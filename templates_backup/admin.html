@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - NOAA CAP Alerts System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background: #007bff;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            padding: 20px;
+        }
+        .card h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        select, input[type="file"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .btn-danger {
+            background: #dc3545;
+        }
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        .btn-success {
+            background: #28a745;
+        }
+        .btn-success:hover {
+            background: #218838;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: none;
+        }
+        .status.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .status.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .nav {
+            margin-bottom: 20px;
+        }
+        .nav a {
+            text-decoration: none;
+            color: #007bff;
+            margin-right: 20px;
+        }
+        .nav a:hover {
+            text-decoration: underline;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>??? NOAA CAP Alerts - Admin Panel</h1>
+            <p>Manage boundaries, configure system settings, and monitor operations</p>
+        </div>
+
+        <div class="nav">
+            <a href="/">? Back to Main</a>
+            <a href="/stats">Statistics</a>
+            <a href="/logs">System Logs</a>
+            <a href="/api/system_status">System Status API</a>
+        </div>
+
+        <!-- Upload Boundary Files -->
+        <div class="card">
+            <h3>?? Upload Boundary Files</h3>
+            <form id="uploadForm" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="boundaryType">Boundary Type:</label>
+                    <select id="boundaryType" name="boundary_type" required>
+                        <option value="">Select boundary type...</option>
+                        <option value="fire">Fire District</option>
+                        <option value="ems">EMS District</option>
+                        <option value="electric">Electric District</option>
+                        <option value="township">Township</option>
+                        <option value="villages">Village</option>
+                        <option value="telephone">Telephone Provider</option>
+                        <option value="school">School District</option>
+                        <option value="county">County Outline</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="geoJsonFile">GeoJSON File:</label>
+                    <input type="file" id="geoJsonFile" name="file" accept=".geojson,.json" required>
+                    <small style="color: #666;">Upload a GeoJSON file containing boundary polygons</small>
+                </div>
+                <button type="submit">Upload Boundaries</button>
+            </form>
+            <div id="uploadStatus" class="status"></div>
+        </div>
+
+        <!-- Manual Operations -->
+        <div class="card">
+            <h3>?? Manual Operations</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                <div>
+                    <button onclick="triggerCAPPoll()" class="btn-success">
+                        ?? Trigger CAP Poll
+                    </button>
+                    <p><small>Manually fetch latest CAP alerts from NOAA</small></p>
+                </div>
+                <div>
+                    <button onclick="clearExpiredAlerts()" class="btn-danger">
+                        ??? Clear Expired Alerts
+                    </button>
+                    <p><small>Remove all expired alerts from database</small></p>
+                </div>
+                <div>
+                    <button onclick="optimizeDatabase()">
+                        ?? Optimize Database
+                    </button>
+                    <p><small>Run database maintenance tasks</small></p>
+                </div>
+            </div>
+            <div id="operationStatus" class="status"></div>
+        </div>
+
+        <!-- System Statistics -->
+        <div class="card">
+            <h3>?? System Statistics</h3>
+            <div id="systemStats">
+                <p>Loading statistics...</p>
+            </div>
+        </div>
+
+        <!-- Current Boundaries -->
+        <div class="card">
+            <h3>??? Current Boundaries</h3>
+            <div id="boundariesList">
+                <p>Loading boundaries...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Load system statistics
+        async function loadSystemStats() {
+            try {
+                const response = await fetch('/api/system_status');
+                const data = await response.json();
+                
+                const statsHtml = `
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-number">${data.active_alerts_count}</div>
+                            <div class="stat-label">Active Alerts</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">${data.system_resources.cpu_usage_percent.toFixed(1)}%</div>
+                            <div class="stat-label">CPU Usage</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">${data.system_resources.memory_usage_percent.toFixed(1)}%</div>
+                            <div class="stat-label">Memory Usage</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">${data.system_resources.disk_free_gb}</div>
+                            <div class="stat-label">Free Disk (GB)</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">${data.database_status}</div>
+                            <div class="stat-label">Database</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">${data.last_poll ? 'Yes' : 'Never'}</div>
+                            <div class="stat-label">Last Poll</div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('systemStats').innerHTML = statsHtml;
+            } catch (error) {
+                document.getElementById('systemStats').innerHTML = `<p style="color: red;">Error loading statistics: ${error.message}</p>`;
+            }
+        }
+
+        // Load boundaries list
+        async function loadBoundaries() {
+            try {
+                const response = await fetch('/api/boundaries');
+                const data = await response.json();
+                
+                if (data.features && data.features.length > 0) {
+                    const boundariesByType = {};
+                    data.features.forEach(feature => {
+                        const type = feature.properties.type;
+                        if (!boundariesByType[type]) {
+                            boundariesByType[type] = [];
+                        }
+                        boundariesByType[type].push(feature.properties.name);
+                    });
+                    
+                    let html = '<div class="stats-grid">';
+                    for (const [type, names] of Object.entries(boundariesByType)) {
+                        html += `
+                            <div class="stat-item">
+                                <div class="stat-number">${names.length}</div>
+                                <div class="stat-label">${type.charAt(0).toUpperCase() + type.slice(1)}</div>
+                            </div>
+                        `;
+                    }
+                    html += '</div>';
+                    
+                    document.getElementById('boundariesList').innerHTML = html;
+                } else {
+                    document.getElementById('boundariesList').innerHTML = '<p>No boundaries uploaded yet. Use the upload form above to add boundary files.</p>';
+                }
+            } catch (error) {
+                document.getElementById('boundariesList').innerHTML = `<p style="color: red;">Error loading boundaries: ${error.message}</p>`;
+            }
+        }
+
+        // Handle file upload
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const statusDiv = document.getElementById('uploadStatus');
+            
+            statusDiv.style.display = 'block';
+            statusDiv.className = 'status';
+            statusDiv.innerHTML = 'Uploading...';
+            
+            try {
+                const response = await fetch('/admin/upload_boundary', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    statusDiv.className = 'status success';
+                    statusDiv.innerHTML = result.success || 'Upload successful!';
+                    this.reset();
+                    loadBoundaries(); // Refresh boundaries list
+                } else {
+                    statusDiv.className = 'status error';
+                    statusDiv.innerHTML = result.error || 'Upload failed';
+                }
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.innerHTML = 'Error: ' + error.message;
+            }
+        });
+
+        // Manual operations
+        async function triggerCAPPoll() {
+            showOperationStatus('Triggering CAP poll...', 'info');
+            try {
+                const response = await fetch('/admin/trigger_poll', { method: 'POST' });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showOperationStatus(result.message || 'CAP poll triggered successfully', 'success');
+                } else {
+                    showOperationStatus(result.error || 'Failed to trigger CAP poll', 'error');
+                }
+            } catch (error) {
+                showOperationStatus('Error: ' + error.message, 'error');
+            }
+        }
+
+        async function clearExpiredAlerts() {
+            if (confirm('Are you sure you want to clear all expired alerts?')) {
+                showOperationStatus('Clearing expired alerts...', 'info');
+                try {
+                    const response = await fetch('/admin/clear_expired', { method: 'POST' });
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        showOperationStatus(result.message || 'Expired alerts cleared successfully', 'success');
+                    } else {
+                        showOperationStatus(result.error || 'Failed to clear expired alerts', 'error');
+                    }
+                } catch (error) {
+                    showOperationStatus('Error: ' + error.message, 'error');
+                }
+            }
+        }
+
+        async function optimizeDatabase() {
+            if (confirm('Are you sure you want to run database optimization?')) {
+                showOperationStatus('Optimizing database...', 'info');
+                try {
+                    const response = await fetch('/admin/optimize_db', { method: 'POST' });
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        showOperationStatus(result.message || 'Database optimization completed', 'success');
+                    } else {
+                        showOperationStatus(result.error || 'Database optimization failed', 'error');
+                    }
+                } catch (error) {
+                    showOperationStatus('Error: ' + error.message, 'error');
+                }
+            }
+        }
+
+        function showOperationStatus(message, type) {
+            const statusDiv = document.getElementById('operationStatus');
+            statusDiv.style.display = 'block';
+            statusDiv.className = `status ${type}`;
+            statusDiv.innerHTML = message;
+        }
+
+        // Load data when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSystemStats();
+            loadBoundaries();
+            
+            // Auto-refresh every 30 seconds
+            setInterval(loadSystemStats, 30000);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin - NOAA CAP Alerts</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header { background: white; padding: 30px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .nav { margin-bottom: 20px; }
+        .nav a { display: inline-block; margin-right: 15px; padding: 8px 15px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; }
+        .nav a:hover { background: #0056b3; }
+        .card { background: white; padding: 25px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        select, input, button { padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        select, input[type="file"] { width: 100%; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; margin-right: 10px; }
+        button:hover { background: #0056b3; }
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-success { background: #28a745; }
+        .btn-success:hover { background: #218838; }
+        .status { padding: 10px; border-radius: 4px; margin-top: 15px; display: none; }
+        .status.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; display: block; }
+        .status.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; display: block; }
+        .status.info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; display: block; }
+        .boundary-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; }
+        .boundary-item { border: 1px solid #ddd; padding: 15px; border-radius: 4px; }
+        .boundary-item h4 { margin: 0 0 10px 0; color: #007bff; }
+        .boundary-actions { margin-top: 10px; }
+        .boundary-actions button { font-size: 12px; padding: 5px 10px; }
+        .boundary-entry { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; padding: 5px; background: #f8f9fa; border-radius: 3px; }
+        .boundary-name { flex-grow: 1; }
+        .delete-btn { font-size: 10px; padding: 2px 6px; }
+        .tabs { display: flex; margin-bottom: 20px; }
+        .tab { padding: 10px 20px; background: #e9ecef; border: 1px solid #ddd; cursor: pointer; margin-right: 5px; border-radius: 4px 4px 0 0; }
+        .tab.active { background: white; border-bottom: 1px solid white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .preview-result { border: 1px solid #ddd; padding: 10px; margin: 5px 0; background: #f9f9f9; border-radius: 4px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }
+        .stat-card { text-align: center; padding: 15px; background: #f8f9fa; border-radius: 4px; }
+        .stat-number { font-size: 1.5em; font-weight: bold; color: #007bff; }
+        .stat-label { color: #666; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚙️ NOAA CAP Alerts - Admin Panel</h1>
+            <p>Manage boundaries, configure system settings, and monitor operations</p>
+        </div>
+
+        <div class="nav">
+            <a href="/">🏠 Back to Main</a>
+            <a href="/logs">📋 System Logs</a>
+            <a href="/stats">📊 Statistics</a>
+            <a href="/api/system_status">🔗 System Status API</a>
+        </div>
+
+        <!-- Tabbed Interface -->
+        <div class="card">
+            <div class="tabs">
+                <div class="tab active" onclick="showTab('upload')">📁 Upload Boundaries</div>
+                <div class="tab" onclick="showTab('preview')">👁️ Preview Extraction</div>
+                <div class="tab" onclick="showTab('manage')">🗂️ Manage Boundaries</div>
+            </div>
+
+            <!-- Upload Tab -->
+            <div id="upload-tab" class="tab-content active">
+                <h3>📁 Upload Boundary Files</h3>
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="boundaryType">Boundary Type:</label>
+                        <select id="boundaryType" name="boundary_type" required>
+                            <option value="">Select boundary type...</option>
+                            <option value="electric">⚡ Electric Providers</option>
+                            <option value="villages">🏘️ Villages</option>
+                            <option value="school">🏫 School Districts</option>
+                            <option value="fire">🔥 Fire Districts</option>
+                            <option value="ems">🚑 EMS Districts</option>
+                            <option value="township">🏘️ Townships</option>
+                            <option value="telephone">📞 Telephone Providers</option>
+                            <option value="county">🗺️ County Outlines</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="geoJsonFile">GeoJSON File:</label>
+                        <input type="file" id="geoJsonFile" name="file" accept=".geojson,.json" required>
+                        <small style="color: #666;">Upload a GeoJSON file containing boundary polygons</small>
+                    </div>
+                    <button type="submit">📤 Upload Boundaries</button>
+                </form>
+                <div id="uploadStatus" class="status"></div>
+            </div>
+
+            <!-- Preview Tab -->
+            <div id="preview-tab" class="tab-content">
+                <h3>👁️ Preview Data Extraction</h3>
+                <form id="previewForm" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="previewBoundaryType">Boundary Type:</label>
+                        <select id="previewBoundaryType" name="boundary_type" required>
+                            <option value="">Select boundary type...</option>
+                            <option value="electric">⚡ Electric Providers</option>
+                            <option value="villages">🏘️ Villages</option>
+                            <option value="school">🏫 School Districts</option>
+                            <option value="fire">🔥 Fire Districts</option>
+                            <option value="ems">🚑 EMS Districts</option>
+                            <option value="township">🏘️ Townships</option>
+                            <option value="telephone">📞 Telephone Providers</option>
+                            <option value="county">🗺️ County Outlines</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="previewFile">GeoJSON File:</label>
+                        <input type="file" id="previewFile" name="file" accept=".geojson,.json" required>
+                        <small style="color: #666;">Preview what will be extracted before uploading</small>
+                    </div>
+                    <button type="button" onclick="previewExtraction()">👁️ Preview Extraction</button>
+                </form>
+                <div id="previewResults" class="status"></div>
+            </div>
+
+            <!-- Manage Tab -->
+            <div id="manage-tab" class="tab-content">
+                <h3>🗂️ Manage Boundaries</h3>
+                <div style="margin-bottom: 20px;">
+                    <label for="deleteType">Delete by Type:</label>
+                    <select id="deleteType">
+                        <option value="">Select boundary type to delete...</option>
+                        <option value="electric">⚡ Electric Providers</option>
+                        <option value="villages">🏘️ Villages</option>
+                        <option value="school">🏫 School Districts</option>
+                        <option value="fire">🔥 Fire Districts</option>
+                        <option value="ems">🚑 EMS Districts</option>
+                        <option value="township">🏘️ Townships</option>
+                        <option value="telephone">📞 Telephone Providers</option>
+                        <option value="county">🗺️ County Outlines</option>
+                    </select>
+                    <button onclick="deleteBoundariesByType()" class="btn-danger">🗑️ Delete All of Type</button>
+                    <button onclick="clearAllBoundaries()" class="btn-danger">⚠️ Clear ALL Boundaries</button>
+                </div>
+                <div id="boundariesList">Loading boundaries...</div>
+            </div>
+        </div>
+
+        <!-- Manual Operations -->
+        <div class="card">
+            <h3>🔧 Manual Operations</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                <div>
+                    <button onclick="triggerCAPPoll()" class="btn-success">📡 Trigger CAP Poll</button>
+                    <p><small>Manually fetch latest CAP alerts from NOAA</small></p>
+                </div>
+                <div>
+                    <button onclick="clearExpiredAlerts()" class="btn-danger">🗑️ Clear Expired Alerts</button>
+                    <p><small>Remove all expired alerts from database</small></p>
+                </div>
+                <div>
+                    <button onclick="optimizeDatabase()">🔧 Optimize Database</button>
+                    <p><small>Run database maintenance tasks</small></p>
+                </div>
+            </div>
+            <div id="operationStatus" class="status"></div>
+        </div>
+
+        <!-- System Statistics -->
+        <div class="card">
+            <h3>📊 System Statistics</h3>
+            <div id="systemStats">Loading statistics...</div>
+        </div>
+    </div>
+
+    <script>
+        // Tab functionality
+        function showTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(tabName + '-tab').classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+        }
+
+        // Load boundaries list
+        async function loadBoundaries() {
+            try {
+                const response = await fetch('/api/boundaries');
+                const data = await response.json();
+                
+                if (data.features && data.features.length > 0) {
+                    const boundariesByType = {};
+                    data.features.forEach(feature => {
+                        const type = feature.properties.type;
+                        if (!boundariesByType[type]) {
+                            boundariesByType[type] = [];
+                        }
+                        boundariesByType[type].push(feature.properties);
+                    });
+                    
+                    let html = '<div class="boundary-list">';
+                    for (const [type, boundaries] of Object.entries(boundariesByType)) {
+                        html += `<div class="boundary-item">
+                            <h4>${type.charAt(0).toUpperCase() + type.slice(1)} (${boundaries.length})</h4>`;
+                        boundaries.forEach(boundary => {
+                            html += `<div class="boundary-entry">
+                                <span class="boundary-name">${boundary.name}</span>
+                                <button onclick="deleteBoundary(${boundary.id}, '${boundary.name.replace(/'/g, "\\'")}')" class="btn-danger delete-btn">🗑️</button>
+                            </div>`;
+                        });
+                        html += '</div>';
+                    }
+                    html += '</div>';
+                    document.getElementById('boundariesList').innerHTML = html;
+                } else {
+                    document.getElementById('boundariesList').innerHTML = '<p>No boundaries found. Use the upload form above to add boundary files.</p>';
+                }
+            } catch (error) {
+                document.getElementById('boundariesList').innerHTML = `<p style="color: red;">Error loading boundaries: ${error.message}</p>`;
+            }
+        }
+
+        // Load system statistics
+        async function loadSystemStats() {
+            try {
+                const response = await fetch('/api/system_status');
+                const data = await response.json();
+                
+                const statsHtml = `
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-number">${data.active_alerts_count}</div>
+                            <div class="stat-label">Active Alerts</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">${data.boundaries_count}</div>
+                            <div class="stat-label">Total Boundaries</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">${data.system_resources.cpu_usage_percent.toFixed(1)}%</div>
+                            <div class="stat-label">CPU Usage</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">${data.system_resources.memory_usage_percent.toFixed(1)}%</div>
+                            <div class="stat-label">Memory Usage</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" style="color: ${data.database_status === 'connected' ? '#28a745' : '#dc3545'};">${data.database_status}</div>
+                            <div class="stat-label">Database</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">${data.system_resources.disk_free_gb} GB</div>
+                            <div class="stat-label">Free Disk</div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('systemStats').innerHTML = statsHtml;
+            } catch (error) {
+                document.getElementById('systemStats').innerHTML = `<p style="color: red;">Error loading statistics: ${error.message}</p>`;
+            }
+        }
+
+        // Preview extraction functionality
+        async function previewExtraction() {
+            const form = document.getElementById('previewForm');
+            const formData = new FormData(form);
+            const resultsDiv = document.getElementById('previewResults');
+            
+            resultsDiv.style.display = 'block';
+            resultsDiv.className = 'status info';
+            resultsDiv.innerHTML = 'Analyzing file...';
+            
+            try {
+                const response = await fetch('/admin/preview_geojson', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    let html = `<h4>📋 Preview Results</h4>
+                        <p><strong>Total Features:</strong> ${result.total_features}</p>
+                        <p><strong>Boundary Type:</strong> ${result.boundary_type}</p>
+                        <p><strong>Available Fields:</strong> ${result.all_fields.join(', ')}</p>
+                        <h5>🔍 Sample Extractions (first ${result.preview_count}):</h5>`;
+                    
+                    result.previews.forEach((preview, index) => {
+                        html += `<div class="preview-result">
+                            <strong>Feature ${index + 1}:</strong><br>
+                            <strong>📝 Name:</strong> ${preview.name}<br>
+                            <strong>📄 Description:</strong> ${preview.description || 'No description'}
+                        </div>`;
+                    });
+                    
+                    if (result.field_mappings && Object.keys(result.field_mappings).length > 0) {
+                        html += `<h5>🗺️ Field Mappings for ${result.boundary_type}:</h5>
+                            <p><strong>Name Fields:</strong> ${result.field_mappings.name_fields ? result.field_mappings.name_fields.join(', ') : 'None configured'}</p>
+                            <p><strong>Description Fields:</strong> ${result.field_mappings.description_fields ? result.field_mappings.description_fields.join(', ') : 'None configured'}</p>`;
+                    }
+                    
+                    resultsDiv.className = 'status success';
+                    resultsDiv.innerHTML = html;
+                } else {
+                    resultsDiv.className = 'status error';
+                    resultsDiv.innerHTML = result.error || 'Preview failed';
+                }
+            } catch (error) {
+                resultsDiv.className = 'status error';
+                resultsDiv.innerHTML = 'Error: ' + error.message;
+            }
+        }
+
+        // Delete individual boundary
+        async function deleteBoundary(boundaryId, boundaryName) {
+            if (!confirm(`Are you sure you want to delete boundary "${boundaryName}"?`)) return;
+            
+            try {
+                const response = await fetch(`/admin/delete_boundary/${boundaryId}`, { method: 'DELETE' });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showStatus(result.success || 'Boundary deleted successfully', 'success');
+                    loadBoundaries();
+                    loadSystemStats();
+                } else {
+                    showStatus(result.error || 'Failed to delete boundary', 'error');
+                }
+            } catch (error) {
+                showStatus('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Delete boundaries by type
+        async function deleteBoundariesByType() {
+            const boundaryType = document.getElementById('deleteType').value;
+            if (!boundaryType) {
+                alert('Please select a boundary type to delete');
+                return;
+            }
+            
+            if (!confirm(`Are you sure you want to delete ALL ${boundaryType} boundaries? This cannot be undone!`)) return;
+            
+            try {
+                const response = await fetch('/admin/delete_boundaries_by_type', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ boundary_type: boundaryType })
+                });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showStatus(result.success || result.message, 'success');
+                    loadBoundaries();
+                    loadSystemStats();
+                    document.getElementById('deleteType').value = '';
+                } else {
+                    showStatus(result.error || 'Failed to delete boundaries', 'error');
+                }
+            } catch (error) {
+                showStatus('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Clear all boundaries
+        async function clearAllBoundaries() {
+            if (!confirm('⚠️ WARNING: This will delete ALL boundaries from the system! This cannot be undone! Are you absolutely sure?')) return;
+            if (!confirm('⚠️ FINAL WARNING: This will permanently remove ALL boundary data. Continue?')) return;
+            
+            try {
+                const response = await fetch('/admin/clear_all_boundaries', { method: 'DELETE' });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showStatus(result.success || result.message, 'success');
+                    loadBoundaries();
+                    loadSystemStats();
+                } else {
+                    showStatus(result.error || 'Failed to clear boundaries', 'error');
+                }
+            } catch (error) {
+                showStatus('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Handle file upload
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const statusDiv = document.getElementById('uploadStatus');
+            
+            statusDiv.style.display = 'block';
+            statusDiv.className = 'status info';
+            statusDiv.innerHTML = '⏳ Uploading and processing...';
+            
+            try {
+                const response = await fetch('/admin/upload_boundary', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    statusDiv.className = 'status success';
+                    statusDiv.innerHTML = '✅ ' + (result.success || 'Upload successful!');
+                    this.reset();
+                    loadBoundaries();
+                    loadSystemStats();
+                } else {
+                    statusDiv.className = 'status error';
+                    statusDiv.innerHTML = '❌ ' + (result.error || 'Upload failed');
+                }
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.innerHTML = '❌ Error: ' + error.message;
+            }
+        });
+
+        // Manual operations
+        async function triggerCAPPoll() {
+            showStatus('📡 Triggering CAP poll...', 'info');
+            try {
+                const response = await fetch('/admin/trigger_poll', { method: 'POST' });
+                const result = await response.json();
+                showStatus((response.ok ? '✅ ' : '❌ ') + (result.message || result.error), response.ok ? 'success' : 'error');
+            } catch (error) {
+                showStatus('❌ Error: ' + error.message, 'error');
+            }
+        }
+
+        async function clearExpiredAlerts() {
+            if (!confirm('Are you sure you want to clear all expired alerts?')) return;
+            try {
+                const response = await fetch('/admin/clear_expired', { method: 'POST' });
+                const result = await response.json();
+                showStatus((response.ok ? '✅ ' : '❌ ') + (result.message || result.error), response.ok ? 'success' : 'error');
+                if (response.ok) loadSystemStats();
+            } catch (error) {
+                showStatus('❌ Error: ' + error.message, 'error');
+            }
+        }
+
+        async function optimizeDatabase() {
+            if (!confirm('Run database optimization?')) return;
+            try {
+                const response = await fetch('/admin/optimize_db', { method: 'POST' });
+                const result = await response.json();
+                showStatus((response.ok ? '✅ ' : '❌ ') + (result.message || result.error), response.ok ? 'success' : 'error');
+            } catch (error) {
+                showStatus('❌ Error: ' + error.message, 'error');
+            }
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('operationStatus');
+            statusDiv.className = `status ${type}`;
+            statusDiv.innerHTML = message;
+            statusDiv.style.display = 'block';
+            
+            // Auto-hide success messages after 5 seconds
+            if (type === 'success') {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        // Load data on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadBoundaries();
+            loadSystemStats();
+            
+            // Refresh stats every 30 seconds
+            setInterval(loadSystemStats, 30000);
+        });
+    </script>
+</body>
+</html>

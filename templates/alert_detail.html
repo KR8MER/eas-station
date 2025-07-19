@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+
+{% block title %}Alert Details - {{ alert.event }} - NOAA CAP Alerts{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1 class="h3 text-primary mb-1">
+                        <i class="fas fa-exclamation-triangle"></i> Alert Details
+                    </h1>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="/">Home</a></li>
+                            <li class="breadcrumb-item"><a href="/alerts">Alerts History</a></li>
+                            <li class="breadcrumb-item active">{{ alert.event }}</li>
+                        </ol>
+                    </nav>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="/alerts" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Alerts
+                    </a>
+                    <a href="/" class="btn btn-outline-primary">
+                        <i class="fas fa-map"></i> View on Map
+                    </a>
+                </div>
+            </div>
+
+            <div class="row">
+                <!-- Main Alert Information -->
+                <div class="col-lg-8">
+                    <div class="card mb-4">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-info-circle"></i> Alert Information
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            {% if alert.headline %}
+                            <div class="alert alert-{% if alert.severity == 'Extreme' %}danger{% elif alert.severity == 'Severe' %}warning{% elif alert.severity == 'Moderate' %}info{% else %}secondary{% endif %}" role="alert">
+                                <h5 class="alert-heading">{{ alert.headline }}</h5>
+                            </div>
+                            {% endif %}
+
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <h6 class="text-muted mb-1">Event Type</h6>
+                                    <span class="badge bg-primary fs-6">{{ alert.event }}</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6 class="text-muted mb-1">Status</h6>
+                                    <span class="badge bg-secondary fs-6">{{ alert.status }}</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6 class="text-muted mb-1">Severity</h6>
+                                    {% if alert.severity %}
+                                    <span class="badge {% if alert.severity == 'Extreme' %}bg-danger{% elif alert.severity == 'Severe' %}bg-warning{% elif alert.severity == 'Moderate' %}bg-info{% else %}bg-secondary{% endif %} fs-6">
+                                        {{ alert.severity }}
+                                    </span>
+                                    {% else %}
+                                    <span class="text-muted">Not specified</span>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <h6 class="text-muted mb-1">Urgency</h6>
+                                    {% if alert.urgency %}
+                                    <span class="badge bg-info fs-6">{{ alert.urgency }}</span>
+                                    {% else %}
+                                    <span class="text-muted">Not specified</span>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <h6 class="text-muted mb-1">Certainty</h6>
+                                    {% if alert.certainty %}
+                                    <span class="badge bg-success fs-6">{{ alert.certainty }}</span>
+                                    {% else %}
+                                    <span class="text-muted">Not specified</span>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <h6 class="text-muted mb-1">Message Type</h6>
+                                    <span class="badge bg-dark fs-6">{{ alert.message_type }}</span>
+                                </div>
+                            </div>
+
+                            {% if alert.description %}
+                            <hr class="my-4">
+                            <h6 class="text-muted mb-2">Description</h6>
+                            <div class="p-3 bg-light rounded">
+                                {{ alert.description | nl2br }}
+                            </div>
+                            {% endif %}
+
+                            {% if alert.instruction %}
+                            <hr class="my-4">
+                            <h6 class="text-muted mb-2">Instructions</h6>
+                            <div class="p-3 bg-warning bg-opacity-10 rounded border-start border-warning border-4">
+                                {{ alert.instruction | nl2br }}
+                            </div>
+                            {% endif %}
+
+                            {% if alert.area_desc %}
+                            <hr class="my-4">
+                            <h6 class="text-muted mb-2">Affected Areas</h6>
+                            <div class="p-3 bg-info bg-opacity-10 rounded">
+                                {{ alert.area_desc }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Affected Boundaries -->
+                    {% if intersections %}
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-map-marked-alt"></i> Affected Boundaries
+                                <span class="badge bg-secondary">{{ intersections|length }}</span>
+                            </h5>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Boundary Name</th>
+                                            <th>Type</th>
+                                            <th>Intersection Area</th>
+                                            <th>Description</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for intersection, boundary in intersections %}
+                                        <tr>
+                                            <td><strong>{{ boundary.name }}</strong></td>
+                                            <td>
+                                                <span class="badge bg-outline-primary">{{ boundary.type.title() }}</span>
+                                            </td>
+                                            <td>
+                                                {% if intersection.intersection_area %}
+                                                {{ "%.2f"|format(intersection.intersection_area * 3.86102e-7) }} sq mi
+                                                {% else %}
+                                                <span class="text-muted">Not calculated</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if boundary.description %}
+                                                <div class="text-truncate" style="max-width: 200px;" title="{{ boundary.description }}">
+                                                    {{ boundary.description }}
+                                                </div>
+                                                {% else %}
+                                                <span class="text-muted">No description</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Sidebar -->
+                <div class="col-lg-4">
+                    <!-- Timing Information -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="fas fa-clock"></i> Timing Information
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <h6 class="text-muted mb-1">Alert Sent</h6>
+                                <div class="fw-bold">{{ alert.sent.strftime('%B %d, %Y') }}</div>
+                                <div class="text-muted">{{ alert.sent.strftime('%I:%M %p UTC') }}</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <h6 class="text-muted mb-1">Expires</h6>
+                                {% if alert.expires %}
+                                <div class="fw-bold {% if alert.expires < moment().utc() %}text-danger{% else %}text-success{% endif %}">
+                                    {{ alert.expires.strftime('%B %d, %Y') }}
+                                </div>
+                                <div class="text-muted">{{ alert.expires.strftime('%I:%M %p UTC') }}</div>
+                                {% if alert.expires < moment().utc() %}
+                                <div class="badge bg-danger mt-1">EXPIRED</div>
+                                {% else %}
+                                <div class="badge bg-success mt-1">ACTIVE</div>
+                                {% endif %}
+                                {% else %}
+                                <div class="text-muted">No expiration set</div>
+                                <div class="badge bg-warning mt-1">INDEFINITE</div>
+                                {% endif %}
+                            </div>
+
+                            <div class="mb-3">
+                                <h6 class="text-muted mb-1">Added to System</h6>
+                                <div class="fw-bold">{{ alert.created_at.strftime('%B %d, %Y') }}</div>
+                                <div class="text-muted">{{ alert.created_at.strftime('%I:%M %p UTC') }}</div>
+                            </div>
+
+                            {% if alert.updated_at != alert.created_at %}
+                            <div class="mb-3">
+                                <h6 class="text-muted mb-1">Last Updated</h6>
+                                <div class="fw-bold">{{ alert.updated_at.strftime('%B %d, %Y') }}</div>
+                                <div class="text-muted">{{ alert.updated_at.strftime('%I:%M %p UTC') }}</div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Technical Details -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="fas fa-code"></i> Technical Details
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <h6 class="text-muted mb-1">Alert Identifier</h6>
+                                <code class="text-break">{{ alert.identifier }}</code>
+                            </div>
+
+                            <div class="mb-3">
+                                <h6 class="text-muted mb-1">Scope</h6>
+                                <span class="badge bg-secondary">{{ alert.scope }}</span>
+                            </div>
+
+                            {% if alert.category %}
+                            <div class="mb-3">
+                                <h6 class="text-muted mb-1">Category</h6>
+                                <span class="badge bg-info">{{ alert.category }}</span>
+                            </div>
+                            {% endif %}
+
+                            <div class="mb-3">
+                                <h6 class="text-muted mb-1">Database ID</h6>
+                                <code>#{{ alert.id }}</code>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="fas fa-tools"></i> Actions
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-grid gap-2">
+                                {% if alert.raw_json %}
+                                <button class="btn btn-outline-secondary" onclick="showRawData()">
+                                    <i class="fas fa-code"></i> View Raw CAP Data
+                                </button>
+                                {% endif %}
+                                
+                                <a href="/alerts?search={{ alert.event }}" class="btn btn-outline-primary">
+                                    <i class="fas fa-search"></i> Find Similar Alerts
+                                </a>
+                                
+                                <a href="/" class="btn btn-primary">
+                                    <i class="fas fa-map"></i> View on Interactive Map
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Raw Data Modal -->
+{% if alert.raw_json %}
+<div class="modal fade" id="rawDataModal" tabindex="-1" aria-labelledby="rawDataModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="rawDataModalLabel">
+                    <i class="fas fa-code"></i> Raw CAP Alert Data
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-end mb-2">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="copyRawData()">
+                        <i class="fas fa-copy"></i> Copy to Clipboard
+                    </button>
+                </div>
+                <pre id="rawDataContent" class="bg-light p-3 rounded" style="max-height: 400px; overflow-y: auto;"><code>{{ alert.raw_json | tojson(indent=2) }}</code></pre>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+function showRawData() {
+    const modal = new bootstrap.Modal(document.getElementById('rawDataModal'));
+    modal.show();
+}
+
+function copyRawData() {
+    const content = document.getElementById('rawDataContent').textContent;
+    navigator.clipboard.writeText(content).then(function() {
+        // Show a temporary success message
+        const btn = event.target.closest('button');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-success');
+        
+        setTimeout(function() {
+            btn.innerHTML = originalText;
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-outline-secondary');
+        }, 2000);
+    }).catch(function(err) {
+        console.error('Failed to copy: ', err);
+        alert('Failed to copy to clipboard');
+    });
+}
+
+// Add moment.js-like functionality for template
+window.moment = function() {
+    return {
+        utc: function() {
+            return new Date();
+        }
+    };
+};
+</script>
+{% endblock %}

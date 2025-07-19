@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NOAA CAP Alerts & GIS Map</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+        }
+        
+        .navbar {
+            background-color: #007bff !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .navbar-brand {
+            font-weight: bold;
+            color: white !important;
+        }
+        
+        .navbar-nav .nav-link {
+            color: rgba(255,255,255,0.8) !important;
+        }
+        
+        .navbar-nav .nav-link:hover {
+            color: white !important;
+        }
+        
+        .main-container {
+            display: flex;
+            height: calc(100vh - 56px);
+        }
+        
+        .map-container {
+            flex: 1;
+            position: relative;
+        }
+        
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+        
+        .sidebar {
+            width: 350px;
+            background: white;
+            border-left: 1px solid #dee2e6;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+        
+        .sidebar-section {
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .sidebar-section h5 {
+            margin-bottom: 15px;
+            color: #495057;
+            font-weight: 600;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 5px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+        
+        .legend-item:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .legend-item input[type="checkbox"] {
+            margin-right: 10px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            margin-right: 10px;
+            border: 2px solid #333;
+        }
+        
+        .legend-label {
+            flex: 1;
+            font-size: 14px;
+            color: #495057;
+        }
+        
+        .status-info {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 0;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .status-item:last-child {
+            border-bottom: none;
+        }
+        
+        .status-label {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .status-value {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .status-good { color: #28a745; }
+        .status-warning { color: #ffc107; }
+        .status-error { color: #dc3545; }
+        
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        .spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #007bff;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Boundary colors */
+        .boundary-fire { background-color: #dc3545; }
+        .boundary-ems { background-color: #007bff; }
+        .boundary-electric { background-color: #ffc107; }
+        .boundary-township { background-color: #28a745; }
+        .boundary-villages { background-color: #17a2b8; }
+        .boundary-telephone { background-color: #6f42c1; }
+        .boundary-school { background-color: #fd7e14; }
+        .boundary-county { background-color: #6c757d; }
+        
+        .leaflet-popup-content {
+            max-width: 300px;
+        }
+        
+        .popup-header {
+            font-weight: bold;
+            color: #007bff;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+        
+        .popup-content {
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        .popup-detail {
+            margin-bottom: 4px;
+        }
+        
+        .footer {
+            background-color: #343a40;
+            color: white;
+            padding: 10px 0;
+            text-align: center;
+            font-size: 12px;
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 100%;
+                height: 40vh;
+            }
+            .main-container {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-satellite-dish"></i> NOAA CAP Alerts & GIS
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/admin">
+                            <i class="fas fa-cog"></i> Admin
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/stats">
+                            <i class="fas fa-chart-bar"></i> Stats
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/logs">
+                            <i class="fas fa-list"></i> Logs
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    
+    <!-- Main Content -->
+    <div class="main-container">
+        <!-- Map Container -->
+        <div class="map-container">
+            <div id="map"></div>
+        </div>
+        
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <!-- System Status -->
+            <div class="sidebar-section">
+                <h5><i class="fas fa-info-circle"></i> System Status</h5>
+                <div class="status-info">
+                    <div id="system-status">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                            Loading status...
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Map Layers -->
+            <div class="sidebar-section">
+                <h5><i class="fas fa-layers"></i> Map Layers</h5>
+                
+                <!-- Boundary Layers -->
+                <div class="mb-3">
+                    <h6 class="mb-2">Boundaries</h6>
+                    <div id="boundary-toggles">
+                        <div class="legend-item">
+                            <input type="checkbox" id="toggle-fire" checked>
+                            <div class="legend-color boundary-fire"></div>
+                            <label for="toggle-fire" class="legend-label">Fire Districts</label>
+                        </div>
+                        <div class="legend-item">
+                            <input type="checkbox" id="toggle-ems" checked>
+                            <div class="legend-color boundary-ems"></div>
+                            <label for="toggle-ems" class="legend-label">EMS Districts</label>
+                        </div>
+                        <div class="legend-item">
+                            <input type="checkbox" id="toggle-electric" checked>
+                            <div class="legend-color boundary-electric"></div>
+                            <label for="toggle-electric" class="legend-label">Electric Districts</label>
+                        </div>
+                        <div class="legend-item">
+                            <input type="checkbox" id="toggle-township" checked>
+                            <div class="legend-color boundary-township"></div>
+                            <label for="toggle-township" class="legend-label">Townships</label>
+                        </div>
+                        <div class="legend-item">
+                            <input type="checkbox" id="toggle-villages" checked>
+                            <div class="legend-color boundary-villages"></div>
+                            <label for="toggle-villages" class="legend-label">Villages</label>
+                        </div>
+                        <div class="legend-item">
+                            <input type="checkbox" id="toggle-telephone" checked>
+                            <div class="legend-color boundary-telephone"></div>
+                            <label for="toggle-telephone" class="legend-label">Telephone</label>
+                        </div>
+                        <div class="legend-item">
+                            <input type="checkbox" id="toggle-school" checked>
+                            <div class="legend-color boundary-school"></div>
+                            <label for="toggle-school" class="legend-label">School Districts</label>
+                        </div>
+                        <div class="legend-item">
+                            <input type="checkbox" id="toggle-county" checked>
+                            <div class="legend-color boundary-county"></div>
+                            <label for="toggle-county" class="legend-label">County Outline</label>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Alert Layers -->
+                <div class="mb-3">
+                    <h6 class="mb-2">CAP Alerts</h6>
+                    <div class="legend-item">
+                        <input type="checkbox" id="toggle-alerts" checked>
+                        <div class="legend-color" style="background-color: #dc3545;"></div>
+                        <label for="toggle-alerts" class="legend-label">Active Alerts</label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Alert Summary -->
+            <div class="sidebar-section">
+                <h5><i class="fas fa-exclamation-triangle"></i> Alert Summary</h5>
+                <div id="alert-summary">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        Loading alerts...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container-fluid">
+            <span>&copy; 2025 NOAA CAP Alerts & GIS System | Raspberry Pi Server | <span id="current-time"></span></span>
+        </div>
+    </footer>
+    
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Global variables
+        let map;
+        let boundaryLayers = {};
+        let alertLayer;
+        let systemStatusInterval;
+        
+        // Boundary colors
+        const boundaryColors = {
+            'fire': '#dc3545',
+            'ems': '#007bff',
+            'electric': '#ffc107',
+            'township': '#28a745',
+            'villages': '#17a2b8',
+            'telephone': '#6f42c1',
+            'school': '#fd7e14',
+            'county': '#6c757d'
+        };
+        
+        // Initialize map
+        function initMap() {
+            // Create map centered on Putnam County, Ohio
+            map = L.map('map').setView([40.875, -84.15], 10);
+            
+            // Add base tile layer
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 18
+            }).addTo(map);
+            
+            // Load data
+            loadBoundaries();
+            loadAlerts();
+            
+            // Setup layer toggles
+            setupLayerToggles();
+            
+            // Start system status updates
+            updateSystemStatus();
+            systemStatusInterval = setInterval(updateSystemStatus, 30000);
+        }
+        
+        // Load boundary layers
+        function loadBoundaries() {
+            fetch('/api/boundaries')
+                .then(response => response.json())
+                .then(data => {
+                    // Group boundaries by type
+                    const boundariesByType = {};
+                    data.features.forEach(feature => {
+                        const type = feature.properties.type;
+                        if (!boundariesByType[type]) {
+                            boundariesByType[type] = [];
+                        }
+                        boundariesByType[type].push(feature);
+                    });
+                    
+                    // Create layer for each boundary type
+                    Object.keys(boundariesByType).forEach(type => {
+                        const color = boundaryColors[type] || '#333333';
+                        const layer = L.geoJSON(boundariesByType[type], {
+                            style: {
+                                color: color,
+                                weight: 2,
+                                opacity: 0.8,
+                                fillOpacity: 0.1
+                            },
+                            onEachFeature: (feature, layer) => {
+                                // Add popup with boundary info
+                                const popup = `
+                                    <div class="popup-header">${feature.properties.name}</div>
+                                    <div class="popup-content">
+                                        <div class="popup-detail"><strong>Type:</strong> ${feature.properties.type}</div>
+                                        ${feature.properties.description ? `<div class="popup-detail"><strong>Description:</strong> ${feature.properties.description}</div>` : ''}
+                                    </div>
+                                `;
+                                layer.bindPopup(popup);
+                            }
+                        });
+                        
+                        boundaryLayers[type] = layer;
+                        layer.addTo(map);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading boundaries:', error);
+                });
+        }
+        
+        // Load CAP alerts
+        function loadAlerts() {
+            fetch('/api/alerts')
+                .then(response => response.json())
+                .then(data => {
+                    // Remove existing alert layer
+                    if (alertLayer) {
+                        map.removeLayer(alertLayer);
+                    }
+                    
+                    // Create new alert layer
+                    alertLayer = L.geoJSON(data, {
+                        style: feature => {
+                            const severity = feature.properties.severity?.toLowerCase() || 'unknown';
+                            const colors = {
+                                'extreme': '#8B0000',
+                                'severe': '#FF0000',
+                                'moderate': '#FFA500',
+                                'minor': '#FFFF00',
+                                'unknown': '#808080'
+                            };
+                            
+                            return {
+                                color: '#000',
+                                weight: 2,
+                                opacity: 0.8,
+                                fillColor: colors[severity] || '#808080',
+                                fillOpacity: 0.6
+                            };
+                        },
+                        onEachFeature: (feature, layer) => {
+                            const props = feature.properties;
+                            const popup = `
+                                <div class="popup-header">${props.event}</div>
+                                <div class="popup-content">
+                                    <div class="popup-detail"><strong>Severity:</strong> ${props.severity}</div>
+                                    <div class="popup-detail"><strong>Urgency:</strong> ${props.urgency}</div>
+                                    <div class="popup-detail"><strong>Area:</strong> ${props.area_desc}</div>
+                                    <div class="popup-detail"><strong>Expires:</strong> ${props.expires ? new Date(props.expires).toLocaleString() : 'No expiration'}</div>
+                                    ${props.headline ? `<div class="popup-detail"><strong>Headline:</strong> ${props.headline}</div>` : ''}
+                                </div>
+                            `;
+                            layer.bindPopup(popup);
+                        }
+                    });
+                    
+                    // Add to map if alerts toggle is checked
+                    if (document.getElementById('toggle-alerts').checked) {
+                        alertLayer.addTo(map);
+                    }
+                    
+                    // Update alert summary
+                    updateAlertSummary(data.features);
+                })
+                .catch(error => {
+                    console.error('Error loading alerts:', error);
+                    document.getElementById('alert-summary').innerHTML = 
+                        '<div class="text-danger">Error loading alerts</div>';
+                });
+        }
+        
+        // Update alert summary
+        function updateAlertSummary(alerts) {
+            const summaryDiv = document.getElementById('alert-summary');
+            
+            if (alerts.length === 0) {
+                summaryDiv.innerHTML = '<div class="text-muted">No active alerts</div>';
+                return;
+            }
+            
+            const severityCounts = {};
+            alerts.forEach(alert => {
+                const severity = alert.properties.severity || 'Unknown';
+                severityCounts[severity] = (severityCounts[severity] || 0) + 1;
+            });
+            
+            let html = `<div class="mb-2"><strong>Total: ${alerts.length}</strong></div>`;
+            Object.entries(severityCounts).forEach(([severity, count]) => {
+                html += `<div class="popup-detail">${severity}: ${count}</div>`;
+            });
+            
+            summaryDiv.innerHTML = html;
+        }
+        
+        // Setup layer toggle controls
+        function setupLayerToggles() {
+            // Boundary toggles
+            Object.keys(boundaryColors).forEach(type => {
+                const checkbox = document.getElementById(`toggle-${type}`);
+                if (checkbox) {
+                    checkbox.addEventListener('change', function() {
+                        const layer = boundaryLayers[type];
+                        if (layer) {
+                            if (this.checked) {
+                                map.addLayer(layer);
+                            } else {
+                                map.removeLayer(layer);
+                            }
+                        }
+                    });
+                }
+            });
+            
+            // Alert toggle
+            const alertToggle = document.getElementById('toggle-alerts');
+            if (alertToggle) {
+                alertToggle.addEventListener('change', function() {
+                    if (alertLayer) {
+                        if (this.checked) {
+                            map.addLayer(alertLayer);
+                        } else {
+                            map.removeLayer(alertLayer);
+                        }
+                    }
+                });
+            }
+        }
+        
+        // Update system status
+        function updateSystemStatus() {
+            fetch('/api/system_status')
+                .then(response => response.json())
+                .then(data => {
+                    const statusDiv = document.getElementById('system-status');
+                    
+                    // Format last poll time
+                    let lastPollText = 'Never';
+                    let pollStatusClass = 'status-error';
+                    
+                    if (data.last_poll) {
+                        const lastPoll = new Date(data.last_poll);
+                        const now = new Date();
+                        const diffMinutes = Math.floor((now - lastPoll) / (1000 * 60));
+                        
+                        if (diffMinutes < 10) {
+                            lastPollText = `${diffMinutes} min ago`;
+                            pollStatusClass = 'status-good';
+                        } else if (diffMinutes < 30) {
+                            lastPollText = `${diffMinutes} min ago`;
+                            pollStatusClass = 'status-warning';
+                        } else {
+                            lastPollText = `${diffMinutes} min ago`;
+                            pollStatusClass = 'status-error';
+                        }
+                    }
+                    
+                    const dbStatusClass = data.database_status === 'Connected' ? 'status-good' : 'status-error';
+                    const cpuClass = data.system_resources.cpu_usage_percent < 80 ? 'status-good' : 'status-warning';
+                    
+                    statusDiv.innerHTML = `
+                        <div class="status-item">
+                            <span class="status-label">Last Poll:</span>
+                            <span class="status-value ${pollStatusClass}">${lastPollText}</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Active Alerts:</span>
+                            <span class="status-value">${data.active_alerts_count}</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Database:</span>
+                            <span class="status-value ${dbStatusClass}">${data.database_status}</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">CPU:</span>
+                            <span class="status-value ${cpuClass}">${data.system_resources.cpu_usage_percent.toFixed(1)}%</span>
+                        </div>
+                    `;
+                })
+                .catch(error => {
+                    console.error('Error updating system status:', error);
+                    document.getElementById('system-status').innerHTML = 
+                        '<div class="text-danger">Error loading status</div>';
+                });
+        }
+        
+        // Update current time
+        function updateCurrentTime() {
+            document.getElementById('current-time').textContent = new Date().toLocaleString();
+        }
+        
+        // Auto-refresh
+        setInterval(() => {
+            loadAlerts();
+        }, 5 * 60 * 1000); // Every 5 minutes
+        
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initMap();
+            updateCurrentTime();
+            setInterval(updateCurrentTime, 1000);
+        });
+    </script>
+</body>
+</html>

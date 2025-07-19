@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Health Monitor - NOAA CAP Alerts</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .health-card { border-left: 4px solid #007bff; }
+        .health-card.warning { border-left-color: #ffc107; }
+        .health-card.danger { border-left-color: #dc3545; }
+        .health-card.success { border-left-color: #28a745; }
+        .metric-row { margin-bottom: 1rem; }
+        .metric-label { font-weight: 600; color: #495057; }
+        .metric-value { font-family: 'Courier New', monospace; }
+        .progress-sm { height: 8px; }
+        .refresh-btn { position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
+        .section-icon { color: #007bff; margin-right: 8px; }
+        .status-badge { font-size: 0.8em; }
+        .system-overview { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .system-overview .card-body { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); }
+    </style>
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-dark bg-primary">
+        <div class="container-fluid">
+            <span class="navbar-brand">
+                <i class="fas fa-heartbeat"></i> System Health Monitor
+            </span>
+            <div>
+                <a href="/stats" class="btn btn-outline-light btn-sm me-2">
+                    <i class="fas fa-chart-bar"></i> Statistics
+                </a>
+                <a href="/alerts" class="btn btn-outline-light btn-sm me-2">
+                    <i class="fas fa-exclamation-triangle"></i> Alerts
+                </a>
+                <a href="/admin" class="btn btn-outline-light btn-sm me-2">
+                    <i class="fas fa-cog"></i> Admin
+                </a>
+                <a href="/" class="btn btn-outline-light btn-sm">
+                    <i class="fas fa-home"></i> Home
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <!-- System Overview -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card system-overview">
+                    <div class="card-body">
+                        <h4><i class="fas fa-server section-icon text-white"></i> System Overview</h4>
+                        <div class="row mt-3">
+                            <div class="col-md-3">
+                                <div class="metric-row">
+                                    <div class="metric-label text-white-50">Hostname</div>
+                                    <div class="metric-value text-white">{{ system.hostname or 'Unknown' }}</div>
+                                </div>
+                                <div class="metric-row">
+                                    <div class="metric-label text-white-50">Operating System</div>
+                                    <div class="metric-value text-white">{{ system.system or 'Unknown' }} {{ system.release or '' }}</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-row">
+                                    <div class="metric-label text-white-50">Architecture</div>
+                                    <div class="metric-value text-white">{{ system.machine or 'Unknown' }}</div>
+                                </div>
+                                <div class="metric-row">
+                                    <div class="metric-label text-white-50">Uptime</div>
+                                    <div class="metric-value text-white">{{ format_uptime(system.uptime_seconds or 0) }}</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-row">
+                                    <div class="metric-label text-white-50">Load Average</div>
+                                    <div class="metric-value text-white">
+                                        {% if load_averages %}
+                                            {{ ', '.join(load_averages|map('string')) }}
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="metric-row">
+                                    <div class="metric-label text-white-50">Processes</div>
+                                    <div class="metric-value text-white">{{ processes.total_processes or 0 }} total ({{ processes.running_processes or 0 }} running)</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 text-end">
+                                <div class="metric-row">
+                                    <div class="metric-label text-white-50">Last Updated</div>
+                                    <div class="metric-value text-white" id="current-time"></div>
+                                </div>
+                                <button class="btn btn-light btn-sm mt-2" onclick="refreshPage()">
+                                    <i class="fas fa-sync-alt"></i> Refresh Now
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resource Usage Row -->
+        <div class="row mb-4">
+            <!-- CPU Usage -->
+            <div class="col-lg-4 mb-3">
+                {% set cpu_class = 'danger' if cpu.cpu_usage_percent > 80 else 'warning' if cpu.cpu_usage_percent > 50 else 'success' %}
+                <div class="card health-card {{ cpu_class }} h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-microchip section-icon"></i> CPU Usage</h5>
+                        
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="metric-label">Overall Usage</span>
+                            <span class="badge bg-{{ 'danger' if cpu.cpu_usage_percent > 80 else 'warning' if cpu.cpu_usage_percent > 50 else 'success' }}">
+                                {{ "%.1f"|format(cpu.cpu_usage_percent or 0) }}%
+                            </span>
+                        </div>
+                        <div class="progress progress-sm mb-3">
+                            {% set progress_class = 'bg-danger' if cpu.cpu_usage_percent > 80 else 'bg-warning' if cpu.cpu_usage_percent > 50 else 'bg-success' %}
+                            <div class="progress-bar {{ progress_class }}" style="width: {{ cpu.cpu_usage_percent or 0 }}%"></div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-6">
+                                <small>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Physical Cores:</span>
+                                        <span class="metric-value">{{ cpu.physical_cores or 'N/A' }}</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Total Cores:</span>
+                                        <span class="metric-value">{{ cpu.total_cores or 'N/A' }}</span>
+                                    </div>
+                                </small>
+                            </div>
+                            <div class="col-6">
+                                <small>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Max Freq:</span>
+                                        <span class="metric-value">{{ "%.0f"|format(cpu.max_frequency or 0) }} MHz</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Current:</span>
+                                        <span class="metric-value">{{ "%.0f"|format(cpu.current_frequency or 0) }} MHz</span>
+                                    </div>
+                                </small>
+                            </div>
+                        </div>
+
+                        {% if cpu.cpu_usage_per_core and cpu.cpu_usage_per_core|length <= 8 %}
+                        <hr>
+                        <h6 class="text-muted">Per-Core Usage</h6>
+                        <div class="row">
+                            {% for usage in cpu.cpu_usage_per_core %}
+                            <div class="col-6 col-lg-12 col-xl-6">
+                                <small>
+                                    <div class="d-flex justify-content-between">
+                                        <span>Core {{ loop.index0 }}:</span>
+                                        <span class="metric-value">{{ "%.1f"|format(usage) }}%</span>
+                                    </div>
+                                </small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Memory Usage -->
+            <div class="col-lg-4 mb-3">
+                {% set mem_class = 'danger' if memory.percentage > 90 else 'warning' if memory.percentage > 75 else 'success' %}
+                <div class="card health-card {{ mem_class }} h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-memory section-icon"></i> Memory Usage</h5>
+                        
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="metric-label">RAM Usage</span>
+                            <span class="badge bg-{{ 'danger' if memory.percentage > 90 else 'warning' if memory.percentage > 75 else 'success' }}">
+                                {{ "%.1f"|format(memory.percentage or 0) }}%
+                            </span>
+                        </div>
+                        <div class="progress progress-sm mb-2">
+                            {% set mem_progress_class = 'bg-danger' if memory.percentage > 90 else 'bg-warning' if memory.percentage > 75 else 'bg-success' %}
+                            <div class="progress-bar {{ mem_progress_class }}" style="width: {{ memory.percentage or 0 }}%"></div>
+                        </div>
+                        <small class="text-muted">{{ format_bytes(memory.used or 0) }} / {{ format_bytes(memory.total or 0) }}</small>
+
+                        {% if memory.swap_total and memory.swap_total > 0 %}
+                        <div class="d-flex justify-content-between align-items-center mb-2 mt-3">
+                            <span class="metric-label">Swap Usage</span>
+                            <span class="badge bg-info">{{ "%.1f"|format(memory.swap_percentage or 0) }}%</span>
+                        </div>
+                        <div class="progress progress-sm mb-2">
+                            <div class="progress-bar bg-info" style="width: {{ memory.swap_percentage or 0 }}%"></div>
+                        </div>
+                        <small class="text-muted">{{ format_bytes(memory.swap_used or 0) }} / {{ format_bytes(memory.swap_total or 0) }}</small>
+                        {% endif %}
+
+                        <hr>
+                        <div class="row">
+                            <div class="col-6">
+                                <small>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Available:</span>
+                                        <span class="metric-value">{{ format_bytes(memory.available or 0) }}</span>
+                                    </div>
+                                </small>
+                            </div>
+                            <div class="col-6">
+                                <small>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Free:</span>
+                                        <span class="metric-value">{{ format_bytes(memory.free or 0) }}</span>
+                                    </div>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Services & Database -->
+            <div class="col-lg-4 mb-3">
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-cogs section-icon"></i> Services & Database</h5>
+                        
+                        <!-- Database Status -->
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="metric-label">Database</span>
+                            {% set db_class = 'success' if database.status == 'connected' else 'danger' %}
+                            <span class="badge bg-{{ db_class }}">{{ database.status or 'Unknown' }}</span>
+                        </div>
+                        {% if database.info %}
+                            {% if database.info.version %}
+                            <small class="text-muted d-block">Version: {{ database.info.version[:50] }}{% if database.info.version|length > 50 %}...{% endif %}</small>
+                            {% endif %}
+                            {% if database.info.size %}
+                            <small class="text-muted d-block">Size: {{ database.info.size }}</small>
+                            {% endif %}
+                            {% if database.info.active_connections %}
+                            <small class="text-muted d-block">Active Connections: {{ database.info.active_connections }}</small>
+                            {% endif %}
+                        {% endif %}
+
+                        <!-- System Services -->
+                        {% if services %}
+                        <hr>
+                        <h6 class="text-muted">System Services</h6>
+                        {% for service_name, status in services.items() %}
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="metric-label">{{ service_name.title() }}</span>
+                            {% set service_class = 'success' if status == 'active' else 'danger' %}
+                            <span class="badge bg-{{ service_class }} status-badge">{{ status }}</span>
+                        </div>
+                        {% endfor %}
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Storage & Network Row -->
+        <div class="row mb-4">
+            <!-- Disk Storage -->
+            <div class="col-lg-8 mb-3">
+                <div class="card health-card">
+                    <div class="card-body">
+                        <h5><i class="fas fa-hdd section-icon"></i> Storage Usage</h5>
+                        
+                        {% for disk_item in disk %}
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="metric-label">
+                                    <strong>{{ disk_item.device or 'Unknown' }}</strong>
+                                    <small class="text-muted">({{ disk_item.mountpoint or 'Unknown' }})</small>
+                                </span>
+                                <span class="badge bg-{{ 'danger' if disk_item.percentage > 90 else 'warning' if disk_item.percentage > 75 else 'success' }}">
+                                    {{ "%.1f"|format(disk_item.percentage or 0) }}%
+                                </span>
+                            </div>
+                            <div class="progress progress-sm mb-1">
+                                {% set disk_class = 'bg-danger' if disk_item.percentage > 90 else 'bg-warning' if disk_item.percentage > 75 else 'bg-success' %}
+                                <div class="progress-bar {{ disk_class }}" style="width: {{ disk_item.percentage or 0 }}%"></div>
+                            </div>
+                            <small class="text-muted">
+                                {{ format_bytes(disk_item.used or 0) }} used / {{ format_bytes(disk_item.total or 0) }} total
+                                ({{ format_bytes(disk_item.free or 0) }} free) • {{ disk_item.fstype or 'Unknown' }}
+                            </small>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Network Summary -->
+            <div class="col-lg-4 mb-3">
+                <div class="card health-card">
+                    <div class="card-body">
+                        <h5><i class="fas fa-network-wired section-icon"></i> Network</h5>
+                        
+                        <div class="metric-row mb-3">
+                            <span class="metric-label">Hostname:</span>
+                            <span class="metric-value">{{ network.hostname or 'Unknown' }}</span>
+                        </div>
+
+                        {% for interface in network.interfaces[:3] %}
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="metric-label">{{ interface.name or 'Unknown' }}</span>
+                                {% set status_class = 'success' if interface.is_up else 'secondary' %}
+                                <span class="badge bg-{{ status_class }} status-badge">{{ 'UP' if interface.is_up else 'DOWN' }}</span>
+                            </div>
+                            {% for addr in interface.addresses[:2] %}
+                                {% if addr.type == 'IPv4' %}
+                                <small class="text-muted d-block">{{ addr.address or 'Unknown' }}</small>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                        {% endfor %}
+
+                        {% if network.interfaces|length > 3 %}
+                        <small class="text-muted">... and {{ network.interfaces|length - 3 }} more interfaces</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Process Information -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card health-card">
+                    <div class="card-body">
+                        <h5><i class="fas fa-tasks section-icon"></i> Top Processes (CPU Usage)</h5>
+                        
+                        {% if processes.top_processes %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>PID</th>
+                                        <th>Process Name</th>
+                                        <th>CPU %</th>
+                                        <th>Memory %</th>
+                                        <th>User</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for proc in processes.top_processes[:10] %}
+                                    <tr>
+                                        <td><code>{{ proc.pid or 'N/A' }}</code></td>
+                                        <td>
+                                            <span title="{{ proc.name or 'Unknown' }}">
+                                                {% if proc.name and proc.name|length > 20 %}
+                                                    {{ proc.name[:20] }}...
+                                                {% else %}
+                                                    {{ proc.name or 'Unknown' }}
+                                                {% endif %}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="metric-value">{{ "%.1f"|format(proc.cpu_percent or 0) }}%</span>
+                                        </td>
+                                        <td>
+                                            <span class="metric-value">{{ "%.1f"|format(proc.memory_percent or 0) }}%</span>
+                                        </td>
+                                        <td><small class="text-muted">{{ proc.username or 'N/A' }}</small></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="text-muted text-center py-3">No process information available</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Temperature Sensors (if available) -->
+        {% if temperature %}
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card health-card">
+                    <div class="card-body">
+                        <h5><i class="fas fa-thermometer-half section-icon"></i> Temperature Sensors</h5>
+                        <div class="row">
+                            {% for sensor_name, entries in temperature.items() %}
+                            <div class="col-md-4 mb-3">
+                                <h6 class="text-muted">{{ sensor_name }}</h6>
+                                {% for entry in entries %}
+                                <div class="metric-row">
+                                    <span class="metric-label">{{ entry.label or 'Sensor' }}:</span>
+                                    <span class="metric-value">
+                                        {{ "%.1f"|format(entry.current) }}°C
+                                        {% if entry.critical and entry.current > entry.critical * 0.8 %}
+                                            <span class="badge bg-warning ms-1">Hot</span>
+                                        {% endif %}
+                                    </span>
+                                </div>
+                                {% if entry.high or entry.critical %}
+                                <small class="text-muted">
+                                    {% if entry.high %}High: {{ "%.1f"|format(entry.high) }}°C{% endif %}
+                                    {% if entry.critical %}{% if entry.high %} • {% endif %}Critical: {{ "%.1f"|format(entry.critical) }}°C{% endif %}
+                                </small>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Auto-refresh button -->
+    <button class="btn btn-primary refresh-btn" onclick="refreshPage()" title="Refresh system data">
+        <i class="fas fa-sync-alt"></i>
+    </button>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Update current time
+        function updateTime() {
+            const timeElement = document.getElementById('current-time');
+            if (timeElement) {
+                timeElement.textContent = new Date().toLocaleTimeString();
+            }
+        }
+        
+        // Initialize time update
+        updateTime();
+
+        // Auto-refresh every 30 seconds
+        setTimeout(function() {
+            window.location.reload();
+        }, 30000);
+
+        // Update time every second until page refreshes
+        setInterval(updateTime, 1000);
+
+        // Add loading state to refresh button
+        function refreshPage() {
+            const refreshBtn = document.querySelector('.refresh-btn');
+            if (refreshBtn) {
+                refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                refreshBtn.disabled = true;
+            }
+            
+            setTimeout(function() {
+                window.location.reload();
+            }, 500);
+        }
+
+        // Update refresh button to use the new function
+        document.addEventListener('DOMContentLoaded', function() {
+            const refreshBtn = document.querySelector('.refresh-btn');
+            if (refreshBtn) {
+                refreshBtn.onclick = refreshPage;
+            }
+
+            // Also update the refresh button in the overview section
+            const overviewRefreshBtn = document.querySelector('.card-body .btn-sm');
+            if (overviewRefreshBtn) {
+                overviewRefreshBtn.onclick = refreshPage;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,483 @@
+{% extends "base.html" %}
+
+{% block title %}Interactive Map - NOAA CAP Alerts{% endblock %}
+
+{% block extra_css %}
+<style>
+    #map {
+        height: 600px;
+        width: 100%;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    .map-controls {
+        background: white;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    
+    .status-panel {
+        background: white;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    
+    .form-check-input:checked {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+    }
+    
+    .layer-group {
+        margin-bottom: 15px;
+    }
+    
+    .layer-group h6 {
+        color: #495057;
+        margin-bottom: 10px;
+        font-weight: 600;
+    }
+    
+    .status-item {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 8px;
+    }
+    
+    .status-value {
+        font-weight: 600;
+    }
+    
+    .btn-group-sm .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+    
+    .leaflet-popup-content {
+        max-width: 300px;
+    }
+    
+    .popup-title {
+        font-weight: bold;
+        color: #0d6efd;
+        margin-bottom: 8px;
+    }
+    
+    .popup-detail {
+        margin-bottom: 5px;
+        font-size: 0.9em;
+    }
+    
+    .alert-summary {
+        background: #f8f9fa;
+        border-radius: 5px;
+        padding: 10px;
+        margin-top: 10px;
+    }
+    
+    @media (max-width: 768px) {
+        #map {
+            height: 400px;
+        }
+        
+        .col-md-3 {
+            margin-bottom: 20px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="h3 text-primary mb-4">
+                <i class="fas fa-map"></i> Interactive Map
+            </h1>
+        </div>
+    </div>
+    
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-3">
+            <!-- Map Controls -->
+            <div class="map-controls">
+                <h5 class="mb-3">
+                    <i class="fas fa-sliders-h"></i> Map Controls
+                </h5>
+                
+                <!-- Boundary Layers -->
+                <div class="layer-group">
+                    <h6><i class="fas fa-layer-group"></i> Boundary Layers</h6>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="toggle-county" checked>
+                        <label class="form-check-label" for="toggle-county">County</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="toggle-fire" checked>
+                        <label class="form-check-label" for="toggle-fire">Fire Districts</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="toggle-ems" checked>
+                        <label class="form-check-label" for="toggle-ems">EMS Districts</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="toggle-electric" checked>
+                        <label class="form-check-label" for="toggle-electric">Electric Districts</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="toggle-township" checked>
+                        <label class="form-check-label" for="toggle-township">Townships</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="toggle-villages" checked>
+                        <label class="form-check-label" for="toggle-villages">Villages</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="toggle-telephone" checked>
+                        <label class="form-check-label" for="toggle-telephone">Telephone</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="toggle-school" checked>
+                        <label class="form-check-label" for="toggle-school">School Districts</label>
+                    </div>
+                </div>
+                
+                <!-- Alert Layers -->
+                <div class="layer-group">
+                    <h6><i class="fas fa-exclamation-triangle"></i> Alert Layers</h6>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="toggle-alerts" checked>
+                        <label class="form-check-label" for="toggle-alerts">Active Alerts</label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- System Status -->
+            <div class="status-panel">
+                <h5 class="mb-3">
+                    <i class="fas fa-server"></i> System Status
+                </h5>
+                <div class="status-item">
+                    <span>Database:</span>
+                    <span class="status-value text-success" id="db-status">Connected</span>
+                </div>
+                <div class="status-item">
+                    <span>Boundaries:</span>
+                    <span class="status-value" id="boundary-count">Loading...</span>
+                </div>
+                <div class="status-item">
+                    <span>Alerts:</span>
+                    <span class="status-value" id="alert-count">Loading...</span>
+                </div>
+                
+                <div id="alert-summary" class="alert-summary mt-3" style="display: none;">
+                    <!-- Alert summary will be populated by JavaScript -->
+                </div>
+            </div>
+            
+            <!-- Quick Actions -->
+            <div class="status-panel">
+                <h5 class="mb-3">
+                    <i class="fas fa-bolt"></i> Quick Actions
+                </h5>
+                <div class="d-grid gap-2">
+                    <a href="/alerts" class="btn btn-primary btn-sm">
+                        <i class="fas fa-history"></i> View Alerts History
+                    </a>
+                    <a href="/admin" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-cog"></i> Admin Panel
+                    </a>
+                    <a href="/stats" class="btn btn-outline-info btn-sm">
+                        <i class="fas fa-chart-bar"></i> View Statistics
+                    </a>
+                    <button class="btn btn-outline-success btn-sm" onclick="refreshData()">
+                        <i class="fas fa-sync-alt"></i> Refresh Data
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Map -->
+        <div class="col-md-9">
+            <div id="map"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let map;
+let boundaryLayers = {};
+let alertLayer;
+
+// Initialize map
+function initMap() {
+    // Create map centered on Putnam County, Ohio
+    map = L.map('map').setView([41.0167, -84.1330], 11); // Putnam County, Ohio coordinates
+    
+    // Add base layers
+    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    });
+    
+    const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles © Esri'
+    });
+    
+    // Add default layer
+    osmLayer.addTo(map);
+    
+    // Layer control
+    const baseLayers = {
+        "OpenStreetMap": osmLayer,
+        "Satellite": satelliteLayer
+    };
+    
+    L.control.layers(baseLayers).addTo(map);
+    
+    // Load data
+    loadBoundaries();
+    loadAlerts();
+    updateSystemStatus();
+    
+    // Set up layer toggles
+    setupLayerToggles();
+}
+
+// Load boundaries from API
+function loadBoundaries() {
+    const boundaryTypes = ['county', 'fire', 'ems', 'electric', 'township', 'villages', 'telephone', 'school'];
+    let totalBoundaries = 0;
+    
+    boundaryTypes.forEach(type => {
+        fetch(`/api/boundaries?type=${type}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.features && data.features.length > 0) {
+                    // Color scheme for different boundary types
+                    const colors = {
+                        county: '#e74c3c',
+                        fire: '#e67e22',
+                        ems: '#f39c12',
+                        electric: '#2ecc71',
+                        township: '#3498db',
+                        villages: '#9b59b6',
+                        telephone: '#1abc9c',
+                        school: '#34495e'
+                    };
+                    
+                    // Create layer for this boundary type
+                    boundaryLayers[type] = L.geoJSON(data, {
+                        style: {
+                            color: colors[type] || '#95a5a6',
+                            weight: 2,
+                            opacity: 0.8,
+                            fillOpacity: 0.1
+                        },
+                        onEachFeature: function(feature, layer) {
+                            const props = feature.properties;
+                            const popup = `
+                                <div class="popup-title">${props.name}</div>
+                                <div class="popup-detail"><strong>Type:</strong> ${props.type}</div>
+                                ${props.description ? `<div class="popup-detail"><strong>Details:</strong> ${props.description}</div>` : ''}
+                            `;
+                            layer.bindPopup(popup);
+                        }
+                    });
+                    
+                    // Add to map if toggle is checked
+                    if (document.getElementById(`toggle-${type}`).checked) {
+                        boundaryLayers[type].addTo(map);
+                    }
+                    
+                    totalBoundaries += data.features.length;
+                    document.getElementById('boundary-count').textContent = totalBoundaries;
+                }
+            })
+            .catch(error => {
+                console.error(`Error loading ${type} boundaries:`, error);
+            });
+    });
+}
+
+// Load alerts from API
+function loadAlerts() {
+    fetch('/api/alerts')
+        .then(response => response.json())
+        .then(data => {
+            if (alertLayer) {
+                map.removeLayer(alertLayer);
+            }
+            
+            if (data.features && data.features.length > 0) {
+                alertLayer = L.geoJSON(data, {
+                    style: function(feature) {
+                        const severity = feature.properties.severity;
+                        let color = '#95a5a6'; // default gray
+                        
+                        switch(severity) {
+                            case 'Extreme': color = '#e74c3c'; break;
+                            case 'Severe': color = '#e67e22'; break;
+                            case 'Moderate': color = '#f39c12'; break;
+                            case 'Minor': color = '#3498db'; break;
+                        }
+                        
+                        return {
+                            color: color,
+                            weight: 3,
+                            opacity: 0.9,
+                            fillOpacity: 0.3
+                        };
+                    },
+                    onEachFeature: function(feature, layer) {
+                        const props = feature.properties;
+                        const popup = `
+                            <div class="popup-title">${props.event}</div>
+                            <div class="popup-detail"><strong>Severity:</strong> ${props.severity || 'Unknown'}</div>
+                            <div class="popup-detail"><strong>Urgency:</strong> ${props.urgency || 'Unknown'}</div>
+                            <div class="popup-detail"><strong>Expires:</strong> ${props.expires ? new Date(props.expires).toLocaleString() : 'No expiration'}</div>
+                            ${props.headline ? `<div class="popup-detail"><strong>Headline:</strong> ${props.headline}</div>` : ''}
+                            <div class="mt-2">
+                                <a href="/alerts/${props.id}" class="btn btn-sm btn-primary">View Details</a>
+                            </div>
+                        `;
+                        layer.bindPopup(popup);
+                    }
+                });
+                
+                // Add to map if alerts toggle is checked
+                if (document.getElementById('toggle-alerts').checked) {
+                    alertLayer.addTo(map);
+                }
+                
+                // Update alert summary
+                updateAlertSummary(data.features);
+                document.getElementById('alert-count').textContent = data.features.length;
+            } else {
+                document.getElementById('alert-count').textContent = '0';
+                document.getElementById('alert-summary').style.display = 'none';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading alerts:', error);
+            document.getElementById('alert-count').textContent = 'Error';
+        });
+}
+
+// Update alert summary
+function updateAlertSummary(alerts) {
+    const summaryDiv = document.getElementById('alert-summary');
+    
+    if (alerts.length === 0) {
+        summaryDiv.style.display = 'none';
+        return;
+    }
+    
+    const severityCounts = {};
+    alerts.forEach(alert => {
+        const severity = alert.properties.severity || 'Unknown';
+        severityCounts[severity] = (severityCounts[severity] || 0) + 1;
+    });
+    
+    let summaryHtml = '<strong>Alert Summary:</strong><br>';
+    Object.entries(severityCounts).forEach(([severity, count]) => {
+        const badgeClass = {
+            'Extreme': 'danger',
+            'Severe': 'warning',
+            'Moderate': 'info',
+            'Minor': 'secondary'
+        }[severity] || 'secondary';
+        
+        summaryHtml += `<span class="badge bg-${badgeClass} me-1">${severity}: ${count}</span>`;
+    });
+    
+    summaryDiv.innerHTML = summaryHtml;
+    summaryDiv.style.display = 'block';
+}
+
+// Setup layer toggles
+function setupLayerToggles() {
+    const boundaryTypes = ['county', 'fire', 'ems', 'electric', 'township', 'villages', 'telephone', 'school'];
+    
+    boundaryTypes.forEach(type => {
+        const toggle = document.getElementById(`toggle-${type}`);
+        if (toggle) {
+            toggle.addEventListener('change', function() {
+                if (boundaryLayers[type]) {
+                    if (this.checked) {
+                        boundaryLayers[type].addTo(map);
+                    } else {
+                        map.removeLayer(boundaryLayers[type]);
+                    }
+                }
+            });
+        }
+    });
+    
+    // Alert toggle
+    const alertToggle = document.getElementById('toggle-alerts');
+    if (alertToggle) {
+        alertToggle.addEventListener('change', function() {
+            if (alertLayer) {
+                if (this.checked) {
+                    alertLayer.addTo(map);
+                } else {
+                    map.removeLayer(alertLayer);
+                }
+            }
+        });
+    }
+}
+
+// Update system status
+function updateSystemStatus() {
+    fetch('/api/system_status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.database_status === 'connected') {
+                document.getElementById('db-status').textContent = 'Connected';
+                document.getElementById('db-status').className = 'status-value text-success';
+            } else {
+                document.getElementById('db-status').textContent = 'Error';
+                document.getElementById('db-status').className = 'status-value text-danger';
+            }
+        })
+        .catch(error => {
+            console.error('Error getting system status:', error);
+            document.getElementById('db-status').textContent = 'Error';
+            document.getElementById('db-status').className = 'status-value text-danger';
+        });
+}
+
+// Refresh all data
+function refreshData() {
+    const refreshBtn = document.querySelector('button[onclick="refreshData()"] i');
+    refreshBtn.classList.add('fa-spin');
+    
+    loadBoundaries();
+    loadAlerts();
+    updateSystemStatus();
+    
+    setTimeout(() => {
+        refreshBtn.classList.remove('fa-spin');
+    }, 2000);
+}
+
+// Initialize map when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    initMap();
+    
+    // Refresh data every 5 minutes
+    setInterval(() => {
+        loadAlerts();
+        updateSystemStatus();
+    }, 300000);
+});
+</script>
+{% endblock %}
