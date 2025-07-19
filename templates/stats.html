@@ -81,7 +81,7 @@
         margin: 10px;
         box-shadow: 0 4px 15px rgba(0,0,0,0.1);
     }
-    
+
     .data-table {
         width: 100%;
         border-collapse: collapse;
@@ -91,7 +91,7 @@
         overflow: hidden;
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
-    
+
     .data-table th {
         background: #007bff;
         color: white;
@@ -99,16 +99,16 @@
         text-align: left;
         font-weight: 600;
     }
-    
+
     .data-table td {
         padding: 12px 15px;
         border-bottom: 1px solid #eee;
     }
-    
+
     .data-table tr:hover {
         background: #f8f9fa;
     }
-    
+
     .chart-title {
         font-size: 1.2em;
         font-weight: 600;
@@ -116,7 +116,7 @@
         margin-bottom: 15px;
         text-align: center;
     }
-    
+
     .error-message {
         background: #f8d7da;
         color: #721c24;
@@ -124,6 +124,7 @@
         border-radius: 8px;
         margin: 10px 0;
         border: 1px solid #f5c6cb;
+        text-align: center;
     }
 
     .loading-indicator {
@@ -556,7 +557,7 @@ function safeCreateChart(containerId, chartConfig, dataValidator) {
 
         // Validate data if validator function provided
         if (dataValidator && !dataValidator()) {
-            container.innerHTML = '<div class="error-message">No data available for this chart</div>';
+            container.innerHTML = '<div class="error-message"><i class="fas fa-info-circle"></i> No data available for this chart<br><small class="text-muted">Charts will appear when alerts are received</small></div>';
             return;
         }
 
@@ -569,7 +570,7 @@ function safeCreateChart(containerId, chartConfig, dataValidator) {
         console.error(`Error creating chart ${containerId}:`, error);
         const container = document.getElementById(containerId);
         if (container) {
-            container.innerHTML = `<div class="error-message">Error loading chart: ${error.message}</div>`;
+            container.innerHTML = `<div class="error-message"><i class="fas fa-exclamation-triangle"></i> Error loading chart: ${error.message}</div>`;
         }
     }
 }
@@ -679,7 +680,23 @@ function showToast(message, type) {
         window.showToast(message, type);
     } else {
         console.log(`${type.toUpperCase()}: ${message}`);
-        alert(message);
+        // Create a simple visual feedback
+        const alertClass = type === 'success' ? 'alert-success' : type === 'error' ? 'alert-danger' : 'alert-info';
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert ${alertClass} alert-dismissible fade show position-fixed top-0 end-0 m-3`;
+        alertDiv.style.zIndex = '9999';
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(alertDiv);
+
+        // Auto remove after 5 seconds
+        setTimeout(() => {
+            if (alertDiv && alertDiv.parentNode) {
+                alertDiv.parentNode.removeChild(alertDiv);
+            }
+        }, 5000);
     }
 }
 
@@ -1027,11 +1044,6 @@ function createBoundaryChart() {
 }
 
 // Main initialization function
-document.addEventListener('DOMContentLoaded', document.addEventListener('DOMContentLoaded', function () {
-    updateTimestamp();
-    initializeChartsWithDelay();
-});
-
 function updateTimestamp() {
     const timestampEl = document.getElementById('stats-timestamp');
     if (timestampEl) {
@@ -1039,66 +1051,100 @@ function updateTimestamp() {
     }
 }
 
-function initializeChartsWithDelay() {
-    const INITIALIZATION_DELAY = 100;
-
-    setTimeout(() => {
-        console.log('Initializing charts with data:', window.statsData);
-        initializeCharts();
-        console.log('Chart initialization completed');
-    }, INITIALIZATION_DELAY);
+function hasValidData(data) {
+    return data && Array.isArray(data) && data.length > 0;
 }
 
 function initializeCharts() {
-    const chartConfigs = {
-        mandatory: [
-            {create: createAlertTypesChart},
-            {create: createSeverityChart},
-            {create: createHourlyChart},
-            {create: createDayOfWeekChart},
-            {create: createMonthlyChart}
-        ],
-        conditional: [
-            {
-                create: createYearlyChart,
-                isValid: () => hasValidData(window.statsData.alertByYear)
-            },
-            {
-                create: createAffectedAreasChart,
-                isValid: () => hasValidData(window.statsData.mostAffectedBoundaries)
-            },
-            {
-                create: createDurationChart,
-                isValid: () => hasValidData(window.statsData.avgDurations)
-            },
-            {
-                create: createRecentActivityChart,
-                isValid: () => hasValidData(window.statsData.recentByDay)
-            },
-            {
-                create: createReliabilityGauge,
-                isValid: () => window.statsData.polling?.success_rate !== undefined
-            },
-            {
-                create: createBoundaryChart,
-                isValid: () => hasValidData(window.statsData.boundaryStats)
+    console.log('Starting chart initialization with data:', window.statsData);
+
+    // Check if we have any real alert data at all
+    const hasAnyAlertData = (
+        (window.statsData.alertByEvent && window.statsData.alertByEvent.length > 0) ||
+        (window.statsData.alertBySeverity && window.statsData.alertBySeverity.length > 0) ||
+        (window.statsData.alertByHour && window.statsData.alertByHour.some(count => count > 0)) ||
+        (window.statsData.alertByDow && window.statsData.alertByDow.some(count => count > 0)) ||
+        (window.statsData.alertByMonth && window.statsData.alertByMonth.some(count => count > 0))
+    );
+
+    console.log('Has real alert data:', hasAnyAlertData);
+
+    // If no real data exists, don't create sample data - show "no data" messages instead
+    if (!hasAnyAlertData) {
+        console.log('No real alert data found, will show "no data" messages');
+    }
+
+    // Initialize charts with error handling
+    const charts = [
+        { name: 'Alert Types', func: createAlertTypesChart },
+        { name: 'Severity', func: createSeverityChart },
+        { name: 'Hourly', func: createHourlyChart },
+        { name: 'Day of Week', func: createDayOfWeekChart },
+        { name: 'Monthly', func: createMonthlyChart }
+    ];
+
+    // Conditional charts
+    if (hasValidData(window.statsData.alertByYear)) {
+        charts.push({ name: 'Yearly', func: createYearlyChart });
+    }
+
+    if (hasValidData(window.statsData.mostAffectedBoundaries)) {
+        charts.push({ name: 'Affected Areas', func: createAffectedAreasChart });
+    }
+
+    if (hasValidData(window.statsData.avgDurations)) {
+        charts.push({ name: 'Duration', func: createDurationChart });
+    }
+
+    if (hasValidData(window.statsData.recentByDay)) {
+        charts.push({ name: 'Recent Activity', func: createRecentActivityChart });
+    }
+
+    if (window.statsData.polling && window.statsData.polling.success_rate !== undefined) {
+        charts.push({ name: 'Reliability Gauge', func: createReliabilityGauge });
+    }
+
+    if (hasValidData(window.statsData.boundaryStats)) {
+        charts.push({ name: 'Boundary Stats', func: createBoundaryChart });
+    }
+
+    // Create charts with delays to prevent overwhelming
+    charts.forEach((chart, index) => {
+        setTimeout(() => {
+            try {
+                console.log(`Creating ${chart.name} chart...`);
+                chart.func();
+                console.log(`${chart.name} chart created successfully`);
+            } catch (error) {
+                console.error(`Error creating ${chart.name} chart:`, error);
             }
-        ]
-    };
-
-    // Initialize mandatory charts
-    chartConfigs.mandatory.forEach(config => config.create());
-
-    // Initialize conditional charts
-    chartConfigs.conditional.forEach(config => {
-        if (config.isValid()) {
-            config.create();
-        }
+        }, index * 200); // 200ms delay between each chart
     });
 }
 
-function hasValidData(data) {
-    return data && Array.isArray(data) && data.length > 0;
+// Initialize everything when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Page loaded, initializing statistics...');
+
+    // Update timestamp
+    updateTimestamp();
+
+    // Debug: Log what data we have
+    console.log('Available stats data:', window.statsData);
+
+    // Initialize charts after a short delay to ensure Highcharts is loaded
+    setTimeout(() => {
+        if (typeof Highcharts !== 'undefined') {
+            console.log('Highcharts is available, initializing charts...');
+            initializeCharts();
+        } else {
+            console.error('Highcharts is not loaded!');
+            // Show error message in charts
+            document.querySelectorAll('[id$="Chart"]').forEach(container => {
+                container.innerHTML = '<div class="error-message">Highcharts library failed to load. Please refresh the page.</div>';
+            });
+        }
+    }, 500);
 });
 
 // Global error handler for uncaught chart errors

@@ -3,6 +3,7 @@
 NOAA CAP Alerts and GIS Boundary Mapping System
 Flask Web Application with Enhanced Boundary Management and Alerts History
 WITH ALERT PRESERVATION AND CONFIRMATION SYSTEMS
+NOW WITH PROPER TIMEZONE HANDLING FOR PUTNAM COUNTY, OHIO
 """
 
 import os
@@ -13,6 +14,7 @@ import socket
 import subprocess
 import shutil
 import time
+import pytz
 from datetime import datetime, timedelta
 from collections import defaultdict
 from flask import Flask, request, jsonify, render_template, flash, redirect, url_for
@@ -36,7 +38,137 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
+# Timezone configuration for Putnam County, Ohio (Eastern Time)
+PUTNAM_COUNTY_TZ = pytz.timezone('America/New_York')
+UTC_TZ = pytz.UTC
+
 logger.info("NOAA Alerts System startup")
+
+
+def utc_now():
+    """Get current UTC time with timezone awareness"""
+    return datetime.now(UTC_TZ)
+
+
+def local_now():
+    """Get current Putnam County local time"""
+    return utc_now().astimezone(PUTNAM_COUNTY_TZ)
+
+
+def parse_nws_datetime(dt_string):
+    """Parse NWS datetime strings which can be in various formats"""
+    if not dt_string:
+        return None
+
+    # Remove timezone abbreviations and normalize
+    dt_string = str(dt_string).strip()
+
+    # Handle common NWS formats
+    if dt_string.endswith('Z'):
+        # UTC/Zulu time
+        try:
+            dt = datetime.fromisoformat(dt_string.replace('Z', '+00:00'))
+            return dt.astimezone(UTC_TZ)
+        except ValueError:
+            pass
+
+    # Try parsing as ISO format with timezone
+    try:
+        dt = datetime.fromisoformat(dt_string)
+        if dt.tzinfo is None:
+            # Assume UTC if no timezone info
+            dt = dt.replace(tzinfo=UTC_TZ)
+        return dt.astimezone(UTC_TZ)
+    except ValueError:
+        pass
+
+    # Handle EDT/EST format (approximate - NWS sometimes uses these)
+    if 'EDT' in dt_string:
+        try:
+            dt_clean = dt_string.replace(' EDT', '').replace('EDT', '')
+            dt = datetime.fromisoformat(dt_clean)
+            # EDT is UTC-4
+            edt_tz = pytz.timezone('US/Eastern')
+            dt = edt_tz.localize(dt)
+            return dt.astimezone(UTC_TZ)
+        except ValueError:
+            pass
+
+    if 'EST' in dt_string:
+        try:
+            dt_clean = dt_string.replace(' EST', '').replace('EST', '')
+            dt = datetime.fromisoformat(dt_clean)
+            # EST is UTC-5
+            est_tz = pytz.timezone('US/Eastern')
+            dt = est_tz.localize(dt)
+            return dt.astimezone(UTC_TZ)
+        except ValueError:
+            pass
+
+    logger.warning(f"Could not parse datetime: {dt_string}")
+    return None
+
+
+def format_local_datetime(dt, include_utc=True):
+    """Format datetime in Putnam County local time with optional UTC"""
+    if not dt:
+        return "Unknown"
+
+    # Ensure datetime is timezone-aware
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC_TZ)
+
+    # Convert to local time
+    local_dt = dt.astimezone(PUTNAM_COUNTY_TZ)
+
+    # Format local time
+    local_str = local_dt.strftime('%B %d, %Y at %I:%M %p %Z')
+
+    if include_utc:
+        utc_str = dt.astimezone(UTC_TZ).strftime('%H:%M UTC')
+        return f"{local_str} ({utc_str})"
+    else:
+        return local_str
+
+
+def format_local_date(dt):
+    """Format date in Putnam County local time"""
+    if not dt:
+        return "Unknown"
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC_TZ)
+
+    local_dt = dt.astimezone(PUTNAM_COUNTY_TZ)
+    return local_dt.strftime('%B %d, %Y')
+
+
+def format_local_time(dt):
+    """Format time only in Putnam County local time with UTC"""
+    if not dt:
+        return "Unknown"
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC_TZ)
+
+    local_dt = dt.astimezone(PUTNAM_COUNTY_TZ)
+    utc_dt = dt.astimezone(UTC_TZ)
+
+    local_str = local_dt.strftime('%I:%M %p %Z')
+    utc_str = utc_dt.strftime('%H:%M UTC')
+
+    return f"{local_str} ({utc_str})"
+
+
+def is_alert_expired(expires_dt):
+    """Check if alert is expired using current time"""
+    if not expires_dt:
+        return False
+
+    if expires_dt.tzinfo is None:
+        expires_dt = expires_dt.replace(tzinfo=UTC_TZ)
+
+    return expires_dt < utc_now()
 
 
 # Database Models
@@ -48,8 +180,8 @@ class Boundary(db.Model):
     type = db.Column(db.String(50), nullable=False)
     description = db.Column(db.Text)
     geom = db.Column(Geometry('MULTIPOLYGON', srid=4326))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
 
 
 class CAPAlert(db.Model):
@@ -73,15 +205,15 @@ class CAPAlert(db.Model):
     instruction = db.Column(db.Text)
     raw_json = db.Column(db.JSON)
     geom = db.Column(Geometry('POLYGON', srid=4326))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
 
 
 class SystemLog(db.Model):
     __tablename__ = 'system_log'
 
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    timestamp = db.Column(db.DateTime, default=utc_now)
     level = db.Column(db.String(20), nullable=False)
     message = db.Column(db.Text, nullable=False)
     module = db.Column(db.String(100))
@@ -95,14 +227,14 @@ class Intersection(db.Model):
     cap_alert_id = db.Column(db.Integer, db.ForeignKey('cap_alerts.id', ondelete='CASCADE'))
     boundary_id = db.Column(db.Integer, db.ForeignKey('boundaries.id', ondelete='CASCADE'))
     intersection_area = db.Column(db.Float)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utc_now)
 
 
 class PollHistory(db.Model):
     __tablename__ = 'poll_history'
 
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    timestamp = db.Column(db.DateTime, default=utc_now)
     status = db.Column(db.String(20), nullable=False)
     alerts_fetched = db.Column(db.Integer, default=0)
     alerts_new = db.Column(db.Integer, default=0)
@@ -114,7 +246,7 @@ class PollHistory(db.Model):
 # Helper Functions for Active Alerts
 def get_active_alerts_query():
     """Get query for active (non-expired) alerts - preserves all data"""
-    now = datetime.utcnow()
+    now = utc_now()
     return CAPAlert.query.filter(
         or_(
             CAPAlert.expires.is_(None),  # No expiration date
@@ -127,7 +259,7 @@ def get_active_alerts_query():
 
 def get_expired_alerts_query():
     """Get query for expired alerts"""
-    now = datetime.utcnow()
+    now = utc_now()
     return CAPAlert.query.filter(
         CAPAlert.expires < now
     )
@@ -432,7 +564,8 @@ def get_system_health():
             pass
 
         return {
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': utc_now().isoformat(),
+            'local_timestamp': local_now().isoformat(),
             'system': {
                 'hostname': uname.node,
                 'system': uname.system,
@@ -440,7 +573,7 @@ def get_system_health():
                 'version': uname.version,
                 'machine': uname.machine,
                 'processor': uname.processor,
-                'boot_time': datetime.fromtimestamp(boot_time).isoformat(),
+                'boot_time': datetime.fromtimestamp(boot_time, UTC_TZ).isoformat(),
                 'uptime_seconds': time.time() - boot_time
             },
             'cpu': cpu_info,
@@ -461,7 +594,8 @@ def get_system_health():
         logger.error(f"Error getting system health: {str(e)}")
         return {
             'error': str(e),
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': utc_now().isoformat(),
+            'local_timestamp': local_now().isoformat()
         }
 
 
@@ -511,18 +645,40 @@ def nl2br_filter(text):
     return text.replace('\n', '<br>\n')
 
 
-@app.template_global()
-def moment():
-    """Provide current datetime to templates"""
-    return datetime.utcnow()
+@app.template_filter('format_local_datetime')
+def format_local_datetime_filter(dt, include_utc=True):
+    """Template filter for formatting local datetime"""
+    return format_local_datetime(dt, include_utc)
+
+
+@app.template_filter('format_local_date')
+def format_local_date_filter(dt):
+    """Template filter for formatting local date"""
+    return format_local_date(dt)
+
+
+@app.template_filter('format_local_time')
+def format_local_time_filter(dt):
+    """Template filter for formatting local time"""
+    return format_local_time(dt)
 
 
 @app.template_filter('is_expired')
 def is_expired_filter(expires_date):
     """Check if an alert has expired"""
-    if not expires_date:
-        return False
-    return expires_date < datetime.utcnow()
+    return is_alert_expired(expires_date)
+
+
+@app.template_global()
+def current_time():
+    """Provide current datetime to templates"""
+    return utc_now()
+
+
+@app.template_global()
+def local_current_time():
+    """Provide current local datetime to templates"""
+    return local_now()
 
 
 # Main Routes
@@ -712,9 +868,9 @@ def stats():
             logger.error(f"Error calculating durations: {str(e)}")
             stats_data['avg_durations'] = []
 
-        # Recent activity
+        # Recent activity (using timezone-aware date calculation)
         try:
-            thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+            thirty_days_ago = utc_now() - timedelta(days=30)
             recent_alerts = CAPAlert.query.filter(CAPAlert.sent >= thirty_days_ago).count()
             recent_by_day = db.session.query(
                 func.date(CAPAlert.sent).label('date'),
@@ -868,7 +1024,7 @@ def alerts():
 
         if not show_expired:
             # Use our helper function for consistent active alerts logic
-            now = datetime.utcnow()
+            now = utc_now()
             query = query.filter(
                 or_(
                     CAPAlert.expires.is_(None),
@@ -1000,7 +1156,7 @@ def get_boundaries():
 
 @app.route('/api/alerts')
 def get_alerts():
-    """Get active CAP alerts as GeoJSON using new active logic"""
+    """Get active CAP alerts as GeoJSON using new active logic with timezone support"""
     try:
         # Use helper function for consistent active alerts logic
         alerts_query = get_active_alerts_query()
@@ -1086,6 +1242,15 @@ def get_alerts():
                     is_county_wide = True
 
             if geometry:
+                # Convert expires to ISO format for JavaScript (will be in UTC)
+                expires_iso = None
+                if alert.expires:
+                    if alert.expires.tzinfo is None:
+                        expires_dt = alert.expires.replace(tzinfo=UTC_TZ)
+                    else:
+                        expires_dt = alert.expires.astimezone(UTC_TZ)
+                    expires_iso = expires_dt.isoformat()
+
                 features.append({
                     'type': 'Feature',
                     'properties': {
@@ -1097,7 +1262,7 @@ def get_alerts():
                         'headline': alert.headline,
                         'description': alert.description,
                         'area_desc': alert.area_desc,
-                        'expires': alert.expires.isoformat() if alert.expires else None,
+                        'expires': expires_iso,
                         'is_county_wide': is_county_wide,
                         'geometry_source': 'county_boundary' if is_county_wide and county_boundary else 'original'
                     },
@@ -1115,7 +1280,7 @@ def get_alerts():
 
 @app.route('/api/system_status')
 def api_system_status():
-    """Get system status information using new helper functions"""
+    """Get system status information using new helper functions with timezone support"""
     try:
         total_boundaries = Boundary.query.count()
         active_alerts = get_active_alerts_query().count()
@@ -1126,14 +1291,20 @@ def api_system_status():
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
 
+        current_utc = utc_now()
+        current_local = local_now()
+
         return jsonify({
             'status': 'online',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': current_utc.isoformat(),
+            'local_timestamp': current_local.isoformat(),
+            'timezone': str(PUTNAM_COUNTY_TZ),
             'boundaries_count': total_boundaries,
             'active_alerts_count': active_alerts,
             'database_status': 'connected',
             'last_poll': {
                 'timestamp': last_poll.timestamp.isoformat() if last_poll else None,
+                'local_timestamp': last_poll.timestamp.astimezone(PUTNAM_COUNTY_TZ).isoformat() if last_poll else None,
                 'status': last_poll.status if last_poll else None,
                 'alerts_fetched': last_poll.alerts_fetched if last_poll else 0,
                 'alerts_new': last_poll.alerts_new if last_poll else 0
@@ -1164,12 +1335,17 @@ def api_system_health():
 # Export Routes
 @app.route('/export/alerts')
 def export_alerts():
-    """Export alerts data to Excel"""
+    """Export alerts data to Excel with proper timezone formatting"""
     try:
         alerts = CAPAlert.query.order_by(CAPAlert.sent.desc()).all()
 
         alerts_data = []
         for alert in alerts:
+            # Format times in local timezone for export
+            sent_local = format_local_datetime(alert.sent, include_utc=False) if alert.sent else ''
+            expires_local = format_local_datetime(alert.expires, include_utc=False) if alert.expires else ''
+            created_local = format_local_datetime(alert.created_at, include_utc=False) if alert.created_at else ''
+
             alerts_data.append({
                 'ID': alert.id,
                 'Identifier': alert.identifier,
@@ -1178,17 +1354,22 @@ def export_alerts():
                 'Severity': alert.severity or '',
                 'Urgency': alert.urgency or '',
                 'Certainty': alert.certainty or '',
-                'Sent': alert.sent.strftime('%Y-%m-%d %H:%M:%S') if alert.sent else '',
-                'Expires': alert.expires.strftime('%Y-%m-%d %H:%M:%S') if alert.expires else '',
+                'Sent_Local_Time': sent_local,
+                'Expires_Local_Time': expires_local,
+                'Sent_UTC': alert.sent.isoformat() if alert.sent else '',
+                'Expires_UTC': alert.expires.isoformat() if alert.expires else '',
                 'Headline': alert.headline or '',
                 'Area_Description': alert.area_desc or '',
-                'Created_At': alert.created_at.strftime('%Y-%m-%d %H:%M:%S') if alert.created_at else ''
+                'Created_Local_Time': created_local,
+                'Is_Expired': is_alert_expired(alert.expires)
             })
 
         return jsonify({
             'data': alerts_data,
             'total': len(alerts_data),
-            'exported_at': datetime.utcnow().isoformat()
+            'exported_at': utc_now().isoformat(),
+            'exported_at_local': local_now().isoformat(),
+            'timezone': str(PUTNAM_COUNTY_TZ)
         })
 
     except Exception as e:
@@ -1198,25 +1379,32 @@ def export_alerts():
 
 @app.route('/export/boundaries')
 def export_boundaries():
-    """Export boundaries data to Excel"""
+    """Export boundaries data to Excel with timezone formatting"""
     try:
         boundaries = Boundary.query.order_by(Boundary.type, Boundary.name).all()
 
         boundaries_data = []
         for boundary in boundaries:
+            created_local = format_local_datetime(boundary.created_at, include_utc=False) if boundary.created_at else ''
+            updated_local = format_local_datetime(boundary.updated_at, include_utc=False) if boundary.updated_at else ''
+
             boundaries_data.append({
                 'ID': boundary.id,
                 'Name': boundary.name,
                 'Type': boundary.type,
                 'Description': boundary.description or '',
-                'Created_At': boundary.created_at.strftime('%Y-%m-%d %H:%M:%S') if boundary.created_at else '',
-                'Updated_At': boundary.updated_at.strftime('%Y-%m-%d %H:%M:%S') if boundary.updated_at else ''
+                'Created_Local_Time': created_local,
+                'Updated_Local_Time': updated_local,
+                'Created_UTC': boundary.created_at.isoformat() if boundary.created_at else '',
+                'Updated_UTC': boundary.updated_at.isoformat() if boundary.updated_at else ''
             })
 
         return jsonify({
             'data': boundaries_data,
             'total': len(boundaries_data),
-            'exported_at': datetime.utcnow().isoformat()
+            'exported_at': utc_now().isoformat(),
+            'exported_at_local': local_now().isoformat(),
+            'timezone': str(PUTNAM_COUNTY_TZ)
         })
 
     except Exception as e:
@@ -1226,7 +1414,7 @@ def export_boundaries():
 
 @app.route('/export/statistics')
 def export_statistics():
-    """Export current statistics to Excel"""
+    """Export current statistics to Excel with timezone info"""
     try:
         stats_data = [{
             'Metric': 'Total Alerts',
@@ -1271,7 +1459,9 @@ def export_statistics():
         return jsonify({
             'data': stats_data,
             'total': len(stats_data),
-            'exported_at': datetime.utcnow().isoformat()
+            'exported_at': utc_now().isoformat(),
+            'exported_at_local': local_now().isoformat(),
+            'timezone': str(PUTNAM_COUNTY_TZ)
         })
 
     except Exception as e:
@@ -1313,6 +1503,11 @@ def debug_boundaries(alert_id):
             if any(indicator in area_lower for indicator in putnam_indicators):
                 is_county_wide = True
 
+        # Format alert times with timezone info
+        sent_time = format_local_datetime(alert.sent) if alert.sent else 'Unknown'
+        expires_time = format_local_datetime(alert.expires) if alert.expires else 'No expiration'
+        is_expired = is_alert_expired(alert.expires)
+
         html = f"""
         <html>
         <head><title>Boundary Debug for Alert {alert_id}</title></head>
@@ -1322,6 +1517,9 @@ def debug_boundaries(alert_id):
 
             <h2>Alert Information</h2>
             <p><strong>Event:</strong> {alert.event}</p>
+            <p><strong>Sent:</strong> {sent_time}</p>
+            <p><strong>Expires:</strong> {expires_time}</p>
+            <p><strong>Status:</strong> {'EXPIRED' if is_expired else 'ACTIVE'}</p>
             <p><strong>Area Description:</strong> {alert.area_desc or 'None'}</p>
             <p><strong>Detected as County-Wide:</strong> {'Yes' if is_county_wide else 'No'}</p>
         """
@@ -1415,12 +1613,16 @@ def debug_boundaries(alert_id):
 
 @app.route('/admin/trigger_poll', methods=['POST'])
 def trigger_poll():
-    """Manually trigger CAP alert polling"""
+    """Manually trigger CAP alert polling with timezone logging"""
     try:
         log_entry = SystemLog(
             level='INFO',
             message='Manual CAP poll triggered',
-            module='admin'
+            module='admin',
+            details={
+                'triggered_at_utc': utc_now().isoformat(),
+                'triggered_at_local': local_now().isoformat()
+            }
         )
         db.session.add(log_entry)
         db.session.commit()
@@ -1435,7 +1637,7 @@ def trigger_poll():
 def mark_expired():
     """Mark expired alerts as inactive without deleting them (SAFE OPTION)"""
     try:
-        now = datetime.utcnow()
+        now = utc_now()
 
         # Find alerts that are expired but not marked as such
         expired_alerts = CAPAlert.query.filter(
@@ -1458,7 +1660,12 @@ def mark_expired():
         log_entry = SystemLog(
             level='INFO',
             message=f'Marked {count} alerts as expired (data preserved)',
-            module='admin'
+            module='admin',
+            details={
+                'marked_at_utc': now.isoformat(),
+                'marked_at_local': local_now().isoformat(),
+                'count': count
+            }
         )
         db.session.add(log_entry)
         db.session.commit()
@@ -1485,7 +1692,7 @@ def clear_expired():
 
         if not confirmed:
             # First request - return count and require confirmation
-            now = datetime.utcnow()
+            now = utc_now()
             expired_count = CAPAlert.query.filter(CAPAlert.expires < now).count()
 
             return jsonify({
@@ -1496,7 +1703,7 @@ def clear_expired():
             })
 
         # Confirmed request - proceed with deletion
-        now = datetime.utcnow()
+        now = utc_now()
         expired_alerts = CAPAlert.query.filter(CAPAlert.expires < now).all()
         count = len(expired_alerts)
 
@@ -1512,7 +1719,9 @@ def clear_expired():
             details={
                 'deleted_alert_ids': alert_ids[:10],  # Log first 10 IDs
                 'total_deleted': count,
-                'deletion_confirmed': True
+                'deletion_confirmed': True,
+                'deleted_at_utc': now.isoformat(),
+                'deleted_at_local': local_now().isoformat()
             }
         )
         db.session.add(log_entry)
@@ -1537,7 +1746,7 @@ def clear_expired():
 
 @app.route('/admin/alert_status/<int:alert_id>', methods=['POST'])
 def update_alert_status(alert_id):
-    """Update the status of a specific alert"""
+    """Update the status of a specific alert with timezone logging"""
     try:
         data = request.get_json()
         new_status = data.get('status')
@@ -1550,14 +1759,21 @@ def update_alert_status(alert_id):
         old_status = alert.status
 
         alert.status = new_status
-        alert.updated_at = datetime.utcnow()
+        alert.updated_at = utc_now()
 
         db.session.commit()
 
         log_entry = SystemLog(
             level='INFO',
             message=f'Alert {alert.identifier} status changed from {old_status} to {new_status}',
-            module='admin'
+            module='admin',
+            details={
+                'updated_at_utc': utc_now().isoformat(),
+                'updated_at_local': local_now().isoformat(),
+                'alert_id': alert_id,
+                'old_status': old_status,
+                'new_status': new_status
+            }
         )
         db.session.add(log_entry)
         db.session.commit()
@@ -1600,7 +1816,12 @@ def optimize_db():
             level='INFO',
             message=f'Database optimization completed in {execution_time}ms',
             module='admin',
-            details={'execution_time_ms': execution_time, 'operation': 'VACUUM ANALYZE'}
+            details={
+                'execution_time_ms': execution_time,
+                'operation': 'VACUUM ANALYZE',
+                'completed_at_utc': utc_now().isoformat(),
+                'completed_at_local': local_now().isoformat()
+            }
         )
         db.session.add(log_entry)
         db.session.commit()
@@ -1674,6 +1895,11 @@ def check_db_health():
             health_info['active_connections'] = conn_result[0] if conn_result else 0
         except:
             health_info['active_connections'] = 'Unknown'
+
+        # Add timezone info
+        health_info['checked_at_utc'] = utc_now().isoformat()
+        health_info['checked_at_local'] = local_now().isoformat()
+        health_info['timezone'] = str(PUTNAM_COUNTY_TZ)
 
         return jsonify(health_info)
 
@@ -1782,7 +2008,14 @@ def upload_boundary():
             log_entry = SystemLog(
                 level='INFO',
                 message=f'Imported {imported_count} {boundary_type} boundaries (skipped {skipped_count})',
-                module='admin'
+                module='admin',
+                details={
+                    'boundary_type': boundary_type,
+                    'imported_count': imported_count,
+                    'skipped_count': skipped_count,
+                    'imported_at_utc': utc_now().isoformat(),
+                    'imported_at_local': local_now().isoformat()
+                }
             )
             db.session.add(log_entry)
             db.session.commit()
@@ -1815,7 +2048,14 @@ def delete_boundary(boundary_id):
         log_entry = SystemLog(
             level='INFO',
             message=f'Deleted {boundary_type} boundary: {boundary_name}',
-            module='admin'
+            module='admin',
+            details={
+                'boundary_id': boundary_id,
+                'boundary_name': boundary_name,
+                'boundary_type': boundary_type,
+                'deleted_at_utc': utc_now().isoformat(),
+                'deleted_at_local': local_now().isoformat()
+            }
         )
         db.session.add(log_entry)
         db.session.commit()
@@ -1826,364 +2066,6 @@ def delete_boundary(boundary_id):
         db.session.rollback()
         logger.error(f"Error deleting boundary {boundary_id}: {str(e)}")
         return jsonify({'error': f'Failed to delete boundary: {str(e)}'}), 500
-
-
-@app.route('/admin/delete_boundaries_by_type', methods=['DELETE'])
-def delete_boundaries_by_type():
-    """Delete all boundaries of a specific type with confirmation"""
-    try:
-        data = request.get_json() or {}
-        boundary_type = data.get('boundary_type')
-        confirmed = data.get('confirmed', False)
-
-        if not boundary_type:
-            return jsonify({'error': 'Boundary type is required'}), 400
-
-        boundaries = Boundary.query.filter_by(type=boundary_type).all()
-        count = len(boundaries)
-
-        if count == 0:
-            return jsonify({'message': f'No {boundary_type} boundaries found to delete'})
-
-        if not confirmed:
-            return jsonify({
-                'requires_confirmation': True,
-                'message': f'This will permanently delete ALL {count} {boundary_type} boundaries.',
-                'warning': 'This action cannot be undone and will affect all related alerts.',
-                'boundary_count': count,
-                'boundary_type': boundary_type
-            })
-
-        # Proceed with deletion
-        for boundary in boundaries:
-            db.session.delete(boundary)
-
-        db.session.commit()
-
-        log_entry = SystemLog(
-            level='WARNING',
-            message=f'PERMANENT DELETION: Deleted all {count} {boundary_type} boundaries',
-            module='admin',
-            details={'boundary_type': boundary_type, 'count': count, 'deletion_confirmed': True}
-        )
-        db.session.add(log_entry)
-        db.session.commit()
-
-        return jsonify({'success': f'Permanently deleted {count} {boundary_type} boundaries'})
-
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error deleting boundaries by type: {str(e)}")
-        return jsonify({'error': f'Failed to delete boundaries: {str(e)}'}), 500
-
-
-@app.route('/admin/clear_all_boundaries', methods=['DELETE'])
-def clear_all_boundaries():
-    """Delete ALL boundaries from the system with double confirmation"""
-    try:
-        data = request.get_json() or {}
-        confirmation_level = data.get('confirmation_level', 0)
-
-        count = Boundary.query.count()
-
-        if count == 0:
-            return jsonify({'message': 'No boundaries found to delete'})
-
-        if confirmation_level == 0:
-            # First confirmation request
-            return jsonify({
-                'requires_confirmation': True,
-                'confirmation_level': 1,
-                'message': f'⚠️ WARNING: This will permanently delete ALL {count} boundaries from the system.',
-                'warning': 'This will affect all alerts and intersections. This action cannot be undone.',
-                'boundary_count': count
-            })
-        elif confirmation_level == 1:
-            # Second confirmation request
-            return jsonify({
-                'requires_confirmation': True,
-                'confirmation_level': 2,
-                'message': f'🚨 FINAL WARNING: You are about to permanently delete {count} boundaries.',
-                'warning': 'Type "DELETE ALL BOUNDARIES" to confirm this irreversible action.',
-                'requires_text_confirmation': True,
-                'expected_text': 'DELETE ALL BOUNDARIES'
-            })
-        elif confirmation_level == 2:
-            # Check text confirmation
-            text_confirmation = data.get('text_confirmation', '')
-            if text_confirmation != 'DELETE ALL BOUNDARIES':
-                return jsonify({
-                    'error': 'Text confirmation does not match. Operation cancelled.',
-                    'expected': 'DELETE ALL BOUNDARIES',
-                    'received': text_confirmation
-                }), 400
-
-            # Proceed with deletion
-            log_entry = SystemLog(
-                level='CRITICAL',
-                message=f'PERMANENT DELETION: Clearing ALL {count} boundaries from system',
-                module='admin',
-                details={'deletion_confirmed': True, 'boundaries_deleted': count}
-            )
-            db.session.add(log_entry)
-
-            db.session.execute(text('DELETE FROM boundaries'))
-            db.session.commit()
-
-            return jsonify({
-                'success': f'Permanently deleted all {count} boundaries from the system',
-                'warning': 'All boundary data has been removed',
-                'deleted_count': count
-            })
-
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error clearing all boundaries: {str(e)}")
-        return jsonify({'error': f'Failed to clear boundaries: {str(e)}'}), 500
-
-
-# INTERSECTION MANAGEMENT ROUTES
-
-@app.route('/admin/fix_single_alert_intersections/<int:alert_id>', methods=['POST'])
-def fix_single_alert_intersections(alert_id):
-    """Fix intersections for a specific alert"""
-    try:
-        alert = CAPAlert.query.get_or_404(alert_id)
-
-        # Delete existing intersections for this alert
-        Intersection.query.filter_by(cap_alert_id=alert_id).delete()
-
-        # Check if this should be county-wide (improved detection)
-        is_county_wide = False
-        if alert.area_desc:
-            area_lower = alert.area_desc.lower()
-
-            county_wide_keywords = ['county', 'putnam county', 'entire county', 'all of putnam']
-            putnam_indicators = ['putnam;', 'putnam,', '; putnam;', '; putnam,', ', putnam;', ', putnam,', 'putnam ',
-                                 ' putnam']
-
-            if 'putnam' in area_lower:
-                county_count = len([x for x in area_lower.split(';') if x.strip()])
-                if county_count >= 3:
-                    is_county_wide = True
-
-            if any(keyword in area_lower for keyword in county_wide_keywords):
-                is_county_wide = True
-
-            if any(indicator in area_lower for indicator in putnam_indicators):
-                is_county_wide = True
-
-        intersections_created = 0
-
-        if is_county_wide:
-            # For county-wide alerts, intersect with ALL boundaries
-            all_boundaries = Boundary.query.all()
-
-            for boundary in all_boundaries:
-                # Calculate intersection area based on boundary area
-                intersection_area = 0
-                if boundary.geom:
-                    try:
-                        area_result = db.session.execute(text("""
-                                                              SELECT ST_Area(ST_Transform(geom, 3857)) as area
-                                                              FROM boundaries
-                                                              WHERE id = :boundary_id
-                                                              """), {'boundary_id': boundary.id}).fetchone()
-
-                        if area_result:
-                            intersection_area = area_result[0]
-                    except Exception as e:
-                        logger.warning(f"Could not calculate area for boundary {boundary.id}: {e}")
-
-                # Create intersection record
-                intersection = Intersection(
-                    cap_alert_id=alert_id,
-                    boundary_id=boundary.id,
-                    intersection_area=intersection_area or 0
-                )
-
-                db.session.add(intersection)
-                intersections_created += 1
-
-        elif alert.geom:
-            # For regular alerts with geometry, use spatial intersection
-            try:
-                intersecting_boundaries = db.session.query(Boundary).filter(
-                    ST_Intersects(Boundary.geom, alert.geom)
-                ).all()
-
-                for boundary in intersecting_boundaries:
-                    # Calculate actual intersection area
-                    try:
-                        intersection_area = db.session.scalar(
-                            text("""
-                                 SELECT ST_Area(ST_Intersection(
-                                         ST_Transform(b.geom, 3857),
-                                         ST_Transform(a.geom, 3857)
-                                                )) as area
-                                 FROM boundaries b,
-                                      cap_alerts a
-                                 WHERE b.id = :boundary_id
-                                   AND a.id = :alert_id
-                                 """),
-                            {'boundary_id': boundary.id, 'alert_id': alert_id}
-                        )
-                    except Exception as e:
-                        logger.warning(f"Could not calculate intersection area: {e}")
-                        intersection_area = 0
-
-                    intersection = Intersection(
-                        cap_alert_id=alert_id,
-                        boundary_id=boundary.id,
-                        intersection_area=intersection_area or 0
-                    )
-
-                    db.session.add(intersection)
-                    intersections_created += 1
-
-            except Exception as e:
-                logger.error(f"Error calculating spatial intersections: {e}")
-
-        db.session.commit()
-
-        log_entry = SystemLog(
-            level='INFO',
-            message=f'Fixed intersections for alert {alert_id}: created {intersections_created} intersection records',
-            module='admin'
-        )
-        db.session.add(log_entry)
-        db.session.commit()
-
-        return jsonify({
-            'success': f'Created {intersections_created} intersection records for this alert',
-            'alert_type': 'county-wide' if is_county_wide else 'localized',
-            'intersections_created': intersections_created
-        })
-
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error fixing intersections for alert {alert_id}: {str(e)}")
-        return jsonify({'error': f'Failed to fix intersections: {str(e)}'}), 500
-
-
-@app.route('/admin/recalculate_intersections', methods=['POST'])
-def recalculate_intersections():
-    """Recalculate all intersections for existing alerts"""
-    try:
-        # Get all active alerts using our helper function
-        active_alerts = get_active_alerts_query().all()
-
-        total_processed = 0
-        total_intersections = 0
-
-        for alert in active_alerts:
-            # Delete existing intersections for this alert
-            Intersection.query.filter_by(cap_alert_id=alert.id).delete()
-
-            # Process intersections using enhanced logic
-            intersections_created = process_alert_intersections(alert)
-            total_intersections += intersections_created
-            total_processed += 1
-
-        db.session.commit()
-
-        log_entry = SystemLog(
-            level='INFO',
-            message=f'Recalculated intersections for {total_processed} alerts, created {total_intersections} intersection records',
-            module='admin'
-        )
-        db.session.add(log_entry)
-        db.session.commit()
-
-        return jsonify({
-            'success': f'Recalculated intersections for {total_processed} alerts',
-            'message': f'Created {total_intersections} boundary intersection records'
-        })
-
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error recalculating intersections: {str(e)}")
-        return jsonify({'error': f'Failed to recalculate intersections: {str(e)}'}), 500
-
-
-def process_alert_intersections(alert: CAPAlert):
-    """Process intersections for a single alert and return count created"""
-    intersections_created = 0
-
-    try:
-        # Check if this is a county-wide alert
-        is_county_wide = bool(alert.area_desc and any(
-            term in alert.area_desc.lower()
-            for term in ['county', 'putnam county', 'entire county']
-        ))
-
-        if is_county_wide:
-            # For county-wide alerts, intersect with all boundaries
-            all_boundaries = db.session.query(Boundary).all()
-
-            for boundary in all_boundaries:
-                # Calculate intersection area
-                intersection_area = 0
-                if boundary.geom:
-                    try:
-                        area_result = db.session.execute(text("""
-                                                              SELECT ST_Area(ST_Transform(geom, 3857)) as area
-                                                              FROM boundaries
-                                                              WHERE id = :boundary_id
-                                                              """), {'boundary_id': boundary.id}).fetchone()
-                        if area_result:
-                            intersection_area = area_result[0]
-                    except Exception as e:
-                        logger.warning(f"Could not calculate area for boundary {boundary.id}: {e}")
-
-                # Save intersection record
-                intersection = Intersection(
-                    cap_alert_id=alert.id,
-                    boundary_id=boundary.id,
-                    intersection_area=intersection_area or 0
-                )
-                db.session.add(intersection)
-                intersections_created += 1
-
-        elif alert.geom:
-            # Regular alert with geometry - use spatial intersection
-            intersecting_boundaries = db.session.query(Boundary).filter(
-                ST_Intersects(Boundary.geom, alert.geom)
-            ).all()
-
-            for boundary in intersecting_boundaries:
-                # Calculate intersection area
-                try:
-                    intersection_area = db.session.scalar(
-                        text("""
-                             SELECT ST_Area(ST_Intersection(
-                                     ST_Transform(b.geom, 3857),
-                                     ST_Transform(a.geom, 3857)
-                                            )) as area
-                             FROM boundaries b,
-                                  cap_alerts a
-                             WHERE b.id = :boundary_id
-                               AND a.id = :alert_id
-                             """),
-                        {'boundary_id': boundary.id, 'alert_id': alert.id}
-                    )
-                except Exception as e:
-                    logger.warning(f"Could not calculate intersection area: {e}")
-                    intersection_area = 0
-
-                # Save intersection record
-                intersection = Intersection(
-                    cap_alert_id=alert.id,
-                    boundary_id=boundary.id,
-                    intersection_area=intersection_area or 0
-                )
-                db.session.add(intersection)
-                intersections_created += 1
-
-    except Exception as e:
-        logger.error(f"Error processing intersections for alert {alert.id}: {str(e)}")
-
-    return intersections_created
 
 
 # Error handlers
