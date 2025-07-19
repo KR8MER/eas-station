@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Interactive Map - NOAA CAP Alerts{% endblock %}
+{% block title %}Interactive Map - KR8MER CAP Alerts{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -10,7 +10,7 @@
         border-radius: 8px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
-    
+
     .map-controls {
         background: white;
         border-radius: 8px;
@@ -18,7 +18,7 @@
         box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         margin-bottom: 20px;
     }
-    
+
     .status-panel {
         background: white;
         border-radius: 8px;
@@ -26,64 +26,73 @@
         box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         margin-bottom: 20px;
     }
-    
+
     .form-check-input:checked {
         background-color: #0d6efd;
         border-color: #0d6efd;
     }
-    
+
     .layer-group {
         margin-bottom: 15px;
     }
-    
+
     .layer-group h6 {
         color: #495057;
         margin-bottom: 10px;
         font-weight: 600;
     }
-    
+
     .status-item {
         display: flex;
         justify-content: space-between;
         margin-bottom: 8px;
     }
-    
+
     .status-value {
         font-weight: 600;
     }
-    
+
     .btn-group-sm .btn {
         padding: 0.25rem 0.5rem;
         font-size: 0.875rem;
     }
-    
+
     .leaflet-popup-content {
         max-width: 300px;
     }
-    
+
     .popup-title {
         font-weight: bold;
         color: #0d6efd;
         margin-bottom: 8px;
     }
-    
+
     .popup-detail {
         margin-bottom: 5px;
         font-size: 0.9em;
     }
-    
+
     .alert-summary {
         background: #f8f9fa;
         border-radius: 5px;
         padding: 10px;
         margin-top: 10px;
     }
-    
+
+    .county-wide-badge {
+        background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+        color: white;
+        font-size: 0.75em;
+        padding: 2px 6px;
+        border-radius: 10px;
+        margin-left: 5px;
+    }
+
     @media (max-width: 768px) {
         #map {
             height: 400px;
         }
-        
+
         .col-md-3 {
             margin-bottom: 20px;
         }
@@ -96,20 +105,21 @@
     <div class="row">
         <div class="col-12">
             <h1 class="h3 text-primary mb-4">
-                <i class="fas fa-map"></i> Interactive Map
+                <i class="fas fa-map"></i> Interactive Emergency Alert Map
+                <small class="text-muted">- Putnam County, Ohio</small>
             </h1>
         </div>
     </div>
-    
+
     <div class="row">
-        <!-- Sidebar -->
+        <!-- Sidebar Controls -->
         <div class="col-md-3">
             <!-- Map Controls -->
             <div class="map-controls">
                 <h5 class="mb-3">
                     <i class="fas fa-sliders-h"></i> Map Controls
                 </h5>
-                
+
                 <!-- Boundary Layers -->
                 <div class="layer-group">
                     <h6><i class="fas fa-layer-group"></i> Boundary Layers</h6>
@@ -146,7 +156,7 @@
                         <label class="form-check-label" for="toggle-school">School Districts</label>
                     </div>
                 </div>
-                
+
                 <!-- Alert Layers -->
                 <div class="layer-group">
                     <h6><i class="fas fa-exclamation-triangle"></i> Alert Layers</h6>
@@ -154,9 +164,13 @@
                         <input class="form-check-input" type="checkbox" id="toggle-alerts" checked>
                         <label class="form-check-label" for="toggle-alerts">Active Alerts</label>
                     </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="toggle-county-alerts" checked>
+                        <label class="form-check-label" for="toggle-county-alerts">County-wide Alerts</label>
+                    </div>
                 </div>
             </div>
-            
+
             <!-- System Status -->
             <div class="status-panel">
                 <h5 class="mb-3">
@@ -174,12 +188,12 @@
                     <span>Alerts:</span>
                     <span class="status-value" id="alert-count">Loading...</span>
                 </div>
-                
+
                 <div id="alert-summary" class="alert-summary mt-3" style="display: none;">
                     <!-- Alert summary will be populated by JavaScript -->
                 </div>
             </div>
-            
+
             <!-- Quick Actions -->
             <div class="status-panel">
                 <h5 class="mb-3">
@@ -195,16 +209,60 @@
                     <a href="/stats" class="btn btn-outline-info btn-sm">
                         <i class="fas fa-chart-bar"></i> View Statistics
                     </a>
+                    <a href="/system_health" class="btn btn-outline-success btn-sm">
+                        <i class="fas fa-heartbeat"></i> System Health
+                    </a>
                     <button class="btn btn-outline-success btn-sm" onclick="refreshData()">
                         <i class="fas fa-sync-alt"></i> Refresh Data
+                    </button>
+                    <button class="btn btn-outline-warning btn-sm" onclick="fixCountyIntersections()">
+                        <i class="fas fa-wrench"></i> Fix County Intersections
                     </button>
                 </div>
             </div>
         </div>
-        
-        <!-- Map -->
+
+        <!-- Map Column -->
         <div class="col-md-9">
             <div id="map"></div>
+        </div>
+    </div>
+
+    <!-- Map Legend Row -->
+    <div class="row mt-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="fas fa-map-signs"></i> Map Legend</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Alert Severity Colors:</h6>
+                            <div class="d-flex flex-wrap gap-2">
+                                <span class="badge" style="background-color: #e74c3c;">Extreme</span>
+                                <span class="badge" style="background-color: #e67e22;">Severe</span>
+                                <span class="badge" style="background-color: #f39c12;">Moderate</span>
+                                <span class="badge" style="background-color: #3498db;">Minor</span>
+                                <span class="badge" style="background-color: #95a5a6;">Unknown</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Boundary Types:</h6>
+                            <div class="d-flex flex-wrap gap-1">
+                                <span class="badge" style="background-color: #e74c3c;">County</span>
+                                <span class="badge" style="background-color: #e67e22;">Fire</span>
+                                <span class="badge" style="background-color: #f39c12;">Electric</span>
+                                <span class="badge" style="background-color: #2ecc71;">Township</span>
+                                <span class="badge" style="background-color: #3498db;">EMS</span>
+                                <span class="badge" style="background-color: #9b59b6;">Villages</span>
+                                <span class="badge" style="background-color: #1abc9c;">Telephone</span>
+                                <span class="badge" style="background-color: #34495e;">School</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -215,37 +273,43 @@
 let map;
 let boundaryLayers = {};
 let alertLayer;
+let countyWideAlertLayer;
 
 // Initialize map
 function initMap() {
     // Create map centered on Putnam County, Ohio
-    map = L.map('map').setView([41.0167, -84.1330], 11); // Putnam County, Ohio coordinates
-    
+    map = L.map('map').setView([41.0167, -84.1330], 11);
+
     // Add base layers
     const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors'
     });
-    
+
     const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: 'Tiles © Esri'
     });
-    
+
+    const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenTopoMap contributors'
+    });
+
     // Add default layer
     osmLayer.addTo(map);
-    
+
     // Layer control
     const baseLayers = {
         "OpenStreetMap": osmLayer,
-        "Satellite": satelliteLayer
+        "Satellite": satelliteLayer,
+        "Topographic": topoLayer
     };
-    
+
     L.control.layers(baseLayers).addTo(map);
-    
+
     // Load data
     loadBoundaries();
     loadAlerts();
     updateSystemStatus();
-    
+
     // Set up layer toggles
     setupLayerToggles();
 }
@@ -254,7 +318,7 @@ function initMap() {
 function loadBoundaries() {
     const boundaryTypes = ['county', 'fire', 'ems', 'electric', 'township', 'villages', 'telephone', 'school'];
     let totalBoundaries = 0;
-    
+
     boundaryTypes.forEach(type => {
         fetch(`/api/boundaries?type=${type}`)
             .then(response => response.json())
@@ -271,14 +335,14 @@ function loadBoundaries() {
                         telephone: '#1abc9c',
                         school: '#34495e'
                     };
-                    
+
                     // Create layer for this boundary type
                     boundaryLayers[type] = L.geoJSON(data, {
                         style: {
                             color: colors[type] || '#95a5a6',
-                            weight: 2,
+                            weight: type === 'county' ? 3 : 2,
                             opacity: 0.8,
-                            fillOpacity: 0.1
+                            fillOpacity: type === 'county' ? 0.05 : 0.1
                         },
                         onEachFeature: function(feature, layer) {
                             const props = feature.properties;
@@ -290,12 +354,12 @@ function loadBoundaries() {
                             layer.bindPopup(popup);
                         }
                     });
-                    
+
                     // Add to map if toggle is checked
                     if (document.getElementById(`toggle-${type}`).checked) {
                         boundaryLayers[type].addTo(map);
                     }
-                    
+
                     totalBoundaries += data.features.length;
                     document.getElementById('boundary-count').textContent = totalBoundaries;
                 }
@@ -306,56 +370,114 @@ function loadBoundaries() {
     });
 }
 
-// Load alerts from API
+// Load alerts from API with county-wide support
 function loadAlerts() {
     fetch('/api/alerts')
         .then(response => response.json())
         .then(data => {
+            // Clear existing alert layers
             if (alertLayer) {
                 map.removeLayer(alertLayer);
             }
-            
+            if (countyWideAlertLayer) {
+                map.removeLayer(countyWideAlertLayer);
+            }
+
             if (data.features && data.features.length > 0) {
-                alertLayer = L.geoJSON(data, {
-                    style: function(feature) {
-                        const severity = feature.properties.severity;
-                        let color = '#95a5a6'; // default gray
-                        
-                        switch(severity) {
-                            case 'Extreme': color = '#e74c3c'; break;
-                            case 'Severe': color = '#e67e22'; break;
-                            case 'Moderate': color = '#f39c12'; break;
-                            case 'Minor': color = '#3498db'; break;
+                // Separate regular alerts from county-wide alerts
+                const regularAlerts = data.features.filter(f => !f.properties.is_county_wide);
+                const countyWideAlerts = data.features.filter(f => f.properties.is_county_wide);
+
+                // Create regular alerts layer
+                if (regularAlerts.length > 0) {
+                    alertLayer = L.geoJSON(regularAlerts, {
+                        style: function(feature) {
+                            const severity = feature.properties.severity;
+                            let color = '#95a5a6'; // default gray
+
+                            switch(severity) {
+                                case 'Extreme': color = '#e74c3c'; break;
+                                case 'Severe': color = '#e67e22'; break;
+                                case 'Moderate': color = '#f39c12'; break;
+                                case 'Minor': color = '#3498db'; break;
+                            }
+
+                            return {
+                                color: color,
+                                weight: 3,
+                                opacity: 0.9,
+                                fillOpacity: 0.3
+                            };
+                        },
+                        onEachFeature: function(feature, layer) {
+                            const props = feature.properties;
+                            const popup = `
+                                <div class="popup-title">${props.event}</div>
+                                <div class="popup-detail"><strong>Severity:</strong> ${props.severity || 'Unknown'}</div>
+                                <div class="popup-detail"><strong>Urgency:</strong> ${props.urgency || 'Unknown'}</div>
+                                <div class="popup-detail"><strong>Expires:</strong> ${props.expires ? new Date(props.expires).toLocaleString() : 'No expiration'}</div>
+                                ${props.headline ? `<div class="popup-detail"><strong>Headline:</strong> ${props.headline}</div>` : ''}
+                                ${props.area_desc ? `<div class="popup-detail"><strong>Area:</strong> ${props.area_desc}</div>` : ''}
+                                <div class="mt-2">
+                                    <a href="/alerts/${props.id}" class="btn btn-sm btn-primary">View Details</a>
+                                </div>
+                            `;
+                            layer.bindPopup(popup);
                         }
-                        
-                        return {
-                            color: color,
-                            weight: 3,
-                            opacity: 0.9,
-                            fillOpacity: 0.3
-                        };
-                    },
-                    onEachFeature: function(feature, layer) {
-                        const props = feature.properties;
-                        const popup = `
-                            <div class="popup-title">${props.event}</div>
-                            <div class="popup-detail"><strong>Severity:</strong> ${props.severity || 'Unknown'}</div>
-                            <div class="popup-detail"><strong>Urgency:</strong> ${props.urgency || 'Unknown'}</div>
-                            <div class="popup-detail"><strong>Expires:</strong> ${props.expires ? new Date(props.expires).toLocaleString() : 'No expiration'}</div>
-                            ${props.headline ? `<div class="popup-detail"><strong>Headline:</strong> ${props.headline}</div>` : ''}
-                            <div class="mt-2">
-                                <a href="/alerts/${props.id}" class="btn btn-sm btn-primary">View Details</a>
-                            </div>
-                        `;
-                        layer.bindPopup(popup);
+                    });
+
+                    if (document.getElementById('toggle-alerts').checked) {
+                        alertLayer.addTo(map);
                     }
-                });
-                
-                // Add to map if alerts toggle is checked
-                if (document.getElementById('toggle-alerts').checked) {
-                    alertLayer.addTo(map);
                 }
-                
+
+                // Create county-wide alerts layer with special styling
+                if (countyWideAlerts.length > 0) {
+                    countyWideAlertLayer = L.geoJSON(countyWideAlerts, {
+                        style: function(feature) {
+                            const severity = feature.properties.severity;
+                            let color = '#95a5a6';
+
+                            switch(severity) {
+                                case 'Extreme': color = '#e74c3c'; break;
+                                case 'Severe': color = '#e67e22'; break;
+                                case 'Moderate': color = '#f39c12'; break;
+                                case 'Minor': color = '#3498db'; break;
+                            }
+
+                            return {
+                                color: color,
+                                weight: 4,
+                                opacity: 0.8,
+                                fillOpacity: 0.2,
+                                dashArray: '10, 5' // Dashed line for county-wide alerts
+                            };
+                        },
+                        onEachFeature: function(feature, layer) {
+                            const props = feature.properties;
+                            const popup = `
+                                <div class="popup-title">
+                                    ${props.event}
+                                    <span class="county-wide-badge">COUNTY-WIDE</span>
+                                </div>
+                                <div class="popup-detail"><strong>Severity:</strong> ${props.severity || 'Unknown'}</div>
+                                <div class="popup-detail"><strong>Urgency:</strong> ${props.urgency || 'Unknown'}</div>
+                                <div class="popup-detail"><strong>Expires:</strong> ${props.expires ? new Date(props.expires).toLocaleString() : 'No expiration'}</div>
+                                ${props.headline ? `<div class="popup-detail"><strong>Headline:</strong> ${props.headline}</div>` : ''}
+                                <div class="popup-detail"><strong>Coverage:</strong> County-wide alert</div>
+                                <div class="mt-2">
+                                    <a href="/alerts/${props.id}" class="btn btn-sm btn-primary">View Details</a>
+                                </div>
+                            `;
+                            layer.bindPopup(popup);
+                        }
+                    });
+
+                    if (document.getElementById('toggle-county-alerts').checked) {
+                        countyWideAlertLayer.addTo(map);
+                    }
+                }
+
                 // Update alert summary
                 updateAlertSummary(data.features);
                 document.getElementById('alert-count').textContent = data.features.length;
@@ -373,18 +495,20 @@ function loadAlerts() {
 // Update alert summary
 function updateAlertSummary(alerts) {
     const summaryDiv = document.getElementById('alert-summary');
-    
+
     if (alerts.length === 0) {
         summaryDiv.style.display = 'none';
         return;
     }
-    
+
     const severityCounts = {};
+    const countyWideCount = alerts.filter(a => a.properties.is_county_wide).length;
+
     alerts.forEach(alert => {
         const severity = alert.properties.severity || 'Unknown';
         severityCounts[severity] = (severityCounts[severity] || 0) + 1;
     });
-    
+
     let summaryHtml = '<strong>Alert Summary:</strong><br>';
     Object.entries(severityCounts).forEach(([severity, count]) => {
         const badgeClass = {
@@ -393,10 +517,14 @@ function updateAlertSummary(alerts) {
             'Moderate': 'info',
             'Minor': 'secondary'
         }[severity] || 'secondary';
-        
+
         summaryHtml += `<span class="badge bg-${badgeClass} me-1">${severity}: ${count}</span>`;
     });
-    
+
+    if (countyWideCount > 0) {
+        summaryHtml += `<br><small class="text-muted mt-1">${countyWideCount} county-wide alert${countyWideCount > 1 ? 's' : ''}</small>`;
+    }
+
     summaryDiv.innerHTML = summaryHtml;
     summaryDiv.style.display = 'block';
 }
@@ -404,7 +532,7 @@ function updateAlertSummary(alerts) {
 // Setup layer toggles
 function setupLayerToggles() {
     const boundaryTypes = ['county', 'fire', 'ems', 'electric', 'township', 'villages', 'telephone', 'school'];
-    
+
     boundaryTypes.forEach(type => {
         const toggle = document.getElementById(`toggle-${type}`);
         if (toggle) {
@@ -419,8 +547,8 @@ function setupLayerToggles() {
             });
         }
     });
-    
-    // Alert toggle
+
+    // Regular alert toggle
     const alertToggle = document.getElementById('toggle-alerts');
     if (alertToggle) {
         alertToggle.addEventListener('change', function() {
@@ -429,6 +557,20 @@ function setupLayerToggles() {
                     alertLayer.addTo(map);
                 } else {
                     map.removeLayer(alertLayer);
+                }
+            }
+        });
+    }
+
+    // County-wide alert toggle
+    const countyAlertToggle = document.getElementById('toggle-county-alerts');
+    if (countyAlertToggle) {
+        countyAlertToggle.addEventListener('change', function() {
+            if (countyWideAlertLayer) {
+                if (this.checked) {
+                    countyWideAlertLayer.addTo(map);
+                } else {
+                    map.removeLayer(countyWideAlertLayer);
                 }
             }
         });
@@ -459,25 +601,115 @@ function updateSystemStatus() {
 function refreshData() {
     const refreshBtn = document.querySelector('button[onclick="refreshData()"] i');
     refreshBtn.classList.add('fa-spin');
-    
+
     loadBoundaries();
     loadAlerts();
     updateSystemStatus();
-    
+
+    // Show toast notification
+    if (typeof showToast === 'function') {
+        showToast('Map data refreshed successfully!', 'success');
+    }
+
     setTimeout(() => {
         refreshBtn.classList.remove('fa-spin');
     }, 2000);
 }
 
+// Fix county intersections function
+async function fixCountyIntersections() {
+    if (!confirm('Fix intersection calculations for county-wide alerts? This will recalculate affected boundaries.')) return;
+
+    try {
+        const response = await fetch('/admin/fix_county_intersections', { method: 'POST' });
+        const result = await response.json();
+
+        if (response.ok) {
+            if (typeof showToast === 'function') {
+                showToast(result.success || result.message, 'success');
+            } else {
+                alert(result.success || result.message);
+            }
+        } else {
+            if (typeof showToast === 'function') {
+                showToast(result.error || 'Failed to fix intersections', 'error');
+            } else {
+                alert(result.error || 'Failed to fix intersections');
+            }
+        }
+    } catch (error) {
+        console.error('Error fixing intersections:', error);
+        if (typeof showToast === 'function') {
+            showToast('Error fixing intersections: ' + error.message, 'error');
+        } else {
+            alert('Error fixing intersections: ' + error.message);
+        }
+    }
+}
+
+// Add map controls for better UX
+function addMapControls() {
+    // Add scale control
+    L.control.scale({
+        position: 'bottomleft'
+    }).addTo(map);
+}
+
 // Initialize map when page loads
 document.addEventListener('DOMContentLoaded', function() {
-    initMap();
-    
-    // Refresh data every 5 minutes
-    setInterval(() => {
-        loadAlerts();
-        updateSystemStatus();
-    }, 300000);
+    try {
+        initMap();
+        addMapControls();
+
+        // Refresh data every 5 minutes
+        setInterval(() => {
+            loadAlerts();
+            updateSystemStatus();
+        }, 300000);
+
+        // Add keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            // Press 'R' to refresh
+            if (e.key === 'r' || e.key === 'R') {
+                if (!e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    refreshData();
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error initializing map:', error);
+
+        // Fallback: show error message in map container
+        const mapContainer = document.getElementById('map');
+        if (mapContainer) {
+            mapContainer.innerHTML = `
+                <div style="height: 600px; display: flex; align-items: center; justify-content: center; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px;">
+                    <div style="text-align: center;">
+                        <h4 style="color: #dc3545;">Map Loading Error</h4>
+                        <p style="color: #6c757d;">There was an issue loading the map. Please refresh the page.</p>
+                        <button onclick="window.location.reload()" style="background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">
+                            Refresh Page
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+    }
+});
+
+// Add some utility functions for better error handling
+window.addEventListener('online', function() {
+    if (typeof showToast === 'function') {
+        showToast('Connection restored - refreshing data', 'success');
+    }
+    refreshData();
+});
+
+window.addEventListener('offline', function() {
+    if (typeof showToast === 'function') {
+        showToast('Connection lost - map data may be outdated', 'warning');
+    }
 });
 </script>
 {% endblock %}

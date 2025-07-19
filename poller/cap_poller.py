@@ -23,11 +23,11 @@ from app import CAPAlert, Boundary, SystemLog, Intersection, db
 
 
 class CAPPoller:
-    """NOAA CAP Alert Polling Service for OHZ016 zone"""
+    """NOAA CAP Alert Polling Service for OHZ016 zone (Putnam County, OH)"""
 
     def __init__(self, database_url=None):
         self.logger = logging.getLogger(__name__)
-        
+
         # Configure requests session
         self.session = requests.Session()
         self.session.timeout = 30
@@ -35,9 +35,6 @@ class CAPPoller:
             'User-Agent': 'NOAA-CAP-Alert-System/1.0 (Emergency Management System)'
         })
 
-        # API endpoint for OHZ016 (your specific zone)
-        self.api_url = "https://api.weather.gov/alerts/active?zone=OHZ013"
-        
         # Database setup
         if database_url:
             self.engine = create_engine(database_url)
@@ -49,26 +46,103 @@ class CAPPoller:
             self.app = app
             self.db_session = db.session
 
-    def fetch_cap_alerts(self) -> List[Dict]:
-        """Fetch CAP alerts from NOAA API for OHZ016 zone"""
+    def is_relevant_alert(self, alert_data: Dict) -> bool:
+        """Check if alert is relevant to Putnam County, Ohio"""
         try:
-            self.logger.info(f"Fetching CAP alerts from: {self.api_url}")
+            properties = alert_data.get('properties', {})
 
-            response = self.session.get(self.api_url)
-            response.raise_for_status()
+            # Safe extraction of data
+            area_desc = str(properties.get('areaDesc') or '').upper()
+            geocode = properties.get('geocode', {})
+            ugc_codes = geocode.get('UGC', []) or []
+            event = str(properties.get('event') or '').lower()
 
-            alerts_data = response.json()
-            features = alerts_data.get('features', [])
+            self.logger.debug(f"Checking alert: {event}")
+            self.logger.debug(f"  UGC codes: {ugc_codes}")
+            self.logger.debug(f"  Area contains PUTNAM: {'PUTNAM' in area_desc}")
 
-            self.logger.info(f"Retrieved {len(features)} alerts for OHZ016 zone")
-            return features
+            # Check for our specific zones
+            our_zones = ['OHZ016', 'OHC137']
+            for zone in our_zones:
+                if zone in ugc_codes:
+                    self.logger.info(f"Alert {event} affects our zone {zone}")
+                    return True
 
-        except requests.exceptions.RequestException as e:
-            self.logger.error(f"Error fetching CAP alerts: {str(e)}")
-            raise
-        except json.JSONDecodeError as e:
-            self.logger.error(f"Error parsing CAP alerts JSON: {str(e)}")
-            raise
+            # Check area description for Putnam County
+            if 'PUTNAM' in area_desc:
+                self.logger.info(f"Alert {event} mentions Putnam County")
+                return True
+
+            # Check for our zones in area description
+            for zone in our_zones:
+                if zone in area_desc:
+                    self.logger.info(f"Alert {event} mentions zone {zone}")
+                    return True
+
+            return False
+
+        except Exception as e:
+            self.logger.error(f"Error in is_relevant_alert: {e}")
+            return True  # Include on error to be safe
+
+    def fetch_cap_alerts(self) -> List[Dict]:
+        """Fetch CAP alerts from NOAA API for OHZ016 and related zones"""
+        all_alerts = []
+
+        # Multiple endpoints to check
+        endpoints = [
+            "https://api.weather.gov/alerts/active?zone=OHZ016",  # Putnam County Zone
+            "https://api.weather.gov/alerts/active?zone=OHC137",  # Putnam County Code
+        ]
+
+        for endpoint in endpoints:
+            try:
+                self.logger.info(f"Fetching CAP alerts from: {endpoint}")
+
+                response = self.session.get(endpoint)
+                response.raise_for_status()
+
+                alerts_data = response.json()
+                features = alerts_data.get('features', [])
+
+                self.logger.info(f"Retrieved {len(features)} alerts from endpoint")
+
+                # Add all features, we'll filter them later
+                all_alerts.extend(features)
+
+            except requests.exceptions.RequestException as e:
+                self.logger.error(f"Error fetching CAP alerts from {endpoint}: {str(e)}")
+                continue
+            except json.JSONDecodeError as e:
+                self.logger.error(f"Error parsing CAP alerts JSON from {endpoint}: {str(e)}")
+                continue
+
+        # Remove duplicates based on identifier - handle None identifiers
+        seen_ids = set()
+        unique_alerts = []
+        for alert in all_alerts:
+            alert_id = alert.get('properties', {}).get('identifier')
+            if alert_id:  # Only check for duplicates if identifier exists
+                if alert_id not in seen_ids:
+                    seen_ids.add(alert_id)
+                    unique_alerts.append(alert)
+                else:
+                    self.logger.debug(f"Skipping duplicate alert: {alert_id}")
+            else:
+                # If no identifier, include the alert anyway
+                self.logger.warning(f"Alert has no identifier, including anyway")
+                unique_alerts.append(alert)
+
+        self.logger.info(f"Total unique alerts collected: {len(unique_alerts)}")
+
+        # Debug: log what we collected
+        for alert in unique_alerts:
+            props = alert.get('properties', {})
+            event = props.get('event', 'Unknown')
+            alert_id = props.get('identifier', 'No ID')
+            self.logger.info(f"Collected alert: {event} (ID: {alert_id[:20] if alert_id != 'No ID' else 'No ID'}...)")
+
+        return unique_alerts
 
     def parse_cap_alert(self, alert_data: Dict) -> Optional[Dict]:
         """Parse CAP alert data into database format"""
@@ -76,11 +150,17 @@ class CAPPoller:
             properties = alert_data.get('properties', {})
             geometry = alert_data.get('geometry')
 
-            # Extract required fields
+            # Extract identifier - generate one if missing
             identifier = properties.get('identifier')
             if not identifier:
-                self.logger.warning("Alert missing identifier, skipping")
-                return None
+                # Generate a temporary identifier for alerts without one
+                import hashlib
+                import time
+                event = properties.get('event', 'Unknown')
+                sent = properties.get('sent', str(time.time()))
+                temp_id = f"temp_{hashlib.md5((event + sent).encode()).hexdigest()[:16]}"
+                identifier = temp_id
+                self.logger.info(f"Generated temporary identifier for {event}: {identifier}")
 
             # Parse datetime fields
             sent_str = properties.get('sent')
@@ -110,10 +190,10 @@ class CAPPoller:
                     self.logger.warning(f"Invalid expires timestamp: {expires_str} - {e}")
 
             # Extract area description from multiple possible fields
-            area_desc = (properties.get('areaDesc') or 
-                        properties.get('areas') or 
-                        properties.get('geocode', {}).get('UGC', [''])[0] or
-                        'OHZ016')
+            area_desc = (properties.get('areaDesc') or
+                         properties.get('areas') or
+                         properties.get('geocode', {}).get('UGC', [''])[0] or
+                         'OHZ016')
 
             # Build parsed alert data
             parsed_alert = {
@@ -136,7 +216,7 @@ class CAPPoller:
                 'raw_json': alert_data
             }
 
-            self.logger.debug(f"Parsed alert: {identifier} - {parsed_alert['event']}")
+            self.logger.info(f"Successfully parsed alert: {identifier} - {parsed_alert['event']}")
             return parsed_alert
 
         except Exception as e:
@@ -144,7 +224,7 @@ class CAPPoller:
             return None
 
     def save_cap_alert(self, alert_data: Dict) -> Tuple[bool, Optional[CAPAlert]]:
-        """Save CAP alert to database"""
+        """Save CAP alert to database - handles null geometry"""
         try:
             # Check if alert already exists
             existing = self.db_session.query(CAPAlert).filter_by(
@@ -157,26 +237,32 @@ class CAPPoller:
                     if key != 'geometry':
                         setattr(existing, key, value)
 
-                # Update geometry if provided
+                # Update geometry if provided and not null
                 if alert_data.get('geometry'):
                     existing.geom = ST_GeomFromGeoJSON(json.dumps(alert_data['geometry']))
+                else:
+                    # For null geometry, set to None
+                    existing.geom = None
 
                 self.db_session.commit()
                 self.logger.debug(f"Updated existing alert: {existing.identifier}")
-                return False, existing  # Updated, not new
+                return False, existing
 
             else:
                 # Create new alert
                 new_alert = CAPAlert(**{k: v for k, v in alert_data.items() if k != 'geometry'})
 
-                # Add geometry if provided
+                # Add geometry if provided and not null
                 if alert_data.get('geometry'):
                     new_alert.geom = ST_GeomFromGeoJSON(json.dumps(alert_data['geometry']))
+                else:
+                    # For null geometry, leave as None
+                    new_alert.geom = None
 
                 self.db_session.add(new_alert)
                 self.db_session.commit()
                 self.logger.info(f"Saved new alert: {new_alert.identifier} - {new_alert.event}")
-                return True, new_alert  # New alert
+                return True, new_alert
 
         except Exception as e:
             self.db_session.rollback()
@@ -187,10 +273,41 @@ class CAPPoller:
         """Process intersections between alert and boundaries"""
         try:
             if not alert.geom:
-                self.logger.debug(f"Alert {alert.identifier} has no geometry, skipping intersections")
+                self.logger.info(
+                    f"Alert {alert.identifier} ({alert.event}) has no geometry - using zone-based intersection")
+
+                # For alerts without geometry (like Special Weather Statements),
+                # create intersections based on zone codes
+                if alert.event and ('special weather statement' in alert.event.lower() or
+                                    'advisory' in alert.event.lower() or
+                                    'warning' in alert.event.lower()):
+
+                    # Find all boundaries in Putnam County for general intersection
+                    county_boundaries = self.db_session.query(Boundary).filter(
+                        Boundary.name.ilike('%putnam%')
+                    ).all()
+
+                    for boundary in county_boundaries:
+                        # Check if intersection already exists
+                        existing = self.db_session.query(Intersection).filter_by(
+                            cap_alert_id=alert.id,
+                            boundary_id=boundary.id
+                        ).first()
+
+                        if not existing:
+                            intersection = Intersection(
+                                cap_alert_id=alert.id,
+                                boundary_id=boundary.id,
+                                intersection_area=0  # No area calculation for zone-based
+                            )
+                            self.db_session.add(intersection)
+                            self.logger.info(
+                                f"Created zone-based intersection: {alert.event} -> {boundary.type} '{boundary.name}'")
+
+                self.db_session.commit()
                 return
 
-            # Find intersecting boundaries
+            # Normal geometry-based intersection processing
             intersecting_boundaries = self.db_session.query(Boundary).filter(
                 ST_Intersects(Boundary.geom, alert.geom)
             ).all()
@@ -287,31 +404,51 @@ class CAPPoller:
             'alerts_fetched': 0,
             'alerts_new': 0,
             'alerts_updated': 0,
+            'alerts_filtered': 0,
             'execution_time_ms': 0,
             'status': 'SUCCESS',
             'error_message': None,
-            'zone': 'OHZ016'
+            'zone': 'OHZ016/OHC137 (Putnam County, OH)'
         }
 
         try:
-            self.logger.info("Starting CAP alert polling cycle for OHZ016")
+            self.logger.info("Starting CAP alert polling cycle for Putnam County, OH (OHZ016/OHC137)")
 
-            # Fetch alerts from NOAA for OHZ016
+            # Fetch alerts from NOAA for OHZ016 and OHC137
             alerts_data = self.fetch_cap_alerts()
             stats['alerts_fetched'] = len(alerts_data)
 
             # Process each alert
             for alert_data in alerts_data:
+                props = alert_data.get('properties', {})
+                event = props.get('event', 'Unknown')
+                alert_id = props.get('identifier', 'No ID')
+
+                self.logger.info(
+                    f"Processing alert: {event} (ID: {alert_id[:20] if alert_id != 'No ID' else 'No ID'}...)")
+
+                # Check if alert is relevant to our area
+                if not self.is_relevant_alert(alert_data):
+                    self.logger.info(f"Alert {event} filtered out - not relevant to our area")
+                    stats['alerts_filtered'] += 1
+                    continue
+
+                self.logger.info(f"Alert {event} passed relevance check - processing...")
+
                 parsed_alert = self.parse_cap_alert(alert_data)
                 if parsed_alert:
                     is_new, alert = self.save_cap_alert(parsed_alert)
 
                     if is_new:
                         stats['alerts_new'] += 1
+                        self.logger.info(f"Saved new alert: {alert.event}")
                         # Process intersections for new alerts
                         self.process_intersections(alert)
                     else:
                         stats['alerts_updated'] += 1
+                        self.logger.info(f"Updated existing alert: {alert.event}")
+                else:
+                    self.logger.warning(f"Failed to parse alert: {event}")
 
             # Cleanup expired alerts
             self.cleanup_expired_alerts()
@@ -319,7 +456,8 @@ class CAPPoller:
             # Calculate execution time
             stats['execution_time_ms'] = int((time.time() - start_time) * 1000)
 
-            self.logger.info(f"OHZ016 polling cycle completed: {stats['alerts_new']} new, {stats['alerts_updated']} updated")
+            self.logger.info(
+                f"Putnam County polling cycle completed: {stats['alerts_new']} new, {stats['alerts_updated']} updated, {stats['alerts_filtered']} filtered")
 
             # Log successful poll
             self.log_system_event('INFO', f'CAP polling successful: {stats["alerts_new"]} new alerts', stats)
@@ -329,7 +467,7 @@ class CAPPoller:
             stats['error_message'] = str(e)
             stats['execution_time_ms'] = int((time.time() - start_time) * 1000)
 
-            self.logger.error(f"Error in OHZ016 polling cycle: {str(e)}")
+            self.logger.error(f"Error in Putnam County polling cycle: {str(e)}")
             self.log_system_event('ERROR', f'CAP polling failed: {str(e)}', stats)
 
         return stats
@@ -345,24 +483,24 @@ class CAPPoller:
 def main():
     """Main entry point for running poller standalone"""
     import argparse
-    
+
     # Setup argument parser
-    parser = argparse.ArgumentParser(description='NOAA CAP Alert Poller for OHZ016')
-    parser.add_argument('--database-url', 
-                       default='postgresql://noaa_user:rkhkeq@localhost:5432/noaa_alerts',
-                       help='Database connection URL')
-    parser.add_argument('--log-level', 
-                       default='INFO',
-                       choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
-                       help='Logging level')
-    parser.add_argument('--continuous', 
-                       action='store_true',
-                       help='Run continuously every 5 minutes')
-    parser.add_argument('--interval', 
-                       type=int, 
-                       default=300,
-                       help='Polling interval in seconds (default: 300)')
-    
+    parser = argparse.ArgumentParser(description='NOAA CAP Alert Poller for Putnam County, OH (OHZ016/OHC137)')
+    parser.add_argument('--database-url',
+                        default='postgresql://noaa_user:rkhkeq@localhost:5432/noaa_alerts',
+                        help='Database connection URL')
+    parser.add_argument('--log-level',
+                        default='INFO',
+                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
+                        help='Logging level')
+    parser.add_argument('--continuous',
+                        action='store_true',
+                        help='Run continuously every 5 minutes')
+    parser.add_argument('--interval',
+                        type=int,
+                        default=300,
+                        help='Polling interval in seconds (default: 300)')
+
     args = parser.parse_args()
 
     # Setup logging
@@ -376,11 +514,11 @@ def main():
     )
 
     logger = logging.getLogger(__name__)
-    logger.info(f"Starting NOAA CAP Alert Poller for zone OHZ016")
+    logger.info(f"Starting NOAA CAP Alert Poller for Putnam County, OH (OHZ016/OHC137)")
 
     # Create poller
     poller = CAPPoller(args.database_url)
-    
+
     try:
         if args.continuous:
             logger.info(f"Running continuously with {args.interval} second intervals")
@@ -399,7 +537,7 @@ def main():
             # Single poll
             stats = poller.poll_and_process()
             print(f"Polling completed: {json.dumps(stats, indent=2)}")
-            
+
     finally:
         poller.close()
 

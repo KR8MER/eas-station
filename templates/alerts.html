@@ -67,7 +67,7 @@
                             <div class="col-md-3">
                                 <label for="search" class="form-label">Search</label>
                                 <input type="text" class="form-control" id="search" name="search" 
-                                       value="{{ current_filters.search }}" placeholder="Search alerts...">
+                                       value="{{ current_filters.search or '' }}" placeholder="Search alerts...">
                             </div>
                             <div class="col-md-2">
                                 <label for="status" class="form-label">Status</label>
@@ -165,7 +165,9 @@
                             </thead>
                             <tbody>
                                 {% for alert in alerts %}
-                                <tr class="{% if alert.expires and alert.expires < moment().utc() %}table-secondary{% endif %}">
+                                {% set now = moment() %}
+                                {% set is_expired = alert.expires and alert.expires < now %}
+                                <tr class="{% if is_expired %}table-secondary{% endif %}">
                                     <td>
                                         <span class="badge bg-primary">{{ alert.event }}</span>
                                     </td>
@@ -183,12 +185,12 @@
                                     </td>
                                     <td>
                                         <small class="text-muted">
-                                            {{ alert.sent.strftime('%m/%d/%Y %H:%M') }}
+                                            {{ alert.sent.strftime('%m/%d/%Y %H:%M') if alert.sent else 'Unknown' }}
                                         </small>
                                     </td>
                                     <td>
                                         {% if alert.expires %}
-                                        <small class="{% if alert.expires < moment().utc() %}text-danger{% else %}text-success{% endif %}">
+                                        <small class="{% if is_expired %}text-danger{% else %}text-success{% endif %}">
                                             {{ alert.expires.strftime('%m/%d/%Y %H:%M') }}
                                         </small>
                                         {% else %}
@@ -234,7 +236,7 @@
             </div>
 
             <!-- Pagination -->
-            {% if pagination.pages > 1 %}
+            {% if pagination and pagination.pages > 1 %}
             <nav aria-label="Alerts pagination" class="mt-4">
                 <ul class="pagination justify-content-center">
                     {% if pagination.has_prev %}
@@ -277,7 +279,6 @@
     </div>
 </div>
 
-<script>
 <script>
 // Export current filtered alerts
 function exportCurrentAlerts() {
@@ -326,9 +327,20 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    checkbox.addEventListener('change', function() {
-        form.submit();
-    });
+    if (checkbox) {
+        checkbox.addEventListener('change', function() {
+            form.submit();
+        });
+    }
 });
+
+// Simple toast notification fallback
+function showToast(message, type) {
+    if (typeof window.showToast === 'function') {
+        window.showToast(message, type);
+    } else {
+        alert(message);
+    }
+}
 </script>
 {% endblock %}

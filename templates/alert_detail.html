@@ -1,6 +1,135 @@
 {% extends "base.html" %}
 
-{% block title %}Alert Details - {{ alert.event }} - NOAA CAP Alerts{% endblock %}
+{% block title %}Alert Details - {{ alert.event }} - KR8MER CAP Alerts{% endblock %}
+
+{% block extra_css %}
+<style>
+    .county-wide-banner {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        text-align: center;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+    
+    .county-wide-icon {
+        font-size: 2em;
+        margin-bottom: 10px;
+        display: block;
+    }
+    
+    .affected-summary {
+        background: #f8f9fa;
+        border-left: 4px solid #007bff;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 0 8px 8px 0;
+    }
+    
+    .boundary-type-group {
+        margin-bottom: 20px;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    .boundary-type-header {
+        background: #f8f9fa;
+        padding: 10px 15px;
+        border-bottom: 1px solid #dee2e6;
+        font-weight: 600;
+        color: #495057;
+    }
+    
+    .boundary-list {
+        padding: 0;
+        margin: 0;
+        list-style: none;
+    }
+    
+    .boundary-item {
+        padding: 10px 15px;
+        border-bottom: 1px solid #f8f9fa;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .boundary-item:last-child {
+        border-bottom: none;
+    }
+    
+    .boundary-item:nth-child(even) {
+        background: #fdfdfe;
+    }
+    
+    .boundary-name {
+        font-weight: 500;
+    }
+    
+    .boundary-area {
+        font-size: 0.9em;
+        color: #6c757d;
+    }
+    
+    .coverage-badge {
+        background: #28a745;
+        color: white;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 0.8em;
+    }
+    
+    .alert-scope-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 10px;
+        border-radius: 15px;
+        font-size: 0.85em;
+        font-weight: 500;
+    }
+    
+    .scope-county-wide {
+        background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+        color: white;
+    }
+    
+    .scope-localized {
+        background: #e9ecef;
+        color: #495057;
+    }
+    
+    .impact-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 15px;
+        margin: 15px 0;
+    }
+    
+    .impact-stat {
+        text-align: center;
+        padding: 15px;
+        background: white;
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+    }
+    
+    .impact-number {
+        font-size: 1.5em;
+        font-weight: bold;
+        color: #007bff;
+    }
+    
+    .impact-label {
+        font-size: 0.9em;
+        color: #6c757d;
+        margin-top: 5px;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -30,6 +159,24 @@
                 </div>
             </div>
 
+            <!-- County-Wide Alert Banner -->
+            {% set area_lower = alert.area_desc.lower() if alert.area_desc else '' %}
+            {% set is_county_wide = (
+                area_lower and (
+                    'county' in area_lower or 
+                    'putnam county' in area_lower or
+                    'entire county' in area_lower or
+                    ('putnam' in area_lower and (area_lower.count(';') >= 2 or area_lower.count(',') >= 2))
+                )
+            ) %}
+            {% if is_county_wide %}
+            <div class="county-wide-banner">
+                <i class="fas fa-globe-americas county-wide-icon"></i>
+                <h4 class="mb-2">COUNTY-WIDE ALERT</h4>
+                <p class="mb-0">This alert affects the entire county and all emergency service boundaries within it.</p>
+            </div>
+            {% endif %}
+
             <div class="row">
                 <!-- Main Alert Information -->
                 <div class="col-lg-8">
@@ -37,6 +184,17 @@
                         <div class="card-header bg-primary text-white">
                             <h5 class="mb-0">
                                 <i class="fas fa-info-circle"></i> Alert Information
+                                <span class="float-end">
+                                    {% if is_county_wide %}
+                                    <span class="alert-scope-indicator scope-county-wide">
+                                        <i class="fas fa-globe"></i> County-Wide Coverage
+                                    </span>
+                                    {% else %}
+                                    <span class="alert-scope-indicator scope-localized">
+                                        <i class="fas fa-map-marker-alt"></i> Localized Alert
+                                    </span>
+                                    {% endif %}
+                                </span>
                             </h5>
                         </div>
                         <div class="card-body">
@@ -108,6 +266,11 @@
                             <h6 class="text-muted mb-2">Affected Areas</h6>
                             <div class="p-3 bg-info bg-opacity-10 rounded">
                                 {{ alert.area_desc }}
+                                {% if is_county_wide %}
+                                <br><small class="text-muted mt-2">
+                                    <i class="fas fa-info-circle"></i> This covers all emergency service districts, townships, and municipalities within the county.
+                                </small>
+                                {% endif %}
                             </div>
                             {% endif %}
                         </div>
@@ -118,49 +281,98 @@
                     <div class="card">
                         <div class="card-header">
                             <h5 class="mb-0">
-                                <i class="fas fa-map-marked-alt"></i> Affected Boundaries
+                                <i class="fas fa-map-marked-alt"></i> 
+                                {% if is_county_wide %}
+                                Emergency Service Coverage - All County Boundaries
+                                {% else %}
+                                Affected Boundaries
+                                {% endif %}
                                 <span class="badge bg-secondary">{{ intersections|length }}</span>
                             </h5>
                         </div>
-                        <div class="card-body p-0">
-                            <div class="table-responsive">
-                                <table class="table table-hover mb-0">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>Boundary Name</th>
-                                            <th>Type</th>
-                                            <th>Intersection Area</th>
-                                            <th>Description</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for intersection, boundary in intersections %}
-                                        <tr>
-                                            <td><strong>{{ boundary.name }}</strong></td>
-                                            <td>
-                                                <span class="badge bg-outline-primary">{{ boundary.type.title() }}</span>
-                                            </td>
-                                            <td>
-                                                {% if intersection.intersection_area %}
-                                                {{ "%.2f"|format(intersection.intersection_area * 3.86102e-7) }} sq mi
-                                                {% else %}
-                                                <span class="text-muted">Not calculated</span>
-                                                {% endif %}
-                                            </td>
-                                            <td>
-                                                {% if boundary.description %}
-                                                <div class="text-truncate" style="max-width: 200px;" title="{{ boundary.description }}">
-                                                    {{ boundary.description }}
-                                                </div>
-                                                {% else %}
-                                                <span class="text-muted">No description</span>
-                                                {% endif %}
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
+                        <div class="card-body">
+                            {% if is_county_wide %}
+                            <div class="affected-summary">
+                                <h6><i class="fas fa-globe-americas"></i> County-Wide Impact</h6>
+                                <p class="mb-0">This alert affects <strong>all {{ intersections|length }} emergency service boundaries</strong> within Putnam County, ensuring complete coverage across all districts and municipalities.</p>
                             </div>
+
+                            <!-- Impact Statistics -->
+                            <div class="impact-stats">
+                                {% set boundary_types = intersections | groupby('1.type') %}
+                                {% for boundary_type, boundaries in boundary_types %}
+                                <div class="impact-stat">
+                                    <div class="impact-number">{{ boundaries|list|length }}</div>
+                                    <div class="impact-label">{{ boundary_type.title() }}{% if boundaries|list|length != 1 %}s{% endif %}</div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+
+                            <!-- Group boundaries by type -->
+                            {% set boundary_groups = intersections | groupby('1.type') %}
+                            {% for boundary_type, boundaries in boundary_groups %}
+                            <div class="boundary-type-group">
+                                <div class="boundary-type-header">
+                                    <i class="fas fa-{% if boundary_type == 'fire' %}fire{% elif boundary_type == 'ems' %}ambulance{% elif boundary_type == 'electric' %}bolt{% elif boundary_type == 'township' %}home{% elif boundary_type == 'village' %}building{% elif boundary_type == 'telephone' %}phone{% elif boundary_type == 'school' %}school{% else %}map{% endif %}"></i>
+                                    {{ boundary_type.title() }}{% if boundaries|list|length != 1 %}s{% endif %}
+                                    <span class="badge bg-primary">{{ boundaries|list|length }}</span>
+                                    {% if is_county_wide %}
+                                    <span class="coverage-badge">100% Coverage</span>
+                                    {% endif %}
+                                </div>
+                                <ul class="boundary-list">
+                                    {% for intersection, boundary in boundaries %}
+                                    <li class="boundary-item">
+                                        <div>
+                                            <div class="boundary-name">{{ boundary.name }}</div>
+                                            {% if boundary.description %}
+                                            <small class="text-muted">{{ boundary.description[:100] }}{% if boundary.description|length > 100 %}...{% endif %}</small>
+                                            {% endif %}
+                                        </div>
+                                        <div class="text-end">
+                                            {% if intersection.intersection_area and intersection.intersection_area > 0 %}
+                                            <div class="boundary-area">
+                                                {{ "%.2f"|format(intersection.intersection_area * 3.86102e-7) }} sq mi
+                                            </div>
+                                            {% else %}
+                                            <div class="boundary-area text-muted">
+                                                {% if is_county_wide %}Full coverage{% else %}Area not calculated{% endif %}
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% else %}
+                    <!-- No intersections found -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-map-marked-alt"></i> Affected Boundaries
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            {% if is_county_wide %}
+                            <div class="text-center py-4">
+                                <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
+                                <h5>County-Wide Alert - Boundary Analysis Pending</h5>
+                                <p class="text-muted">This county-wide alert affects all emergency service boundaries, but intersection analysis is still processing.</p>
+                                <button class="btn btn-warning" onclick="triggerIntersectionFix()">
+                                    <i class="fas fa-wrench"></i> Calculate Affected Boundaries
+                                </button>
+                            </div>
+                            {% else %}
+                            <div class="text-center py-4">
+                                <i class="fas fa-map fa-3x text-muted mb-3"></i>
+                                <h5 class="text-muted">No Boundary Intersections Found</h5>
+                                <p class="text-muted">This alert may not intersect with any configured emergency service boundaries, or intersection analysis is pending.</p>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                     {% endif %}
@@ -185,11 +397,11 @@
                             <div class="mb-3">
                                 <h6 class="text-muted mb-1">Expires</h6>
                                 {% if alert.expires %}
-                                <div class="fw-bold {% if alert.expires < moment().utc() %}text-danger{% else %}text-success{% endif %}">
+                                <div class="fw-bold                                 {% if alert.expires | is_expired %}text-danger{% else %}text-success{% endif %}">
                                     {{ alert.expires.strftime('%B %d, %Y') }}
                                 </div>
                                 <div class="text-muted">{{ alert.expires.strftime('%I:%M %p UTC') }}</div>
-                                {% if alert.expires < moment().utc() %}
+                                {% if alert.expires and alert.expires < moment() %}
                                 <div class="badge bg-danger mt-1">EXPIRED</div>
                                 {% else %}
                                 <div class="badge bg-success mt-1">ACTIVE</div>
@@ -215,6 +427,36 @@
                             {% endif %}
                         </div>
                     </div>
+
+                    <!-- Coverage Summary -->
+                    {% if is_county_wide and intersections %}
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="fas fa-shield-alt"></i> Emergency Service Coverage
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-center">
+                                <div class="display-6 text-success mb-2">100%</div>
+                                <p class="text-muted mb-3">Complete County Coverage</p>
+                            </div>
+                            
+                            <div class="row text-center">
+                                <div class="col-6">
+                                    <div class="border-end">
+                                        <div class="h5 mb-0">{{ intersections|length }}</div>
+                                        <small class="text-muted">Boundaries</small>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="h5 mb-0">{{ (intersections | groupby('1.type') | list | length) }}</div>
+                                    <small class="text-muted">Service Types</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
 
                     <!-- Technical Details -->
                     <div class="card mb-4">
@@ -245,6 +487,13 @@
                                 <h6 class="text-muted mb-1">Database ID</h6>
                                 <code>#{{ alert.id }}</code>
                             </div>
+
+                            {% if is_county_wide %}
+                            <div class="mb-3">
+                                <h6 class="text-muted mb-1">Coverage Type</h6>
+                                <span class="badge bg-primary">County-Wide</span>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
 
@@ -269,6 +518,16 @@
                                 
                                 <a href="/" class="btn btn-primary">
                                     <i class="fas fa-map"></i> View on Interactive Map
+                                </a>
+
+                                {% if is_county_wide and not intersections %}
+                                <button class="btn btn-warning" onclick="triggerIntersectionFix()">
+                                    <i class="fas fa-wrench"></i> Calculate Boundaries
+                                </button>
+                                {% endif %}
+
+                                <a href="/debug/boundaries/{{ alert.id }}" class="btn btn-outline-info" target="_blank">
+                                    <i class="fas fa-bug"></i> Debug Boundaries
                                 </a>
                             </div>
                         </div>
@@ -315,7 +574,6 @@ function showRawData() {
 function copyRawData() {
     const content = document.getElementById('rawDataContent').textContent;
     navigator.clipboard.writeText(content).then(function() {
-        // Show a temporary success message
         const btn = event.target.closest('button');
         const originalText = btn.innerHTML;
         btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
@@ -333,13 +591,38 @@ function copyRawData() {
     });
 }
 
-// Add moment.js-like functionality for template
-window.moment = function() {
-    return {
-        utc: function() {
-            return new Date();
+async function triggerIntersectionFix() {
+    try {
+        const response = await fetch('/admin/fix_county_intersections', { method: 'POST' });
+        const result = await response.json();
+        
+        if (response.ok) {
+            if (typeof showToast === 'function') {
+                showToast('Boundary analysis completed! Refreshing page...', 'success');
+            }
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+        } else {
+            if (typeof showToast === 'function') {
+                showToast(result.error || 'Failed to calculate boundaries', 'error');
+            } else {
+                alert(result.error || 'Failed to calculate boundaries');
+            }
         }
-    };
+    } catch (error) {
+        console.error('Error calculating boundaries:', error);
+        if (typeof showToast === 'function') {
+            showToast('Error: ' + error.message, 'error');
+        } else {
+            alert('Error: ' + error.message);
+        }
+    }
+}
+
+// Template helper for datetime comparisons
+window.moment = function() {
+    return new Date();
 };
 </script>
 {% endblock %}
