@@ -128,6 +128,78 @@
         color: #6c757d;
         margin-top: 5px;
     }
+
+    /* Enhanced timezone display styles */
+    .time-info-card {
+        background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+        border: 1px solid #bbdefb;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+
+    .time-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(0,0,0,0.1);
+    }
+
+    .time-row:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+    }
+
+    .time-label {
+        font-weight: 600;
+        color: #1976d2;
+    }
+
+    .time-value {
+        text-align: right;
+    }
+
+    .local-time-display {
+        font-weight: 600;
+        color: #2e7d32;
+        font-size: 1.1em;
+    }
+
+    .utc-time-display {
+        color: #666;
+        font-size: 0.9em;
+        margin-top: 2px;
+    }
+
+    .expired-badge {
+        background: #f44336;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 0.8em;
+        font-weight: 600;
+    }
+
+    .active-badge {
+        background: #4caf50;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 0.8em;
+        font-weight: 600;
+    }
+
+    .timezone-note {
+        background: #fff3e0;
+        border: 1px solid #ffcc02;
+        border-radius: 4px;
+        padding: 8px;
+        margin-top: 10px;
+        font-size: 0.85em;
+        color: #e65100;
+    }
 </style>
 {% endblock %}
 
@@ -163,7 +235,7 @@
             {% set area_lower = alert.area_desc.lower() if alert.area_desc else '' %}
             {% set is_county_wide = (
                 area_lower and (
-                    'county' in area_lower or 
+                    'county' in area_lower or
                     'putnam county' in area_lower or
                     'entire county' in area_lower or
                     ('putnam' in area_lower and (area_lower.count(';') >= 2 or area_lower.count(',') >= 2))
@@ -212,6 +284,11 @@
                                 <div class="col-md-6">
                                     <h6 class="text-muted mb-1">Status</h6>
                                     <span class="badge bg-secondary fs-6">{{ alert.status }}</span>
+                                    {% if alert.expires and alert.expires | is_expired %}
+                                    <span class="expired-badge">EXPIRED</span>
+                                    {% elif alert.expires %}
+                                    <span class="active-badge">ACTIVE</span>
+                                    {% endif %}
                                 </div>
                                 <div class="col-md-6">
                                     <h6 class="text-muted mb-1">Severity</h6>
@@ -281,7 +358,7 @@
                     <div class="card">
                         <div class="card-header">
                             <h5 class="mb-0">
-                                <i class="fas fa-map-marked-alt"></i> 
+                                <i class="fas fa-map-marked-alt"></i>
                                 {% if is_county_wide %}
                                 Emergency Service Coverage - All County Boundaries
                                 {% else %}
@@ -380,51 +457,70 @@
 
                 <!-- Sidebar -->
                 <div class="col-lg-4">
-                    <!-- Timing Information -->
+                    <!-- Enhanced Timing Information with Timezone Support -->
                     <div class="card mb-4">
                         <div class="card-header">
                             <h6 class="mb-0">
                                 <i class="fas fa-clock"></i> Timing Information
+                                <small class="text-muted">(Putnam County Time)</small>
                             </h6>
                         </div>
                         <div class="card-body">
-                            <div class="mb-3">
-                                <h6 class="text-muted mb-1">Alert Sent</h6>
-                                <div class="fw-bold">{{ alert.sent.strftime('%B %d, %Y') }}</div>
-                                <div class="text-muted">{{ alert.sent.strftime('%I:%M %p UTC') }}</div>
-                            </div>
-
-                            <div class="mb-3">
-                                <h6 class="text-muted mb-1">Expires</h6>
-                                {% if alert.expires %}
-                                <div class="fw-bold                                 {% if alert.expires | is_expired %}text-danger{% else %}text-success{% endif %}">
-                                    {{ alert.expires.strftime('%B %d, %Y') }}
+                            <div class="time-info-card">
+                                <div class="time-row">
+                                    <div class="time-label">Alert Sent:</div>
+                                    <div class="time-value">
+                                        {% if alert.sent %}
+                                        <div class="local-time-display">{{ alert.sent | format_local_datetime(false) }}</div>
+                                        <div class="utc-time-display">{{ alert.sent.strftime('%H:%M UTC') if alert.sent else 'Unknown' }}</div>
+                                        {% else %}
+                                        <div class="text-muted">Unknown</div>
+                                        {% endif %}
+                                    </div>
                                 </div>
-                                <div class="text-muted">{{ alert.expires.strftime('%I:%M %p UTC') }}</div>
-                                {% if alert.expires and alert.expires < moment() %}
-                                <div class="badge bg-danger mt-1">EXPIRED</div>
-                                {% else %}
-                                <div class="badge bg-success mt-1">ACTIVE</div>
-                                {% endif %}
-                                {% else %}
-                                <div class="text-muted">No expiration set</div>
-                                <div class="badge bg-warning mt-1">INDEFINITE</div>
+
+                                <div class="time-row">
+                                    <div class="time-label">Expires:</div>
+                                    <div class="time-value">
+                                        {% if alert.expires %}
+                                        <div class="local-time-display {% if alert.expires | is_expired %}text-danger{% else %}text-success{% endif %}">
+                                            {{ alert.expires | format_local_datetime(false) }}
+                                        </div>
+                                        <div class="utc-time-display">{{ alert.expires.strftime('%H:%M UTC') if alert.expires else 'No expiration' }}</div>
+                                        {% else %}
+                                        <div class="text-muted">No expiration set</div>
+                                        <div class="badge bg-warning mt-1">INDEFINITE</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+
+                                <div class="time-row">
+                                    <div class="time-label">Added to System:</div>
+                                    <div class="time-value">
+                                        {% if alert.created_at %}
+                                        <div class="local-time-display">{{ alert.created_at | format_local_datetime(false) }}</div>
+                                        <div class="utc-time-display">{{ alert.created_at.strftime('%H:%M UTC') if alert.created_at else 'Unknown' }}</div>
+                                        {% else %}
+                                        <div class="text-muted">Unknown</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+
+                                {% if alert.updated_at != alert.created_at %}
+                                <div class="time-row">
+                                    <div class="time-label">Last Updated:</div>
+                                    <div class="time-value">
+                                        <div class="local-time-display">{{ alert.updated_at | format_local_datetime(false) }}</div>
+                                        <div class="utc-time-display">{{ alert.updated_at.strftime('%H:%M UTC') if alert.updated_at else 'Unknown' }}</div>
+                                    </div>
+                                </div>
                                 {% endif %}
                             </div>
 
-                            <div class="mb-3">
-                                <h6 class="text-muted mb-1">Added to System</h6>
-                                <div class="fw-bold">{{ alert.created_at.strftime('%B %d, %Y') }}</div>
-                                <div class="text-muted">{{ alert.created_at.strftime('%I:%M %p UTC') }}</div>
+                            <div class="timezone-note">
+                                <i class="fas fa-info-circle"></i> All times shown in Eastern Time (Putnam County local time) with UTC reference.
+                                Times automatically adjust for daylight saving changes.
                             </div>
-
-                            {% if alert.updated_at != alert.created_at %}
-                            <div class="mb-3">
-                                <h6 class="text-muted mb-1">Last Updated</h6>
-                                <div class="fw-bold">{{ alert.updated_at.strftime('%B %d, %Y') }}</div>
-                                <div class="text-muted">{{ alert.updated_at.strftime('%I:%M %p UTC') }}</div>
-                            </div>
-                            {% endif %}
                         </div>
                     </div>
 
@@ -441,7 +537,7 @@
                                 <div class="display-6 text-success mb-2">100%</div>
                                 <p class="text-muted mb-3">Complete County Coverage</p>
                             </div>
-                            
+
                             <div class="row text-center">
                                 <div class="col-6">
                                     <div class="border-end">
@@ -494,6 +590,13 @@
                                 <span class="badge bg-primary">County-Wide</span>
                             </div>
                             {% endif %}
+
+                            <div class="mb-3">
+                                <h6 class="text-muted mb-1">Timezone Processing</h6>
+                                <small class="text-muted">
+                                    Source times converted from NWS format (UTC/EST/EDT) to local Eastern Time for display.
+                                </small>
+                            </div>
                         </div>
                     </div>
 
@@ -511,11 +614,11 @@
                                     <i class="fas fa-code"></i> View Raw CAP Data
                                 </button>
                                 {% endif %}
-                                
+
                                 <a href="/alerts?search={{ alert.event }}" class="btn btn-outline-primary">
                                     <i class="fas fa-search"></i> Find Similar Alerts
                                 </a>
-                                
+
                                 <a href="/" class="btn btn-primary">
                                     <i class="fas fa-map"></i> View on Interactive Map
                                 </a>
@@ -579,7 +682,7 @@ function copyRawData() {
         btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
         btn.classList.remove('btn-outline-secondary');
         btn.classList.add('btn-success');
-        
+
         setTimeout(function() {
             btn.innerHTML = originalText;
             btn.classList.remove('btn-success');
@@ -595,7 +698,7 @@ async function triggerIntersectionFix() {
     try {
         const response = await fetch('/admin/fix_county_intersections', { method: 'POST' });
         const result = await response.json();
-        
+
         if (response.ok) {
             if (typeof showToast === 'function') {
                 showToast('Boundary analysis completed! Refreshing page...', 'success');
@@ -620,9 +723,51 @@ async function triggerIntersectionFix() {
     }
 }
 
-// Template helper for datetime comparisons
-window.moment = function() {
-    return new Date();
-};
+// Update any existing time displays when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Convert any remaining time displays to local timezone
+    const timeElements = document.querySelectorAll('[data-utc-time]');
+    timeElements.forEach(element => {
+        const utcTime = element.getAttribute('data-utc-time');
+        if (utcTime) {
+            element.textContent = formatLocalDateTime(utcTime);
+        }
+    });
+
+    // Update relative time displays
+    updateRelativeTimes();
+});
+
+function updateRelativeTimes() {
+    // Update "time ago" displays
+    const relativeTimeElements = document.querySelectorAll('.relative-time');
+    relativeTimeElements.forEach(element => {
+        const timestamp = element.getAttribute('data-timestamp');
+        if (timestamp) {
+            const timeAgo = getTimeAgo(timestamp);
+            element.textContent = timeAgo;
+        }
+    });
+}
+
+function getTimeAgo(timestamp) {
+    const now = new Date();
+    const past = new Date(timestamp);
+    const diffMs = now - past;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 60) {
+        return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+    } else if (diffHours < 24) {
+        return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+    } else {
+        return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+    }
+}
+
+// Set up periodic updates for relative times
+setInterval(updateRelativeTimes, 60000); // Update every minute
 </script>
 {% endblock %}
