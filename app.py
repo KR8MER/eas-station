@@ -2,6 +2,7 @@
 """
 NOAA CAP Alerts and GIS Boundary Mapping System
 Flask Web Application with Enhanced Boundary Management and Alerts History
+WITH ALERT PRESERVATION AND CONFIRMATION SYSTEMS
 """
 
 import os
@@ -108,6 +109,28 @@ class PollHistory(db.Model):
     alerts_updated = db.Column(db.Integer, default=0)
     execution_time_ms = db.Column(db.Integer)
     error_message = db.Column(db.Text)
+
+
+# Helper Functions for Active Alerts
+def get_active_alerts_query():
+    """Get query for active (non-expired) alerts - preserves all data"""
+    now = datetime.utcnow()
+    return CAPAlert.query.filter(
+        or_(
+            CAPAlert.expires.is_(None),  # No expiration date
+            CAPAlert.expires > now  # Future expiration
+        )
+    ).filter(
+        CAPAlert.status != 'Expired'  # Exclude explicitly expired
+    )
+
+
+def get_expired_alerts_query():
+    """Get query for expired alerts"""
+    now = datetime.utcnow()
+    return CAPAlert.query.filter(
+        CAPAlert.expires < now
+    )
 
 
 # Enhanced Field Detection Functions
@@ -517,12 +540,11 @@ def index():
 def admin():
     """Admin interface"""
     try:
-        # Get some basic stats for the admin dashboard
+        # Get some basic stats for the admin dashboard using new helper functions
         total_boundaries = Boundary.query.count()
         total_alerts = CAPAlert.query.count()
-        active_alerts = CAPAlert.query.filter(
-            or_(CAPAlert.expires.is_(None), CAPAlert.expires > datetime.utcnow())
-        ).count()
+        active_alerts = get_active_alerts_query().count()
+        expired_alerts = get_expired_alerts_query().count()
 
         # Get boundary counts by type
         boundary_stats = db.session.query(
@@ -533,6 +555,7 @@ def admin():
                                total_boundaries=total_boundaries,
                                total_alerts=total_alerts,
                                active_alerts=active_alerts,
+                               expired_alerts=expired_alerts,
                                boundary_stats=boundary_stats
                                )
     except Exception as e:
@@ -557,15 +580,13 @@ def stats():
     try:
         stats_data = {}
 
+        # Basic counts
         try:
-            now = datetime.utcnow()
             stats_data.update({
                 'total_boundaries': Boundary.query.count(),
                 'total_alerts': CAPAlert.query.count(),
-                'active_alerts': CAPAlert.query.filter(
-                    or_(CAPAlert.expires.is_(None), CAPAlert.expires > now)
-                ).count(),
-                'expired_alerts': CAPAlert.query.filter(CAPAlert.expires < now).count()
+                'active_alerts': get_active_alerts_query().count(),
+                'expired_alerts': get_expired_alerts_query().count()
             })
         except Exception as e:
             logger.error(f"Error getting basic counts: {str(e)}")
@@ -574,6 +595,7 @@ def stats():
                 'active_alerts': 0, 'expired_alerts': 0
             })
 
+        # Boundary stats
         try:
             boundary_stats = db.session.query(
                 Boundary.type, func.count(Boundary.id).label('count')
@@ -583,6 +605,7 @@ def stats():
             logger.error(f"Error getting boundary stats: {str(e)}")
             stats_data['boundary_stats'] = []
 
+        # Alert category stats
         try:
             alert_by_status = db.session.query(
                 CAPAlert.status, func.count(CAPAlert.id).label('count')
@@ -604,6 +627,7 @@ def stats():
                 'alert_by_status': [], 'alert_by_severity': [], 'alert_by_event': []
             })
 
+        # Time-based stats
         try:
             alert_by_hour = db.session.query(
                 func.extract('hour', CAPAlert.sent).label('hour'),
@@ -652,6 +676,7 @@ def stats():
                 'alert_by_year': []
             })
 
+        # Most affected boundaries
         try:
             most_affected = db.session.query(
                 Boundary.name, Boundary.type, func.count(Intersection.id).label('alert_count')
@@ -665,6 +690,7 @@ def stats():
             logger.error(f"Error getting affected boundaries: {str(e)}")
             stats_data['most_affected_boundaries'] = []
 
+        # Duration analysis
         try:
             durations = db.session.query(
                 CAPAlert.event,
@@ -686,8 +712,9 @@ def stats():
             logger.error(f"Error calculating durations: {str(e)}")
             stats_data['avg_durations'] = []
 
+        # Recent activity
         try:
-            thirty_days_ago = now - timedelta(days=30)
+            thirty_days_ago = datetime.utcnow() - timedelta(days=30)
             recent_alerts = CAPAlert.query.filter(CAPAlert.sent >= thirty_days_ago).count()
             recent_by_day = db.session.query(
                 func.date(CAPAlert.sent).label('date'),
@@ -775,6 +802,7 @@ def stats():
                     'data_source': 'error'
                 }
 
+        # Fun statistics
         try:
             longest_headline = db.session.query(
                 func.max(func.length(CAPAlert.headline)).label('max_length')
@@ -805,7 +833,7 @@ def stats():
 
 @app.route('/alerts')
 def alerts():
-    """Alerts history page"""
+    """Alerts history page with improved active/expired logic"""
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 50, type=int)
@@ -838,10 +866,16 @@ def alerts():
                 )
             )
 
-        now = datetime.utcnow()
         if not show_expired:
+            # Use our helper function for consistent active alerts logic
+            now = datetime.utcnow()
             query = query.filter(
-                or_(CAPAlert.expires.is_(None), CAPAlert.expires > now)
+                or_(
+                    CAPAlert.expires.is_(None),
+                    CAPAlert.expires > now
+                )
+            ).filter(
+                CAPAlert.status != 'Expired'
             )
 
         query = query.order_by(CAPAlert.sent.desc())
@@ -856,10 +890,8 @@ def alerts():
         events = [e[0] for e in db.session.query(CAPAlert.event).distinct().limit(20).all() if e[0]]
 
         total_alerts = CAPAlert.query.count()
-        active_alerts = CAPAlert.query.filter(
-            or_(CAPAlert.expires.is_(None), CAPAlert.expires > now)
-        ).count()
-        expired_alerts = total_alerts - active_alerts
+        active_alerts = get_active_alerts_query().count()
+        expired_alerts = get_expired_alerts_query().count()
 
         return render_template('alerts.html',
                                alerts=alerts_pagination.items,
@@ -921,7 +953,7 @@ def system_health_page():
 # API Routes
 @app.route('/api/boundaries')
 def get_boundaries():
-    """Get all boundaries as GeoJSON with county-wide alert fixing"""
+    """Get all boundaries as GeoJSON"""
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 1000, type=int)
@@ -968,22 +1000,17 @@ def get_boundaries():
 
 @app.route('/api/alerts')
 def get_alerts():
-    """Get active CAP alerts as GeoJSON with county-wide coverage fix"""
+    """Get active CAP alerts as GeoJSON using new active logic"""
     try:
-        now = datetime.utcnow()
+        # Use helper function for consistent active alerts logic
+        alerts_query = get_active_alerts_query()
 
-        # Get alerts that are either unexpired or covering the county
         alerts = db.session.query(
             CAPAlert.id, CAPAlert.identifier, CAPAlert.event, CAPAlert.severity,
             CAPAlert.urgency, CAPAlert.headline, CAPAlert.description, CAPAlert.expires,
             CAPAlert.area_desc, func.ST_AsGeoJSON(CAPAlert.geom).label('geometry')
         ).filter(
-            or_(
-                CAPAlert.expires.is_(None),
-                CAPAlert.expires > now,
-                # Include county-wide alerts even if slightly expired (within 1 hour)
-                CAPAlert.area_desc.ilike('%county%')
-            )
+            CAPAlert.id.in_(alerts_query.with_entities(CAPAlert.id).subquery())
         ).all()
 
         # Get the actual county boundary geometry for fallback
@@ -1019,79 +1046,25 @@ def get_alerts():
                     geometry = {
                         "type": "Polygon",
                         "coordinates": [[
-                            [-84.255, 40.954],  # NW
-                            [-84.254, 40.935],  #
-                            [-84.239, 40.921],  #
-                            [-84.226, 40.903],  #
-                            [-84.210, 40.896],  #
-                            [-84.198, 40.880],  #
-                            [-84.186, 40.866],  #
-                            [-84.174, 40.852],  #
-                            [-84.162, 40.838],  #
-                            [-84.150, 40.824],  #
-                            [-84.138, 40.810],  #
-                            [-84.126, 40.796],  #
-                            [-84.114, 40.782],  #
-                            [-84.102, 40.768],  #
-                            [-84.090, 40.754],  #
-                            [-84.078, 40.740],  #
-                            [-84.066, 40.726],  #
-                            [-84.054, 40.712],  #
-                            [-84.042, 40.698],  #
-                            [-84.030, 40.684],  #
-                            [-84.018, 40.670],  #
-                            [-84.006, 40.656],  #
-                            [-83.994, 40.642],  #
-                            [-83.982, 40.628],  #
-                            [-83.970, 40.614],  #
-                            [-83.958, 40.600],  #
-                            [-83.946, 40.586],  #
-                            [-83.934, 40.572],  #
-                            [-83.922, 40.558],  #
-                            [-83.910, 40.544],  #
-                            [-83.898, 40.530],  #
-                            [-83.886, 40.516],  #
-                            [-83.874, 40.502],  #
-                            [-83.862, 40.488],  #
-                            [-83.850, 40.474],  #
-                            [-83.838, 40.460],  #
-                            [-83.826, 40.446],  #
-                            [-83.814, 40.432],  #
-                            [-83.802, 40.418],  #
-                            [-83.790, 40.404],  #
-                            [-83.778, 40.390],  #
-                            [-83.766, 40.376],  #
-                            [-83.754, 40.362],  #
-                            [-83.742, 40.348],  #
-                            [-83.730, 40.334],  #
-                            [-83.718, 40.320],  #
-                            [-83.706, 40.306],  #
-                            [-83.694, 40.292],  #
-                            [-83.682, 40.278],  #
-                            [-83.670, 40.264],  #
-                            [-83.658, 40.250],  #
-                            [-83.646, 40.236],  #
-                            [-83.634, 40.222],  #
-                            [-83.622, 40.208],  #
-                            [-83.610, 40.194],  #
-                            [-83.598, 40.180],  #
-                            [-83.586, 40.166],  #
-                            [-83.574, 40.152],  #
-                            [-83.562, 40.138],  #
-                            [-83.550, 40.124],  #
-                            [-83.538, 40.110],  #
-                            [-83.526, 40.096],  #
-                            [-83.514, 40.082],  #
-                            [-83.502, 40.068],  #
-                            [-83.490, 40.054],  #
-                            [-83.478, 40.040],  #
-                            [-83.466, 40.026],  #
-                            [-83.454, 40.012],  #
-                            [-83.442, 39.998],  #
-                            [-83.430, 39.984],  # SE (approximate)
-                            [-83.750, 40.650],  # Eastern boundary
-                            [-84.000, 40.850],  # Northern boundary
-                            [-84.255, 40.954]  # Close polygon
+                            [-84.255, 40.954], [-84.254, 40.935], [-84.239, 40.921], [-84.226, 40.903],
+                            [-84.210, 40.896], [-84.198, 40.880], [-84.186, 40.866], [-84.174, 40.852],
+                            [-84.162, 40.838], [-84.150, 40.824], [-84.138, 40.810], [-84.126, 40.796],
+                            [-84.114, 40.782], [-84.102, 40.768], [-84.090, 40.754], [-84.078, 40.740],
+                            [-84.066, 40.726], [-84.054, 40.712], [-84.042, 40.698], [-84.030, 40.684],
+                            [-84.018, 40.670], [-84.006, 40.656], [-83.994, 40.642], [-83.982, 40.628],
+                            [-83.970, 40.614], [-83.958, 40.600], [-83.946, 40.586], [-83.934, 40.572],
+                            [-83.922, 40.558], [-83.910, 40.544], [-83.898, 40.530], [-83.886, 40.516],
+                            [-83.874, 40.502], [-83.862, 40.488], [-83.850, 40.474], [-83.838, 40.460],
+                            [-83.826, 40.446], [-83.814, 40.432], [-83.802, 40.418], [-83.790, 40.404],
+                            [-83.778, 40.390], [-83.766, 40.376], [-83.754, 40.362], [-83.742, 40.348],
+                            [-83.730, 40.334], [-83.718, 40.320], [-83.706, 40.306], [-83.694, 40.292],
+                            [-83.682, 40.278], [-83.670, 40.264], [-83.658, 40.250], [-83.646, 40.236],
+                            [-83.634, 40.222], [-83.622, 40.208], [-83.610, 40.194], [-83.598, 40.180],
+                            [-83.586, 40.166], [-83.574, 40.152], [-83.562, 40.138], [-83.550, 40.124],
+                            [-83.538, 40.110], [-83.526, 40.096], [-83.514, 40.082], [-83.502, 40.068],
+                            [-83.490, 40.054], [-83.478, 40.040], [-83.466, 40.026], [-83.454, 40.012],
+                            [-83.442, 39.998], [-83.430, 39.984], [-83.750, 40.650], [-84.000, 40.850],
+                            [-84.255, 40.954]
                         ]]
                     }
                     is_county_wide = True
@@ -1142,12 +1115,10 @@ def get_alerts():
 
 @app.route('/api/system_status')
 def api_system_status():
-    """Get system status information"""
+    """Get system status information using new helper functions"""
     try:
         total_boundaries = Boundary.query.count()
-        active_alerts = CAPAlert.query.filter(
-            or_(CAPAlert.expires.is_(None), CAPAlert.expires > datetime.utcnow())
-        ).count()
+        active_alerts = get_active_alerts_query().count()
 
         last_poll = PollHistory.query.order_by(desc(PollHistory.timestamp)).first()
 
@@ -1257,21 +1228,17 @@ def export_boundaries():
 def export_statistics():
     """Export current statistics to Excel"""
     try:
-        now = datetime.utcnow()
-
         stats_data = [{
             'Metric': 'Total Alerts',
             'Value': CAPAlert.query.count(),
             'Category': 'Alerts'
         }, {
             'Metric': 'Active Alerts',
-            'Value': CAPAlert.query.filter(
-                or_(CAPAlert.expires.is_(None), CAPAlert.expires > now)
-            ).count(),
+            'Value': get_active_alerts_query().count(),
             'Category': 'Alerts'
         }, {
             'Metric': 'Expired Alerts',
-            'Value': CAPAlert.query.filter(CAPAlert.expires < now).count(),
+            'Value': get_expired_alerts_query().count(),
             'Category': 'Alerts'
         }, {
             'Metric': 'Total Boundaries',
@@ -1312,56 +1279,37 @@ def export_statistics():
         return jsonify({'error': 'Failed to export statistics data'}), 500
 
 
-# Add diagnostic route to check boundary counts
+# Debug Route
 @app.route('/debug/boundaries/<int:alert_id>')
 def debug_boundaries(alert_id):
     """Debug route to check boundary counts for an alert"""
     try:
         alert = CAPAlert.query.get_or_404(alert_id)
 
-        # Get all boundaries in the system
         all_boundaries = Boundary.query.all()
-
-        # Get current intersections for this alert
         current_intersections = db.session.query(Intersection, Boundary).join(
             Boundary, Intersection.boundary_id == Boundary.id
         ).filter(Intersection.cap_alert_id == alert_id).all()
 
-        # Group boundaries by type
         boundary_counts = {}
         for boundary in all_boundaries:
             boundary_counts[boundary.type] = boundary_counts.get(boundary.type, 0) + 1
 
-        # Check if this should be county-wide (improved detection - same as main logic)
         is_county_wide = False
         if alert.area_desc:
             area_lower = alert.area_desc.lower()
+            county_wide_keywords = ['county', 'putnam county', 'entire county', 'all of putnam']
+            putnam_indicators = ['putnam;', 'putnam,', '; putnam;', '; putnam,', ', putnam;', ', putnam,', 'putnam ',
+                                 ' putnam']
 
-            # Method 1: Direct county-wide keywords
-            county_wide_keywords = [
-                'county', 'putnam county', 'entire county', 'all of putnam'
-            ]
-
-            # Method 2: Check if Putnam is listed among counties
-            putnam_indicators = [
-                'putnam;', 'putnam,', '; putnam;', '; putnam,',
-                ', putnam;', ', putnam,', 'putnam ', ' putnam'
-            ]
-
-            # Method 3: Multi-county alerts that include Putnam
             if 'putnam' in area_lower:
-                # Count how many counties are mentioned (semicolons usually separate counties)
                 county_count = len([x for x in area_lower.split(';') if x.strip()])
-
-                # If it's a multi-county alert including Putnam, treat as county-wide for Putnam
-                if county_count >= 3:  # 3 or more counties = regional alert
+                if county_count >= 3:
                     is_county_wide = True
 
-            # Check direct keywords
             if any(keyword in area_lower for keyword in county_wide_keywords):
                 is_county_wide = True
 
-            # Check Putnam-specific indicators
             if any(indicator in area_lower for indicator in putnam_indicators):
                 is_county_wide = True
 
@@ -1378,7 +1326,6 @@ def debug_boundaries(alert_id):
             <p><strong>Detected as County-Wide:</strong> {'Yes' if is_county_wide else 'No'}</p>
         """
 
-        # Add detection reasoning
         if alert.area_desc:
             area_lower = alert.area_desc.lower()
             county_list = [x.strip() for x in area_lower.split(';') if x.strip()]
@@ -1394,7 +1341,6 @@ def debug_boundaries(alert_id):
             """
 
         html += f"""
-
             <h2>Total Boundaries in System</h2>
             <ul>
         """
@@ -1465,390 +1411,280 @@ def debug_boundaries(alert_id):
         return f"<h1>Debug Error</h1><p>{str(e)}</p><p><a href='/alerts/{alert_id}'>← Back to Alert</a></p>"
 
 
-# Add route to fix intersections for a single alert
-@app.route('/admin/fix_single_alert_intersections/<int:alert_id>', methods=['POST'])
-def fix_single_alert_intersections(alert_id):
-    """Fix intersections for a specific alert"""
+# ADMIN ROUTES WITH PRESERVATION AND CONFIRMATIONS
+
+@app.route('/admin/trigger_poll', methods=['POST'])
+def trigger_poll():
+    """Manually trigger CAP alert polling"""
     try:
+        log_entry = SystemLog(
+            level='INFO',
+            message='Manual CAP poll triggered',
+            module='admin'
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+
+        return jsonify({'message': 'CAP poll triggered successfully'})
+    except Exception as e:
+        logger.error(f"Error triggering poll: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/mark_expired', methods=['POST'])
+def mark_expired():
+    """Mark expired alerts as inactive without deleting them (SAFE OPTION)"""
+    try:
+        now = datetime.utcnow()
+
+        # Find alerts that are expired but not marked as such
+        expired_alerts = CAPAlert.query.filter(
+            CAPAlert.expires < now,
+            CAPAlert.status != 'Expired'
+        ).all()
+
+        count = len(expired_alerts)
+
+        if count == 0:
+            return jsonify({'message': 'No alerts need to be marked as expired'})
+
+        # Mark as expired instead of deleting
+        for alert in expired_alerts:
+            alert.status = 'Expired'
+            alert.updated_at = now
+
+        db.session.commit()
+
+        log_entry = SystemLog(
+            level='INFO',
+            message=f'Marked {count} alerts as expired (data preserved)',
+            module='admin'
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+
+        return jsonify({
+            'message': f'Marked {count} alerts as expired',
+            'note': 'Alert data has been preserved in the database',
+            'marked_count': count
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error marking expired alerts: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/clear_expired', methods=['POST'])
+def clear_expired():
+    """Clear expired alerts from database with confirmation (DESTRUCTIVE)"""
+    try:
+        # Check for confirmation parameter
+        data = request.get_json() or {}
+        confirmed = data.get('confirmed', False)
+
+        if not confirmed:
+            # First request - return count and require confirmation
+            now = datetime.utcnow()
+            expired_count = CAPAlert.query.filter(CAPAlert.expires < now).count()
+
+            return jsonify({
+                'requires_confirmation': True,
+                'message': f'This will permanently delete {expired_count} expired alerts from the database.',
+                'warning': 'This action cannot be undone. Historical data will be lost.',
+                'expired_count': expired_count
+            })
+
+        # Confirmed request - proceed with deletion
+        now = datetime.utcnow()
+        expired_alerts = CAPAlert.query.filter(CAPAlert.expires < now).all()
+        count = len(expired_alerts)
+
+        if count == 0:
+            return jsonify({'message': 'No expired alerts found to delete'})
+
+        # Log the deletion before it happens
+        alert_ids = [alert.id for alert in expired_alerts]
+        log_entry = SystemLog(
+            level='WARNING',
+            message=f'PERMANENT DELETION: Removing {count} expired alerts from database',
+            module='admin',
+            details={
+                'deleted_alert_ids': alert_ids[:10],  # Log first 10 IDs
+                'total_deleted': count,
+                'deletion_confirmed': True
+            }
+        )
+        db.session.add(log_entry)
+
+        # Actually delete the alerts
+        for alert in expired_alerts:
+            db.session.delete(alert)
+
+        db.session.commit()
+
+        return jsonify({
+            'message': f'Permanently deleted {count} expired alerts',
+            'warning': 'Historical data has been removed from the database',
+            'deleted_count': count
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error clearing expired alerts: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/alert_status/<int:alert_id>', methods=['POST'])
+def update_alert_status(alert_id):
+    """Update the status of a specific alert"""
+    try:
+        data = request.get_json()
+        new_status = data.get('status')
+
+        valid_statuses = ['Active', 'Expired', 'Cancelled', 'Test', 'Draft']
+        if new_status not in valid_statuses:
+            return jsonify({'error': f'Invalid status. Must be one of: {valid_statuses}'}), 400
+
         alert = CAPAlert.query.get_or_404(alert_id)
+        old_status = alert.status
 
-        # Delete existing intersections for this alert
-        Intersection.query.filter_by(cap_alert_id=alert_id).delete()
-
-        # Check if this should be county-wide (improved detection)
-        is_county_wide = False
-        if alert.area_desc:
-            area_lower = alert.area_desc.lower()
-
-            # Method 1: Direct county-wide keywords
-            county_wide_keywords = [
-                'county', 'putnam county', 'entire county', 'all of putnam'
-            ]
-
-            # Method 2: Check if Putnam is listed among counties
-            putnam_indicators = [
-                'putnam;', 'putnam,', '; putnam;', '; putnam,',
-                ', putnam;', ', putnam,', 'putnam ', ' putnam'
-            ]
-
-            # Method 3: Multi-county alerts that include Putnam
-            if 'putnam' in area_lower:
-                # Count how many counties are mentioned (semicolons usually separate counties)
-                county_count = len([x for x in area_lower.split(';') if x.strip()])
-
-                # If it's a multi-county alert including Putnam, treat as county-wide for Putnam
-                if county_count >= 3:  # 3 or more counties = regional alert
-                    is_county_wide = True
-
-            # Check direct keywords
-            if any(keyword in area_lower for keyword in county_wide_keywords):
-                is_county_wide = True
-
-            # Check Putnam-specific indicators
-            if any(indicator in area_lower for indicator in putnam_indicators):
-                is_county_wide = True
-
-        intersections_created = 0
-
-        if is_county_wide:
-            # For county-wide alerts, intersect with ALL boundaries
-            all_boundaries = Boundary.query.all()
-
-            for boundary in all_boundaries:
-                # Calculate intersection area based on boundary area
-                intersection_area = 0
-                if boundary.geom:
-                    try:
-                        area_result = db.session.execute(text("""
-                                                              SELECT ST_Area(ST_Transform(geom, 3857)) as area
-                                                              FROM boundaries
-                                                              WHERE id = :boundary_id
-                                                              """), {'boundary_id': boundary.id}).fetchone()
-
-                        if area_result:
-                            intersection_area = area_result[0]
-                    except Exception as e:
-                        logger.warning(f"Could not calculate area for boundary {boundary.id}: {e}")
-
-                # Create intersection record
-                intersection = Intersection(
-                    cap_alert_id=alert_id,
-                    boundary_id=boundary.id,
-                    intersection_area=intersection_area or 0
-                )
-
-                db.session.add(intersection)
-                intersections_created += 1
-
-        elif alert.geom:
-            # For regular alerts with geometry, use spatial intersection
-            try:
-                intersecting_boundaries = db.session.query(Boundary).filter(
-                    ST_Intersects(Boundary.geom, alert.geom)
-                ).all()
-
-                for boundary in intersecting_boundaries:
-                    # Calculate actual intersection area
-                    try:
-                        intersection_area = db.session.scalar(
-                            text("""
-                                 SELECT ST_Area(ST_Intersection(
-                                         ST_Transform(b.geom, 3857),
-                                         ST_Transform(a.geom, 3857)
-                                                )) as area
-                                 FROM boundaries b,
-                                      cap_alerts a
-                                 WHERE b.id = :boundary_id
-                                   AND a.id = :alert_id
-                                 """),
-                            {'boundary_id': boundary.id, 'alert_id': alert_id}
-                        )
-                    except Exception as e:
-                        logger.warning(f"Could not calculate intersection area: {e}")
-                        intersection_area = 0
-
-                    intersection = Intersection(
-                        cap_alert_id=alert_id,
-                        boundary_id=boundary.id,
-                        intersection_area=intersection_area or 0
-                    )
-
-                    db.session.add(intersection)
-                    intersections_created += 1
-
-            except Exception as e:
-                logger.error(f"Error calculating spatial intersections: {e}")
+        alert.status = new_status
+        alert.updated_at = datetime.utcnow()
 
         db.session.commit()
 
         log_entry = SystemLog(
             level='INFO',
-            message=f'Fixed intersections for alert {alert_id}: created {intersections_created} intersection records',
+            message=f'Alert {alert.identifier} status changed from {old_status} to {new_status}',
             module='admin'
         )
         db.session.add(log_entry)
         db.session.commit()
 
         return jsonify({
-            'success': f'Created {intersections_created} intersection records for this alert',
-            'alert_type': 'county-wide' if is_county_wide else 'localized',
-            'intersections_created': intersections_created
+            'success': f'Alert status updated to {new_status}',
+            'alert_id': alert_id,
+            'old_status': old_status,
+            'new_status': new_status
         })
 
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error fixing intersections for alert {alert_id}: {str(e)}")
-        return jsonify({'error': f'Failed to fix intersections: {str(e)}'}), 500
+        logger.error(f"Error updating alert status: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 
-@app.route('/admin/fix_county_intersections', methods=['POST'])
-def fix_county_intersections():
-    """Fix intersections for county-wide alerts that use fallback geometry"""
+@app.route('/admin/optimize_db', methods=['POST'])
+def optimize_db():
+    """Run database optimization with fixed VACUUM handling"""
     try:
-        # Get county-wide alerts that might need intersection fixes
-        county_alerts = CAPAlert.query.filter(
-            or_(
-                CAPAlert.area_desc.ilike('%county%'),
-                CAPAlert.area_desc.ilike('%putnam%')
-            )
-        ).all()
+        start_time = time.time()
 
-        fixed_count = 0
+        # Get a raw connection and enable autocommit
+        raw_connection = db.engine.raw_connection()
+        raw_connection.autocommit = True
 
-        for alert in county_alerts:
-            # Check if this alert already has intersections
-            existing_intersections = Intersection.query.filter_by(cap_alert_id=alert.id).count()
+        cursor = raw_connection.cursor()
 
-            # If no intersections exist or very few, try to create them
-            if existing_intersections < 2:  # Assume county should intersect with multiple boundaries
-                try:
-                    # Get all boundaries in the county
-                    all_boundaries = Boundary.query.all()
+        # Run VACUUM ANALYZE outside of transaction
+        cursor.execute('VACUUM ANALYZE')
 
-                    for boundary in all_boundaries:
-                        # Check if intersection already exists
-                        existing = Intersection.query.filter_by(
-                            cap_alert_id=alert.id,
-                            boundary_id=boundary.id
-                        ).first()
+        # Close the raw connection
+        cursor.close()
+        raw_connection.close()
 
-                        if not existing:
-                            # For county-wide alerts, assume they intersect with all boundaries
-                            # Calculate a reasonable intersection area based on boundary type
-                            if boundary.geom:
-                                try:
-                                    # Try to calculate actual intersection area
-                                    area_result = db.session.execute(text("""
-                                                                          SELECT ST_Area(ST_Transform(geom, 3857)) as area
-                                                                          FROM boundaries
-                                                                          WHERE id = :boundary_id
-                                                                          """), {'boundary_id': boundary.id}).fetchone()
-
-                                    intersection_area = area_result[0] if area_result else 0
-                                except:
-                                    # Fallback area estimates by boundary type
-                                    area_estimates = {
-                                        'county': 1500000000,  # ~580 sq miles
-                                        'township': 150000000,  # ~58 sq miles
-                                        'village': 10000000,  # ~4 sq miles
-                                        'fire': 100000000,  # ~39 sq miles
-                                        'ems': 100000000,  # ~39 sq miles
-                                        'electric': 200000000,  # ~77 sq miles
-                                        'telephone': 150000000,  # ~58 sq miles
-                                        'school': 120000000  # ~46 sq miles
-                                    }
-                                    intersection_area = area_estimates.get(boundary.type, 50000000)
-                            else:
-                                intersection_area = 50000000  # Default ~19 sq miles
-
-                            # Create intersection record
-                            intersection = Intersection(
-                                cap_alert_id=alert.id,
-                                boundary_id=boundary.id,
-                                intersection_area=intersection_area
-                            )
-
-                            db.session.add(intersection)
-                            fixed_count += 1
-
-                except Exception as e:
-                    logger.warning(f"Error processing intersections for alert {alert.id}: {str(e)}")
-                    continue
-
-        db.session.commit()
+        execution_time = int((time.time() - start_time) * 1000)
 
         log_entry = SystemLog(
             level='INFO',
-            message=f'Fixed {fixed_count} county-wide alert intersections',
-            module='admin'
+            message=f'Database optimization completed in {execution_time}ms',
+            module='admin',
+            details={'execution_time_ms': execution_time, 'operation': 'VACUUM ANALYZE'}
         )
         db.session.add(log_entry)
         db.session.commit()
 
         return jsonify({
-            'success': f'Fixed intersections for {fixed_count} boundary relationships',
-            'message': f'County-wide alerts now properly show affected boundaries'
+            'message': f'Database optimization completed successfully in {execution_time}ms',
+            'execution_time_ms': execution_time
         })
 
     except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error fixing county intersections: {str(e)}")
-        return jsonify({'error': f'Failed to fix intersections: {str(e)}'}), 500
+        logger.error(f"Error optimizing database: {str(e)}")
+        return jsonify({'error': f'Database optimization failed: {str(e)}'}), 500
 
 
-# Update the CAP poller intersection processing to handle county-wide alerts better
-def process_intersections_enhanced(alert: CAPAlert):
-    """Enhanced intersection processing for county-wide alerts"""
+@app.route('/admin/check_db_health', methods=['GET'])
+def check_db_health():
+    """Check database health and vacuum status"""
     try:
-        # Check if this is a county-wide alert
-        is_county_wide = bool(alert.area_desc and any(
-            term in alert.area_desc.lower()
-            for term in ['county', 'putnam county', 'entire county']
-        ))
+        health_info = {}
 
-        if is_county_wide:
-            # For county-wide alerts, intersect with all boundaries
-            all_boundaries = db.session.query(Boundary).all()
+        # Check basic connectivity
+        result = db.session.execute(text('SELECT 1')).fetchone()
+        health_info['connectivity'] = 'OK' if result else 'Failed'
 
-            logger.info(f"Processing county-wide alert {alert.identifier} against all {len(all_boundaries)} boundaries")
+        # Get database size
+        try:
+            size_result = db.session.execute(text(
+                "SELECT pg_size_pretty(pg_database_size(current_database()))"
+            )).fetchone()
+            health_info['database_size'] = size_result[0] if size_result else 'Unknown'
+        except:
+            health_info['database_size'] = 'Unknown'
 
-            for boundary in all_boundaries:
-                # Check if intersection already exists
-                existing_intersection = db.session.query(Intersection).filter_by(
-                    cap_alert_id=alert.id,
-                    boundary_id=boundary.id
-                ).first()
+        # Get table statistics
+        try:
+            table_stats = db.session.execute(text("""
+                                                  SELECT schemaname,
+                                                         tablename,
+                                                         n_tup_ins,
+                                                         n_tup_upd,
+                                                         n_tup_del,
+                                                         last_vacuum,
+                                                         last_autovacuum,
+                                                         last_analyze,
+                                                         last_autoanalyze
+                                                  FROM pg_stat_user_tables
+                                                  WHERE schemaname = 'public'
+                                                  ORDER BY tablename
+                                                  """)).fetchall()
 
-                if existing_intersection:
-                    continue
+            health_info['table_statistics'] = []
+            for stat in table_stats:
+                health_info['table_statistics'].append({
+                    'table': stat[1],
+                    'inserts': stat[2],
+                    'updates': stat[3],
+                    'deletes': stat[4],
+                    'last_vacuum': str(stat[5]) if stat[5] else 'Never',
+                    'last_autovacuum': str(stat[6]) if stat[6] else 'Never',
+                    'last_analyze': str(stat[7]) if stat[7] else 'Never',
+                    'last_autoanalyze': str(stat[8]) if stat[8] else 'Never'
+                })
+        except Exception as e:
+            health_info['table_statistics_error'] = str(e)
 
-                # Calculate intersection area
-                intersection_area = 0
-                if boundary.geom:
-                    try:
-                        # Calculate actual area of the boundary (approximation for county-wide)
-                        area_result = db.session.execute(text("""
-                                                              SELECT ST_Area(ST_Transform(geom, 3857)) as area
-                                                              FROM boundaries
-                                                              WHERE id = :boundary_id
-                                                              """), {'boundary_id': boundary.id}).fetchone()
+        # Get active connections
+        try:
+            conn_result = db.session.execute(text(
+                "SELECT count(*) FROM pg_stat_activity WHERE state = 'active'"
+            )).fetchone()
+            health_info['active_connections'] = conn_result[0] if conn_result else 0
+        except:
+            health_info['active_connections'] = 'Unknown'
 
-                        if area_result:
-                            intersection_area = area_result[0]
-                    except Exception as e:
-                        logger.warning(f"Could not calculate area for boundary {boundary.id}: {e}")
-                        intersection_area = 0
-
-                # Save intersection record
-                intersection = Intersection(
-                    cap_alert_id=alert.id,
-                    boundary_id=boundary.id,
-                    intersection_area=intersection_area or 0
-                )
-
-                db.session.add(intersection)
-                logger.debug(f"County-wide alert {alert.identifier} intersects with {boundary.type} '{boundary.name}'")
-
-        elif alert.geom:
-            # Regular alert with geometry - use spatial intersection
-            intersecting_boundaries = db.session.query(Boundary).filter(
-                ST_Intersects(Boundary.geom, alert.geom)
-            ).all()
-
-            logger.info(f"Alert {alert.identifier} intersects with {len(intersecting_boundaries)} boundaries")
-
-            for boundary in intersecting_boundaries:
-                # Check if intersection already exists
-                existing_intersection = db.session.query(Intersection).filter_by(
-                    cap_alert_id=alert.id,
-                    boundary_id=boundary.id
-                ).first()
-
-                if existing_intersection:
-                    continue
-
-                # Calculate intersection area
-                try:
-                    intersection_area = db.session.scalar(
-                        text("""
-                             SELECT ST_Area(ST_Intersection(
-                                     ST_Transform(b.geom, 3857),
-                                     ST_Transform(a.geom, 3857)
-                                            )) as area
-                             FROM boundaries b,
-                                  cap_alerts a
-                             WHERE b.id = :boundary_id
-                               AND a.id = :alert_id
-                             """),
-                        {'boundary_id': boundary.id, 'alert_id': alert.id}
-                    )
-                except Exception as e:
-                    logger.warning(f"Could not calculate intersection area: {e}")
-                    intersection_area = 0
-
-                # Save intersection record
-                intersection = Intersection(
-                    cap_alert_id=alert.id,
-                    boundary_id=boundary.id,
-                    intersection_area=intersection_area or 0
-                )
-
-                db.session.add(intersection)
-                logger.info(f"Alert {alert.identifier} intersects with {boundary.type} boundary '{boundary.name}'")
-
-        db.session.commit()
+        return jsonify(health_info)
 
     except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error processing intersections: {str(e)}")
+        logger.error(f"Error checking database health: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 
-# Add the enhanced function to the admin routes section
-@app.route('/admin/recalculate_intersections', methods=['POST'])
-def recalculate_intersections():
-    """Recalculate all intersections for existing alerts"""
-    try:
-        # Get all active alerts
-        active_alerts = CAPAlert.query.filter(
-            or_(CAPAlert.expires.is_(None), CAPAlert.expires > datetime.utcnow())
-        ).all()
+# BOUNDARY MANAGEMENT WITH CONFIRMATIONS
 
-        total_processed = 0
-        total_intersections = 0
-
-        for alert in active_alerts:
-            # Delete existing intersections for this alert
-            Intersection.query.filter_by(cap_alert_id=alert.id).delete()
-
-            # Reprocess intersections with enhanced logic
-            process_intersections_enhanced(alert)
-
-            # Count new intersections
-            new_intersections = Intersection.query.filter_by(cap_alert_id=alert.id).count()
-            total_intersections += new_intersections
-            total_processed += 1
-
-        db.session.commit()
-
-        log_entry = SystemLog(
-            level='INFO',
-            message=f'Recalculated intersections for {total_processed} alerts, created {total_intersections} intersection records',
-            module='admin'
-        )
-        db.session.add(log_entry)
-        db.session.commit()
-
-        return jsonify({
-            'success': f'Recalculated intersections for {total_processed} alerts',
-            'message': f'Created {total_intersections} boundary intersection records'
-        })
-
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error recalculating intersections: {str(e)}")
-        return jsonify({'error': f'Failed to recalculate intersections: {str(e)}'}), 500
-
-
+@app.route('/admin/preview_geojson', methods=['POST'])
 def preview_geojson():
     """Preview what will be extracted from a GeoJSON file"""
     if 'file' not in request.files:
@@ -1994,10 +1830,11 @@ def delete_boundary(boundary_id):
 
 @app.route('/admin/delete_boundaries_by_type', methods=['DELETE'])
 def delete_boundaries_by_type():
-    """Delete all boundaries of a specific type"""
+    """Delete all boundaries of a specific type with confirmation"""
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         boundary_type = data.get('boundary_type')
+        confirmed = data.get('confirmed', False)
 
         if not boundary_type:
             return jsonify({'error': 'Boundary type is required'}), 400
@@ -2008,20 +1845,31 @@ def delete_boundaries_by_type():
         if count == 0:
             return jsonify({'message': f'No {boundary_type} boundaries found to delete'})
 
+        if not confirmed:
+            return jsonify({
+                'requires_confirmation': True,
+                'message': f'This will permanently delete ALL {count} {boundary_type} boundaries.',
+                'warning': 'This action cannot be undone and will affect all related alerts.',
+                'boundary_count': count,
+                'boundary_type': boundary_type
+            })
+
+        # Proceed with deletion
         for boundary in boundaries:
             db.session.delete(boundary)
 
         db.session.commit()
 
         log_entry = SystemLog(
-            level='INFO',
-            message=f'Deleted all {count} {boundary_type} boundaries',
-            module='admin'
+            level='WARNING',
+            message=f'PERMANENT DELETION: Deleted all {count} {boundary_type} boundaries',
+            module='admin',
+            details={'boundary_type': boundary_type, 'count': count, 'deletion_confirmed': True}
         )
         db.session.add(log_entry)
         db.session.commit()
 
-        return jsonify({'success': f'Deleted {count} {boundary_type} boundaries'})
+        return jsonify({'success': f'Permanently deleted {count} {boundary_type} boundaries'})
 
     except Exception as e:
         db.session.rollback()
@@ -2031,25 +1879,62 @@ def delete_boundaries_by_type():
 
 @app.route('/admin/clear_all_boundaries', methods=['DELETE'])
 def clear_all_boundaries():
-    """Delete ALL boundaries from the system"""
+    """Delete ALL boundaries from the system with double confirmation"""
     try:
+        data = request.get_json() or {}
+        confirmation_level = data.get('confirmation_level', 0)
+
         count = Boundary.query.count()
 
         if count == 0:
             return jsonify({'message': 'No boundaries found to delete'})
 
-        db.session.execute(text('DELETE FROM boundaries'))
-        db.session.commit()
+        if confirmation_level == 0:
+            # First confirmation request
+            return jsonify({
+                'requires_confirmation': True,
+                'confirmation_level': 1,
+                'message': f'⚠️ WARNING: This will permanently delete ALL {count} boundaries from the system.',
+                'warning': 'This will affect all alerts and intersections. This action cannot be undone.',
+                'boundary_count': count
+            })
+        elif confirmation_level == 1:
+            # Second confirmation request
+            return jsonify({
+                'requires_confirmation': True,
+                'confirmation_level': 2,
+                'message': f'🚨 FINAL WARNING: You are about to permanently delete {count} boundaries.',
+                'warning': 'Type "DELETE ALL BOUNDARIES" to confirm this irreversible action.',
+                'requires_text_confirmation': True,
+                'expected_text': 'DELETE ALL BOUNDARIES'
+            })
+        elif confirmation_level == 2:
+            # Check text confirmation
+            text_confirmation = data.get('text_confirmation', '')
+            if text_confirmation != 'DELETE ALL BOUNDARIES':
+                return jsonify({
+                    'error': 'Text confirmation does not match. Operation cancelled.',
+                    'expected': 'DELETE ALL BOUNDARIES',
+                    'received': text_confirmation
+                }), 400
 
-        log_entry = SystemLog(
-            level='WARNING',
-            message=f'Cleared ALL {count} boundaries from system',
-            module='admin'
-        )
-        db.session.add(log_entry)
-        db.session.commit()
+            # Proceed with deletion
+            log_entry = SystemLog(
+                level='CRITICAL',
+                message=f'PERMANENT DELETION: Clearing ALL {count} boundaries from system',
+                module='admin',
+                details={'deletion_confirmed': True, 'boundaries_deleted': count}
+            )
+            db.session.add(log_entry)
 
-        return jsonify({'success': f'Cleared all {count} boundaries from the system'})
+            db.session.execute(text('DELETE FROM boundaries'))
+            db.session.commit()
+
+            return jsonify({
+                'success': f'Permanently deleted all {count} boundaries from the system',
+                'warning': 'All boundary data has been removed',
+                'deleted_count': count
+            })
 
     except Exception as e:
         db.session.rollback()
@@ -2057,72 +1942,248 @@ def clear_all_boundaries():
         return jsonify({'error': f'Failed to clear boundaries: {str(e)}'}), 500
 
 
-@app.route('/admin/trigger_poll', methods=['POST'])
-def trigger_poll():
-    """Manually trigger CAP alert polling"""
+# INTERSECTION MANAGEMENT ROUTES
+
+@app.route('/admin/fix_single_alert_intersections/<int:alert_id>', methods=['POST'])
+def fix_single_alert_intersections(alert_id):
+    """Fix intersections for a specific alert"""
     try:
+        alert = CAPAlert.query.get_or_404(alert_id)
+
+        # Delete existing intersections for this alert
+        Intersection.query.filter_by(cap_alert_id=alert_id).delete()
+
+        # Check if this should be county-wide (improved detection)
+        is_county_wide = False
+        if alert.area_desc:
+            area_lower = alert.area_desc.lower()
+
+            county_wide_keywords = ['county', 'putnam county', 'entire county', 'all of putnam']
+            putnam_indicators = ['putnam;', 'putnam,', '; putnam;', '; putnam,', ', putnam;', ', putnam,', 'putnam ',
+                                 ' putnam']
+
+            if 'putnam' in area_lower:
+                county_count = len([x for x in area_lower.split(';') if x.strip()])
+                if county_count >= 3:
+                    is_county_wide = True
+
+            if any(keyword in area_lower for keyword in county_wide_keywords):
+                is_county_wide = True
+
+            if any(indicator in area_lower for indicator in putnam_indicators):
+                is_county_wide = True
+
+        intersections_created = 0
+
+        if is_county_wide:
+            # For county-wide alerts, intersect with ALL boundaries
+            all_boundaries = Boundary.query.all()
+
+            for boundary in all_boundaries:
+                # Calculate intersection area based on boundary area
+                intersection_area = 0
+                if boundary.geom:
+                    try:
+                        area_result = db.session.execute(text("""
+                                                              SELECT ST_Area(ST_Transform(geom, 3857)) as area
+                                                              FROM boundaries
+                                                              WHERE id = :boundary_id
+                                                              """), {'boundary_id': boundary.id}).fetchone()
+
+                        if area_result:
+                            intersection_area = area_result[0]
+                    except Exception as e:
+                        logger.warning(f"Could not calculate area for boundary {boundary.id}: {e}")
+
+                # Create intersection record
+                intersection = Intersection(
+                    cap_alert_id=alert_id,
+                    boundary_id=boundary.id,
+                    intersection_area=intersection_area or 0
+                )
+
+                db.session.add(intersection)
+                intersections_created += 1
+
+        elif alert.geom:
+            # For regular alerts with geometry, use spatial intersection
+            try:
+                intersecting_boundaries = db.session.query(Boundary).filter(
+                    ST_Intersects(Boundary.geom, alert.geom)
+                ).all()
+
+                for boundary in intersecting_boundaries:
+                    # Calculate actual intersection area
+                    try:
+                        intersection_area = db.session.scalar(
+                            text("""
+                                 SELECT ST_Area(ST_Intersection(
+                                         ST_Transform(b.geom, 3857),
+                                         ST_Transform(a.geom, 3857)
+                                                )) as area
+                                 FROM boundaries b,
+                                      cap_alerts a
+                                 WHERE b.id = :boundary_id
+                                   AND a.id = :alert_id
+                                 """),
+                            {'boundary_id': boundary.id, 'alert_id': alert_id}
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not calculate intersection area: {e}")
+                        intersection_area = 0
+
+                    intersection = Intersection(
+                        cap_alert_id=alert_id,
+                        boundary_id=boundary.id,
+                        intersection_area=intersection_area or 0
+                    )
+
+                    db.session.add(intersection)
+                    intersections_created += 1
+
+            except Exception as e:
+                logger.error(f"Error calculating spatial intersections: {e}")
+
+        db.session.commit()
+
         log_entry = SystemLog(
             level='INFO',
-            message='Manual CAP poll triggered',
+            message=f'Fixed intersections for alert {alert_id}: created {intersections_created} intersection records',
             module='admin'
         )
         db.session.add(log_entry)
         db.session.commit()
 
-        return jsonify({'message': 'CAP poll triggered successfully'})
-    except Exception as e:
-        logger.error(f"Error triggering poll: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'success': f'Created {intersections_created} intersection records for this alert',
+            'alert_type': 'county-wide' if is_county_wide else 'localized',
+            'intersections_created': intersections_created
+        })
 
-
-@app.route('/admin/clear_expired', methods=['POST'])
-def clear_expired():
-    """Clear expired alerts from database"""
-    try:
-        now = datetime.utcnow()
-        expired_alerts = CAPAlert.query.filter(CAPAlert.expires < now).all()
-        count = len(expired_alerts)
-
-        for alert in expired_alerts:
-            db.session.delete(alert)
-
-        db.session.commit()
-
-        log_entry = SystemLog(
-            level='INFO',
-            message=f'Cleared {count} expired alerts',
-            module='admin'
-        )
-        db.session.add(log_entry)
-        db.session.commit()
-
-        return jsonify({'message': f'Cleared {count} expired alerts'})
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error clearing expired alerts: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error fixing intersections for alert {alert_id}: {str(e)}")
+        return jsonify({'error': f'Failed to fix intersections: {str(e)}'}), 500
 
 
-@app.route('/admin/optimize_db', methods=['POST'])
-def optimize_db():
-    """Run database optimization"""
+@app.route('/admin/recalculate_intersections', methods=['POST'])
+def recalculate_intersections():
+    """Recalculate all intersections for existing alerts"""
     try:
-        db.session.execute(text('VACUUM ANALYZE'))
+        # Get all active alerts using our helper function
+        active_alerts = get_active_alerts_query().all()
+
+        total_processed = 0
+        total_intersections = 0
+
+        for alert in active_alerts:
+            # Delete existing intersections for this alert
+            Intersection.query.filter_by(cap_alert_id=alert.id).delete()
+
+            # Process intersections using enhanced logic
+            intersections_created = process_alert_intersections(alert)
+            total_intersections += intersections_created
+            total_processed += 1
+
         db.session.commit()
 
         log_entry = SystemLog(
             level='INFO',
-            message='Database optimization completed',
+            message=f'Recalculated intersections for {total_processed} alerts, created {total_intersections} intersection records',
             module='admin'
         )
         db.session.add(log_entry)
         db.session.commit()
 
-        return jsonify({'message': 'Database optimization completed'})
+        return jsonify({
+            'success': f'Recalculated intersections for {total_processed} alerts',
+            'message': f'Created {total_intersections} boundary intersection records'
+        })
+
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error optimizing database: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error recalculating intersections: {str(e)}")
+        return jsonify({'error': f'Failed to recalculate intersections: {str(e)}'}), 500
+
+
+def process_alert_intersections(alert: CAPAlert):
+    """Process intersections for a single alert and return count created"""
+    intersections_created = 0
+
+    try:
+        # Check if this is a county-wide alert
+        is_county_wide = bool(alert.area_desc and any(
+            term in alert.area_desc.lower()
+            for term in ['county', 'putnam county', 'entire county']
+        ))
+
+        if is_county_wide:
+            # For county-wide alerts, intersect with all boundaries
+            all_boundaries = db.session.query(Boundary).all()
+
+            for boundary in all_boundaries:
+                # Calculate intersection area
+                intersection_area = 0
+                if boundary.geom:
+                    try:
+                        area_result = db.session.execute(text("""
+                                                              SELECT ST_Area(ST_Transform(geom, 3857)) as area
+                                                              FROM boundaries
+                                                              WHERE id = :boundary_id
+                                                              """), {'boundary_id': boundary.id}).fetchone()
+                        if area_result:
+                            intersection_area = area_result[0]
+                    except Exception as e:
+                        logger.warning(f"Could not calculate area for boundary {boundary.id}: {e}")
+
+                # Save intersection record
+                intersection = Intersection(
+                    cap_alert_id=alert.id,
+                    boundary_id=boundary.id,
+                    intersection_area=intersection_area or 0
+                )
+                db.session.add(intersection)
+                intersections_created += 1
+
+        elif alert.geom:
+            # Regular alert with geometry - use spatial intersection
+            intersecting_boundaries = db.session.query(Boundary).filter(
+                ST_Intersects(Boundary.geom, alert.geom)
+            ).all()
+
+            for boundary in intersecting_boundaries:
+                # Calculate intersection area
+                try:
+                    intersection_area = db.session.scalar(
+                        text("""
+                             SELECT ST_Area(ST_Intersection(
+                                     ST_Transform(b.geom, 3857),
+                                     ST_Transform(a.geom, 3857)
+                                            )) as area
+                             FROM boundaries b,
+                                  cap_alerts a
+                             WHERE b.id = :boundary_id
+                               AND a.id = :alert_id
+                             """),
+                        {'boundary_id': boundary.id, 'alert_id': alert.id}
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not calculate intersection area: {e}")
+                    intersection_area = 0
+
+                # Save intersection record
+                intersection = Intersection(
+                    cap_alert_id=alert.id,
+                    boundary_id=boundary.id,
+                    intersection_area=intersection_area or 0
+                )
+                db.session.add(intersection)
+                intersections_created += 1
+
+    except Exception as e:
+        logger.error(f"Error processing intersections for alert {alert.id}: {str(e)}")
+
+    return intersections_created
 
 
 # Error handlers

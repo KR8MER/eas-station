@@ -1,562 +1,577 @@
-{% extends "base.html" %}
-
-{% block title %}Administration Panel - KR8MER CAP{% endblock %}
-
-{% block extra_css %}
-<style>
-    .admin-header {
-        background: linear-gradient(135deg, var(--primary-color) 0%, #6f42c1 100%);
-        color: white;
-        border-radius: 12px;
-        margin-bottom: 30px;
-        box-shadow: 0 4px 20px var(--shadow-color);
-    }
-
-    .admin-card {
-        background: var(--bg-color);
-        border: 1px solid var(--border-color);
-        border-radius: 12px;
-        box-shadow: 0 4px 20px var(--shadow-color);
-        margin-bottom: 30px;
-        transition: all 0.3s ease;
-        overflow: hidden;
-    }
-
-    .admin-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 30px var(--shadow-color);
-    }
-
-    .admin-card-header {
-        background: linear-gradient(135deg, var(--light-color) 0%, var(--border-color) 100%);
-        color: var(--text-color);
-        padding: 20px;
-        border-bottom: 1px solid var(--border-color);
-        font-weight: 600;
-    }
-
-    .admin-card-body {
-        padding: 25px;
-    }
-
-    .form-group {
-        margin-bottom: 20px;
-    }
-
-    .form-label {
-        font-weight: 600;
-        color: var(--text-color);
-        margin-bottom: 8px;
-    }
-
-    .form-select, .form-control {
-        background-color: var(--bg-color);
-        border: 2px solid var(--border-color);
-        color: var(--text-color);
-        border-radius: 8px;
-        padding: 12px 16px;
-        transition: all 0.3s ease;
-    }
-
-    .form-select:focus, .form-control:focus {
-        border-color: var(--primary-color);
-        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-        background-color: var(--bg-color);
-        color: var(--text-color);
-    }
-
-    .btn {
-        border-radius: 8px;
-        padding: 12px 24px;
-        font-weight: 600;
-        transition: all 0.3s ease;
-        border: none;
-        position: relative;
-        overflow: hidden;
-    }
-
-    .btn::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-        transition: left 0.5s;
-    }
-
-    .btn:hover::before {
-        left: 100%;
-    }
-
-    .btn-primary {
-        background: linear-gradient(135deg, var(--primary-color) 0%, #4dabf7 100%);
-        box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
-    }
-
-    .btn-primary:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(0, 123, 255, 0.4);
-    }
-
-    .btn-success {
-        background: linear-gradient(135deg, var(--success-color) 0%, #51cf66 100%);
-        box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
-    }
-
-    .btn-success:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
-    }
-
-    .btn-danger {
-        background: linear-gradient(135deg, var(--danger-color) 0%, #ff6b6b 100%);
-        box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3);
-    }
-
-    .btn-danger:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4);
-    }
-
-    .btn-outline-secondary {
-        border: 2px solid var(--border-color);
-        color: var(--text-color);
-        background: transparent;
-    }
-
-    .btn-outline-secondary:hover {
-        background: var(--border-color);
-        color: var(--text-color);
-        transform: translateY(-2px);
-    }
-
-    .nav-pills {
-        background: var(--light-color);
-        border-radius: 12px;
-        padding: 8px;
-        margin-bottom: 25px;
-    }
-
-    .nav-pills .nav-link {
-        border-radius: 8px;
-        color: var(--text-color);
-        font-weight: 600;
-        transition: all 0.3s ease;
-        margin: 0 4px;
-    }
-
-    .nav-pills .nav-link.active {
-        background: linear-gradient(135deg, var(--primary-color) 0%, #4dabf7 100%);
-        color: white;
-        box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
-    }
-
-    .nav-pills .nav-link:hover:not(.active) {
-        background: var(--border-color);
-        transform: translateY(-1px);
-    }
-
-    .status-message {
-        border-radius: 8px;
-        padding: 15px;
-        margin-top: 20px;
-        font-weight: 500;
-        display: none;
-        animation: slideIn 0.3s ease;
-    }
-
-    .status-message.success {
-        background: rgba(40, 167, 69, 0.1);
-        border: 1px solid var(--success-color);
-        color: var(--success-color);
-    }
-
-    .status-message.error {
-        background: rgba(220, 53, 69, 0.1);
-        border: 1px solid var(--danger-color);
-        color: var(--danger-color);
-    }
-
-    .status-message.info {
-        background: rgba(23, 162, 184, 0.1);
-        border: 1px solid var(--info-color);
-        color: var(--info-color);
-    }
-
-    @keyframes slideIn {
-        from {
-            opacity: 0;
-            transform: translateY(-10px);
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - KR8MER CAP Emergency Alert System</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+            --light-color: #f8f9fa;
+            --dark-color: #343a40;
+            --bg-color: #ffffff;
+            --text-color: #212529;
+            --border-color: #dee2e6;
+            --shadow-color: rgba(0, 0, 0, 0.1);
         }
-        to {
-            opacity: 1;
-            transform: translateY(0);
+
+        [data-theme="dark"] {
+            --primary-color: #4dabf7;
+            --secondary-color: #adb5bd;
+            --success-color: #51cf66;
+            --danger-color: #ff6b6b;
+            --warning-color: #ffd43b;
+            --info-color: #339af0;
+            --light-color: #495057;
+            --dark-color: #212529;
+            --bg-color: #1a1a1a;
+            --text-color: #f8f9fa;
+            --border-color: #495057;
+            --shadow-color: rgba(255, 255, 255, 0.1);
         }
-    }
 
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 20px;
-        margin: 20px 0;
-    }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
 
-    .stat-card {
-        background: linear-gradient(135deg, var(--primary-color) 0%, #6f42c1 100%);
-        color: white;
-        padding: 25px;
-        border-radius: 12px;
-        text-align: center;
-        box-shadow: 0 4px 20px var(--shadow-color);
-        transition: all 0.3s ease;
-    }
+        .admin-header {
+            background: linear-gradient(135deg, var(--primary-color), var(--info-color));
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 20px var(--shadow-color);
+        }
 
-    .stat-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 8px 30px var(--shadow-color);
-    }
+        .admin-card {
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 4px 15px var(--shadow-color);
+            transition: all 0.3s ease;
+            margin-bottom: 2rem;
+            overflow: hidden;
+        }
 
-    .stat-number {
-        font-size: 2.5em;
-        font-weight: bold;
-        margin-bottom: 5px;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-    }
+        .admin-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px var(--shadow-color);
+        }
 
-    .stat-label {
-        font-size: 1.1em;
-        opacity: 0.9;
-        text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-    }
+        .card-header-custom {
+            background: linear-gradient(135deg, var(--light-color), var(--border-color));
+            border-bottom: 2px solid var(--primary-color);
+            padding: 1.5rem;
+        }
 
-    .operations-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 20px;
-    }
+        .tabs-container {
+            border-bottom: 3px solid var(--border-color);
+            background: var(--light-color);
+            border-radius: 12px 12px 0 0;
+        }
 
-    .operation-card {
-        background: var(--bg-color);
-        border: 2px solid var(--border-color);
-        border-radius: 12px;
-        padding: 25px;
-        text-align: center;
-        transition: all 0.3s ease;
-        position: relative;
-        overflow: hidden;
-    }
+        .nav-tabs-custom {
+            border: none;
+            padding: 0.5rem 1rem;
+        }
 
-    .operation-card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 4px;
-        background: linear-gradient(90deg, var(--primary-color), var(--info-color));
-    }
+        .nav-tabs-custom .nav-link {
+            border: none;
+            background: transparent;
+            color: var(--text-color);
+            padding: 1rem 1.5rem;
+            margin: 0 0.25rem;
+            border-radius: 8px 8px 0 0;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
 
-    .operation-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 8px 30px var(--shadow-color);
-        border-color: var(--primary-color);
-    }
+        .nav-tabs-custom .nav-link:hover {
+            background: var(--primary-color);
+            color: white;
+            transform: translateY(-2px);
+        }
 
-    .operation-icon {
-        font-size: 3em;
-        margin-bottom: 15px;
-        color: var(--primary-color);
-    }
+        .nav-tabs-custom .nav-link.active {
+            background: var(--primary-color);
+            color: white;
+            border-bottom: 3px solid var(--info-color);
+        }
 
-    .operation-title {
-        font-size: 1.2em;
-        font-weight: 600;
-        margin-bottom: 10px;
-        color: var(--text-color);
-    }
+        .tab-content-custom {
+            padding: 2rem;
+            min-height: 400px;
+        }
 
-    .operation-description {
-        color: var(--secondary-color);
-        margin-bottom: 20px;
-        font-size: 0.9em;
-    }
+        .form-control, .form-select {
+            background-color: var(--bg-color);
+            border: 2px solid var(--border-color);
+            color: var(--text-color);
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
 
-    .boundary-list {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 20px;
-    }
+        .form-control:focus, .form-select:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
 
-    .boundary-item {
-        background: var(--bg-color);
-        border: 1px solid var(--border-color);
-        border-radius: 12px;
-        padding: 20px;
-        transition: all 0.3s ease;
-    }
+        .btn-custom {
+            border-radius: 8px;
+            padding: 0.75rem 1.5rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border: none;
+            position: relative;
+            overflow: hidden;
+        }
 
-    .boundary-item:hover {
-        border-color: var(--primary-color);
-        box-shadow: 0 4px 20px var(--shadow-color);
-    }
+        .btn-custom:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px var(--shadow-color);
+        }
 
-    .boundary-item h4 {
-        color: var(--primary-color);
-        margin-bottom: 15px;
-        font-weight: 600;
-    }
+        .btn-custom.btn-primary {
+            background: linear-gradient(135deg, var(--primary-color), var(--info-color));
+        }
 
-    .boundary-entry {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 10px;
-        margin-bottom: 8px;
-        background: var(--light-color);
-        border-radius: 8px;
-        transition: all 0.3s ease;
-    }
+        .btn-custom.btn-success {
+            background: linear-gradient(135deg, var(--success-color), #20c997);
+        }
 
-    .boundary-entry:hover {
-        background: var(--border-color);
-    }
+        .btn-custom.btn-danger {
+            background: linear-gradient(135deg, var(--danger-color), #e74c3c);
+        }
 
-    .boundary-name {
-        flex-grow: 1;
-        font-weight: 500;
-        color: var(--text-color);
-    }
+        .btn-custom.btn-warning {
+            background: linear-gradient(135deg, var(--warning-color), #f39c12);
+            color: var(--dark-color);
+        }
 
-    .delete-btn {
-        background: var(--danger-color);
-        color: white;
-        border: none;
-        border-radius: 6px;
-        padding: 6px 12px;
-        font-size: 0.8em;
-        transition: all 0.3s ease;
-    }
-
-    .delete-btn:hover {
-        background: #c82333;
-        transform: scale(1.05);
-    }
-
-    .loading-indicator {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        color: var(--text-color);
-    }
-
-    .spinner {
-        width: 20px;
-        height: 20px;
-        border: 2px solid var(--border-color);
-        border-top: 2px solid var(--primary-color);
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-
-    .breadcrumb {
-        background: var(--light-color);
-        border-radius: 8px;
-        padding: 12px 20px;
-    }
-
-    .breadcrumb-item a {
-        color: var(--primary-color);
-        text-decoration: none;
-    }
-
-    .breadcrumb-item.active {
-        color: var(--text-color);
-    }
-
-    /* Dark mode specific adjustments */
-    [data-theme="dark"] .form-select option {
-        background-color: var(--bg-color);
-        color: var(--text-color);
-    }
-
-    /* Responsive design */
-    @media (max-width: 768px) {
         .stats-grid {
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin: 1.5rem 0;
         }
 
-        .operations-grid {
-            grid-template-columns: 1fr;
+        .stat-card {
+            background: linear-gradient(135deg, var(--primary-color), var(--info-color));
+            color: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            text-align: center;
+            transition: all 0.3s ease;
         }
 
-        .boundary-list {
-            grid-template-columns: 1fr;
+        .stat-card:hover {
+            transform: scale(1.05);
         }
 
-        .admin-card-body {
-            padding: 20px;
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
         }
-    }
 
-    /* Preview results styling */
-    .preview-result {
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 15px;
-        margin: 10px 0;
-        background: var(--light-color);
-    }
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
 
-    .preview-result h6 {
-        color: var(--primary-color);
-        margin-bottom: 10px;
-    }
+        .operation-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin: 1.5rem 0;
+        }
 
-    .field-mapping {
-        background: var(--bg-color);
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        padding: 10px;
-        margin: 10px 0;
-    }
+        .operation-card {
+            background: var(--bg-color);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
 
-    .alert-enhancement {
-        background: linear-gradient(135deg, #ffeaa7 0%, #fab1a0 100%);
-        color: #2d3436;
-        padding: 15px;
-        border-radius: 8px;
-        margin: 15px 0;
-        font-weight: 500;
-    }
-</style>
-{% endblock %}
+        .operation-card:hover {
+            border-color: var(--primary-color);
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px var(--shadow-color);
+        }
 
-{% block content %}
-<div class="container-fluid">
-    <!-- Header -->
+        .alert-custom {
+            border-radius: 8px;
+            border: none;
+            padding: 1rem;
+            margin: 1rem 0;
+            box-shadow: 0 2px 10px var(--shadow-color);
+        }
+
+        .alert-success-custom {
+            background: linear-gradient(135deg, rgba(40, 167, 69, 0.1), rgba(32, 201, 151, 0.1));
+            border-left: 4px solid var(--success-color);
+            color: var(--success-color);
+        }
+
+        .alert-danger-custom {
+            background: linear-gradient(135deg, rgba(220, 53, 69, 0.1), rgba(231, 76, 60, 0.1));
+            border-left: 4px solid var(--danger-color);
+            color: var(--danger-color);
+        }
+
+        .alert-warning-custom {
+            background: linear-gradient(135deg, rgba(255, 196, 7, 0.1), rgba(243, 156, 18, 0.1));
+            border-left: 4px solid var(--warning-color);
+            color: #856404;
+        }
+
+        .alert-info-custom {
+            background: linear-gradient(135deg, rgba(23, 162, 184, 0.1), rgba(51, 154, 240, 0.1));
+            border-left: 4px solid var(--info-color);
+            color: var(--info-color);
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid transparent;
+            border-top: 2px solid currentColor;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .confirmation-modal {
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: var(--bg-color);
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            border-bottom: 2px solid var(--border-color);
+            background: linear-gradient(135deg, var(--danger-color), #e74c3c);
+            color: white;
+            border-radius: 15px 15px 0 0;
+        }
+
+        .preview-container {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            background: var(--light-color);
+        }
+
+        .preview-item {
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .keyboard-shortcuts {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--dark-color);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            opacity: 0.7;
+            transition: opacity 0.3s ease;
+        }
+
+        .keyboard-shortcuts:hover {
+            opacity: 1;
+        }
+
+        .btn-theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 12px var(--shadow-color);
+            transition: all 0.3s ease;
+        }
+
+        .btn-theme-toggle:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 20px var(--shadow-color);
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid, .operation-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .nav-tabs-custom .nav-link {
+                padding: 0.75rem 1rem;
+                font-size: 0.9rem;
+            }
+            
+            .tab-content-custom {
+                padding: 1rem;
+            }
+
+            .btn-theme-toggle {
+                top: 10px;
+                right: 10px;
+                width: 40px;
+                height: 40px;
+            }
+        }
+
+        /* Print styles */
+        @media print {
+            .keyboard-shortcuts, .btn, .nav-tabs-custom, .btn-theme-toggle {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Theme Toggle Button -->
+    <button class="btn-theme-toggle" onclick="toggleTheme()" title="Toggle Dark Mode" aria-label="Toggle between light and dark theme">
+        <i class="fas fa-moon" id="theme-icon"></i>
+    </button>
+
+    <!-- Admin Header -->
     <div class="admin-header">
-        <div class="p-4">
-            <h1 class="h2 mb-3">
-                <i class="fas fa-cog"></i> Administration Panel
-            </h1>
-            <p class="mb-0 opacity-75">Manage boundaries, configure system settings, and monitor operations</p>
-        </div>
-    </div>
-
-    <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb" class="mb-4">
-        <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="/"><i class="fas fa-home"></i> Home</a></li>
-            <li class="breadcrumb-item active" aria-current="page">Administration</li>
-        </ol>
-    </nav>
-
-    <!-- Quick Navigation -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <ul class="nav nav-pills justify-content-center">
-                <li class="nav-item">
-                    <a class="nav-link active" href="#upload" onclick="showSection('upload')">
-                        <i class="fas fa-upload"></i> Upload Boundaries
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="#preview" onclick="showSection('preview')">
-                        <i class="fas fa-eye"></i> Preview Data
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="#manage" onclick="showSection('manage')">
-                        <i class="fas fa-list"></i> Manage Boundaries
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="#operations" onclick="showSection('operations')">
-                        <i class="fas fa-tools"></i> Operations
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="#stats" onclick="showSection('stats')">
-                        <i class="fas fa-chart-bar"></i> Statistics
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="#health" onclick="showSection('health')">
-                        <i class="fas fa-heartbeat"></i> Health
-                    </a>
-                </li>
-            </ul>
-        </div>
-    </div>
-
-    <!-- Upload Section -->
-    <div id="upload-section" class="admin-section">
-        <div class="admin-card">
-            <div class="admin-card-header">
-                <h3><i class="fas fa-upload"></i> Upload Boundary Files</h3>
-            </div>
-            <div class="admin-card-body">
-                <form id="uploadForm" enctype="multipart/form-data">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label for="boundaryType" class="form-label">Boundary Type</label>
-                                <select id="boundaryType" name="boundary_type" class="form-select" required>
-                                    <option value="">Select boundary type...</option>
-                                    <option value="electric">⚡ Electric Providers</option>
-                                    <option value="villages">🏘️ Villages</option>
-                                    <option value="school">🏫 School Districts</option>
-                                    <option value="fire">🔥 Fire Districts</option>
-                                    <option value="ems">🚑 EMS Districts</option>
-                                    <option value="township">🏘️ Townships</option>
-                                    <option value="telephone">📞 Telephone Providers</option>
-                                    <option value="county">🗺️ County Outlines</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label for="geoJsonFile" class="form-label">GeoJSON File</label>
-                                <input type="file" id="geoJsonFile" name="file" class="form-control" accept=".geojson,.json" required>
-                                <small class="form-text text-muted">Upload a GeoJSON file containing boundary polygons</small>
-                            </div>
-                        </div>
+        <div class="container-fluid">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h1 class="mb-2">
+                        <i class="fas fa-cogs"></i> Admin Control Panel
+                    </h1>
+                    <p class="mb-0 opacity-75">
+                        KR8MER CAP Emergency Alert System - Administrative Dashboard
+                    </p>
+                </div>
+                <div class="col-md-4 text-md-end">
+                    <div class="d-flex flex-wrap gap-2 justify-content-md-end">
+                        <a href="/" class="btn btn-light btn-sm">
+                            <i class="fas fa-home"></i> Dashboard
+                        </a>
+                        <a href="/alerts" class="btn btn-light btn-sm">
+                            <i class="fas fa-history"></i> Alerts
+                        </a>
+                        <a href="/stats" class="btn btn-light btn-sm">
+                            <i class="fas fa-chart-bar"></i> Statistics
+                        </a>
+                        <a href="/system_health" class="btn btn-light btn-sm">
+                            <i class="fas fa-heartbeat"></i> Health
+                        </a>
                     </div>
-                    <div class="text-center">
-                        <button type="submit" class="btn btn-primary">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid">
+        <!-- System Overview -->
+        <div class="admin-card">
+            <div class="card-header-custom">
+                <h5 class="mb-0">
+                    <i class="fas fa-tachometer-alt text-primary"></i> System Overview
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number">{{ active_alerts or 0 }}</div>
+                        <div class="stat-label">Active Alerts</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, var(--warning-color), #f39c12);">
+                        <div class="stat-number">{{ expired_alerts or 0 }}</div>
+                        <div class="stat-label">Expired Alerts</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, var(--success-color), #20c997);">
+                        <div class="stat-number">{{ total_boundaries or 0 }}</div>
+                        <div class="stat-label">Total Boundaries</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, var(--info-color), #339af0);">
+                        <div class="stat-number">{{ total_alerts or 0 }}</div>
+                        <div class="stat-label">Total Alerts</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Admin Interface -->
+        <div class="admin-card">
+            <div class="tabs-container">
+                <ul class="nav nav-tabs nav-tabs-custom" id="adminTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload" type="button" role="tab">
+                            <i class="fas fa-upload"></i> Upload Files
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="preview-tab" data-bs-toggle="tab" data-bs-target="#preview" type="button" role="tab">
+                            <i class="fas fa-eye"></i> Preview Data
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="manage-tab" data-bs-toggle="tab" data-bs-target="#manage" type="button" role="tab">
+                            <i class="fas fa-tasks"></i> Manage Data
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="operations-tab" data-bs-toggle="tab" data-bs-target="#operations" type="button" role="tab">
+                            <i class="fas fa-tools"></i> Operations
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="alerts-tab" data-bs-toggle="tab" data-bs-target="#alerts-mgmt" type="button" role="tab">
+                            <i class="fas fa-exclamation-triangle"></i> Alert Management
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="health-tab" data-bs-toggle="tab" data-bs-target="#health" type="button" role="tab">
+                            <i class="fas fa-heartbeat"></i> System Health
+                        </button>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="tab-content tab-content-custom" id="adminTabContent">
+                <!-- Upload Tab -->
+                <div class="tab-pane fade show active" id="upload" role="tabpanel">
+                    <h4><i class="fas fa-upload text-primary"></i> Upload Boundary Files</h4>
+                    <p class="text-muted">Upload GeoJSON files to add new boundary layers to the system.</p>
+                    
+                    <form id="uploadForm" enctype="multipart/form-data" class="mt-4">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="boundaryType" class="form-label fw-bold">Boundary Type</label>
+                                    <select id="boundaryType" name="boundary_type" class="form-select" required>
+                                        <option value="">Select boundary type...</option>
+                                        <option value="electric">⚡ Electric Providers</option>
+                                        <option value="villages">🏘️ Villages</option>
+                                        <option value="school">🏫 School Districts</option>
+                                        <option value="fire">🔥 Fire Districts</option>
+                                        <option value="ems">🚑 EMS Districts</option>
+                                        <option value="township">🏘️ Townships</option>
+                                        <option value="telephone">📞 Telephone Providers</option>
+                                        <option value="county">🗺️ County Outlines</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="geoJsonFile" class="form-label fw-bold">GeoJSON File</label>
+                                    <input type="file" id="geoJsonFile" name="file" class="form-control" accept=".geojson,.json" required>
+                                    <div class="form-text">Upload a GeoJSON file containing boundary polygons</div>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-custom btn-primary">
                             <i class="fas fa-upload"></i> Upload Boundaries
                         </button>
-                    </div>
-                </form>
-                <div id="uploadStatus" class="status-message"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Preview Section -->
-    <div id="preview-section" class="admin-section" style="display: none;">
-        <div class="admin-card">
-            <div class="admin-card-header">
-                <h3><i class="fas fa-eye"></i> Preview Data Extraction</h3>
-            </div>
-            <div class="admin-card-body">
-                <div class="alert-enhancement">
-                    <i class="fas fa-lightbulb"></i> <strong>Smart Preview:</strong>
-                    This feature analyzes your GeoJSON file and shows exactly what will be extracted before uploading.
+                    </form>
+                    
+                    <div id="uploadStatus" class="mt-3"></div>
                 </div>
-                <form id="previewForm" enctype="multipart/form-data">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label for="previewBoundaryType" class="form-label">Boundary Type</label>
-                                <select id="previewBoundaryType" name="boundary_type" class="form-select" required>
+
+                <!-- Preview Tab -->
+                <div class="tab-pane fade" id="preview" role="tabpanel">
+                    <h4><i class="fas fa-eye text-info"></i> Preview Data Extraction</h4>
+                    <p class="text-muted">Preview what data will be extracted from your GeoJSON file before uploading.</p>
+                    
+                    <form id="previewForm" enctype="multipart/form-data" class="mt-4">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="previewBoundaryType" class="form-label fw-bold">Boundary Type</label>
+                                    <select id="previewBoundaryType" name="boundary_type" class="form-select" required>
+                                        <option value="">Select boundary type...</option>
+                                        <option value="electric">⚡ Electric Providers</option>
+                                        <option value="villages">🏘️ Villages</option>
+                                        <option value="school">🏫 School Districts</option>
+                                        <option value="fire">🔥 Fire Districts</option>
+                                        <option value="ems">🚑 EMS Districts</option>
+                                        <option value="township">🏘️ Townships</option>
+                                        <option value="telephone">📞 Telephone Providers</option>
+                                        <option value="county">🗺️ County Outlines</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="previewFile" class="form-label fw-bold">GeoJSON File</label>
+                                    <input type="file" id="previewFile" name="file" class="form-control" accept=".geojson,.json" required>
+                                    <div class="form-text">Preview data extraction before uploading</div>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-custom btn-info" onclick="previewExtraction()">
+                            <i class="fas fa-eye"></i> Preview Extraction
+                        </button>
+                    </form>
+                    
+                    <div id="previewResults" class="mt-4"></div>
+                </div>
+
+                <!-- Manage Tab -->
+                <div class="tab-pane fade" id="manage" role="tabpanel">
+                    <h4><i class="fas fa-tasks text-success"></i> Manage Boundary Data</h4>
+                    <p class="text-muted">View, edit, and delete existing boundary data in the system.</p>
+                    
+                    <div class="row mt-4">
+                        <div class="col-md-8">
+                            <h5>Current Boundaries</h5>
+                            <div id="boundariesList" class="mt-3">
+                                <div class="text-center py-4">
+                                    <div class="loading-spinner"></div>
+                                    <span class="ms-2">Loading boundaries...</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <h5>Bulk Operations</h5>
+                            <div class="operation-card">
+                                <h6>Delete by Type</h6>
+                                <select id="deleteType" class="form-select mb-3">
                                     <option value="">Select boundary type...</option>
                                     <option value="electric">⚡ Electric Providers</option>
                                     <option value="villages">🏘️ Villages</option>
@@ -567,765 +582,747 @@
                                     <option value="telephone">📞 Telephone Providers</option>
                                     <option value="county">🗺️ County Outlines</option>
                                 </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label for="previewFile" class="form-label">GeoJSON File</label>
-                                <input type="file" id="previewFile" name="file" class="form-control" accept=".geojson,.json" required>
-                                <small class="form-text text-muted">Preview what will be extracted before uploading</small>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="text-center">
-                        <button type="button" onclick="previewExtraction()" class="btn btn-primary">
-                            <i class="fas fa-eye"></i> Preview Extraction
-                        </button>
-                    </div>
-                </form>
-                <div id="previewResults" class="status-message"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Manage Section -->
-    <div id="manage-section" class="admin-section" style="display: none;">
-        <div class="admin-card">
-            <div class="admin-card-header">
-                <h3><i class="fas fa-list"></i> Manage Boundaries</h3>
-            </div>
-            <div class="admin-card-body">
-                <!-- Delete Controls -->
-                <div class="row mb-4">
-                    <div class="col-md-8">
-                        <label for="deleteType" class="form-label">Delete by Type</label>
-                        <select id="deleteType" class="form-select">
-                            <option value="">Select boundary type to delete...</option>
-                            <option value="electric">⚡ Electric Providers</option>
-                            <option value="villages">🏘️ Villages</option>
-                            <option value="school">🏫 School Districts</option>
-                            <option value="fire">🔥 Fire Districts</option>
-                            <option value="ems">🚑 EMS Districts</option>
-                            <option value="township">🏘️ Townships</option>
-                            <option value="telephone">📞 Telephone Providers</option>
-                            <option value="county">🗺️ County Outlines</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4 d-flex align-items-end">
-                        <div class="btn-group w-100" role="group">
-                            <button onclick="deleteBoundariesByType()" class="btn btn-danger">
-                                <i class="fas fa-trash"></i> Delete Type
-                            </button>
-                            <button onclick="clearAllBoundaries()" class="btn btn-danger">
-                                <i class="fas fa-exclamation-triangle"></i> Clear ALL
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Boundaries List -->
-                <div id="boundariesList">
-                    <div class="loading-indicator">
-                        <div class="spinner"></div>
-                        Loading boundaries...
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Operations Section -->
-    <div id="operations-section" class="admin-section" style="display: none;">
-        <div class="admin-card">
-            <div class="admin-card-header">
-                <h3><i class="fas fa-tools"></i> Manual Operations</h3>
-            </div>
-            <div class="admin-card-body">
-                <div class="operations-grid">
-                    <div class="operation-card">
-                        <div class="operation-icon">
-                            <i class="fas fa-satellite-dish"></i>
-                        </div>
-                        <div class="operation-title">Trigger CAP Poll</div>
-                        <div class="operation-description">Manually fetch latest CAP alerts from NOAA</div>
-                        <button onclick="triggerCAPPoll()" class="btn btn-success">
-                            <i class="fas fa-download"></i> Poll Now
-                        </button>
-                    </div>
-
-                    <div class="operation-card">
-                        <div class="operation-icon">
-                            <i class="fas fa-trash-alt"></i>
-                        </div>
-                        <div class="operation-title">Clear Expired Alerts</div>
-                        <div class="operation-description">Remove all expired alerts from database</div>
-                        <button onclick="clearExpiredAlerts()" class="btn btn-danger">
-                            <i class="fas fa-trash"></i> Clear Expired
-                        </button>
-                    </div>
-
-                    <div class="operation-card">
-                        <div class="operation-icon">
-                            <i class="fas fa-database"></i>
-                        </div>
-                        <div class="operation-title">Optimize Database</div>
-                        <div class="operation-description">Run database maintenance tasks (VACUUM ANALYZE)</div>
-                        <button onclick="optimizeDatabase()" class="btn btn-primary">
-                            <i class="fas fa-wrench"></i> Optimize
-                        </button>
-                    </div>
-
-                    <div class="operation-card">
-                        <div class="operation-icon">
-                            <i class="fas fa-sync-alt"></i>
-                        </div>
-                        <div class="operation-title">Recalculate Intersections</div>
-                        <div class="operation-description">Fix alert-boundary intersections</div>
-                        <button onclick="recalculateIntersections()" class="btn btn-warning">
-                            <i class="fas fa-calculator"></i> Recalculate
-                        </button>
-                    </div>
-
-                    <div class="operation-card">
-                        <div class="operation-icon">
-                            <i class="fas fa-map-marked-alt"></i>
-                        </div>
-                        <div class="operation-title">Fix County Intersections</div>
-                        <div class="operation-description">Fix county-wide alert intersections</div>
-                        <button onclick="fixCountyIntersections()" class="btn btn-info">
-                            <i class="fas fa-map"></i> Fix County
-                        </button>
-                    </div>
-
-                    <div class="operation-card">
-                        <div class="operation-icon">
-                            <i class="fas fa-stethoscope"></i>
-                        </div>
-                        <div class="operation-title">Database Health Check</div>
-                        <div class="operation-description">Check database tables and vacuum status</div>
-                        <button onclick="checkDatabaseHealth()" class="btn btn-secondary">
-                            <i class="fas fa-heartbeat"></i> Check Health
-                        </button>
-                    </div>
-                </div>
-                <div id="operationStatus" class="status-message"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Statistics Section -->
-    <div id="stats-section" class="admin-section" style="display: none;">
-        <div class="admin-card">
-            <div class="admin-card-header">
-                <h3><i class="fas fa-chart-bar"></i> System Statistics</h3>
-            </div>
-            <div class="admin-card-body">
-                <div id="systemStats">
-                    <div class="loading-indicator">
-                        <div class="spinner"></div>
-                        Loading statistics...
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Health Section -->
-    <div id="health-section" class="admin-section" style="display: none;">
-        <div class="admin-card">
-            <div class="admin-card-header">
-                <h3><i class="fas fa-heartbeat"></i> System Health Monitor</h3>
-            </div>
-            <div class="admin-card-body">
-                <div class="text-center mb-3">
-                    <a href="/system_health" class="btn btn-primary" target="_blank">
-                        <i class="fas fa-external-link-alt"></i> Open Full Health Monitor
-                    </a>
-                </div>
-                <div id="healthSummary">
-                    <div class="loading-indicator">
-                        <div class="spinner"></div>
-                        Loading health data...
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-// Section navigation
-function showSection(sectionName) {
-    // Hide all sections
-    document.querySelectorAll('.admin-section').forEach(section => {
-        section.style.display = 'none';
-    });
-
-    // Remove active class from all nav links
-    document.querySelectorAll('.nav-pills .nav-link').forEach(link => {
-        link.classList.remove('active');
-    });
-
-    // Show selected section
-    document.getElementById(sectionName + '-section').style.display = 'block';
-
-    // Add active class to clicked nav link
-    event.target.closest('.nav-link').classList.add('active');
-
-    // Load data if needed
-    if (sectionName === 'manage') {
-        loadBoundaries();
-    } else if (sectionName === 'stats') {
-        loadSystemStats();
-    } else if (sectionName === 'health') {
-        loadHealthSummary();
-    }
-}
-
-// Load system statistics
-async function loadSystemStats() {
-    try {
-        const response = await fetch('/api/system_status');
-        const data = await response.json();
-
-        const statsHtml = `
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-number">${data.active_alerts_count || 0}</div>
-                    <div class="stat-label">Active Alerts</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number">${data.boundaries_count || 0}</div>
-                    <div class="stat-label">Total Boundaries</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number">${data.system_resources?.cpu_usage_percent?.toFixed(1) || 0}%</div>
-                    <div class="stat-label">CPU Usage</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number">${data.system_resources?.memory_usage_percent?.toFixed(1) || 0}%</div>
-                    <div class="stat-label">Memory Usage</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number">${data.system_resources?.disk_free_gb || 0} GB</div>
-                    <div class="stat-label">Free Disk</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number">${data.database_status === 'connected' ? '✅' : '❌'}</div>
-                    <div class="stat-label">Database Status</div>
-                </div>
-            </div>
-        `;
-        document.getElementById('systemStats').innerHTML = statsHtml;
-    } catch (error) {
-        document.getElementById('systemStats').innerHTML = `
-            <div class="text-center text-danger">
-                <i class="fas fa-exclamation-triangle fa-3x mb-3"></i>
-                <h5>Error loading statistics</h5>
-                <p>${error.message}</p>
-            </div>
-        `;
-    }
-}
-
-// Load health summary
-async function loadHealthSummary() {
-    try {
-        const response = await fetch('/api/system_health');
-        const data = await response.json();
-
-        const cpu = data.cpu?.cpu_usage_percent || 0;
-        const memory = data.memory?.percentage || 0;
-        const disk = data.disk?.[0]?.percentage || 0;
-
-        let healthStatus = 'good';
-        if (cpu > 80 || memory > 90 || disk > 90) {
-            healthStatus = 'critical';
-        } else if (cpu > 60 || memory > 75 || disk > 75) {
-            healthStatus = 'warning';
-        }
-
-        const statusColors = {
-            good: '#28a745',
-            warning: '#ffc107',
-            critical: '#dc3545'
-        };
-
-        const healthHtml = `
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="card bg-light">
-                        <div class="card-body text-center">
-                            <h5 style="color: ${statusColors[healthStatus]}">
-                                <i class="fas fa-heartbeat"></i> System Status: ${healthStatus.toUpperCase()}
-                            </h5>
-                            <div class="row mt-3">
-                                <div class="col-4">
-                                    <strong>CPU</strong><br>
-                                    <span style="color: ${cpu > 80 ? '#dc3545' : cpu > 60 ? '#ffc107' : '#28a745'}">${cpu.toFixed(1)}%</span>
-                                </div>
-                                <div class="col-4">
-                                    <strong>Memory</strong><br>
-                                    <span style="color: ${memory > 90 ? '#dc3545' : memory > 75 ? '#ffc107' : '#28a745'}">${memory.toFixed(1)}%</span>
-                                </div>
-                                <div class="col-4">
-                                    <strong>Disk</strong><br>
-                                    <span style="color: ${disk > 90 ? '#dc3545' : disk > 75 ? '#ffc107' : '#28a745'}">${disk.toFixed(1)}%</span>
-                                </div>
+                                <button onclick="deleteBoundariesByType()" class="btn btn-custom btn-warning w-100 mb-2">
+                                    <i class="fas fa-trash-alt"></i> Delete by Type
+                                </button>
+                                <button onclick="clearAllBoundaries()" class="btn btn-custom btn-danger w-100">
+                                    <i class="fas fa-exclamation-triangle"></i> Clear ALL
+                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-6">
-                    <div class="card bg-light">
-                        <div class="card-body">
-                            <h6><i class="fas fa-info-circle"></i> System Info</h6>
-                            <p><strong>Hostname:</strong> ${data.system?.hostname || 'Unknown'}</p>
-                            <p><strong>OS:</strong> ${data.system?.system || 'Unknown'} ${data.system?.release || ''}</p>
-                            <p><strong>Database:</strong> ${data.database?.status || 'Unknown'}</p>
-                            <p><strong>Uptime:</strong> ${formatUptime(data.system?.uptime_seconds || 0)}</p>
+
+                <!-- Operations Tab -->
+                <div class="tab-pane fade" id="operations" role="tabpanel">
+                    <h4><i class="fas fa-tools text-warning"></i> System Operations</h4>
+                    <p class="text-muted">Perform manual system operations and maintenance tasks.</p>
+                    
+                    <div class="operation-grid">
+                        <div class="operation-card">
+                            <i class="fas fa-download fa-2x text-primary mb-3"></i>
+                            <h6>CAP Alert Polling</h6>
+                            <p class="text-muted small">Manually fetch latest alerts from NOAA</p>
+                            <button onclick="triggerCAPPoll()" class="btn btn-custom btn-primary w-100">
+                                <i class="fas fa-satellite-dish"></i> Trigger Poll
+                            </button>
+                        </div>
+                        
+                        <div class="operation-card">
+                            <i class="fas fa-database fa-2x text-success mb-3"></i>
+                            <h6>Database Optimization</h6>
+                            <p class="text-muted small">Optimize database performance</p>
+                            <button onclick="optimizeDatabase()" class="btn btn-custom btn-success w-100">
+                                <i class="fas fa-tools"></i> Optimize DB
+                            </button>
+                        </div>
+                        
+                        <div class="operation-card">
+                            <i class="fas fa-sitemap fa-2x text-info mb-3"></i>
+                            <h6>Fix Intersections</h6>
+                            <p class="text-muted small">Recalculate alert-boundary intersections</p>
+                            <button onclick="recalculateIntersections()" class="btn btn-custom btn-info w-100">
+                                <i class="fas fa-link"></i> Fix Intersections
+                            </button>
+                        </div>
+                        
+                        <div class="operation-card">
+                            <i class="fas fa-heartbeat fa-2x text-danger mb-3"></i>
+                            <h6>Database Health</h6>
+                            <p class="text-muted small">Check database health status</p>
+                            <button onclick="checkDatabaseHealth()" class="btn btn-custom btn-danger w-100">
+                                <i class="fas fa-stethoscope"></i> Health Check
+                            </button>
                         </div>
                     </div>
                 </div>
-            </div>
-        `;
 
-        document.getElementById('healthSummary').innerHTML = healthHtml;
-    } catch (error) {
-        document.getElementById('healthSummary').innerHTML = `
-            <div class="text-center text-danger">
-                <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
-                <p>Error loading health data: ${error.message}</p>
-            </div>
-        `;
-    }
-}
-
-// Load boundaries list
-async function loadBoundaries() {
-    try {
-        const response = await fetch('/api/boundaries');
-        const data = await response.json();
-
-        if (data.features && data.features.length > 0) {
-            const boundariesByType = {};
-            data.features.forEach(feature => {
-                const type = feature.properties.type;
-                if (!boundariesByType[type]) {
-                    boundariesByType[type] = [];
-                }
-                boundariesByType[type].push(feature.properties);
-            });
-
-            let html = '<div class="boundary-list">';
-            for (const [type, boundaries] of Object.entries(boundariesByType)) {
-                const typeIcons = {
-                    electric: '⚡',
-                    villages: '🏘️',
-                    school: '🏫',
-                    fire: '🔥',
-                    ems: '🚑',
-                    township: '🏘️',
-                    telephone: '📞',
-                    county: '🗺️'
-                };
-
-                html += `
-                    <div class="boundary-item">
-                        <h4>${typeIcons[type] || '📍'} ${type.charAt(0).toUpperCase() + type.slice(1)} (${boundaries.length})</h4>
-                `;
-
-                boundaries.forEach(boundary => {
-                    html += `
-                        <div class="boundary-entry">
-                            <span class="boundary-name">${boundary.name}</span>
-                            <button onclick="deleteBoundary(${boundary.id}, '${boundary.name.replace(/'/g, "\\'")}')"
-                                    class="delete-btn" title="Delete boundary">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    `;
-                });
-                html += '</div>';
-            }
-            html += '</div>';
-            document.getElementById('boundariesList').innerHTML = html;
-        } else {
-            document.getElementById('boundariesList').innerHTML = `
-                <div class="text-center text-muted py-5">
-                    <i class="fas fa-map fa-3x mb-3"></i>
-                    <h5>No boundaries found</h5>
-                    <p>Use the upload form to add boundary files.</p>
-                </div>
-            `;
-        }
-    } catch (error) {
-        document.getElementById('boundariesList').innerHTML = `
-            <div class="text-center text-danger py-5">
-                <i class="fas fa-exclamation-triangle fa-3x mb-3"></i>
-                <h5>Error loading boundaries</h5>
-                <p>${error.message}</p>
-            </div>
-        `;
-    }
-}
-
-// Preview extraction functionality
-async function previewExtraction() {
-    const form = document.getElementById('previewForm');
-    const formData = new FormData(form);
-    const resultsDiv = document.getElementById('previewResults');
-
-    showStatus(resultsDiv, 'Analyzing file...', 'info');
-
-    try {
-        const response = await fetch('/admin/preview_geojson', {
-            method: 'POST',
-            body: formData
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-            let html = `
-                <div class="preview-result">
-                    <h6><i class="fas fa-info-circle"></i> Preview Results</h6>
+                <!-- Alert Management Tab -->
+                <div class="tab-pane fade" id="alerts-mgmt" role="tabpanel">
+                    <h4><i class="fas fa-exclamation-triangle text-danger"></i> Alert Management</h4>
+                    <p class="text-muted">Manage expired alerts and data preservation.</p>
+                    
                     <div class="row">
                         <div class="col-md-6">
+                            <div class="operation-card">
+                                <i class="fas fa-bookmark fa-2x text-success mb-3"></i>
+                                <h6>Mark Expired Alerts (SAFE)</h6>
+                                <p class="text-muted small">Mark expired alerts as inactive while preserving all data for historical analysis.</p>
+                                <button onclick="markExpiredAlerts()" class="btn btn-custom btn-success w-100">
+                                    <i class="fas fa-bookmark"></i> Mark as Expired
+                                </button>
+                                <small class="text-success mt-2 d-block">✓ Preserves all historical data</small>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="operation-card border-danger">
+                                <i class="fas fa-trash-alt fa-2x text-danger mb-3"></i>
+                                <h6>Delete Expired Alerts (DESTRUCTIVE)</h6>
+                                <p class="text-muted small">Permanently delete expired alerts from the database. This cannot be undone!</p>
+                                <button onclick="clearExpiredAlerts()" class="btn btn-custom btn-danger w-100">
+                                    <i class="fas fa-exclamation-triangle"></i> Delete Expired
+                                </button>
+                                <small class="text-danger mt-2 d-block">⚠️ Permanently removes historical data</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Health Tab -->
+                <div class="tab-pane fade" id="health" role="tabpanel">
+                    <h4><i class="fas fa-heartbeat text-info"></i> System Health Monitor</h4>
+                    <p class="text-muted">Real-time system health and performance monitoring.</p>
+                    
+                    <div id="systemHealthData" class="mt-4">
+                        <div class="text-center py-4">
+                            <div class="loading-spinner"></div>
+                            <span class="ms-2">Loading system health data...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Operation Status -->
+        <div id="operationStatus" class="mt-3"></div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal fade confirmation-modal" id="confirmationModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-exclamation-triangle"></i> Confirmation Required
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="confirmationBody">
+                    <!-- Dynamic content -->
+                </div>
+                <div class="modal-footer" id="confirmationFooter">
+                    <!-- Dynamic buttons -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Info -->
+    <div class="keyboard-shortcuts">
+        <i class="fas fa-keyboard"></i> Alt+1-6: Switch Tabs | Alt+R: Refresh | Alt+H: Help
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Global variables
+        let confirmationModal;
+        let currentOperation = null;
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+            loadBoundaries();
+            loadSystemHealth();
+            setupKeyboardShortcuts();
+            loadTheme();
+            
+            // Auto-refresh every 30 seconds
+            setInterval(() => {
+                loadSystemHealth();
+            }, 30000);
+        });
+
+        // Theme Management
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            
+            // Update icon
+            const icon = document.getElementById('theme-icon');
+            icon.className = newTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+        }
+
+        function loadTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            
+            const icon = document.getElementById('theme-icon');
+            icon.className = savedTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+        }
+
+        // Keyboard shortcuts
+        function setupKeyboardShortcuts() {
+            document.addEventListener('keydown', function(e) {
+                if (e.altKey) {
+                    switch(e.key) {
+                        case '1': switchTab('upload-tab'); break;
+                        case '2': switchTab('preview-tab'); break;
+                        case '3': switchTab('manage-tab'); break;
+                        case '4': switchTab('operations-tab'); break;
+                        case '5': switchTab('alerts-tab'); break;
+                        case '6': switchTab('health-tab'); break;
+                        case 'r': e.preventDefault(); location.reload(); break;
+                    }
+                }
+            });
+        }
+
+        function switchTab(tabId) {
+            document.getElementById(tabId).click();
+        }
+
+        // Enhanced confirmation system
+        function showConfirmation(options) {
+            const { title, message, warning, type = 'danger', confirmText = 'Confirm', cancelText = 'Cancel', onConfirm } = options;
+            
+            const body = document.getElementById('confirmationBody');
+            const footer = document.getElementById('confirmationFooter');
+            
+            body.innerHTML = `
+                <div class="alert alert-${type}-custom">
+                    <h6>${message}</h6>
+                    ${warning ? `<p class="mb-0"><strong>⚠️ Warning:</strong> ${warning}</p>` : ''}
+                </div>
+            `;
+            
+            footer.innerHTML = `
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">${cancelText}</button>
+                <button type="button" class="btn btn-${type}" id="confirmButton">${confirmText}</button>
+            `;
+            
+            document.getElementById('confirmButton').onclick = function() {
+                confirmationModal.hide();
+                if (onConfirm) onConfirm();
+            };
+            
+            confirmationModal.show();
+        }
+
+        function showMultiStepConfirmation(options) {
+            const { steps, onComplete } = options;
+            let currentStep = 0;
+            
+            function showStep() {
+                const step = steps[currentStep];
+                const body = document.getElementById('confirmationBody');
+                const footer = document.getElementById('confirmationFooter');
+                
+                body.innerHTML = `
+                    <div class="alert alert-danger-custom">
+                        <h6>${step.message}</h6>
+                        ${step.warning ? `<p class="mb-2"><strong>⚠️ Warning:</strong> ${step.warning}</p>` : ''}
+                        ${step.textConfirmation ? `
+                            <div class="mt-3">
+                                <label class="form-label fw-bold">Type "${step.textConfirmation}" to confirm:</label>
+                                <input type="text" class="form-control" id="textConfirmInput" placeholder="Type confirmation text">
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+                
+                footer.innerHTML = `
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="stepConfirmButton">
+                        ${currentStep === steps.length - 1 ? 'CONFIRM DELETION' : 'Continue'}
+                    </button>
+                `;
+                
+                document.getElementById('stepConfirmButton').onclick = function() {
+                    if (step.textConfirmation) {
+                        const input = document.getElementById('textConfirmInput');
+                        if (input.value !== step.textConfirmation) {
+                            showStatus('Text confirmation does not match. Please try again.', 'danger');
+                            return;
+                        }
+                    }
+                    
+                    currentStep++;
+                    if (currentStep < steps.length) {
+                        showStep();
+                    } else {
+                        confirmationModal.hide();
+                        if (onComplete) onComplete();
+                    }
+                };
+            }
+            
+            showStep();
+            confirmationModal.show();
+        }
+
+        // Status display functions
+        function showStatus(message, type = 'info', duration = 5000) {
+            const statusDiv = document.getElementById('operationStatus');
+            statusDiv.className = `alert alert-${type}-custom`;
+            statusDiv.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-triangle' : 'info-circle'}"></i>
+                ${message}
+            `;
+            statusDiv.style.display = 'block';
+            
+            if (type === 'success' && duration > 0) {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, duration);
+            }
+        }
+
+        // File upload handling
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            
+            submitBtn.innerHTML = '<span class="loading-spinner"></span> Uploading...';
+            submitBtn.disabled = true;
+            
+            try {
+                const response = await fetch('/admin/upload_boundary', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showStatus(`✅ ${result.success}`, 'success');
+                    this.reset();
+                    loadBoundaries();
+                } else {
+                    showStatus(`❌ ${result.error}`, 'danger');
+                }
+            } catch (error) {
+                showStatus(`❌ Upload error: ${error.message}`, 'danger');
+            } finally {
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            }
+        });
+
+        // Preview extraction
+        async function previewExtraction() {
+            const form = document.getElementById('previewForm');
+            const formData = new FormData(form);
+            const resultsDiv = document.getElementById('previewResults');
+            
+            resultsDiv.innerHTML = '<div class="text-center py-3"><div class="loading-spinner"></div><span class="ms-2">Analyzing file...</span></div>';
+            
+            try {
+                const response = await fetch('/admin/preview_geojson', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    let html = `
+                        <div class="preview-container">
+                            <h5>📋 Preview Results</h5>
                             <p><strong>Total Features:</strong> ${result.total_features}</p>
                             <p><strong>Boundary Type:</strong> ${result.boundary_type}</p>
-                        </div>
-                        <div class="col-md-6">
                             <p><strong>Available Fields:</strong> ${result.all_fields.join(', ')}</p>
-                            <p><strong>Sample Count:</strong> ${result.preview_count}</p>
+                            <h6 class="mt-3">🔍 Sample Extractions (first ${result.preview_count}):</h6>
+                    `;
+                    
+                    result.previews.forEach((preview, index) => {
+                        html += `
+                            <div class="preview-item">
+                                <strong>Feature ${index + 1}:</strong><br>
+                                <strong>📝 Name:</strong> ${preview.name}<br>
+                                <strong>📄 Description:</strong> ${preview.description || 'No description'}
+                            </div>
+                        `;
+                    });
+                    
+                    if (result.field_mappings && Object.keys(result.field_mappings).length > 0) {
+                        html += `
+                            <h6 class="mt-3">🗺️ Field Mappings for ${result.boundary_type}:</h6>
+                            <p><strong>Name Fields:</strong> ${result.field_mappings.name_fields ? result.field_mappings.name_fields.join(', ') : 'None configured'}</p>
+                            <p><strong>Description Fields:</strong> ${result.field_mappings.description_fields ? result.field_mappings.description_fields.join(', ') : 'None configured'}</p>
+                        `;
+                    }
+                    
+                    html += '</div>';
+                    resultsDiv.innerHTML = html;
+                } else {
+                    resultsDiv.innerHTML = `<div class="alert alert-danger-custom">❌ ${result.error}</div>`;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="alert alert-danger-custom">❌ Error: ${error.message}</div>`;
+            }
+        }
+
+        // Load boundaries
+        async function loadBoundaries() {
+            try {
+                const response = await fetch('/api/boundaries');
+                const data = await response.json();
+                
+                const listDiv = document.getElementById('boundariesList');
+                
+                if (data.features && data.features.length > 0) {
+                    const boundariesByType = {};
+                    data.features.forEach(feature => {
+                        const type = feature.properties.type;
+                        if (!boundariesByType[type]) {
+                            boundariesByType[type] = [];
+                        }
+                        boundariesByType[type].push(feature.properties);
+                    });
+                    
+                    let html = '<div class="row">';
+                    for (const [type, boundaries] of Object.entries(boundariesByType)) {
+                        html += `
+                            <div class="col-md-6 col-lg-4 mb-3">
+                                <div class="operation-card">
+                                    <h6>${type.charAt(0).toUpperCase() + type.slice(1)} (${boundaries.length})</h6>
+                                    <div style="max-height: 200px; overflow-y: auto;">
+                        `;
+                        boundaries.slice(0, 10).forEach(boundary => {
+                            html += `
+                                <div class="d-flex justify-content-between align-items-center border-bottom py-1">
+                                    <small class="text-truncate" style="max-width: 150px;" title="${boundary.name}">${boundary.name}</small>
+                                    <button onclick="deleteBoundary(${boundary.id}, '${boundary.name.replace(/'/g, "\\'")}')" 
+                                            class="btn btn-outline-danger btn-sm">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            `;
+                        });
+                        if (boundaries.length > 10) {
+                            html += `<small class="text-muted">... and ${boundaries.length - 10} more</small>`;
+                        }
+                        html += '</div></div></div>';
+                    }
+                    html += '</div>';
+                    listDiv.innerHTML = html;
+                } else {
+                    listDiv.innerHTML = '<div class="alert alert-info-custom">No boundaries found. Use the upload form to add boundary files.</div>';
+                }
+            } catch (error) {
+                document.getElementById('boundariesList').innerHTML = `<div class="alert alert-danger-custom">Error loading boundaries: ${error.message}</div>`;
+            }
+        }
+
+        // System health loading
+        async function loadSystemHealth() {
+            try {
+                const response = await fetch('/api/system_status');
+                const data = await response.json();
+                
+                const healthDiv = document.getElementById('systemHealthData');
+                
+                const healthHtml = `
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-number">${data.active_alerts_count || 0}</div>
+                            <div class="stat-label">Active Alerts</div>
+                        </div>
+                        <div class="stat-card" style="background: linear-gradient(135deg, var(--success-color), #20c997);">
+                            <div class="stat-number">${data.boundaries_count || 0}</div>
+                            <div class="stat-label">Total Boundaries</div>
+                        </div>
+                        <div class="stat-card" style="background: linear-gradient(135deg, var(--warning-color), #f39c12);">
+                            <div class="stat-number">${data.system_resources.cpu_usage_percent.toFixed(1)}%</div>
+                            <div class="stat-label">CPU Usage</div>
+                        </div>
+                        <div class="stat-card" style="background: linear-gradient(135deg, var(--info-color), #339af0);">
+                            <div class="stat-number">${data.system_resources.memory_usage_percent.toFixed(1)}%</div>
+                            <div class="stat-label">Memory Usage</div>
+                        </div>
+                        <div class="stat-card" style="background: linear-gradient(135deg, var(--danger-color), #e74c3c);">
+                            <div class="stat-number">${data.system_resources.disk_free_gb} GB</div>
+                            <div class="stat-label">Free Disk</div>
+                        </div>
+                        <div class="stat-card" style="background: linear-gradient(135deg, var(--secondary-color), #6c757d);">
+                            <div class="stat-number" style="color: ${data.database_status === 'connected' ? '#28a745' : '#dc3545'};">${data.database_status}</div>
+                            <div class="stat-label">Database</div>
                         </div>
                     </div>
-                    <h6 class="mt-3">Sample Extractions:</h6>
-            `;
-
-            result.previews.forEach((preview, index) => {
-                html += `
-                    <div class="field-mapping">
-                        <strong>Feature ${index + 1}:</strong><br>
-                        <strong>Name:</strong> ${preview.name}<br>
-                        <strong>Description:</strong> ${preview.description || 'No description'}
-                    </div>
                 `;
-            });
-
-            if (result.field_mappings && Object.keys(result.field_mappings).length > 0) {
-                html += `
-                    <h6 class="mt-3">Field Mappings for ${result.boundary_type}:</h6>
-                    <p><strong>Name Fields:</strong> ${result.field_mappings.name_fields ? result.field_mappings.name_fields.join(', ') : 'None configured'}</p>
-                    <p><strong>Description Fields:</strong> ${result.field_mappings.description_fields ? result.field_mappings.description_fields.join(', ') : 'None configured'}</p>
-                `;
-            }
-
-            html += '</div>';
-            showStatus(resultsDiv, html, 'success');
-        } else {
-            showStatus(resultsDiv, result.error || 'Preview failed', 'error');
-        }
-    } catch (error) {
-        showStatus(resultsDiv, 'Error: ' + error.message, 'error');
-    }
-}
-
-// Delete individual boundary
-async function deleteBoundary(boundaryId, boundaryName) {
-    if (!confirm(`Are you sure you want to delete boundary "${boundaryName}"?`)) return;
-
-    try {
-        const response = await fetch(`/admin/delete_boundary/${boundaryId}`, { method: 'DELETE' });
-        const result = await response.json();
-
-        if (response.ok) {
-            showToast(result.success || 'Boundary deleted successfully', 'success');
-            loadBoundaries();
-            loadSystemStats();
-        } else {
-            showToast(result.error || 'Failed to delete boundary', 'error');
-        }
-    } catch (error) {
-        showToast('Error: ' + error.message, 'error');
-    }
-}
-
-// Delete boundaries by type
-async function deleteBoundariesByType() {
-    const boundaryType = document.getElementById('deleteType').value;
-    if (!boundaryType) {
-        showToast('Please select a boundary type to delete', 'error');
-        return;
-    }
-
-    if (!confirm(`Are you sure you want to delete ALL ${boundaryType} boundaries? This cannot be undone!`)) return;
-
-    try {
-        const response = await fetch('/admin/delete_boundaries_by_type', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ boundary_type: boundaryType })
-        });
-        const result = await response.json();
-
-        if (response.ok) {
-            showToast(result.success || result.message, 'success');
-            loadBoundaries();
-            loadSystemStats();
-            document.getElementById('deleteType').value = '';
-        } else {
-            showToast(result.error || 'Failed to delete boundaries', 'error');
-        }
-    } catch (error) {
-        showToast('Error: ' + error.message, 'error');
-    }
-}
-
-// Clear all boundaries
-async function clearAllBoundaries() {
-    if (!confirm('⚠️ WARNING: This will delete ALL boundaries from the system! This cannot be undone! Are you absolutely sure?')) return;
-    if (!confirm('⚠️ FINAL WARNING: This will permanently remove ALL boundary data. Continue?')) return;
-
-    try {
-        const response = await fetch('/admin/clear_all_boundaries', { method: 'DELETE' });
-        const result = await response.json();
-
-        if (response.ok) {
-            showToast(result.success || result.message, 'success');
-            loadBoundaries();
-            loadSystemStats();
-        } else {
-            showToast(result.error || 'Failed to clear boundaries', 'error');
-        }
-    } catch (error) {
-        showToast('Error: ' + error.message, 'error');
-    }
-}
-
-// Handle file upload
-document.getElementById('uploadForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-
-    const formData = new FormData(this);
-    const statusDiv = document.getElementById('uploadStatus');
-
-    showStatus(statusDiv, '⏳ Uploading and processing...', 'info');
-
-    try {
-        const response = await fetch('/admin/upload_boundary', {
-            method: 'POST',
-            body: formData
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-            showStatus(statusDiv, '✅ ' + (result.success || 'Upload successful!'), 'success');
-            this.reset();
-            loadBoundaries();
-            loadSystemStats();
-        } else {
-            showStatus(statusDiv, '❌ ' + (result.error || 'Upload failed'), 'error');
-        }
-    } catch (error) {
-        showStatus(statusDiv, '❌ Error: ' + error.message, 'error');
-    }
-});
-
-// Manual operations
-async function triggerCAPPoll() {
-    const operationStatus = document.getElementById('operationStatus');
-    showStatus(operationStatus, '📡 Triggering CAP poll...', 'info');
-
-    try {
-        const response = await fetch('/admin/trigger_poll', { method: 'POST' });
-        const result = await response.json();
-
-        const message = (response.ok ? '✅ ' : '❌ ') + (result.message || result.error);
-        showStatus(operationStatus, message, response.ok ? 'success' : 'error');
-
-        if (response.ok) {
-            loadSystemStats();
-        }
-    } catch (error) {
-        showStatus(operationStatus, '❌ Error: ' + error.message, 'error');
-    }
-}
-
-async function clearExpiredAlerts() {
-    if (!confirm('Are you sure you want to clear all expired alerts?')) return;
-
-    const operationStatus = document.getElementById('operationStatus');
-    showStatus(operationStatus, '🗑️ Clearing expired alerts...', 'info');
-
-    try {
-        const response = await fetch('/admin/clear_expired', { method: 'POST' });
-        const result = await response.json();
-
-        const message = (response.ok ? '✅ ' : '❌ ') + (result.message || result.error);
-        showStatus(operationStatus, message, response.ok ? 'success' : 'error');
-
-        if (response.ok) {
-            loadSystemStats();
-        }
-    } catch (error) {
-        showStatus(operationStatus, '❌ Error: ' + error.message, 'error');
-    }
-}
-
-async function optimizeDatabase() {
-    if (!confirm('Run database optimization? This will run VACUUM ANALYZE to improve performance.')) return;
-
-    const operationStatus = document.getElementById('operationStatus');
-    showStatus(operationStatus, '🔧 Optimizing database (VACUUM ANALYZE)...', 'info');
-
-    try {
-        const response = await fetch('/admin/optimize_db', { method: 'POST' });
-        const result = await response.json();
-
-        const message = (response.ok ? '✅ ' : '❌ ') + (result.message || result.error);
-        showStatus(operationStatus, message, response.ok ? 'success' : 'error');
-    } catch (error) {
-        showStatus(operationStatus, '❌ Error: ' + error.message, 'error');
-    }
-}
-
-async function recalculateIntersections() {
-    if (!confirm('Recalculate all alert-boundary intersections? This may take a few minutes.')) return;
-
-    const operationStatus = document.getElementById('operationStatus');
-    showStatus(operationStatus, '🧮 Recalculating intersections...', 'info');
-
-    try {
-        const response = await fetch('/admin/recalculate_intersections', { method: 'POST' });
-        const result = await response.json();
-
-        const message = (response.ok ? '✅ ' : '❌ ') + (result.message || result.error);
-        showStatus(operationStatus, message, response.ok ? 'success' : 'error');
-    } catch (error) {
-        showStatus(operationStatus, '❌ Error: ' + error.message, 'error');
-    }
-}
-
-async function fixCountyIntersections() {
-    if (!confirm('Fix county-wide alert intersections? This will ensure county-wide alerts show all affected boundaries.')) return;
-
-    const operationStatus = document.getElementById('operationStatus');
-    showStatus(operationStatus, '🗺️ Fixing county intersections...', 'info');
-
-    try {
-        const response = await fetch('/admin/fix_county_intersections', { method: 'POST' });
-        const result = await response.json();
-
-        const message = (response.ok ? '✅ ' : '❌ ') + (result.message || result.error);
-        showStatus(operationStatus, message, response.ok ? 'success' : 'error');
-    } catch (error) {
-        showStatus(operationStatus, '❌ Error: ' + error.message, 'error');
-    }
-}
-
-async function checkDatabaseHealth() {
-    const operationStatus = document.getElementById('operationStatus');
-    showStatus(operationStatus, '💓 Checking database health...', 'info');
-
-    try {
-        const response = await fetch('/admin/db_health', { method: 'GET' });
-        const result = await response.json();
-
-        if (response.ok) {
-            let healthHtml = `
-                <h6>Database Health Report</h6>
-                <p><strong>Database Size:</strong> ${result.database_size}</p>
-                <p><strong>Tables:</strong> ${result.tables.length}</p>
-                <h6>Recommendations:</h6>
-                <ul>
-            `;
-
-            result.recommendations.forEach(rec => {
-                healthHtml += `<li>${rec}</li>`;
-            });
-
-            healthHtml += '</ul>';
-            showStatus(operationStatus, healthHtml, 'success');
-        } else {
-            showStatus(operationStatus, '❌ ' + (result.error || 'Health check failed'), 'error');
-        }
-    } catch (error) {
-        showStatus(operationStatus, '❌ Error: ' + error.message, 'error');
-    }
-}
-
-// Utility functions
-function showStatus(element, message, type) {
-    element.className = `status-message ${type}`;
-    element.innerHTML = message;
-    element.style.display = 'block';
-
-    // Auto-hide success messages after 5 seconds
-    if (type === 'success') {
-        setTimeout(() => {
-            element.style.display = 'none';
-        }, 5000);
-    }
-}
-
-function formatUptime(seconds) {
-    if (!seconds) return '0s';
-
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-
-    if (days > 0) {
-        return `${days}d ${hours}h ${minutes}m`;
-    } else if (hours > 0) {
-        return `${hours}h ${minutes}m`;
-    } else {
-        return `${minutes}m`;
-    }
-}
-
-// Initialize page
-document.addEventListener('DOMContentLoaded', function() {
-    loadSystemStats();
-
-    // Refresh stats every 30 seconds
-    setInterval(loadSystemStats, 30000);
-
-    // Set up keyboard shortcuts
-    document.addEventListener('keydown', function(e) {
-        if (e.altKey) {
-            switch(e.key) {
-                case '1':
-                    e.preventDefault();
-                    showSection('upload');
-                    break;
-                case '2':
-                    e.preventDefault();
-                    showSection('preview');
-                    break;
-                case '3':
-                    e.preventDefault();
-                    showSection('manage');
-                    break;
-                case '4':
-                    e.preventDefault();
-                    showSection('operations');
-                    break;
-                case '5':
-                    e.preventDefault();
-                    showSection('stats');
-                    break;
-                case '6':
-                    e.preventDefault();
-                    showSection('health');
-                    break;
+                healthDiv.innerHTML = healthHtml;
+            } catch (error) {
+                document.getElementById('systemHealthData').innerHTML = `<div class="alert alert-danger-custom">Error loading system health: ${error.message}</div>`;
             }
         }
-    });
-});
-</script>
-{% endblock %}
+
+        // Alert Management Functions (NEW PRESERVATION SYSTEM)
+        async function markExpiredAlerts() {
+            try {
+                const response = await fetch('/admin/mark_expired', { method: 'POST' });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showStatus(`✅ ${result.message}`, 'success');
+                    if (result.note) {
+                        showStatus(`ℹ️ ${result.note}`, 'info', 3000);
+                    }
+                } else {
+                    showStatus(`❌ ${result.error}`, 'danger');
+                }
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, 'danger');
+            }
+        }
+
+        async function clearExpiredAlerts() {
+            try {
+                // First request to get confirmation details
+                const response = await fetch('/admin/clear_expired', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                
+                const result = await response.json();
+                
+                if (result.requires_confirmation) {
+                    showConfirmation({
+                        title: '⚠️ PERMANENT DELETION WARNING',
+                        message: result.message,
+                        warning: result.warning,
+                        type: 'danger',
+                        confirmText: 'DELETE PERMANENTLY',
+                        onConfirm: async () => {
+                            try {
+                                const confirmResponse = await fetch('/admin/clear_expired', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ confirmed: true })
+                                });
+                                
+                                const confirmResult = await confirmResponse.json();
+                                
+                                if (confirmResponse.ok) {
+                                    showStatus(`✅ ${confirmResult.message}`, 'success');
+                                    if (confirmResult.warning) {
+                                        showStatus(`⚠️ ${confirmResult.warning}`, 'warning', 5000);
+                                    }
+                                } else {
+                                    showStatus(`❌ ${confirmResult.error}`, 'danger');
+                                }
+                            } catch (error) {
+                                showStatus(`❌ Error: ${error.message}`, 'danger');
+                            }
+                        }
+                    });
+                } else {
+                    showStatus(`ℹ️ ${result.message}`, 'info');
+                }
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, 'danger');
+            }
+        }
+
+        // Boundary Management Functions
+        async function deleteBoundary(boundaryId, boundaryName) {
+            showConfirmation({
+                title: 'Delete Boundary',
+                message: `Delete boundary "${boundaryName}"?`,
+                warning: 'This will remove the boundary from all maps and alerts.',
+                type: 'warning',
+                confirmText: 'Delete',
+                onConfirm: async () => {
+                    try {
+                        const response = await fetch(`/admin/delete_boundary/${boundaryId}`, { method: 'DELETE' });
+                        const result = await response.json();
+                        
+                        if (response.ok) {
+                            showStatus(`✅ ${result.success}`, 'success');
+                            loadBoundaries();
+                        } else {
+                            showStatus(`❌ ${result.error}`, 'danger');
+                        }
+                    } catch (error) {
+                        showStatus(`❌ Error: ${error.message}`, 'danger');
+                    }
+                }
+            });
+        }
+
+        async function deleteBoundariesByType() {
+            const boundaryType = document.getElementById('deleteType').value;
+            if (!boundaryType) {
+                showStatus('Please select a boundary type to delete', 'warning');
+                return;
+            }
+            
+            try {
+                // First request
+                const response = await fetch('/admin/delete_boundaries_by_type', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ boundary_type: boundaryType })
+                });
+                
+                const result = await response.json();
+                
+                if (result.requires_confirmation) {
+                    showConfirmation({
+                        title: 'Delete All Boundaries of Type',
+                        message: result.message,
+                        warning: result.warning,
+                        type: 'danger',
+                        confirmText: 'DELETE ALL',
+                        onConfirm: async () => {
+                            try {
+                                const confirmResponse = await fetch('/admin/delete_boundaries_by_type', {
+                                    method: 'DELETE',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ boundary_type: boundaryType, confirmed: true })
+                                });
+                                
+                                const confirmResult = await confirmResponse.json();
+                                
+                                if (confirmResponse.ok) {
+                                    showStatus(`✅ ${confirmResult.success}`, 'success');
+                                    loadBoundaries();
+                                    document.getElementById('deleteType').value = '';
+                                } else {
+                                    showStatus(`❌ ${confirmResult.error}`, 'danger');
+                                }
+                            } catch (error) {
+                                showStatus(`❌ Error: ${error.message}`, 'danger');
+                            }
+                        }
+                    });
+                } else {
+                    showStatus(`ℹ️ ${result.message}`, 'info');
+                }
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, 'danger');
+            }
+        }
+
+        async function clearAllBoundaries() {
+            const steps = [
+                {
+                    message: '⚠️ WARNING: This will permanently delete ALL boundaries from the system.',
+                    warning: 'This will affect all alerts and intersections. This action cannot be undone.'
+                },
+                {
+                    message: '🚨 FINAL WARNING: You are about to permanently delete all boundaries.',
+                    warning: 'Type "DELETE ALL BOUNDARIES" to confirm this irreversible action.',
+                    textConfirmation: 'DELETE ALL BOUNDARIES'
+                }
+            ];
+            
+            showMultiStepConfirmation({
+                steps: steps,
+                onComplete: async () => {
+                    try {
+                        const response = await fetch('/admin/clear_all_boundaries', {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                confirmation_level: 2, 
+                                text_confirmation: 'DELETE ALL BOUNDARIES' 
+                            })
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (response.ok) {
+                            showStatus(`✅ ${result.success}`, 'success');
+                            loadBoundaries();
+                        } else {
+                            showStatus(`❌ ${result.error}`, 'danger');
+                        }
+                    } catch (error) {
+                        showStatus(`❌ Error: ${error.message}`, 'danger');
+                    }
+                }
+            });
+        }
+
+        // System Operations
+        async function triggerCAPPoll() {
+            try {
+                showStatus('📡 Triggering CAP poll...', 'info');
+                const response = await fetch('/admin/trigger_poll', { method: 'POST' });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showStatus(`✅ ${result.message}`, 'success');
+                } else {
+                    showStatus(`❌ ${result.error}`, 'danger');
+                }
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, 'danger');
+            }
+        }
+
+        async function optimizeDatabase() {
+            try {
+                showStatus('🔧 Optimizing database...', 'info');
+                const response = await fetch('/admin/optimize_db', { method: 'POST' });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showStatus(`✅ ${result.message}`, 'success');
+                } else {
+                    showStatus(`❌ ${result.error}`, 'danger');
+                }
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, 'danger');
+            }
+        }
+
+        async function recalculateIntersections() {
+            showConfirmation({
+                title: 'Recalculate Intersections',
+                message: 'This will recalculate all alert-boundary intersections.',
+                warning: 'This may take several minutes for large datasets.',
+                type: 'info',
+                confirmText: 'Recalculate',
+                onConfirm: async () => {
+                    try {
+                        showStatus('🔗 Recalculating intersections...', 'info');
+                        const response = await fetch('/admin/recalculate_intersections', { method: 'POST' });
+                        const result = await response.json();
+                        
+                        if (response.ok) {
+                            showStatus(`✅ ${result.success}`, 'success');
+                        } else {
+                            showStatus(`❌ ${result.error}`, 'danger');
+                        }
+                    } catch (error) {
+                        showStatus(`❌ Error: ${error.message}`, 'danger');
+                    }
+                }
+            });
+        }
+
+        async function checkDatabaseHealth() {
+            try {
+                showStatus('🔍 Checking database health...', 'info');
+                const response = await fetch('/admin/check_db_health');
+                const result = await response.json();
+                
+                if (response.ok) {
+                    let healthHtml = '<div class="alert alert-info-custom"><h6>Database Health Report:</h6>';
+                    healthHtml += `<p><strong>Connectivity:</strong> ${result.connectivity}</p>`;
+                    healthHtml += `<p><strong>Database Size:</strong> ${result.database_size}</p>`;
+                    healthHtml += `<p><strong>Active Connections:</strong> ${result.active_connections}</p>`;
+                    healthHtml += '</div>';
+                    
+                    showStatus(healthHtml, 'info', 10000);
+                } else {
+                    showStatus(`❌ ${result.error}`, 'danger');
+                }
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, 'danger');
+            }
+        }
+    </script>
+</body>
+</html>

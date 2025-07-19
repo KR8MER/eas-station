@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+"""
+Fix the original poller/cap_poller.py file
+"""
+
+import os
+import re
+
+
+def fix_original_poller():
+    """Fix the original cap_poller.py file"""
+
+    poller_file = '/home/pi/noaa_alerts_system/poller/cap_poller.py'
+
+    if not os.path.exists(poller_file):
+        print(f"❌ File not found: {poller_file}")
+        return False
+
+    print(f"🔧 Fixing original poller: {poller_file}")
+
+    # Backup the original
+    backup_file = f"{poller_file}.backup_fix_{int(__import__('time').time())}"
+    os.system(f"cp {poller_file} {backup_file}")
+    print(f"✅ Backed up to: {backup_file}")
+
+    # Read the current file
+    with open(poller_file, 'r') as f:
+        content = f.read()
+
+    # Fix 1: Update the API URL from OHZ013 to OHZ016
+    content = content.replace(
+        'self.api_url = "https://api.weather.gov/alerts/active?zone=OHZ013"',
+        'self.api_url = "https://api.weather.gov/alerts/active?zone=OHZ016"'
+    )
+
+    # Fix 2: Replace the is_relevant_alert function if it exists, or add one
+    new_is_relevant_function = '''    def is_relevant_alert(self, alert_data: Dict) -> bool:
+        """Check if alert is relevant to Putnam County, Ohio"""
+        try:
+            properties = alert_data.get('properties', {})
+
+            # Safe extraction of data
+            area_desc = str(properties.get('areaDesc') or '').upper()
+            geocode = properties.get('geocode', {})
+            ugc_codes = geocode.get('UGC', []) or []
+            event = str(properties.get('event') or '').lower()
+
+            self.logger.debug(f"Checking alert: {event}")
+            self.logger.debug(f"  UGC codes: {ugc_codes}")
+            self.logger.debug(f"  Area contains PUTNAM: {'PUTNAM' in area_desc}")
+
+            # Check for our specific zones
+            our_zones = ['OHZ016', 'OHC137']
+            for zone in our_zones:
+                if zone in ugc_codes:
+                    self.logger.info(f"Alert {event} affects our zone {zone}")
+                    return True
+
+            # Check area description for Putnam County
+            if 'PUTNAM' in area_desc:
+                self.logger.info(f"Alert {event} mentions Putnam County")
+                return True
+
+            # Check for our zones in area description
+            for zone in our_zones:
+                if zone in area_desc:
+                    self.logger.info(f"Alert {event} mentions zone {zone}")
+                    return True
+
+            return False
+
+        except Exception as e:
+            self.logger.error(f"Error in is_relevant_alert: {e}")
+            return True  # Include on error to be safe
+
+'''
+
+    # Fix 3: Update the fetch_cap_alerts function to handle multiple zones
+    new_fetch_function = '''    def fetch_cap_alerts(self) -> List[Dict]:
+        """Fetch CAP alerts from NOAA API for OHZ016 and related zones"""
+        all_alerts = []
+
+        # Multiple endpoints to check
+        endpoints = [
+            "https://api.weather.gov/alerts/active?zone=OHZ016",  # Putnam County Zone
+            "https://api.weather.gov/alerts/active?zone=OHC137",  # Putnam County Code
+        ]
+
+        for endpoint in endpoints:
+            try:
+                self.logger.info(f"Fetching CAP alerts from: {endpoint}")
+
+                response = self.session.get(endpoint)
+                response.raise_for_status()
+
+                alerts_data = response.json()
+                features = alerts_data.get('features', [])
+
+                self.logger.info(f"Retrieved {len(features)} alerts from endpoint")
+
+                # Add all features, we'll filter them later
+                all_alerts.extend(features)
+
+            except requests.exceptions.RequestException as e:
+                self.logger.error(f"Error fetching CAP alerts from {endpoint}: {str(e)}")
+                continue
+            except json.JSONDecodeError as e:
+                self.logger.error(f"Error parsing CAP alerts JSON from {endpoint}: {str(e)}")
+                continue
+
+        # Remove duplicates based on identifier
+        seen_ids = set()
+        unique_alerts = []
+        for alert in all_alerts:
+            alert_id = alert.get('properties', {}).get('identifier')
+            if alert_id and alert_id not in seen_ids:
+                seen_ids.add(alert_id)
+                unique_alerts.append(alert)
+
+        self.logger.info(f"Total unique alerts collected: {len(unique_alerts)}")
+        return unique_alerts
+
+'''
+
+    # Fix 4: Update the save_cap_alert function to handle null geometry
+    geometry_fix = '''        except Exception as e:
+            self.db_session.rollback()
+            self.logger.error(f"Error saving CAP alert: {str(e)}")
+            raise
+
+    def save_cap_alert(self, alert_data: Dict) -> Tuple[bool, Optional[CAPAlert]]:
+        """Save CAP alert to database - handles null geometry"""
+        try:
+            # Check if alert already exists
+            existing = self.db_session.query(CAPAlert).filter_by(
+                identifier=alert_data['identifier']
+            ).first()
+
+            if existing:
+                # Update existing alert
+                for key, value in alert_data.items():
+                    if key != 'geometry':
+                        setattr(existing, key, value)
+
+                # Update geometry if provided and not null
+                if alert_data.get('geometry'):
+                    existing.geom = ST_GeomFromGeoJSON(json.dumps(alert_data['geometry']))
+                else:
+                    # For null geometry, set to None
+                    existing.geom = None
+
+                self.db_session.commit()
+                self.logger.debug(f"Updated existing alert: {existing.identifier}")
+                return False, existing
+
+            else:
+                # Create new alert
+                new_alert = CAPAlert(**{k: v for k, v in alert_data.items() if k != 'geometry'})
+
+                # Add geometry if provided and not null
+                if alert_data.get('geometry'):
+                    new_alert.geom = ST_GeomFromGeoJSON(json.dumps(alert_data['geometry']))
+                else:
+                    # For null geometry, leave as None
+                    new_alert.geom = None
+
+                self.db_session.add(new_alert)
+                self.db_session.commit()
+                self.logger.info(f"Saved new alert: {new_alert.identifier} - {new_alert.event}")
+                return True, new_alert
+
+        except Exception as e:
+            self.db_session.rollback()
+            self.logger.error(f"Error saving CAP alert: {str(e)}")
+            raise'''
+
+    # Apply the fixes
+
+    # Fix 1: API URL is already done above
+
+    # Fix 2: Add or replace is_relevant_alert function
+    if 'def is_relevant_alert(' in content:
+        # Replace existing function
+        pattern = r'(\s+def is_relevant_alert\(.*?)(?=\n\s+def |\nclass |\Z)'
+        match = re.search(pattern, content, re.DOTALL)
+        if match:
+            content = content[:match.start()] + new_is_relevant_function + content[match.end():]
+            print("✅ Replaced existing is_relevant_alert function")
+        else:
+            print("⚠️  Could not replace is_relevant_alert function")
+    else:
+        # Add new function before fetch_cap_alerts
+        fetch_pos = content.find('def fetch_cap_alerts(')
+        if fetch_pos > 0:
+            content = content[:fetch_pos] + new_is_relevant_function + '\n    ' + content[fetch_pos:]
+            print("✅ Added new is_relevant_alert function")
+
+    # Fix 3: Replace fetch_cap_alerts function
+    pattern = r'(\s+def fetch_cap_alerts\(.*?)(?=\n\s+def |\nclass |\Z)'
+    match = re.search(pattern, content, re.DOTALL)
+    if match:
+        content = content[:match.start()] + new_fetch_function + content[match.end():]
+        print("✅ Replaced fetch_cap_alerts function")
+
+    # Fix 4: Make sure we have proper error handling
+    if 'Error saving CAP alert' not in content:
+        content = content.replace(
+            'raise',
+            geometry_fix
+        )
+
+    # Fix 5: Update zone references in comments and strings
+    content = content.replace('OHZ013', 'OHZ016')
+    content = content.replace('zone OHZ016', 'zone OHZ016 (Putnam County, OH)')
+
+    # Fix 6: Add the is_relevant_alert call in the main processing loop
+    if 'self.is_relevant_alert(' not in content:
+        # Find the poll_and_process function and add filtering
+        pattern = r'(for alert_data in alerts_data:.*?parsed_alert = self\.parse_cap_alert\(alert_data\))'
+        replacement = r'''\1
+                if not self.is_relevant_alert(alert_data):
+                    continue'''
+        content = re.sub(pattern, replacement, content, flags=re.DOTALL)
+        print("✅ Added relevance filtering to processing loop")
+
+    # Write the fixed content back
+    with open(poller_file, 'w') as f:
+        f.write(content)
+
+    print("✅ Successfully fixed original cap_poller.py")
+    return True
+
+
+def test_fixes():
+    """Test if the fixes look correct"""
+
+    poller_file = '/home/pi/noaa_alerts_system/poller/cap_poller.py'
+
+    with open(poller_file, 'r') as f:
+        content = f.read()
+
+    print(f"\n🧪 Testing fixes:")
+
+    # Check API URL
+    if 'zone=OHZ016' in content:
+        print("✅ API URL updated to OHZ016")
+    else:
+        print("❌ API URL not updated")
+
+    # Check functions
+    if 'def is_relevant_alert(' in content:
+        print("✅ is_relevant_alert function present")
+    else:
+        print("❌ is_relevant_alert function missing")
+
+    if 'OHC137' in content:
+        print("✅ OHC137 county code included")
+    else:
+        print("❌ OHC137 county code missing")
+
+    if 'PUTNAM' in content:
+        print("✅ Putnam County check included")
+    else:
+        print("❌ Putnam County check missing")
+
+
+def main():
+    """Apply all fixes to the original poller"""
+
+    print("🔧 Fixing Original CAP Poller")
+    print("=" * 40)
+
+    if fix_original_poller():
+        test_fixes()
+
+        print(f"\n🔄 Restart the service:")
+        print("  sudo systemctl restart cap-poller")
+        print(f"\n📊 Monitor logs:")
+        print("  sudo journalctl -u cap-poller -f")
+        print(f"\n🧪 Test the fixes:")
+        print("  python3 debug_poller.py")
+    else:
+        print("❌ Failed to fix poller")
+
+
+if __name__ == '__main__':
+    main()
