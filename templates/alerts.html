@@ -165,8 +165,7 @@
                             </thead>
                             <tbody>
                                 {% for alert in alerts %}
-                                {% set now = moment() %}
-                                {% set is_expired = alert.expires and alert.expires < now %}
+                                {% set is_expired = alert.expires | is_expired %}
                                 <tr class="{% if is_expired %}table-secondary{% endif %}">
                                     <td>
                                         <span class="badge bg-primary">{{ alert.event }}</span>
@@ -185,13 +184,13 @@
                                     </td>
                                     <td>
                                         <small class="text-muted">
-                                            {{ alert.sent.strftime('%m/%d/%Y %H:%M') if alert.sent else 'Unknown' }}
+                                            {{ alert.sent | format_local_datetime(false) if alert.sent else 'Unknown' }}
                                         </small>
                                     </td>
                                     <td>
                                         {% if alert.expires %}
                                         <small class="{% if is_expired %}text-danger{% else %}text-success{% endif %}">
-                                            {{ alert.expires.strftime('%m/%d/%Y %H:%M') }}
+                                            {{ alert.expires | format_local_datetime(false) }}
                                         </small>
                                         {% else %}
                                         <span class="text-muted">No expiration</span>
@@ -285,7 +284,7 @@ function exportCurrentAlerts() {
     try {
         const alertsData = [];
         const alertRows = document.querySelectorAll('tbody tr');
-        
+
         alertRows.forEach(row => {
             const cells = row.querySelectorAll('td');
             if (cells.length >= 7) {
@@ -300,15 +299,15 @@ function exportCurrentAlerts() {
                 });
             }
         });
-        
+
         if (alertsData.length === 0) {
             showToast('No alerts data to export', 'warning');
             return;
         }
-        
+
         exportToExcel(alertsData, 'Filtered_Alerts');
         showToast(`Exported ${alertsData.length} alerts successfully!`, 'success');
-        
+
     } catch (error) {
         console.error('Export error:', error);
         showToast('Failed to export alerts. Please try again.', 'error');
@@ -320,13 +319,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('filterForm');
     const selects = form.querySelectorAll('select');
     const checkbox = form.querySelector('#show_expired');
-    
+
     selects.forEach(select => {
         select.addEventListener('change', function() {
             form.submit();
         });
     });
-    
+
     if (checkbox) {
         checkbox.addEventListener('change', function() {
             form.submit();

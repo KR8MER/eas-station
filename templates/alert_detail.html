@@ -200,6 +200,35 @@
         font-size: 0.85em;
         color: #e65100;
     }
+
+    /* Enhanced alert content styling */
+    .alert-content {
+        line-height: 1.6;
+        font-size: 1.05em;
+    }
+
+    .alert-description {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 15px 0;
+    }
+
+    .alert-instruction {
+        background: linear-gradient(135deg, rgba(255, 193, 7, 0.1), rgba(255, 193, 7, 0.05));
+        border: 2px solid #ffc107;
+        border-left: 6px solid #ffc107;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 15px 0;
+    }
+
+    .alert-instruction h6 {
+        color: #856404;
+        margin-bottom: 15px;
+        font-weight: 600;
+    }
 </style>
 {% endblock %}
 
@@ -325,16 +354,18 @@
                             {% if alert.description %}
                             <hr class="my-4">
                             <h6 class="text-muted mb-2">Description</h6>
-                            <div class="p-3 bg-light rounded">
-                                {{ alert.description | nl2br }}
+                            <div class="alert-description alert-content">
+                                {{ alert.description | safe }}
                             </div>
                             {% endif %}
 
                             {% if alert.instruction %}
                             <hr class="my-4">
-                            <h6 class="text-muted mb-2">Instructions</h6>
-                            <div class="p-3 bg-warning bg-opacity-10 rounded border-start border-warning border-4">
-                                {{ alert.instruction | nl2br }}
+                            <div class="alert-instruction">
+                                <h6 class="text-muted mb-2"><i class="fas fa-exclamation-triangle"></i> Instructions</h6>
+                                <div class="alert-content">
+                                    {{ alert.instruction | safe }}
+                                </div>
                             </div>
                             {% endif %}
 

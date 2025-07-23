@@ -989,7 +989,7 @@ def stats():
 
 @app.route('/alerts')
 def alerts():
-    """Alerts history page with improved active/expired logic"""
+    """Alerts history page with improved active/expired logic and timezone handling"""
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 50, type=int)
@@ -1071,7 +1071,6 @@ def alerts():
     except Exception as e:
         logger.error(f"Error loading alerts history: {str(e)}")
         return f"<h1>Error loading alerts history</h1><p>{str(e)}</p><p><a href='/'>← Back to Main</a></p>"
-
 
 @app.route('/alerts/<int:alert_id>')
 def alert_detail(alert_id):
@@ -1790,6 +1789,244 @@ def update_alert_status(alert_id):
         logger.error(f"Error updating alert status: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+
+@app.route('/admin/fix_single_alert_intersections/<int:alert_id>', methods=['POST'])
+def fix_single_alert_intersections(alert_id):
+    """Fix intersections for a single alert"""
+    try:
+        # Get the alert
+        alert = CAPAlert.query.get_or_404(alert_id)
+
+        # Check if this is a county-wide alert based on area description
+        is_county_wide = False
+        if alert.area_desc:
+            area_lower = alert.area_desc.lower()
+            county_wide_keywords = ['county', 'putnam county', 'entire county', 'all of putnam']
+
+            if 'putnam' in area_lower:
+                # Count semicolon-separated areas (indicates multi-county which we treat as county-wide for Putnam)
+                county_count = len([x for x in area_lower.split(';') if x.strip()])
+                if county_count >= 3:
+                    is_county_wide = True
+
+            # Check for direct county-wide keywords
+            if any(keyword in area_lower for keyword in county_wide_keywords):
+                is_county_wide = True
+
+        intersections_created = 0
+
+        if is_county_wide or not alert.geom:
+            # For county-wide alerts or alerts without geometry, create intersections with ALL boundaries
+            logger.info(f"Creating intersections for county-wide/geometry-less alert {alert.identifier}")
+
+            # Get all boundaries
+            all_boundaries = Boundary.query.all()
+
+            for boundary in all_boundaries:
+                # Check if intersection already exists
+                existing = db.session.query(Intersection).filter_by(
+                    cap_alert_id=alert.id,
+                    boundary_id=boundary.id
+                ).first()
+
+                if not existing:
+                    # Create new intersection
+                    intersection = Intersection(
+                        cap_alert_id=alert.id,
+                        boundary_id=boundary.id,
+                        intersection_area=0,  # Set to 0 for county-wide
+                        created_at=utc_now()
+                    )
+                    db.session.add(intersection)
+                    intersections_created += 1
+
+                    logger.debug(f"Created intersection: Alert {alert.identifier} -> {boundary.type} '{boundary.name}'")
+
+        else:
+            # For alerts with geometry, use spatial intersection
+            logger.info(f"Creating spatial intersections for alert {alert.identifier}")
+
+            # Find intersecting boundaries
+            intersecting_boundaries = db.session.query(Boundary).filter(
+                ST_Intersects(Boundary.geom, alert.geom)
+            ).all()
+
+            for boundary in intersecting_boundaries:
+                # Check if intersection already exists
+                existing = db.session.query(Intersection).filter_by(
+                    cap_alert_id=alert.id,
+                    boundary_id=boundary.id
+                ).first()
+
+                if not existing:
+                    # Calculate intersection area (optional)
+                    try:
+                        intersection_area = db.session.scalar(
+                            text("""
+                                 SELECT ST_Area(ST_Intersection(
+                                         ST_Transform(b.geom, 3857),
+                                         ST_Transform(a.geom, 3857)
+                                                )) as area
+                                 FROM boundaries b,
+                                      cap_alerts a
+                                 WHERE b.id = :boundary_id
+                                   AND a.id = :alert_id
+                                 """),
+                            {'boundary_id': boundary.id, 'alert_id': alert.id}
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not calculate intersection area: {e}")
+                        intersection_area = 0
+
+                    # Create intersection
+                    intersection = Intersection(
+                        cap_alert_id=alert.id,
+                        boundary_id=boundary.id,
+                        intersection_area=intersection_area or 0,
+                        created_at=utc_now()
+                    )
+                    db.session.add(intersection)
+                    intersections_created += 1
+
+                    logger.debug(
+                        f"Created spatial intersection: Alert {alert.identifier} -> {boundary.type} '{boundary.name}'")
+
+        # Commit all changes
+        db.session.commit()
+
+        # Log the operation
+        log_entry = SystemLog(
+            level='INFO',
+            message=f'Fixed intersections for alert {alert.identifier}: created {intersections_created} new intersections',
+            module='admin',
+            details={
+                'alert_id': alert_id,
+                'alert_identifier': alert.identifier,
+                'intersections_created': intersections_created,
+                'is_county_wide': is_county_wide,
+                'has_geometry': alert.geom is not None,
+                'fixed_at_utc': utc_now().isoformat(),
+                'fixed_at_local': local_now().isoformat()
+            }
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+
+        return jsonify({
+            'success': f'Successfully created {intersections_created} new intersections for alert {alert.identifier}',
+            'alert_id': alert_id,
+            'intersections_created': intersections_created,
+            'is_county_wide': is_county_wide,
+            'total_boundaries': Boundary.query.count()
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error fixing intersections for alert {alert_id}: {str(e)}")
+        return jsonify({'error': f'Failed to fix intersections: {str(e)}'}), 500
+
+
+@app.route('/admin/fix_county_intersections', methods=['POST'])
+def fix_county_intersections():
+    """Fix intersections for all county-wide alerts"""
+    try:
+        # Find all alerts that appear to be county-wide but have missing intersections
+        county_wide_alerts = []
+
+        # Get all alerts
+        all_alerts = CAPAlert.query.all()
+        total_boundaries = Boundary.query.count()
+
+        for alert in all_alerts:
+            if alert.area_desc:
+                area_lower = alert.area_desc.lower()
+
+                # Check if this looks like a county-wide alert
+                is_county_wide = False
+
+                if 'putnam' in area_lower:
+                    # Multi-county alerts that include Putnam
+                    county_count = len([x for x in area_lower.split(';') if x.strip()])
+                    if county_count >= 3:
+                        is_county_wide = True
+
+                # Direct county-wide keywords
+                county_wide_keywords = ['county', 'putnam county', 'entire county']
+                if any(keyword in area_lower for keyword in county_wide_keywords):
+                    is_county_wide = True
+
+                if is_county_wide:
+                    # Check how many intersections this alert has
+                    intersection_count = db.session.query(Intersection).filter_by(
+                        cap_alert_id=alert.id
+                    ).count()
+
+                    # If it has significantly fewer intersections than total boundaries, it needs fixing
+                    if intersection_count < (total_boundaries * 0.8):  # Less than 80% of boundaries
+                        county_wide_alerts.append(alert)
+
+        if not county_wide_alerts:
+            return jsonify({
+                'message': 'No county-wide alerts found that need intersection fixes',
+                'alerts_checked': len(all_alerts),
+                'total_boundaries': total_boundaries
+            })
+
+        # Fix intersections for each county-wide alert
+        total_intersections_created = 0
+
+        for alert in county_wide_alerts:
+            # Get all boundaries
+            all_boundaries = Boundary.query.all()
+
+            for boundary in all_boundaries:
+                # Check if intersection already exists
+                existing = db.session.query(Intersection).filter_by(
+                    cap_alert_id=alert.id,
+                    boundary_id=boundary.id
+                ).first()
+
+                if not existing:
+                    # Create new intersection
+                    intersection = Intersection(
+                        cap_alert_id=alert.id,
+                        boundary_id=boundary.id,
+                        intersection_area=0,  # Set to 0 for county-wide
+                        created_at=utc_now()
+                    )
+                    db.session.add(intersection)
+                    total_intersections_created += 1
+
+        # Commit all changes
+        db.session.commit()
+
+        # Log the operation
+        log_entry = SystemLog(
+            level='INFO',
+            message=f'Fixed county-wide intersections: {len(county_wide_alerts)} alerts, {total_intersections_created} intersections created',
+            module='admin',
+            details={
+                'alerts_fixed': len(county_wide_alerts),
+                'intersections_created': total_intersections_created,
+                'total_boundaries': total_boundaries,
+                'fixed_at_utc': utc_now().isoformat(),
+                'fixed_at_local': local_now().isoformat()
+            }
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+
+        return jsonify({
+            'success': f'Successfully fixed intersections for {len(county_wide_alerts)} county-wide alerts',
+            'alerts_fixed': len(county_wide_alerts),
+            'intersections_created': total_intersections_created,
+            'total_boundaries': total_boundaries
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error fixing county intersections: {str(e)}")
+        return jsonify({'error': f'Failed to fix county intersections: {str(e)}'}), 500
 
 @app.route('/admin/optimize_db', methods=['POST'])
 def optimize_db():
