@@ -418,9 +418,7 @@ class CAPPoller:
                                     'warning' in alert.event.lower()):
 
                     # Find all boundaries in Putnam County for general intersection
-                    county_boundaries = self.db_session.query(Boundary).filter(
-                        Boundary.name.ilike('%putnam%')
-                    ).all()
+                    county_boundaries = self.db_session.query(Boundary).all()
 
                     for boundary in county_boundaries:
                         # Check if intersection already exists

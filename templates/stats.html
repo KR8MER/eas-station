@@ -161,6 +161,24 @@
             font-size: 2em;
         }
     }
+
+    /* Print styles */
+    @media print {
+        .print-hide, .export-buttons, .btn {
+            display: none !important;
+        }
+
+        body {
+            background: white !important;
+            color: black !important;
+        }
+
+        .stat-card, .chart-container {
+            box-shadow: none !important;
+            border: 1px solid #ddd !important;
+            break-inside: avoid;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -172,7 +190,7 @@
                 <h1 class="h3 text-primary">
                     <i class="fas fa-chart-bar"></i> System Statistics
                 </h1>
-                <div class="d-flex gap-2 flex-wrap">
+                <div class="d-flex gap-2 flex-wrap print-hide">
                     <button onclick="exportToExcel()" class="btn btn-success" title="Export all statistics to Excel">
                         <i class="fas fa-file-excel"></i> Export Excel
                     </button>
@@ -546,6 +564,30 @@
 <script src="https://code.highcharts.com/modules/solid-gauge.js"></script>
 
 <script>
+// FIXED Toast notification - prevents infinite recursion
+function createToast(message, type) {
+    console.log(`Toast: [${type.toUpperCase()}] ${message}`);
+
+    // Create a simple visual feedback without calling window.showToast
+    const alertClass = type === 'success' ? 'alert-success' :
+                      type === 'error' ? 'alert-danger' : 'alert-info';
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 400px;';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(alertDiv);
+
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+        if (alertDiv && alertDiv.parentNode) {
+            alertDiv.parentNode.removeChild(alertDiv);
+        }
+    }, 5000);
+}
+
 // Error handling wrapper for chart creation
 function safeCreateChart(containerId, chartConfig, dataValidator) {
     try {
@@ -575,83 +617,145 @@ function safeCreateChart(containerId, chartConfig, dataValidator) {
     }
 }
 
-// Export Functions
+// FIXED Export Functions - using createToast instead of showToast
 async function exportToExcel() {
     try {
-        showToast('Preparing Excel export...', 'info');
+        // Check if XLSX library is loaded
+        if (typeof XLSX === 'undefined') {
+            createToast('Excel export library not loaded. Please refresh the page.', 'error');
+            return;
+        }
+
+        createToast('Preparing Excel export...', 'info');
 
         const statsResponse = await fetch('/export/statistics');
+
+        if (!statsResponse.ok) {
+            throw new Error(`HTTP ${statsResponse.status}: ${statsResponse.statusText}`);
+        }
+
         const statsData = await statsResponse.json();
 
         if (statsData.error) {
             throw new Error(statsData.error);
         }
 
-        exportToExcel(statsData.data, 'NOAA_Statistics');
+        // Create Excel file
+        const ws = XLSX.utils.json_to_sheet(statsData.data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Statistics');
+        XLSX.writeFile(wb, `NOAA_Statistics_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+        createToast('Statistics exported successfully!', 'success');
 
     } catch (error) {
         console.error('Export error:', error);
-        showToast('Failed to export statistics. Please try again.', 'error');
+        createToast(`Failed to export statistics: ${error.message}`, 'error');
     }
 }
 
 async function exportAlertsData() {
     try {
-        showToast('Exporting alerts data...', 'info');
+        if (typeof XLSX === 'undefined') {
+            createToast('Excel export library not loaded. Please refresh the page.', 'error');
+            return;
+        }
+
+        createToast('Exporting alerts data...', 'info');
 
         const response = await fetch('/export/alerts');
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
         const data = await response.json();
 
         if (data.error) {
             throw new Error(data.error);
         }
 
-        exportToExcel(data.data, 'NOAA_Alerts');
-        showToast(`Exported ${data.total} alerts successfully!`, 'success');
+        // Create Excel file
+        const ws = XLSX.utils.json_to_sheet(data.data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Alerts');
+        XLSX.writeFile(wb, `NOAA_Alerts_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+        createToast(`Exported ${data.total} alerts successfully!`, 'success');
 
     } catch (error) {
         console.error('Export error:', error);
-        showToast('Failed to export alerts. Please try again.', 'error');
+        createToast(`Failed to export alerts: ${error.message}`, 'error');
     }
 }
 
 async function exportBoundariesData() {
     try {
-        showToast('Exporting boundaries data...', 'info');
+        if (typeof XLSX === 'undefined') {
+            createToast('Excel export library not loaded. Please refresh the page.', 'error');
+            return;
+        }
+
+        createToast('Exporting boundaries data...', 'info');
 
         const response = await fetch('/export/boundaries');
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
         const data = await response.json();
 
         if (data.error) {
             throw new Error(data.error);
         }
 
-        exportToExcel(data.data, 'NOAA_Boundaries');
-        showToast(`Exported ${data.total} boundaries successfully!`, 'success');
+        // Create Excel file
+        const ws = XLSX.utils.json_to_sheet(data.data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Boundaries');
+        XLSX.writeFile(wb, `NOAA_Boundaries_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+        createToast(`Exported ${data.total} boundaries successfully!`, 'success');
 
     } catch (error) {
         console.error('Export error:', error);
-        showToast('Failed to export boundaries. Please try again.', 'error');
+        createToast(`Failed to export boundaries: ${error.message}`, 'error');
     }
 }
 
 async function exportStatisticsData() {
     try {
-        showToast('Exporting statistics...', 'info');
+        if (typeof XLSX === 'undefined') {
+            createToast('Excel export library not loaded. Please refresh the page.', 'error');
+            return;
+        }
+
+        createToast('Exporting detailed statistics...', 'info');
 
         const response = await fetch('/export/statistics');
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
         const data = await response.json();
 
         if (data.error) {
             throw new Error(data.error);
         }
 
-        exportToExcel(data.data, 'NOAA_Statistics_Detailed');
-        showToast('Statistics exported successfully!', 'success');
+        // Create Excel file
+        const ws = XLSX.utils.json_to_sheet(data.data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Statistics_Detailed');
+        XLSX.writeFile(wb, `NOAA_Statistics_Detailed_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+        createToast('Detailed statistics exported successfully!', 'success');
 
     } catch (error) {
         console.error('Export error:', error);
-        showToast('Failed to export statistics. Please try again.', 'error');
+        createToast(`Failed to export detailed statistics: ${error.message}`, 'error');
     }
 }
 
@@ -661,42 +765,27 @@ function refreshStats() {
         refreshBtn.classList.add('fa-spin');
     }
 
-    showToast('Refreshing statistics...', 'info');
-
-    setTimeout(() => {
-        window.location.reload();
-    }, 500);
+    createToast('Refreshing statistics...', 'info');
+    window.location.reload();
 }
 
-// Print function
+// FIXED Print function
 function printPage() {
-    window.print();
-}
+    try {
+        // Add print class to body for print-specific styles
+        document.body.classList.add('printing');
 
-// Toast notification fallback
-function showToast(message, type) {
-    // If global showToast doesn't exist, create a simple fallback
-    if (typeof window.showToast === 'function') {
-        window.showToast(message, type);
-    } else {
-        console.log(`${type.toUpperCase()}: ${message}`);
-        // Create a simple visual feedback
-        const alertClass = type === 'success' ? 'alert-success' : type === 'error' ? 'alert-danger' : 'alert-info';
-        const alertDiv = document.createElement('div');
-        alertDiv.className = `alert ${alertClass} alert-dismissible fade show position-fixed top-0 end-0 m-3`;
-        alertDiv.style.zIndex = '9999';
-        alertDiv.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-        document.body.appendChild(alertDiv);
+        // Trigger print
+        window.print();
 
-        // Auto remove after 5 seconds
+        // Remove print class after print dialog closes
         setTimeout(() => {
-            if (alertDiv && alertDiv.parentNode) {
-                alertDiv.parentNode.removeChild(alertDiv);
-            }
-        }, 5000);
+            document.body.classList.remove('printing');
+        }, 1000);
+
+    } catch (error) {
+        console.error('Print error:', error);
+        createToast(`Print error: ${error.message}`, 'error');
     }
 }
 
@@ -922,7 +1011,11 @@ function createDurationChart() {
         },
         series: [{
             name: 'Duration (Hours)',
-            data: data.slice(0, 10).map(item => parseFloat(item.avg_hours.toFixed(1))),
+            data: data.slice(0, 10).map(item => {
+                // FIXED: Handle avg_hours properly
+                const hours = typeof item.avg_hours === 'number' ? item.avg_hours : parseFloat(item.avg_hours) || 0;
+                return parseFloat(hours.toFixed(1));
+            }),
             showInLegend: false,
             color: '#fd7e14'
         }]
@@ -1068,11 +1161,6 @@ function initializeCharts() {
     );
 
     console.log('Has real alert data:', hasAnyAlertData);
-
-    // If no real data exists, don't create sample data - show "no data" messages instead
-    if (!hasAnyAlertData) {
-        console.log('No real alert data found, will show "no data" messages');
-    }
 
     // Initialize charts with error handling
     const charts = [

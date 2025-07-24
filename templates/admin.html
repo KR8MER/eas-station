@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Panel - KR8MER CAP Emergency Alert System</title>
-    
+
     <!-- Bootstrap CSS -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    
+
     <style>
         :root {
             --primary-color: #007bff;
@@ -342,12 +342,12 @@
             .stats-grid, .operation-grid {
                 grid-template-columns: 1fr;
             }
-            
+
             .nav-tabs-custom .nav-link {
                 padding: 0.75rem 1rem;
                 font-size: 0.9rem;
             }
-            
+
             .tab-content-custom {
                 padding: 1rem;
             }
@@ -478,7 +478,7 @@
                 <div class="tab-pane fade show active" id="upload" role="tabpanel">
                     <h4><i class="fas fa-upload text-primary"></i> Upload Boundary Files</h4>
                     <p class="text-muted">Upload GeoJSON files to add new boundary layers to the system.</p>
-                    
+
                     <form id="uploadForm" enctype="multipart/form-data" class="mt-4">
                         <div class="row">
                             <div class="col-md-6">
@@ -509,7 +509,7 @@
                             <i class="fas fa-upload"></i> Upload Boundaries
                         </button>
                     </form>
-                    
+
                     <div id="uploadStatus" class="mt-3"></div>
                 </div>
 
@@ -517,7 +517,7 @@
                 <div class="tab-pane fade" id="preview" role="tabpanel">
                     <h4><i class="fas fa-eye text-info"></i> Preview Data Extraction</h4>
                     <p class="text-muted">Preview what data will be extracted from your GeoJSON file before uploading.</p>
-                    
+
                     <form id="previewForm" enctype="multipart/form-data" class="mt-4">
                         <div class="row">
                             <div class="col-md-6">
@@ -548,7 +548,7 @@
                             <i class="fas fa-eye"></i> Preview Extraction
                         </button>
                     </form>
-                    
+
                     <div id="previewResults" class="mt-4"></div>
                 </div>
 
@@ -556,7 +556,7 @@
                 <div class="tab-pane fade" id="manage" role="tabpanel">
                     <h4><i class="fas fa-tasks text-success"></i> Manage Boundary Data</h4>
                     <p class="text-muted">View, edit, and delete existing boundary data in the system.</p>
-                    
+
                     <div class="row mt-4">
                         <div class="col-md-8">
                             <h5>Current Boundaries</h5>
@@ -597,7 +597,7 @@
                 <div class="tab-pane fade" id="operations" role="tabpanel">
                     <h4><i class="fas fa-tools text-warning"></i> System Operations</h4>
                     <p class="text-muted">Perform manual system operations and maintenance tasks.</p>
-                    
+
                     <div class="operation-grid">
                         <div class="operation-card">
                             <i class="fas fa-download fa-2x text-primary mb-3"></i>
@@ -607,7 +607,7 @@
                                 <i class="fas fa-satellite-dish"></i> Trigger Poll
                             </button>
                         </div>
-                        
+
                         <div class="operation-card">
                             <i class="fas fa-database fa-2x text-success mb-3"></i>
                             <h6>Database Optimization</h6>
@@ -616,7 +616,7 @@
                                 <i class="fas fa-tools"></i> Optimize DB
                             </button>
                         </div>
-                        
+
                         <div class="operation-card">
                             <i class="fas fa-sitemap fa-2x text-info mb-3"></i>
                             <h6>Fix Intersections</h6>
@@ -625,7 +625,7 @@
                                 <i class="fas fa-link"></i> Fix Intersections
                             </button>
                         </div>
-                        
+
                         <div class="operation-card">
                             <i class="fas fa-heartbeat fa-2x text-danger mb-3"></i>
                             <h6>Database Health</h6>
@@ -641,7 +641,7 @@
                 <div class="tab-pane fade" id="alerts-mgmt" role="tabpanel">
                     <h4><i class="fas fa-exclamation-triangle text-danger"></i> Alert Management</h4>
                     <p class="text-muted">Manage expired alerts and data preservation.</p>
-                    
+
                     <div class="row">
                         <div class="col-md-6">
                             <div class="operation-card">
@@ -654,7 +654,7 @@
                                 <small class="text-success mt-2 d-block">✓ Preserves all historical data</small>
                             </div>
                         </div>
-                        
+
                         <div class="col-md-6">
                             <div class="operation-card border-danger">
                                 <i class="fas fa-trash-alt fa-2x text-danger mb-3"></i>
@@ -673,7 +673,7 @@
                 <div class="tab-pane fade" id="health" role="tabpanel">
                     <h4><i class="fas fa-heartbeat text-info"></i> System Health Monitor</h4>
                     <p class="text-muted">Real-time system health and performance monitoring.</p>
-                    
+
                     <div id="systemHealthData" class="mt-4">
                         <div class="text-center py-4">
                             <div class="loading-spinner"></div>
@@ -715,7 +715,7 @@
 
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
-    
+
     <script>
         // Global variables
         let confirmationModal;
@@ -728,7 +728,7 @@
             loadSystemHealth();
             setupKeyboardShortcuts();
             loadTheme();
-            
+
             // Auto-refresh every 30 seconds
             setInterval(() => {
                 loadSystemHealth();
@@ -739,10 +739,10 @@
         function toggleTheme() {
             const currentTheme = document.documentElement.getAttribute('data-theme');
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            
+
             document.documentElement.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);
-            
+
             // Update icon
             const icon = document.getElementById('theme-icon');
             icon.className = newTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
@@ -751,7 +751,7 @@
         function loadTheme() {
             const savedTheme = localStorage.getItem('theme') || 'light';
             document.documentElement.setAttribute('data-theme', savedTheme);
-            
+
             const icon = document.getElementById('theme-icon');
             icon.className = savedTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
         }
@@ -780,39 +780,39 @@
         // Enhanced confirmation system
         function showConfirmation(options) {
             const { title, message, warning, type = 'danger', confirmText = 'Confirm', cancelText = 'Cancel', onConfirm } = options;
-            
+
             const body = document.getElementById('confirmationBody');
             const footer = document.getElementById('confirmationFooter');
-            
+
             body.innerHTML = `
                 <div class="alert alert-${type}-custom">
                     <h6>${message}</h6>
                     ${warning ? `<p class="mb-0"><strong>⚠️ Warning:</strong> ${warning}</p>` : ''}
                 </div>
             `;
-            
+
             footer.innerHTML = `
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">${cancelText}</button>
                 <button type="button" class="btn btn-${type}" id="confirmButton">${confirmText}</button>
             `;
-            
+
             document.getElementById('confirmButton').onclick = function() {
                 confirmationModal.hide();
                 if (onConfirm) onConfirm();
             };
-            
+
             confirmationModal.show();
         }
 
         function showMultiStepConfirmation(options) {
             const { steps, onComplete } = options;
             let currentStep = 0;
-            
+
             function showStep() {
                 const step = steps[currentStep];
                 const body = document.getElementById('confirmationBody');
                 const footer = document.getElementById('confirmationFooter');
-                
+
                 body.innerHTML = `
                     <div class="alert alert-danger-custom">
                         <h6>${step.message}</h6>
@@ -825,14 +825,14 @@
                         ` : ''}
                     </div>
                 `;
-                
+
                 footer.innerHTML = `
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-danger" id="stepConfirmButton">
                         ${currentStep === steps.length - 1 ? 'CONFIRM DELETION' : 'Continue'}
                     </button>
                 `;
-                
+
                 document.getElementById('stepConfirmButton').onclick = function() {
                     if (step.textConfirmation) {
                         const input = document.getElementById('textConfirmInput');
@@ -841,7 +841,7 @@
                             return;
                         }
                     }
-                    
+
                     currentStep++;
                     if (currentStep < steps.length) {
                         showStep();
@@ -851,7 +851,7 @@
                     }
                 };
             }
-            
+
             showStep();
             confirmationModal.show();
         }
@@ -865,7 +865,7 @@
                 ${message}
             `;
             statusDiv.style.display = 'block';
-            
+
             if (type === 'success' && duration > 0) {
                 setTimeout(() => {
                     statusDiv.style.display = 'none';
@@ -876,22 +876,22 @@
         // File upload handling
         document.getElementById('uploadForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            
+
             const formData = new FormData(this);
             const submitBtn = this.querySelector('button[type="submit"]');
             const originalText = submitBtn.innerHTML;
-            
+
             submitBtn.innerHTML = '<span class="loading-spinner"></span> Uploading...';
             submitBtn.disabled = true;
-            
+
             try {
                 const response = await fetch('/admin/upload_boundary', {
                     method: 'POST',
                     body: formData
                 });
-                
+
                 const result = await response.json();
-                
+
                 if (response.ok) {
                     showStatus(`✅ ${result.success}`, 'success');
                     this.reset();
@@ -912,17 +912,17 @@
             const form = document.getElementById('previewForm');
             const formData = new FormData(form);
             const resultsDiv = document.getElementById('previewResults');
-            
+
             resultsDiv.innerHTML = '<div class="text-center py-3"><div class="loading-spinner"></div><span class="ms-2">Analyzing file...</span></div>';
-            
+
             try {
                 const response = await fetch('/admin/preview_geojson', {
                     method: 'POST',
                     body: formData
                 });
-                
+
                 const result = await response.json();
-                
+
                 if (response.ok) {
                     let html = `
                         <div class="preview-container">
@@ -932,7 +932,7 @@
                             <p><strong>Available Fields:</strong> ${result.all_fields.join(', ')}</p>
                             <h6 class="mt-3">🔍 Sample Extractions (first ${result.preview_count}):</h6>
                     `;
-                    
+
                     result.previews.forEach((preview, index) => {
                         html += `
                             <div class="preview-item">
@@ -942,7 +942,7 @@
                             </div>
                         `;
                     });
-                    
+
                     if (result.field_mappings && Object.keys(result.field_mappings).length > 0) {
                         html += `
                             <h6 class="mt-3">🗺️ Field Mappings for ${result.boundary_type}:</h6>
@@ -950,7 +950,7 @@
                             <p><strong>Description Fields:</strong> ${result.field_mappings.description_fields ? result.field_mappings.description_fields.join(', ') : 'None configured'}</p>
                         `;
                     }
-                    
+
                     html += '</div>';
                     resultsDiv.innerHTML = html;
                 } else {
@@ -966,9 +966,9 @@
             try {
                 const response = await fetch('/api/boundaries');
                 const data = await response.json();
-                
+
                 const listDiv = document.getElementById('boundariesList');
-                
+
                 if (data.features && data.features.length > 0) {
                     const boundariesByType = {};
                     data.features.forEach(feature => {
@@ -978,7 +978,7 @@
                         }
                         boundariesByType[type].push(feature.properties);
                     });
-                    
+
                     let html = '<div class="row">';
                     for (const [type, boundaries] of Object.entries(boundariesByType)) {
                         html += `
@@ -991,7 +991,7 @@
                             html += `
                                 <div class="d-flex justify-content-between align-items-center border-bottom py-1">
                                     <small class="text-truncate" style="max-width: 150px;" title="${boundary.name}">${boundary.name}</small>
-                                    <button onclick="deleteBoundary(${boundary.id}, '${boundary.name.replace(/'/g, "\\'")}')" 
+                                    <button onclick="deleteBoundary(${boundary.id}, '${boundary.name.replace(/'/g, "\\'")}')"
                                             class="btn btn-outline-danger btn-sm">
                                         <i class="fas fa-trash"></i>
                                     </button>
@@ -1018,9 +1018,9 @@
             try {
                 const response = await fetch('/api/system_status');
                 const data = await response.json();
-                
+
                 const healthDiv = document.getElementById('systemHealthData');
-                
+
                 const healthHtml = `
                     <div class="stats-grid">
                         <div class="stat-card">
@@ -1060,7 +1060,7 @@
             try {
                 const response = await fetch('/admin/mark_expired', { method: 'POST' });
                 const result = await response.json();
-                
+
                 if (response.ok) {
                     showStatus(`✅ ${result.message}`, 'success');
                     if (result.note) {
@@ -1077,14 +1077,14 @@
         async function clearExpiredAlerts() {
             try {
                 // First request to get confirmation details
-                const response = await fetch('/admin/clear_expired', { 
+                const response = await fetch('/admin/clear_expired', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({})
                 });
-                
+
                 const result = await response.json();
-                
+
                 if (result.requires_confirmation) {
                     showConfirmation({
                         title: '⚠️ PERMANENT DELETION WARNING',
@@ -1099,9 +1099,9 @@
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ confirmed: true })
                                 });
-                                
+
                                 const confirmResult = await confirmResponse.json();
-                                
+
                                 if (confirmResponse.ok) {
                                     showStatus(`✅ ${confirmResult.message}`, 'success');
                                     if (confirmResult.warning) {
@@ -1135,7 +1135,7 @@
                     try {
                         const response = await fetch(`/admin/delete_boundary/${boundaryId}`, { method: 'DELETE' });
                         const result = await response.json();
-                        
+
                         if (response.ok) {
                             showStatus(`✅ ${result.success}`, 'success');
                             loadBoundaries();
@@ -1155,7 +1155,7 @@
                 showStatus('Please select a boundary type to delete', 'warning');
                 return;
             }
-            
+
             try {
                 // First request
                 const response = await fetch('/admin/delete_boundaries_by_type', {
@@ -1163,9 +1163,9 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ boundary_type: boundaryType })
                 });
-                
+
                 const result = await response.json();
-                
+
                 if (result.requires_confirmation) {
                     showConfirmation({
                         title: 'Delete All Boundaries of Type',
@@ -1180,9 +1180,9 @@
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ boundary_type: boundaryType, confirmed: true })
                                 });
-                                
+
                                 const confirmResult = await confirmResponse.json();
-                                
+
                                 if (confirmResponse.ok) {
                                     showStatus(`✅ ${confirmResult.success}`, 'success');
                                     loadBoundaries();
@@ -1215,7 +1215,7 @@
                     textConfirmation: 'DELETE ALL BOUNDARIES'
                 }
             ];
-            
+
             showMultiStepConfirmation({
                 steps: steps,
                 onComplete: async () => {
@@ -1223,14 +1223,14 @@
                         const response = await fetch('/admin/clear_all_boundaries', {
                             method: 'DELETE',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ 
-                                confirmation_level: 2, 
-                                text_confirmation: 'DELETE ALL BOUNDARIES' 
+                            body: JSON.stringify({
+                                confirmation_level: 2,
+                                text_confirmation: 'DELETE ALL BOUNDARIES'
                             })
                         });
-                        
+
                         const result = await response.json();
-                        
+
                         if (response.ok) {
                             showStatus(`✅ ${result.success}`, 'success');
                             loadBoundaries();
@@ -1250,7 +1250,7 @@
                 showStatus('📡 Triggering CAP poll...', 'info');
                 const response = await fetch('/admin/trigger_poll', { method: 'POST' });
                 const result = await response.json();
-                
+
                 if (response.ok) {
                     showStatus(`✅ ${result.message}`, 'success');
                 } else {
@@ -1266,7 +1266,7 @@
                 showStatus('🔧 Optimizing database...', 'info');
                 const response = await fetch('/admin/optimize_db', { method: 'POST' });
                 const result = await response.json();
-                
+
                 if (response.ok) {
                     showStatus(`✅ ${result.message}`, 'success');
                 } else {
@@ -1289,7 +1289,7 @@
                         showStatus('🔗 Recalculating intersections...', 'info');
                         const response = await fetch('/admin/recalculate_intersections', { method: 'POST' });
                         const result = await response.json();
-                        
+
                         if (response.ok) {
                             showStatus(`✅ ${result.success}`, 'success');
                         } else {
@@ -1307,14 +1307,14 @@
                 showStatus('🔍 Checking database health...', 'info');
                 const response = await fetch('/admin/check_db_health');
                 const result = await response.json();
-                
+
                 if (response.ok) {
                     let healthHtml = '<div class="alert alert-info-custom"><h6>Database Health Report:</h6>';
                     healthHtml += `<p><strong>Connectivity:</strong> ${result.connectivity}</p>`;
                     healthHtml += `<p><strong>Database Size:</strong> ${result.database_size}</p>`;
                     healthHtml += `<p><strong>Active Connections:</strong> ${result.active_connections}</p>`;
                     healthHtml += '</div>';
-                    
+
                     showStatus(healthHtml, 'info', 10000);
                 } else {
                     showStatus(`❌ ${result.error}`, 'danger');

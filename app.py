@@ -2,9 +2,24 @@
 """
 NOAA CAP Alerts and GIS Boundary Mapping System
 Flask Web Application with Enhanced Boundary Management and Alerts History
-WITH ALERT PRESERVATION AND CONFIRMATION SYSTEMS
-NOW WITH PROPER TIMEZONE HANDLING FOR PUTNAM COUNTY, OHIO
+
+Author: KR8MER Amateur Radio Emergency Communications
+Description: Emergency alert system for Putnam County, Ohio with proper timezone handling
+Version: 2.0 - Organized and Refactored
+
+Directory Structure for Future Refactoring:
+- app.py (main application)
+- models/ (database models)
+- routes/ (route blueprints)
+- services/ (business logic)
+- utils/ (helper functions)
+- templates/ (HTML templates)
+- static/ (CSS, JS, images)
 """
+
+# =============================================================================
+# IMPORTS AND DEPENDENCIES
+# =============================================================================
 
 import os
 import json
@@ -17,17 +32,28 @@ import time
 import pytz
 from datetime import datetime, timedelta
 from collections import defaultdict
+
+# Flask and extensions
 from flask import Flask, request, jsonify, render_template, flash, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
+
+# Database imports
 from geoalchemy2 import Geometry
 from geoalchemy2.functions import ST_GeomFromGeoJSON, ST_Intersects, ST_AsGeoJSON
 from sqlalchemy import text, func, or_, desc
+
+# Logging
 import logging
+
+# =============================================================================
+# CONFIGURATION AND SETUP
+# =============================================================================
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Create Flask app
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
@@ -36,6 +62,7 @@ DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://noaa_user:rkhkeq@localhos
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# Initialize database
 db = SQLAlchemy(app)
 
 # Timezone configuration for Putnam County, Ohio (Eastern Time)
@@ -44,6 +71,10 @@ UTC_TZ = pytz.UTC
 
 logger.info("NOAA Alerts System startup")
 
+
+# =============================================================================
+# TIMEZONE AND DATETIME UTILITIES
+# =============================================================================
 
 def utc_now():
     """Get current UTC time with timezone awareness"""
@@ -60,12 +91,10 @@ def parse_nws_datetime(dt_string):
     if not dt_string:
         return None
 
-    # Remove timezone abbreviations and normalize
     dt_string = str(dt_string).strip()
 
     # Handle common NWS formats
     if dt_string.endswith('Z'):
-        # UTC/Zulu time
         try:
             dt = datetime.fromisoformat(dt_string.replace('Z', '+00:00'))
             return dt.astimezone(UTC_TZ)
@@ -76,18 +105,16 @@ def parse_nws_datetime(dt_string):
     try:
         dt = datetime.fromisoformat(dt_string)
         if dt.tzinfo is None:
-            # Assume UTC if no timezone info
             dt = dt.replace(tzinfo=UTC_TZ)
         return dt.astimezone(UTC_TZ)
     except ValueError:
         pass
 
-    # Handle EDT/EST format (approximate - NWS sometimes uses these)
+    # Handle EDT/EST format
     if 'EDT' in dt_string:
         try:
             dt_clean = dt_string.replace(' EDT', '').replace('EDT', '')
             dt = datetime.fromisoformat(dt_clean)
-            # EDT is UTC-4
             edt_tz = pytz.timezone('US/Eastern')
             dt = edt_tz.localize(dt)
             return dt.astimezone(UTC_TZ)
@@ -98,7 +125,6 @@ def parse_nws_datetime(dt_string):
         try:
             dt_clean = dt_string.replace(' EST', '').replace('EST', '')
             dt = datetime.fromisoformat(dt_clean)
-            # EST is UTC-5
             est_tz = pytz.timezone('US/Eastern')
             dt = est_tz.localize(dt)
             return dt.astimezone(UTC_TZ)
@@ -114,14 +140,10 @@ def format_local_datetime(dt, include_utc=True):
     if not dt:
         return "Unknown"
 
-    # Ensure datetime is timezone-aware
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC_TZ)
 
-    # Convert to local time
     local_dt = dt.astimezone(PUTNAM_COUNTY_TZ)
-
-    # Format local time
     local_str = local_dt.strftime('%B %d, %Y at %I:%M %p %Z')
 
     if include_utc:
@@ -171,7 +193,10 @@ def is_alert_expired(expires_dt):
     return expires_dt < utc_now()
 
 
-# Database Models
+# =============================================================================
+# DATABASE MODELS
+# =============================================================================
+
 class Boundary(db.Model):
     __tablename__ = 'boundaries'
 
@@ -243,7 +268,10 @@ class PollHistory(db.Model):
     error_message = db.Column(db.Text)
 
 
-# Helper Functions for Active Alerts
+# =============================================================================
+# DATABASE HELPER FUNCTIONS
+# =============================================================================
+
 def get_active_alerts_query():
     """Get query for active (non-expired) alerts - preserves all data"""
     now = utc_now()
@@ -260,12 +288,13 @@ def get_active_alerts_query():
 def get_expired_alerts_query():
     """Get query for expired alerts"""
     now = utc_now()
-    return CAPAlert.query.filter(
-        CAPAlert.expires < now
-    )
+    return CAPAlert.query.filter(CAPAlert.expires < now)
 
 
-# Enhanced Field Detection Functions
+# =============================================================================
+# GEOJSON AND BOUNDARY PROCESSING UTILITIES
+# =============================================================================
+
 def get_field_mappings():
     """Define field mappings for different boundary types"""
     return {
@@ -369,9 +398,22 @@ def extract_name_and_description(properties, boundary_type):
             break
 
     description = "; ".join(description_parts) if description_parts else ""
-
     return name, description
 
+
+def ensure_multipolygon(geometry):
+    """Convert Polygon to MultiPolygon if needed"""
+    if geometry['type'] == 'Polygon':
+        return {
+            'type': 'MultiPolygon',
+            'coordinates': [geometry['coordinates']]
+        }
+    return geometry
+
+
+# =============================================================================
+# SYSTEM MONITORING UTILITIES
+# =============================================================================
 
 def get_system_health():
     """Get comprehensive system health information"""
@@ -626,17 +668,10 @@ def format_uptime(seconds):
         return f"{minutes}m"
 
 
-def ensure_multipolygon(geometry):
-    """Convert Polygon to MultiPolygon if needed"""
-    if geometry['type'] == 'Polygon':
-        return {
-            'type': 'MultiPolygon',
-            'coordinates': [geometry['coordinates']]
-        }
-    return geometry
+# =============================================================================
+# TEMPLATE FILTERS AND GLOBALS
+# =============================================================================
 
-
-# Template filters
 @app.template_filter('nl2br')
 def nl2br_filter(text):
     """Convert newlines to HTML br tags"""
@@ -681,53 +716,18 @@ def local_current_time():
     return local_now()
 
 
-# Main Routes
+# =============================================================================
+# MAIN PAGE ROUTES
+# =============================================================================
+
 @app.route('/')
 def index():
-    """Main dashboard"""
+    """Main dashboard with interactive map"""
     try:
         return render_template('index.html')
     except Exception as e:
         logger.error(f"Error rendering index template: {str(e)}")
         return f"<h1>NOAA CAP Alerts System</h1><p>Map interface loading...</p><p><a href='/stats'>📊 Statistics</a> | <a href='/alerts'>📝 Alerts History</a> | <a href='/admin'>⚙️ Admin</a></p>"
-
-
-@app.route('/admin')
-def admin():
-    """Admin interface"""
-    try:
-        # Get some basic stats for the admin dashboard using new helper functions
-        total_boundaries = Boundary.query.count()
-        total_alerts = CAPAlert.query.count()
-        active_alerts = get_active_alerts_query().count()
-        expired_alerts = get_expired_alerts_query().count()
-
-        # Get boundary counts by type
-        boundary_stats = db.session.query(
-            Boundary.type, func.count(Boundary.id).label('count')
-        ).group_by(Boundary.type).all()
-
-        return render_template('admin.html',
-                               total_boundaries=total_boundaries,
-                               total_alerts=total_alerts,
-                               active_alerts=active_alerts,
-                               expired_alerts=expired_alerts,
-                               boundary_stats=boundary_stats
-                               )
-    except Exception as e:
-        logger.error(f"Error rendering admin template: {str(e)}")
-        return f"<h1>Admin Interface</h1><p>Admin panel loading...</p><p><a href='/'>← Back to Main</a></p>"
-
-
-@app.route('/logs')
-def logs():
-    """View system logs"""
-    try:
-        logs = SystemLog.query.order_by(SystemLog.timestamp.desc()).limit(100).all()
-        return render_template('logs.html', logs=logs)
-    except Exception as e:
-        logger.error(f"Error loading logs: {str(e)}")
-        return f"<h1>Error loading logs</h1><p>{str(e)}</p><p><a href='/'>← Back to Main</a></p>"
 
 
 @app.route('/stats')
@@ -987,9 +987,26 @@ def stats():
         return f"<h1>Error loading statistics</h1><p>{str(e)}</p><p><a href='/'>← Back to Main</a></p>"
 
 
+@app.route('/system_health')
+def system_health_page():
+    """Dedicated system health monitoring page"""
+    try:
+        health_data = get_system_health()
+        health_data['format_bytes'] = format_bytes
+        health_data['format_uptime'] = format_uptime
+        return render_template('system_health.html', **health_data)
+    except Exception as e:
+        logger.error(f"Error loading system health page: {str(e)}")
+        return f"<h1>Error loading system health</h1><p>{str(e)}</p><p><a href='/'>← Back to Main</a></p>"
+
+
+# =============================================================================
+# ALERT MANAGEMENT ROUTES
+# =============================================================================
+
 @app.route('/alerts')
 def alerts():
-    """Alerts history page with improved active/expired logic and timezone handling"""
+    """Alerts history page with improved active/expired logic"""
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 50, type=int)
@@ -1072,6 +1089,7 @@ def alerts():
         logger.error(f"Error loading alerts history: {str(e)}")
         return f"<h1>Error loading alerts history</h1><p>{str(e)}</p><p><a href='/'>← Back to Main</a></p>"
 
+
 @app.route('/alerts/<int:alert_id>')
 def alert_detail(alert_id):
     """Individual alert detail page"""
@@ -1092,20 +1110,421 @@ def alert_detail(alert_id):
         return f"<h1>Error loading alert details</h1><p>{str(e)}</p><p><a href='/alerts'>← Back to Alerts</a></p>"
 
 
-@app.route('/system_health')
-def system_health_page():
-    """Dedicated system health monitoring page"""
+# =============================================================================
+# ADMINISTRATIVE ROUTES
+# =============================================================================
+
+@app.route('/admin')
+def admin():
+    """Admin interface"""
     try:
-        health_data = get_system_health()
-        health_data['format_bytes'] = format_bytes
-        health_data['format_uptime'] = format_uptime
-        return render_template('system_health.html', **health_data)
+        # Get some basic stats for the admin dashboard using new helper functions
+        total_boundaries = Boundary.query.count()
+        total_alerts = CAPAlert.query.count()
+        active_alerts = get_active_alerts_query().count()
+        expired_alerts = get_expired_alerts_query().count()
+
+        # Get boundary counts by type
+        boundary_stats = db.session.query(
+            Boundary.type, func.count(Boundary.id).label('count')
+        ).group_by(Boundary.type).all()
+
+        return render_template('admin.html',
+                               total_boundaries=total_boundaries,
+                               total_alerts=total_alerts,
+                               active_alerts=active_alerts,
+                               expired_alerts=expired_alerts,
+                               boundary_stats=boundary_stats
+                               )
     except Exception as e:
-        logger.error(f"Error loading system health page: {str(e)}")
-        return f"<h1>Error loading system health</h1><p>{str(e)}</p><p><a href='/'>← Back to Main</a></p>"
+        logger.error(f"Error rendering admin template: {str(e)}")
+        return f"<h1>Admin Interface</h1><p>Admin panel loading...</p><p><a href='/'>← Back to Main</a></p>"
 
 
-# API Routes
+@app.route('/admin/check_duplicates', methods=['GET'])
+def check_duplicates():
+    """Check for duplicate alerts and boundaries in the system"""
+    try:
+        duplicate_report = {
+            'alerts': {
+                'total_duplicates': 0,
+                'duplicate_groups': [],
+                'details': []
+            },
+            'boundaries': {
+                'total_duplicates': 0,
+                'duplicate_groups': [],
+                'details': []
+            },
+            'checked_at_utc': utc_now().isoformat(),
+            'checked_at_local': local_now().isoformat()
+        }
+
+        # Check for duplicate alerts based on identifier
+        alert_duplicates = db.session.query(
+            CAPAlert.identifier,
+            func.count(CAPAlert.id).label('count'),
+            func.array_agg(CAPAlert.id).label('alert_ids'),
+            func.min(CAPAlert.created_at).label('first_created'),
+            func.max(CAPAlert.created_at).label('last_created')
+        ).group_by(CAPAlert.identifier).having(func.count(CAPAlert.id) > 1).all()
+
+        for dup in alert_duplicates:
+            duplicate_report['alerts']['total_duplicates'] += dup.count - 1  # Subtract 1 to keep one copy
+
+            # Get detailed info for each duplicate group
+            alerts_in_group = CAPAlert.query.filter(CAPAlert.id.in_(dup.alert_ids)).all()
+
+            group_details = {
+                'identifier': dup.identifier,
+                'total_copies': dup.count,
+                'duplicates_to_remove': dup.count - 1,
+                'first_created': format_local_datetime(dup.first_created),
+                'last_created': format_local_datetime(dup.last_created),
+                'alerts': []
+            }
+
+            for alert in alerts_in_group:
+                group_details['alerts'].append({
+                    'id': alert.id,
+                    'event': alert.event,
+                    'status': alert.status,
+                    'created_at': format_local_datetime(alert.created_at),
+                    'sent': format_local_datetime(alert.sent) if alert.sent else 'Unknown',
+                    'expires': format_local_datetime(alert.expires) if alert.expires else 'No expiration',
+                    'is_expired': is_alert_expired(alert.expires)
+                })
+
+            duplicate_report['alerts']['duplicate_groups'].append(group_details)
+
+        # Check for duplicate boundaries based on name and type
+        boundary_duplicates = db.session.query(
+            Boundary.name,
+            Boundary.type,
+            func.count(Boundary.id).label('count'),
+            func.array_agg(Boundary.id).label('boundary_ids'),
+            func.min(Boundary.created_at).label('first_created'),
+            func.max(Boundary.created_at).label('last_created')
+        ).group_by(Boundary.name, Boundary.type).having(func.count(Boundary.id) > 1).all()
+
+        for dup in boundary_duplicates:
+            duplicate_report['boundaries']['total_duplicates'] += dup.count - 1
+
+            # Get detailed info for each duplicate group
+            boundaries_in_group = Boundary.query.filter(Boundary.id.in_(dup.boundary_ids)).all()
+
+            group_details = {
+                'name': dup.name,
+                'type': dup.type,
+                'total_copies': dup.count,
+                'duplicates_to_remove': dup.count - 1,
+                'first_created': format_local_datetime(dup.first_created),
+                'last_created': format_local_datetime(dup.last_created),
+                'boundaries': []
+            }
+
+            for boundary in boundaries_in_group:
+                group_details['boundaries'].append({
+                    'id': boundary.id,
+                    'name': boundary.name,
+                    'type': boundary.type,
+                    'description': boundary.description or 'No description',
+                    'created_at': format_local_datetime(boundary.created_at)
+                })
+
+            duplicate_report['boundaries']['duplicate_groups'].append(group_details)
+
+        # Add summary statistics
+        duplicate_report['summary'] = {
+            'total_alert_duplicates': duplicate_report['alerts']['total_duplicates'],
+            'total_boundary_duplicates': duplicate_report['boundaries']['total_duplicates'],
+            'alert_duplicate_groups': len(duplicate_report['alerts']['duplicate_groups']),
+            'boundary_duplicate_groups': len(duplicate_report['boundaries']['duplicate_groups']),
+            'has_duplicates': (duplicate_report['alerts']['total_duplicates'] > 0 or
+                               duplicate_report['boundaries']['total_duplicates'] > 0)
+        }
+
+        return jsonify(duplicate_report)
+
+    except Exception as e:
+        logger.error(f"Error checking duplicates: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/remove_alert_duplicates', methods=['POST'])
+def remove_alert_duplicates():
+    """Remove duplicate alerts, keeping the oldest copy of each"""
+    try:
+        data = request.get_json() or {}
+        confirmed = data.get('confirmed', False)
+        dry_run = data.get('dry_run', True)
+
+        if not confirmed and not dry_run:
+            return jsonify({'error': 'Confirmation required for actual deletion'}), 400
+
+        # Find duplicate alerts
+        alert_duplicates = db.session.query(
+            CAPAlert.identifier,
+            func.count(CAPAlert.id).label('count'),
+            func.array_agg(CAPAlert.id).label('alert_ids'),
+            func.min(CAPAlert.created_at).label('first_created')
+        ).group_by(CAPAlert.identifier).having(func.count(CAPAlert.id) > 1).all()
+
+        removal_plan = {
+            'total_duplicates_found': 0,
+            'total_alerts_to_remove': 0,
+            'duplicate_groups': [],
+            'dry_run': dry_run
+        }
+
+        alerts_to_remove = []
+
+        for dup in alert_duplicates:
+            # Get all alerts in this duplicate group
+            alerts_in_group = CAPAlert.query.filter(
+                CAPAlert.id.in_(dup.alert_ids)
+            ).order_by(CAPAlert.created_at.asc()).all()  # Oldest first
+
+            # Keep the first (oldest) alert, remove the rest
+            alerts_to_keep = alerts_in_group[0]
+            alerts_to_delete = alerts_in_group[1:]
+
+            removal_plan['total_duplicates_found'] += len(alerts_to_delete)
+            removal_plan['total_alerts_to_remove'] += len(alerts_to_delete)
+
+            group_info = {
+                'identifier': dup.identifier,
+                'total_copies': dup.count,
+                'keeping': {
+                    'id': alerts_to_keep.id,
+                    'event': alerts_to_keep.event,
+                    'created_at': format_local_datetime(alerts_to_keep.created_at),
+                    'status': alerts_to_keep.status
+                },
+                'removing': []
+            }
+
+            for alert in alerts_to_delete:
+                group_info['removing'].append({
+                    'id': alert.id,
+                    'event': alert.event,
+                    'created_at': format_local_datetime(alert.created_at),
+                    'status': alert.status
+                })
+
+                if not dry_run:
+                    alerts_to_remove.append(alert)
+
+            removal_plan['duplicate_groups'].append(group_info)
+
+        # Actually remove duplicates if not a dry run
+        if not dry_run and confirmed:
+            for alert in alerts_to_remove:
+                db.session.delete(alert)
+
+            db.session.commit()
+
+            # Log the cleanup
+            log_entry = SystemLog(
+                level='INFO',
+                message=f'Removed {len(alerts_to_remove)} duplicate alerts',
+                module='admin',
+                details={
+                    'removed_count': len(alerts_to_remove),
+                    'duplicate_groups': len(removal_plan['duplicate_groups']),
+                    'cleaned_at_utc': utc_now().isoformat(),
+                    'cleaned_at_local': local_now().isoformat()
+                }
+            )
+            db.session.add(log_entry)
+            db.session.commit()
+
+            removal_plan['success'] = f'Successfully removed {len(alerts_to_remove)} duplicate alerts'
+        elif dry_run:
+            removal_plan['note'] = 'This was a dry run - no alerts were actually removed'
+
+        return jsonify(removal_plan)
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error removing alert duplicates: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/remove_boundary_duplicates', methods=['POST'])
+def remove_boundary_duplicates():
+    """Remove duplicate boundaries, keeping the oldest copy of each"""
+    try:
+        data = request.get_json() or {}
+        confirmed = data.get('confirmed', False)
+        dry_run = data.get('dry_run', True)
+
+        if not confirmed and not dry_run:
+            return jsonify({'error': 'Confirmation required for actual deletion'}), 400
+
+        # Find duplicate boundaries
+        boundary_duplicates = db.session.query(
+            Boundary.name,
+            Boundary.type,
+            func.count(Boundary.id).label('count'),
+            func.array_agg(Boundary.id).label('boundary_ids'),
+            func.min(Boundary.created_at).label('first_created')
+        ).group_by(Boundary.name, Boundary.type).having(func.count(Boundary.id) > 1).all()
+
+        removal_plan = {
+            'total_duplicates_found': 0,
+            'total_boundaries_to_remove': 0,
+            'duplicate_groups': [],
+            'dry_run': dry_run
+        }
+
+        boundaries_to_remove = []
+
+        for dup in boundary_duplicates:
+            # Get all boundaries in this duplicate group
+            boundaries_in_group = Boundary.query.filter(
+                Boundary.id.in_(dup.boundary_ids)
+            ).order_by(Boundary.created_at.asc()).all()  # Oldest first
+
+            # Keep the first (oldest) boundary, remove the rest
+            boundary_to_keep = boundaries_in_group[0]
+            boundaries_to_delete = boundaries_in_group[1:]
+
+            removal_plan['total_duplicates_found'] += len(boundaries_to_delete)
+            removal_plan['total_boundaries_to_remove'] += len(boundaries_to_delete)
+
+            group_info = {
+                'name': dup.name,
+                'type': dup.type,
+                'total_copies': dup.count,
+                'keeping': {
+                    'id': boundary_to_keep.id,
+                    'name': boundary_to_keep.name,
+                    'type': boundary_to_keep.type,
+                    'created_at': format_local_datetime(boundary_to_keep.created_at),
+                    'description': boundary_to_keep.description or 'No description'
+                },
+                'removing': []
+            }
+
+            for boundary in boundaries_to_delete:
+                group_info['removing'].append({
+                    'id': boundary.id,
+                    'name': boundary.name,
+                    'type': boundary.type,
+                    'created_at': format_local_datetime(boundary.created_at),
+                    'description': boundary.description or 'No description'
+                })
+
+                if not dry_run:
+                    boundaries_to_remove.append(boundary)
+
+            removal_plan['duplicate_groups'].append(group_info)
+
+        # Actually remove duplicates if not a dry run
+        if not dry_run and confirmed:
+            for boundary in boundaries_to_remove:
+                db.session.delete(boundary)
+
+            db.session.commit()
+
+            # Log the cleanup
+            log_entry = SystemLog(
+                level='INFO',
+                message=f'Removed {len(boundaries_to_remove)} duplicate boundaries',
+                module='admin',
+                details={
+                    'removed_count': len(boundaries_to_remove),
+                    'duplicate_groups': len(removal_plan['duplicate_groups']),
+                    'cleaned_at_utc': utc_now().isoformat(),
+                    'cleaned_at_local': local_now().isoformat()
+                }
+            )
+            db.session.add(log_entry)
+            db.session.commit()
+
+            removal_plan['success'] = f'Successfully removed {len(boundaries_to_remove)} duplicate boundaries'
+        elif dry_run:
+            removal_plan['note'] = 'This was a dry run - no boundaries were actually removed'
+
+        return jsonify(removal_plan)
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error removing boundary duplicates: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/duplicate_summary', methods=['GET'])
+def duplicate_summary():
+    """Get a quick summary of duplicates in the system"""
+    try:
+        # Quick counts for duplicates
+        alert_duplicate_count = db.session.query(
+            func.count('*')
+        ).select_from(
+            db.session.query(CAPAlert.identifier)
+            .group_by(CAPAlert.identifier)
+            .having(func.count(CAPAlert.id) > 1)
+            .subquery()
+        ).scalar() or 0
+
+        boundary_duplicate_count = db.session.query(
+            func.count('*')
+        ).select_from(
+            db.session.query(Boundary.name, Boundary.type)
+            .group_by(Boundary.name, Boundary.type)
+            .having(func.count(Boundary.id) > 1)
+            .subquery()
+        ).scalar() or 0
+
+        # Get total duplicate records (not groups)
+        total_alert_duplicates = 0
+        total_boundary_duplicates = 0
+
+        if alert_duplicate_count > 0:
+            alert_groups = db.session.query(
+                func.count(CAPAlert.id).label('count')
+            ).group_by(CAPAlert.identifier).having(func.count(CAPAlert.id) > 1).all()
+
+            total_alert_duplicates = sum(group.count - 1 for group in alert_groups)
+
+        if boundary_duplicate_count > 0:
+            boundary_groups = db.session.query(
+                func.count(Boundary.id).label('count')
+            ).group_by(Boundary.name, Boundary.type).having(func.count(Boundary.id) > 1).all()
+
+            total_boundary_duplicates = sum(group.count - 1 for group in boundary_groups)
+
+        return jsonify({
+            'alert_duplicate_groups': alert_duplicate_count,
+            'boundary_duplicate_groups': boundary_duplicate_count,
+            'total_alert_duplicates': total_alert_duplicates,
+            'total_boundary_duplicates': total_boundary_duplicates,
+            'has_duplicates': (total_alert_duplicates > 0 or total_boundary_duplicates > 0),
+            'checked_at': format_local_datetime(utc_now())
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting duplicate summary: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/logs')
+def logs():
+    """View system logs"""
+    try:
+        logs = SystemLog.query.order_by(SystemLog.timestamp.desc()).limit(100).all()
+        return render_template('logs.html', logs=logs)
+    except Exception as e:
+        logger.error(f"Error loading logs: {str(e)}")
+        return f"<h1>Error loading logs</h1><p>{str(e)}</p><p><a href='/'>← Back to Main</a></p>"
+
+
+# =============================================================================
+# API ROUTES - CORE DATA
+# =============================================================================
+
 @app.route('/api/boundaries')
 def get_boundaries():
     """Get all boundaries as GeoJSON"""
@@ -1331,7 +1750,10 @@ def api_system_health():
         return jsonify({'error': str(e)}), 500
 
 
-# Export Routes
+# =============================================================================
+# API ROUTES - DATA EXPORT
+# =============================================================================
+
 @app.route('/export/alerts')
 def export_alerts():
     """Export alerts data to Excel with proper timezone formatting"""
@@ -1468,147 +1890,9 @@ def export_statistics():
         return jsonify({'error': 'Failed to export statistics data'}), 500
 
 
-# Debug Route
-@app.route('/debug/boundaries/<int:alert_id>')
-def debug_boundaries(alert_id):
-    """Debug route to check boundary counts for an alert"""
-    try:
-        alert = CAPAlert.query.get_or_404(alert_id)
-
-        all_boundaries = Boundary.query.all()
-        current_intersections = db.session.query(Intersection, Boundary).join(
-            Boundary, Intersection.boundary_id == Boundary.id
-        ).filter(Intersection.cap_alert_id == alert_id).all()
-
-        boundary_counts = {}
-        for boundary in all_boundaries:
-            boundary_counts[boundary.type] = boundary_counts.get(boundary.type, 0) + 1
-
-        is_county_wide = False
-        if alert.area_desc:
-            area_lower = alert.area_desc.lower()
-            county_wide_keywords = ['county', 'putnam county', 'entire county', 'all of putnam']
-            putnam_indicators = ['putnam;', 'putnam,', '; putnam;', '; putnam,', ', putnam;', ', putnam,', 'putnam ',
-                                 ' putnam']
-
-            if 'putnam' in area_lower:
-                county_count = len([x for x in area_lower.split(';') if x.strip()])
-                if county_count >= 3:
-                    is_county_wide = True
-
-            if any(keyword in area_lower for keyword in county_wide_keywords):
-                is_county_wide = True
-
-            if any(indicator in area_lower for indicator in putnam_indicators):
-                is_county_wide = True
-
-        # Format alert times with timezone info
-        sent_time = format_local_datetime(alert.sent) if alert.sent else 'Unknown'
-        expires_time = format_local_datetime(alert.expires) if alert.expires else 'No expiration'
-        is_expired = is_alert_expired(alert.expires)
-
-        html = f"""
-        <html>
-        <head><title>Boundary Debug for Alert {alert_id}</title></head>
-        <body style="font-family: Arial; margin: 40px;">
-            <h1>Boundary Debug Information</h1>
-            <p><a href="/alerts/{alert_id}">← Back to Alert Details</a></p>
-
-            <h2>Alert Information</h2>
-            <p><strong>Event:</strong> {alert.event}</p>
-            <p><strong>Sent:</strong> {sent_time}</p>
-            <p><strong>Expires:</strong> {expires_time}</p>
-            <p><strong>Status:</strong> {'EXPIRED' if is_expired else 'ACTIVE'}</p>
-            <p><strong>Area Description:</strong> {alert.area_desc or 'None'}</p>
-            <p><strong>Detected as County-Wide:</strong> {'Yes' if is_county_wide else 'No'}</p>
-        """
-
-        if alert.area_desc:
-            area_lower = alert.area_desc.lower()
-            county_list = [x.strip() for x in area_lower.split(';') if x.strip()]
-
-            html += f"""
-            <h3>County-Wide Detection Analysis</h3>
-            <ul>
-                <li><strong>Contains 'Putnam':</strong> {'Yes' if 'putnam' in area_lower else 'No'}</li>
-                <li><strong>Counties Listed:</strong> {len(county_list)} counties</li>
-                <li><strong>Multi-County Alert:</strong> {'Yes' if len(county_list) >= 3 else 'No'}</li>
-                <li><strong>County List:</strong> {', '.join(county_list[:10])}{'...' if len(county_list) > 10 else ''}</li>
-            </ul>
-            """
-
-        html += f"""
-            <h2>Total Boundaries in System</h2>
-            <ul>
-        """
-
-        total_boundaries = 0
-        for boundary_type, count in boundary_counts.items():
-            html += f"<li><strong>{boundary_type.title()}:</strong> {count}</li>"
-            total_boundaries += count
-
-        html += f"""
-            </ul>
-            <p><strong>Total:</strong> {total_boundaries} boundaries</p>
-
-            <h2>Current Intersections for This Alert</h2>
-            <p><strong>Found:</strong> {len(current_intersections)} intersections</p>
-            <ul>
-        """
-
-        for intersection, boundary in current_intersections:
-            html += f"<li>{boundary.type.title()}: {boundary.name}</li>"
-
-        html += f"""
-            </ul>
-
-            <h2>Missing Intersections</h2>
-            <p>If this is a county-wide alert, it should intersect with ALL {total_boundaries} boundaries.</p>
-            <p><strong>Missing:</strong> {total_boundaries - len(current_intersections)} intersections</p>
-
-            <div style="margin: 20px 0;">
-                <button onclick="fixIntersections()" style="background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer;">
-                    Fix All Intersections for This Alert
-                </button>
-            </div>
-
-            <div id="result" style="margin-top: 20px;"></div>
-
-            <script>
-            async function fixIntersections() {{
-                const resultDiv = document.getElementById('result');
-                resultDiv.innerHTML = 'Fixing intersections...';
-
-                try {{
-                    const response = await fetch('/admin/fix_single_alert_intersections/{alert_id}', {{
-                        method: 'POST'
-                    }});
-                    const result = await response.json();
-
-                    if (response.ok) {{
-                        resultDiv.innerHTML = '<div style="color: green;">' + result.success + '</div>';
-                        setTimeout(() => {{
-                            window.location.reload();
-                        }}, 2000);
-                    }} else {{
-                        resultDiv.innerHTML = '<div style="color: red;">' + result.error + '</div>';
-                    }}
-                }} catch (error) {{
-                    resultDiv.innerHTML = '<div style="color: red;">Error: ' + error.message + '</div>';
-                }}
-            }}
-            </script>
-        </body>
-        </html>
-        """
-
-        return html
-
-    except Exception as e:
-        return f"<h1>Debug Error</h1><p>{str(e)}</p><p><a href='/alerts/{alert_id}'>← Back to Alert</a></p>"
-
-
-# ADMIN ROUTES WITH PRESERVATION AND CONFIRMATIONS
+# =============================================================================
+# ADMIN API ROUTES - SYSTEM OPERATIONS
+# =============================================================================
 
 @app.route('/admin/trigger_poll', methods=['POST'])
 def trigger_poll():
@@ -1743,291 +2027,6 @@ def clear_expired():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/admin/alert_status/<int:alert_id>', methods=['POST'])
-def update_alert_status(alert_id):
-    """Update the status of a specific alert with timezone logging"""
-    try:
-        data = request.get_json()
-        new_status = data.get('status')
-
-        valid_statuses = ['Active', 'Expired', 'Cancelled', 'Test', 'Draft']
-        if new_status not in valid_statuses:
-            return jsonify({'error': f'Invalid status. Must be one of: {valid_statuses}'}), 400
-
-        alert = CAPAlert.query.get_or_404(alert_id)
-        old_status = alert.status
-
-        alert.status = new_status
-        alert.updated_at = utc_now()
-
-        db.session.commit()
-
-        log_entry = SystemLog(
-            level='INFO',
-            message=f'Alert {alert.identifier} status changed from {old_status} to {new_status}',
-            module='admin',
-            details={
-                'updated_at_utc': utc_now().isoformat(),
-                'updated_at_local': local_now().isoformat(),
-                'alert_id': alert_id,
-                'old_status': old_status,
-                'new_status': new_status
-            }
-        )
-        db.session.add(log_entry)
-        db.session.commit()
-
-        return jsonify({
-            'success': f'Alert status updated to {new_status}',
-            'alert_id': alert_id,
-            'old_status': old_status,
-            'new_status': new_status
-        })
-
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error updating alert status: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/admin/fix_single_alert_intersections/<int:alert_id>', methods=['POST'])
-def fix_single_alert_intersections(alert_id):
-    """Fix intersections for a single alert"""
-    try:
-        # Get the alert
-        alert = CAPAlert.query.get_or_404(alert_id)
-
-        # Check if this is a county-wide alert based on area description
-        is_county_wide = False
-        if alert.area_desc:
-            area_lower = alert.area_desc.lower()
-            county_wide_keywords = ['county', 'putnam county', 'entire county', 'all of putnam']
-
-            if 'putnam' in area_lower:
-                # Count semicolon-separated areas (indicates multi-county which we treat as county-wide for Putnam)
-                county_count = len([x for x in area_lower.split(';') if x.strip()])
-                if county_count >= 3:
-                    is_county_wide = True
-
-            # Check for direct county-wide keywords
-            if any(keyword in area_lower for keyword in county_wide_keywords):
-                is_county_wide = True
-
-        intersections_created = 0
-
-        if is_county_wide or not alert.geom:
-            # For county-wide alerts or alerts without geometry, create intersections with ALL boundaries
-            logger.info(f"Creating intersections for county-wide/geometry-less alert {alert.identifier}")
-
-            # Get all boundaries
-            all_boundaries = Boundary.query.all()
-
-            for boundary in all_boundaries:
-                # Check if intersection already exists
-                existing = db.session.query(Intersection).filter_by(
-                    cap_alert_id=alert.id,
-                    boundary_id=boundary.id
-                ).first()
-
-                if not existing:
-                    # Create new intersection
-                    intersection = Intersection(
-                        cap_alert_id=alert.id,
-                        boundary_id=boundary.id,
-                        intersection_area=0,  # Set to 0 for county-wide
-                        created_at=utc_now()
-                    )
-                    db.session.add(intersection)
-                    intersections_created += 1
-
-                    logger.debug(f"Created intersection: Alert {alert.identifier} -> {boundary.type} '{boundary.name}'")
-
-        else:
-            # For alerts with geometry, use spatial intersection
-            logger.info(f"Creating spatial intersections for alert {alert.identifier}")
-
-            # Find intersecting boundaries
-            intersecting_boundaries = db.session.query(Boundary).filter(
-                ST_Intersects(Boundary.geom, alert.geom)
-            ).all()
-
-            for boundary in intersecting_boundaries:
-                # Check if intersection already exists
-                existing = db.session.query(Intersection).filter_by(
-                    cap_alert_id=alert.id,
-                    boundary_id=boundary.id
-                ).first()
-
-                if not existing:
-                    # Calculate intersection area (optional)
-                    try:
-                        intersection_area = db.session.scalar(
-                            text("""
-                                 SELECT ST_Area(ST_Intersection(
-                                         ST_Transform(b.geom, 3857),
-                                         ST_Transform(a.geom, 3857)
-                                                )) as area
-                                 FROM boundaries b,
-                                      cap_alerts a
-                                 WHERE b.id = :boundary_id
-                                   AND a.id = :alert_id
-                                 """),
-                            {'boundary_id': boundary.id, 'alert_id': alert.id}
-                        )
-                    except Exception as e:
-                        logger.warning(f"Could not calculate intersection area: {e}")
-                        intersection_area = 0
-
-                    # Create intersection
-                    intersection = Intersection(
-                        cap_alert_id=alert.id,
-                        boundary_id=boundary.id,
-                        intersection_area=intersection_area or 0,
-                        created_at=utc_now()
-                    )
-                    db.session.add(intersection)
-                    intersections_created += 1
-
-                    logger.debug(
-                        f"Created spatial intersection: Alert {alert.identifier} -> {boundary.type} '{boundary.name}'")
-
-        # Commit all changes
-        db.session.commit()
-
-        # Log the operation
-        log_entry = SystemLog(
-            level='INFO',
-            message=f'Fixed intersections for alert {alert.identifier}: created {intersections_created} new intersections',
-            module='admin',
-            details={
-                'alert_id': alert_id,
-                'alert_identifier': alert.identifier,
-                'intersections_created': intersections_created,
-                'is_county_wide': is_county_wide,
-                'has_geometry': alert.geom is not None,
-                'fixed_at_utc': utc_now().isoformat(),
-                'fixed_at_local': local_now().isoformat()
-            }
-        )
-        db.session.add(log_entry)
-        db.session.commit()
-
-        return jsonify({
-            'success': f'Successfully created {intersections_created} new intersections for alert {alert.identifier}',
-            'alert_id': alert_id,
-            'intersections_created': intersections_created,
-            'is_county_wide': is_county_wide,
-            'total_boundaries': Boundary.query.count()
-        })
-
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error fixing intersections for alert {alert_id}: {str(e)}")
-        return jsonify({'error': f'Failed to fix intersections: {str(e)}'}), 500
-
-
-@app.route('/admin/fix_county_intersections', methods=['POST'])
-def fix_county_intersections():
-    """Fix intersections for all county-wide alerts"""
-    try:
-        # Find all alerts that appear to be county-wide but have missing intersections
-        county_wide_alerts = []
-
-        # Get all alerts
-        all_alerts = CAPAlert.query.all()
-        total_boundaries = Boundary.query.count()
-
-        for alert in all_alerts:
-            if alert.area_desc:
-                area_lower = alert.area_desc.lower()
-
-                # Check if this looks like a county-wide alert
-                is_county_wide = False
-
-                if 'putnam' in area_lower:
-                    # Multi-county alerts that include Putnam
-                    county_count = len([x for x in area_lower.split(';') if x.strip()])
-                    if county_count >= 3:
-                        is_county_wide = True
-
-                # Direct county-wide keywords
-                county_wide_keywords = ['county', 'putnam county', 'entire county']
-                if any(keyword in area_lower for keyword in county_wide_keywords):
-                    is_county_wide = True
-
-                if is_county_wide:
-                    # Check how many intersections this alert has
-                    intersection_count = db.session.query(Intersection).filter_by(
-                        cap_alert_id=alert.id
-                    ).count()
-
-                    # If it has significantly fewer intersections than total boundaries, it needs fixing
-                    if intersection_count < (total_boundaries * 0.8):  # Less than 80% of boundaries
-                        county_wide_alerts.append(alert)
-
-        if not county_wide_alerts:
-            return jsonify({
-                'message': 'No county-wide alerts found that need intersection fixes',
-                'alerts_checked': len(all_alerts),
-                'total_boundaries': total_boundaries
-            })
-
-        # Fix intersections for each county-wide alert
-        total_intersections_created = 0
-
-        for alert in county_wide_alerts:
-            # Get all boundaries
-            all_boundaries = Boundary.query.all()
-
-            for boundary in all_boundaries:
-                # Check if intersection already exists
-                existing = db.session.query(Intersection).filter_by(
-                    cap_alert_id=alert.id,
-                    boundary_id=boundary.id
-                ).first()
-
-                if not existing:
-                    # Create new intersection
-                    intersection = Intersection(
-                        cap_alert_id=alert.id,
-                        boundary_id=boundary.id,
-                        intersection_area=0,  # Set to 0 for county-wide
-                        created_at=utc_now()
-                    )
-                    db.session.add(intersection)
-                    total_intersections_created += 1
-
-        # Commit all changes
-        db.session.commit()
-
-        # Log the operation
-        log_entry = SystemLog(
-            level='INFO',
-            message=f'Fixed county-wide intersections: {len(county_wide_alerts)} alerts, {total_intersections_created} intersections created',
-            module='admin',
-            details={
-                'alerts_fixed': len(county_wide_alerts),
-                'intersections_created': total_intersections_created,
-                'total_boundaries': total_boundaries,
-                'fixed_at_utc': utc_now().isoformat(),
-                'fixed_at_local': local_now().isoformat()
-            }
-        )
-        db.session.add(log_entry)
-        db.session.commit()
-
-        return jsonify({
-            'success': f'Successfully fixed intersections for {len(county_wide_alerts)} county-wide alerts',
-            'alerts_fixed': len(county_wide_alerts),
-            'intersections_created': total_intersections_created,
-            'total_boundaries': total_boundaries
-        })
-
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error fixing county intersections: {str(e)}")
-        return jsonify({'error': f'Failed to fix county intersections: {str(e)}'}), 500
-
 @app.route('/admin/optimize_db', methods=['POST'])
 def optimize_db():
     """Run database optimization with fixed VACUUM handling"""
@@ -2145,7 +2144,9 @@ def check_db_health():
         return jsonify({'error': str(e)}), 500
 
 
-# BOUNDARY MANAGEMENT WITH CONFIRMATIONS
+# =============================================================================
+# ADMIN API ROUTES - BOUNDARY MANAGEMENT
+# =============================================================================
 
 @app.route('/admin/preview_geojson', methods=['POST'])
 def preview_geojson():
@@ -2305,7 +2306,603 @@ def delete_boundary(boundary_id):
         return jsonify({'error': f'Failed to delete boundary: {str(e)}'}), 500
 
 
-# Error handlers
+@app.route('/admin/delete_boundaries_by_type', methods=['DELETE'])
+def delete_boundaries_by_type():
+    """Delete all boundaries of a specific type with confirmation"""
+    try:
+        data = request.get_json() or {}
+        boundary_type = data.get('boundary_type')
+        confirmed = data.get('confirmed', False)
+
+        if not boundary_type:
+            return jsonify({'error': 'Boundary type is required'}), 400
+
+        if not confirmed:
+            # First request - return count and require confirmation
+            count = Boundary.query.filter_by(type=boundary_type).count()
+
+            if count == 0:
+                return jsonify({'message': f'No {boundary_type} boundaries found to delete'})
+
+            return jsonify({
+                'requires_confirmation': True,
+                'message': f'This will permanently delete {count} {boundary_type} boundaries.',
+                'warning': 'This action cannot be undone and will affect all related alerts.',
+                'boundary_count': count
+            })
+
+        # Confirmed request - proceed with deletion
+        boundaries = Boundary.query.filter_by(type=boundary_type).all()
+        count = len(boundaries)
+
+        if count == 0:
+            return jsonify({'message': f'No {boundary_type} boundaries found to delete'})
+
+        # Log the deletion before it happens
+        boundary_names = [b.name for b in boundaries[:10]]  # Log first 10 names
+        log_entry = SystemLog(
+            level='WARNING',
+            message=f'BULK DELETION: Removing {count} {boundary_type} boundaries',
+            module='admin',
+            details={
+                'boundary_type': boundary_type,
+                'boundary_names_sample': boundary_names,
+                'total_deleted': count,
+                'deletion_confirmed': True,
+                'deleted_at_utc': utc_now().isoformat(),
+                'deleted_at_local': local_now().isoformat()
+            }
+        )
+        db.session.add(log_entry)
+
+        # Delete the boundaries
+        for boundary in boundaries:
+            db.session.delete(boundary)
+
+        db.session.commit()
+
+        return jsonify({
+            'success': f'Deleted {count} {boundary_type} boundaries',
+            'deleted_count': count
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error deleting boundaries by type: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/clear_all_boundaries', methods=['DELETE'])
+def clear_all_boundaries():
+    """Clear all boundaries with multi-step confirmation"""
+    try:
+        data = request.get_json() or {}
+        confirmation_level = data.get('confirmation_level', 0)
+        text_confirmation = data.get('text_confirmation', '')
+
+        # Require both confirmation level 2 and correct text
+        if confirmation_level != 2 or text_confirmation != 'DELETE ALL BOUNDARIES':
+            total_count = Boundary.query.count()
+            return jsonify({
+                'error': 'This operation requires multi-step confirmation',
+                'total_boundaries': total_count,
+                'required_confirmation_level': 2,
+                'required_text': 'DELETE ALL BOUNDARIES'
+            }), 400
+
+        # Proceed with deletion
+        boundaries = Boundary.query.all()
+        count = len(boundaries)
+
+        if count == 0:
+            return jsonify({'message': 'No boundaries found to delete'})
+
+        # Log the massive deletion
+        boundary_counts_by_type = {}
+        for boundary in boundaries:
+            boundary_counts_by_type[boundary.type] = boundary_counts_by_type.get(boundary.type, 0) + 1
+
+        log_entry = SystemLog(
+            level='CRITICAL',
+            message=f'COMPLETE BOUNDARY DELETION: Removing ALL {count} boundaries from system',
+            module='admin',
+            details={
+                'total_deleted': count,
+                'boundaries_by_type': boundary_counts_by_type,
+                'confirmation_level': confirmation_level,
+                'text_confirmation': text_confirmation,
+                'deleted_at_utc': utc_now().isoformat(),
+                'deleted_at_local': local_now().isoformat()
+            }
+        )
+        db.session.add(log_entry)
+
+        # Delete all boundaries
+        for boundary in boundaries:
+            db.session.delete(boundary)
+
+        db.session.commit()
+
+        return jsonify({
+            'success': f'Deleted ALL {count} boundaries from the system',
+            'deleted_count': count,
+            'boundaries_by_type': boundary_counts_by_type
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error clearing all boundaries: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# =============================================================================
+# DEBUG AND UTILITY ROUTES
+# =============================================================================
+# Add these routes to your app.py file in the ADMIN API ROUTES section
+
+@app.route('/admin/fix_single_alert_intersections/<int:alert_id>', methods=['POST'])
+def fix_single_alert_intersections(alert_id):
+    """Fix intersections for a single alert"""
+    try:
+        alert = CAPAlert.query.get_or_404(alert_id)
+
+        # Delete existing intersections for this alert
+        existing_intersections = Intersection.query.filter_by(cap_alert_id=alert_id).all()
+        for intersection in existing_intersections:
+            db.session.delete(intersection)
+
+        # Determine if this is a county-wide alert
+        is_county_wide = is_alert_county_wide(alert)
+
+        if is_county_wide:
+            # Get ALL boundaries for county-wide alert
+            all_boundaries = Boundary.query.all()
+
+            intersection_count = 0
+            for boundary in all_boundaries:
+                intersection = Intersection(
+                    cap_alert_id=alert.id,
+                    boundary_id=boundary.id,
+                    intersection_area=0,  # No area calculation for county-wide
+                    created_at=utc_now()
+                )
+                db.session.add(intersection)
+                intersection_count += 1
+
+            db.session.commit()
+
+            log_entry = SystemLog(
+                level='INFO',
+                message=f'Fixed county-wide intersections for alert {alert.identifier}: {intersection_count} boundaries',
+                module='admin',
+                details={
+                    'alert_id': alert_id,
+                    'alert_event': alert.event,
+                    'intersection_count': intersection_count,
+                    'is_county_wide': True,
+                    'fixed_at_utc': utc_now().isoformat(),
+                    'fixed_at_local': local_now().isoformat()
+                }
+            )
+            db.session.add(log_entry)
+            db.session.commit()
+
+            return jsonify({
+                'success': f'Fixed county-wide alert intersections: {intersection_count} boundaries affected',
+                'intersection_count': intersection_count,
+                'is_county_wide': True,
+                'alert_event': alert.event
+            })
+
+        else:
+            # For non-county-wide alerts, use geometry-based intersection
+            if alert.geom:
+                intersecting_boundaries = db.session.query(Boundary).filter(
+                    ST_Intersects(Boundary.geom, alert.geom)
+                ).all()
+            else:
+                # For alerts without geometry, find relevant boundaries
+                intersecting_boundaries = find_relevant_boundaries_for_alert(alert)
+
+            intersection_count = 0
+            for boundary in intersecting_boundaries:
+                intersection = Intersection(
+                    cap_alert_id=alert.id,
+                    boundary_id=boundary.id,
+                    intersection_area=0,
+                    created_at=utc_now()
+                )
+                db.session.add(intersection)
+                intersection_count += 1
+
+            db.session.commit()
+
+            log_entry = SystemLog(
+                level='INFO',
+                message=f'Fixed intersections for alert {alert.identifier}: {intersection_count} boundaries',
+                module='admin',
+                details={
+                    'alert_id': alert_id,
+                    'alert_event': alert.event,
+                    'intersection_count': intersection_count,
+                    'is_county_wide': False,
+                    'has_geometry': alert.geom is not None,
+                    'fixed_at_utc': utc_now().isoformat(),
+                    'fixed_at_local': local_now().isoformat()
+                }
+            )
+            db.session.add(log_entry)
+            db.session.commit()
+
+            return jsonify({
+                'success': f'Fixed alert intersections: {intersection_count} boundaries affected',
+                'intersection_count': intersection_count,
+                'is_county_wide': False,
+                'alert_event': alert.event
+            })
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error fixing intersections for alert {alert_id}: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/fix_county_intersections', methods=['POST'])
+def fix_county_intersections():
+    """Fix intersections for all county-wide alerts"""
+    try:
+        # Find all alerts that should be county-wide
+        all_alerts = CAPAlert.query.all()
+
+        fixed_alerts = 0
+        total_intersections = 0
+
+        for alert in all_alerts:
+            if is_alert_county_wide(alert):
+                # Delete existing intersections for this alert
+                existing_intersections = Intersection.query.filter_by(cap_alert_id=alert.id).all()
+                for intersection in existing_intersections:
+                    db.session.delete(intersection)
+
+                # Get All boundaries for county-wide alert
+                all_boundaries = Boundary.query.all()
+
+                intersection_count = 0
+                for boundary in all_boundaries:
+                    intersection = Intersection(
+                        cap_alert_id=alert.id,
+                        boundary_id=boundary.id,
+                        intersection_area=0,
+                        created_at=utc_now()
+                    )
+                    db.session.add(intersection)
+                    intersection_count += 1
+
+                fixed_alerts += 1
+                total_intersections += intersection_count
+
+        db.session.commit()
+
+        log_entry = SystemLog(
+            level='INFO',
+            message=f'Fixed county-wide intersections: {fixed_alerts} alerts, {total_intersections} intersections',
+            module='admin',
+            details={
+                'fixed_alerts': fixed_alerts,
+                'total_intersections': total_intersections,
+                'fixed_at_utc': utc_now().isoformat(),
+                'fixed_at_local': local_now().isoformat()
+            }
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+
+        return jsonify({
+            'success': f'Fixed county-wide intersections for {fixed_alerts} alerts ({total_intersections} total intersections)',
+            'fixed_alerts': fixed_alerts,
+            'total_intersections': total_intersections
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error fixing county intersections: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# Helper functions - add these to your app.py file
+
+def is_alert_county_wide(alert):
+    """
+    Determine if an alert should be treated as county-wide
+    (This is the app.py version of the function, separate from the poller version)
+    """
+    if not alert.area_desc:
+        return False
+
+    area_desc_lower = alert.area_desc.lower()
+
+    # Check for explicit county-wide indicators
+    county_wide_keywords = [
+        'county', 'putnam county', 'entire county',
+        'all of putnam', 'countywide', 'county wide'
+    ]
+
+    for keyword in county_wide_keywords:
+        if keyword in area_desc_lower:
+            return True
+
+    # Check for multi-county alerts that include Putnam
+    if 'putnam' in area_desc_lower:
+        # Count separators (semicolons or commas usually separate counties)
+        separator_count = max(area_desc_lower.count(';'), area_desc_lower.count(','))
+        if separator_count >= 2:  # 3+ counties typically means county-wide coverage
+            return True
+
+    # Check for broad area coverage terms
+    broad_coverage_terms = [
+        'west central ohio', 'northwest ohio', 'north central ohio',
+        'multiple counties', 'several counties', 'surrounding counties'
+    ]
+
+    for term in broad_coverage_terms:
+        if term in area_desc_lower and 'putnam' in area_desc_lower:
+            return True
+
+    return False
+
+
+def find_relevant_boundaries_for_alert(alert):
+    """
+    Find boundaries that might be relevant to an alert without geometry
+    (App.py version of the function)
+    """
+    relevant_boundaries = []
+
+    try:
+        # For Special Weather Statements, include all boundaries
+        if alert.event and 'special weather statement' in alert.event.lower():
+            all_boundaries = Boundary.query.all()
+            relevant_boundaries.extend(all_boundaries)
+        else:
+            # Start with boundaries that might contain "Putnam"
+            putnam_boundaries = Boundary.query.filter(
+                Boundary.name.ilike('%putnam%')
+            ).all()
+
+            if putnam_boundaries:
+                relevant_boundaries.extend(putnam_boundaries)
+            else:
+                # Fallback: use all boundaries
+                all_boundaries = Boundary.query.all()
+                relevant_boundaries.extend(all_boundaries)
+
+    except Exception as e:
+        logger.error(f"Error finding relevant boundaries: {e}")
+        relevant_boundaries = []
+
+    return relevant_boundaries
+
+
+@app.route('/admin/recalculate_intersections', methods=['POST'])
+def recalculate_intersections():
+    """Recalculate all alert-boundary intersections"""
+    try:
+        # Get all active alerts
+        active_alerts = get_active_alerts_query().all()
+
+        total_alerts_processed = 0
+        total_intersections_created = 0
+
+        for alert in active_alerts:
+            # Delete existing intersections for this alert
+            existing_intersections = Intersection.query.filter_by(cap_alert_id=alert.id).all()
+            for intersection in existing_intersections:
+                db.session.delete(intersection)
+
+            # Determine processing method
+            if is_alert_county_wide(alert):
+                # County-wide: all boundaries
+                boundaries = Boundary.query.all()
+                intersection_method = "county-wide"
+            elif alert.geom:
+                # Geometry-based intersection
+                boundaries = db.session.query(Boundary).filter(
+                    ST_Intersects(Boundary.geom, alert.geom)
+                ).all()
+                intersection_method = "geometry-based"
+            else:
+                # Zone-based: find relevant boundaries
+                boundaries = find_relevant_boundaries_for_alert(alert)
+                intersection_method = "zone-based"
+
+            # Create new intersections
+            intersection_count = 0
+            for boundary in boundaries:
+                intersection = Intersection(
+                    cap_alert_id=alert.id,
+                    boundary_id=boundary.id,
+                    intersection_area=0,
+                    created_at=utc_now()
+                )
+                db.session.add(intersection)
+                intersection_count += 1
+
+            total_alerts_processed += 1
+            total_intersections_created += intersection_count
+
+            logger.info(
+                f"Recalculated intersections for {alert.event} ({intersection_method}): {intersection_count} boundaries")
+
+        db.session.commit()
+
+        log_entry = SystemLog(
+            level='INFO',
+            message=f'Recalculated all intersections: {total_alerts_processed} alerts, {total_intersections_created} intersections',
+            module='admin',
+            details={
+                'total_alerts_processed': total_alerts_processed,
+                'total_intersections_created': total_intersections_created,
+                'recalculated_at_utc': utc_now().isoformat(),
+                'recalculated_at_local': local_now().isoformat()
+            }
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+
+        return jsonify({
+            'success': f'Recalculated intersections for {total_alerts_processed} alerts ({total_intersections_created} total intersections)',
+            'total_alerts_processed': total_alerts_processed,
+            'total_intersections_created': total_intersections_created
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error recalculating intersections: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/debug/boundaries/<int:alert_id>')
+def debug_boundaries(alert_id):
+    """Debug route to check boundary counts for an alert"""
+    try:
+        alert = CAPAlert.query.get_or_404(alert_id)
+
+        all_boundaries = Boundary.query.all()
+        current_intersections = db.session.query(Intersection, Boundary).join(
+            Boundary, Intersection.boundary_id == Boundary.id
+        ).filter(Intersection.cap_alert_id == alert_id).all()
+
+        boundary_counts = {}
+        for boundary in all_boundaries:
+            boundary_counts[boundary.type] = boundary_counts.get(boundary.type, 0) + 1
+
+        is_county_wide = False
+        if alert.area_desc:
+            area_lower = alert.area_desc.lower()
+            county_wide_keywords = ['county', 'putnam county', 'entire county', 'all of putnam']
+            putnam_indicators = ['putnam;', 'putnam,', '; putnam;', '; putnam,', ', putnam;', ', putnam,', 'putnam ',
+                                 ' putnam']
+
+            if 'putnam' in area_lower:
+                county_count = len([x for x in area_lower.split(';') if x.strip()])
+                if county_count >= 3:
+                    is_county_wide = True
+
+            if any(keyword in area_lower for keyword in county_wide_keywords):
+                is_county_wide = True
+
+            if any(indicator in area_lower for indicator in putnam_indicators):
+                is_county_wide = True
+
+        # Format alert times with timezone info
+        sent_time = format_local_datetime(alert.sent) if alert.sent else 'Unknown'
+        expires_time = format_local_datetime(alert.expires) if alert.expires else 'No expiration'
+        is_expired = is_alert_expired(alert.expires)
+
+        html = f"""
+        <html>
+        <head><title>Boundary Debug for Alert {alert_id}</title></head>
+        <body style="font-family: Arial; margin: 40px;">
+            <h1>Boundary Debug Information</h1>
+            <p><a href="/alerts/{alert_id}">← Back to Alert Details</a></p>
+
+            <h2>Alert Information</h2>
+            <p><strong>Event:</strong> {alert.event}</p>
+            <p><strong>Sent:</strong> {sent_time}</p>
+            <p><strong>Expires:</strong> {expires_time}</p>
+            <p><strong>Status:</strong> {'EXPIRED' if is_expired else 'ACTIVE'}</p>
+            <p><strong>Area Description:</strong> {alert.area_desc or 'None'}</p>
+            <p><strong>Detected as County-Wide:</strong> {'Yes' if is_county_wide else 'No'}</p>
+        """
+
+        if alert.area_desc:
+            area_lower = alert.area_desc.lower()
+            county_list = [x.strip() for x in area_lower.split(';') if x.strip()]
+
+            html += f"""
+            <h3>County-Wide Detection Analysis</h3>
+            <ul>
+                <li><strong>Contains 'Putnam':</strong> {'Yes' if 'putnam' in area_lower else 'No'}</li>
+                <li><strong>Counties Listed:</strong> {len(county_list)} counties</li>
+                <li><strong>Multi-County Alert:</strong> {'Yes' if len(county_list) >= 3 else 'No'}</li>
+                <li><strong>County List:</strong> {', '.join(county_list[:10])}{'...' if len(county_list) > 10 else ''}</li>
+            </ul>
+            """
+
+        html += f"""
+            <h2>Total Boundaries in System</h2>
+            <ul>
+        """
+
+        total_boundaries = 0
+        for boundary_type, count in boundary_counts.items():
+            html += f"<li><strong>{boundary_type.title()}:</strong> {count}</li>"
+            total_boundaries += count
+
+        html += f"""
+            </ul>
+            <p><strong>Total:</strong> {total_boundaries} boundaries</p>
+
+            <h2>Current Intersections for This Alert</h2>
+            <p><strong>Found:</strong> {len(current_intersections)} intersections</p>
+            <ul>
+        """
+
+        for intersection, boundary in current_intersections:
+            html += f"<li>{boundary.type.title()}: {boundary.name}</li>"
+
+        html += f"""
+            </ul>
+
+            <h2>Missing Intersections</h2>
+            <p>If this is a county-wide alert, it should intersect with ALL {total_boundaries} boundaries.</p>
+            <p><strong>Missing:</strong> {total_boundaries - len(current_intersections)} intersections</p>
+
+            <div style="margin: 20px 0;">
+                <button onclick="fixIntersections()" style="background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer;">
+                    Fix All Intersections for This Alert
+                </button>
+            </div>
+
+            <div id="result" style="margin-top: 20px;"></div>
+
+            <script>
+            async function fixIntersections() {{
+                const resultDiv = document.getElementById('result');
+                resultDiv.innerHTML = 'Fixing intersections...';
+
+                try {{
+                    const response = await fetch('/admin/fix_single_alert_intersections/{alert_id}', {{
+                        method: 'POST'
+                    }});
+                    const result = await response.json();
+
+                    if (response.ok) {{
+                        resultDiv.innerHTML = '<div style="color: green;">' + result.success + '</div>';
+                        setTimeout(() => {{
+                            window.location.reload();
+                        }}, 2000);
+                    }} else {{
+                        resultDiv.innerHTML = '<div style="color: red;">' + result.error + '</div>';
+                    }}
+                }} catch (error) {{
+                    resultDiv.innerHTML = '<div style="color: red;">Error: ' + error.message + '</div>';
+                }}
+            }}
+            </script>
+        </body>
+        </html>
+        """
+
+        return html
+
+    except Exception as e:
+        return f"<h1>Debug Error</h1><p>{str(e)}</p><p><a href='/alerts/{alert_id}'>← Back to Alert</a></p>"
+
+
+# =============================================================================
+# ERROR HANDLERS
+# =============================================================================
+
 @app.errorhandler(404)
 def not_found_error(error):
     """Enhanced 404 error page"""
@@ -2320,8 +2917,100 @@ def internal_error(error):
     return "<h1>500 - Internal Server Error</h1><p><a href='/'>← Back to Main</a></p>", 500
 
 
+# =============================================================================
+# APPLICATION STARTUP
+# =============================================================================
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
 
     app.run(debug=True, host='0.0.0.0', port=5000)
+
+# =============================================================================
+# FUTURE REFACTORING NOTES
+# =============================================================================
+
+"""
+REFACTORING ROADMAP:
+
+1. MODELS (models/)
+   - models/base.py (base model class with timezone utilities)
+   - models/boundary.py (Boundary model)
+   - models/cap_alert.py (CAPAlert model)
+   - models/system_log.py (SystemLog model)
+   - models/intersection.py (Intersection model)
+   - models/poll_history.py (PollHistory model)
+
+2. SERVICES (services/)
+   - services/timezone_service.py (all timezone utilities)
+   - services/boundary_service.py (boundary processing logic)
+   - services/alert_service.py (alert processing logic)
+   - services/system_health_service.py (system monitoring)
+   - services/export_service.py (data export functionality)
+
+3. ROUTES (routes/)
+   - routes/main_routes.py (/, /stats, /system_health)
+   - routes/alert_routes.py (/alerts, /alerts/<id>)
+   - routes/admin_routes.py (/admin, admin templates)
+   - routes/api_routes.py (all /api/ endpoints)
+   - routes/admin_api_routes.py (all /admin/ API endpoints)
+   - routes/export_routes.py (all /export/ endpoints)
+
+4. UTILITIES (utils/)
+   - utils/geojson_processor.py (GeoJSON processing)
+   - utils/field_mapping.py (boundary field detection)
+   - utils/formatters.py (data formatting utilities)
+   - utils/validators.py (input validation)
+
+5. CONFIGURATION (config/)
+   - config/settings.py (application settings)
+   - config/database.py (database configuration)
+   - config/timezone_config.py (timezone settings)
+
+6. TEMPLATES ORGANIZATION
+   - templates/layouts/ (base templates)
+   - templates/pages/ (main page templates)
+   - templates/components/ (reusable components)
+   - templates/admin/ (admin-specific templates)
+
+7. STATIC FILES ORGANIZATION
+   - static/css/ (stylesheets)
+   - static/js/ (JavaScript files)
+   - static/images/ (images and icons)
+   - static/fonts/ (custom fonts)
+
+8. API VERSIONING
+   - api/v1/ (version 1 endpoints)
+   - api/v2/ (future version 2 endpoints)
+
+9. TESTING STRUCTURE
+   - tests/unit/ (unit tests)
+   - tests/integration/ (integration tests)
+   - tests/fixtures/ (test data)
+
+10. DEPLOYMENT
+    - docker/ (Docker configuration)
+    - scripts/ (deployment scripts)
+    - docs/ (documentation)
+
+MIGRATION STRATEGY:
+1. Create new directory structure
+2. Move models to models/ (one at a time)
+3. Extract services from app.py
+4. Split routes into blueprints
+5. Move utilities to utils/
+6. Update imports gradually
+7. Test each migration step
+8. Update documentation
+
+BENEFITS AFTER REFACTORING:
+- Easier testing (isolated components)
+- Better code reuse
+- Clearer separation of concerns
+- Easier debugging
+- Simpler onboarding for new developers
+- More maintainable codebase
+- Better performance (lazy loading)
+- Easier feature additions
+"""
