@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-NOAA CAP Alert Poller Service
+NOAA CAP Alert Poller Service - FIXED VERSION
 Fetches CAP alerts from NOAA API for OHZ016 zone and processes them
-NOW WITH PROPER TIMEZONE HANDLING FOR PUTNAM COUNTY, OHIO
+NOW WITH PROPER ALERT PRESERVATION - NO AUTO-DELETION OF EXPIRED ALERTS
+WITH PROPER TIMEZONE HANDLING FOR PUTNAM COUNTY, OHIO
 """
 
 import requests
@@ -294,9 +295,10 @@ class CAPPoller:
                 if expires:
                     self.logger.debug(f"Parsed expires time: {format_local_datetime(expires)}")
 
-                    # Check if alert is already expired
+                    # Check if alert is already expired (but don't skip it - still process for historical data)
                     if expires < utc_now():
-                        self.logger.info(f"Alert {identifier} is already expired: {format_local_datetime(expires)}")
+                        self.logger.info(
+                            f"Alert {identifier} is already expired but will be preserved: {format_local_datetime(expires)}")
                 else:
                     self.logger.warning(f"Could not parse expires timestamp: {expires_str}")
 
@@ -349,7 +351,7 @@ class CAPPoller:
             ).first()
 
             if existing:
-                # Update existing alert
+                # Update existing alert BUT PRESERVE IT
                 for key, value in alert_data.items():
                     if key != 'geometry':
                         setattr(existing, key, value)
@@ -368,9 +370,9 @@ class CAPPoller:
 
                 if existing.sent:
                     self.logger.debug(
-                        f"Updated existing alert: {existing.identifier} - Sent: {format_local_datetime(existing.sent)}")
+                        f"Updated existing alert (PRESERVED): {existing.identifier} - Sent: {format_local_datetime(existing.sent)}")
                 else:
-                    self.logger.debug(f"Updated existing alert: {existing.identifier}")
+                    self.logger.debug(f"Updated existing alert (PRESERVED): {existing.identifier}")
 
                 return False, existing
 
@@ -393,9 +395,9 @@ class CAPPoller:
 
                 if new_alert.sent:
                     self.logger.info(
-                        f"Saved new alert: {new_alert.identifier} - {new_alert.event} - Sent: {format_local_datetime(new_alert.sent)}")
+                        f"Saved new alert (PRESERVED): {new_alert.identifier} - {new_alert.event} - Sent: {format_local_datetime(new_alert.sent)}")
                 else:
-                    self.logger.info(f"Saved new alert: {new_alert.identifier} - {new_alert.event}")
+                    self.logger.info(f"Saved new alert (PRESERVED): {new_alert.identifier} - {new_alert.event}")
 
                 return True, new_alert
 
@@ -418,7 +420,9 @@ class CAPPoller:
                                     'warning' in alert.event.lower()):
 
                     # Find all boundaries in Putnam County for general intersection
-                    county_boundaries = self.db_session.query(Boundary).all()
+                    county_boundaries = self.db_session.query(Boundary).filter(
+                        Boundary.name.ilike('%putnam%')
+                    ).all()
 
                     for boundary in county_boundaries:
                         # Check if intersection already exists
@@ -495,35 +499,41 @@ class CAPPoller:
             self.db_session.rollback()
             self.logger.error(f"Error processing intersections: {str(e)}")
 
-    def cleanup_expired_alerts(self):
-        """Remove expired alerts from database using timezone-aware comparison"""
+    # REMOVED THE AUTOMATIC CLEANUP FUNCTION - ALERTS ARE NOW PRESERVED!
+    # The cleanup_expired_alerts() function has been completely removed
+    # to preserve all historical alert data in the database.
+
+    def mark_expired_alerts_as_inactive(self):
+        """
+        OPTIONAL: Mark expired alerts as inactive without deleting them
+        This preserves all historical data while distinguishing active vs expired alerts
+        """
         try:
             now = utc_now()
 
-            # Find expired alerts
+            # Find alerts that are expired but not marked as inactive
             expired_alerts = self.db_session.query(CAPAlert).filter(
-                CAPAlert.expires < now
+                CAPAlert.expires < now,
+                CAPAlert.status != 'Expired'  # Not already marked as expired
             ).all()
 
             count = len(expired_alerts)
             if count > 0:
-                self.logger.info(f"Found {count} expired alerts to clean up")
+                self.logger.info(f"Found {count} expired alerts to mark as inactive (preserving data)")
 
-                # Log some details about what's being cleaned up
-                for alert in expired_alerts[:5]:  # Log first 5
-                    expires_local = format_local_datetime(alert.expires)
-                    self.logger.debug(f"Cleaning up expired alert: {alert.event} - Expired: {expires_local}")
-
-                # Delete expired alerts (intersections will be deleted via cascade)
+                # Mark as expired instead of deleting
                 for alert in expired_alerts:
-                    self.db_session.delete(alert)
+                    expires_local = format_local_datetime(alert.expires)
+                    self.logger.debug(f"Marking expired alert as inactive: {alert.event} - Expired: {expires_local}")
+                    alert.status = 'Expired'  # Mark as expired but keep in database
+                    alert.updated_at = now
 
                 self.db_session.commit()
-                self.logger.info(f"Cleaned up {count} expired alerts")
+                self.logger.info(f"Marked {count} expired alerts as inactive (DATA PRESERVED)")
 
         except Exception as e:
             self.db_session.rollback()
-            self.logger.error(f"Error cleaning up expired alerts: {str(e)}")
+            self.logger.error(f"Error marking expired alerts as inactive: {str(e)}")
 
     def log_system_event(self, level: str, message: str, details: Dict = None):
         """Log system event to database with timezone info"""
@@ -551,7 +561,7 @@ class CAPPoller:
             self.logger.error(f"Error logging system event: {str(e)}")
 
     def poll_and_process(self) -> Dict:
-        """Main polling and processing function with timezone support"""
+        """Main polling and processing function with timezone support - NOW PRESERVES ALL ALERTS"""
         start_time = time.time()
         poll_start_utc = utc_now()
         poll_start_local = local_now()
@@ -561,18 +571,21 @@ class CAPPoller:
             'alerts_new': 0,
             'alerts_updated': 0,
             'alerts_filtered': 0,
+            'alerts_marked_expired': 0,
             'execution_time_ms': 0,
             'status': 'SUCCESS',
             'error_message': None,
             'zone': 'OHZ016/OHC137 (Putnam County, OH)',
             'poll_time_utc': poll_start_utc.isoformat(),
             'poll_time_local': poll_start_local.isoformat(),
-            'timezone': str(PUTNAM_COUNTY_TZ)
+            'timezone': str(PUTNAM_COUNTY_TZ),
+            'data_preservation': True  # Indicates alerts are preserved
         }
 
         try:
             self.logger.info(
                 f"Starting CAP alert polling cycle for Putnam County, OH (OHZ016/OHC137) at {format_local_datetime(poll_start_utc)}")
+            self.logger.info("📦 ALERT PRESERVATION MODE: All alerts will be kept in database for historical analysis")
 
             # Fetch alerts from NOAA for OHZ016 and OHC137
             alerts_data = self.fetch_cap_alerts()
@@ -603,39 +616,44 @@ class CAPPoller:
                         stats['alerts_new'] += 1
                         if alert.sent:
                             self.logger.info(
-                                f"Saved new alert: {alert.event} - Sent: {format_local_datetime(alert.sent)}")
+                                f"Saved new alert (PRESERVED): {alert.event} - Sent: {format_local_datetime(alert.sent)}")
                         else:
-                            self.logger.info(f"Saved new alert: {alert.event}")
+                            self.logger.info(f"Saved new alert (PRESERVED): {alert.event}")
                         # Process intersections for new alerts
                         self.process_intersections(alert)
                     else:
                         stats['alerts_updated'] += 1
                         if alert.sent:
                             self.logger.info(
-                                f"Updated existing alert: {alert.event} - Sent: {format_local_datetime(alert.sent)}")
+                                f"Updated existing alert (PRESERVED): {alert.event} - Sent: {format_local_datetime(alert.sent)}")
                         else:
-                            self.logger.info(f"Updated existing alert: {alert.event}")
+                            self.logger.info(f"Updated existing alert (PRESERVED): {alert.event}")
                 else:
                     self.logger.warning(f"Failed to parse alert: {event}")
 
-            # Cleanup expired alerts
-            self.cleanup_expired_alerts()
+            # OPTIONAL: Mark expired alerts as inactive (but preserve them)
+            # Uncomment the next two lines if you want to mark expired alerts as inactive
+            self.mark_expired_alerts_as_inactive()
+            stats['alerts_marked_expired'] = len(self.db_session.query(CAPAlert).filter(CAPAlert.status == 'Expired').all())
 
             # Calculate execution time
             stats['execution_time_ms'] = int((time.time() - start_time) * 1000)
 
             self.logger.info(
-                f"Putnam County polling cycle completed: {stats['alerts_new']} new, {stats['alerts_updated']} updated, {stats['alerts_filtered']} filtered")
+                f"✅ Putnam County polling cycle completed: {stats['alerts_new']} new, {stats['alerts_updated']} updated, {stats['alerts_filtered']} filtered")
+            self.logger.info("📦 ALL ALERTS PRESERVED IN DATABASE FOR HISTORICAL ANALYSIS")
 
             # Log successful poll with timezone info
-            self.log_system_event('INFO', f'CAP polling successful: {stats["alerts_new"]} new alerts', stats)
+            self.log_system_event('INFO',
+                                  f'CAP polling successful with data preservation: {stats["alerts_new"]} new alerts',
+                                  stats)
 
         except Exception as e:
             stats['status'] = 'ERROR'
             stats['error_message'] = str(e)
             stats['execution_time_ms'] = int((time.time() - start_time) * 1000)
 
-            self.logger.error(f"Error in Putnam County polling cycle: {str(e)}")
+            self.logger.error(f"❌ Error in Putnam County polling cycle: {str(e)}")
             self.log_system_event('ERROR', f'CAP polling failed: {str(e)}', stats)
 
         return stats
@@ -653,7 +671,8 @@ def main():
     import argparse
 
     # Setup argument parser
-    parser = argparse.ArgumentParser(description='NOAA CAP Alert Poller for Putnam County, OH (OHZ016/OHC137)')
+    parser = argparse.ArgumentParser(
+        description='NOAA CAP Alert Poller for Putnam County, OH (OHZ016/OHC137) - ALERT PRESERVATION MODE')
     parser.add_argument('--database-url',
                         default='postgresql://noaa_user:rkhkeq@localhost:5432/noaa_alerts',
                         help='Database connection URL')
@@ -686,7 +705,8 @@ def main():
     # Log startup with timezone info
     startup_utc = utc_now()
     startup_local = local_now()
-    logger.info(f"Starting NOAA CAP Alert Poller for Putnam County, OH (OHZ016/OHC137)")
+    logger.info(f"🚀 Starting NOAA CAP Alert Poller for Putnam County, OH (OHZ016/OHC137)")
+    logger.info(f"📦 ALERT PRESERVATION MODE: Historical data will be preserved")
     logger.info(f"Startup time: {format_local_datetime(startup_utc)}")
     logger.info(f"Timezone: {PUTNAM_COUNTY_TZ}")
 
