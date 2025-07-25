@@ -1,0 +1,601 @@
+2025-07-25 22:55:12,113 - __main__ - INFO - Starting NOAA CAP Alert Poller with LED Integration
+2025-07-25 22:55:12,113 - __main__ - INFO - Startup time: July 25, 2025 at 05:55 PM EDT (21:55 UTC)
+2025-07-25 22:56:13,560 - __main__ - INFO - Starting NOAA CAP Alert Poller with LED Integration
+2025-07-25 22:56:13,560 - __main__ - INFO - Startup time: July 25, 2025 at 05:56 PM EDT (21:56 UTC)
+2025-07-25 22:56:53,161 - __main__ - INFO - Starting NOAA CAP Alert Poller with LED Integration
+2025-07-25 22:56:53,162 - __main__ - INFO - Startup time: July 25, 2025 at 05:56 PM EDT (21:56 UTC)
+2025-07-25 22:56:53,265 - __main__ - WARNING - Database table verification failed: (psycopg2.errors.UndefinedTable) relation "system_logs" does not exist
+LINE 1: SELECT 1 FROM system_logs LIMIT 1
+                      ^
+
+[SQL: SELECT 1 FROM system_logs LIMIT 1]
+(Background on this error at: https://sqlalche.me/e/14/f405)
+2025-07-25 22:56:53,268 - __main__ - INFO - Running continuously with 300 second intervals
+2025-07-25 22:56:53,268 - __main__ - INFO - Starting CAP alert polling cycle for Putnam County, OH at July 25, 2025 at 05:56 PM EDT (21:56 UTC)
+2025-07-25 22:56:53,268 - __main__ - INFO - Fetching alerts from: https://api.weather.gov/alerts/active?zone=OHZ016
+2025-07-25 22:56:53,809 - __main__ - INFO - Retrieved 0 alerts from https://api.weather.gov/alerts/active?zone=OHZ016
+2025-07-25 22:56:53,809 - __main__ - INFO - Fetching alerts from: https://api.weather.gov/alerts/active?area=OH&code=OHC137
+2025-07-25 22:56:54,059 - __main__ - ERROR - Error fetching from https://api.weather.gov/alerts/active?area=OH&code=OHC137: 400 Client Error: Bad Request for url: https://api.weather.gov/alerts/active?area=OH&code=OHC137
+2025-07-25 22:56:54,059 - __main__ - INFO - Total unique alerts collected: 0
+2025-07-25 22:56:54,078 - __main__ - ERROR - Error cleaning up poll history: (psycopg2.errors.InFailedSqlTransaction) current transaction is aborted, commands ignored until end of transaction block
+
+[SQL: SELECT count(*) AS count_1 
+FROM (SELECT poll_history.id AS poll_history_id, poll_history.timestamp AS poll_history_timestamp, poll_history.alerts_fetched AS poll_history_alerts_fetched, poll_history.alerts_new AS poll_history_alerts_new, poll_history.alerts_updated AS poll_history_alerts_updated, poll_history.execution_time_ms AS poll_history_execution_time_ms, poll_history.status AS poll_history_status, poll_history.error_message AS poll_history_error_message 
+FROM poll_history 
+WHERE poll_history.timestamp < %(timestamp_1)s) AS anon_1]
+[parameters: {'timestamp_1': datetime.datetime(2025, 6, 25, 21, 56, 54, 65723, tzinfo=<UTC>)}]
+(Background on this error at: https://sqlalche.me/e/14/2j85)
+2025-07-25 22:56:54,084 - __main__ - ERROR - Error logging poll history: (psycopg2.errors.InFailedSqlTransaction) current transaction is aborted, commands ignored until end of transaction block
+
+[SQL: INSERT INTO poll_history (timestamp, alerts_fetched, alerts_new, alerts_updated, execution_time_ms, status, error_message) VALUES (%(timestamp)s, %(alerts_fetched)s, %(alerts_new)s, %(alerts_updated)s, %(execution_time_ms)s, %(status)s, %(error_message)s) RETURNING poll_history.id]
+[parameters: {'timestamp': datetime.datetime(2025, 7, 25, 21, 56, 54, 79039, tzinfo=<UTC>), 'alerts_fetched': 0, 'alerts_new': 0, 'alerts_updated': 0, 'execution_time_ms': 0, 'status': 'SUCCESS', 'error_message': None}]
+(Background on this error at: https://sqlalche.me/e/14/2j85)
+2025-07-25 22:56:54,084 - __main__ - INFO - Polling cycle completed: 0 new, 0 updated, 0 filtered
+2025-07-25 22:56:54,085 - __main__ - ERROR - Error logging system event: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (psycopg2.errors.InFailedSqlTransaction) current transaction is aborted, commands ignored until end of transaction block
+
+[SQL: INSERT INTO poll_history (timestamp, alerts_fetched, alerts_new, alerts_updated, execution_time_ms, status, error_message) VALUES (%(timestamp)s, %(alerts_fetched)s, %(alerts_new)s, %(alerts_updated)s, %(execution_time_ms)s, %(status)s, %(error_message)s) RETURNING poll_history.id]
+[parameters: {'timestamp': datetime.datetime(2025, 7, 25, 21, 56, 54, 79039, tzinfo=<UTC>), 'alerts_fetched': 0, 'alerts_new': 0, 'alerts_updated': 0, 'execution_time_ms': 0, 'status': 'SUCCESS', 'error_message': None}]
+(Background on this error at: https://sqlalche.me/e/14/2j85) (Background on this error at: https://sqlalche.me/e/14/7s2a)
+2025-07-25 22:56:54,085 - __main__ - INFO - Poll completed: {
+  "alerts_fetched": 0,
+  "alerts_new": 0,
+  "alerts_updated": 0,
+  "alerts_filtered": 0,
+  "execution_time_ms": 816,
+  "status": "SUCCESS",
+  "error_message": null,
+  "zone": "OHZ016/OHC137 (Putnam County, OH)",
+  "poll_time_utc": "2025-07-25T21:56:53.268498+00:00",
+  "poll_time_local": "2025-07-25T17:56:53.268524-04:00",
+  "timezone": "America/New_York",
+  "led_updated": false,
+  "logged_at_utc": "2025-07-25T21:56:54.084864+00:00",
+  "logged_at_local": "2025-07-25T17:56:54.084888-04:00"
+}
+2025-07-25 22:58:56,145 - __main__ - INFO - Starting NOAA CAP Alert Poller with LED Integration
+2025-07-25 22:58:56,145 - __main__ - INFO - Startup time: July 25, 2025 at 05:58 PM EDT (21:58 UTC)
+2025-07-25 22:58:56,182 - __main__ - WARNING - Database table verification failed: (psycopg2.errors.UndefinedTable) relation "system_logs" does not exist
+LINE 1: SELECT 1 FROM system_logs LIMIT 1
+                      ^
+
+[SQL: SELECT 1 FROM system_logs LIMIT 1]
+(Background on this error at: https://sqlalche.me/e/14/f405)
+2025-07-25 22:58:56,183 - __main__ - INFO - Running continuously with 300 second intervals
+2025-07-25 22:58:56,183 - __main__ - INFO - Starting CAP alert polling cycle for Putnam County, OH at July 25, 2025 at 05:58 PM EDT (21:58 UTC)
+2025-07-25 22:58:56,183 - __main__ - INFO - Fetching alerts from: https://api.weather.gov/alerts/active?zone=OHZ016
+2025-07-25 22:58:56,730 - __main__ - INFO - Retrieved 0 alerts from https://api.weather.gov/alerts/active?zone=OHZ016
+2025-07-25 22:58:56,730 - __main__ - INFO - Fetching alerts from: https://api.weather.gov/alerts/active?area=OH
+2025-07-25 22:58:57,016 - __main__ - INFO - Retrieved 9 alerts from https://api.weather.gov/alerts/active?area=OH
+2025-07-25 22:58:57,017 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 22:58:57,017 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 22:58:57,017 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 22:58:57,017 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 22:58:57,017 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 22:58:57,017 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 22:58:57,017 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 22:58:57,017 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 22:58:57,017 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 22:58:57,017 - __main__ - INFO - Total unique alerts collected: 9
+2025-07-25 22:58:57,017 - __main__ - INFO - Processing alert: Severe Thunderstorm Warning (ID: No ID...)
+2025-07-25 22:58:57,017 - __main__ - INFO - Alert Severe Thunderstorm Warning passed relevance check - processing...
+2025-07-25 22:58:57,017 - __main__ - INFO - Generated temporary identifier: temp_7f23cad46477e41b
+2025-07-25 22:58:57,024 - __main__ - INFO - Successfully parsed alert: temp_7f23cad46477e41b - Severe Thunderstorm Warning
+2025-07-25 22:58:57,030 - __main__ - ERROR - Database error saving alert: (psycopg2.errors.InFailedSqlTransaction) current transaction is aborted, commands ignored until end of transaction block
+
+[SQL: SELECT cap_alerts.id AS cap_alerts_id, cap_alerts.identifier AS cap_alerts_identifier, cap_alerts.sent AS cap_alerts_sent, cap_alerts.expires AS cap_alerts_expires, cap_alerts.status AS cap_alerts_status, cap_alerts.message_type AS cap_alerts_message_type, cap_alerts.scope AS cap_alerts_scope, cap_alerts.category AS cap_alerts_category, cap_alerts.event AS cap_alerts_event, cap_alerts.urgency AS cap_alerts_urgency, cap_alerts.severity AS cap_alerts_severity, cap_alerts.certainty AS cap_alerts_certainty, cap_alerts.area_desc AS cap_alerts_area_desc, cap_alerts.headline AS cap_alerts_headline, cap_alerts.description AS cap_alerts_description, cap_alerts.instruction AS cap_alerts_instruction, ST_AsEWKB(cap_alerts.geometry) AS cap_alerts_geometry, cap_alerts.raw_json AS cap_alerts_raw_json, cap_alerts.created_at AS cap_alerts_created_at, cap_alerts.updated_at AS cap_alerts_updated_at 
+FROM cap_alerts 
+WHERE cap_alerts.identifier = %(identifier_1)s 
+ LIMIT %(param_1)s]
+[parameters: {'identifier_1': 'temp_7f23cad46477e41b', 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/14/2j85)
+2025-07-25 22:58:57,030 - __main__ - INFO - Updated existing alert: Severe Thunderstorm Warning
+2025-07-25 22:58:57,030 - __main__ - INFO - Processing alert: Severe Thunderstorm Warning (ID: No ID...)
+2025-07-25 22:58:57,030 - __main__ - INFO - Alert Severe Thunderstorm Warning passed relevance check - processing...
+2025-07-25 22:58:57,030 - __main__ - INFO - Generated temporary identifier: temp_7f23cad46477e41b
+2025-07-25 22:58:57,031 - __main__ - INFO - Successfully parsed alert: temp_7f23cad46477e41b - Severe Thunderstorm Warning
+2025-07-25 22:58:57,045 - __main__ - ERROR - Database error saving alert: (psycopg2.errors.UndefinedColumn) column cap_alerts.geometry does not exist
+LINE 1: ....instruction AS cap_alerts_instruction, ST_AsEWKB(cap_alerts...
+                                                             ^
+
+[SQL: SELECT cap_alerts.id AS cap_alerts_id, cap_alerts.identifier AS cap_alerts_identifier, cap_alerts.sent AS cap_alerts_sent, cap_alerts.expires AS cap_alerts_expires, cap_alerts.status AS cap_alerts_status, cap_alerts.message_type AS cap_alerts_message_type, cap_alerts.scope AS cap_alerts_scope, cap_alerts.category AS cap_alerts_category, cap_alerts.event AS cap_alerts_event, cap_alerts.urgency AS cap_alerts_urgency, cap_alerts.severity AS cap_alerts_severity, cap_alerts.certainty AS cap_alerts_certainty, cap_alerts.area_desc AS cap_alerts_area_desc, cap_alerts.headline AS cap_alerts_headline, cap_alerts.description AS cap_alerts_description, cap_alerts.instruction AS cap_alerts_instruction, ST_AsEWKB(cap_alerts.geometry) AS cap_alerts_geometry, cap_alerts.raw_json AS cap_alerts_raw_json, cap_alerts.created_at AS cap_alerts_created_at, cap_alerts.updated_at AS cap_alerts_updated_at 
+FROM cap_alerts 
+WHERE cap_alerts.identifier = %(identifier_1)s 
+ LIMIT %(param_1)s]
+[parameters: {'identifier_1': 'temp_7f23cad46477e41b', 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/14/f405)
+2025-07-25 22:58:57,045 - __main__ - INFO - Updated existing alert: Severe Thunderstorm Warning
+2025-07-25 22:58:57,045 - __main__ - INFO - Processing alert: Special Weather Statement (ID: No ID...)
+2025-07-25 22:58:57,045 - __main__ - INFO - Alert Special Weather Statement filtered out - not relevant
+2025-07-25 22:58:57,045 - __main__ - INFO - Processing alert: Severe Thunderstorm Warning (ID: No ID...)
+2025-07-25 22:58:57,045 - __main__ - INFO - Alert Severe Thunderstorm Warning passed relevance check - processing...
+2025-07-25 22:58:57,045 - __main__ - INFO - Generated temporary identifier: temp_bcbfa8ae9604c8a2
+2025-07-25 22:58:57,045 - __main__ - INFO - Successfully parsed alert: temp_bcbfa8ae9604c8a2 - Severe Thunderstorm Warning
+2025-07-25 22:58:57,047 - __main__ - ERROR - Database error saving alert: (psycopg2.errors.UndefinedColumn) column cap_alerts.geometry does not exist
+LINE 1: ....instruction AS cap_alerts_instruction, ST_AsEWKB(cap_alerts...
+                                                             ^
+
+[SQL: SELECT cap_alerts.id AS cap_alerts_id, cap_alerts.identifier AS cap_alerts_identifier, cap_alerts.sent AS cap_alerts_sent, cap_alerts.expires AS cap_alerts_expires, cap_alerts.status AS cap_alerts_status, cap_alerts.message_type AS cap_alerts_message_type, cap_alerts.scope AS cap_alerts_scope, cap_alerts.category AS cap_alerts_category, cap_alerts.event AS cap_alerts_event, cap_alerts.urgency AS cap_alerts_urgency, cap_alerts.severity AS cap_alerts_severity, cap_alerts.certainty AS cap_alerts_certainty, cap_alerts.area_desc AS cap_alerts_area_desc, cap_alerts.headline AS cap_alerts_headline, cap_alerts.description AS cap_alerts_description, cap_alerts.instruction AS cap_alerts_instruction, ST_AsEWKB(cap_alerts.geometry) AS cap_alerts_geometry, cap_alerts.raw_json AS cap_alerts_raw_json, cap_alerts.created_at AS cap_alerts_created_at, cap_alerts.updated_at AS cap_alerts_updated_at 
+FROM cap_alerts 
+WHERE cap_alerts.identifier = %(identifier_1)s 
+ LIMIT %(param_1)s]
+[parameters: {'identifier_1': 'temp_bcbfa8ae9604c8a2', 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/14/f405)
+2025-07-25 22:58:57,047 - __main__ - INFO - Updated existing alert: Severe Thunderstorm Warning
+2025-07-25 22:58:57,047 - __main__ - INFO - Processing alert: Special Weather Statement (ID: No ID...)
+2025-07-25 22:58:57,047 - __main__ - INFO - Alert Special Weather Statement filtered out - not relevant
+2025-07-25 22:58:57,047 - __main__ - INFO - Processing alert: Heat Advisory (ID: No ID...)
+2025-07-25 22:58:57,047 - __main__ - INFO - Alert Heat Advisory passed relevance check - processing...
+2025-07-25 22:58:57,047 - __main__ - INFO - Generated temporary identifier: temp_1e01b78c92795067
+2025-07-25 22:58:57,047 - __main__ - INFO - Successfully parsed alert: temp_1e01b78c92795067 - Heat Advisory
+2025-07-25 22:58:57,048 - __main__ - ERROR - Database error saving alert: (psycopg2.errors.UndefinedColumn) column cap_alerts.geometry does not exist
+LINE 1: ....instruction AS cap_alerts_instruction, ST_AsEWKB(cap_alerts...
+                                                             ^
+
+[SQL: SELECT cap_alerts.id AS cap_alerts_id, cap_alerts.identifier AS cap_alerts_identifier, cap_alerts.sent AS cap_alerts_sent, cap_alerts.expires AS cap_alerts_expires, cap_alerts.status AS cap_alerts_status, cap_alerts.message_type AS cap_alerts_message_type, cap_alerts.scope AS cap_alerts_scope, cap_alerts.category AS cap_alerts_category, cap_alerts.event AS cap_alerts_event, cap_alerts.urgency AS cap_alerts_urgency, cap_alerts.severity AS cap_alerts_severity, cap_alerts.certainty AS cap_alerts_certainty, cap_alerts.area_desc AS cap_alerts_area_desc, cap_alerts.headline AS cap_alerts_headline, cap_alerts.description AS cap_alerts_description, cap_alerts.instruction AS cap_alerts_instruction, ST_AsEWKB(cap_alerts.geometry) AS cap_alerts_geometry, cap_alerts.raw_json AS cap_alerts_raw_json, cap_alerts.created_at AS cap_alerts_created_at, cap_alerts.updated_at AS cap_alerts_updated_at 
+FROM cap_alerts 
+WHERE cap_alerts.identifier = %(identifier_1)s 
+ LIMIT %(param_1)s]
+[parameters: {'identifier_1': 'temp_1e01b78c92795067', 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/14/f405)
+2025-07-25 22:58:57,049 - __main__ - INFO - Updated existing alert: Heat Advisory
+2025-07-25 22:58:57,049 - __main__ - INFO - Processing alert: Special Weather Statement (ID: No ID...)
+2025-07-25 22:58:57,049 - __main__ - INFO - Alert Special Weather Statement filtered out - not relevant
+2025-07-25 22:58:57,049 - __main__ - INFO - Processing alert: Flash Flood Warning (ID: No ID...)
+2025-07-25 22:58:57,049 - __main__ - INFO - Alert Flash Flood Warning passed relevance check - processing...
+2025-07-25 22:58:57,049 - __main__ - INFO - Generated temporary identifier: temp_5025d6d831fb4df7
+2025-07-25 22:58:57,049 - __main__ - INFO - Successfully parsed alert: temp_5025d6d831fb4df7 - Flash Flood Warning
+2025-07-25 22:58:57,050 - __main__ - ERROR - Database error saving alert: (psycopg2.errors.UndefinedColumn) column cap_alerts.geometry does not exist
+LINE 1: ....instruction AS cap_alerts_instruction, ST_AsEWKB(cap_alerts...
+                                                             ^
+
+[SQL: SELECT cap_alerts.id AS cap_alerts_id, cap_alerts.identifier AS cap_alerts_identifier, cap_alerts.sent AS cap_alerts_sent, cap_alerts.expires AS cap_alerts_expires, cap_alerts.status AS cap_alerts_status, cap_alerts.message_type AS cap_alerts_message_type, cap_alerts.scope AS cap_alerts_scope, cap_alerts.category AS cap_alerts_category, cap_alerts.event AS cap_alerts_event, cap_alerts.urgency AS cap_alerts_urgency, cap_alerts.severity AS cap_alerts_severity, cap_alerts.certainty AS cap_alerts_certainty, cap_alerts.area_desc AS cap_alerts_area_desc, cap_alerts.headline AS cap_alerts_headline, cap_alerts.description AS cap_alerts_description, cap_alerts.instruction AS cap_alerts_instruction, ST_AsEWKB(cap_alerts.geometry) AS cap_alerts_geometry, cap_alerts.raw_json AS cap_alerts_raw_json, cap_alerts.created_at AS cap_alerts_created_at, cap_alerts.updated_at AS cap_alerts_updated_at 
+FROM cap_alerts 
+WHERE cap_alerts.identifier = %(identifier_1)s 
+ LIMIT %(param_1)s]
+[parameters: {'identifier_1': 'temp_5025d6d831fb4df7', 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/14/f405)
+2025-07-25 22:58:57,050 - __main__ - INFO - Updated existing alert: Flash Flood Warning
+2025-07-25 22:58:57,050 - __main__ - INFO - Processing alert: Heat Advisory (ID: No ID...)
+2025-07-25 22:58:57,050 - __main__ - INFO - Alert Heat Advisory filtered out - not relevant
+2025-07-25 22:58:57,066 - __main__ - INFO - Polling cycle completed: 0 new, 5 updated, 4 filtered
+2025-07-25 22:58:57,068 - __main__ - ERROR - Error logging system event: (psycopg2.errors.UndefinedTable) relation "system_logs" does not exist
+LINE 1: INSERT INTO system_logs (timestamp, level, message, module, ...
+                    ^
+
+[SQL: INSERT INTO system_logs (timestamp, level, message, module, details) VALUES (%(timestamp)s, %(level)s, %(message)s, %(module)s, %(details)s) RETURNING system_logs.id]
+[parameters: {'timestamp': datetime.datetime(2025, 7, 25, 21, 58, 57, 66386, tzinfo=<UTC>), 'level': 'INFO', 'message': 'CAP polling successful: 0 new alerts', 'module': 'cap_poller', 'details': '{"alerts_fetched": 9, "alerts_new": 0, "alerts_updated": 5, "alerts_filtered": 4, "execution_time_ms": 882, "status": "SUCCESS", "error_message": nul ... (168 characters truncated) ... "America/New_York", "led_updated": false, "logged_at_utc": "2025-07-25T21:58:57.066344+00:00", "logged_at_local": "2025-07-25T17:58:57.066364-04:00"}'}]
+(Background on this error at: https://sqlalche.me/e/14/f405)
+2025-07-25 22:58:57,068 - __main__ - INFO - Poll completed: {
+  "alerts_fetched": 9,
+  "alerts_new": 0,
+  "alerts_updated": 5,
+  "alerts_filtered": 4,
+  "execution_time_ms": 882,
+  "status": "SUCCESS",
+  "error_message": null,
+  "zone": "OHZ016/OHC137 (Putnam County, OH)",
+  "poll_time_utc": "2025-07-25T21:58:56.183267+00:00",
+  "poll_time_local": "2025-07-25T17:58:56.183279-04:00",
+  "timezone": "America/New_York",
+  "led_updated": false,
+  "logged_at_utc": "2025-07-25T21:58:57.066344+00:00",
+  "logged_at_local": "2025-07-25T17:58:57.066364-04:00"
+}
+2025-07-25 23:03:57,077 - __main__ - INFO - Starting CAP alert polling cycle for Putnam County, OH at July 25, 2025 at 06:03 PM EDT (22:03 UTC)
+2025-07-25 23:03:57,080 - __main__ - INFO - Fetching alerts from: https://api.weather.gov/alerts/active?zone=OHZ016
+2025-07-25 23:03:57,639 - __main__ - INFO - Retrieved 0 alerts from https://api.weather.gov/alerts/active?zone=OHZ016
+2025-07-25 23:03:57,640 - __main__ - INFO - Fetching alerts from: https://api.weather.gov/alerts/active?area=OH
+2025-07-25 23:03:57,943 - __main__ - INFO - Retrieved 6 alerts from https://api.weather.gov/alerts/active?area=OH
+2025-07-25 23:03:57,943 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:03:57,943 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:03:57,943 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:03:57,943 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:03:57,943 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:03:57,943 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:03:57,943 - __main__ - INFO - Total unique alerts collected: 6
+2025-07-25 23:03:57,943 - __main__ - INFO - Processing alert: Severe Thunderstorm Warning (ID: No ID...)
+2025-07-25 23:03:57,943 - __main__ - INFO - Alert Severe Thunderstorm Warning passed relevance check - processing...
+2025-07-25 23:03:57,943 - __main__ - INFO - Generated temporary identifier: temp_f5790749758d0ef3
+2025-07-25 23:03:57,944 - __main__ - INFO - Successfully parsed alert: temp_f5790749758d0ef3 - Severe Thunderstorm Warning
+2025-07-25 23:03:57,955 - __main__ - ERROR - Database error saving alert: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (psycopg2.errors.UndefinedTable) relation "system_logs" does not exist
+LINE 1: INSERT INTO system_logs (timestamp, level, message, module, ...
+                    ^
+
+[SQL: INSERT INTO system_logs (timestamp, level, message, module, details) VALUES (%(timestamp)s, %(level)s, %(message)s, %(module)s, %(details)s) RETURNING system_logs.id]
+[parameters: {'timestamp': datetime.datetime(2025, 7, 25, 21, 58, 57, 66386, tzinfo=<UTC>), 'level': 'INFO', 'message': 'CAP polling successful: 0 new alerts', 'module': 'cap_poller', 'details': '{"alerts_fetched": 9, "alerts_new": 0, "alerts_updated": 5, "alerts_filtered": 4, "execution_time_ms": 882, "status": "SUCCESS", "error_message": nul ... (168 characters truncated) ... "America/New_York", "led_updated": false, "logged_at_utc": "2025-07-25T21:58:57.066344+00:00", "logged_at_local": "2025-07-25T17:58:57.066364-04:00"}'}]
+(Background on this error at: https://sqlalche.me/e/14/f405) (Background on this error at: https://sqlalche.me/e/14/7s2a)
+2025-07-25 23:03:57,956 - __main__ - INFO - Updated existing alert: Severe Thunderstorm Warning
+2025-07-25 23:03:57,956 - __main__ - INFO - Processing alert: Special Weather Statement (ID: No ID...)
+2025-07-25 23:03:57,956 - __main__ - INFO - Alert Special Weather Statement filtered out - not relevant
+2025-07-25 23:03:57,956 - __main__ - INFO - Processing alert: Special Weather Statement (ID: No ID...)
+2025-07-25 23:03:57,956 - __main__ - INFO - Alert Special Weather Statement filtered out - not relevant
+2025-07-25 23:03:57,956 - __main__ - INFO - Processing alert: Heat Advisory (ID: No ID...)
+2025-07-25 23:03:57,956 - __main__ - INFO - Alert Heat Advisory passed relevance check - processing...
+2025-07-25 23:03:57,957 - __main__ - INFO - Generated temporary identifier: temp_1e01b78c92795067
+2025-07-25 23:03:57,957 - __main__ - INFO - Successfully parsed alert: temp_1e01b78c92795067 - Heat Advisory
+2025-07-25 23:03:57,964 - __main__ - ERROR - Database error saving alert: (psycopg2.errors.UndefinedColumn) column cap_alerts.geometry does not exist
+LINE 1: ....instruction AS cap_alerts_instruction, ST_AsEWKB(cap_alerts...
+                                                             ^
+
+[SQL: SELECT cap_alerts.id AS cap_alerts_id, cap_alerts.identifier AS cap_alerts_identifier, cap_alerts.sent AS cap_alerts_sent, cap_alerts.expires AS cap_alerts_expires, cap_alerts.status AS cap_alerts_status, cap_alerts.message_type AS cap_alerts_message_type, cap_alerts.scope AS cap_alerts_scope, cap_alerts.category AS cap_alerts_category, cap_alerts.event AS cap_alerts_event, cap_alerts.urgency AS cap_alerts_urgency, cap_alerts.severity AS cap_alerts_severity, cap_alerts.certainty AS cap_alerts_certainty, cap_alerts.area_desc AS cap_alerts_area_desc, cap_alerts.headline AS cap_alerts_headline, cap_alerts.description AS cap_alerts_description, cap_alerts.instruction AS cap_alerts_instruction, ST_AsEWKB(cap_alerts.geometry) AS cap_alerts_geometry, cap_alerts.raw_json AS cap_alerts_raw_json, cap_alerts.created_at AS cap_alerts_created_at, cap_alerts.updated_at AS cap_alerts_updated_at 
+FROM cap_alerts 
+WHERE cap_alerts.identifier = %(identifier_1)s 
+ LIMIT %(param_1)s]
+[parameters: {'identifier_1': 'temp_1e01b78c92795067', 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/14/f405)
+2025-07-25 23:03:57,965 - __main__ - INFO - Updated existing alert: Heat Advisory
+2025-07-25 23:03:57,965 - __main__ - INFO - Processing alert: Flash Flood Warning (ID: No ID...)
+2025-07-25 23:03:57,965 - __main__ - INFO - Alert Flash Flood Warning passed relevance check - processing...
+2025-07-25 23:03:57,965 - __main__ - INFO - Generated temporary identifier: temp_5025d6d831fb4df7
+2025-07-25 23:03:57,965 - __main__ - INFO - Successfully parsed alert: temp_5025d6d831fb4df7 - Flash Flood Warning
+2025-07-25 23:03:57,968 - __main__ - ERROR - Database error saving alert: (psycopg2.errors.UndefinedColumn) column cap_alerts.geometry does not exist
+LINE 1: ....instruction AS cap_alerts_instruction, ST_AsEWKB(cap_alerts...
+                                                             ^
+
+[SQL: SELECT cap_alerts.id AS cap_alerts_id, cap_alerts.identifier AS cap_alerts_identifier, cap_alerts.sent AS cap_alerts_sent, cap_alerts.expires AS cap_alerts_expires, cap_alerts.status AS cap_alerts_status, cap_alerts.message_type AS cap_alerts_message_type, cap_alerts.scope AS cap_alerts_scope, cap_alerts.category AS cap_alerts_category, cap_alerts.event AS cap_alerts_event, cap_alerts.urgency AS cap_alerts_urgency, cap_alerts.severity AS cap_alerts_severity, cap_alerts.certainty AS cap_alerts_certainty, cap_alerts.area_desc AS cap_alerts_area_desc, cap_alerts.headline AS cap_alerts_headline, cap_alerts.description AS cap_alerts_description, cap_alerts.instruction AS cap_alerts_instruction, ST_AsEWKB(cap_alerts.geometry) AS cap_alerts_geometry, cap_alerts.raw_json AS cap_alerts_raw_json, cap_alerts.created_at AS cap_alerts_created_at, cap_alerts.updated_at AS cap_alerts_updated_at 
+FROM cap_alerts 
+WHERE cap_alerts.identifier = %(identifier_1)s 
+ LIMIT %(param_1)s]
+[parameters: {'identifier_1': 'temp_5025d6d831fb4df7', 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/14/f405)
+2025-07-25 23:03:57,969 - __main__ - INFO - Updated existing alert: Flash Flood Warning
+2025-07-25 23:03:57,970 - __main__ - INFO - Processing alert: Heat Advisory (ID: No ID...)
+2025-07-25 23:03:57,970 - __main__ - INFO - Alert Heat Advisory filtered out - not relevant
+2025-07-25 23:03:58,035 - __main__ - INFO - Polling cycle completed: 0 new, 3 updated, 3 filtered
+2025-07-25 23:03:58,038 - __main__ - ERROR - Error logging system event: (psycopg2.errors.UndefinedTable) relation "system_logs" does not exist
+LINE 1: INSERT INTO system_logs (timestamp, level, message, module, ...
+                    ^
+
+[SQL: INSERT INTO system_logs (timestamp, level, message, module, details) VALUES (%(timestamp)s, %(level)s, %(message)s, %(module)s, %(details)s) RETURNING system_logs.id]
+[parameters: {'timestamp': datetime.datetime(2025, 7, 25, 22, 3, 58, 35324, tzinfo=<UTC>), 'level': 'INFO', 'message': 'CAP polling successful: 0 new alerts', 'module': 'cap_poller', 'details': '{"alerts_fetched": 6, "alerts_new": 0, "alerts_updated": 3, "alerts_filtered": 3, "execution_time_ms": 963, "status": "SUCCESS", "error_message": nul ... (168 characters truncated) ... "America/New_York", "led_updated": false, "logged_at_utc": "2025-07-25T22:03:58.035260+00:00", "logged_at_local": "2025-07-25T18:03:58.035291-04:00"}'}]
+(Background on this error at: https://sqlalche.me/e/14/f405)
+2025-07-25 23:03:58,038 - __main__ - INFO - Poll completed: {
+  "alerts_fetched": 6,
+  "alerts_new": 0,
+  "alerts_updated": 3,
+  "alerts_filtered": 3,
+  "execution_time_ms": 963,
+  "status": "SUCCESS",
+  "error_message": null,
+  "zone": "OHZ016/OHC137 (Putnam County, OH)",
+  "poll_time_utc": "2025-07-25T22:03:57.071562+00:00",
+  "poll_time_local": "2025-07-25T18:03:57.074135-04:00",
+  "timezone": "America/New_York",
+  "led_updated": false,
+  "logged_at_utc": "2025-07-25T22:03:58.035260+00:00",
+  "logged_at_local": "2025-07-25T18:03:58.035291-04:00"
+}
+2025-07-25 23:07:57,931 - __main__ - INFO - Starting NOAA CAP Alert Poller with LED Integration
+2025-07-25 23:07:57,932 - __main__ - INFO - Startup time: July 25, 2025 at 06:07 PM EDT (22:07 UTC)
+2025-07-25 23:07:57,968 - __main__ - WARNING - Database table verification failed: (psycopg2.errors.InsufficientPrivilege) permission denied for table system_logs
+
+[SQL: SELECT 1 FROM system_logs LIMIT 1]
+(Background on this error at: https://sqlalche.me/e/14/f405)
+2025-07-25 23:07:57,968 - __main__ - INFO - Running continuously with 300 second intervals
+2025-07-25 23:07:57,968 - __main__ - INFO - Starting CAP alert polling cycle for Putnam County, OH at July 25, 2025 at 06:07 PM EDT (22:07 UTC)
+2025-07-25 23:07:57,968 - __main__ - INFO - Fetching alerts from: https://api.weather.gov/alerts/active?zone=OHZ016
+2025-07-25 23:07:58,530 - __main__ - INFO - Retrieved 0 alerts from https://api.weather.gov/alerts/active?zone=OHZ016
+2025-07-25 23:07:58,530 - __main__ - INFO - Fetching alerts from: https://api.weather.gov/alerts/active?area=OH
+2025-07-25 23:07:58,815 - __main__ - INFO - Retrieved 7 alerts from https://api.weather.gov/alerts/active?area=OH
+2025-07-25 23:07:58,816 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:07:58,816 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:07:58,816 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:07:58,816 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:07:58,816 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:07:58,816 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:07:58,816 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:07:58,816 - __main__ - INFO - Total unique alerts collected: 7
+2025-07-25 23:07:58,816 - __main__ - INFO - Processing alert: Flood Advisory (ID: No ID...)
+2025-07-25 23:07:58,816 - __main__ - INFO - Alert Flood Advisory filtered out - not relevant
+2025-07-25 23:07:58,816 - __main__ - INFO - Processing alert: Severe Thunderstorm Warning (ID: No ID...)
+2025-07-25 23:07:58,816 - __main__ - INFO - Alert Severe Thunderstorm Warning passed relevance check - processing...
+2025-07-25 23:07:58,816 - __main__ - INFO - Generated temporary identifier: temp_f5790749758d0ef3
+2025-07-25 23:07:58,820 - __main__ - INFO - Successfully parsed alert: temp_f5790749758d0ef3 - Severe Thunderstorm Warning
+2025-07-25 23:07:58,826 - __main__ - ERROR - Database error saving alert: (psycopg2.errors.InFailedSqlTransaction) current transaction is aborted, commands ignored until end of transaction block
+
+[SQL: SELECT cap_alerts.id AS cap_alerts_id, cap_alerts.identifier AS cap_alerts_identifier, cap_alerts.sent AS cap_alerts_sent, cap_alerts.expires AS cap_alerts_expires, cap_alerts.status AS cap_alerts_status, cap_alerts.message_type AS cap_alerts_message_type, cap_alerts.scope AS cap_alerts_scope, cap_alerts.category AS cap_alerts_category, cap_alerts.event AS cap_alerts_event, cap_alerts.urgency AS cap_alerts_urgency, cap_alerts.severity AS cap_alerts_severity, cap_alerts.certainty AS cap_alerts_certainty, cap_alerts.area_desc AS cap_alerts_area_desc, cap_alerts.headline AS cap_alerts_headline, cap_alerts.description AS cap_alerts_description, cap_alerts.instruction AS cap_alerts_instruction, ST_AsEWKB(cap_alerts.geometry) AS cap_alerts_geometry, cap_alerts.raw_json AS cap_alerts_raw_json, cap_alerts.created_at AS cap_alerts_created_at, cap_alerts.updated_at AS cap_alerts_updated_at 
+FROM cap_alerts 
+WHERE cap_alerts.identifier = %(identifier_1)s 
+ LIMIT %(param_1)s]
+[parameters: {'identifier_1': 'temp_f5790749758d0ef3', 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/14/2j85)
+2025-07-25 23:07:58,826 - __main__ - INFO - Updated existing alert: Severe Thunderstorm Warning
+2025-07-25 23:07:58,826 - __main__ - INFO - Processing alert: Special Weather Statement (ID: No ID...)
+2025-07-25 23:07:58,826 - __main__ - INFO - Alert Special Weather Statement filtered out - not relevant
+2025-07-25 23:07:58,827 - __main__ - INFO - Processing alert: Special Weather Statement (ID: No ID...)
+2025-07-25 23:07:58,827 - __main__ - INFO - Alert Special Weather Statement filtered out - not relevant
+2025-07-25 23:07:58,827 - __main__ - INFO - Processing alert: Heat Advisory (ID: No ID...)
+2025-07-25 23:07:58,827 - __main__ - INFO - Alert Heat Advisory passed relevance check - processing...
+2025-07-25 23:07:58,827 - __main__ - INFO - Generated temporary identifier: temp_1e01b78c92795067
+2025-07-25 23:07:58,827 - __main__ - INFO - Successfully parsed alert: temp_1e01b78c92795067 - Heat Advisory
+2025-07-25 23:07:58,829 - __main__ - ERROR - Database error saving alert: (psycopg2.errors.UndefinedColumn) column cap_alerts.geometry does not exist
+LINE 1: ....instruction AS cap_alerts_instruction, ST_AsEWKB(cap_alerts...
+                                                             ^
+
+[SQL: SELECT cap_alerts.id AS cap_alerts_id, cap_alerts.identifier AS cap_alerts_identifier, cap_alerts.sent AS cap_alerts_sent, cap_alerts.expires AS cap_alerts_expires, cap_alerts.status AS cap_alerts_status, cap_alerts.message_type AS cap_alerts_message_type, cap_alerts.scope AS cap_alerts_scope, cap_alerts.category AS cap_alerts_category, cap_alerts.event AS cap_alerts_event, cap_alerts.urgency AS cap_alerts_urgency, cap_alerts.severity AS cap_alerts_severity, cap_alerts.certainty AS cap_alerts_certainty, cap_alerts.area_desc AS cap_alerts_area_desc, cap_alerts.headline AS cap_alerts_headline, cap_alerts.description AS cap_alerts_description, cap_alerts.instruction AS cap_alerts_instruction, ST_AsEWKB(cap_alerts.geometry) AS cap_alerts_geometry, cap_alerts.raw_json AS cap_alerts_raw_json, cap_alerts.created_at AS cap_alerts_created_at, cap_alerts.updated_at AS cap_alerts_updated_at 
+FROM cap_alerts 
+WHERE cap_alerts.identifier = %(identifier_1)s 
+ LIMIT %(param_1)s]
+[parameters: {'identifier_1': 'temp_1e01b78c92795067', 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/14/f405)
+2025-07-25 23:07:58,830 - __main__ - INFO - Updated existing alert: Heat Advisory
+2025-07-25 23:07:58,830 - __main__ - INFO - Processing alert: Flash Flood Warning (ID: No ID...)
+2025-07-25 23:07:58,830 - __main__ - INFO - Alert Flash Flood Warning passed relevance check - processing...
+2025-07-25 23:07:58,830 - __main__ - INFO - Generated temporary identifier: temp_5025d6d831fb4df7
+2025-07-25 23:07:58,830 - __main__ - INFO - Successfully parsed alert: temp_5025d6d831fb4df7 - Flash Flood Warning
+2025-07-25 23:07:58,831 - __main__ - ERROR - Database error saving alert: (psycopg2.errors.UndefinedColumn) column cap_alerts.geometry does not exist
+LINE 1: ....instruction AS cap_alerts_instruction, ST_AsEWKB(cap_alerts...
+                                                             ^
+
+[SQL: SELECT cap_alerts.id AS cap_alerts_id, cap_alerts.identifier AS cap_alerts_identifier, cap_alerts.sent AS cap_alerts_sent, cap_alerts.expires AS cap_alerts_expires, cap_alerts.status AS cap_alerts_status, cap_alerts.message_type AS cap_alerts_message_type, cap_alerts.scope AS cap_alerts_scope, cap_alerts.category AS cap_alerts_category, cap_alerts.event AS cap_alerts_event, cap_alerts.urgency AS cap_alerts_urgency, cap_alerts.severity AS cap_alerts_severity, cap_alerts.certainty AS cap_alerts_certainty, cap_alerts.area_desc AS cap_alerts_area_desc, cap_alerts.headline AS cap_alerts_headline, cap_alerts.description AS cap_alerts_description, cap_alerts.instruction AS cap_alerts_instruction, ST_AsEWKB(cap_alerts.geometry) AS cap_alerts_geometry, cap_alerts.raw_json AS cap_alerts_raw_json, cap_alerts.created_at AS cap_alerts_created_at, cap_alerts.updated_at AS cap_alerts_updated_at 
+FROM cap_alerts 
+WHERE cap_alerts.identifier = %(identifier_1)s 
+ LIMIT %(param_1)s]
+[parameters: {'identifier_1': 'temp_5025d6d831fb4df7', 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/14/f405)
+2025-07-25 23:07:58,831 - __main__ - INFO - Updated existing alert: Flash Flood Warning
+2025-07-25 23:07:58,831 - __main__ - INFO - Processing alert: Heat Advisory (ID: No ID...)
+2025-07-25 23:07:58,832 - __main__ - INFO - Alert Heat Advisory filtered out - not relevant
+2025-07-25 23:07:58,839 - __main__ - INFO - Polling cycle completed: 0 new, 3 updated, 4 filtered
+2025-07-25 23:07:58,842 - __main__ - ERROR - Error logging system event: (psycopg2.errors.InsufficientPrivilege) permission denied for table system_logs
+
+[SQL: INSERT INTO system_logs (timestamp, level, message, module, details) VALUES (%(timestamp)s, %(level)s, %(message)s, %(module)s, %(details)s) RETURNING system_logs.id]
+[parameters: {'timestamp': datetime.datetime(2025, 7, 25, 22, 7, 58, 839701, tzinfo=<UTC>), 'level': 'INFO', 'message': 'CAP polling successful: 0 new alerts', 'module': 'cap_poller', 'details': '{"alerts_fetched": 7, "alerts_new": 0, "alerts_updated": 3, "alerts_filtered": 4, "execution_time_ms": 870, "status": "SUCCESS", "error_message": nul ... (168 characters truncated) ... "America/New_York", "led_updated": false, "logged_at_utc": "2025-07-25T22:07:58.839658+00:00", "logged_at_local": "2025-07-25T18:07:58.839677-04:00"}'}]
+(Background on this error at: https://sqlalche.me/e/14/f405)
+2025-07-25 23:07:58,842 - __main__ - INFO - Poll completed: {
+  "alerts_fetched": 7,
+  "alerts_new": 0,
+  "alerts_updated": 3,
+  "alerts_filtered": 4,
+  "execution_time_ms": 870,
+  "status": "SUCCESS",
+  "error_message": null,
+  "zone": "OHZ016/OHC137 (Putnam County, OH)",
+  "poll_time_utc": "2025-07-25T22:07:57.968590+00:00",
+  "poll_time_local": "2025-07-25T18:07:57.968606-04:00",
+  "timezone": "America/New_York",
+  "led_updated": false,
+  "logged_at_utc": "2025-07-25T22:07:58.839658+00:00",
+  "logged_at_local": "2025-07-25T18:07:58.839677-04:00"
+}
+2025-07-25 23:10:30,017 - __main__ - INFO - Starting NOAA CAP Alert Poller with LED Integration
+2025-07-25 23:10:30,019 - __main__ - INFO - Startup time: July 25, 2025 at 06:10 PM EDT (22:10 UTC)
+2025-07-25 23:10:30,071 - __main__ - WARNING - Database table verification failed: (psycopg2.errors.InsufficientPrivilege) permission denied for table system_logs
+
+[SQL: SELECT 1 FROM system_logs LIMIT 1]
+(Background on this error at: https://sqlalche.me/e/14/f405)
+2025-07-25 23:10:30,072 - __main__ - INFO - Running continuously with 300 second intervals
+2025-07-25 23:10:30,072 - __main__ - INFO - Starting CAP alert polling cycle for Putnam County, OH at July 25, 2025 at 06:10 PM EDT (22:10 UTC)
+2025-07-25 23:10:30,072 - __main__ - INFO - Fetching alerts from: https://api.weather.gov/alerts/active?zone=OHZ016
+2025-07-25 23:10:30,632 - __main__ - INFO - Retrieved 0 alerts from https://api.weather.gov/alerts/active?zone=OHZ016
+2025-07-25 23:10:30,632 - __main__ - INFO - Fetching alerts from: https://api.weather.gov/alerts/active?area=OH
+2025-07-25 23:10:30,904 - __main__ - INFO - Retrieved 8 alerts from https://api.weather.gov/alerts/active?area=OH
+2025-07-25 23:10:30,905 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:10:30,905 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:10:30,905 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:10:30,905 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:10:30,905 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:10:30,905 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:10:30,905 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:10:30,905 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:10:30,905 - __main__ - INFO - Total unique alerts collected: 8
+2025-07-25 23:10:30,905 - __main__ - INFO - Processing alert: Special Weather Statement (ID: No ID...)
+2025-07-25 23:10:30,905 - __main__ - INFO - Alert Special Weather Statement filtered out - not relevant
+2025-07-25 23:10:30,905 - __main__ - INFO - Processing alert: Flood Advisory (ID: No ID...)
+2025-07-25 23:10:30,905 - __main__ - INFO - Alert Flood Advisory filtered out - not relevant
+2025-07-25 23:10:30,905 - __main__ - INFO - Processing alert: Severe Thunderstorm Warning (ID: No ID...)
+2025-07-25 23:10:30,906 - __main__ - INFO - Alert Severe Thunderstorm Warning passed relevance check - processing...
+2025-07-25 23:10:30,906 - __main__ - INFO - Generated temporary identifier: temp_f5790749758d0ef3
+2025-07-25 23:10:30,910 - __main__ - INFO - Successfully parsed alert: temp_f5790749758d0ef3 - Severe Thunderstorm Warning
+2025-07-25 23:10:30,916 - __main__ - ERROR - Database error saving alert: (psycopg2.errors.InFailedSqlTransaction) current transaction is aborted, commands ignored until end of transaction block
+
+[SQL: SELECT cap_alerts.id AS cap_alerts_id, cap_alerts.identifier AS cap_alerts_identifier, cap_alerts.sent AS cap_alerts_sent, cap_alerts.expires AS cap_alerts_expires, cap_alerts.status AS cap_alerts_status, cap_alerts.message_type AS cap_alerts_message_type, cap_alerts.scope AS cap_alerts_scope, cap_alerts.category AS cap_alerts_category, cap_alerts.event AS cap_alerts_event, cap_alerts.urgency AS cap_alerts_urgency, cap_alerts.severity AS cap_alerts_severity, cap_alerts.certainty AS cap_alerts_certainty, cap_alerts.area_desc AS cap_alerts_area_desc, cap_alerts.headline AS cap_alerts_headline, cap_alerts.description AS cap_alerts_description, cap_alerts.instruction AS cap_alerts_instruction, cap_alerts.raw_json AS cap_alerts_raw_json, cap_alerts.created_at AS cap_alerts_created_at, cap_alerts.updated_at AS cap_alerts_updated_at 
+FROM cap_alerts 
+WHERE cap_alerts.identifier = %(identifier_1)s 
+ LIMIT %(param_1)s]
+[parameters: {'identifier_1': 'temp_f5790749758d0ef3', 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/14/2j85)
+2025-07-25 23:10:30,916 - __main__ - INFO - Updated existing alert: Severe Thunderstorm Warning
+2025-07-25 23:10:30,916 - __main__ - INFO - Processing alert: Special Weather Statement (ID: No ID...)
+2025-07-25 23:10:30,916 - __main__ - INFO - Alert Special Weather Statement filtered out - not relevant
+2025-07-25 23:10:30,916 - __main__ - INFO - Processing alert: Special Weather Statement (ID: No ID...)
+2025-07-25 23:10:30,916 - __main__ - INFO - Alert Special Weather Statement filtered out - not relevant
+2025-07-25 23:10:30,917 - __main__ - INFO - Processing alert: Heat Advisory (ID: No ID...)
+2025-07-25 23:10:30,917 - __main__ - INFO - Alert Heat Advisory passed relevance check - processing...
+2025-07-25 23:10:30,917 - __main__ - INFO - Generated temporary identifier: temp_1e01b78c92795067
+2025-07-25 23:10:30,917 - __main__ - INFO - Successfully parsed alert: temp_1e01b78c92795067 - Heat Advisory
+2025-07-25 23:10:31,013 - __main__ - INFO - Saved new alert: Heat Advisory - Sent: July 25, 2025 at 06:15 PM EDT (22:15 UTC)
+2025-07-25 23:10:31,013 - __main__ - INFO - Processing alert: Flash Flood Warning (ID: No ID...)
+2025-07-25 23:10:31,013 - __main__ - INFO - Alert Flash Flood Warning passed relevance check - processing...
+2025-07-25 23:10:31,013 - __main__ - INFO - Generated temporary identifier: temp_5025d6d831fb4df7
+2025-07-25 23:10:31,013 - __main__ - INFO - Successfully parsed alert: temp_5025d6d831fb4df7 - Flash Flood Warning
+2025-07-25 23:10:31,019 - __main__ - INFO - Saved new alert: Flash Flood Warning - Sent: July 25, 2025 at 05:17 PM EDT (21:17 UTC)
+2025-07-25 23:10:31,019 - __main__ - INFO - Processing alert: Heat Advisory (ID: No ID...)
+2025-07-25 23:10:31,019 - __main__ - INFO - Alert Heat Advisory filtered out - not relevant
+2025-07-25 23:10:31,027 - __main__ - INFO - Polling cycle completed: 2 new, 1 updated, 5 filtered
+2025-07-25 23:10:31,028 - __main__ - INFO - system_logs table not available - logging to file only
+2025-07-25 23:10:31,028 - __main__ - INFO - Poll completed: {
+  "alerts_fetched": 8,
+  "alerts_new": 2,
+  "alerts_updated": 1,
+  "alerts_filtered": 5,
+  "execution_time_ms": 954,
+  "status": "SUCCESS",
+  "error_message": null,
+  "zone": "OHZ016/OHC137 (Putnam County, OH)",
+  "poll_time_utc": "2025-07-25T22:10:30.072298+00:00",
+  "poll_time_local": "2025-07-25T18:10:30.072311-04:00",
+  "timezone": "America/New_York",
+  "led_updated": true
+}
+2025-07-25 23:10:38,678 - __main__ - INFO - Starting NOAA CAP Alert Poller with LED Integration
+2025-07-25 23:10:38,685 - __main__ - INFO - Startup time: July 25, 2025 at 06:10 PM EDT (22:10 UTC)
+2025-07-25 23:10:38,720 - __main__ - WARNING - Database table verification failed: (psycopg2.errors.InsufficientPrivilege) permission denied for table system_logs
+
+[SQL: SELECT 1 FROM system_logs LIMIT 1]
+(Background on this error at: https://sqlalche.me/e/14/f405)
+2025-07-25 23:10:38,721 - __main__ - INFO - Running continuously with 300 second intervals
+2025-07-25 23:10:38,721 - __main__ - INFO - Starting CAP alert polling cycle for Putnam County, OH at July 25, 2025 at 06:10 PM EDT (22:10 UTC)
+2025-07-25 23:10:38,721 - __main__ - INFO - Fetching alerts from: https://api.weather.gov/alerts/active?zone=OHZ016
+2025-07-25 23:10:39,185 - __main__ - INFO - Retrieved 0 alerts from https://api.weather.gov/alerts/active?zone=OHZ016
+2025-07-25 23:10:39,186 - __main__ - INFO - Fetching alerts from: https://api.weather.gov/alerts/active?area=OH
+2025-07-25 23:10:39,341 - __main__ - INFO - Retrieved 8 alerts from https://api.weather.gov/alerts/active?area=OH
+2025-07-25 23:10:39,341 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:10:39,341 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:10:39,341 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:10:39,341 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:10:39,341 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:10:39,342 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:10:39,342 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:10:39,342 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:10:39,342 - __main__ - INFO - Total unique alerts collected: 8
+2025-07-25 23:10:39,342 - __main__ - INFO - Processing alert: Special Weather Statement (ID: No ID...)
+2025-07-25 23:10:39,342 - __main__ - INFO - Alert Special Weather Statement filtered out - not relevant
+2025-07-25 23:10:39,342 - __main__ - INFO - Processing alert: Flood Advisory (ID: No ID...)
+2025-07-25 23:10:39,342 - __main__ - INFO - Alert Flood Advisory filtered out - not relevant
+2025-07-25 23:10:39,342 - __main__ - INFO - Processing alert: Severe Thunderstorm Warning (ID: No ID...)
+2025-07-25 23:10:39,342 - __main__ - INFO - Alert Severe Thunderstorm Warning passed relevance check - processing...
+2025-07-25 23:10:39,342 - __main__ - INFO - Generated temporary identifier: temp_f5790749758d0ef3
+2025-07-25 23:10:39,344 - __main__ - INFO - Successfully parsed alert: temp_f5790749758d0ef3 - Severe Thunderstorm Warning
+2025-07-25 23:10:39,349 - __main__ - ERROR - Database error saving alert: (psycopg2.errors.InFailedSqlTransaction) current transaction is aborted, commands ignored until end of transaction block
+
+[SQL: SELECT cap_alerts.id AS cap_alerts_id, cap_alerts.identifier AS cap_alerts_identifier, cap_alerts.sent AS cap_alerts_sent, cap_alerts.expires AS cap_alerts_expires, cap_alerts.status AS cap_alerts_status, cap_alerts.message_type AS cap_alerts_message_type, cap_alerts.scope AS cap_alerts_scope, cap_alerts.category AS cap_alerts_category, cap_alerts.event AS cap_alerts_event, cap_alerts.urgency AS cap_alerts_urgency, cap_alerts.severity AS cap_alerts_severity, cap_alerts.certainty AS cap_alerts_certainty, cap_alerts.area_desc AS cap_alerts_area_desc, cap_alerts.headline AS cap_alerts_headline, cap_alerts.description AS cap_alerts_description, cap_alerts.instruction AS cap_alerts_instruction, cap_alerts.raw_json AS cap_alerts_raw_json, cap_alerts.created_at AS cap_alerts_created_at, cap_alerts.updated_at AS cap_alerts_updated_at 
+FROM cap_alerts 
+WHERE cap_alerts.identifier = %(identifier_1)s 
+ LIMIT %(param_1)s]
+[parameters: {'identifier_1': 'temp_f5790749758d0ef3', 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/14/2j85)
+2025-07-25 23:10:39,349 - __main__ - INFO - Updated existing alert: Severe Thunderstorm Warning
+2025-07-25 23:10:39,349 - __main__ - INFO - Processing alert: Special Weather Statement (ID: No ID...)
+2025-07-25 23:10:39,349 - __main__ - INFO - Alert Special Weather Statement filtered out - not relevant
+2025-07-25 23:10:39,349 - __main__ - INFO - Processing alert: Special Weather Statement (ID: No ID...)
+2025-07-25 23:10:39,349 - __main__ - INFO - Alert Special Weather Statement filtered out - not relevant
+2025-07-25 23:10:39,349 - __main__ - INFO - Processing alert: Heat Advisory (ID: No ID...)
+2025-07-25 23:10:39,350 - __main__ - INFO - Alert Heat Advisory passed relevance check - processing...
+2025-07-25 23:10:39,350 - __main__ - INFO - Generated temporary identifier: temp_1e01b78c92795067
+2025-07-25 23:10:39,350 - __main__ - INFO - Successfully parsed alert: temp_1e01b78c92795067 - Heat Advisory
+2025-07-25 23:10:39,365 - __main__ - INFO - Updated existing alert: Heat Advisory - Sent: July 25, 2025 at 06:15 PM EDT (22:15 UTC)
+2025-07-25 23:10:39,365 - __main__ - INFO - Processing alert: Flash Flood Warning (ID: No ID...)
+2025-07-25 23:10:39,365 - __main__ - INFO - Alert Flash Flood Warning passed relevance check - processing...
+2025-07-25 23:10:39,365 - __main__ - INFO - Generated temporary identifier: temp_5025d6d831fb4df7
+2025-07-25 23:10:39,365 - __main__ - INFO - Successfully parsed alert: temp_5025d6d831fb4df7 - Flash Flood Warning
+2025-07-25 23:10:39,369 - __main__ - INFO - Updated existing alert: Flash Flood Warning - Sent: July 25, 2025 at 05:17 PM EDT (21:17 UTC)
+2025-07-25 23:10:39,369 - __main__ - INFO - Processing alert: Heat Advisory (ID: No ID...)
+2025-07-25 23:10:39,369 - __main__ - INFO - Alert Heat Advisory filtered out - not relevant
+2025-07-25 23:10:39,377 - __main__ - INFO - Polling cycle completed: 0 new, 3 updated, 5 filtered
+2025-07-25 23:10:39,378 - __main__ - INFO - system_logs table not available - logging to file only
+2025-07-25 23:10:39,378 - __main__ - INFO - Poll completed: {
+  "alerts_fetched": 8,
+  "alerts_new": 0,
+  "alerts_updated": 3,
+  "alerts_filtered": 5,
+  "execution_time_ms": 656,
+  "status": "SUCCESS",
+  "error_message": null,
+  "zone": "OHZ016/OHC137 (Putnam County, OH)",
+  "poll_time_utc": "2025-07-25T22:10:38.721321+00:00",
+  "poll_time_local": "2025-07-25T18:10:38.721333-04:00",
+  "timezone": "America/New_York",
+  "led_updated": false
+}
+2025-07-25 23:13:11,081 - __main__ - INFO - Starting NOAA CAP Alert Poller with LED Integration
+2025-07-25 23:13:11,081 - __main__ - INFO - Startup time: July 25, 2025 at 06:13 PM EDT (22:13 UTC)
+2025-07-25 23:13:11,154 - __main__ - WARNING - Database table verification failed: (psycopg2.errors.InsufficientPrivilege) permission denied for table system_logs
+
+[SQL: SELECT 1 FROM system_logs LIMIT 1]
+(Background on this error at: https://sqlalche.me/e/14/f405)
+2025-07-25 23:13:11,154 - __main__ - INFO - Running continuously with 300 second intervals
+2025-07-25 23:13:11,155 - __main__ - INFO - Starting CAP alert polling cycle for Putnam County, OH at July 25, 2025 at 06:13 PM EDT (22:13 UTC)
+2025-07-25 23:13:11,155 - __main__ - INFO - Fetching alerts from: https://api.weather.gov/alerts/active?zone=OHZ016
+2025-07-25 23:13:11,706 - __main__ - INFO - Retrieved 0 alerts from https://api.weather.gov/alerts/active?zone=OHZ016
+2025-07-25 23:13:11,706 - __main__ - INFO - Fetching alerts from: https://api.weather.gov/alerts/active?area=OH
+2025-07-25 23:13:12,083 - __main__ - INFO - Retrieved 8 alerts from https://api.weather.gov/alerts/active?area=OH
+2025-07-25 23:13:12,084 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:13:12,084 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:13:12,084 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:13:12,084 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:13:12,084 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:13:12,084 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:13:12,084 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:13:12,084 - __main__ - WARNING - Alert has no identifier, including anyway
+2025-07-25 23:13:12,084 - __main__ - INFO - Total unique alerts collected: 8
+2025-07-25 23:13:12,084 - __main__ - INFO - Processing alert: Special Weather Statement (ID: No ID...)
+2025-07-25 23:13:12,084 - __main__ - INFO - Alert Special Weather Statement filtered out - not relevant
+2025-07-25 23:13:12,084 - __main__ - INFO - Processing alert: Flood Advisory (ID: No ID...)
+2025-07-25 23:13:12,084 - __main__ - INFO - Alert Flood Advisory filtered out - not relevant
+2025-07-25 23:13:12,084 - __main__ - INFO - Processing alert: Severe Thunderstorm Warning (ID: No ID...)
+2025-07-25 23:13:12,084 - __main__ - INFO - Alert Severe Thunderstorm Warning passed relevance check - processing...
+2025-07-25 23:13:12,084 - __main__ - INFO - Generated temporary identifier: temp_f5790749758d0ef3
+2025-07-25 23:13:12,088 - __main__ - INFO - Successfully parsed alert: temp_f5790749758d0ef3 - Severe Thunderstorm Warning
+2025-07-25 23:13:12,094 - __main__ - ERROR - Database error saving alert: (psycopg2.errors.InFailedSqlTransaction) current transaction is aborted, commands ignored until end of transaction block
+
+[SQL: SELECT cap_alerts.id AS cap_alerts_id, cap_alerts.identifier AS cap_alerts_identifier, cap_alerts.sent AS cap_alerts_sent, cap_alerts.expires AS cap_alerts_expires, cap_alerts.status AS cap_alerts_status, cap_alerts.message_type AS cap_alerts_message_type, cap_alerts.scope AS cap_alerts_scope, cap_alerts.category AS cap_alerts_category, cap_alerts.event AS cap_alerts_event, cap_alerts.urgency AS cap_alerts_urgency, cap_alerts.severity AS cap_alerts_severity, cap_alerts.certainty AS cap_alerts_certainty, cap_alerts.area_desc AS cap_alerts_area_desc, cap_alerts.headline AS cap_alerts_headline, cap_alerts.description AS cap_alerts_description, cap_alerts.instruction AS cap_alerts_instruction, cap_alerts.raw_json AS cap_alerts_raw_json, cap_alerts.created_at AS cap_alerts_created_at, cap_alerts.updated_at AS cap_alerts_updated_at 
+FROM cap_alerts 
+WHERE cap_alerts.identifier = %(identifier_1)s 
+ LIMIT %(param_1)s]
+[parameters: {'identifier_1': 'temp_f5790749758d0ef3', 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/14/2j85)
+2025-07-25 23:13:12,094 - __main__ - INFO - Updated existing alert: Severe Thunderstorm Warning
+2025-07-25 23:13:12,094 - __main__ - INFO - Processing alert: Special Weather Statement (ID: No ID...)
+2025-07-25 23:13:12,094 - __main__ - INFO - Alert Special Weather Statement filtered out - not relevant
+2025-07-25 23:13:12,094 - __main__ - INFO - Processing alert: Special Weather Statement (ID: No ID...)
+2025-07-25 23:13:12,094 - __main__ - INFO - Alert Special Weather Statement filtered out - not relevant
+2025-07-25 23:13:12,094 - __main__ - INFO - Processing alert: Heat Advisory (ID: No ID...)
+2025-07-25 23:13:12,095 - __main__ - INFO - Alert Heat Advisory passed relevance check - processing...
+2025-07-25 23:13:12,095 - __main__ - INFO - Generated temporary identifier: temp_1e01b78c92795067
+2025-07-25 23:13:12,095 - __main__ - INFO - Successfully parsed alert: temp_1e01b78c92795067 - Heat Advisory
+2025-07-25 23:13:12,116 - __main__ - INFO - Updated existing alert: Heat Advisory - Sent: July 25, 2025 at 06:15 PM EDT (22:15 UTC)
+2025-07-25 23:13:12,116 - __main__ - INFO - Processing alert: Flash Flood Warning (ID: No ID...)
+2025-07-25 23:13:12,116 - __main__ - INFO - Alert Flash Flood Warning passed relevance check - processing...
+2025-07-25 23:13:12,117 - __main__ - INFO - Generated temporary identifier: temp_5025d6d831fb4df7
+2025-07-25 23:13:12,117 - __main__ - INFO - Successfully parsed alert: temp_5025d6d831fb4df7 - Flash Flood Warning
+2025-07-25 23:13:12,122 - __main__ - INFO - Updated existing alert: Flash Flood Warning - Sent: July 25, 2025 at 05:17 PM EDT (21:17 UTC)
+2025-07-25 23:13:12,122 - __main__ - INFO - Processing alert: Heat Advisory (ID: No ID...)
+2025-07-25 23:13:12,122 - __main__ - INFO - Alert Heat Advisory filtered out - not relevant
+2025-07-25 23:13:12,131 - __main__ - INFO - Polling cycle completed: 0 new, 3 updated, 5 filtered
+2025-07-25 23:13:12,132 - __main__ - INFO - system_logs table not available - logging to file only
+2025-07-25 23:13:12,132 - __main__ - INFO - Poll completed: {
+  "alerts_fetched": 8,
+  "alerts_new": 0,
+  "alerts_updated": 3,
+  "alerts_filtered": 5,
+  "execution_time_ms": 977,
+  "status": "SUCCESS",
+  "error_message": null,
+  "zone": "OHZ016/OHC137 (Putnam County, OH)",
+  "poll_time_utc": "2025-07-25T22:13:11.154345+00:00",
+  "poll_time_local": "2025-07-25T18:13:11.154358-04:00",
+  "timezone": "America/New_York",
+  "led_updated": false
+}
+2025-07-25 23:17:13,051 - __main__ - INFO - Starting NOAA CAP Alert Poller with LED Integration
+2025-07-25 23:17:13,052 - __main__ - INFO - Startup time: July 25, 2025 at 06:17 PM EDT (22:17 UTC)
+2025-07-25 23:17:13,121 - __main__ - WARNING - Database table verification failed: (psycopg2.errors.InsufficientPrivilege) permission denied for table system_logs
+
+[SQL: SELECT 1 FROM system_logs LIMIT 1]
+(Background on this error at: https://sqlalche.me/e/14/f405)
+2025-07-25 23:17:13,122 - __main__ - INFO - Running continuously with 300 second intervals
+2025-07-25 23:17:13,122 - __main__ - INFO - Starting CAP alert polling cycle for Putnam County, OH at July 25, 2025 at 06:17 PM EDT (22:17 UTC)
+2025-07-25 23:17:13,122 - __main__ - INFO - Fetching alerts from: https://api.weather.gov/alerts/active?zone=OHZ016
+2025-07-25 23:17:13,374 - __main__ - INFO - Retrieved 0 alerts from https://api.weather.gov/alerts/active?zone=OHZ016
+2025-07-25 23:17:13,374 - __main__ - INFO - Fetching alerts from: https://api.weather.gov/alerts/active?area=OHC137
+2025-07-25 23:17:13,475 - __main__ - ERROR - Error fetching from https://api.weather.gov/alerts/active?area=OHC137: 400 Client Error: Bad Request for url: https://api.weather.gov/alerts/active?area=OHC137
+2025-07-25 23:17:13,475 - __main__ - INFO - Total unique alerts collected: 0
+2025-07-25 23:17:13,475 - __main__ - INFO - poll_history table not available - skipping cleanup
+2025-07-25 23:17:13,476 - __main__ - INFO - poll_history table not available - logging to file only
+2025-07-25 23:17:13,476 - __main__ - INFO - Polling cycle completed: 0 new, 0 updated, 0 filtered
+2025-07-25 23:17:13,476 - __main__ - INFO - system_logs table not available - logging to file only
+2025-07-25 23:17:13,476 - __main__ - INFO - Poll completed: {
+  "alerts_fetched": 0,
+  "alerts_new": 0,
+  "alerts_updated": 0,
+  "alerts_filtered": 0,
+  "execution_time_ms": 354,
+  "status": "SUCCESS",
+  "error_message": null,
+  "zone": "OHZ016/OHC137 (Putnam County, OH)",
+  "poll_time_utc": "2025-07-25T22:17:13.122227+00:00",
+  "poll_time_local": "2025-07-25T18:17:13.122240-04:00",
+  "timezone": "America/New_York",
+  "led_updated": false
+}

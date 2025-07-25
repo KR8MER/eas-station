@@ -1,314 +1,933 @@
 #!/usr/bin/env python3
 """
-NOAA CAP Alert Poller Service - FIXED VERSION
-Fetches CAP alerts from NOAA API for OHZ016 zone and processes them
-NOW WITH PROPER ALERT PRESERVATION - NO AUTO-DELETION OF EXPIRED ALERTS
-WITH PROPER TIMEZONE HANDLING FOR PUTNAM COUNTY, OHIO
+Enhanced NOAA CAP Alert Poller for Putnam County, OH (OHZ016/OHC137)
+Includes LED sign integration for alert display
 """
 
-import requests
-import json
-import logging
-import pytz
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Tuple
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from geoalchemy2.functions import ST_GeomFromGeoJSON, ST_Intersects, ST_Area
-import time
 import os
 import sys
+import time
+import json
+import requests
+import logging
+import hashlib
+from datetime import datetime, timedelta
+from typing import Dict, List
+import argparse
+import pytz
+from sqlalchemy import create_engine, text, func, or_
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import SQLAlchemyError
 
-# Add project root to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from app import CAPAlert, Boundary, SystemLog, Intersection, db
-
-# Timezone configuration for Putnam County, Ohio (Eastern Time)
-PUTNAM_COUNTY_TZ = pytz.timezone('America/New_York')
+# Configure timezone
 UTC_TZ = pytz.UTC
+PUTNAM_COUNTY_TZ = pytz.timezone('America/New_York')
 
 
 def utc_now():
-    """Get current UTC time with timezone awareness"""
+    """Get current UTC time"""
     return datetime.now(UTC_TZ)
 
 
 def local_now():
-    """Get current Putnam County local time"""
-    return utc_now().astimezone(PUTNAM_COUNTY_TZ)
+    """Get current local time"""
+    return datetime.now(PUTNAM_COUNTY_TZ)
 
 
 def parse_nws_datetime(dt_string):
-    """Parse NWS datetime strings which can be in various formats"""
+    """Parse NWS datetime string with timezone handling"""
     if not dt_string:
         return None
 
-    # Remove timezone abbreviations and normalize
-    dt_string = str(dt_string).strip()
-
-    # Handle common NWS formats
-    if dt_string.endswith('Z'):
-        # UTC/Zulu time
-        try:
-            dt = datetime.fromisoformat(dt_string.replace('Z', '+00:00'))
-            return dt.astimezone(UTC_TZ)
-        except ValueError:
-            pass
-
-    # Try parsing as ISO format with timezone
     try:
-        dt = datetime.fromisoformat(dt_string)
-        if dt.tzinfo is None:
-            # Assume UTC if no timezone info
-            dt = dt.replace(tzinfo=UTC_TZ)
-        return dt.astimezone(UTC_TZ)
-    except ValueError:
-        pass
-
-    # Handle EDT/EST format (approximate - NWS sometimes uses these)
-    if 'EDT' in dt_string:
-        try:
-            dt_clean = dt_string.replace(' EDT', '').replace('EDT', '')
-            dt = datetime.fromisoformat(dt_clean)
-            # EDT is UTC-4, but use proper timezone
-            edt_tz = pytz.timezone('US/Eastern')
-            dt = edt_tz.localize(dt, is_dst=True)  # EDT is daylight time
-            return dt.astimezone(UTC_TZ)
-        except ValueError:
-            pass
-
-    if 'EST' in dt_string:
-        try:
-            dt_clean = dt_string.replace(' EST', '').replace('EST', '')
-            dt = datetime.fromisoformat(dt_clean)
-            # EST is UTC-5, but use proper timezone
-            est_tz = pytz.timezone('US/Eastern')
-            dt = est_tz.localize(dt, is_dst=False)  # EST is standard time
-            return dt.astimezone(UTC_TZ)
-        except ValueError:
-            pass
-
-    # Try parsing without timezone and assume UTC
-    try:
-        dt = datetime.fromisoformat(dt_string)
-        dt = dt.replace(tzinfo=UTC_TZ)
-        return dt
-    except ValueError:
-        pass
+        # Handle different datetime formats from NWS
+        for fmt in [
+            '%Y-%m-%dT%H:%M:%S%z',
+            '%Y-%m-%dT%H:%M:%S.%f%z',
+            '%Y-%m-%dT%H:%M:%SZ',
+            '%Y-%m-%dT%H:%M:%S.%fZ'
+        ]:
+            try:
+                if dt_string.endswith('Z'):
+                    dt_string = dt_string[:-1] + '+00:00'
+                dt = datetime.strptime(dt_string, fmt)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=UTC_TZ)
+                return dt.astimezone(UTC_TZ)
+            except ValueError:
+                continue
+    except Exception as e:
+        logging.warning(f"Could not parse datetime: {dt_string} - {e}")
 
     return None
 
 
 def format_local_datetime(dt, include_utc=True):
-    """Format datetime in Putnam County local time with optional UTC"""
+    """Format datetime in local time"""
     if not dt:
         return "Unknown"
-
-    # Ensure datetime is timezone-aware
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC_TZ)
-
-    # Convert to local time
     local_dt = dt.astimezone(PUTNAM_COUNTY_TZ)
-
-    # Format local time
     local_str = local_dt.strftime('%B %d, %Y at %I:%M %p %Z')
-
     if include_utc:
         utc_str = dt.astimezone(UTC_TZ).strftime('%H:%M UTC')
         return f"{local_str} ({utc_str})"
-    else:
-        return local_str
+    return local_str
+
+
+# Add the parent directory to the path for imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.insert(0, parent_dir)
+
+# Try to import from existing app structure
+try:
+    # Import from Flask app if available
+    import sys
+    import os
+
+    # Add the project root to path
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    if project_root.endswith('/poller'):
+        project_root = os.path.dirname(project_root)
+    sys.path.insert(0, project_root)
+
+    # Try to import the main app to get access to existing models
+    from app import db, CAPAlert, SystemLog
+
+    # Define missing models that might not be in the main app yet
+    from sqlalchemy import Column, Integer, String, DateTime, Text, JSON
+
+
+    class PollHistory(db.Model):
+        __tablename__ = 'poll_history'
+
+        id = Column(Integer, primary_key=True)
+        timestamp = Column(DateTime, default=utc_now)
+        alerts_fetched = Column(Integer, default=0)
+        alerts_new = Column(Integer, default=0)
+        alerts_updated = Column(Integer, default=0)
+        execution_time_ms = Column(Integer)
+        status = Column(String(20))
+        error_message = Column(Text)
+
+
+    FLASK_MODELS_AVAILABLE = True
+    USE_EXISTING_DB = True
+
+except ImportError as e:
+    print(f"Warning: Could not import from main app: {e}")
+    print("Will attempt to connect to existing database directly")
+    FLASK_MODELS_AVAILABLE = False
+    USE_EXISTING_DB = True
+
+# Try to import LED controller
+try:
+    from led_sign_controller import LEDSignController
+
+    LED_AVAILABLE = True
+except ImportError:
+    LED_AVAILABLE = False
+    print("Warning: LED sign controller not available")
+
+    # Fallback: Direct database connection without models
+if not FLASK_MODELS_AVAILABLE:
+    from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Boolean, Float, ForeignKey
+    from sqlalchemy.ext.declarative import declarative_base
+    from sqlalchemy.orm import relationship
+
+    # Create base but don't create tables - use existing ones
+    Base = declarative_base()
+
+
+    class CAPAlert(Base):
+        __tablename__ = 'cap_alerts'
+
+        id = Column(Integer, primary_key=True)
+        identifier = Column(String(255), unique=True, nullable=False)
+        sent = Column(DateTime, nullable=False)
+        expires = Column(DateTime)
+        status = Column(String(50))
+        message_type = Column(String(50))
+        scope = Column(String(50))
+        category = Column(String(50))
+        event = Column(String(100))
+        urgency = Column(String(50))
+        severity = Column(String(50))
+        certainty = Column(String(50))
+        area_desc = Column(Text)
+        headline = Column(Text)
+        description = Column(Text)
+        instruction = Column(Text)
+        # Remove geometry column reference for now
+        raw_json = Column(JSON)
+        created_at = Column(DateTime, default=utc_now)
+        updated_at = Column(DateTime, default=utc_now)
+
+
+    class SystemLog(Base):
+        __tablename__ = 'system_logs'
+
+        id = Column(Integer, primary_key=True)
+        timestamp = Column(DateTime, default=utc_now)
+        level = Column(String(20))
+        message = Column(Text)
+        module = Column(String(50))
+        details = Column(JSON)
+
+
+    class PollHistory(Base):
+        __tablename__ = 'poll_history'
+
+        id = Column(Integer, primary_key=True)
+        timestamp = Column(DateTime, default=utc_now)
+        alerts_fetched = Column(Integer, default=0)
+        alerts_new = Column(Integer, default=0)
+        alerts_updated = Column(Integer, default=0)
+        execution_time_ms = Column(Integer)
+        status = Column(String(20))
+        error_message = Column(Text)
 
 
 class CAPPoller:
-    """NOAA CAP Alert Polling Service for OHZ016 zone (Putnam County, OH) with timezone support"""
+    """Enhanced CAP alert poller with LED sign integration"""
 
-    def __init__(self, database_url=None):
+    def __init__(self, database_url: str, led_sign_ip: str = None, led_sign_port: int = 10001):
+        """
+        Initialize CAP poller with LED sign support
+
+        Args:
+            database_url: PostgreSQL database connection string
+            led_sign_ip: IP address of the LED sign (optional)
+            led_sign_port: Port for LED sign communication (default 10001)
+        """
+        self.database_url = database_url
+        self.led_sign_ip = led_sign_ip
+        self.led_sign_port = led_sign_port
+
+        # Setup logging
         self.logger = logging.getLogger(__name__)
 
-        # Configure requests session
+        # Setup database connection
+        self.engine = create_engine(database_url, pool_pre_ping=True, pool_recycle=3600)
+        Session = sessionmaker(bind=self.engine)
+        self.db_session = Session()
+
+        # DON'T create tables - use existing database structure
+        # Tables should already exist from the main Flask app
+
+        # Verify required tables exist
+        try:
+            # Simple test query to ensure tables exist
+            self.db_session.execute(text("SELECT 1 FROM cap_alerts LIMIT 1"))
+            self.db_session.execute(text("SELECT 1 FROM system_logs LIMIT 1"))
+            self.logger.info("Database tables verified successfully")
+        except Exception as e:
+            self.logger.warning(f"Database table verification failed: {e}")
+            # Continue anyway - tables might be empty but exist
+
+        # Setup HTTP session
         self.session = requests.Session()
-        self.session.timeout = 30
         self.session.headers.update({
-            'User-Agent': 'NOAA-CAP-Alert-System/1.0 (Emergency Management System)'
+            'User-Agent': 'NOAA CAP Alert System/1.0 (Putnam County, OH Emergency Management)'
         })
 
-        # Database setup
-        if database_url:
-            self.engine = create_engine(database_url)
-            Session = sessionmaker(bind=self.engine)
-            self.db_session = Session()
-        else:
-            # Use Flask app context
-            from app import app
-            self.app = app
-            self.db_session = db.session
+        # Initialize LED sign controller if IP is provided and available
+        self.led_controller = None
+        if led_sign_ip and LED_AVAILABLE:
+            try:
+                self.led_controller = LEDSignController(led_sign_ip, led_sign_port)
+                self.logger.info(f"LED sign controller initialized for {led_sign_ip}:{led_sign_port}")
+            except Exception as e:
+                self.logger.error(f"Failed to initialize LED controller: {e}")
+        elif led_sign_ip:
+            self.logger.warning("LED sign IP provided but controller not available")
+
+        # CAP alert endpoints
+        self.cap_endpoints = [
+            'https://api.weather.gov/alerts/active?zone=OHZ016',  # Putnam County Zone
+            'https://api.weather.gov/alerts/active?area=OHC137',  # All Ohio alerts (we'll filter)
+        ]
+
+        # Area filters for relevance checking
+        self.area_filters = [
+            'OHZ016',  # Putnam County forecast zone
+            'OHC137',  # Putnam County FIPS code
+            'PUTNAM',  # County name
+            'COLUMBUS',  # Major nearby city
+            'FINDLAY',  # Regional city
+            'LIMA',  # Regional city
+            'OTTAWA',  # County seat
+            'LEIPSIC', 'PANDORA', 'GLANDORF', 'KALIDA', 'FORT JENNINGS'  # Local communities
+        ]
+
+    def fetch_cap_alerts(self, timeout: int = 30) -> List[Dict]:
+        """Fetch CAP alerts from NOAA with enhanced error handling"""
+        unique_alerts = []
+        seen_identifiers = set()
+
+        for endpoint in self.cap_endpoints:
+            try:
+                self.logger.info(f"Fetching alerts from: {endpoint}")
+
+                response = self.session.get(endpoint, timeout=timeout)
+                response.raise_for_status()
+
+                data = response.json()
+                features = data.get('features', [])
+
+                self.logger.info(f"Retrieved {len(features)} alerts from {endpoint}")
+
+                for alert in features:
+                    props = alert.get('properties', {})
+                    identifier = props.get('identifier')
+
+                    if identifier and identifier not in seen_identifiers:
+                        seen_identifiers.add(identifier)
+                        unique_alerts.append(alert)
+                    elif not identifier:
+                        self.logger.warning("Alert has no identifier, including anyway")
+                        unique_alerts.append(alert)
+
+            except requests.exceptions.RequestException as e:
+                self.logger.error(f"Error fetching from {endpoint}: {str(e)}")
+                continue
+            except json.JSONDecodeError as e:
+                self.logger.error(f"JSON decode error from {endpoint}: {str(e)}")
+                continue
+            except Exception as e:
+                self.logger.error(f"Unexpected error fetching from {endpoint}: {str(e)}")
+                continue
+
+        self.logger.info(f"Total unique alerts collected: {len(unique_alerts)}")
+        return unique_alerts
 
     def is_relevant_alert(self, alert_data: Dict) -> bool:
-        """Check if alert is relevant to Putnam County, Ohio"""
+        """Enhanced relevance checking for alerts"""
         try:
             properties = alert_data.get('properties', {})
 
-            # Safe extraction of data
-            area_desc = str(properties.get('areaDesc') or '').upper()
+            # Check UGC codes
             geocode = properties.get('geocode', {})
-            ugc_codes = geocode.get('UGC', []) or []
-            event = str(properties.get('event') or '').lower()
+            ugc_codes = geocode.get('UGC', [])
 
-            self.logger.debug(f"Checking alert: {event}")
-            self.logger.debug(f"  UGC codes: {ugc_codes}")
-            self.logger.debug(f"  Area contains PUTNAM: {'PUTNAM' in area_desc}")
-
-            # Check for our specific zones
-            our_zones = ['OHZ016', 'OHC137']
-            for zone in our_zones:
-                if zone in ugc_codes:
-                    self.logger.info(f"Alert {event} affects our zone {zone}")
+            for ugc in ugc_codes:
+                if any(area in ugc.upper() for area in ['OHZ016', 'OHC137']):
+                    self.logger.debug(f"Alert relevant by UGC code: {ugc}")
                     return True
 
-            # Check area description for Putnam County
-            if 'PUTNAM' in area_desc:
-                self.logger.info(f"Alert {event} mentions Putnam County")
+            # Check area description
+            area_desc = properties.get('areaDesc', '').upper()
+            if any(area in area_desc for area in self.area_filters):
+                self.logger.debug(f"Alert relevant by area description: {area_desc}")
                 return True
 
-            # Check for our zones in area description
-            for zone in our_zones:
-                if zone in area_desc:
-                    self.logger.info(f"Alert {event} mentions zone {zone}")
+            # Check event severity - always include severe alerts for nearby areas
+            severity = properties.get('severity', '').upper()
+            if severity in ['SEVERE', 'EXTREME']:
+                # Check if it's in Ohio
+                if 'OHIO' in area_desc or any(ugc.startswith('OH') for ugc in ugc_codes):
+                    self.logger.debug(f"Severe alert included from Ohio: {severity}")
                     return True
 
             return False
 
         except Exception as e:
-            self.logger.error(f"Error in is_relevant_alert: {e}")
-            return True  # Include on error to be safe
+            self.logger.error(f"Error checking alert relevance: {str(e)}")
+            return False
 
-    def fetch_cap_alerts(self) -> List[Dict]:
-        """Fetch CAP alerts from NOAA API for OHZ016 and related zones"""
-        all_alerts = []
-
-        # Multiple endpoints to check
-        endpoints = [
-            "https://api.weather.gov/alerts/active?zone=OHZ016",  # Putnam County Zone
-            "https://api.weather.gov/alerts/active?zone=OHC137",  # Putnam County Code
-        ]
-
-        for endpoint in endpoints:
-            try:
-                self.logger.info(f"Fetching CAP alerts from: {endpoint}")
-
-                response = self.session.get(endpoint)
-                response.raise_for_status()
-
-                alerts_data = response.json()
-                features = alerts_data.get('features', [])
-
-                self.logger.info(f"Retrieved {len(features)} alerts from endpoint")
-
-                # Add all features, we'll filter them later
-                all_alerts.extend(features)
-
-            except requests.exceptions.RequestException as e:
-                self.logger.error(f"Error fetching CAP alerts from {endpoint}: {str(e)}")
-                continue
-            except json.JSONDecodeError as e:
-                self.logger.error(f"Error parsing CAP alerts JSON from {endpoint}: {str(e)}")
-                continue
-
-        # Remove duplicates based on identifier - handle None identifiers
-        seen_ids = set()
-        unique_alerts = []
-        for alert in all_alerts:
-            alert_id = alert.get('properties', {}).get('identifier')
-            if alert_id:  # Only check for duplicates if identifier exists
-                if alert_id not in seen_ids:
-                    seen_ids.add(alert_id)
-                    unique_alerts.append(alert)
-                else:
-                    self.logger.debug(f"Skipping duplicate alert: {alert_id}")
-            else:
-                # If no identifier, include the alert anyway
-                self.logger.warning(f"Alert has no identifier, including anyway")
-                unique_alerts.append(alert)
-
-        self.logger.info(f"Total unique alerts collected: {len(unique_alerts)}")
-
-        # Debug: log what we collected with timezone info
-        for alert in unique_alerts:
-            props = alert.get('properties', {})
-            event = props.get('event', 'Unknown')
-            alert_id = props.get('identifier', 'No ID')
-            sent_str = props.get('sent', 'Unknown')
-
-            # Parse and log times in both UTC and local
-            if sent_str != 'Unknown':
-                sent_dt = parse_nws_datetime(sent_str)
-                if sent_dt:
-                    local_time = format_local_datetime(sent_dt)
-                    self.logger.info(
-                        f"Collected alert: {event} (ID: {alert_id[:20] if alert_id != 'No ID' else 'No ID'}...) - Sent: {local_time}")
-                else:
-                    self.logger.info(
-                        f"Collected alert: {event} (ID: {alert_id[:20] if alert_id != 'No ID' else 'No ID'}...) - Sent: {sent_str}")
-            else:
-                self.logger.info(
-                    f"Collected alert: {event} (ID: {alert_id[:20] if alert_id != 'No ID' else 'No ID'}...)")
-
-        return unique_alerts
-
-    def parse_cap_alert(self, alert_data: Dict) -> Optional[Dict]:
-        """Parse CAP alert data into database format with proper timezone handling"""
+    def parse_cap_alert(self, alert_data: Dict):
+        """Parse CAP alert data with enhanced timezone handling"""
         try:
             properties = alert_data.get('properties', {})
             geometry = alert_data.get('geometry')
 
-            # Extract identifier - generate one if missing
+            # Extract or generate identifier
             identifier = properties.get('identifier')
             if not identifier:
-                # Generate a temporary identifier for alerts without one
-                import hashlib
-                import time
                 event = properties.get('event', 'Unknown')
                 sent = properties.get('sent', str(time.time()))
                 temp_id = f"temp_{hashlib.md5((event + sent).encode()).hexdigest()[:16]}"
                 identifier = temp_id
-                self.logger.info(f"Generated temporary identifier for {event}: {identifier}")
+                self.logger.info(f"Generated temporary identifier: {identifier}")
 
-            # Parse datetime fields with proper timezone handling
-            sent_str = properties.get('sent')
-            expires_str = properties.get('expires')
+            # Parse timestamps
+            sent = parse_nws_datetime(properties.get('sent')) if properties.get('sent') else None
+            expires = parse_nws_datetime(properties.get('expires')) if properties.get('expires') else None
 
-            sent = None
-            expires = None
+            # Check if already expired
+            if expires and expires < utc_now():
+                self.logger.info(f"Alert {identifier} is already expired")
 
-            if sent_str:
-                sent = parse_nws_datetime(sent_str)
-                if sent:
-                    self.logger.debug(f"Parsed sent time: {format_local_datetime(sent)}")
-                else:
-                    self.logger.warning(f"Could not parse sent timestamp: {sent_str}")
-
-            if expires_str:
-                expires = parse_nws_datetime(expires_str)
-                if expires:
-                    self.logger.debug(f"Parsed expires time: {format_local_datetime(expires)}")
-
-                    # Check if alert is already expired (but don't skip it - still process for historical data)
-                    if expires < utc_now():
-                        self.logger.info(
-                            f"Alert {identifier} is already expired but will be preserved: {format_local_datetime(expires)}")
-                else:
-                    self.logger.warning(f"Could not parse expires timestamp: {expires_str}")
-
-            # Extract area description from multiple possible fields
+            # Extract area description
             area_desc = (properties.get('areaDesc') or
                          properties.get('areas') or
                          properties.get('geocode', {}).get('UGC', [''])[0] or
                          'OHZ016')
 
-            # Build parsed alert data
+            parsed_alert = {
+                'identifier': identifier,
+                'sent': sent,
+                'expires': expires,
+                'status': properties.get('status', 'Unknown'),
+                'message_type': properties.get('messageType', 'Unknown'),
+                'scope': properties.get('scope', 'Unknown'),
+                'category': properties.get('category', 'Unknown'),
+                'event': properties.get('event', 'Unknown'),
+                'urgency': properties.get('urgency', 'Unknown'),
+                'severity': properties.get('severity', 'Unknown'),
+                'certainty': properties.get('certainty', 'Unknown'),
+                'area_desc': area_desc,
+                'headline': properties.get('headline', ''),
+                'description': properties.get('description', ''),
+                'instruction': properties.get('instruction', ''),
+                # Store geometry in raw_json for now since geometry column may not exist
+                'raw_json': alert_data
+            }
+
+            self.logger.info(f"Successfully parsed alert: {identifier} - {parsed_alert['event']}")
+            return parsed_alert
+
+        except Exception as e:
+            self.logger.error(f"Error parsing CAP alert: {str(e)}")
+            return None
+
+    def save_cap_alert(self, alert_data: Dict):
+        """Save CAP alert to database with duplicate detection"""
+        try:
+            # Check if alert already exists
+            existing_alert = self.db_session.query(CAPAlert).filter_by(
+                identifier=alert_data['identifier']
+            ).first()
+
+            if existing_alert:
+                # Update existing alert
+                for key, value in alert_data.items():
+                    if key != 'raw_json':  # Don't overwrite raw_json unless necessary
+                        setattr(existing_alert, key, value)
+
+                existing_alert.updated_at = utc_now()
+                self.db_session.commit()
+
+                # Update LED display if this is an active alert
+                if self.led_controller and not self.is_alert_expired(existing_alert):
+                    self.update_led_display()
+
+                return False, existing_alert
+            else:
+                # Create new alert
+                new_alert = CAPAlert(**alert_data)
+                new_alert.created_at = utc_now()
+                new_alert.updated_at = utc_now()
+
+                self.db_session.add(new_alert)
+                self.db_session.commit()
+
+                # Update LED display for new active alerts
+                if self.led_controller and not self.is_alert_expired(new_alert):
+                    self.update_led_display()
+
+                return True, new_alert
+
+        except SQLAlchemyError as e:
+            self.logger.error(f"Database error saving alert: {str(e)}")
+            self.db_session.rollback()
+            return False, None
+        except Exception as e:
+            self.logger.error(f"Error saving CAP alert: {str(e)}")
+            return False, None
+
+    def is_alert_expired(self, alert) -> bool:
+        """Check if an alert is expired"""
+        if not hasattr(alert, 'expires') or not alert.expires:
+            return False
+        return alert.expires < utc_now()
+
+    def update_led_display(self):
+        """Update LED sign with current active alerts"""
+        if not self.led_controller:
+            return
+
+        try:
+            # Get active alerts ordered by severity
+            active_alerts = self.db_session.query(CAPAlert).filter(
+                or_(
+                    CAPAlert.expires.is_(None),
+                    CAPAlert.expires > utc_now()
+                )
+            ).order_by(
+                CAPAlert.severity.desc(),
+                CAPAlert.sent.desc()
+            ).limit(5).all()
+
+            if active_alerts:
+                # Display alerts on LED sign
+                self.led_controller.display_alerts(active_alerts)
+                self.logger.info(f"Updated LED display with {len(active_alerts)} active alerts")
+            else:
+                # Display default message when no alerts
+                self.led_controller.display_default_message()
+                self.logger.info("Updated LED display with default message")
+
+        except Exception as e:
+            self.logger.error(f"Error updating LED display: {e}")
+
+    def cleanup_old_poll_history(self):
+        """Clean up old poll history records (keep alerts forever)"""
+        try:
+            # Skip if poll_history table doesn't exist
+            try:
+                # Test if poll_history table exists
+                self.db_session.execute(text("SELECT 1 FROM poll_history LIMIT 1"))
+            except Exception:
+                self.logger.info("poll_history table not available - skipping cleanup")
+                return
+
+            # Only clean up poll history, NOT alerts - keep all alerts for historical analysis
+            cutoff_date = utc_now() - timedelta(days=30)  # Keep 30 days of poll history
+
+            old_polls_count = self.db_session.query(PollHistory).filter(
+                PollHistory.timestamp < cutoff_date
+            ).count()
+
+            if old_polls_count > 100:  # Only clean if we have many records
+                # Keep the most recent 100 poll records even if older than 30 days
+                subquery = self.db_session.query(PollHistory.id).order_by(
+                    PollHistory.timestamp.desc()
+                ).limit(100).subquery()
+
+                self.db_session.query(PollHistory).filter(
+                    PollHistory.timestamp < cutoff_date,
+                    ~PollHistory.id.in_(subquery)
+                ).delete(synchronize_session=False)
+
+                self.db_session.commit()
+                self.logger.info(f"Cleaned up old poll history records (alerts preserved)")
+
+        except Exception as e:
+            self.logger.error(f"Error cleaning up poll history: {str(e)}")
+            # Rollback any failed transaction
+            try:
+                self.db_session.rollback()
+            except:
+                pass
+
+    def log_poll_history(self, stats):
+        """Log poll statistics to database for monitoring"""
+        try:
+            # Skip if poll_history table doesn't exist
+            try:
+                # Test if poll_history table exists
+                self.db_session.execute(text("SELECT 1 FROM poll_history LIMIT 1"))
+            except Exception:
+                self.logger.info("poll_history table not available - logging to file only")
+                return
+
+            poll_record = PollHistory(
+                timestamp=utc_now(),
+                alerts_fetched=stats.get('alerts_fetched', 0),
+                alerts_new=stats.get('alerts_new', 0),
+                alerts_updated=stats.get('alerts_updated', 0),
+                execution_time_ms=stats.get('execution_time_ms', 0),
+                status=stats.get('status', 'UNKNOWN'),
+                error_message=stats.get('error_message')
+            )
+            self.db_session.add(poll_record)
+            self.db_session.commit()
+
+        except Exception as e:
+            self.logger.error(f"Error logging poll history: {str(e)}")
+            # Rollback any failed transaction
+            try:
+                self.db_session.rollback()
+            except:
+                pass
+
+    def log_system_event(self, level: str, message: str, details: Dict = None):
+        """Log system event to database"""
+        try:
+            # Skip if system_logs table doesn't exist
+            try:
+                # Test if system_logs table exists
+                self.db_session.execute(text("SELECT 1 FROM system_logs LIMIT 1"))
+            except Exception:
+                self.logger.info("system_logs table not available - logging to file only")
+                return
+
+            if details is None:
+                details = {}
+
+            details.update({
+                'logged_at_utc': utc_now().isoformat(),
+                'logged_at_local': local_now().isoformat(),
+                'timezone': str(PUTNAM_COUNTY_TZ)
+            })
+
+            log_entry = SystemLog(
+                level=level,
+                message=message,
+                module='cap_poller',
+                details=details,
+                timestamp=utc_now()
+            )
+            self.db_session.add(log_entry)
+            self.db_session.commit()
+        except Exception as e:
+            self.logger.error(f"Error logging system event: {str(e)}")
+            # Rollback any failed transaction
+            try:
+                self.db_session.rollback()
+            except:
+                pass
+
+    def poll_and_process(self) -> Dict:
+        """Main polling function with LED integration"""
+        start_time = time.time()
+        poll_start_utc = utc_now()
+        poll_start_local = local_now()
+
+        stats = {
+            'alerts_fetched': 0,
+            'alerts_new': 0,
+            'alerts_updated': 0,
+            'alerts_filtered': 0,
+            'execution_time_ms': 0,
+            'status': 'SUCCESS',
+            'error_message': None,
+            'zone': 'OHZ016/OHC137 (Putnam County, OH)',
+            'poll_time_utc': poll_start_utc.isoformat(),
+            'poll_time_local': poll_start_local.isoformat(),
+            'timezone': str(PUTNAM_COUNTY_TZ),
+            'led_updated': False
+        }
+
+        try:
+            self.logger.info(
+                f"Starting CAP alert polling cycle for Putnam County, OH at {format_local_datetime(poll_start_utc)}"
+            )
+
+            # Fetch alerts
+            alerts_data = self.fetch_cap_alerts()
+            stats['alerts_fetched'] = len(alerts_data)
+
+            # Process each alert
+            for alert_data in alerts_data:
+                props = alert_data.get('properties', {})
+                event = props.get('event', 'Unknown')
+                alert_id = props.get('identifier', 'No ID')
+
+                self.logger.info(
+                    f"Processing alert: {event} (ID: {alert_id[:20] if alert_id != 'No ID' else 'No ID'}...)")
+
+                if not self.is_relevant_alert(alert_data):
+                    self.logger.info(f"Alert {event} filtered out - not relevant")
+                    stats['alerts_filtered'] += 1
+                    continue
+
+                self.logger.info(f"Alert {event} passed relevance check - processing...")
+
+                parsed_alert = self.parse_cap_alert(alert_data)
+                if parsed_alert:
+                    is_new, alert = self.save_cap_alert(parsed_alert)
+
+                    if is_new:
+                        stats['alerts_new'] += 1
+                        if alert and hasattr(alert, 'sent') and alert.sent:
+                            self.logger.info(
+                                f"Saved new alert: {alert.event} - Sent: {format_local_datetime(alert.sent)}"
+                            )
+                        else:
+                            self.logger.info(f"Saved new alert: {parsed_alert['event']}")
+                        stats['led_updated'] = True
+                    else:
+                        stats['alerts_updated'] += 1
+                        if alert and hasattr(alert, 'sent') and alert.sent:
+                            self.logger.info(
+                                f"Updated existing alert: {alert.event} - Sent: {format_local_datetime(alert.sent)}"
+                            )
+                        else:
+                            self.logger.info(f"Updated existing alert: {parsed_alert['event']}")
+                else:
+                    self.logger.warning(f"Failed to parse alert: {event}")
+
+            # Cleanup old poll history (but keep all alerts for historical data)
+            self.cleanup_old_poll_history()
+
+            # Log poll statistics
+            self.log_poll_history(stats)
+
+            # Update LED display
+            if self.led_controller:
+                self.update_led_display()
+                stats['led_updated'] = True
+
+            # Calculate execution time
+            stats['execution_time_ms'] = int((time.time() - start_time) * 1000)
+
+            self.logger.info(
+                f"Polling cycle completed: {stats['alerts_new']} new, {stats['alerts_updated']} updated, {stats['alerts_filtered']} filtered"
+            )
+
+            # Log successful poll
+            self.log_system_event('INFO', f'CAP polling successful: {stats["alerts_new"]} new alerts', stats)
+
+        except Exception as e:
+            stats['status'] = 'ERROR'
+            stats['error_message'] = str(e)
+            stats['execution_time_ms'] = int((time.time() - start_time) * 1000)
+
+            self.logger.error(f"Error in polling cycle: {str(e)}")
+            self.log_system_event('ERROR', f'CAP polling failed: {str(e)}', stats)
+
+        return stats
+
+    def close(self):
+        """Close connections"""
+        if hasattr(self, 'db_session'):
+            self.db_session.close()
+        if hasattr(self, 'session'):
+            self.session.close()
+        if self.led_controller:
+            self.led_controller.close()
+
+
+def main():
+    """Main entry point"""
+    parser = argparse.ArgumentParser(description='NOAA CAP Alert Poller with LED Sign Integration')
+    parser.add_argument('--database-url',
+                        default='postgresql://noaa_user:rkhkeq@localhost:5432/noaa_alerts',
+                        help='Database connection URL')
+    parser.add_argument('--led-ip',
+                        help='LED sign IP address')
+    parser.add_argument('--led-port',
+                        type=int,
+                        default=10001,
+                        help='LED sign port (default: 10001)')
+    parser.add_argument('--log-level',
+                        default='INFO',
+                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
+                        help='Logging level')
+    parser.add_argument('--continuous',
+                        action='store_true',
+                        help='Run continuously')
+    parser.add_argument('--interval',
+                        type=int,
+                        default=300,
+                        help='Polling interval in seconds (default: 300)')
+
+    args = parser.parse_args()
+
+    # Setup logging
+    logging.basicConfig(
+        level=getattr(logging, args.log_level),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler('/home/pi/noaa_alerts_system/logs/cap_poller.log')
+        ]
+    )
+
+    logger = logging.getLogger(__name__)
+
+    startup_utc = utc_now()
+    logger.info(f"Starting NOAA CAP Alert Poller with LED Integration")
+    logger.info(f"Startup time: {format_local_datetime(startup_utc)}")
+    if args.led_ip:
+        logger.info(f"LED Sign: {args.led_ip}:{args.led_port}")
+
+    # Create poller
+    poller = CAPPoller(args.database_url, args.led_ip, args.led_port)
+
+    try:
+        if args.continuous:
+            logger.info(f"Running continuously with {args.interval} second intervals")
+            while True:
+                try:
+                    stats = poller.poll_and_process()
+                    logger.info(f"Poll completed: {json.dumps(stats, indent=2)}")
+                    time.sleep(args.interval)
+                except KeyboardInterrupt:
+                    logger.info("Received interrupt signal, shutting down")
+                    break
+                except Exception as e:
+                    logger.error(f"Error in continuous polling: {e}")
+                    time.sleep(60)
+        else:
+            stats = poller.poll_and_process()
+            print(f"Polling completed: {json.dumps(stats, indent=2)}")
+
+    finally:
+        poller.close()
+
+
+if __name__ == '__main__':
+    main()
+
+    """Enhanced CAP alert poller with LED sign integration"""
+
+
+    def __init__(self, database_url: str, led_sign_ip: str = None, led_sign_port: int = 10001):
+        """
+        Initialize CAP poller with LED sign support
+
+        Args:
+            database_url: PostgreSQL database connection string
+            led_sign_ip: IP address of the LED sign (optional)
+            led_sign_port: Port for LED sign communication (default 10001)
+        """
+        self.database_url = database_url
+        self.led_sign_ip = led_sign_ip
+        self.led_sign_port = led_sign_port
+
+        # Setup logging
+        self.logger = logging.getLogger(__name__)
+
+        # Setup database connection
+        self.engine = create_engine(database_url, pool_pre_ping=True, pool_recycle=3600)
+        Session = sessionmaker(bind=self.engine)
+        self.db_session = Session()
+
+        # Setup HTTP session
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'NOAA CAP Alert System/1.0 (Putnam County, OH Emergency Management)'
+        })
+
+        # Initialize LED sign controller if IP is provided
+        self.led_controller = None
+        if led_sign_ip:
+            try:
+                self.led_controller = LEDSignController(led_sign_ip, led_sign_port)
+                self.logger.info(f"LED sign controller initialized for {led_sign_ip}:{led_sign_port}")
+            except Exception as e:
+                self.logger.error(f"Failed to initialize LED controller: {e}")
+
+        # CAP alert endpoints
+        self.cap_endpoints = [
+            'https://api.weather.gov/alerts/active?zone=OHZ016',  # Putnam County Zone
+            'https://api.weather.gov/alerts/active?area=OH&code=OHC137',  # Putnam County Code
+        ]
+
+        # Area filters for relevance checking
+        self.area_filters = [
+            'OHZ016',  # Putnam County forecast zone
+            'OHC137',  # Putnam County FIPS code
+            'PUTNAM',  # County name
+            'COLUMBUS',  # Major nearby city
+            'FINDLAY',  # Regional city
+            'LIMA',  # Regional city
+            'OTTAWA',  # County seat
+            'LEIPSIC', 'PANDORA', 'GLANDORF', 'KALIDA', 'FORT JENNINGS'  # Local communities
+        ]
+
+
+    def fetch_cap_alerts(self, timeout: int = 30) -> List[Dict]:
+        """Fetch CAP alerts from NOAA with enhanced error handling"""
+        unique_alerts = []
+        seen_identifiers = set()
+
+        for endpoint in self.cap_endpoints:
+            try:
+                self.logger.info(f"Fetching alerts from: {endpoint}")
+
+                response = self.session.get(endpoint, timeout=timeout)
+                response.raise_for_status()
+
+                data = response.json()
+                features = data.get('features', [])
+
+                self.logger.info(f"Retrieved {len(features)} alerts from {endpoint}")
+
+                for alert in features:
+                    props = alert.get('properties', {})
+                    identifier = props.get('identifier')
+
+                    if identifier and identifier not in seen_identifiers:
+                        seen_identifiers.add(identifier)
+                        unique_alerts.append(alert)
+                    elif not identifier:
+                        self.logger.warning("Alert has no identifier, including anyway")
+                        unique_alerts.append(alert)
+
+            except requests.exceptions.RequestException as e:
+                self.logger.error(f"Error fetching from {endpoint}: {str(e)}")
+                continue
+            except json.JSONDecodeError as e:
+                self.logger.error(f"JSON decode error from {endpoint}: {str(e)}")
+                continue
+            except Exception as e:
+                self.logger.error(f"Unexpected error fetching from {endpoint}: {str(e)}")
+                continue
+
+        self.logger.info(f"Total unique alerts collected: {len(unique_alerts)}")
+        return unique_alerts
+
+
+    def is_relevant_alert(self, alert_data: Dict) -> bool:
+        """Enhanced relevance checking for alerts"""
+        try:
+            properties = alert_data.get('properties', {})
+
+            # Check UGC codes
+            geocode = properties.get('geocode', {})
+            ugc_codes = geocode.get('UGC', [])
+
+            for ugc in ugc_codes:
+                if any(area in ugc.upper() for area in ['OHZ016', 'OHC137']):
+                    self.logger.debug(f"Alert relevant by UGC code: {ugc}")
+                    return True
+
+            # Check area description
+            area_desc = properties.get('areaDesc', '').upper()
+            if any(area in area_desc for area in self.area_filters):
+                self.logger.debug(f"Alert relevant by area description: {area_desc}")
+                return True
+
+            # Check event severity - always include severe alerts for nearby areas
+            severity = properties.get('severity', '').upper()
+            if severity in ['SEVERE', 'EXTREME']:
+                # Check if it's in Ohio
+                if 'OHIO' in area_desc or any(ugc.startswith('OH') for ugc in ugc_codes):
+                    self.logger.debug(f"Severe alert included from Ohio: {severity}")
+                    return True
+
+            return False
+
+        except Exception as e:
+            self.logger.error(f"Error checking alert relevance: {str(e)}")
+            return False
+
+
+    def parse_cap_alert(self, alert_data: Dict) -> Optional[Dict]:
+        """Parse CAP alert data with enhanced timezone handling"""
+        try:
+            properties = alert_data.get('properties', {})
+            geometry = alert_data.get('geometry')
+
+            # Extract or generate identifier
+            identifier = properties.get('identifier')
+            if not identifier:
+                event = properties.get('event', 'Unknown')
+                sent = properties.get('sent', str(time.time()))
+                temp_id = f"temp_{hashlib.md5((event + sent).encode()).hexdigest()[:16]}"
+                identifier = temp_id
+                self.logger.info(f"Generated temporary identifier: {identifier}")
+
+            # Parse timestamps
+            sent = parse_nws_datetime(properties.get('sent')) if properties.get('sent') else None
+            expires = parse_nws_datetime(properties.get('expires')) if properties.get('expires') else None
+
+            # Check if already expired
+            if expires and expires < utc_now():
+                self.logger.info(f"Alert {identifier} is already expired")
+
+            # Extract area description
+            area_desc = (properties.get('areaDesc') or
+                         properties.get('areas') or
+                         properties.get('geocode', {}).get('UGC', [''])[0] or
+                         'OHZ016')
+
             parsed_alert = {
                 'identifier': identifier,
                 'sent': sent,
@@ -329,219 +948,165 @@ class CAPPoller:
                 'raw_json': alert_data
             }
 
-            # Log alert parsing with timezone info
-            if sent:
-                self.logger.info(
-                    f"Successfully parsed alert: {identifier} - {parsed_alert['event']} - Sent: {format_local_datetime(sent)}")
-            else:
-                self.logger.info(f"Successfully parsed alert: {identifier} - {parsed_alert['event']}")
-
+            self.logger.info(f"Successfully parsed alert: {identifier} - {parsed_alert['event']}")
             return parsed_alert
 
         except Exception as e:
             self.logger.error(f"Error parsing CAP alert: {str(e)}")
             return None
 
+
     def save_cap_alert(self, alert_data: Dict) -> Tuple[bool, Optional[CAPAlert]]:
-        """Save CAP alert to database - handles null geometry and timezone-aware timestamps"""
+        """Save CAP alert to database with duplicate detection"""
         try:
             # Check if alert already exists
-            existing = self.db_session.query(CAPAlert).filter_by(
+            existing_alert = self.db_session.query(CAPAlert).filter_by(
                 identifier=alert_data['identifier']
             ).first()
 
-            if existing:
-                # Update existing alert BUT PRESERVE IT
+            if existing_alert:
+                # Update existing alert
                 for key, value in alert_data.items():
-                    if key != 'geometry':
-                        setattr(existing, key, value)
+                    if key != 'raw_json':  # Don't overwrite raw_json unless necessary
+                        setattr(existing_alert, key, value)
 
-                # Update geometry if provided and not null
-                if alert_data.get('geometry'):
-                    existing.geom = ST_GeomFromGeoJSON(json.dumps(alert_data['geometry']))
-                else:
-                    # For null geometry, set to None
-                    existing.geom = None
-
-                # Update the updated_at timestamp
-                existing.updated_at = utc_now()
-
+                existing_alert.updated_at = utc_now()
                 self.db_session.commit()
 
-                if existing.sent:
-                    self.logger.debug(
-                        f"Updated existing alert (PRESERVED): {existing.identifier} - Sent: {format_local_datetime(existing.sent)}")
-                else:
-                    self.logger.debug(f"Updated existing alert (PRESERVED): {existing.identifier}")
+                # Update LED display if this is an active alert
+                if self.led_controller and not self.is_alert_expired(existing_alert):
+                    self.update_led_display()
 
-                return False, existing
-
+                return False, existing_alert
             else:
                 # Create new alert
-                new_alert = CAPAlert(**{k: v for k, v in alert_data.items() if k != 'geometry'})
-
-                # Add geometry if provided and not null
-                if alert_data.get('geometry'):
-                    new_alert.geom = ST_GeomFromGeoJSON(json.dumps(alert_data['geometry']))
-                else:
-                    # For null geometry, leave as None
-                    new_alert.geom = None
-
-                # Set creation timestamp
+                new_alert = CAPAlert(**alert_data)
                 new_alert.created_at = utc_now()
+                new_alert.updated_at = utc_now()
 
                 self.db_session.add(new_alert)
                 self.db_session.commit()
 
-                if new_alert.sent:
-                    self.logger.info(
-                        f"Saved new alert (PRESERVED): {new_alert.identifier} - {new_alert.event} - Sent: {format_local_datetime(new_alert.sent)}")
-                else:
-                    self.logger.info(f"Saved new alert (PRESERVED): {new_alert.identifier} - {new_alert.event}")
+                # Update LED display for new active alerts
+                if self.led_controller and not self.is_alert_expired(new_alert):
+                    self.update_led_display()
 
                 return True, new_alert
 
-        except Exception as e:
+        except SQLAlchemyError as e:
+            self.logger.error(f"Database error saving alert: {str(e)}")
             self.db_session.rollback()
+            return False, None
+        except Exception as e:
             self.logger.error(f"Error saving CAP alert: {str(e)}")
-            raise
+            return False, None
+
+
+    def is_alert_expired(self, alert: CAPAlert) -> bool:
+        """Check if an alert is expired"""
+        if not alert.expires:
+            return False
+        return alert.expires < utc_now()
+
+
+    def update_led_display(self):
+        """Update LED sign with current active alerts"""
+        if not self.led_controller:
+            return
+
+        try:
+            # Get active alerts ordered by severity
+            active_alerts = self.db_session.query(CAPAlert).filter(
+                or_(
+                    CAPAlert.expires.is_(None),
+                    CAPAlert.expires > utc_now()
+                )
+            ).order_by(
+                CAPAlert.severity.desc(),
+                CAPAlert.sent.desc()
+            ).limit(5).all()
+
+            if active_alerts:
+                # Display alerts on LED sign
+                self.led_controller.display_alerts(active_alerts)
+                self.logger.info(f"Updated LED display with {len(active_alerts)} active alerts")
+            else:
+                # Display default message when no alerts
+                self.led_controller.display_default_message()
+                self.logger.info("Updated LED display with default message")
+
+        except Exception as e:
+            self.logger.error(f"Error updating LED display: {e}")
+
 
     def process_intersections(self, alert: CAPAlert):
-        """Process intersections between alert and boundaries"""
+        """Process alert intersections with boundaries"""
         try:
-            if not alert.geom:
-                self.logger.info(
-                    f"Alert {alert.identifier} ({alert.event}) has no geometry - using zone-based intersection")
-
-                # For alerts without geometry (like Special Weather Statements),
-                # create intersections based on zone codes
-                if alert.event and ('special weather statement' in alert.event.lower() or
-                                    'advisory' in alert.event.lower() or
-                                    'warning' in alert.event.lower()):
-
-                    # Find all boundaries in Putnam County for general intersection
-                    county_boundaries = self.db_session.query(Boundary).filter(
-                        Boundary.name.ilike('%putnam%')
-                    ).all()
-
-                    for boundary in county_boundaries:
-                        # Check if intersection already exists
-                        existing = self.db_session.query(Intersection).filter_by(
-                            cap_alert_id=alert.id,
-                            boundary_id=boundary.id
-                        ).first()
-
-                        if not existing:
-                            intersection = Intersection(
-                                cap_alert_id=alert.id,
-                                boundary_id=boundary.id,
-                                intersection_area=0,  # No area calculation for zone-based
-                                created_at=utc_now()
-                            )
-                            self.db_session.add(intersection)
-                            self.logger.info(
-                                f"Created zone-based intersection: {alert.event} -> {boundary.type} '{boundary.name}'")
-
-                self.db_session.commit()
+            if not alert.geometry:
                 return
 
-            # Normal geometry-based intersection processing
-            intersecting_boundaries = self.db_session.query(Boundary).filter(
-                ST_Intersects(Boundary.geom, alert.geom)
-            ).all()
-
-            self.logger.info(f"Alert {alert.identifier} intersects with {len(intersecting_boundaries)} boundaries")
-
-            for boundary in intersecting_boundaries:
-                # Check if intersection already exists
-                existing_intersection = self.db_session.query(Intersection).filter_by(
-                    cap_alert_id=alert.id,
-                    boundary_id=boundary.id
-                ).first()
-
-                if existing_intersection:
-                    continue
-
-                # Calculate intersection area (optional)
-                try:
-                    intersection_area = self.db_session.scalar(
-                        text("""
-                             SELECT ST_Area(ST_Intersection(
-                                     ST_Transform(b.geom, 3857),
-                                     ST_Transform(a.geom, 3857)
-                                            )) as area
-                             FROM boundaries b,
-                                  cap_alerts a
-                             WHERE b.id = :boundary_id
-                               AND a.id = :alert_id
-                             """),
-                        {'boundary_id': boundary.id, 'alert_id': alert.id}
-                    )
-                except Exception as e:
-                    self.logger.warning(f"Could not calculate intersection area: {e}")
-                    intersection_area = 0
-
-                # Save intersection record
-                intersection = Intersection(
-                    cap_alert_id=alert.id,
-                    boundary_id=boundary.id,
-                    intersection_area=intersection_area or 0,
-                    created_at=utc_now()
-                )
-
-                self.db_session.add(intersection)
-
-                self.logger.info(f"Alert {alert.identifier} intersects with {boundary.type} boundary '{boundary.name}'")
-
-            self.db_session.commit()
+            # This would be implemented based on your existing intersection logic
+            # from the main app.py file
+            pass
 
         except Exception as e:
-            self.db_session.rollback()
             self.logger.error(f"Error processing intersections: {str(e)}")
 
-    # REMOVED THE AUTOMATIC CLEANUP FUNCTION - ALERTS ARE NOW PRESERVED!
-    # The cleanup_expired_alerts() function has been completely removed
-    # to preserve all historical alert data in the database.
 
-    def mark_expired_alerts_as_inactive(self):
-        """
-        OPTIONAL: Mark expired alerts as inactive without deleting them
-        This preserves all historical data while distinguishing active vs expired alerts
-        """
+    def cleanup_old_poll_history(self):
+        """Clean up old poll history records (keep alerts forever)"""
         try:
-            now = utc_now()
+            # Only clean up poll history, NOT alerts - keep all alerts for historical analysis
+            cutoff_date = utc_now() - timedelta(days=30)  # Keep 30 days of poll history
 
-            # Find alerts that are expired but not marked as inactive
-            expired_alerts = self.db_session.query(CAPAlert).filter(
-                CAPAlert.expires < now,
-                CAPAlert.status != 'Expired'  # Not already marked as expired
-            ).all()
+            from models import PollHistory
+            old_polls_count = self.db_session.query(PollHistory).filter(
+                PollHistory.timestamp < cutoff_date
+            ).count()
 
-            count = len(expired_alerts)
-            if count > 0:
-                self.logger.info(f"Found {count} expired alerts to mark as inactive (preserving data)")
+            if old_polls_count > 100:  # Only clean if we have many records
+                # Keep the most recent 100 poll records even if older than 30 days
+                subquery = self.db_session.query(PollHistory.id).order_by(
+                    PollHistory.timestamp.desc()
+                ).limit(100).subquery()
 
-                # Mark as expired instead of deleting
-                for alert in expired_alerts:
-                    expires_local = format_local_datetime(alert.expires)
-                    self.logger.debug(f"Marking expired alert as inactive: {alert.event} - Expired: {expires_local}")
-                    alert.status = 'Expired'  # Mark as expired but keep in database
-                    alert.updated_at = now
+                self.db_session.query(PollHistory).filter(
+                    PollHistory.timestamp < cutoff_date,
+                    ~PollHistory.id.in_(subquery)
+                ).delete(synchronize_session=False)
 
                 self.db_session.commit()
-                self.logger.info(f"Marked {count} expired alerts as inactive (DATA PRESERVED)")
+                self.logger.info(f"Cleaned up old poll history records (alerts preserved)")
 
         except Exception as e:
-            self.db_session.rollback()
-            self.logger.error(f"Error marking expired alerts as inactive: {str(e)}")
+            self.logger.error(f"Error cleaning up poll history: {str(e)}")
+
+
+    def log_poll_history(self, stats):
+        """Log poll statistics to database for monitoring"""
+        try:
+            from models import PollHistory
+            poll_record = PollHistory(
+                timestamp=utc_now(),
+                alerts_fetched=stats.get('alerts_fetched', 0),
+                alerts_new=stats.get('alerts_new', 0),
+                alerts_updated=stats.get('alerts_updated', 0),
+                execution_time_ms=stats.get('execution_time_ms', 0),
+                status=stats.get('status', 'UNKNOWN'),
+                error_message=stats.get('error_message')
+            )
+            self.db_session.add(poll_record)
+            self.db_session.commit()
+        except Exception as e:
+            self.logger.error(f"Error logging poll history: {str(e)}")
+
 
     def log_system_event(self, level: str, message: str, details: Dict = None):
-        """Log system event to database with timezone info"""
+        """Log system event to database"""
         try:
             if details is None:
                 details = {}
 
-            # Add timezone info to details
             details.update({
                 'logged_at_utc': utc_now().isoformat(),
                 'logged_at_local': local_now().isoformat(),
@@ -560,8 +1125,9 @@ class CAPPoller:
         except Exception as e:
             self.logger.error(f"Error logging system event: {str(e)}")
 
+
     def poll_and_process(self) -> Dict:
-        """Main polling and processing function with timezone support - NOW PRESERVES ALL ALERTS"""
+        """Main polling function with LED integration"""
         start_time = time.time()
         poll_start_utc = utc_now()
         poll_start_local = local_now()
@@ -571,7 +1137,6 @@ class CAPPoller:
             'alerts_new': 0,
             'alerts_updated': 0,
             'alerts_filtered': 0,
-            'alerts_marked_expired': 0,
             'execution_time_ms': 0,
             'status': 'SUCCESS',
             'error_message': None,
@@ -579,15 +1144,15 @@ class CAPPoller:
             'poll_time_utc': poll_start_utc.isoformat(),
             'poll_time_local': poll_start_local.isoformat(),
             'timezone': str(PUTNAM_COUNTY_TZ),
-            'data_preservation': True  # Indicates alerts are preserved
+            'led_updated': False
         }
 
         try:
             self.logger.info(
-                f"Starting CAP alert polling cycle for Putnam County, OH (OHZ016/OHC137) at {format_local_datetime(poll_start_utc)}")
-            self.logger.info("📦 ALERT PRESERVATION MODE: All alerts will be kept in database for historical analysis")
+                f"Starting CAP alert polling cycle for Putnam County, OH at {format_local_datetime(poll_start_utc)}"
+            )
 
-            # Fetch alerts from NOAA for OHZ016 and OHC137
+            # Fetch alerts
             alerts_data = self.fetch_cap_alerts()
             stats['alerts_fetched'] = len(alerts_data)
 
@@ -597,12 +1162,10 @@ class CAPPoller:
                 event = props.get('event', 'Unknown')
                 alert_id = props.get('identifier', 'No ID')
 
-                self.logger.info(
-                    f"Processing alert: {event} (ID: {alert_id[:20] if alert_id != 'No ID' else 'No ID'}...)")
+                self.logger.info(f"Processing alert: {event} (ID: {alert_id[:20]}...)")
 
-                # Check if alert is relevant to our area
                 if not self.is_relevant_alert(alert_data):
-                    self.logger.info(f"Alert {event} filtered out - not relevant to our area")
+                    self.logger.info(f"Alert {event} filtered out - not relevant")
                     stats['alerts_filtered'] += 1
                     continue
 
@@ -616,73 +1179,85 @@ class CAPPoller:
                         stats['alerts_new'] += 1
                         if alert.sent:
                             self.logger.info(
-                                f"Saved new alert (PRESERVED): {alert.event} - Sent: {format_local_datetime(alert.sent)}")
+                                f"Saved new alert: {alert.event} - Sent: {format_local_datetime(alert.sent)}"
+                            )
                         else:
-                            self.logger.info(f"Saved new alert (PRESERVED): {alert.event}")
-                        # Process intersections for new alerts
+                            self.logger.info(f"Saved new alert: {alert.event}")
+
                         self.process_intersections(alert)
+                        stats['led_updated'] = True
                     else:
                         stats['alerts_updated'] += 1
                         if alert.sent:
                             self.logger.info(
-                                f"Updated existing alert (PRESERVED): {alert.event} - Sent: {format_local_datetime(alert.sent)}")
+                                f"Updated existing alert: {alert.event} - Sent: {format_local_datetime(alert.sent)}"
+                            )
                         else:
-                            self.logger.info(f"Updated existing alert (PRESERVED): {alert.event}")
+                            self.logger.info(f"Updated existing alert: {alert.event}")
                 else:
                     self.logger.warning(f"Failed to parse alert: {event}")
 
-            # OPTIONAL: Mark expired alerts as inactive (but preserve them)
-            # Uncomment the next two lines if you want to mark expired alerts as inactive
-            self.mark_expired_alerts_as_inactive()
-            stats['alerts_marked_expired'] = len(self.db_session.query(CAPAlert).filter(CAPAlert.status == 'Expired').all())
+            # Cleanup old poll history (but keep all alerts for historical data)
+            self.cleanup_old_poll_history()
+
+            # Log poll statistics
+            self.log_poll_history(stats)
+
+            # Update LED display
+            if self.led_controller:
+                self.update_led_display()
+                stats['led_updated'] = True
 
             # Calculate execution time
             stats['execution_time_ms'] = int((time.time() - start_time) * 1000)
 
             self.logger.info(
-                f"✅ Putnam County polling cycle completed: {stats['alerts_new']} new, {stats['alerts_updated']} updated, {stats['alerts_filtered']} filtered")
-            self.logger.info("📦 ALL ALERTS PRESERVED IN DATABASE FOR HISTORICAL ANALYSIS")
+                f"Polling cycle completed: {stats['alerts_new']} new, {stats['alerts_updated']} updated, {stats['alerts_filtered']} filtered"
+            )
 
-            # Log successful poll with timezone info
-            self.log_system_event('INFO',
-                                  f'CAP polling successful with data preservation: {stats["alerts_new"]} new alerts',
-                                  stats)
+            # Log successful poll
+            self.log_system_event('INFO', f'CAP polling successful: {stats["alerts_new"]} new alerts', stats)
 
         except Exception as e:
             stats['status'] = 'ERROR'
             stats['error_message'] = str(e)
             stats['execution_time_ms'] = int((time.time() - start_time) * 1000)
 
-            self.logger.error(f"❌ Error in Putnam County polling cycle: {str(e)}")
+            self.logger.error(f"Error in polling cycle: {str(e)}")
             self.log_system_event('ERROR', f'CAP polling failed: {str(e)}', stats)
 
         return stats
 
+
     def close(self):
-        """Close database connections"""
-        if hasattr(self, 'db_session') and hasattr(self.db_session, 'close'):
+        """Close connections"""
+        if hasattr(self, 'db_session'):
             self.db_session.close()
         if hasattr(self, 'session'):
             self.session.close()
+        if self.led_controller:
+            self.led_controller.close()
 
 
 def main():
-    """Main entry point for running poller standalone"""
-    import argparse
-
-    # Setup argument parser
-    parser = argparse.ArgumentParser(
-        description='NOAA CAP Alert Poller for Putnam County, OH (OHZ016/OHC137) - ALERT PRESERVATION MODE')
+    """Main entry point"""
+    parser = argparse.ArgumentParser(description='NOAA CAP Alert Poller with LED Sign Integration')
     parser.add_argument('--database-url',
                         default='postgresql://noaa_user:rkhkeq@localhost:5432/noaa_alerts',
                         help='Database connection URL')
+    parser.add_argument('--led-ip',
+                        help='LED sign IP address')
+    parser.add_argument('--led-port',
+                        type=int,
+                        default=10001,
+                        help='LED sign port (default: 10001)')
     parser.add_argument('--log-level',
                         default='INFO',
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
                         help='Logging level')
     parser.add_argument('--continuous',
                         action='store_true',
-                        help='Run continuously every 5 minutes')
+                        help='Run continuously')
     parser.add_argument('--interval',
                         type=int,
                         default=300,
@@ -690,7 +1265,7 @@ def main():
 
     args = parser.parse_args()
 
-    # Setup logging with timezone info
+    # Setup logging
     logging.basicConfig(
         level=getattr(logging, args.log_level),
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -702,16 +1277,14 @@ def main():
 
     logger = logging.getLogger(__name__)
 
-    # Log startup with timezone info
     startup_utc = utc_now()
-    startup_local = local_now()
-    logger.info(f"🚀 Starting NOAA CAP Alert Poller for Putnam County, OH (OHZ016/OHC137)")
-    logger.info(f"📦 ALERT PRESERVATION MODE: Historical data will be preserved")
+    logger.info(f"Starting NOAA CAP Alert Poller with LED Integration")
     logger.info(f"Startup time: {format_local_datetime(startup_utc)}")
-    logger.info(f"Timezone: {PUTNAM_COUNTY_TZ}")
+    if args.led_ip:
+        logger.info(f"LED Sign: {args.led_ip}:{args.led_port}")
 
     # Create poller
-    poller = CAPPoller(args.database_url)
+    poller = CAPPoller(args.database_url, args.led_ip, args.led_port)
 
     try:
         if args.continuous:
@@ -719,20 +1292,17 @@ def main():
             while True:
                 try:
                     stats = poller.poll_and_process()
-
-                    # Log stats with local time info
-                    logger.info(f"Poll completed at {format_local_datetime(utc_now())}: {json.dumps(stats, indent=2)}")
+                    logger.info(f"Poll completed: {json.dumps(stats, indent=2)}")
                     time.sleep(args.interval)
                 except KeyboardInterrupt:
                     logger.info("Received interrupt signal, shutting down")
                     break
                 except Exception as e:
                     logger.error(f"Error in continuous polling: {e}")
-                    time.sleep(60)  # Wait 1 minute before retrying
+                    time.sleep(60)
         else:
-            # Single poll
             stats = poller.poll_and_process()
-            print(f"Polling completed at {format_local_datetime(utc_now())}: {json.dumps(stats, indent=2)}")
+            print(f"Polling completed: {json.dumps(stats, indent=2)}")
 
     finally:
         poller.close()
