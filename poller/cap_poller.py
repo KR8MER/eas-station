@@ -247,7 +247,7 @@ class CAPPoller:
         # CAP alert endpoints
         self.cap_endpoints = [
             'https://api.weather.gov/alerts/active?zone=OHZ016',  # Putnam County Zone
-            'https://api.weather.gov/alerts/active?area=OHC137',  # All Ohio alerts (we'll filter)
+            'https://api.weather.gov/zones/county/OHC137',  # All Ohio alerts (we'll filter)
         ]
 
         # Area filters for relevance checking
