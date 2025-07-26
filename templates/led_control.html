@@ -1,1705 +1,1602 @@
-<small>Bright (16)</small>
-                                    </div>
+{% extends "base.html" %}
+
+{% block title %}LED Sign Control - Alpha 9120C M-Protocol{% endblock %}
+
+{% block nav_title %}LED Sign Control{% endblock %}
+
+{% block extra_css %}
+/* LED-specific styles */
+.message-preview {
+    background: #000;
+    color: #00ff00;
+    font-family: 'Courier New', monospace;
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    font-weight: bold;
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    word-break: break-word;
+    position: relative;
+    overflow: hidden;
+}
+
+.preview-line {
+    margin: 2px 0;
+    min-height: 20px;
+}
+
+.color-preview {
+    width: 25px;
+    height: 25px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-right: 8px;
+    border: 1px solid var(--border-color);
+    vertical-align: middle;
+}
+
+.rgb-input-group {
+    position: relative;
+}
+
+.rgb-preview {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 30px;
+    height: 30px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+}
+
+.effect-preview {
+    font-size: 0.8em;
+    color: #666;
+    font-style: italic;
+}
+
+.btn-emergency {
+    background: linear-gradient(135deg, var(--danger-color), #e74c3c);
+    border: none;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.3; }
+}
+
+@keyframes flashText {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+.flash-preview {
+    animation: flashText 1s infinite;
+}
+
+.rainbow-text {
+    background: linear-gradient(45deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3);
+    background-size: 400% 400%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: rainbow 2s ease-in-out infinite;
+}
+
+@keyframes rainbow {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+.message-item {
+    border-left: 4px solid var(--primary-color);
+    padding: 10px 15px;
+    margin-bottom: 10px;
+    background: white;
+    border-radius: 0 8px 8px 0;
+}
+
+.message-item.sent { border-left-color: var(--success-color); }
+.message-item.failed { border-left-color: var(--danger-color); }
+
+.feature-group {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+    background: var(--light-color);
+}
+
+.feature-group h6 {
+    margin-bottom: 15px;
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+.nav-tabs .nav-link {
+    border: none;
+    border-radius: 8px 8px 0 0;
+    margin-right: 0.25rem;
+}
+
+.nav-tabs .nav-link.active {
+    background: var(--primary-color);
+    color: white;
+}
+
+.tab-content {
+    background: white;
+    padding: 2rem;
+    border-radius: 0 12px 12px 12px;
+    box-shadow: 0 4px 15px var(--shadow-color);
+}
+
+@media (max-width: 768px) {
+    .tab-content { padding: 1rem; }
+    .feature-group { padding: 10px; }
+}
+{% endblock %}
+
+{% block content %}
+<!-- LED Status Overview -->
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">
+            <i class="fas fa-tv"></i> Alpha 9120C Status
+            <small class="ms-2 opacity-75">M-Protocol Full Implementation</small>
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <div id="led-status-display">
+                    <div class="loading-spinner"></div>
+                    Loading Alpha 9120C status...
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="message-preview" id="message-preview">
+                    <div class="preview-line">ALPHA 9120C</div>
+                    <div class="preview-line">M-PROTOCOL</div>
+                    <div class="preview-line">READY</div>
+                    <div class="preview-line"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Controls -->
+<div class="card">
+    <!-- Navigation Tabs -->
+    <div class="card-header p-0">
+        <ul class="nav nav-tabs nav-fill" id="ledTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="custom-tab" data-bs-toggle="tab" data-bs-target="#custom" type="button" role="tab">
+                    <i class="fas fa-edit"></i> Custom Message
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="canned-tab" data-bs-toggle="tab" data-bs-target="#canned" type="button" role="tab">
+                    <i class="fas fa-list"></i> Canned Messages
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="rgb-tab" data-bs-toggle="tab" data-bs-target="#rgb" type="button" role="tab">
+                    <i class="fas fa-palette"></i> RGB Colors
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="emergency-tab" data-bs-toggle="tab" data-bs-target="#emergency" type="button" role="tab">
+                    <i class="fas fa-exclamation-triangle"></i> Emergency
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button" role="tab">
+                    <i class="fas fa-cog"></i> Settings
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history" type="button" role="tab">
+                    <i class="fas fa-history"></i> History
+                </button>
+            </li>
+        </ul>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="ledTabContent">
+        <!-- Custom Message Tab -->
+        <div class="tab-pane fade show active" id="custom" role="tabpanel">
+            <h4><i class="fas fa-edit text-primary"></i> Custom Message (M-Protocol)</h4>
+            <p class="text-muted mb-4">Create messages with full Alpha 9120C M-Protocol features - 4 lines, effects, fonts, and colors.</p>
+            
+            <form id="custom-message-form">
+                <div class="row">
+                    <div class="col-lg-8">
+                        <!-- Message Text -->
+                        <div class="feature-group">
+                            <h6><i class="fas fa-keyboard"></i> Message Text (4 Lines, 20 chars each)</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="line1" class="form-label">Line 1</label>
+                                    <input type="text" class="form-control" id="line1" maxlength="20" placeholder="Line 1 (20 chars max)" oninput="updatePreview()">
                                 </div>
-                                <button class="btn btn-primary" onclick="setBrightness()">
-                                    <i class="fas fa-check"></i> Apply Brightness
-                                </button>
+                                <div class="col-md-6">
+                                    <label for="line2" class="form-label">Line 2</label>
+                                    <input type="text" class="form-control" id="line2" maxlength="20" placeholder="Line 2 (20 chars max)" oninput="updatePreview()">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="line3" class="form-label">Line 3</label>
+                                    <input type="text" class="form-control" id="line3" maxlength="20" placeholder="Line 3 (20 chars max)" oninput="updatePreview()">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="line4" class="form-label">Line 4</label>
+                                    <input type="text" class="form-control" id="line4" maxlength="20" placeholder="Line 4 (20 chars max)" oninput="updatePreview()">
+                                </div>
                             </div>
                         </div>
-                        
-                        <div class="card mb-3">
-                            <div class="card-header">
-                                <h6><i class="fas fa-tools"></i> Display Controls</h6>
+
+                        <!-- Color & Font Selection -->
+                        <div class="feature-group">
+                            <h6><i class="fas fa-paint-brush"></i> Color & Font</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="custom-color" class="form-label">Color</label>
+                                    <select class="form-select" id="custom-color" onchange="updatePreview()">
+                                        <option value="RED">🔴 Red</option>
+                                        <option value="GREEN" selected>🟢 Green</option>
+                                        <option value="AMBER">🟠 Amber</option>
+                                        <option value="DIM_RED">🔸 Dim Red</option>
+                                        <option value="DIM_GREEN">🔹 Dim Green</option>
+                                        <option value="BROWN">🟤 Brown</option>
+                                        <option value="ORANGE">🟠 Orange</option>
+                                        <option value="YELLOW">🟡 Yellow</option>
+                                        <option value="RAINBOW_1">🌈 Rainbow 1</option>
+                                        <option value="RAINBOW_2">🌈 Rainbow 2</option>
+                                        <option value="COLOR_MIX">🎨 Color Mix</option>
+                                        <option value="AUTO_COLOR">🤖 Auto Color</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="custom-font" class="form-label">Font Size</label>
+                                    <select class="form-select" id="custom-font" onchange="updatePreview()">
+                                        <option value="FONT_5x7">5x7 (Tiny)</option>
+                                        <option value="FONT_6x7">6x7 (Small)</option>
+                                        <option value="FONT_7x9" selected>7x9 (Medium)</option>
+                                        <option value="FONT_8x7">8x7 (Wide)</option>
+                                        <option value="FONT_7x11">7x11 (Tall)</option>
+                                        <option value="FONT_15x7">15x7 (Extra Wide)</option>
+                                        <option value="FONT_19x7">19x7 (Ultra Wide)</option>
+                                        <option value="FONT_7x13">7x13 (Large)</option>
+                                        <option value="FONT_16x9">16x9 (X-Large)</option>
+                                        <option value="FONT_32x16">32x16 (Huge)</option>
+                                    </select>
+                                </div>
                             </div>
-                            <div class="card-body">
-                                <div class="d-grid gap-2">
-                                    <button class="btn btn-warning" onclick="clearDisplay()">
-                                        <i class="fas fa-eraser"></i> Clear Display
-                                    </button>
-                                    <button class="btn btn-info" onclick="testFeatures()">
-                                        <i class="fas fa-vial"></i> Run Feature Test
-                                    </button>
-                                    <button class="btn btn-success" onclick="refreshStatus()">
-                                        <i class="fas fa-sync-alt"></i> Refresh Status
-                                    </button>
+                        </div>
+
+                        <!-- Display Effects -->
+                        <div class="feature-group">
+                            <h6><i class="fas fa-magic"></i> Display Effects</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="custom-mode" class="form-label">Display Mode</label>
+                                    <select class="form-select" id="custom-mode" onchange="updatePreview()">
+                                        <option value="HOLD" selected>Hold (Static)</option>
+                                        <option value="FLASH">⚡ Flash</option>
+                                        <option value="SCROLL">📜 Scroll</option>
+                                        <option value="ROLL_LEFT">⬅️ Roll Left</option>
+                                        <option value="ROLL_RIGHT">➡️ Roll Right</option>
+                                        <option value="ROLL_UP">⬆️ Roll Up</option>
+                                        <option value="ROLL_DOWN">⬇️ Roll Down</option>
+                                        <option value="WIPE_LEFT">🧽 Wipe Left</option>
+                                        <option value="WIPE_RIGHT">🧽 Wipe Right</option>
+                                        <option value="WIPE_UP">🧽 Wipe Up</option>
+                                        <option value="WIPE_DOWN">🧽 Wipe Down</option>
+                                        <option value="WIPE_IN">🧽 Wipe In</option>
+                                        <option value="WIPE_OUT">🧽 Wipe Out</option>
+                                        <option value="ROLL_IN">🌀 Roll In</option>
+                                        <option value="ROLL_OUT">🌀 Roll Out</option>
+                                        <option value="EXPLODE">💥 Explode</option>
+                                        <option value="ROTATE">🔄 Rotate</option>
+                                        <option value="COMPRESSED_ROTATE">🔄 Compressed Rotate</option>
+                                        <option value="AUTO_MODE">🤖 Auto Mode</option>
+                                        <option value="CLOCK">🕐 Clock</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="custom-speed" class="form-label">Animation Speed</label>
+                                    <select class="form-select" id="custom-speed">
+                                        <option value="SPEED_1">🐌 Slowest</option>
+                                        <option value="SPEED_2">🚶 Slow</option>
+                                        <option value="SPEED_3" selected>🚴 Medium</option>
+                                        <option value="SPEED_4">🏃 Fast</option>
+                                        <option value="SPEED_5">🏎️ Fastest</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Special Features -->
+                        <div class="feature-group">
+                            <h6><i class="fas fa-star"></i> Special Features</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="char-flash" onchange="updatePreview()">
+                                        <label class="form-check-label" for="char-flash">
+                                            ⚡ Character Flash (Blinking)
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="wide-char">
+                                        <label class="form-check-label" for="wide-char">
+                                            ↔️ Wide Characters
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="custom-priority" class="form-label">Message Priority</label>
+                                    <select class="form-select" id="custom-priority">
+                                        <option value="0">🚨 Emergency</option>
+                                        <option value="1">⚠️ Urgent</option>
+                                        <option value="2" selected>ℹ️ Normal</option>
+                                        <option value="3">💤 Low</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="row mt-3">
+                                <div class="col-md-6">
+                                    <label for="custom-hold-time" class="form-label">Hold Time (seconds)</label>
+                                    <input type="number" class="form-control" id="custom-hold-time" value="5" min="1" max="60">
                                 </div>
                             </div>
                         </div>
                     </div>
                     
-                    <div class="col-lg-6">
-                        <div class="card mb-3">
-                            <div class="card-header">
-                                <h6><i class="fas fa-clock"></i> Scheduled Messages</h6>
+                    <div class="col-lg-4">
+                        <div class="sticky-top" style="top: 20px;">
+                            <div class="mb-3">
+                                <label class="form-label">Live Preview</label>
+                                <div class="message-preview" id="custom-preview">
+                                    <div class="preview-line" id="preview-line1">Enter message</div>
+                                    <div class="preview-line" id="preview-line2">to see preview</div>
+                                    <div class="preview-line" id="preview-line3"></div>
+                                    <div class="preview-line" id="preview-line4"></div>
+                                </div>
+                                <div class="effect-preview mt-2" id="effect-description">
+                                    Effect: Static display
+                                </div>
                             </div>
-                            <div class="card-body">
-                                <p class="text-muted">Schedule messages to be sent at specific times.</p>
-                                <div class="mb-3">
-                                    <label for="schedule-time" class="form-label">Schedule Time</label>
-                                    <input type="datetime-local" class="form-control" id="schedule-time">
-                                </div>
-                                <div class="mb-3">
-                                    <label for="schedule-message" class="form-label">Message</label>
-                                    <input type="text" class="form-control" id="schedule-message" placeholder="Scheduled message text">
-                                </div>
-                                <button class="btn btn-primary" onclick="scheduleMessage()">
-                                    <i class="fas fa-calendar-plus"></i> Schedule Message
+                            
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-paper-plane"></i> Send to Alpha 9120C
+                                </button>
+                                <button type="button" class="btn btn-secondary" onclick="clearPreview()">
+                                    <i class="fas fa-eraser"></i> Clear All Lines
+                                </button>
+                                <button type="button" class="btn btn-info" onclick="fillSampleMessage()">
+                                    <i class="fas fa-lightbulb"></i> Sample Message
                                 </button>
                             </div>
                         </div>
-                        
-                        <div class="card">
-                            <div class="card-header">
-                                <h6><i class="fas fa-info-circle"></i> Sign Information</h6>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Canned Messages Tab -->
+        <div class="tab-pane fade" id="canned" role="tabpanel">
+            <h4><i class="fas fa-list text-success"></i> M-Protocol Canned Messages</h4>
+            <p class="text-muted mb-4">Predefined messages optimized for Alpha 9120C with advanced effects.</p>
+            
+            <div class="mb-3">
+                <input type="text" class="form-control" id="canned-search" placeholder="Search canned messages..." onkeyup="filterCannedMessages()">
+            </div>
+            
+            <div class="row" id="canned-messages-grid">
+                <div class="col-12 text-center py-4">
+                    <div class="loading-spinner"></div>
+                    Loading enhanced canned messages...
+                </div>
+            </div>
+        </div>
+
+        <!-- RGB Colors Tab -->
+        <div class="tab-pane fade" id="rgb" role="tabpanel">
+            <h4><i class="fas fa-palette text-info"></i> RGB Custom Colors</h4>
+            <p class="text-muted mb-4">Use Alpha 3.0 protocol RGB colors - 16.7 million colors available!</p>
+            
+            <form id="rgb-message-form">
+                <div class="row">
+                    <div class="col-lg-8">
+                        <div class="feature-group">
+                            <h6><i class="fas fa-keyboard"></i> Message Text</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control" id="rgb-line1" maxlength="20" placeholder="Line 1" oninput="updateRGBPreview()">
+                                </div>
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control" id="rgb-line2" maxlength="20" placeholder="Line 2" oninput="updateRGBPreview()">
+                                </div>
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control" id="rgb-line3" maxlength="20" placeholder="Line 3" oninput="updateRGBPreview()">
+                                </div>
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control" id="rgb-line4" maxlength="20" placeholder="Line 4" oninput="updateRGBPreview()">
+                                </div>
                             </div>
-                            <div class="card-body">
-                                <div id="sign-info">
-                                    <div class="loading-spinner"></div>
-                                    Loading sign information...
+                        </div>
+
+                        <div class="feature-group">
+                            <h6><i class="fas fa-palette"></i> RGB Color Selection</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="rgb-color-picker" class="form-label">Color Picker</label>
+                                    <div class="rgb-input-group">
+                                        <input type="color" class="form-control form-control-color" id="rgb-color-picker" value="#ff6600" onchange="updateRGBFromPicker()">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="rgb-hex" class="form-label">Hex Color</label>
+                                    <div class="rgb-input-group">
+                                        <input type="text" class="form-control" id="rgb-hex" value="FF6600" placeholder="FF6600" pattern="[0-9A-Fa-f]{6}" maxlength="6" oninput="updateRGBFromHex()">
+                                        <div class="rgb-preview" id="rgb-preview"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="row mt-3">
+                                <div class="col-12">
+                                    <label class="form-label">Preset Colors</label>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <button type="button" class="btn btn-sm" style="background: #FF0000; color: white;" onclick="setRGBColor('FF0000')">Red</button>
+                                        <button type="button" class="btn btn-sm" style="background: #00FF00; color: black;" onclick="setRGBColor('00FF00')">Green</button>
+                                        <button type="button" class="btn btn-sm" style="background: #0000FF; color: white;" onclick="setRGBColor('0000FF')">Blue</button>
+                                        <button type="button" class="btn btn-sm" style="background: #FFFF00; color: black;" onclick="setRGBColor('FFFF00')">Yellow</button>
+                                        <button type="button" class="btn btn-sm" style="background: #FF00FF; color: white;" onclick="setRGBColor('FF00FF')">Magenta</button>
+                                        <button type="button" class="btn btn-sm" style="background: #00FFFF; color: black;" onclick="setRGBColor('00FFFF')">Cyan</button>
+                                        <button type="button" class="btn btn-sm" style="background: #FF6600; color: white;" onclick="setRGBColor('FF6600')">Orange</button>
+                                        <button type="button" class="btn btn-sm" style="background: #6600FF; color: white;" onclick="setRGBColor('6600FF')">Purple</button>
+                                        <button type="button" class="btn btn-sm" style="background: #FF0066; color: white;" onclick="setRGBColor('FF0066')">Pink</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="feature-group">
+                            <h6><i class="fas fa-magic"></i> Display Options</h6>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <label for="rgb-font" class="form-label">Font</label>
+                                    <select class="form-select" id="rgb-font">
+                                        <option value="FONT_7x9" selected>7x9 (Medium)</option>
+                                        <option value="FONT_7x13">7x13 (Large)</option>
+                                        <option value="FONT_16x9">16x9 (X-Large)</option>
+                                        <option value="FONT_32x16">32x16 (Huge)</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="rgb-mode" class="form-label">Effect</label>
+                                    <select class="form-select" id="rgb-mode">
+                                        <option value="HOLD" selected>Hold</option>
+                                        <option value="WIPE_IN">Wipe In</option>
+                                        <option value="EXPLODE">Explode</option>
+                                        <option value="ROLL_LEFT">Roll Left</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="rgb-speed" class="form-label">Speed</label>
+                                    <select class="form-select" id="rgb-speed">
+                                        <option value="SPEED_2">Slow</option>
+                                        <option value="SPEED_3" selected>Medium</option>
+                                        <option value="SPEED_4">Fast</option>
+                                    </select>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <!-- Message History Tab -->
-            <div class="tab-pane fade" id="history" role="tabpanel">
-                <h4><i class="fas fa-history text-secondary"></i> Message History</h4>
-                <p class="text-muted">View recent messages sent to the LED sign.</p>
-                
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="fas fa-filter"></i></span>
-                            <select class="form-select" id="history-filter" onchange="filterHistory()">
-                                <option value="all">All Messages</option>
-                                <option value="sent">Sent Only</option>
-                                <option value="failed">Failed Only</option>
-                                <option value="emergency">Emergency</option>
-                                <option value="custom">Custom</option>
-                                <option value="canned">Canned</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="fas fa-search"></i></span>
-                            <input type="text" class="form-control" id="history-search" placeholder="Search messages..." onkeyup="searchHistory()">
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="message-history" id="message-history">
-                    <div class="text-center py-4">
-                        <div class="loading-spinner"></div>
-                        Loading message history...
-                    </div>
-                </div>
-                
-                <div class="text-center mt-3">
-                    <button class="btn btn-primary" onclick="loadMessageHistory()">
-                        <i class="fas fa-sync-alt"></i> Refresh History
-                    </button>
-                    <button class="btn btn-secondary" onclick="exportHistory()">
-                        <i class="fas fa-download"></i> Export History
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Schedule Message Modal -->
-<div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Schedule Message</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="schedule-form">
-                    <div class="mb-3">
-                        <label for="modal-schedule-time" class="form-label">Schedule Time</label>
-                        <input type="datetime-local" class="form-control" id="modal-schedule-time" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="modal-schedule-message" class="form-label">Message</label>
-                        <textarea class="form-control" id="modal-schedule-message" rows="3" maxlength="200" required></textarea>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <label for="modal-schedule-color" class="form-label">Color</label>
-                            <select class="form-select" id="modal-schedule-color">
-                                <option value="GREEN">Green</option>
-                                <option value="RED">Red</option>
-                                <option value="AMBER">Amber</option>
-                                <option value="ORANGE">Orange</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="modal-schedule-effect" class="form-label">Effect</label>
-                            <select class="form-select" id="modal-schedule-effect">
-                                <option value="IMMEDIATE">Immediate</option>
-                                <option value="SCROLL_LEFT">Scroll Left</option>
-                                <option value="TWINKLE">Twinkle</option>
-                                <option value="NEWS_FLASH">News Flash</option>
-                            </select>
-                        </div>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="confirmSchedule()">Schedule Message</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Toast Container -->
-<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toast-container"></div>
-
-<!-- Bootstrap JS -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
-
-<script>
-    // Global variables
-    let ledStatus = null;
-    let cannedMessages = [];
-    let messageHistory = [];
-    let filteredHistory = [];
-    
-    // Color mapping for preview
-    const colorMap = {
-        'RED': '#ff0000',
-        'GREEN': '#00ff00',
-        'AMBER': '#ffbf00',
-        'YELLOW': '#ffff00',
-        'ORANGE': '#ff8000',
-        'WHITE': '#ffffff',
-        'BLUE': '#0080ff',
-        'CYAN': '#00ffff',
-        'MAGENTA': '#ff00ff'
-    };
-    
-    // Font size mapping
-    const fontSizeMap = {
-        'SMALL': '1.0em',
-        'MEDIUM': '1.2em',
-        'LARGE': '1.5em',
-        'EXTRA_LARGE': '1.8em'
-    };
-    
-    // Initialize the page
-    document.addEventListener('DOMContentLoaded', function() {
-        loadLEDStatus();
-        loadCannedMessages();
-        loadMessageHistory();
-        
-        // Setup form handlers
-        setupFormHandlers();
-        
-        // Setup auto-refresh
-        setInterval(loadLEDStatus, 30000); // Refresh status every 30 seconds
-        setInterval(loadMessageHistory, 60000); // Refresh history every minute
-        
-        // Load theme
-        loadTheme();
-    });
-    
-    function setupFormHandlers() {
-        // Custom message form
-        document.getElementById('custom-message-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            sendCustomMessage();
-        });
-        
-        // Emergency form
-        document.getElementById('emergency-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            sendEmergencyMessage();
-        });
-        
-        // Emergency text preview
-        document.getElementById('emergency-text').addEventListener('input', function() {
-            document.getElementById('emergency-preview').textContent = this.value || 'Enter emergency message';
-        });
-    }
-    
-    function loadLEDStatus() {
-        fetch('/api/led/status')
-            .then(response => response.json())
-            .then(data => {
-                ledStatus = data;
-                updateStatusDisplay(data);
-                updateSignInfo(data);
-            })
-            .catch(error => {
-                console.error('Error loading LED status:', error);
-                showToast('Error loading LED status', 'error');
-            });
-    }
-    
-    function updateStatusDisplay(status) {
-        const statusDisplay = document.getElementById('led-status-display');
-        
-        let connectionStatus = 'disconnected';
-        let statusClass = 'status-disconnected';
-        
-        if (status.controller_available && status.connected) {
-            connectionStatus = 'connected';
-            statusClass = 'status-connected';
-        } else if (status.controller_available) {
-            connectionStatus = 'error';
-            statusClass = 'status-error';
-        }
-        
-        statusDisplay.innerHTML = `
-            <div class="d-flex align-items-center mb-3">
-                <span class="status-indicator ${statusClass}"></span>
-                <strong>Status: ${connectionStatus.charAt(0).toUpperCase() + connectionStatus.slice(1)}</strong>
-            </div>
-            <div class="row">
-                <div class="col-sm-6">
-                    <strong>Sign IP:</strong> ${status.sign_ip || 'Unknown'}<br>
-                    <strong>Port:</strong> ${status.sign_port || 'Unknown'}<br>
-                    <strong>Brightness:</strong> ${status.brightness_level || 'Unknown'}
-                </div>
-                <div class="col-sm-6">
-                    <strong>Last Update:</strong> ${status.last_update ? new Date(status.last_update).toLocaleString() : 'Never'}<br>
-                    <strong>Messages Stored:</strong> ${status.messages_stored || 0}<br>
-                    <strong>Priority:</strong> ${status.current_priority || 'Unknown'}
-                </div>
-            </div>
-        `;
-    }
-    
-    function updateSignInfo(status) {
-        const signInfo = document.getElementById('sign-info');
-        
-        signInfo.innerHTML = `
-            <div class="row">
-                <div class="col-12">
-                    <strong>Connection Details:</strong><br>
-                    IP Address: ${status.sign_ip}<br>
-                    Port: ${status.sign_port}<br>
-                    Sign ID: ${status.sign_id || 'Unknown'}<br>
-                    Controller Available: ${status.controller_available ? 'Yes' : 'No'}<br>
-                    LED Library: ${status.led_library_available ? 'Available' : 'Not Available'}<br>
-                    <br>
-                    <strong>Display Settings:</strong><br>
-                    Current Priority: ${status.current_priority || 'Unknown'}<br>
-                    Display Active: ${status.display_active ? 'Yes' : 'No'}<br>
-                    Brightness: ${status.brightness_level || 'Unknown'}/16<br>
-                    Error Count: ${status.error_count || 0}
-                </div>
-            </div>
-        `;
-    }
-    
-    function loadCannedMessages() {
-        fetch('/api/led/canned_messages')
-            .then(response => response.json())
-            .then(data => {
-                cannedMessages = data.canned_messages || [];
-                updateCannedMessagesDisplay();
-            })
-            .catch(error => {
-                console.error('Error loading canned messages:', error);
-                document.getElementById('canned-messages-grid').innerHTML = 
-                    '<div class="col-12 text-center text-danger">Error loading canned messages</div>';
-            });
-    }
-    
-    function updateCannedMessagesDisplay() {
-        const grid = document.getElementById('canned-messages-grid');
-        
-        if (cannedMessages.length === 0) {
-            grid.innerHTML = '<div class="col-12 text-center text-muted">No canned messages available</div>';
-            return;
-        }
-        
-        let html = '';
-        cannedMessages.forEach(msg => {
-            html += `
-                <div class="col-md-6 col-lg-4 mb-3" data-message-name="${msg.name.toLowerCase()}">
-                    <div class="card h-100">
-                        <div class="card-body">
-                            <h6 class="card-title">${msg.name.replace('_', ' ').toUpperCase()}</h6>
-                            <p class="card-text small text-muted">${msg.text}</p>
-                            <div class="d-flex align-items-center mb-2">
-                                <span class="color-preview" style="background-color: ${colorMap[msg.color] || '#00ff00'}"></span>
-                                <small class="text-muted">${msg.color} | ${msg.font} | ${msg.effect}</small>
+                    
+                    <div class="col-lg-4">
+                        <div class="sticky-top" style="top: 20px;">
+                            <div class="mb-3">
+                                <label class="form-label">RGB Preview</label>
+                                <div class="message-preview" id="rgb-preview-display">
+                                    <div class="preview-line" id="rgb-preview-line1">RGB COLOR</div>
+                                    <div class="preview-line" id="rgb-preview-line2">TEST MESSAGE</div>
+                                    <div class="preview-line" id="rgb-preview-line3"></div>
+                                    <div class="preview-line" id="rgb-preview-line4"></div>
+                                </div>
                             </div>
-                            <button class="btn btn-primary btn-sm w-100" onclick="sendCannedMessage('${msg.name}')">
-                                <i class="fas fa-paper-plane"></i> Send
+                            
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-info btn-lg">
+                                    <i class="fas fa-palette"></i> Send RGB Message
+                                </button>
+                                <button type="button" class="btn btn-secondary" onclick="clearRGBMessage()">
+                                    <i class="fas fa-eraser"></i> Clear
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Emergency Tab -->
+        <div class="tab-pane fade" id="emergency" role="tabpanel">
+            <h4><i class="fas fa-exclamation-triangle text-danger"></i> Emergency Override</h4>
+            <div class="alert alert-danger mb-4">
+                <h6><i class="fas fa-warning"></i> Warning</h6>
+                Emergency messages override all other content with highest priority and use flashing red display.
+            </div>
+            
+            <form id="emergency-form">
+                <div class="row">
+                    <div class="col-lg-8">
+                        <div class="mb-3">
+                            <label for="emergency-text" class="form-label">Emergency Message</label>
+                            <textarea class="form-control" id="emergency-text" rows="3" maxlength="80" 
+                                      placeholder="Enter critical emergency message (will be split across lines 3-4)..."
+                                      oninput="updateEmergencyPreview()"></textarea>
+                            <div class="form-text">Message will be automatically formatted across 4 lines with "EMERGENCY ALERT" header</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="emergency-duration" class="form-label">Display Duration (seconds)</label>
+                            <input type="number" class="form-control" id="emergency-duration" value="30" min="10" max="300">
+                            <div class="form-text">How long to display before returning to normal operation</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Quick Emergency Templates</label>
+                            <div class="d-grid gap-2 d-md-block">
+                                <button type="button" class="btn btn-outline-danger" onclick="setEmergencyTemplate('TORNADO WARNING - TAKE SHELTER IMMEDIATELY')">
+                                    <i class="fas fa-tornado"></i> Tornado
+                                </button>
+                                <button type="button" class="btn btn-outline-danger" onclick="setEmergencyTemplate('SEVERE WEATHER ALERT - SEEK SHELTER NOW')">
+                                    <i class="fas fa-cloud-bolt"></i> Severe Weather
+                                </button>
+                                <button type="button" class="btn btn-outline-danger" onclick="setEmergencyTemplate('EVACUATION ORDER - FOLLOW DESIGNATED ROUTES')">
+                                    <i class="fas fa-route"></i> Evacuation
+                                </button>
+                                <button type="button" class="btn btn-outline-warning" onclick="setEmergencyTemplate('EMERGENCY TEST - THIS IS ONLY A TEST')">
+                                    <i class="fas fa-vial"></i> Test
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-lg-4">
+                        <div class="sticky-top" style="top: 20px;">
+                            <div class="mb-3">
+                                <label class="form-label">Emergency Preview</label>
+                                <div class="message-preview flash-preview" style="color: #ff0000;">
+                                    <div class="preview-line">EMERGENCY</div>
+                                    <div class="preview-line">ALERT</div>
+                                    <div class="preview-line" id="emergency-preview-line3">Enter emergency</div>
+                                    <div class="preview-line" id="emergency-preview-line4">message above</div>
+                                </div>
+                                <div class="effect-preview mt-2">
+                                    Effect: Flashing red text with character flash
+                                </div>
+                            </div>
+                            
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-emergency btn-lg">
+                                    <i class="fas fa-exclamation-triangle"></i> SEND EMERGENCY ALERT
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Settings Tab -->
+        <div class="tab-pane fade" id="settings" role="tabpanel">
+            <h4><i class="fas fa-cog text-info"></i> Alpha 9120C Settings</h4>
+            <p class="text-muted mb-4">Configure display settings and test M-Protocol features.</p>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6><i class="fas fa-sun"></i> Brightness Control</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="brightness-slider" class="form-label">Brightness Level: <span id="brightness-value">10</span></label>
+                                <input type="range" class="form-range" id="brightness-slider" min="1" max="16" value="10" 
+                                       oninput="updateBrightnessValue(this.value)">
+                                <div class="d-flex justify-content-between">
+                                    <small>Dim (1)</small>
+                                    <small>Bright (16)</small>
+                                </div>
+                            </div>
+                            <button class="btn btn-primary" onclick="setBrightness()">
+                                <i class="fas fa-check"></i> Apply Brightness
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6><i class="fas fa-clock"></i> Time Display</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="time-format" class="form-label">Time Format</label>
+                                <select class="form-select" id="time-format">
+                                    <option value="TIME_12H" selected>12 Hour (AM/PM)</option>
+                                    <option value="TIME_24H">24 Hour</option>
+                                    <option value="MMDDYY">MM/DD/YY</option>
+                                    <option value="DDMMYY">DD/MM/YY</option>
+                                    <option value="MMDDYYYY">MM/DD/YYYY</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-info" onclick="sendTimeDisplay()">
+                                <i class="fas fa-clock"></i> Display Time
                             </button>
                         </div>
                     </div>
                 </div>
-            `;
-        });
-        
-        grid.innerHTML = html;
-    }
-    
-    function filterCannedMessages() {
-        const searchTerm = document.getElementById('canned-search').value.toLowerCase();
-        const messageCards = document.querySelectorAll('[data-message-name]');
-        
-        messageCards.forEach(card => {
-            const messageName = card.getAttribute('data-message-name');
-            const messageText = card.querySelector('.card-text').textContent.toLowerCase();
-            
-            if (messageName.includes(searchTerm) || messageText.includes(searchTerm)) {
-                card.style.display = 'block';
-            } else {
-                card.style.display = 'none';
-            }
-        });
-    }
-    
-    function loadMessageHistory() {
-        fetch('/api/led/messages?per_page=50')
-            .then(response => response.json())
-            .then(data => {
-                messageHistory = data.messages || [];
-                filteredHistory = messageHistory;
-                updateMessageHistoryDisplay();
-            })
-            .catch(error => {
-                console.error('Error loading message history:', error);
-                document.getElementById('message-history').innerHTML = 
-                    '<div class="text-center text-danger">Error loading message history</div>';
-            });
-    }
-    
-    function updateMessageHistoryDisplay() {
-        const historyDiv = document.getElementById('message-history');
-        const messages = filteredHistory;
-        
-        if (messages.length === 0) {
-            historyDiv.innerHTML = '<div class="text-center text-muted">No messages in history</div>';
-            return;
-        }
-        
-        let html = '';
-        messages.forEach(msg => {
-            const statusClass = msg.sent_at ? 'sent' : 'failed';
-            const statusIcon = msg.sent_at ? 'check-circle' : 'times-circle';
-            const statusText = msg.sent_at ? 'Sent' : 'Failed';
-            
-            html += `
-                <div class="message-item ${statusClass}">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div class="flex-grow-1">
-                            <div class="d-flex align-items-center mb-1">
-                                <strong>${msg.type.charAt(0).toUpperCase() + msg.type.slice(1)} Message</strong>
-                                <span class="badge bg-${getPriorityBadgeColor(msg.priority)} ms-2">
-                                    ${getPriorityText(msg.priority)}
-                                </span>
-                            </div>
-                            <p class="mb-1">${msg.content}</p>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <small class="text-muted">
-                                        <i class="fas fa-clock"></i> Created: ${new Date(msg.created_at).toLocaleString()}
-                                    </small>
-                                </div>
-                                <div class="col-md-6">
-                                    <small class="text-muted">
-                                        ${msg.sent_at ? '<i class="fas fa-paper-plane"></i> Sent: ' + new Date(msg.sent_at).toLocaleString() : '<i class="fas fa-times"></i> Not sent'}
-                                    </small>
-                                </div>
-                            </div>
-                            ${msg.color ? `<small class="text-muted">Style: ${msg.color} | ${msg.font_size} | ${msg.effect}</small>` : ''}
+                
+                <div class="col-md-6">
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6><i class="fas fa-tools"></i> Display Controls</h6>
                         </div>
-                        <div class="text-end ms-3">
-                            <i class="fas fa-${statusIcon} fs-4 ${msg.sent_at ? 'text-success' : 'text-danger'}"></i>
-                            <br><small>${statusText}</small>
+                        <div class="card-body">
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-warning" onclick="clearDisplay()">
+                                    <i class="fas fa-eraser"></i> Clear Display
+                                </button>
+                                <button class="btn btn-info" onclick="testAllFeatures()">
+                                    <i class="fas fa-vial"></i> Test All M-Protocol Features
+                                </button>
+                                <button class="btn btn-success" onclick="refreshStatus()">
+                                    <i class="fas fa-sync-alt"></i> Refresh Status
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h6><i class="fas fa-flask"></i> Quick Tests</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-outline-primary" onclick="testRainbowColors()">
+                                    <i class="fas fa-rainbow"></i> Test Rainbow Colors
+                                </button>
+                                <button class="btn btn-outline-success" onclick="testScrollingMessage()">
+                                    <i class="fas fa-scroll"></i> Test Scrolling Effects
+                                </button>
+                                <button class="btn btn-outline-info" onclick="testFlashingMessage()">
+                                    <i class="fas fa-bolt"></i> Test Flashing Text
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
-            `;
-        });
-        
-        historyDiv.innerHTML = html;
-    }
-    
-    function getPriorityBadgeColor(priority) {
-        switch(priority) {
-            case 0: return 'danger';
-            case 1: return 'warning';
-            case 2: return 'primary';
-            case 3: return 'secondary';
-            default: return 'secondary';
-        }
-    }
-    
-    function getPriorityText(priority) {
-        switch(priority) {
-            case 0: return 'Emergency';
-            case 1: return 'Urgent';
-            case 2: return 'Normal';
-            case 3: return 'Low';
-            default: return 'Unknown';
-        }
-    }
-    
-    function filterHistory() {
-        const filter = document.getElementById('history-filter').value;
-        
-        switch(filter) {
-            case 'sent':
-                filteredHistory = messageHistory.filter(msg => msg.sent_at);
-                break;
-            case 'failed':
-                filteredHistory = messageHistory.filter(msg => !msg.sent_at);
-                break;
-            case 'emergency':
-                filteredHistory = messageHistory.filter(msg => msg.priority === 0);
-                break;
-            case 'custom':
-                filteredHistory = messageHistory.filter(msg => msg.type === 'custom');
-                break;
-            case 'canned':
-                filteredHistory = messageHistory.filter(msg => msg.type === 'canned');
-                break;
-            default:
-                filteredHistory = messageHistory;
-        }
-        
-        updateMessageHistoryDisplay();
-    }
-    
-    function searchHistory() {
-        const searchTerm = document.getElementById('history-search').value.toLowerCase();
-        
-        if (searchTerm) {
-            filteredHistory = messageHistory.filter(msg => 
-                msg.content.toLowerCase().includes(searchTerm) ||
-                msg.type.toLowerCase().includes(searchTerm)
-            );
-        } else {
-            filteredHistory = messageHistory;
-        }
-        
-        updateMessageHistoryDisplay();
-    }
-    
-    function updatePreview() {
-        const text = document.getElementById('custom-text').value;
-        const color = document.getElementById('custom-color').value;
-        const font = document.getElementById('custom-font').value;
-        
-        const preview = document.getElementById('custom-preview');
-        preview.textContent = text || 'Enter message to preview';
-        preview.style.color = colorMap[color] || '#00ff00';
-        preview.style.fontSize = fontSizeMap[font] || '1.2em';
-        
-        // Update character count
-        document.getElementById('char-count').textContent = text.length;
-    }
-    
-    function clearPreview() {
-        document.getElementById('custom-text').value = '';
-        updatePreview();
-    }
-    
-    function setEmergencyTemplate(template) {
-        document.getElementById('emergency-text').value = template;
-        document.getElementById('emergency-preview').textContent = template;
-    }
-    
-    function sendCustomMessage() {
-        const data = {
-            text: document.getElementById('custom-text').value,
-            color: document.getElementById('custom-color').value,
-            font: document.getElementById('custom-font').value,
-            effect: document.getElementById('custom-effect').value,
-            speed: document.getElementById('custom-speed').value,
-            hold_time: parseInt(document.getElementById('custom-hold-time').value),
-            priority: parseInt(document.getElementById('custom-priority').value)
-        };
-        
-        if (!data.text.trim()) {
-            showToast('Please enter a message', 'error');
-            return;
-        }
-        
-        showLoading('Sending message...');
-        
-        fetch('/api/led/send_message', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data)
-        })
-        .then(response => response.json())
-        .then(result => {
-            hideLoading();
-            if (result.success) {
-                showToast('Message sent successfully!', 'success');
-                loadMessageHistory();
-                clearPreview();
-            } else {
-                showToast('Failed to send message: ' + (result.error || 'Unknown error'), 'error');
-            }
-        })
-        .catch(error => {
-            hideLoading();
-            console.error('Error sending message:', error);
-            showToast('Error sending message', 'error');
-        });
-    }
-    
-    function sendCannedMessage(messageName) {
-        showLoading('Sending canned message...');
-        
-        fetch('/api/led/send_canned', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                message_name: messageName,
-                parameters: {}
-            })
-        })
-        .then(response => response.json())
-        .then(result => {
-            hideLoading();
-            if (result.success) {
-                showToast(`Canned message "${messageName}" sent successfully!`, 'success');
-                loadMessageHistory();
-            } else {
-                showToast('Failed to send canned message: ' + (result.error || 'Unknown error'), 'error');
-            }
-        })
-        .catch(error => {
-            hideLoading();
-            console.error('Error sending canned message:', error);
-            showToast('Error sending canned message', 'error');
-        });
-    }
-    
-    function sendEmergencyMessage() {
-        const text = document.getElementById('emergency-text').value;
-        const duration = parseInt(document.getElementById('emergency-duration').value);
-        
-        if (!text.trim()) {
-            showToast('Please enter an emergency message', 'error');
-            return;
-        }
-        
-        if (!confirm('Are you sure you want to send an EMERGENCY message? This will override all other content on the LED sign.')) {
-            return;
-        }
-        
-        showLoading('Sending emergency message...');
-        
-        fetch('/api/led/emergency', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                message: text,
-                duration: duration
-            })
-        })
-        .then(response => response.json())
-        .then(result => {
-            hideLoading();
-            if (result.success) {
-                showToast('Emergency message sent successfully!', 'success');
-                loadMessageHistory();
-                document.getElementById('emergency-text').value = '';
-                document.getElementById('emergency-preview').textContent = 'Enter emergency message';
-            } else {
-                showToast('Failed to send emergency message: ' + (result.error || 'Unknown error'), 'error');
-            }
-        })
-        .catch(error => {
-            hideLoading();
-            console.error('Error sending emergency message:', error);
-            showToast('Error sending emergency message', 'error');
-        });
-    }
-    
-    function updateBrightnessValue(value) {
-        document.getElementById('brightness-value').textContent = value;
-    }
-    
-    function setBrightness() {
-        const brightness = parseInt(document.getElementById('brightness-slider').value);
-        
-        showLoading('Setting brightness...');
-        
-        fetch('/api/led/brightness', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({brightness: brightness})
-        })
-        .then(response => response.json())
-        .then(result => {
-            hideLoading();
-            if (result.success) {
-                showToast(`Brightness set to ${brightness}`, 'success');
-                loadLEDStatus();
-            } else {
-                showToast('Failed to set brightness: ' + (result.error || 'Unknown error'), 'error');
-            }
-        })
-        .catch(error => {
-            hideLoading();
-            console.error('Error setting brightness:', error);
-            showToast('Error setting brightness', 'error');
-        });
-    }
-    
-    function clearDisplay() {
-        if (!confirm('Are you sure you want to clear the LED display?')) {
-            return;
-        }
-        
-        showLoading('Clearing display...');
-        
-        fetch('/api/led/clear', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'}
-        })
-        .then(response => response.json())
-        .then(result => {
-            hideLoading();
-            if (result.success) {
-                showToast('Display cleared successfully', 'success');
-                loadMessageHistory();
-            } else {
-                showToast('Failed to clear display: ' + (result.error || 'Unknown error'), 'error');
-            }
-        })
-        .catch(error => {
-            hideLoading();
-            console.error('Error clearing display:', error);
-            showToast('Error clearing display', 'error');
-        });
-    }
-    
-    function testFeatures() {
-        if (!confirm('This will run a comprehensive test of all LED sign features. Continue?')) {
-            return;
-        }
-        
-        showLoading('Running feature test...');
-        
-        fetch('/api/led/test', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'}
-        })
-        .then(response => response.json())
-        .then(result => {
-            hideLoading();
-            if (result.success) {
-                showToast('Feature test started successfully', 'success');
-                loadMessageHistory();
-            } else {
-                showToast('Failed to start feature test: ' + (result.error || 'Unknown error'), 'error');
-            }
-        })
-        .catch(error => {
-            hideLoading();
-            console.error('Error starting feature test:', error);
-            showToast('Error starting feature test', 'error');
-        });
-    }
-    
-    function refreshStatus() {
-        showLoading('Refreshing status...');
-        loadLEDStatus();
-        setTimeout(() => {
-            hideLoading();
-            showToast('Status refreshed', 'success');
-        }, 1000);
-    }
-    
-    function scheduleMessage() {
-        const modal = new bootstrap.Modal(document.getElementById('scheduleModal'));
-        modal.show();
-    }
-    
-    function confirmSchedule() {
-        const time = document.getElementById('modal-schedule-time').value;
-        const message = document.getElementById('modal-schedule-message').value;
-        const color = document.getElementById('modal-schedule-color').value;
-        const effect = document.getElementById('modal-schedule-effect').value;
-        
-        if (!time || !message) {
-            showToast('Please fill in all required fields', 'error');
-            return;
-        }
-        
-        // For now, just send the message immediately
-        // In a full implementation, you'd schedule it
-        showLoading('Scheduling message...');
-        
-        fetch('/api/led/send_message', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                text: `SCHEDULED: ${message}`,
-                color: color,
-                effect: effect,
-                priority: 2
-            })
-        })
-        .then(response => response.json())
-        .then(result => {
-            hideLoading();
-            if (result.success) {
-                showToast('Message scheduled successfully!', 'success');
-                bootstrap.Modal.getInstance(document.getElementById('scheduleModal')).hide();
-                loadMessageHistory();
-            } else {
-                showToast('Failed to schedule message: ' + (result.error || 'Unknown error'), 'error');
-            }
-        })
-        .catch(error => {
-            hideLoading();
-            console.error('Error scheduling message:', error);
-            showToast('Error scheduling message', 'error');
-        });
-    }
-    
-    function exportHistory() {
-        const csvContent = "data:text/csv;charset=utf-8," + 
-            "Type,Content,Priority,Created,Sent,Status\n" +
-            messageHistory.map(msg => 
-                `"${msg.type}","${msg.content}","${getPriorityText(msg.priority)}","${msg.created_at}","${msg.sent_at || 'Not sent'}","${msg.sent_at ? 'Sent' : 'Failed'}"`
-            ).join("\n");
-        
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `led_message_history_${new Date().toISOString().split('T')[0]}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        showToast('Message history exported successfully', 'success');
-    }
-    
-    // Theme functions
-    function toggleTheme() {
-        const currentTheme = document.documentElement.getAttribute('data-theme');
-        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-        
-        document.documentElement.setAttribute('data-theme', newTheme);
-        localStorage.setItem('theme', newTheme);
-        
-        // Update icon
-        const icon = document.getElementById('theme-icon');
-        icon.className = newTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-        
-        showToast(`${newTheme.charAt(0).toUpperCase() + newTheme.slice(1)} mode enabled`, 'info');
-    }
-    
-    function loadTheme() {
-        const savedTheme = localStorage.getItem('theme') || 'light';
-        document.documentElement.setAttribute('data-theme', savedTheme);
-        
-        const icon = document.getElementById('theme-icon');
-        if (icon) {
-            icon.className = savedTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-        }
-    }
-    
-    // Utility functions
-    function showToast(message, type = 'info') {
-        const toastContainer = document.getElementById('toast-container');
-        const toastId = 'toast-' + Date.now();
-        
-        const bgClass = type === 'success' ? 'bg-success' : 
-                       type === 'error' ? 'bg-danger' : 
-                       type === 'warning' ? 'bg-warning' : 'bg-info';
-        
-        const toast = document.createElement('div');
-        toast.id = toastId;
-        toast.className = `toast align-items-center text-white ${bgClass} border-0`;
-        toast.setAttribute('role', 'alert');
-        toast.innerHTML = `
-            <div class="d-flex">
-                <div class="toast-body">${message}</div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
             </div>
-        `;
-        
-        toastContainer.appendChild(toast);
-        
-        const bsToast = new bootstrap.Toast(toast, {
-            autohide: true,
-            delay: type === 'error' ? 5000 : 3000
-        });
-        bsToast.show();
-        
-        // Remove toast element after it's hidden
-        toast.addEventListener('hidden.bs.toast', () => {
-            toast.remove();
-        });
-    }
-    
-    function showLoading(message) {
-        // Create or update loading overlay
-        let overlay = document.getElementById('loading-overlay');
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.id = 'loading-overlay';
-            overlay.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0, 0, 0, 0.5);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 9999;
-                color: white;
-                font-size: 1.2em;
-            `;
-            document.body.appendChild(overlay);
-        }
-        
-        overlay.innerHTML = `
-            <div class="text-center">
-                <div class="spinner-border text-light mb-3" role="status">
-                    <span class="visually-hidden">Loading...</span>
+        </div>
+
+        <!-- History Tab -->
+        <div class="tab-pane fade" id="history" role="tabpanel">
+            <h4><i class="fas fa-history text-secondary"></i> Message History</h4>
+            <p class="text-muted mb-4">View messages sent to Alpha 9120C with M-Protocol details.</p>
+            
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <select class="form-select" id="history-filter" onchange="filterHistory()">
+                        <option value="all">All Messages</option>
+                        <option value="sent">Sent Only</option>
+                        <option value="failed">Failed Only</option>
+                        <option value="emergency">Emergency</option>
+                        <option value="custom">Custom</option>
+                        <option value="canned">Canned</option>
+                        <option value="rgb">RGB Messages</option>
+                    </select>
                 </div>
-                <div>${message}</div>
-            </div>
-        `;
-        overlay.style.display = 'flex';
-    }
-    
-    function hideLoading() {
-        const overlay = document.getElementById('loading-overlay');
-        if (overlay) {
-            overlay.style.display = 'none';
-        }
-    }
-    
-    // Keyboard shortcuts
-    document.addEventListener('keydown', function(e) {
-        // Ctrl+Enter to send custom message
-        if (e.ctrlKey && e.key === 'Enter') {
-            const activeTab = document.querySelector('.tab-pane.active');
-            if (activeTab && activeTab.id === 'custom') {
-                sendCustomMessage();
-            }
-        }
-        
-        // Escape to clear current form
-        if (e.key === 'Escape') {
-            const activeTab = document.querySelector('.tab-pane.active');
-            if (activeTab && activeTab.id === 'custom') {
-                clearPreview();
-            }
-        }
-        
-        // F5 to refresh status
-        if (e.key === 'F5' && !e.ctrlKey) {
-            e.preventDefault();
-            refreshStatus();
-        }
-    });
-    
-    // Auto-save form data to localStorage
-    function saveFormData() {
-        const formData = {
-            customText: document.getElementById('custom-text').value,
-            customColor: document.getElementById('custom-color').value,
-            customFont: document.getElementById('custom-font').value,
-            customEffect: document.getElementById('custom-effect').value,
-            customSpeed: document.getElementById('custom-speed').value,
-            customHoldTime: document.getElementById('custom-hold-time').value,
-            customPriority: document.getElementById('custom-priority').value
-        };
-        localStorage.setItem('ledControlFormData', JSON.stringify(formData));
-    }
-    
-    function loadFormData() {
-        try {
-            const formData = JSON.parse(localStorage.getItem('ledControlFormData') || '{}');
-            
-            if (formData.customText) document.getElementById('custom-text').value = formData.customText;
-            if (formData.customColor) document.getElementById('custom-color').value = formData.customColor;
-            if (formData.customFont) document.getElementById('custom-font').value = formData.customFont;
-            if (formData.customEffect) document.getElementById('custom-effect').value = formData.customEffect;
-            if (formData.customSpeed) document.getElementById('custom-speed').value = formData.customSpeed;
-            if (formData.customHoldTime) document.getElementById('custom-hold-time').value = formData.customHoldTime;
-            if (formData.customPriority) document.getElementById('custom-priority').value = formData.customPriority;
-            
-            updatePreview();
-        } catch (e) {
-            console.log('No saved form data found');
-        }
-    }
-    
-    // Auto-save on form changes
-    document.addEventListener('change', function(e) {
-        if (e.target.closest('#custom-message-form')) {
-            saveFormData();
-        }
-    });
-    
-    document.addEventListener('input', function(e) {
-        if (e.target.closest('#custom-message-form')) {
-            saveFormData();
-        }
-    });
-    
-    // Load saved form data on page load
-    document.addEventListener('DOMContentLoaded', function() {
-        setTimeout(loadFormData, 100); // Small delay to ensure form is ready
-    });
-    
-    // Blinking animation for emergency preview
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes blink {
-            0%, 50% { opacity: 1; }
-            51%, 100% { opacity: 0.3; }
-        }
-    `;
-    document.head.appendChild(style);
-    
-    // Live clock for time display
-    function updateClock() {
-        const now = new Date();
-        const timeString = now.toLocaleTimeString();
-        const elements = document.querySelectorAll('.live-time');
-        elements.forEach(el => el.textContent = timeString);
-    }
-    
-    // Update clock every second
-    setInterval(updateClock, 1000);
-    updateClock(); // Initial call
-    
-    // Connection status monitoring
-    function monitorConnection() {
-        // Check if we can reach the LED API
-        fetch('/api/led/status')
-            .then(response => {
-                if (response.ok) {
-                    document.body.classList.remove('connection-lost');
-                } else {
-                    document.body.classList.add('connection-lost');
-                }
-            })
-            .catch(() => {
-                document.body.classList.add('connection-lost');
-            });
-    }
-    
-    // Monitor connection every 10 seconds
-    setInterval(monitorConnection, 10000);
-    
-    // Add connection status styles
-    const connectionStyle = document.createElement('style');
-    connectionStyle.textContent = `
-        .connection-lost::before {
-            content: "⚠️ Connection Lost";
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            background: #dc3545;
-            color: white;
-            text-align: center;
-            padding: 10px;
-            z-index: 10000;
-            font-weight: bold;
-        }
-        
-        .connection-lost {
-            padding-top: 50px;
-        }
-    `;
-    document.head.appendChild(connectionStyle);
-    
-    // Advanced features toggle
-    function toggleAdvancedFeatures() {
-        const advanced = document.querySelectorAll('.advanced-feature');
-        advanced.forEach(el => {
-            el.style.display = el.style.display === 'none' ? 'block' : 'none';
-        });
-    }
-    
-    // Help system
-    function showHelp() {
-        const helpContent = `
-            <h5>LED Sign Control Help</h5>
-            <ul>
-                <li><strong>Custom Messages:</strong> Create and send custom messages with full formatting control</li>
-                <li><strong>Canned Messages:</strong> Send predefined messages quickly</li>
-                <li><strong>Emergency Alerts:</strong> Override all content with high-priority emergency messages</li>
-                <li><strong>Settings:</strong> Control brightness and run diagnostic tests</li>
-                <li><strong>History:</strong> View all sent messages and their status</li>
-            </ul>
-            <h6>Keyboard Shortcuts:</h6>
-            <ul>
-                <li><kbd>Ctrl+Enter</kbd> - Send custom message</li>
-                <li><kbd>Esc</kbd> - Clear current form</li>
-                <li><kbd>F5</kbd> - Refresh status</li>
-            </ul>
-        `;
-        
-        showToast(helpContent, 'info');
-    }
-    
-    // Add help button to navigation if desired
-    // This would be added to the template if you want a help system
-    
-    console.log('LED Control Interface initialized successfully');
-</script>
-
-<!-- Additional CSS for animations -->
-<style>
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    
-    .led-card {
-        animation: fadeIn 0.5s ease-out;
-    }
-    
-    .message-item {
-        animation: fadeIn 0.3s ease-out;
-    }
-    
-    .status-indicator {
-        animation: pulse 2s infinite;
-    }
-    
-    @keyframes pulse {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.1); }
-        100% { transform: scale(1); }
-    }
-    
-    .btn-emergency:hover {
-        animation: none;
-        background: linear-gradient(135deg, #e74c3c, #c0392b) !important;
-    }
-</style>
-
-</body>
-</html><!DOCTYPE html>
-<html lang="en" data-theme="light">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LED Sign Control - KR8MER CAP Emergency Alert System</title>
-    
-    <!-- Bootstrap CSS -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    
-    <style>
-        :root {
-            --primary-color: #007bff;
-            --secondary-color: #6c757d;
-            --success-color: #28a745;
-            --danger-color: #dc3545;
-            --warning-color: #ffc107;
-            --info-color: #17a2b8;
-            --light-color: #f8f9fa;
-            --dark-color: #343a40;
-            --bg-color: #ffffff;
-            --text-color: #212529;
-            --border-color: #dee2e6;
-            --shadow-color: rgba(0, 0, 0, 0.1);
-        }
-
-        [data-theme="dark"] {
-            --primary-color: #4dabf7;
-            --secondary-color: #adb5bd;
-            --success-color: #51cf66;
-            --danger-color: #ff6b6b;
-            --warning-color: #ffd43b;
-            --info-color: #339af0;
-            --light-color: #495057;
-            --dark-color: #212529;
-            --bg-color: #1a1a1a;
-            --text-color: #f8f9fa;
-            --border-color: #495057;
-            --shadow-color: rgba(255, 255, 255, 0.1);
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            transition: background-color 0.3s ease, color 0.3s ease;
-        }
-
-        .led-header {
-            background: linear-gradient(135deg, var(--primary-color), var(--info-color));
-            color: white;
-            padding: 2rem 0;
-            margin-bottom: 2rem;
-            box-shadow: 0 4px 20px var(--shadow-color);
-        }
-
-        .led-card {
-            background-color: var(--bg-color);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            box-shadow: 0 4px 15px var(--shadow-color);
-            transition: all 0.3s ease;
-            margin-bottom: 2rem;
-            overflow: hidden;
-        }
-
-        .led-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px var(--shadow-color);
-        }
-
-        .status-indicator {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 8px;
-        }
-
-        .status-connected { background-color: var(--success-color); }
-        .status-disconnected { background-color: var(--danger-color); }
-        .status-error { background-color: var(--warning-color); }
-
-        .message-preview {
-            background: #000;
-            color: #00ff00;
-            font-family: 'Courier New', monospace;
-            padding: 20px;
-            border-radius: 8px;
-            text-align: center;
-            font-size: 1.2em;
-            font-weight: bold;
-            margin: 20px 0;
-            border: 2px solid #333;
-            min-height: 80px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow-wrap: break-word;
-            word-break: break-word;
-        }
-
-        .color-preview {
-            width: 30px;
-            height: 30px;
-            border-radius: 4px;
-            display: inline-block;
-            margin-right: 10px;
-            border: 2px solid var(--border-color);
-        }
-
-        .btn-led {
-            border-radius: 8px;
-            padding: 0.75rem 1.5rem;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            border: none;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .btn-led:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px var(--shadow-color);
-        }
-
-        .btn-emergency {
-            background: linear-gradient(135deg, var(--danger-color), #e74c3c);
-            color: white;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
-        }
-
-        .message-history {
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        .message-item {
-            border-left: 4px solid var(--primary-color);
-            padding: 10px 15px;
-            margin-bottom: 10px;
-            background: var(--light-color);
-            border-radius: 0 8px 8px 0;
-        }
-
-        .message-item.sent {
-            border-left-color: var(--success-color);
-        }
-
-        .message-item.failed {
-            border-left-color: var(--danger-color);
-        }
-
-        .led-controls {
-            position: sticky;
-            top: 20px;
-        }
-
-        .form-control, .form-select {
-            background-color: var(--bg-color);
-            border: 2px solid var(--border-color);
-            color: var(--text-color);
-            border-radius: 8px;
-            transition: all 0.3s ease;
-        }
-
-        .form-control:focus, .form-select:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-            background-color: var(--bg-color);
-            color: var(--text-color);
-        }
-
-        .loading-spinner {
-            border: 2px solid var(--border-color);
-            border-top: 2px solid var(--primary-color);
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
-            display: inline-block;
-            margin-right: 10px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .alert-custom {
-            border-radius: 12px;
-            border: none;
-            padding: 1rem 1.5rem;
-        }
-
-        .alert-success-custom {
-            background: linear-gradient(135deg, var(--success-color), #20c997);
-            color: white;
-        }
-
-        .alert-danger-custom {
-            background: linear-gradient(135deg, var(--danger-color), #e74c3c);
-            color: white;
-        }
-
-        .alert-warning-custom {
-            background: linear-gradient(135deg, var(--warning-color), #f39c12);
-            color: var(--dark-color);
-        }
-
-        .tabs-container {
-            border-bottom: 3px solid var(--border-color);
-            background: var(--light-color);
-            border-radius: 12px 12px 0 0;
-        }
-
-        .nav-tabs-custom {
-            border: none;
-            padding: 0.5rem 1rem;
-        }
-
-        .nav-tabs-custom .nav-link {
-            border: none;
-            background: transparent;
-            color: var(--text-color);
-            padding: 1rem 1.5rem;
-            margin: 0 0.25rem;
-            border-radius: 8px 8px 0 0;
-            transition: all 0.3s ease;
-            font-weight: 500;
-        }
-
-        .nav-tabs-custom .nav-link:hover {
-            background: var(--primary-color);
-            color: white;
-            transform: translateY(-2px);
-        }
-
-        .nav-tabs-custom .nav-link.active {
-            background: var(--primary-color);
-            color: white;
-            border-bottom: 3px solid var(--info-color);
-        }
-
-        .tab-content-custom {
-            padding: 2rem;
-            min-height: 400px;
-        }
-
-        /* Responsive adjustments */
-        @media (max-width: 768px) {
-            .led-header {
-                padding: 1rem 0;
-            }
-            
-            .nav-tabs-custom .nav-link {
-                padding: 0.75rem 1rem;
-                font-size: 0.9rem;
-            }
-            
-            .tab-content-custom {
-                padding: 1rem;
-            }
-
-            .led-controls {
-                position: static;
-                margin-top: 1rem;
-            }
-        }
-
-        /* Theme toggle button */
-        .btn-theme-toggle {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            box-shadow: 0 4px 15px var(--shadow-color);
-            z-index: 1000;
-            transition: all 0.3s ease;
-        }
-
-        .btn-theme-toggle:hover {
-            transform: scale(1.1);
-            background: var(--info-color);
-        }
-    </style>
-</head>
-<body>
-    <!-- Theme Toggle Button -->
-    <button class="btn-theme-toggle" onclick="toggleTheme()" title="Toggle Dark Mode">
-        <i class="fas fa-moon" id="theme-icon"></i>
-    </button>
-
-    <!-- LED Control Header -->
-    <div class="led-header">
-        <div class="container-fluid">
-            <div class="row align-items-center">
                 <div class="col-md-8">
-                    <h1 class="mb-2">
-                        <i class="fas fa-tv"></i> LED Sign Control
-                    </h1>
-                    <p class="mb-0 opacity-75">
-                        AlphaPremier LED Sign Management - Real-time Message Display
-                    </p>
+                    <input type="text" class="form-control" id="history-search" placeholder="Search messages..." onkeyup="searchHistory()">
                 </div>
-                <div class="col-md-4 text-md-end">
-                    <div class="d-flex flex-wrap gap-2 justify-content-md-end">
-                        <a href="/" class="btn btn-light btn-sm">
-                            <i class="fas fa-home"></i> Dashboard
-                        </a>
-                        <a href="/admin" class="btn btn-light btn-sm">
-                            <i class="fas fa-cogs"></i> Admin
-                        </a>
-                        <a href="/alerts" class="btn btn-light btn-sm">
-                            <i class="fas fa-history"></i> Alerts
-                        </a>
-                    </div>
+            </div>
+            
+            <div class="message-history" id="message-history" style="max-height: 400px; overflow-y: auto;">
+                <div class="text-center py-4">
+                    <div class="loading-spinner"></div>
+                    Loading message history...
                 </div>
+            </div>
+            
+            <div class="text-center mt-3">
+                <button class="btn btn-primary" onclick="loadMessageHistory()">
+                    <i class="fas fa-sync-alt"></i> Refresh History
+                </button>
+                <button class="btn btn-secondary" onclick="exportHistory()">
+                    <i class="fas fa-download"></i> Export History
+                </button>
             </div>
         </div>
     </div>
+</div>
+{% endblock %}
 
-    <div class="container-fluid">
-        <!-- LED Status Overview -->
-        <div class="led-card">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0">
-                    <i class="fas fa-info-circle"></i> LED Sign Status
-                </h5>
+{% block extra_js %}
+// Enhanced M-Protocol LED Control JavaScript
+let ledStatus = null;
+let cannedMessages = [];
+let messageHistory = [];
+let filteredHistory = [];
+
+// Color mapping for preview (M-Protocol colors)
+const colorMap = {
+    'RED': '#ff0000',
+    'GREEN': '#00ff00', 
+    'AMBER': '#ffbf00',
+    'DIM_RED': '#aa0000',
+    'DIM_GREEN': '#008800',
+    'BROWN': '#8b4513',
+    'ORANGE': '#ff8000',
+    'YELLOW': '#ffff00',
+    'RAINBOW_1': 'rainbow',
+    'RAINBOW_2': 'rainbow',
+    'COLOR_MIX': 'rainbow',
+    'AUTO_COLOR': 'rainbow'
+};
+
+// Font size mapping for preview
+const fontSizeMap = {
+    'FONT_5x7': '0.8em',
+    'FONT_6x7': '0.9em', 
+    'FONT_7x9': '1.0em',
+    'FONT_8x7': '1.1em',
+    'FONT_7x11': '1.2em',
+    'FONT_15x7': '1.3em',
+    'FONT_19x7': '1.4em',
+    'FONT_7x13': '1.5em',
+    'FONT_16x9': '1.7em',
+    'FONT_32x16': '2.0em'
+};
+
+// Display mode descriptions
+const modeDescriptions = {
+    'HOLD': 'Static display',
+    'FLASH': 'Flashing display',
+    'SCROLL': 'Continuous scrolling',
+    'ROLL_LEFT': 'Roll in from right',
+    'ROLL_RIGHT': 'Roll in from left',
+    'ROLL_UP': 'Roll up from bottom',
+    'ROLL_DOWN': 'Roll down from top',
+    'WIPE_LEFT': 'Wipe from right to left',
+    'WIPE_RIGHT': 'Wipe from left to right',
+    'WIPE_UP': 'Wipe from bottom to top',
+    'WIPE_DOWN': 'Wipe from top to bottom',
+    'WIPE_IN': 'Wipe in from edges',
+    'WIPE_OUT': 'Wipe out to edges',
+    'ROLL_IN': 'Roll in from all sides',
+    'ROLL_OUT': 'Roll out to all sides',
+    'EXPLODE': 'Explode from center',
+    'ROTATE': 'Rotating display',
+    'COMPRESSED_ROTATE': 'Compressed rotating display',
+    'AUTO_MODE': 'Automatic mode cycling',
+    'CLOCK': 'Clock display mode'
+};
+
+// Initialize enhanced LED control
+function initLEDControl() {
+    loadLEDStatus();
+    loadCannedMessages();
+    loadMessageHistory();
+    setupFormHandlers();
+    setInterval(loadLEDStatus, 30000);
+    
+    // Initialize RGB preview
+    updateRGBPreview();
+}
+
+function setupFormHandlers() {
+    document.getElementById('custom-message-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        sendCustomMessage();
+    });
+    
+    document.getElementById('rgb-message-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        sendRGBMessage();
+    });
+    
+    document.getElementById('emergency-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        sendEmergencyMessage();
+    });
+}
+
+function updatePreview() {
+    const line1 = document.getElementById('line1').value || '';
+    const line2 = document.getElementById('line2').value || '';
+    const line3 = document.getElementById('line3').value || '';
+    const line4 = document.getElementById('line4').value || '';
+    const color = document.getElementById('custom-color').value;
+    const font = document.getElementById('custom-font').value;
+    const mode = document.getElementById('custom-mode').value;
+    const charFlash = document.getElementById('char-flash').checked;
+    
+    // Update preview lines
+    document.getElementById('preview-line1').textContent = line1 || '';
+    document.getElementById('preview-line2').textContent = line2 || '';
+    document.getElementById('preview-line3').textContent = line3 || '';
+    document.getElementById('preview-line4').textContent = line4 || '';
+    
+    // Update color and font
+    const preview = document.getElementById('custom-preview');
+    const lines = preview.querySelectorAll('.preview-line');
+    
+    lines.forEach(line => {
+        if (colorMap[color] === 'rainbow') {
+            line.className = 'preview-line rainbow-text';
+            line.style.color = '';
+        } else {
+            line.className = 'preview-line';
+            line.style.color = colorMap[color] || '#00ff00';
+        }
+        line.style.fontSize = fontSizeMap[font] || '1.0em';
+        
+        if (charFlash) {
+            line.classList.add('flash-preview');
+        } else {
+            line.classList.remove('flash-preview');
+        }
+    });
+    
+    // Update effect description
+    document.getElementById('effect-description').textContent = 
+        `Effect: ${modeDescriptions[mode] || mode}`;
+}
+
+function updateRGBPreview() {
+    const line1 = document.getElementById('rgb-line1').value || 'RGB COLOR';
+    const line2 = document.getElementById('rgb-line2').value || 'TEST MESSAGE';
+    const line3 = document.getElementById('rgb-line3').value || '';
+    const line4 = document.getElementById('rgb-line4').value || '';
+    const hexColor = document.getElementById('rgb-hex').value;
+    
+    document.getElementById('rgb-preview-line1').textContent = line1;
+    document.getElementById('rgb-preview-line2').textContent = line2;
+    document.getElementById('rgb-preview-line3').textContent = line3;
+    document.getElementById('rgb-preview-line4').textContent = line4;
+    
+    // Update color
+    const preview = document.getElementById('rgb-preview-display');
+    const lines = preview.querySelectorAll('.preview-line');
+    const color = hexColor ? `#${hexColor}` : '#ff6600';
+    
+    lines.forEach(line => {
+        line.style.color = color;
+    });
+    
+    // Update hex preview
+    document.getElementById('rgb-preview').style.backgroundColor = color;
+}
+
+function updateRGBFromPicker() {
+    const picker = document.getElementById('rgb-color-picker');
+    const hex = picker.value.substring(1).toUpperCase();
+    document.getElementById('rgb-hex').value = hex;
+    updateRGBPreview();
+}
+
+function updateRGBFromHex() {
+    const hex = document.getElementById('rgb-hex').value;
+    if (hex.length === 6 && /^[0-9A-Fa-f]{6}$/.test(hex)) {
+        document.getElementById('rgb-color-picker').value = `#${hex}`;
+        updateRGBPreview();
+    }
+}
+
+function setRGBColor(hexColor) {
+    document.getElementById('rgb-hex').value = hexColor;
+    document.getElementById('rgb-color-picker').value = `#${hexColor}`;
+    updateRGBPreview();
+}
+
+function updateEmergencyPreview() {
+    const text = document.getElementById('emergency-text').value;
+    const words = text.split(' ');
+    
+    // Split across lines 3-4
+    let line3 = '';
+    let line4 = '';
+    let currentLine = 3;
+    let currentLength = 0;
+    
+    for (let word of words) {
+        if (currentLine === 3) {
+            if (currentLength + word.length + 1 <= 20) {
+                line3 += (line3 ? ' ' : '') + word;
+                currentLength += word.length + 1;
+            } else {
+                currentLine = 4;
+                line4 = word;
+                currentLength = word.length;
+            }
+        } else if (currentLine === 4) {
+            if (currentLength + word.length + 1 <= 20) {
+                line4 += ' ' + word;
+                currentLength += word.length + 1;
+            }
+        }
+    }
+    
+    document.getElementById('emergency-preview-line3').textContent = line3 || 'Enter emergency';
+    document.getElementById('emergency-preview-line4').textContent = line4 || 'message above';
+}
+
+function clearPreview() {
+    ['line1', 'line2', 'line3', 'line4'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
+    updatePreview();
+}
+
+function clearRGBMessage() {
+    ['rgb-line1', 'rgb-line2', 'rgb-line3', 'rgb-line4'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
+    setRGBColor('FF6600');
+}
+
+function fillSampleMessage() {
+    document.getElementById('line1').value = 'ALPHA 9120C';
+    document.getElementById('line2').value = 'M-PROTOCOL';
+    document.getElementById('line3').value = 'FULL FEATURES';
+    document.getElementById('line4').value = 'DEMO MESSAGE';
+    updatePreview();
+}
+
+function setEmergencyTemplate(template) {
+    document.getElementById('emergency-text').value = template;
+    updateEmergencyPreview();
+}
+
+function sendCustomMessage() {
+    const lines = [
+        document.getElementById('line1').value,
+        document.getElementById('line2').value,
+        document.getElementById('line3').value,
+        document.getElementById('line4').value
+    ];
+    
+    if (!lines.some(line => line.trim())) {
+        showToast('Please enter at least one line of text', 'error');
+        return;
+    }
+    
+    const data = {
+        lines: lines,
+        color: document.getElementById('custom-color').value,
+        font: document.getElementById('custom-font').value,
+        mode: document.getElementById('custom-mode').value,
+        speed: document.getElementById('custom-speed').value,
+        hold_time: parseInt(document.getElementById('custom-hold-time').value),
+        priority: parseInt(document.getElementById('custom-priority').value),
+        special_functions: []
+    };
+    
+    if (document.getElementById('char-flash').checked) {
+        data.special_functions.push('CHAR_FLASH_ON');
+    }
+    if (document.getElementById('wide-char').checked) {
+        data.special_functions.push('WIDE_CHAR_ON');
+    }
+    
+    showLoading('Sending M-Protocol message...');
+    
+    fetch('/api/led/send_message', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        hideLoading();
+        if (result.success) {
+            showToast('M-Protocol message sent successfully!', 'success');
+            loadMessageHistory();
+            clearPreview();
+        } else {
+            showToast('Failed to send message: ' + (result.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(error => {
+        hideLoading();
+        console.error('Error sending message:', error);
+        showToast('Error sending message', 'error');
+    });
+}
+
+function sendRGBMessage() {
+    const lines = [
+        document.getElementById('rgb-line1').value,
+        document.getElementById('rgb-line2').value,
+        document.getElementById('rgb-line3').value,
+        document.getElementById('rgb-line4').value
+    ];
+    
+    const rgbColor = document.getElementById('rgb-hex').value;
+    
+    if (!lines.some(line => line.trim())) {
+        showToast('Please enter at least one line of text', 'error');
+        return;
+    }
+    
+    if (!/^[0-9A-Fa-f]{6}$/.test(rgbColor)) {
+        showToast('Please enter a valid 6-digit hex color', 'error');
+        return;
+    }
+    
+    const data = {
+        lines: lines,
+        rgb_color: rgbColor.toUpperCase(),
+        font: document.getElementById('rgb-font').value,
+        mode: document.getElementById('rgb-mode').value,
+        speed: document.getElementById('rgb-speed').value,
+        priority: 2
+    };
+    
+    showLoading('Sending RGB message...');
+    
+    fetch('/api/led/send_rgb_message', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        hideLoading();
+        if (result.success) {
+            showToast('RGB message sent successfully!', 'success');
+            loadMessageHistory();
+        } else {
+            showToast('Failed to send RGB message: ' + (result.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(error => {
+        hideLoading();
+        console.error('Error sending RGB message:', error);
+        showToast('Error sending RGB message', 'error');
+    });
+}
+
+function sendEmergencyMessage() {
+    const text = document.getElementById('emergency-text').value;
+    const duration = parseInt(document.getElementById('emergency-duration').value);
+    
+    if (!text.trim()) {
+        showToast('Please enter an emergency message', 'error');
+        return;
+    }
+    
+    if (!confirm('⚠️ EMERGENCY ALERT ⚠️\n\nThis will send a HIGH PRIORITY flashing red message that overrides all other content.\n\nAre you sure you want to proceed?')) {
+        return;
+    }
+    
+    showLoading('Sending emergency alert...');
+    
+    fetch('/api/led/emergency', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            message: text,
+            duration: duration
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        hideLoading();
+        if (result.success) {
+            showToast('🚨 Emergency alert sent!', 'success');
+            loadMessageHistory();
+            document.getElementById('emergency-text').value = '';
+            updateEmergencyPreview();
+        } else {
+            showToast('Failed to send emergency alert: ' + (result.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(error => {
+        hideLoading();
+        console.error('Error sending emergency alert:', error);
+        showToast('Error sending emergency alert', 'error');
+    });
+}
+
+// Quick test functions
+function testRainbowColors() {
+    fetch('/api/led/send_message', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            lines: ['RAINBOW TEST', 'COLOR CYCLING', 'M-PROTOCOL', 'ALPHA 9120C'],
+            color: 'RAINBOW_1',
+            font: 'FONT_16x9',
+            mode: 'EXPLODE',
+            speed: 'SPEED_4',
+            priority: 2
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showToast('🌈 Rainbow test started!', 'success');
+        }
+    });
+}
+
+function testScrollingMessage() {
+    fetch('/api/led/send_scrolling_message', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            lines: ['SCROLLING TEST', 'M-PROTOCOL', 'FEATURES', 'ALPHA 9120C'],
+            direction: 'left',
+            speed: 'SPEED_3'
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showToast('📜 Scrolling test started!', 'success');
+        }
+    });
+}
+
+function testFlashingMessage() {
+    fetch('/api/led/send_flashing_message', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            lines: ['FLASH TEST', 'BLINKING TEXT', 'M-PROTOCOL', 'FEATURES'],
+            color: 'YELLOW'
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showToast('⚡ Flashing test started!', 'success');
+        }
+    });
+}
+
+function testAllFeatures() {
+    if (!confirm('This will run a comprehensive test of ALL M-Protocol features including colors, fonts, effects, and RGB. Continue?')) {
+        return;
+    }
+    
+    showLoading('Running comprehensive M-Protocol test...');
+    
+    fetch('/api/led/test', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(response => response.json())
+    .then(result => {
+        hideLoading();
+        if (result.success) {
+            showToast('🧪 Complete M-Protocol test sequence started!', 'success');
+            loadMessageHistory();
+        } else {
+            showToast('Failed to start test: ' + (result.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(error => {
+        hideLoading();
+        console.error('Error starting test:', error);
+        showToast('Error starting test', 'error');
+    });
+}
+
+function sendTimeDisplay() {
+    const format = document.getElementById('time-format').value;
+    
+    fetch('/api/led/send_time_display', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            time_format: format
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showToast('🕐 Time display sent!', 'success');
+            loadMessageHistory();
+        } else {
+            showToast('Failed to send time display: ' + (result.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error sending time display:', error);
+        showToast('Error sending time display', 'error');
+    });
+}
+
+// Load functions (using base template functions)
+function loadLEDStatus() {
+    fetch('/api/led/status')
+        .then(response => response.json())
+        .then(data => {
+            ledStatus = data;
+            updateStatusDisplay(data);
+        })
+        .catch(error => {
+            console.error('Error loading LED status:', error);
+            showToast('Error loading LED status', 'error');
+        });
+}
+
+function updateStatusDisplay(status) {
+    const statusDisplay = document.getElementById('led-status-display');
+    
+    let connectionStatus = 'disconnected';
+    let statusClass = 'status-disconnected';
+    
+    if (status.controller_available && status.connected) {
+        connectionStatus = 'connected';
+        statusClass = 'status-connected';
+    } else if (status.controller_available) {
+        connectionStatus = 'error';
+        statusClass = 'status-error';
+    }
+    
+    statusDisplay.innerHTML = `
+        <div class="d-flex align-items-center mb-3">
+            <span class="status-indicator ${statusClass}"></span>
+            <strong>Alpha 9120C: ${connectionStatus.charAt(0).toUpperCase() + connectionStatus.slice(1)}</strong>
+        </div>
+        <div class="row">
+            <div class="col-sm-6">
+                <strong>Model:</strong> ${status.model || 'Alpha 9120C'}<br>
+                <strong>Protocol:</strong> ${status.protocol || 'M-Protocol'}<br>
+                <strong>Display:</strong> ${status.display_type || '4-line multi-color'}
             </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <div id="led-status-display">
-                            <div class="loading-spinner"></div>
-                            Loading LED sign status...
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="message-preview" id="message-preview">
-                            <span>LED SIGN READY</span>
-                        </div>
-                    </div>
-                </div>
+            <div class="col-sm-6">
+                <strong>Colors:</strong> ${status.available_colors ? status.available_colors.length : 12}<br>
+                <strong>Fonts:</strong> ${status.available_fonts ? status.available_fonts.length : 10}<br>
+                <strong>Effects:</strong> ${status.available_modes ? status.available_modes.length : 20}+
             </div>
         </div>
+        <div class="mt-2">
+            <small class="text-muted">
+                IP: ${status.sign_ip} | Port: ${status.sign_port} | 
+                Last Update: ${status.last_update ? new Date(status.last_update).toLocaleString() : 'Never'}
+            </small>
+        </div>
+    `;
+}
 
-        <!-- Main LED Control Interface -->
-        <div class="led-card">
-            <div class="tabs-container">
-                <ul class="nav nav-tabs nav-tabs-custom" id="ledTabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="custom-tab" data-bs-toggle="tab" data-bs-target="#custom" type="button" role="tab">
-                            <i class="fas fa-edit"></i> Custom Message
+function loadCannedMessages() {
+    fetch('/api/led/canned_messages')
+        .then(response => response.json())
+        .then(data => {
+            cannedMessages = data.canned_messages || [];
+            updateCannedMessagesDisplay();
+        })
+        .catch(error => {
+            console.error('Error loading canned messages:', error);
+            document.getElementById('canned-messages-grid').innerHTML = 
+                '<div class="col-12 text-center text-danger">Error loading enhanced canned messages</div>';
+        });
+}
+
+function updateCannedMessagesDisplay() {
+    const grid = document.getElementById('canned-messages-grid');
+    
+    if (cannedMessages.length === 0) {
+        grid.innerHTML = '<div class="col-12 text-center text-muted">No enhanced canned messages available</div>';
+        return;
+    }
+    
+    let html = '';
+    cannedMessages.forEach(msg => {
+        const colorDisplay = colorMap[msg.color] === 'rainbow' ? '🌈' : 
+                           `<span class="color-preview" style="background-color: ${colorMap[msg.color] || '#00ff00'}"></span>`;
+        
+        html += `
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h6 class="card-title">${msg.name.replace('_', ' ').toUpperCase()}</h6>
+                        <p class="card-text small text-muted">${msg.text.substring(0, 50)}...</p>
+                        <div class="d-flex align-items-center mb-2">
+                            ${colorDisplay}
+                            <small class="text-muted">${msg.color} | ${msg.font.replace('FONT_', '')} | ${msg.effect}</small>
+                        </div>
+                        <button class="btn btn-primary btn-sm w-100" onclick="sendCannedMessage('${msg.name}')">
+                            <i class="fas fa-paper-plane"></i> Send Enhanced Message
                         </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="canned-tab" data-bs-toggle="tab" data-bs-target="#canned" type="button" role="tab">
-                            <i class="fas fa-list"></i> Canned Messages
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="emergency-tab" data-bs-toggle="tab" data-bs-target="#emergency" type="button" role="tab">
-                            <i class="fas fa-exclamation-triangle"></i> Emergency
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button" role="tab">
-                            <i class="fas fa-cog"></i> Settings
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history" type="button" role="tab">
-                            <i class="fas fa-history"></i> History
-                        </button>
-                    </li>
-                </ul>
+                    </div>
+                </div>
             </div>
+        `;
+    });
+    
+    grid.innerHTML = html;
+}
 
-            <div class="tab-content tab-content-custom" id="ledTabContent">
-                <!-- Custom Message Tab -->
-                <div class="tab-pane fade show active" id="custom" role="tabpanel">
-                    <h4><i class="fas fa-edit text-primary"></i> Send Custom Message</h4>
-                    <p class="text-muted">Create and send custom messages to the LED sign with full formatting control.</p>
-                    
-                    <form id="custom-message-form">
-                        <div class="row">
-                            <div class="col-lg-8">
-                                <div class="mb-3">
-                                    <label for="custom-text" class="form-label">Message Text</label>
-                                    <textarea class="form-control" id="custom-text" rows="3" maxlength="200" 
-                                              placeholder="Enter your message here..." oninput="updatePreview()"></textarea>
-                                    <div class="form-text">
-                                        <span id="char-count">0</span>/200 characters
-                                    </div>
-                                </div>
-                                
-                                <div class="row">
-                                    <div class="col-md-3">
-                                        <label for="custom-color" class="form-label">Color</label>
-                                        <select class="form-select" id="custom-color" onchange="updatePreview()">
-                                            <option value="GREEN">Green</option>
-                                            <option value="RED">Red</option>
-                                            <option value="AMBER">Amber</option>
-                                            <option value="YELLOW">Yellow</option>
-                                            <option value="ORANGE">Orange</option>
-                                            <option value="WHITE">White</option>
-                                            <option value="BLUE">Blue</option>
-                                            <option value="CYAN">Cyan</option>
-                                            <option value="MAGENTA">Magenta</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label for="custom-font" class="form-label">Font Size</label>
-                                        <select class="form-select" id="custom-font" onchange="updatePreview()">
-                                            <option value="SMALL">Small</option>
-                                            <option value="MEDIUM" selected>Medium</option>
-                                            <option value="LARGE">Large</option>
-                                            <option value="EXTRA_LARGE">Extra Large</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label for="custom-effect" class="form-label">Effect</label>
-                                        <select class="form-select" id="custom-effect">
-                                            <option value="IMMEDIATE" selected>Immediate</option>
-                                            <option value="XOPEN">X Open</option>
-                                            <option value="CURTAIN_UP">Curtain Up</option>
-                                            <option value="CURTAIN_DOWN">Curtain Down</option>
-                                            <option value="SCROLL_LEFT">Scroll Left</option>
-                                            <option value="SCROLL_RIGHT">Scroll Right</option>
-                                            <option value="VOPEN">V Open</option>
-                                            <option value="VCLOSE">V Close</option>
-                                            <option value="SCROLL_UP">Scroll Up</option>
-                                            <option value="SCROLL_DOWN">Scroll Down</option>
-                                            <option value="TWINKLE">Twinkle</option>
-                                            <option value="NEWS_FLASH">News Flash</option>
-                                            <option value="CYCLE_COLOR">Cycle Color</option>
-                                            <option value="SNOW">Snow</option>
-                                            <option value="BLOCK_MOVE">Block Move</option>
-                                            <option value="RANDOM">Random</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label for="custom-speed" class="form-label">Speed</label>
-                                        <select class="form-select" id="custom-speed">
-                                            <option value="SLOWEST">Slowest</option>
-                                            <option value="SLOW">Slow</option>
-                                            <option value="MEDIUM" selected>Medium</option>
-                                            <option value="FAST">Fast</option>
-                                            <option value="FASTEST">Fastest</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                
-                                <div class="row mt-3">
-                                    <div class="col-md-6">
-                                        <label for="custom-hold-time" class="form-label">Hold Time (seconds)</label>
-                                        <input type="number" class="form-control" id="custom-hold-time" value="5" min="1" max="60">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label for="custom-priority" class="form-label">Priority</label>
-                                        <select class="form-select" id="custom-priority">
-                                            <option value="0">Emergency</option>
-                                            <option value="1">Urgent</option>
-                                            <option value="2" selected>Normal</option>
-                                            <option value="3">Low</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-lg-4">
-                                <div class="led-controls">
-                                    <div class="mb-3">
-                                        <label class="form-label">Preview</label>
-                                        <div class="message-preview" id="custom-preview">
-                                            Enter message to preview
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="d-grid gap-2">
-                                        <button type="submit" class="btn btn-led btn-primary">
-                                            <i class="fas fa-paper-plane"></i> Send Message
-                                        </button>
-                                        <button type="button" class="btn btn-led btn-secondary" onclick="clearPreview()">
-                                            <i class="fas fa-eraser"></i> Clear
-                                        </button>
-                                        <button type="button" class="btn btn-led btn-info" onclick="scheduleMessage()">
-                                            <i class="fas fa-clock"></i> Schedule
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </form>
-                </div>
+function sendCannedMessage(messageName) {
+    showLoading('Sending enhanced canned message...');
+    
+    fetch('/api/led/send_canned', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            message_name: messageName,
+            parameters: {
+                time: new Date().toLocaleTimeString(),
+                temp: '72'
+            }
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        hideLoading();
+        if (result.success) {
+            showToast(`✨ Enhanced message "${messageName}" sent!`, 'success');
+            loadMessageHistory();
+        } else {
+            showToast('Failed to send canned message: ' + (result.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(error => {
+        hideLoading();
+        console.error('Error sending canned message:', error);
+        showToast('Error sending canned message', 'error');
+    });
+}
 
-                <!-- Canned Messages Tab -->
-                <div class="tab-pane fade" id="canned" role="tabpanel">
-                    <h4><i class="fas fa-list text-success"></i> Canned Messages</h4>
-                    <p class="text-muted">Send predefined messages with optimized formatting.</p>
-                    
-                    <div class="mb-3">
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="fas fa-search"></i></span>
-                            <input type="text" class="form-control" id="canned-search" placeholder="Search canned messages..." onkeyup="filterCannedMessages()">
+function filterCannedMessages() {
+    const searchTerm = document.getElementById('canned-search').value.toLowerCase();
+    const messageCards = document.querySelectorAll('#canned-messages-grid .col-md-6');
+    
+    messageCards.forEach(card => {
+        const text = card.textContent.toLowerCase();
+        card.style.display = text.includes(searchTerm) ? 'block' : 'none';
+    });
+}
+
+function loadMessageHistory() {
+    fetch('/api/led/messages?per_page=50')
+        .then(response => response.json())
+        .then(data => {
+            messageHistory = data.messages || [];
+            filteredHistory = messageHistory;
+            updateMessageHistoryDisplay();
+        })
+        .catch(error => {
+            console.error('Error loading message history:', error);
+            document.getElementById('message-history').innerHTML = 
+                '<div class="text-center text-danger">Error loading message history</div>';
+        });
+}
+
+function updateMessageHistoryDisplay() {
+    const historyDiv = document.getElementById('message-history');
+    const messages = filteredHistory;
+    
+    if (messages.length === 0) {
+        historyDiv.innerHTML = '<div class="text-center text-muted">No messages in history</div>';
+        return;
+    }
+    
+    let html = '';
+    messages.forEach(msg => {
+        const statusClass = msg.sent_at ? 'sent' : 'failed';
+        const statusIcon = msg.sent_at ? 'check-circle' : 'times-circle';
+        const statusText = msg.sent_at ? 'Sent' : 'Failed';
+        
+        html += `
+            <div class="message-item ${statusClass}">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center mb-1">
+                            <strong>${msg.type.charAt(0).toUpperCase() + msg.type.slice(1)} Message</strong>
+                            <span class="badge bg-${getPriorityBadgeColor(msg.priority)} ms-2">
+                                ${getPriorityText(msg.priority)}
+                            </span>
                         </div>
+                        <p class="mb-1">${msg.content || (msg.lines ? msg.lines.join(' | ') : 'M-Protocol message')}</p>
+                        <small class="text-muted">
+                            <i class="fas fa-clock"></i> ${new Date(msg.created_at).toLocaleString()}
+                            ${msg.sent_at ? ' | <i class="fas fa-paper-plane"></i> Sent: ' + new Date(msg.sent_at).toLocaleString() : ''}
+                            ${msg.color ? ' | Color: ' + msg.color : ''}
+                            ${msg.font ? ' | Font: ' + msg.font.replace('FONT_', '') : ''}
+                            ${msg.mode ? ' | Effect: ' + msg.mode : ''}
+                        </small>
                     </div>
-                    
-                    <div class="row" id="canned-messages-grid">
-                        <div class="col-12 text-center py-4">
-                            <div class="loading-spinner"></div>
-                            Loading canned messages...
-                        </div>
+                    <div class="text-end ms-3">
+                        <i class="fas fa-${statusIcon} fs-4 ${msg.sent_at ? 'text-success' : 'text-danger'}"></i>
+                        <br><small>${statusText}</small>
                     </div>
                 </div>
+            </div>
+        `;
+    });
+    
+    historyDiv.innerHTML = html;
+}
 
-                <!-- Emergency Tab -->
-                <div class="tab-pane fade" id="emergency" role="tabpanel">
-                    <h4><i class="fas fa-exclamation-triangle text-danger"></i> Emergency Override</h4>
-                    <div class="alert alert-danger-custom mb-4">
-                        <h6><i class="fas fa-warning"></i> Warning</h6>
-                        Emergency messages override all other content and display with highest priority.
-                        Use only for genuine emergencies.
-                    </div>
-                    
-                    <form id="emergency-form">
-                        <div class="row">
-                            <div class="col-lg-8">
-                                <div class="mb-3">
-                                    <label for="emergency-text" class="form-label">Emergency Message</label>
-                                    <textarea class="form-control" id="emergency-text" rows="3" maxlength="200" 
-                                              placeholder="EMERGENCY: Enter critical alert message..."></textarea>
-                                </div>
-                                
-                                <div class="mb-3">
-                                    <label for="emergency-duration" class="form-label">Display Duration (seconds)</label>
-                                    <input type="number" class="form-control" id="emergency-duration" value="30" min="10" max="300">
-                                    <div class="form-text">How long to display before returning to normal operation</div>
-                                </div>
+function getPriorityBadgeColor(priority) {
+    switch(priority) {
+        case 0: return 'danger';
+        case 1: return 'warning';
+        case 2: return 'primary';
+        case 3: return 'secondary';
+        default: return 'secondary';
+    }
+}
 
-                                <div class="mb-3">
-                                    <label class="form-label">Quick Emergency Templates</label>
-                                    <div class="d-grid gap-2">
-                                        <button type="button" class="btn btn-outline-danger" onclick="setEmergencyTemplate('TORNADO WARNING - TAKE SHELTER IMMEDIATELY')">
-                                            <i class="fas fa-tornado"></i> Tornado Warning
-                                        </button>
-                                        <button type="button" class="btn btn-outline-danger" onclick="setEmergencyTemplate('SEVERE WEATHER ALERT - SEEK SHELTER')">
-                                            <i class="fas fa-cloud-bolt"></i> Severe Weather
-                                        </button>
-                                        <button type="button" class="btn btn-outline-danger" onclick="setEmergencyTemplate('EMERGENCY EVACUATION - FOLLOW DESIGNATED ROUTES')">
-                                            <i class="fas fa-route"></i> Evacuation
-                                        </button>
-                                        <button type="button" class="btn btn-outline-warning" onclick="setEmergencyTemplate('EMERGENCY TEST - THIS IS ONLY A TEST')">
-                                            <i class="fas fa-vial"></i> Test Message
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-lg-4">
-                                <div class="led-controls">
-                                    <div class="mb-3">
-                                        <label class="form-label">Emergency Preview</label>
-                                        <div class="message-preview" style="color: #ff0000; animation: blink 1s infinite;">
-                                            <span id="emergency-preview">Enter emergency message</span>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="d-grid gap-2">
-                                        <button type="submit" class="btn btn-led btn-emergency">
-                                            <i class="fas fa-exclamation-triangle"></i> SEND EMERGENCY ALERT
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </form>
-                </div>
+function getPriorityText(priority) {
+    switch(priority) {
+        case 0: return 'Emergency';
+        case 1: return 'Urgent';
+        case 2: return 'Normal';
+        case 3: return 'Low';
+        default: return 'Unknown';
+    }
+}
 
-                <!-- Settings Tab -->
-                <div class="tab-pane fade" id="settings" role="tabpanel">
-                    <h4><i class="fas fa-cog text-info"></i> LED Sign Settings</h4>
-                    <p class="text-muted">Configure LED sign display settings and run diagnostic tests.</p>
-                    
-                    <div class="row">
-                        <div class="col-lg-6">
-                            <div class="card mb-3">
-                                <div class="card-header">
-                                    <h6><i class="fas fa-sun"></i> Brightness Control</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="mb-3">
-                                        <label for="brightness-slider" class="form-label">Brightness Level: <span id="brightness-value">10</span></label>
-                                        <input type="range" class="form-range" id="brightness-slider" min="1" max="16" value="10" 
-                                               oninput="updateBrightnessValue(this.value)">
-                                        <div class="d-flex justify-content-between">
-                                            <small>Dim (1)</small>
-                                            <small>Bright (
+function filterHistory() {
+    const filter = document.getElementById('history-filter').value;
+    
+    switch(filter) {
+        case 'sent':
+            filteredHistory = messageHistory.filter(msg => msg.sent_at);
+            break;
+        case 'failed':
+            filteredHistory = messageHistory.filter(msg => !msg.sent_at);
+            break;
+        case 'emergency':
+            filteredHistory = messageHistory.filter(msg => msg.priority === 0);
+            break;
+        case 'custom':
+            filteredHistory = messageHistory.filter(msg => msg.type === 'custom');
+            break;
+        case 'canned':
+            filteredHistory = messageHistory.filter(msg => msg.type === 'canned');
+            break;
+        case 'rgb':
+            filteredHistory = messageHistory.filter(msg => msg.rgb_color);
+            break;
+        default:
+            filteredHistory = messageHistory;
+    }
+    
+    updateMessageHistoryDisplay();
+}
+
+function searchHistory() {
+    const searchTerm = document.getElementById('history-search').value.toLowerCase();
+    
+    if (searchTerm) {
+        filteredHistory = messageHistory.filter(msg => 
+            (msg.content && msg.content.toLowerCase().includes(searchTerm)) ||
+            msg.type.toLowerCase().includes(searchTerm) ||
+            (msg.color && msg.color.toLowerCase().includes(searchTerm)) ||
+            (msg.font && msg.font.toLowerCase().includes(searchTerm))
+        );
+    } else {
+        filteredHistory = messageHistory;
+    }
+    
+    updateMessageHistoryDisplay();
+}
+
+function updateBrightnessValue(value) {
+    document.getElementById('brightness-value').textContent = value;
+}
+
+function setBrightness() {
+    const brightness = parseInt(document.getElementById('brightness-slider').value);
+    
+    showLoading('Setting brightness...');
+    
+    fetch('/api/led/brightness', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({brightness: brightness})
+    })
+    .then(response => response.json())
+    .then(result => {
+        hideLoading();
+        if (result.success) {
+            showToast(`💡 Brightness set to ${brightness}`, 'success');
+            loadLEDStatus();
+        } else {
+            showToast('Failed to set brightness: ' + (result.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(error => {
+        hideLoading();
+        console.error('Error setting brightness:', error);
+        showToast('Error setting brightness', 'error');
+    });
+}
+
+function clearDisplay() {
+    if (!confirm('Clear the Alpha 9120C display?')) {
+        return;
+    }
+    
+    showLoading('Clearing display...');
+    
+    fetch('/api/led/clear', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(response => response.json())
+    .then(result => {
+        hideLoading();
+        if (result.success) {
+            showToast('🧹 Display cleared', 'success');
+            loadMessageHistory();
+        } else {
+            showToast('Failed to clear display: ' + (result.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(error => {
+        hideLoading();
+        console.error('Error clearing display:', error);
+        showToast('Error clearing display', 'error');
+    });
+}
+
+function refreshStatus() {
+    showLoading('Refreshing Alpha 9120C status...');
+    loadLEDStatus();
+    setTimeout(() => {
+        hideLoading();
+        showToast('📡 Status refreshed', 'success');
+    }, 1000);
+}
+
+function exportHistory() {
+    const csvContent = "data:text/csv;charset=utf-8," + 
+        "Type,Content,Priority,Color,Font,Effect,Created,Sent,Status\n" +
+        messageHistory.map(msg => 
+            `"${msg.type}","${msg.content || 'M-Protocol message'}","${getPriorityText(msg.priority)}","${msg.color || ''}","${msg.font || ''}","${msg.mode || ''}","${msg.created_at}","${msg.sent_at || 'Not sent'}","${msg.sent_at ? 'Sent' : 'Failed'}"`
+        ).join("\n");
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `alpha9120c_history_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showToast('📊 Message history exported', 'success');
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', initLEDControl);
+
+console.log('Enhanced Alpha 9120C M-Protocol Interface initialized successfully');
+{% endblock %}

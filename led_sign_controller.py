@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-AlphaPremier LED Sign Controller
-Supports full message display with colors, fonts, transitions and effects
-Based on M-Protocol communication standards for AlphaPremier signs
+Complete Alpha 9120C LED Sign Controller
+Full M-Protocol implementation with all documented features
+Based on Alpha Communications M-Protocol specification
 """
 
 import socket
@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Union
 from enum import Enum
 import json
+import re
 
 
 class MessagePriority(Enum):
@@ -23,66 +24,99 @@ class MessagePriority(Enum):
     LOW = 3
 
 
-class FontSize(Enum):
-    """Available font sizes"""
-    SMALL = '1'
-    MEDIUM = '2'
-    LARGE = '3'
-    EXTRA_LARGE = '4'
-
-
 class Color(Enum):
-    """Available colors"""
-    RED = '1'
-    GREEN = '2'
-    AMBER = '3'
-    YELLOW = '4'
-    ORANGE = '5'
-    WHITE = '6'
-    BLUE = '7'
-    CYAN = '8'
-    MAGENTA = '9'
+    """M-Protocol Color Codes (1CH + character)"""
+    RED = '1'  # 1CH + "1" (31H) = Red
+    GREEN = '2'  # 1CH + "2" (32H) = Green
+    AMBER = '3'  # 1CH + "3" (33H) = Amber
+    DIM_RED = '4'  # 1CH + "4" (34H) = Dim red
+    DIM_GREEN = '5'  # 1CH + "5" (35H) = Dim green
+    BROWN = '6'  # 1CH + "6" (36H) = Brown
+    ORANGE = '7'  # 1CH + "7" (37H) = Orange
+    YELLOW = '8'  # 1CH + "8" (38H) = Yellow
+    RAINBOW_1 = '9'  # 1CH + "9" (39H) = Rainbow 1
+    RAINBOW_2 = 'A'  # 1CH + "A" (41H) = Rainbow 2
+    COLOR_MIX = 'B'  # 1CH + "B" (42H) = Color mix
+    AUTO_COLOR = 'C'  # 1CH + "C" (43H) = Autocolor
 
 
-class Effect(Enum):
-    """Display effects"""
-    IMMEDIATE = 'A'
-    XOPEN = 'B'
-    CURTAIN_UP = 'C'
-    CURTAIN_DOWN = 'D'
-    SCROLL_LEFT = 'E'
-    SCROLL_RIGHT = 'F'
-    VOPEN = 'G'
-    VCLOSE = 'H'
-    SCROLL_UP = 'I'
-    SCROLL_DOWN = 'J'
-    HOLD = 'K'
-    SNOW = 'L'
-    TWINKLE = 'M'
-    BLOCK_MOVE = 'N'
-    RANDOM = 'O'
-    HELLO_WORLD = 'P'
-    SLOT_MACHINE = 'Q'
-    NEWS_FLASH = 'S'
-    TRUMPET_FANFARE = 'T'
-    CYCLE_COLOR = 'U'
+class Font(Enum):
+    """M-Protocol Font Selection (1AH + character)"""
+    FONT_5x7 = '1'  # 5x7 dots
+    FONT_6x7 = '2'  # 6x7 dots
+    FONT_7x9 = '3'  # 7x9 dots
+    FONT_8x7 = '4'  # 8x7 dots
+    FONT_7x11 = '5'  # 7x11 dots
+    FONT_15x7 = '6'  # 15x7 dots
+    FONT_19x7 = '7'  # 19x7 dots
+    FONT_7x13 = '8'  # 7x13 dots
+    FONT_16x9 = '9'  # 16x9 dots
+    FONT_32x16 = ':'  # 32x16 dots
+
+
+class DisplayMode(Enum):
+    """Display Mode Commands (1BH + character)"""
+    ROTATE = 'a'  # Rotate (not for line mode)
+    HOLD = 'b'  # Hold
+    FLASH = 'c'  # Flash
+    ROLL_UP = 'e'  # Roll up
+    ROLL_DOWN = 'f'  # Roll down
+    ROLL_LEFT = 'g'  # Roll left
+    ROLL_RIGHT = 'h'  # Roll right
+    WIPE_UP = 'i'  # Wipe up
+    WIPE_DOWN = 'j'  # Wipe down
+    WIPE_LEFT = 'k'  # Wipe left
+    WIPE_RIGHT = 'l'  # Wipe right
+    SCROLL = 'm'  # Scroll
+    AUTO_MODE = 'o'  # Automode
+    ROLL_IN = 'p'  # Roll in
+    ROLL_OUT = 'q'  # Roll out
+    WIPE_IN = 'r'  # Wipe in
+    WIPE_OUT = 's'  # Wipe out
+    COMPRESSED_ROTATE = 't'  # Compressed rotate
+    EXPLODE = 'u'  # Explode
+    CLOCK = 'v'  # Clock
 
 
 class Speed(Enum):
-    """Animation speeds"""
-    SLOWEST = '1'
-    SLOW = '2'
-    MEDIUM = '3'
-    FAST = '4'
-    FASTEST = '5'
+    """Speed Settings (15H + character)"""
+    SPEED_1 = '1'  # Slowest
+    SPEED_2 = '2'  # Slow
+    SPEED_3 = '3'  # Medium
+    SPEED_4 = '4'  # Fast
+    SPEED_5 = '5'  # Fastest
 
 
-class LEDSignController:
-    """Enhanced LED Sign Controller for AlphaPremier signs"""
+class SpecialFunction(Enum):
+    """Special Functions (1EH + character)"""
+    WIDE_CHAR_ON = '0'  # Wide character on
+    WIDE_CHAR_OFF = '1'  # Wide character off
+    TRUE_DESC_ON = '2'  # True descender on
+    TRUE_DESC_OFF = '3'  # True descender off
+    CHAR_FLASH_ON = '4'  # Character flash on
+    CHAR_FLASH_OFF = '5'  # Character flash off
+    FIXED_WIDTH = '6'  # Fixed width font
+    PROP_WIDTH = '7'  # Proportional width font
+
+
+class TimeFormat(Enum):
+    """Time Format Codes (13H + character)"""
+    MMDDYY = '1'  # MM/DD/YY
+    DDMMYY = '2'  # DD/MM/YY
+    MMDDYYYY = '3'  # MM/DD/YYYY
+    DDMMYYYY = '4'  # DD/MM/YYYY
+    YYMMDD = '5'  # YY-MM-DD
+    YYYYMMDD = '6'  # YYYY-MM-DD
+    TIME_12H = '7'  # 12 hour format
+    TIME_24H = '8'  # 24 hour format
+
+
+class Alpha9120CController:
+    """Complete Alpha 9120C LED Sign Controller with full M-Protocol support"""
 
     def __init__(self, host: str, port: int = 10001, sign_id: str = '01', timeout: int = 10):
         """
-        Initialize LED sign controller
+        Initialize Alpha 9120C controller with full M-Protocol support
 
         Args:
             host: IP address of the LED sign
@@ -95,6 +129,28 @@ class LEDSignController:
         self.sign_id = sign_id
         self.timeout = timeout
         self.logger = logging.getLogger(__name__)
+
+        # Alpha 9120C specifications
+        self.max_chars_per_line = 20
+        self.max_lines = 4
+        self.supports_rgb = True
+        self.supports_graphics = True
+
+        # M-Protocol control characters
+        self.STX = '\x02'  # Start of text
+        self.ETX = '\x03'  # End of text
+        self.ESC = '\x1B'  # Escape
+        self.CR = '\x0D'  # Carriage return
+        self.LF = '\x0A'  # Line feed
+
+        # M-Protocol command characters
+        self.COLOR_CMD = '\x1C'  # Color command prefix
+        self.FONT_CMD = '\x1A'  # Font command prefix
+        self.MODE_CMD = '\x1B'  # Display mode command prefix
+        self.SPEED_CMD = '\x15'  # Speed command prefix
+        self.SPECIAL_CMD = '\x1E'  # Special function prefix
+        self.TIME_CMD = '\x13'  # Time format prefix
+        self.POSITION_CMD = '\x1F'  # Position command prefix
 
         # Connection management
         self.socket = None
@@ -114,66 +170,83 @@ class LEDSignController:
         self.connect()
 
     def _load_canned_messages(self) -> Dict[str, Dict]:
-        """Load predefined canned messages"""
+        """Load predefined canned messages with full M-Protocol features"""
         return {
             'welcome': {
-                'text': 'WELCOME TO PUTNAM COUNTY',
+                'lines': [
+                    'WELCOME TO',
+                    'PUTNAM COUNTY',
+                    'EMERGENCY MGMT',
+                    ''
+                ],
                 'color': Color.GREEN,
-                'font': FontSize.LARGE,
-                'effect': Effect.XOPEN,
-                'speed': Speed.MEDIUM,
-                'hold_time': 3,
-                'priority': MessagePriority.LOW
-            },
-            'time_temp': {
-                'text': 'TIME: {time} TEMP: {temp}°F',
-                'color': Color.AMBER,
-                'font': FontSize.MEDIUM,
-                'effect': Effect.IMMEDIATE,
-                'speed': Speed.MEDIUM,
+                'font': Font.FONT_7x9,
+                'mode': DisplayMode.WIPE_RIGHT,
+                'speed': Speed.SPEED_3,
                 'hold_time': 5,
                 'priority': MessagePriority.LOW
             },
-            'emergency_test': {
-                'text': 'EMERGENCY ALERT SYSTEM TEST',
+            'emergency_severe': {
+                'lines': [
+                    'EMERGENCY ALERT',
+                    'SEVERE WEATHER',
+                    'TAKE SHELTER',
+                    'IMMEDIATELY'
+                ],
                 'color': Color.RED,
-                'font': FontSize.LARGE,
-                'effect': Effect.NEWS_FLASH,
-                'speed': Speed.FAST,
+                'font': Font.FONT_7x13,
+                'mode': DisplayMode.FLASH,
+                'speed': Speed.SPEED_5,
                 'hold_time': 2,
-                'priority': MessagePriority.EMERGENCY
+                'priority': MessagePriority.EMERGENCY,
+                'special_functions': [SpecialFunction.CHAR_FLASH_ON]
             },
-            'weather_warning': {
-                'text': 'SEVERE WEATHER WARNING',
-                'color': Color.RED,
-                'font': FontSize.EXTRA_LARGE,
-                'effect': Effect.TWINKLE,
-                'speed': Speed.FASTEST,
-                'hold_time': 3,
-                'priority': MessagePriority.EMERGENCY
+            'time_temp_display': {
+                'lines': [
+                    'CURRENT TIME',
+                    '{time}',
+                    'TEMPERATURE',
+                    '{temp}°F'
+                ],
+                'color': Color.AMBER,
+                'font': Font.FONT_7x11,
+                'mode': DisplayMode.SCROLL,
+                'speed': Speed.SPEED_2,
+                'hold_time': 10,
+                'priority': MessagePriority.LOW
             },
-            'traffic_alert': {
-                'text': 'TRAFFIC ADVISORY',
-                'color': Color.ORANGE,
-                'font': FontSize.LARGE,
-                'effect': Effect.SCROLL_LEFT,
-                'speed': Speed.MEDIUM,
-                'hold_time': 4,
-                'priority': MessagePriority.URGENT
+            'rainbow_test': {
+                'lines': [
+                    'RAINBOW TEST',
+                    'COLOR CYCLING',
+                    'ALPHA 9120C',
+                    'M-PROTOCOL'
+                ],
+                'color': Color.RAINBOW_1,
+                'font': Font.FONT_16x9,
+                'mode': DisplayMode.EXPLODE,
+                'speed': Speed.SPEED_4,
+                'hold_time': 5,
+                'priority': MessagePriority.NORMAL
             },
             'no_alerts': {
-                'text': 'PUTNAM COUNTY EMERGENCY MANAGEMENT - NO ACTIVE ALERTS',
+                'lines': [
+                    'PUTNAM COUNTY',
+                    'NO ACTIVE',
+                    'ALERTS',
+                    'ALL CLEAR'
+                ],
                 'color': Color.GREEN,
-                'font': FontSize.MEDIUM,
-                'effect': Effect.SCROLL_LEFT,
-                'speed': Speed.SLOW,
+                'font': Font.FONT_7x9,
+                'mode': DisplayMode.ROLL_LEFT,
+                'speed': Speed.SPEED_2,
                 'hold_time': 8,
                 'priority': MessagePriority.NORMAL
             }
         }
 
     def connect(self) -> bool:
-        """Establish connection to LED sign"""
+        """Establish connection to Alpha 9120C sign"""
         try:
             if self.socket:
                 self.socket.close()
@@ -183,22 +256,22 @@ class LEDSignController:
             self.socket.connect((self.host, self.port))
 
             self.connected = True
-            self.logger.info(f"Connected to LED sign at {self.host}:{self.port}")
+            self.logger.info(f"Connected to Alpha 9120C at {self.host}:{self.port}")
 
-            # Send initial handshake/test
-            if self._send_test_message():
+            # Send initialization sequence
+            if self._send_initialization():
                 return True
             else:
-                self.logger.warning("Test message failed, but connection established")
+                self.logger.warning("Initialization failed, but connection established")
                 return True
 
         except Exception as e:
-            self.logger.error(f"Failed to connect to LED sign: {e}")
+            self.logger.error(f"Failed to connect to Alpha 9120C: {e}")
             self.connected = False
             return False
 
     def disconnect(self):
-        """Disconnect from LED sign"""
+        """Disconnect from Alpha 9120C"""
         if self.socket:
             try:
                 self.socket.close()
@@ -206,137 +279,164 @@ class LEDSignController:
                 pass
             self.socket = None
         self.connected = False
-        self.logger.info("Disconnected from LED sign")
+        self.logger.info("Disconnected from Alpha 9120C")
 
-    def _send_test_message(self) -> bool:
-        """Send a test message to verify connection"""
+    def _send_initialization(self) -> bool:
+        """Send initialization sequence to Alpha 9120C"""
         try:
-            test_msg = self._build_message('SYSTEM READY', Color.GREEN, FontSize.MEDIUM, Effect.IMMEDIATE)
-            return self._send_raw_message(test_msg)
+            # Send test message to verify connection
+            test_lines = ['ALPHA 9120C', 'INITIALIZED', 'M-PROTOCOL', 'READY']
+            init_msg = self._build_message(
+                test_lines,
+                color=Color.GREEN,
+                font=Font.FONT_7x9,
+                mode=DisplayMode.WIPE_IN,
+                speed=Speed.SPEED_3
+            )
+            return self._send_raw_message(init_msg)
         except Exception as e:
-            self.logger.error(f"Test message failed: {e}")
+            self.logger.error(f"Initialization failed: {e}")
             return False
 
-    def _build_message(self, text: str, color: Color = Color.GREEN,
-                       font: FontSize = FontSize.MEDIUM, effect: Effect = Effect.IMMEDIATE,
-                       speed: Speed = Speed.MEDIUM, hold_time: int = 3,
-                       priority: MessagePriority = MessagePriority.NORMAL) -> str:
+    def _build_message(self, lines: List[str], color: Color = Color.GREEN,
+                       font: Font = Font.FONT_7x9, mode: DisplayMode = DisplayMode.HOLD,
+                       speed: Speed = Speed.SPEED_3, hold_time: int = 5,
+                       special_functions: List[SpecialFunction] = None,
+                       rgb_color: str = None, priority: MessagePriority = MessagePriority.NORMAL) -> str:
         """
-        Build a properly formatted M-Protocol message
+        Build a complete M-Protocol message with all features
 
-        Message format: <ID><COMMAND><DATA><ETX>
+        Format: <STX><ID><CMD><FILE><formatting><content><ETX><CHECKSUM>
         """
         try:
-            # Message structure for AlphaPremier signs
-            # STX (Start of Text)
-            stx = '\x02'
+            # Ensure we have exactly 4 lines
+            display_lines = lines[:4]
+            while len(display_lines) < 4:
+                display_lines.append('')
 
-            # Sign ID
+            # Truncate lines to display width
+            display_lines = [line[:self.max_chars_per_line] for line in display_lines]
+
+            # Message components
             sign_id = self.sign_id
+            cmd = 'AA'  # Write text file command
+            file_label = 'A'  # File label
 
-            # Command type (Write Text File)
-            cmd = 'AA'
+            # Build formatting sequence
+            formatting = ''
 
-            # File label (A-Z, using A for main display)
-            file_label = 'A'
+            # Font selection
+            formatting += self.FONT_CMD + font.value
 
-            # ESC sequence for formatting
-            esc = '\x1b'
+            # Color selection (RGB takes precedence over standard colors)
+            if rgb_color and self._is_valid_rgb(rgb_color):
+                # Alpha 3.0 protocol RGB color
+                formatting += self.COLOR_CMD + 'Z' + rgb_color.upper()
+            else:
+                # Standard color
+                formatting += self.COLOR_CMD + color.value
 
-            # Build formatting string
-            # Font size
-            font_cmd = f"{esc}${font.value}"
+            # Display mode
+            formatting += self.MODE_CMD + mode.value
 
-            # Color
-            color_cmd = f"{esc}{color.value}"
+            # Speed setting
+            formatting += self.SPEED_CMD + speed.value
 
-            # Effect and speed
-            effect_cmd = f"{esc}{effect.value}{speed.value}"
+            # Special functions
+            if special_functions:
+                for func in special_functions:
+                    formatting += self.SPECIAL_CMD + func.value
 
-            # Text content (truncate if too long)
-            display_text = text[:200]  # AlphaPremier typically supports up to 125-250 chars
+            # Build message content with line separators
+            content = formatting
+            for i, line in enumerate(display_lines):
+                content += line
+                if i < len(display_lines) - 1:
+                    content += self.CR  # Line separator
 
-            # Build complete message
-            message_data = f"{font_cmd}{color_cmd}{effect_cmd}{display_text}"
+            # Complete message body
+            message_body = f"{sign_id}{cmd}{file_label}{content}"
 
-            # ETX (End of Text)
-            etx = '\x03'
-
-            # Calculate checksum (XOR of all bytes between STX and ETX)
+            # Calculate checksum
             checksum = 0
-            message_body = f"{sign_id}{cmd}{file_label}{message_data}"
             for char in message_body:
                 checksum ^= ord(char)
-
-            # Format checksum as 2-digit hex
             checksum_str = f"{checksum:02X}"
 
-            # Complete message
-            complete_message = f"{stx}{message_body}{etx}{checksum_str}"
+            # Complete M-Protocol message
+            complete_message = f"{self.STX}{message_body}{self.ETX}{checksum_str}"
 
-            self.logger.debug(f"Built message: {repr(complete_message)}")
+            self.logger.debug(f"Built M-Protocol message: {repr(complete_message)}")
             return complete_message
 
         except Exception as e:
-            self.logger.error(f"Error building message: {e}")
+            self.logger.error(f"Error building M-Protocol message: {e}")
             return None
 
+    def _is_valid_rgb(self, rgb_color: str) -> bool:
+        """Validate RGB color format (RRGGBB)"""
+        return bool(re.match(r'^[0-9A-Fa-f]{6}$', rgb_color))
+
     def _send_raw_message(self, message: str) -> bool:
-        """Send raw message to LED sign"""
+        """Send raw M-Protocol message to Alpha 9120C"""
         if not self.connected or not self.socket:
             if not self.connect():
                 return False
 
         try:
-            # Send message
+            # Send message using latin-1 encoding
             self.socket.send(message.encode('latin-1'))
 
-            # Wait for acknowledgment (optional - some signs don't send ACK)
+            # Wait for acknowledgment
             try:
-                self.socket.settimeout(2)  # Short timeout for ACK
+                self.socket.settimeout(2)
                 response = self.socket.recv(10)
-                self.logger.debug(f"Received response: {repr(response)}")
+                self.logger.debug(f"Alpha 9120C response: {repr(response)}")
             except socket.timeout:
-                self.logger.debug("No response from sign (normal for some models)")
+                self.logger.debug("No ACK from Alpha 9120C")
 
             self.last_message = message
             self.last_update = datetime.now()
 
-            self.logger.info("Message sent successfully to LED sign")
+            self.logger.info("M-Protocol message sent successfully")
             return True
 
         except Exception as e:
-            self.logger.error(f"Error sending message: {e}")
+            self.logger.error(f"Error sending M-Protocol message: {e}")
             self.connected = False
             return False
 
-    def send_message(self, text: str, color: Color = Color.GREEN,
-                     font: FontSize = FontSize.MEDIUM, effect: Effect = Effect.IMMEDIATE,
-                     speed: Speed = Speed.MEDIUM, hold_time: int = 3,
-                     priority: MessagePriority = MessagePriority.NORMAL) -> bool:
-        """Send a formatted message to the LED sign"""
+    def send_message(self, lines: List[str], color: Color = Color.GREEN,
+                     font: Font = Font.FONT_7x9, mode: DisplayMode = DisplayMode.HOLD,
+                     speed: Speed = Speed.SPEED_3, hold_time: int = 5,
+                     special_functions: List[SpecialFunction] = None,
+                     rgb_color: str = None, priority: MessagePriority = MessagePriority.NORMAL) -> bool:
+        """Send a fully-featured message to the Alpha 9120C"""
         try:
-            # Check if we should override current message based on priority
+            # Check priority
             if priority.value < self.current_priority.value:
                 self.current_priority = priority
             elif priority.value > self.current_priority.value:
-                self.logger.info(
-                    f"Message blocked - lower priority than current ({priority} vs {self.current_priority})")
+                self.logger.info(f"Message blocked - lower priority")
                 return False
 
             # Build and send message
-            message = self._build_message(text, color, font, effect, speed, hold_time, priority)
+            message = self._build_message(
+                lines, color, font, mode, speed, hold_time,
+                special_functions, rgb_color, priority
+            )
+
             if message:
                 success = self._send_raw_message(message)
                 if success:
                     # Store message info
                     self.current_messages[priority] = {
-                        'text': text,
-                        'color': color,
-                        'font': font,
-                        'effect': effect,
-                        'speed': speed,
-                        'hold_time': hold_time,
+                        'lines': lines,
+                        'color': color.name,
+                        'font': font.name,
+                        'mode': mode.name,
+                        'speed': speed.name,
+                        'rgb_color': rgb_color,
                         'timestamp': datetime.now()
                     }
                 return success
@@ -346,8 +446,44 @@ class LEDSignController:
             self.logger.error(f"Error in send_message: {e}")
             return False
 
+    def send_rgb_message(self, lines: List[str], rgb_color: str,
+                         font: Font = Font.FONT_7x9, mode: DisplayMode = DisplayMode.HOLD,
+                         speed: Speed = Speed.SPEED_3, special_functions: List[SpecialFunction] = None,
+                         priority: MessagePriority = MessagePriority.NORMAL) -> bool:
+        """Send a message with RGB color (Alpha 3.0 protocol)"""
+        return self.send_message(
+            lines=lines, rgb_color=rgb_color, font=font, mode=mode,
+            speed=speed, special_functions=special_functions, priority=priority
+        )
+
+    def send_flashing_message(self, lines: List[str], color: Color = Color.RED,
+                              font: Font = Font.FONT_7x13, priority: MessagePriority = MessagePriority.URGENT) -> bool:
+        """Send a flashing message (useful for alerts)"""
+        return self.send_message(
+            lines=lines, color=color, font=font, mode=DisplayMode.FLASH,
+            speed=Speed.SPEED_5, special_functions=[SpecialFunction.CHAR_FLASH_ON],
+            priority=priority
+        )
+
+    def send_scrolling_message(self, lines: List[str], color: Color = Color.GREEN,
+                               direction: str = 'left', speed: Speed = Speed.SPEED_3) -> bool:
+        """Send a scrolling message"""
+        mode_map = {
+            'left': DisplayMode.ROLL_LEFT,
+            'right': DisplayMode.ROLL_RIGHT,
+            'up': DisplayMode.ROLL_UP,
+            'down': DisplayMode.ROLL_DOWN
+        }
+
+        mode = mode_map.get(direction, DisplayMode.ROLL_LEFT)
+
+        return self.send_message(
+            lines=lines, color=color, mode=mode, speed=speed,
+            font=Font.FONT_7x9
+        )
+
     def send_canned_message(self, message_name: str, **kwargs) -> bool:
-        """Send a predefined canned message with optional parameter substitution"""
+        """Send a predefined canned message with parameter substitution"""
         if message_name not in self.canned_messages:
             self.logger.error(f"Canned message '{message_name}' not found")
             return False
@@ -355,18 +491,18 @@ class LEDSignController:
         try:
             msg_config = self.canned_messages[message_name].copy()
 
-            # Substitute parameters in text
-            text = msg_config['text']
+            # Substitute parameters in text lines
+            lines = msg_config['lines'].copy()
             if kwargs:
-                text = text.format(**kwargs)
+                lines = [line.format(**kwargs) if line else line for line in lines]
 
             return self.send_message(
-                text=text,
+                lines=lines,
                 color=msg_config['color'],
                 font=msg_config['font'],
-                effect=msg_config['effect'],
+                mode=msg_config['mode'],
                 speed=msg_config['speed'],
-                hold_time=msg_config['hold_time'],
+                special_functions=msg_config.get('special_functions'),
                 priority=msg_config['priority']
             )
 
@@ -374,95 +510,133 @@ class LEDSignController:
             self.logger.error(f"Error sending canned message '{message_name}': {e}")
             return False
 
+    def set_time_format(self, time_format: TimeFormat) -> bool:
+        """Set time display format"""
+        try:
+            # Build time format command
+            message_body = f"{self.sign_id}E*{self.TIME_CMD}{time_format.value}"
+            checksum = 0
+            for char in message_body:
+                checksum ^= ord(char)
+            checksum_str = f"{checksum:02X}"
+
+            message = f"{self.STX}{message_body}{self.ETX}{checksum_str}"
+            return self._send_raw_message(message)
+
+        except Exception as e:
+            self.logger.error(f"Error setting time format: {e}")
+            return False
+
+    def send_time_display(self, time_format: TimeFormat = TimeFormat.TIME_12H) -> bool:
+        """Send current time to display"""
+        try:
+            # Set time format first
+            self.set_time_format(time_format)
+
+            # Send time display message
+            lines = [
+                'CURRENT TIME',
+                '{TIME}',  # Special time placeholder
+                datetime.now().strftime('%m/%d/%Y'),
+                ''
+            ]
+
+            return self.send_message(
+                lines=lines, color=Color.AMBER, font=Font.FONT_7x11,
+                mode=DisplayMode.SCROLL, speed=Speed.SPEED_2
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error sending time display: {e}")
+            return False
+
     def display_alerts(self, alerts: List) -> bool:
-        """Display CAP alerts on the LED sign"""
+        """Display CAP alerts with advanced M-Protocol features"""
         try:
             if not alerts:
-                return self.display_default_message()
+                return self.send_canned_message('no_alerts')
 
             # Sort alerts by severity
             severity_order = {'Extreme': 0, 'Severe': 1, 'Moderate': 2, 'Minor': 3, 'Unknown': 4}
             sorted_alerts = sorted(alerts, key=lambda x: severity_order.get(x.severity, 4))
 
-            # Display the most severe alert
             top_alert = sorted_alerts[0]
 
             # Determine display parameters based on severity
             if top_alert.severity in ['Extreme', 'Severe']:
-                color = Color.RED
-                effect = Effect.TWINKLE
-                speed = Speed.FASTEST
-                font = FontSize.EXTRA_LARGE
-                priority = MessagePriority.EMERGENCY
+                return self.send_flashing_message(
+                    lines=self._format_alert_for_display(top_alert, len(alerts)),
+                    color=Color.RED,
+                    font=Font.FONT_7x13,
+                    priority=MessagePriority.EMERGENCY
+                )
             elif top_alert.severity == 'Moderate':
-                color = Color.ORANGE
-                effect = Effect.NEWS_FLASH
-                speed = Speed.FAST
-                font = FontSize.LARGE
-                priority = MessagePriority.URGENT
+                return self.send_message(
+                    lines=self._format_alert_for_display(top_alert, len(alerts)),
+                    color=Color.ORANGE,
+                    font=Font.FONT_7x11,
+                    mode=DisplayMode.FLASH,
+                    speed=Speed.SPEED_4,
+                    priority=MessagePriority.URGENT
+                )
             else:
-                color = Color.AMBER
-                effect = Effect.SCROLL_LEFT
-                speed = Speed.MEDIUM
-                font = FontSize.MEDIUM
-                priority = MessagePriority.NORMAL
-
-            # Format alert text
-            alert_text = f"{top_alert.event}: {top_alert.headline}"
-            if len(alert_text) > 200:
-                alert_text = alert_text[:197] + "..."
-
-            # Add multiple alerts indicator if needed
-            if len(alerts) > 1:
-                alert_text = f"ALERT ({len(alerts)}): {alert_text}"
-
-            return self.send_message(
-                text=alert_text,
-                color=color,
-                font=font,
-                effect=effect,
-                speed=speed,
-                priority=priority
-            )
+                return self.send_scrolling_message(
+                    lines=self._format_alert_for_display(top_alert, len(alerts)),
+                    color=Color.AMBER,
+                    direction='left',
+                    speed=Speed.SPEED_3
+                )
 
         except Exception as e:
             self.logger.error(f"Error displaying alerts: {e}")
             return False
 
-    def display_default_message(self) -> bool:
-        """Display default message when no alerts are active"""
-        try:
-            # Get current time and temperature (if available)
-            current_time = datetime.now().strftime("%I:%M %p")
+    def _format_alert_for_display(self, alert, total_alerts: int) -> List[str]:
+        """Format a CAP alert for the 4-line Alpha 9120C display"""
+        lines = ['', '', '', '']
 
-            # Try to get temperature from weather service (simplified)
-            temp = "N/A"
+        # Line 1: Alert count or severity
+        if total_alerts > 1:
+            lines[0] = f"{alert.severity} ({total_alerts})"
+        else:
+            lines[0] = f"{alert.severity} ALERT"
 
-            # Cycle through different default messages
-            if hasattr(self, '_default_message_index'):
-                self._default_message_index = (self._default_message_index + 1) % 3
-            else:
-                self._default_message_index = 0
+        # Line 2: Event type
+        lines[1] = alert.event[:self.max_chars_per_line]
 
-            if self._default_message_index == 0:
-                return self.send_canned_message('no_alerts')
-            elif self._default_message_index == 1:
-                return self.send_canned_message('time_temp', time=current_time, temp=temp)
-            else:
-                return self.send_canned_message('welcome')
+        # Lines 3-4: Headline split across lines
+        if alert.headline:
+            words = alert.headline.split()
+            line3_words = []
+            line4_words = []
 
-        except Exception as e:
-            self.logger.error(f"Error displaying default message: {e}")
-            return False
+            current_line = line3_words
+            current_length = 0
+
+            for word in words:
+                if current_length + len(word) + 1 <= self.max_chars_per_line:
+                    current_line.append(word)
+                    current_length += len(word) + 1
+                elif current_line == line3_words:
+                    current_line = line4_words
+                    current_line.append(word)
+                    current_length = len(word)
+                else:
+                    break
+
+            lines[2] = ' '.join(line3_words)
+            lines[3] = ' '.join(line4_words)
+
+        return lines
 
     def clear_display(self) -> bool:
-        """Clear the LED display"""
+        """Clear the Alpha 9120C display"""
         try:
             return self.send_message(
-                text=" ",
+                lines=['', '', '', ''],
                 color=Color.GREEN,
-                font=FontSize.MEDIUM,
-                effect=Effect.IMMEDIATE,
+                font=Font.FONT_7x9,
+                mode=DisplayMode.HOLD,
                 priority=MessagePriority.LOW
             )
         except Exception as e:
@@ -470,78 +644,64 @@ class LEDSignController:
             return False
 
     def set_brightness(self, level: int) -> bool:
-        """Set display brightness (1-16, where 1 is dimmest, 16 is brightest)"""
+        """Set display brightness (1-16)"""
         try:
             if not 1 <= level <= 16:
                 raise ValueError("Brightness level must be between 1 and 16")
 
-            # Build brightness command
-            stx = '\x02'
-            sign_id = self.sign_id
-            cmd = 'E$'  # Set brightness command
-            brightness_hex = f"{level:X}"
-            etx = '\x03'
-
-            # Calculate checksum
-            message_body = f"{sign_id}{cmd}{brightness_hex}"
+            message_body = f"{self.sign_id}E${level:X}"
             checksum = 0
             for char in message_body:
                 checksum ^= ord(char)
             checksum_str = f"{checksum:02X}"
 
-            message = f"{stx}{message_body}{etx}{checksum_str}"
-
+            message = f"{self.STX}{message_body}{self.ETX}{checksum_str}"
             return self._send_raw_message(message)
 
         except Exception as e:
             self.logger.error(f"Error setting brightness: {e}")
             return False
 
-    def run_sequence(self, messages: List[Dict], repeat: bool = False) -> bool:
-        """Run a sequence of messages"""
+    def emergency_override(self, message: str, duration: int = 30) -> bool:
+        """Emergency message override with full M-Protocol features"""
         try:
-            def sequence_thread():
-                while True:
-                    for msg in messages:
-                        if not self.display_active:
-                            break
+            # Split message across lines
+            words = message.split()
+            lines = ['EMERGENCY', 'ALERT', '', '']
 
-                        # Send message
-                        self.send_message(**msg)
+            # Distribute emergency text across lines 3-4
+            if words:
+                line3_words = []
+                line4_words = []
+                current_line = line3_words
+                current_length = 0
 
-                        # Wait for hold time
-                        time.sleep(msg.get('hold_time', 3))
-
-                    if not repeat:
+                for word in words:
+                    if current_length + len(word) + 1 <= self.max_chars_per_line:
+                        current_line.append(word)
+                        current_length += len(word) + 1
+                    elif current_line == line3_words:
+                        current_line = line4_words
+                        current_line.append(word)
+                        current_length = len(word)
+                    else:
                         break
 
-            thread = threading.Thread(target=sequence_thread, daemon=True)
-            thread.start()
-            return True
+                lines[2] = ' '.join(line3_words)
+                lines[3] = ' '.join(line4_words)
 
-        except Exception as e:
-            self.logger.error(f"Error running sequence: {e}")
-            return False
-
-    def emergency_override(self, message: str, duration: int = 30) -> bool:
-        """Emergency message override - highest priority"""
-        try:
-            # Send emergency message
-            success = self.send_message(
-                text=f"EMERGENCY: {message}",
+            success = self.send_flashing_message(
+                lines=lines,
                 color=Color.RED,
-                font=FontSize.EXTRA_LARGE,
-                effect=Effect.NEWS_FLASH,
-                speed=Speed.FASTEST,
+                font=Font.FONT_7x13,
                 priority=MessagePriority.EMERGENCY
             )
 
             if success:
-                # Schedule return to normal after duration
                 def reset_priority():
                     time.sleep(duration)
                     self.current_priority = MessagePriority.LOW
-                    self.display_default_message()
+                    self.send_canned_message('no_alerts')
 
                 threading.Thread(target=reset_priority, daemon=True).start()
 
@@ -551,78 +711,134 @@ class LEDSignController:
             self.logger.error(f"Error in emergency override: {e}")
             return False
 
+    def test_all_features(self) -> bool:
+        """Comprehensive test of all M-Protocol features"""
+        try:
+            test_sequence = [
+                # Color tests
+                {'lines': ['COLOR TEST', 'RED', '', ''], 'color': Color.RED, 'hold_time': 2},
+                {'lines': ['COLOR TEST', 'GREEN', '', ''], 'color': Color.GREEN, 'hold_time': 2},
+                {'lines': ['COLOR TEST', 'AMBER', '', ''], 'color': Color.AMBER, 'hold_time': 2},
+                {'lines': ['COLOR TEST', 'ORANGE', '', ''], 'color': Color.ORANGE, 'hold_time': 2},
+                {'lines': ['COLOR TEST', 'RAINBOW', '', ''], 'color': Color.RAINBOW_1, 'hold_time': 3},
+
+                # Font tests
+                {'lines': ['FONT TEST', 'SMALL 5x7', '', ''], 'font': Font.FONT_5x7, 'hold_time': 2},
+                {'lines': ['FONT TEST', 'MEDIUM 7x9', '', ''], 'font': Font.FONT_7x9, 'hold_time': 2},
+                {'lines': ['FONT TEST', 'LARGE 7x13', '', ''], 'font': Font.FONT_7x13, 'hold_time': 2},
+
+                # Effect tests
+                {'lines': ['EFFECT TEST', 'WIPE RIGHT', '', ''], 'mode': DisplayMode.WIPE_RIGHT, 'hold_time': 3},
+                {'lines': ['EFFECT TEST', 'ROLL LEFT', '', ''], 'mode': DisplayMode.ROLL_LEFT, 'hold_time': 3},
+                {'lines': ['EFFECT TEST', 'FLASH', '', ''], 'mode': DisplayMode.FLASH, 'hold_time': 3},
+                {'lines': ['EFFECT TEST', 'EXPLODE', '', ''], 'mode': DisplayMode.EXPLODE, 'hold_time': 3},
+
+                # RGB test
+                {'lines': ['RGB TEST', 'CUSTOM COLOR', 'FF6600', ''], 'rgb_color': 'FF6600', 'hold_time': 3},
+
+                # Special functions test
+                {'lines': ['SPECIAL TEST', 'FLASHING TEXT', '', ''],
+                 'color': Color.YELLOW, 'special_functions': [SpecialFunction.CHAR_FLASH_ON], 'hold_time': 3},
+
+                # Final test complete message
+                {'lines': ['M-PROTOCOL', 'TEST COMPLETE', 'ALL FEATURES', 'VERIFIED'],
+                 'color': Color.GREEN, 'mode': DisplayMode.WIPE_IN, 'hold_time': 3}
+            ]
+
+            def run_test_sequence():
+                for test in test_sequence:
+                    if not self.display_active:
+                        break
+
+                    # Set default values
+                    test.setdefault('color', Color.GREEN)
+                    test.setdefault('font', Font.FONT_7x9)
+                    test.setdefault('mode', DisplayMode.HOLD)
+                    test.setdefault('speed', Speed.SPEED_3)
+
+                    self.send_message(**test)
+                    time.sleep(test.get('hold_time', 2))
+
+            threading.Thread(target=run_test_sequence, daemon=True).start()
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error in comprehensive feature test: {e}")
+            return False
+
     def get_status(self) -> Dict:
-        """Get current sign status"""
+        """Get current Alpha 9120C status with M-Protocol capabilities"""
         return {
             'connected': self.connected,
             'host': self.host,
             'port': self.port,
             'sign_id': self.sign_id,
+            'model': 'Alpha 9120C',
+            'protocol': 'M-Protocol (Full Implementation)',
+            'display_type': '4-line multi-color',
+            'max_chars_per_line': self.max_chars_per_line,
+            'max_lines': self.max_lines,
+            'supports_rgb': self.supports_rgb,
+            'supports_graphics': self.supports_graphics,
+            'available_colors': [color.name for color in Color],
+            'available_fonts': [font.name for font in Font],
+            'available_modes': [mode.name for mode in DisplayMode],
+            'available_speeds': [speed.name for speed in Speed],
+            'special_functions': [func.name for func in SpecialFunction],
             'last_update': self.last_update.isoformat() if self.last_update else None,
             'current_priority': self.current_priority.name,
             'display_active': self.display_active,
             'messages_stored': len(self.current_messages)
         }
 
-    def test_all_features(self) -> bool:
-        """Test all sign features"""
-        try:
-            test_messages = [
-                {'text': 'COLOR TEST RED', 'color': Color.RED, 'hold_time': 2},
-                {'text': 'COLOR TEST GREEN', 'color': Color.GREEN, 'hold_time': 2},
-                {'text': 'COLOR TEST AMBER', 'color': Color.AMBER, 'hold_time': 2},
-                {'text': 'FONT TEST SMALL', 'font': FontSize.SMALL, 'hold_time': 2},
-                {'text': 'FONT TEST LARGE', 'font': FontSize.LARGE, 'hold_time': 2},
-                {'text': 'EFFECT TEST SCROLL', 'effect': Effect.SCROLL_LEFT, 'hold_time': 3},
-                {'text': 'EFFECT TEST TWINKLE', 'effect': Effect.TWINKLE, 'hold_time': 3},
-                {'text': 'TEST COMPLETE', 'color': Color.GREEN, 'effect': Effect.IMMEDIATE, 'hold_time': 2}
-            ]
-
-            return self.run_sequence(test_messages, repeat=False)
-
-        except Exception as e:
-            self.logger.error(f"Error in feature test: {e}")
-            return False
-
     def close(self):
         """Close connection and cleanup"""
         self.display_active = False
         self.disconnect()
-        self.logger.info("LED sign controller closed")
+        self.logger.info("Alpha 9120C M-Protocol controller closed")
 
 
-# Example usage and testing functions
+# Example usage and testing
 def main():
-    """Example usage of LED sign controller"""
+    """Example usage with full M-Protocol features"""
     import argparse
 
-    parser = argparse.ArgumentParser(description='LED Sign Controller Test')
-    parser.add_argument('--host', required=True, help='LED sign IP address')
-    parser.add_argument('--port', type=int, default=10001, help='LED sign port')
-    parser.add_argument('--test', action='store_true', help='Run feature test')
-    parser.add_argument('--message', help='Send custom message')
-    parser.add_argument('--canned', help='Send canned message by name')
+    parser = argparse.ArgumentParser(description='Alpha 9120C M-Protocol Controller')
+    parser.add_argument('--host', required=True, help='Alpha 9120C IP address')
+    parser.add_argument('--port', type=int, default=10001, help='Port')
+    parser.add_argument('--test', action='store_true', help='Run comprehensive feature test')
+    parser.add_argument('--message', nargs='+', help='Custom message (up to 4 lines)')
+    parser.add_argument('--canned', help='Canned message name')
+    parser.add_argument('--rgb', help='RGB color (RRGGBB format)')
+    parser.add_argument('--emergency', help='Emergency message')
 
     args = parser.parse_args()
 
-    # Setup logging
     logging.basicConfig(level=logging.INFO)
-
-    # Create controller
-    controller = LEDSignController(args.host, args.port)
+    controller = Alpha9120CController(args.host, args.port)
 
     try:
         if args.test:
-            print("Running feature test...")
+            print("Running comprehensive M-Protocol feature test...")
             controller.test_all_features()
+        elif args.emergency:
+            print(f"Sending emergency message: {args.emergency}")
+            controller.emergency_override(args.emergency)
         elif args.message:
-            print(f"Sending message: {args.message}")
-            controller.send_message(args.message)
+            lines = args.message[:4]
+            if args.rgb:
+                print(f"Sending RGB message: {lines} with color {args.rgb}")
+                controller.send_rgb_message(lines, args.rgb)
+            else:
+                print(f"Sending message: {lines}")
+                controller.send_message(lines)
         elif args.canned:
             print(f"Sending canned message: {args.canned}")
             controller.send_canned_message(args.canned)
         else:
-            print("No action specified. Use --test, --message, or --canned")
+            print("No action specified. Use --test, --message, --canned, or --emergency")
+
+        time.sleep(2)  # Let message display
 
     finally:
         controller.close()

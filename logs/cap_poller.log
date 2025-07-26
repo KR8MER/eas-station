@@ -5022,3 +5022,27 @@ WHERE cap_alerts.identifier = %(identifier_1)s
   "timezone": "America/New_York",
   "led_updated": false
 }
+2025-07-26 14:43:17,398 - __main__ - INFO - Starting CAP alert polling cycle for Putnam County, OH at July 26, 2025 at 09:43 AM EDT (13:43 UTC)
+2025-07-26 14:43:17,403 - __main__ - INFO - Fetching alerts from: https://api.weather.gov/alerts/active?zone=OHZ016
+2025-07-26 14:43:17,910 - __main__ - INFO - Retrieved 0 alerts from https://api.weather.gov/alerts/active?zone=OHZ016
+2025-07-26 14:43:17,910 - __main__ - INFO - Fetching alerts from: https://api.weather.gov/zones/county/OHC137
+2025-07-26 14:43:17,990 - __main__ - INFO - Retrieved 0 alerts from https://api.weather.gov/zones/county/OHC137
+2025-07-26 14:43:17,990 - __main__ - INFO - Total unique alerts collected: 0
+2025-07-26 14:43:18,004 - __main__ - INFO - poll_history table not available - skipping cleanup
+2025-07-26 14:43:18,005 - __main__ - INFO - poll_history table not available - logging to file only
+2025-07-26 14:43:18,005 - __main__ - INFO - Polling cycle completed: 0 new, 0 updated, 0 filtered
+2025-07-26 14:43:18,005 - __main__ - INFO - system_logs table not available - logging to file only
+2025-07-26 14:43:18,005 - __main__ - INFO - Poll completed: {
+  "alerts_fetched": 0,
+  "alerts_new": 0,
+  "alerts_updated": 0,
+  "alerts_filtered": 0,
+  "execution_time_ms": 610,
+  "status": "SUCCESS",
+  "error_message": null,
+  "zone": "OHZ016/OHC137 (Putnam County, OH)",
+  "poll_time_utc": "2025-07-26T13:43:17.395394+00:00",
+  "poll_time_local": "2025-07-26T09:43:17.396753-04:00",
+  "timezone": "America/New_York",
+  "led_updated": false
+}
