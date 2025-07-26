@@ -3,13 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}NOAA CAP Alerts System{% endblock %}</title>
-
+    <title>{% block title %}KR8MER CAP - Emergency Alert System{% endblock %}</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>??</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>??</text></svg>">
+    
     <!-- Bootstrap CSS -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-
+    <!-- Leaflet CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" rel="stylesheet">
+    
     <style>
         :root {
             --primary-color: #007bff;
@@ -48,154 +54,211 @@
             transition: background-color 0.3s ease, color 0.3s ease;
         }
 
-        /* Navigation Styles */
-        .navbar-custom {
-            background: linear-gradient(135deg, var(--primary-color), var(--info-color));
-            box-shadow: 0 2px 10px var(--shadow-color);
-        }
-
-        .navbar-brand {
-            font-weight: 600;
-            font-size: 1.25rem;
-        }
-
-        .nav-link {
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-
-        .nav-link:hover {
-            transform: translateY(-1px);
-        }
-
-        /* Content Area */
-        .main-content {
-            min-height: calc(100vh - 76px);
-            padding-top: 1rem;
-        }
-
-        /* Cards */
-        .card {
-            border: none;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px var(--shadow-color);
-            transition: all 0.3s ease;
-            background-color: var(--bg-color);
-        }
-
-        .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px var(--shadow-color);
-        }
-
-        .card-header {
-            border-radius: 12px 12px 0 0 !important;
+        .navbar {
+            background-color: var(--primary-color) !important;
             border-bottom: 1px solid var(--border-color);
         }
 
-        /* Buttons */
-        .btn {
-            border-radius: 8px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-
-        .btn:hover {
-            transform: translateY(-1px);
-        }
-
-        /* Forms */
-        .form-control, .form-select {
+        .card {
             background-color: var(--bg-color);
-            border: 2px solid var(--border-color);
-            color: var(--text-color);
-            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 0.125rem 0.25rem var(--shadow-color);
             transition: all 0.3s ease;
         }
 
-        .form-control:focus, .form-select:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        .table {
             background-color: var(--bg-color);
             color: var(--text-color);
         }
 
-        /* Status Indicators */
-        .status-indicator {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 8px;
+        .table th {
+            background-color: var(--light-color);
+            border-top: none;
+            color: var(--text-color);
         }
 
-        .status-connected { background-color: var(--success-color); }
-        .status-disconnected { background-color: var(--danger-color); }
-        .status-error { background-color: var(--warning-color); }
-
-        /* Loading Spinner */
-        .loading-spinner {
-            border: 2px solid var(--border-color);
-            border-top: 2px solid var(--primary-color);
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
-            display: inline-block;
-            margin-right: 10px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        /* Theme Toggle Button */
         .btn-theme-toggle {
             position: fixed;
-            top: 20px;
+            top: 70px;
             right: 20px;
+            z-index: 1000;
+            border-radius: 50%;
             width: 50px;
             height: 50px;
-            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             background: var(--primary-color);
             color: white;
             border: none;
-            box-shadow: 0 4px 15px var(--shadow-color);
-            z-index: 1000;
+            box-shadow: 0 4px 12px var(--shadow-color);
             transition: all 0.3s ease;
         }
 
         .btn-theme-toggle:hover {
             transform: scale(1.1);
-            background: var(--info-color);
+            box-shadow: 0 6px 20px var(--shadow-color);
         }
 
-        /* Alerts */
-        .alert {
-            border: none;
-            border-radius: 10px;
-        }
-
-        /* Animations */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .fade-in {
-            animation: fadeIn 0.5s ease-out;
-        }
-
-        /* Footer */
         .footer {
-            background-color: var(--dark-color);
-            color: white;
-            padding: 1rem 0;
-            margin-top: 3rem;
+            background-color: var(--light-color);
+            color: var(--text-color);
+            padding: 20px 0;
+            margin-top: 50px;
+            border-top: 1px solid var(--border-color);
         }
 
-        /* Responsive */
+        .navbar-brand {
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .brand-icon {
+            font-size: 1.5em;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--success-color);
+            animation: pulse 2s infinite;
+        }
+
+        /* Health indicator in navigation */
+        .health-indicator {
+            display: inline-flex;
+            align-items: center;
+            font-size: 0.8em;
+            margin-left: 0.5rem;
+        }
+
+        .health-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            margin-right: 4px;
+        }
+
+        .health-good { background-color: var(--success-color); }
+        .health-warning { background-color: var(--warning-color); }
+        .health-critical { background-color: var(--danger-color); }
+
+        /* Timezone display styling */
+        .timezone-info {
+            font-size: 0.85em;
+            color: var(--secondary-color);
+            margin-left: 0.5rem;
+        }
+
+        .local-time {
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .utc-time {
+            font-weight: normal;
+            color: var(--secondary-color);
+        }
+
+        .time-display {
+            display: inline-block;
+        }
+
+        .expired-alert {
+            opacity: 0.6;
+            text-decoration: line-through;
+        }
+
+        .active-alert {
+            font-weight: 500;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .export-buttons {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        .help-tooltip {
+            cursor: help;
+            color: var(--info-color);
+        }
+
+        .error-container {
+            background: linear-gradient(135deg, var(--danger-color), #e74c3c);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .error-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+        }
+
+        .error-actions {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        /* Print Styles */
+        @media print {
+            .navbar, .footer, .btn-theme-toggle, .export-buttons {
+                display: none !important;
+            }
+
+            body {
+                background: white !important;
+                color: black !important;
+            }
+
+            .card {
+                border: 1px solid #ddd !important;
+                box-shadow: none !important;
+                break-inside: avoid;
+                margin-bottom: 20px;
+            }
+
+            .page-break {
+                page-break-before: always;
+            }
+
+            h1, h2, h3 {
+                page-break-after: avoid;
+            }
+
+            .stats-grid {
+                display: grid !important;
+                grid-template-columns: repeat(2, 1fr) !important;
+                gap: 10px !important;
+            }
+
+            .timezone-info {
+                color: #666 !important;
+            }
+        }
+
+        /* Mobile Responsive */
         @media (max-width: 768px) {
             .btn-theme-toggle {
                 top: 10px;
@@ -204,74 +267,161 @@
                 height: 40px;
             }
 
-            .main-content {
-                padding-top: 0.5rem;
+            .export-buttons {
+                flex-direction: column;
+            }
+
+            .d-flex.gap-2 {
+                flex-direction: column;
+                gap: 0.5rem !important;
+            }
+
+            .health-indicator {
+                display: none;
+            }
+
+            .timezone-info {
+                display: none;
             }
         }
 
-        /* Page-specific styles */
-        {% block extra_css %}{% endblock %}
+        /* Loading States */
+        .loading {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .loading::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            animation: loading 1.5s infinite;
+        }
+
+        @keyframes loading {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+
+        /* Accessibility */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        /* Focus styles */
+        .btn:focus, .form-control:focus, .form-select:focus {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
+        }
+
+        /* Dark mode specific overrides */
+        [data-theme="dark"] .table-light {
+            background-color: var(--light-color) !important;
+            color: var(--text-color) !important;
+        }
+
+        [data-theme="dark"] .bg-light {
+            background-color: var(--light-color) !important;
+        }
+
+        [data-theme="dark"] .text-muted {
+            color: var(--secondary-color) !important;
+        }
+
+        [data-theme="dark"] .alert {
+            background-color: var(--light-color);
+            border-color: var(--border-color);
+            color: var(--text-color);
+        }
     </style>
+
+    {% block extra_css %}{% endblock %}
 </head>
 <body>
     <!-- Theme Toggle Button -->
-    <button class="btn-theme-toggle" onclick="toggleTheme()" title="Toggle Dark Mode">
+    <button class="btn-theme-toggle" onclick="toggleTheme()" title="Toggle Dark Mode" aria-label="Toggle between light and dark theme">
         <i class="fas fa-moon" id="theme-icon"></i>
     </button>
 
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
+    <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container-fluid">
             <a class="navbar-brand" href="/">
-                <i class="fas fa-satellite-dish"></i>
-                {% block nav_title %}NOAA CAP Alerts{% endblock %}
+                <span class="brand-icon"><i class="fas fa-broadcast-tower"></i></span>
+                <span>KR8MER CAP</span>
+                <span class="timezone-info">
+                    <i class="fas fa-clock"></i> Putnam County, OH
+                </span>
             </a>
 
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
 
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="/">
-                            <i class="fas fa-map"></i> Map
+                        <a class="nav-link" href="/" aria-label="Interactive map view">
+                            <i class="fas fa-map"></i> Map View
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'alerts' %}active{% endif %}" href="/alerts">
-                            <i class="fas fa-exclamation-triangle"></i> Alerts
+                        <a class="nav-link" href="/alerts" aria-label="View alerts history">
+                            <i class="fas fa-history"></i> Alerts History
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'stats' %}active{% endif %}" href="/stats">
+                        <a class="nav-link" href="/stats" aria-label="View system statistics">
                             <i class="fas fa-chart-bar"></i> Statistics
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'led_control' %}active{% endif %}" href="/led_control">
-                            <i class="fas fa-tv"></i> LED Control
+                        <a class="nav-link" href="/system_health" aria-label="View system health monitoring">
+                            <i class="fas fa-heartbeat"></i> System Health
+                            <span class="health-indicator" id="nav-health-indicator">
+                                <span class="health-dot health-good" id="nav-health-dot"></span>
+                                <span id="nav-health-text">Good</span>
+                            </span>
                         </a>
                     </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-cogs"></i> Admin
+                    <li class="nav-item">
+                        <a class="nav-link" href="/admin" aria-label="Administration panel">
+                            <i class="fas fa-cog"></i> Admin
                         </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="/admin"><i class="fas fa-tools"></i> Dashboard</a></li>
-                            <li><a class="dropdown-item" href="/logs"><i class="fas fa-list"></i> System Logs</a></li>
-                            <li><a class="dropdown-item" href="/system_health"><i class="fas fa-heartbeat"></i> System Health</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="/export/alerts"><i class="fas fa-download"></i> Export Data</a></li>
-                        </ul>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/logs" aria-label="View system logs">
+                            <i class="fas fa-list"></i> Logs
+                        </a>
                     </li>
                 </ul>
 
+                <!-- System Status Indicator with Time -->
                 <ul class="navbar-nav">
                     <li class="nav-item">
+                        <span class="navbar-text status-indicator" id="system-status">
+                            <span class="status-dot"></span>
+                            <span>System Online</span>
+                        </span>
+                    </li>
+                    <li class="nav-item">
                         <span class="navbar-text">
-                            <i class="fas fa-clock"></i>
-                            <span id="current-time">{{ local_current_time().strftime('%I:%M %p %Z') }}</span>
+                            <span class="time-display" id="current-time-display">
+                                <span class="local-time" id="current-local-time">Loading...</span>
+                                <span class="utc-time" id="current-utc-time">(UTC)</span>
+                            </span>
                         </span>
                     </li>
                 </ul>
@@ -280,121 +430,131 @@
     </nav>
 
     <!-- Main Content -->
-    <div class="main-content">
-        <div class="container-fluid">
-            <!-- Flash Messages -->
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    <div class="row">
-                        <div class="col-12">
-                            {% for category, message in messages %}
-                                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
-                                    {{ message }}
-                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                                </div>
-                            {% endfor %}
-                        </div>
+    <div class="container-fluid mt-3">
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-info alert-dismissible fade show" role="alert">
+                        <i class="fas fa-info-circle"></i> {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
-                {% endif %}
-            {% endwith %}
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
 
-            <!-- Page Content -->
-            {% block content %}{% endblock %}
-        </div>
+        {% block content %}{% endblock %}
     </div>
 
     <!-- Footer -->
-    <footer class="footer mt-auto">
-        <div class="container-fluid">
+    <footer class="footer">
+        <div class="container-fluid text-center">
             <div class="row">
-                <div class="col-md-6">
+                <div class="col-md-6 text-md-start">
                     <small class="text-muted">
-                        <i class="fas fa-radio"></i> KR8MER Amateur Radio Emergency Communications
+                        <i class="fas fa-copyright"></i> 2025 KR8MER CAP Emergency Alert System
                     </small>
                 </div>
                 <div class="col-md-6 text-md-end">
                     <small class="text-muted">
-                        NOAA CAP Alerts System v2.0 |
-                        <span id="footer-time">{{ local_current_time().strftime('%Y-%m-%d %I:%M %p %Z') }}</span>
+                        <i class="fas fa-radio"></i> Amateur Radio Emergency Communications |
+                        <span class="time-display">
+                            <span id="footer-time">Loading time...</span>
+                        </span>
                     </small>
                 </div>
             </div>
         </div>
     </footer>
 
-    <!-- Toast Container -->
-    <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toast-container"></div>
-
-    <!-- Bootstrap JS -->
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <!-- Excel Export Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
-    <!-- Base JavaScript -->
     <script>
-        // Global utility functions
-        function showToast(message, type = 'info') {
-            const toastContainer = document.getElementById('toast-container');
-            const toastId = 'toast-' + Date.now();
+        // Timezone handling - Putnam County, Ohio (Eastern Time)
+        const PUTNAM_COUNTY_TZ = 'America/New_York';
 
-            const bgClass = type === 'success' ? 'bg-success' :
-                           type === 'error' ? 'bg-danger' :
-                           type === 'warning' ? 'bg-warning' : 'bg-info';
+        // Global timezone functions
+        window.formatLocalDateTime = function(dateString, includeUTC = true) {
+            if (!dateString) return 'Unknown';
 
-            const toast = document.createElement('div');
-            toast.id = toastId;
-            toast.className = `toast align-items-center text-white ${bgClass} border-0`;
-            toast.setAttribute('role', 'alert');
-            toast.innerHTML = `
-                <div class="d-flex">
-                    <div class="toast-body">${message}</div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-                </div>
-            `;
+            try {
+                const date = new Date(dateString);
+                const localTime = date.toLocaleString('en-US', {
+                    timeZone: PUTNAM_COUNTY_TZ,
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    timeZoneName: 'short'
+                });
 
-            toastContainer.appendChild(toast);
-
-            const bsToast = new bootstrap.Toast(toast, {
-                autohide: true,
-                delay: type === 'error' ? 5000 : 3000
-            });
-            bsToast.show();
-
-            toast.addEventListener('hidden.bs.toast', () => {
-                toast.remove();
-            });
-        }
-
-        function showLoading(message = 'Loading...') {
-            let overlay = document.getElementById('loading-overlay');
-            if (!overlay) {
-                overlay = document.createElement('div');
-                overlay.id = 'loading-overlay';
-                overlay.style.cssText = `
-                    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                    background: rgba(0, 0, 0, 0.5); display: flex; align-items: center;
-                    justify-content: center; z-index: 9999; color: white; font-size: 1.2em;
-                `;
-                document.body.appendChild(overlay);
+                if (includeUTC) {
+                    const utcTime = date.toLocaleString('en-US', {
+                        timeZone: 'UTC',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        timeZoneName: 'short'
+                    });
+                    return `${localTime} (${utcTime})`;
+                }
+                return localTime;
+            } catch (error) {
+                console.error('Error formatting date:', error);
+                return dateString;
             }
+        };
 
-            overlay.innerHTML = `
-                <div class="text-center">
-                    <div class="spinner-border text-light mb-3" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <div>${message}</div>
-                </div>
-            `;
-            overlay.style.display = 'flex';
-        }
+        window.formatLocalDate = function(dateString) {
+            if (!dateString) return 'Unknown';
 
-        function hideLoading() {
-            const overlay = document.getElementById('loading-overlay');
-            if (overlay) {
-                overlay.style.display = 'none';
+            try {
+                const date = new Date(dateString);
+                return date.toLocaleDateString('en-US', {
+                    timeZone: PUTNAM_COUNTY_TZ,
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric'
+                });
+            } catch (error) {
+                console.error('Error formatting date:', error);
+                return dateString;
             }
-        }
+        };
 
-        // Theme toggle functionality
+        window.formatLocalTime = function(dateString) {
+            if (!dateString) return 'Unknown';
+
+            try {
+                const date = new Date(dateString);
+                const localTime = date.toLocaleString('en-US', {
+                    timeZone: PUTNAM_COUNTY_TZ,
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    timeZoneName: 'short'
+                });
+                const utcTime = date.toLocaleString('en-US', {
+                    timeZone: 'UTC',
+                    hour: 'numeric',
+                    minute: '2-digit'
+                });
+                return `${localTime} (${utcTime} UTC)`;
+            } catch (error) {
+                console.error('Error formatting time:', error);
+                return dateString;
+            }
+        };
+
+        window.isExpired = function(expiresString) {
+            if (!expiresString) return false;
+            return new Date(expiresString) < new Date();
+        };
+
+        // Theme Management
         function toggleTheme() {
             const currentTheme = document.documentElement.getAttribute('data-theme');
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
@@ -402,50 +562,308 @@
             document.documentElement.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);
 
+            // Update icon
             const icon = document.getElementById('theme-icon');
             icon.className = newTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
 
-            showToast(`${newTheme.charAt(0).toUpperCase() + newTheme.slice(1)} mode enabled`, 'info');
+            // Announce to screen readers
+            const announcement = newTheme === 'dark' ? 'Dark mode enabled' : 'Light mode enabled';
+            announceToScreenReader(announcement);
         }
 
+        // Load saved theme
         function loadTheme() {
             const savedTheme = localStorage.getItem('theme') || 'light';
             document.documentElement.setAttribute('data-theme', savedTheme);
 
             const icon = document.getElementById('theme-icon');
-            if (icon) {
-                icon.className = savedTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+            icon.className = savedTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+        }
+
+        // Screen reader announcements
+        function announceToScreenReader(message) {
+            const announcement = document.createElement('div');
+            announcement.setAttribute('aria-live', 'polite');
+            announcement.setAttribute('aria-atomic', 'true');
+            announcement.className = 'sr-only';
+            announcement.textContent = message;
+            document.body.appendChild(announcement);
+
+            setTimeout(() => {
+                document.body.removeChild(announcement);
+            }, 1000);
+        }
+
+        // Excel Export Functionality
+        function exportToExcel(data, filename) {
+            try {
+                const ws = XLSX.utils.json_to_sheet(data);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Data');
+                XLSX.writeFile(wb, `${filename}_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+                showToast('Excel file exported successfully!', 'success');
+            } catch (error) {
+                console.error('Export error:', error);
+                showToast('Error exporting to Excel. Please try again.', 'error');
             }
         }
 
-        // Live clock updates
-        function updateClock() {
-            const now = new Date();
-            const timeString = now.toLocaleTimeString();
-            const dateTimeString = now.toLocaleDateString() + ' ' + timeString;
+        // Print Functionality
+        function printPage() {
+            // Add print class to body for print-specific styles
+            document.body.classList.add('printing');
 
-            const currentTimeEl = document.getElementById('current-time');
-            const footerTimeEl = document.getElementById('footer-time');
+            // Trigger print
+            window.print();
 
-            if (currentTimeEl) currentTimeEl.textContent = timeString;
-            if (footerTimeEl) footerTimeEl.textContent = dateTimeString;
+            // Remove print class after print dialog closes
+            setTimeout(() => {
+                document.body.classList.remove('printing');
+            }, 1000);
         }
 
-        // Initialize base functionality
-        document.addEventListener('DOMContentLoaded', function() {
-            loadTheme();
-            updateClock();
-            setInterval(updateClock, 1000);
+        // Toast Notifications
+        function showToast(message, type = 'info') {
+            const toastContainer = getOrCreateToastContainer();
 
-            // Add fade-in animation to main content
-            const mainContent = document.querySelector('.main-content');
-            if (mainContent) {
-                mainContent.classList.add('fade-in');
+            const toast = document.createElement('div');
+            toast.className = `toast align-items-center text-white bg-${type === 'error' ? 'danger' : type} border-0`;
+            toast.setAttribute('role', 'alert');
+            toast.setAttribute('aria-live', 'assertive');
+            toast.setAttribute('aria-atomic', 'true');
+
+            toast.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-triangle' : 'info-circle'}"></i>
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            `;
+
+            toastContainer.appendChild(toast);
+
+            const bsToast = new bootstrap.Toast(toast, {
+                autohide: true,
+                delay: type === 'error' ? 8000 : 5000
+            });
+            bsToast.show();
+
+            // Remove toast element after it's hidden
+            toast.addEventListener('hidden.bs.toast', () => {
+                toast.remove();
+            });
+        }
+
+        function getOrCreateToastContainer() {
+            let container = document.getElementById('toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast-container';
+                container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+                container.style.zIndex = '1100';
+                document.body.appendChild(container);
+            }
+            return container;
+        }
+
+        // Time Updates with Timezone Support
+        function updateTime() {
+            const now = new Date();
+
+            // Local time for Putnam County
+            const localTimeString = now.toLocaleString('en-US', {
+                timeZone: PUTNAM_COUNTY_TZ,
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZoneName: 'short'
+            });
+
+            // UTC time
+            const utcTimeString = now.toLocaleString('en-US', {
+                timeZone: 'UTC',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            // Update various time displays
+            const localTimeEl = document.getElementById('current-local-time');
+            const utcTimeEl = document.getElementById('current-utc-time');
+            const footerTimeEl = document.getElementById('footer-time');
+
+            if (localTimeEl) localTimeEl.textContent = localTimeString;
+            if (utcTimeEl) utcTimeEl.textContent = `(${utcTimeString} UTC)`;
+            if (footerTimeEl) footerTimeEl.textContent = `${localTimeString} (${utcTimeString} UTC)`;
+        }
+
+        // System Status Monitoring - Enhanced for System Health
+        async function checkSystemStatus() {
+            try {
+                const response = await fetch('/api/system_status');
+
+                // Check if response is JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Server returned non-JSON response');
+                }
+
+                const data = await response.json();
+
+                const statusElement = document.getElementById('system-status');
+                const statusDot = statusElement.querySelector('.status-dot');
+                const statusText = statusElement.querySelector('span:last-child');
+
+                // Update main system status
+                if (response.ok && data.status === 'online') {
+                    statusDot.style.backgroundColor = 'var(--success-color)';
+                    statusText.textContent = 'System Online';
+                } else if (response.ok && data.timestamp) {
+                    // If we get data but no explicit status, assume online
+                    statusDot.style.backgroundColor = 'var(--success-color)';
+                    statusText.textContent = 'System Online';
+                } else {
+                    statusDot.style.backgroundColor = 'var(--warning-color)';
+                    statusText.textContent = 'System Issues';
+                }
+
+                // Update health indicator in navigation
+                updateHealthIndicator(data);
+
+            } catch (error) {
+                console.warn('Could not fetch system status:', error);
+
+                const statusElement = document.getElementById('system-status');
+                if (statusElement) {
+                    const statusDot = statusElement.querySelector('.status-dot');
+                    const statusText = statusElement.querySelector('span:last-child');
+
+                    if (statusDot && statusText) {
+                        statusDot.style.backgroundColor = 'var(--danger-color)';
+                        statusText.textContent = 'System Offline';
+                    }
+                }
+
+                // Update health indicator to critical
+                updateHealthIndicatorOffline();
+            }
+        }
+
+        // Update health indicator in System Health nav item
+        function updateHealthIndicator(data) {
+            const healthDot = document.getElementById('nav-health-dot');
+            const healthText = document.getElementById('nav-health-text');
+
+            if (!healthDot || !healthText) return;
+
+            // Handle different API response formats
+            const cpu = data.system_resources?.cpu_usage_percent ||
+                       data.cpu_usage_percent || 0;
+            const memory = data.system_resources?.memory_usage_percent ||
+                          data.memory_usage_percent || 0;
+            const disk = data.system_resources?.disk_usage_percent ||
+                        data.disk_usage_percent || 0;
+
+            let status = 'good';
+            let statusText = 'Good';
+
+            if (cpu > 80 || memory > 90 || disk > 90) {
+                status = 'critical';
+                statusText = 'Critical';
+            } else if (cpu > 50 || memory > 75 || disk > 75) {
+                status = 'warning';
+                statusText = 'Warning';
+            }
+
+            healthDot.className = `health-dot health-${status}`;
+            healthText.textContent = statusText;
+        }
+
+        function updateHealthIndicatorOffline() {
+            const healthDot = document.getElementById('nav-health-dot');
+            const healthText = document.getElementById('nav-health-text');
+
+            if (healthDot && healthText) {
+                healthDot.className = 'health-dot health-critical';
+                healthText.textContent = 'Offline';
+            }
+        }
+
+        // Active Navigation Highlighting
+        function highlightActiveNav() {
+            const currentPath = window.location.pathname;
+            const navLinks = document.querySelectorAll('.navbar-nav .nav-link');
+
+            navLinks.forEach(link => {
+                if (link.getAttribute('href') === currentPath) {
+                    link.classList.add('active');
+                    link.setAttribute('aria-current', 'page');
+                }
+            });
+        }
+
+        // Loading States
+        function showLoading(element) {
+            element.classList.add('loading');
+            element.style.pointerEvents = 'none';
+        }
+
+        function hideLoading(element) {
+            element.classList.remove('loading');
+            element.style.pointerEvents = 'auto';
+        }
+
+        // Error Handling
+        function handleError(error, context = '') {
+            console.error(`Error in ${context}:`, error);
+            showToast(`An error occurred${context ? ` in ${context}` : ''}. Please try again or contact support if the problem persists.`, 'error');
+        }
+
+        // Keyboard Navigation
+        document.addEventListener('keydown', function(e) {
+            // Alt + T for theme toggle
+            if (e.altKey && e.key === 't') {
+                e.preventDefault();
+                toggleTheme();
+            }
+
+            // Alt + P for print
+            if (e.altKey && e.key === 'p') {
+                e.preventDefault();
+                printPage();
             }
         });
 
-        // Page-specific initialization
-        {% block extra_js %}{% endblock %}
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadTheme();
+            updateTime();
+            highlightActiveNav();
+            checkSystemStatus();
+
+            // Set up periodic updates
+            setInterval(updateTime, 30000); // Update time every 30 seconds
+            setInterval(checkSystemStatus, 30000); // Check status every 30 seconds
+
+            // Add loading states to forms
+            document.querySelectorAll('form').forEach(form => {
+                form.addEventListener('submit', function() {
+                    const submitBtn = form.querySelector('button[type="submit"]');
+                    if (submitBtn) {
+                        showLoading(submitBtn);
+                    }
+                });
+            });
+        });
+
+        // Make timezone functions globally available
+        window.PUTNAM_COUNTY_TZ = PUTNAM_COUNTY_TZ;
+        window.showToast = showToast;
     </script>
+    
+    {% block extra_js %}{% endblock %}
 </body>
 </html>

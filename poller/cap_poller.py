@@ -102,6 +102,7 @@ try:
 
     class PollHistory(db.Model):
         __tablename__ = 'poll_history'
+        __table_args__ = {'extend_existing': True}
 
         id = Column(Integer, primary_key=True)
         timestamp = Column(DateTime, default=utc_now)
@@ -143,6 +144,7 @@ if not FLASK_MODELS_AVAILABLE:
 
     class CAPAlert(Base):
         __tablename__ = 'cap_alerts'
+        __table_args__ = {'extend_existing': True}
 
         id = Column(Integer, primary_key=True)
         identifier = Column(String(255), unique=True, nullable=False)
@@ -168,6 +170,7 @@ if not FLASK_MODELS_AVAILABLE:
 
     class SystemLog(Base):
         __tablename__ = 'system_logs'
+        __table_args__ = {'extend_existing': True}
 
         id = Column(Integer, primary_key=True)
         timestamp = Column(DateTime, default=utc_now)
@@ -179,6 +182,7 @@ if not FLASK_MODELS_AVAILABLE:
 
     class PollHistory(Base):
         __tablename__ = 'poll_history'
+        __table_args__ = {'extend_existing': True}
 
         id = Column(Integer, primary_key=True)
         timestamp = Column(DateTime, default=utc_now)
