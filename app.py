@@ -5,16 +5,7 @@ Flask Web Application with Enhanced Boundary Management and Alerts History
 
 Author: KR8MER Amateur Radio Emergency Communications
 Description: Emergency alert system for Putnam County, Ohio with proper timezone handling
-Version: 2.0 - Organized and Refactored
-
-Directory Structure for Future Refactoring:
-- app.py (main application)
-- models/ (database models)
-- routes/ (route blueprints)
-- services/ (business logic)
-- utils/ (helper functions)
-- templates/ (HTML templates)
-- static/ (CSS, JS, images)
+Version: 2.0 - Complete with All Routes and Functionality
 """
 
 # =============================================================================
@@ -35,7 +26,7 @@ from collections import defaultdict
 from enum import Enum
 
 # Flask and extensions
-from flask import Flask, request, jsonify, render_template, flash, redirect, url_for
+from flask import Flask, request, jsonify, render_template, flash, redirect, url_for, render_template_string
 from flask_sqlalchemy import SQLAlchemy
 
 # Database imports
@@ -77,14 +68,13 @@ logger.info("NOAA Alerts System startup")
 # =============================================================================
 
 # LED Sign Configuration
-LED_SIGN_IP = os.getenv('LED_SIGN_IP', '192.168.1.100')  # Change to your actual LED sign IP
+LED_SIGN_IP = os.getenv('LED_SIGN_IP', '192.168.1.100')
 LED_SIGN_PORT = int(os.getenv('LED_SIGN_PORT', '10001'))
 LED_AVAILABLE = False
 led_controller = None
 
 # Try to import and initialize LED controller
 try:
-    # Import LED controller classes
     from led_sign_controller import (
         LEDSignController,
         Color,
@@ -94,7 +84,6 @@ try:
         MessagePriority
     )
 
-    # Initialize the controller
     led_controller = LEDSignController(LED_SIGN_IP, LED_SIGN_PORT)
     LED_AVAILABLE = True
     logger.info(f"LED controller initialized successfully for {LED_SIGN_IP}:{LED_SIGN_PORT}")
@@ -104,7 +93,6 @@ except ImportError as e:
     LED_AVAILABLE = False
 
 
-    # Create dummy classes for the routes to work
     class MessagePriority(Enum):
         EMERGENCY = 0
         URGENT = 1
@@ -116,7 +104,6 @@ except Exception as e:
     LED_AVAILABLE = False
 
 
-    # Create dummy classes for the routes to work
     class MessagePriority(Enum):
         EMERGENCY = 0
         URGENT = 1
@@ -145,7 +132,6 @@ def parse_nws_datetime(dt_string):
 
     dt_string = str(dt_string).strip()
 
-    # Handle common NWS formats
     if dt_string.endswith('Z'):
         try:
             dt = datetime.fromisoformat(dt_string.replace('Z', '+00:00'))
@@ -153,7 +139,6 @@ def parse_nws_datetime(dt_string):
         except ValueError:
             pass
 
-    # Try parsing as ISO format with timezone
     try:
         dt = datetime.fromisoformat(dt_string)
         if dt.tzinfo is None:
@@ -162,7 +147,6 @@ def parse_nws_datetime(dt_string):
     except ValueError:
         pass
 
-    # Handle EDT/EST format
     if 'EDT' in dt_string:
         try:
             dt_clean = dt_string.replace(' EDT', '').replace('EDT', '')
@@ -328,7 +312,7 @@ class LEDMessage(db.Model):
     __tablename__ = 'led_messages'
 
     id = db.Column(db.Integer, primary_key=True)
-    message_type = db.Column(db.String(50), nullable=False)  # 'custom', 'canned', 'emergency', etc.
+    message_type = db.Column(db.String(50), nullable=False)
     content = db.Column(db.Text, nullable=False)
     priority = db.Column(db.Integer, default=2)
     color = db.Column(db.String(20))
@@ -365,11 +349,11 @@ def get_active_alerts_query():
     now = utc_now()
     return CAPAlert.query.filter(
         or_(
-            CAPAlert.expires.is_(None),  # No expiration date
-            CAPAlert.expires > now  # Future expiration
+            CAPAlert.expires.is_(None),
+            CAPAlert.expires > now
         )
     ).filter(
-        CAPAlert.status != 'Expired'  # Exclude explicitly expired
+        CAPAlert.status != 'Expired'
     )
 
 
@@ -757,6 +741,64 @@ def format_uptime(seconds):
 
 
 # =============================================================================
+# INTERSECTION CALCULATION HELPER FUNCTIONS
+# =============================================================================
+
+def calculate_alert_intersections(alert):
+    """Calculate intersections between an alert and all boundaries"""
+    if not alert.geom:
+        return 0
+
+    intersections_created = 0
+
+    try:
+        boundaries = Boundary.query.all()
+
+        for boundary in boundaries:
+            if not boundary.geom:
+                continue
+
+            try:
+                intersection_result = db.session.execute(
+                    text("""
+                        SELECT ST_Intersects(:alert_geom, :boundary_geom) as intersects,
+                               ST_Area(ST_Intersection(:alert_geom, :boundary_geom)) as area
+                    """),
+                    {
+                        'alert_geom': alert.geom,
+                        'boundary_geom': boundary.geom
+                    }
+                ).fetchone()
+
+                if intersection_result and intersection_result.intersects:
+                    db.session.query(Intersection).filter_by(
+                        cap_alert_id=alert.id,
+                        boundary_id=boundary.id
+                    ).delete()
+
+                    intersection = Intersection(
+                        cap_alert_id=alert.id,
+                        boundary_id=boundary.id,
+                        intersection_area=float(intersection_result.area) if intersection_result.area else 0.0,
+                        created_at=utc_now()
+                    )
+                    db.session.add(intersection)
+                    intersections_created += 1
+
+                    logger.debug(f"Created intersection: Alert {alert.identifier} <-> Boundary {boundary.name}")
+
+            except Exception as e:
+                logger.error(f"Error calculating intersection for boundary {boundary.id}: {str(e)}")
+                continue
+
+    except Exception as e:
+        logger.error(f"Error in calculate_alert_intersections for alert {alert.identifier}: {str(e)}")
+        raise
+
+    return intersections_created
+
+
+# =============================================================================
 # TEMPLATE FILTERS AND GLOBALS
 # =============================================================================
 
@@ -1094,93 +1136,272 @@ def system_health_page():
 
 @app.route('/alerts')
 def alerts():
-    """Alerts history page with improved active/expired logic"""
+    """Alerts history page - list all alerts"""
     try:
         page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 50, type=int)
+        per_page = request.args.get('per_page', 25, type=int)
+        per_page = min(max(per_page, 10), 100)
 
-        status_filter = request.args.get('status', '')
-        severity_filter = request.args.get('severity', '')
-        event_filter = request.args.get('event', '')
-        search_query = request.args.get('search', '')
-        show_expired = request.args.get('show_expired', 'false').lower() == 'true'
+        search = request.args.get('search', '').strip()
+        status_filter = request.args.get('status', '').strip()
+        severity_filter = request.args.get('severity', '').strip()
+        event_filter = request.args.get('event', '').strip()
+        show_expired = request.args.get('show_expired') == 'true'
 
         query = CAPAlert.query
 
-        if status_filter:
-            query = query.filter(CAPAlert.status == status_filter)
-
-        if severity_filter:
-            query = query.filter(CAPAlert.severity == severity_filter)
-
-        if event_filter:
-            query = query.filter(CAPAlert.event.ilike(f'%{event_filter}%'))
-
-        if search_query:
-            search_term = f'%{search_query}%'
+        if search:
+            search_term = f'%{search}%'
             query = query.filter(
                 or_(
                     CAPAlert.headline.ilike(search_term),
                     CAPAlert.description.ilike(search_term),
-                    CAPAlert.area_desc.ilike(search_term),
-                    CAPAlert.event.ilike(search_term)
+                    CAPAlert.event.ilike(search_term),
+                    CAPAlert.area_desc.ilike(search_term)
                 )
             )
 
+        if status_filter:
+            query = query.filter(CAPAlert.status == status_filter)
+        if severity_filter:
+            query = query.filter(CAPAlert.severity == severity_filter)
+        if event_filter:
+            query = query.filter(CAPAlert.event == event_filter)
+
         if not show_expired:
-            # Use our helper function for consistent active alerts logic
-            now = utc_now()
             query = query.filter(
                 or_(
                     CAPAlert.expires.is_(None),
-                    CAPAlert.expires > now
+                    CAPAlert.expires > utc_now()
                 )
-            ).filter(
-                CAPAlert.status != 'Expired'
-            )
+            ).filter(CAPAlert.status != 'Expired')
 
         query = query.order_by(CAPAlert.sent.desc())
 
-        alerts_pagination = query.paginate(
-            page=page, per_page=per_page, error_out=False
-        )
+        try:
+            pagination = query.paginate(
+                page=page,
+                per_page=per_page,
+                error_out=False
+            )
+            alerts_list = pagination.items
 
-        statuses = [s[0] for s in db.session.query(CAPAlert.status).distinct().all() if s[0]]
-        severities = [s[0] for s in db.session.query(CAPAlert.severity).filter(
-            CAPAlert.severity.isnot(None)).distinct().all() if s[0]]
-        events = [e[0] for e in db.session.query(CAPAlert.event).distinct().limit(20).all() if e[0]]
+        except Exception as paginate_error:
+            logger.warning(f"Pagination error: {str(paginate_error)}")
 
-        total_alerts = CAPAlert.query.count()
-        active_alerts = get_active_alerts_query().count()
-        expired_alerts = get_expired_alerts_query().count()
+            total_count = query.count()
+            offset = (page - 1) * per_page
+            alerts_list = query.offset(offset).limit(per_page).all()
+
+            class MockPagination:
+                def __init__(self, page, per_page, total, items):
+                    self.page = page
+                    self.per_page = per_page
+                    self.total = total
+                    self.items = items
+                    self.pages = (total + per_page - 1) // per_page if per_page > 0 else 1
+                    self.has_prev = page > 1
+                    self.has_next = page < self.pages
+                    self.prev_num = page - 1 if self.has_prev else None
+                    self.next_num = page + 1 if self.has_next else None
+
+                def iter_pages(self, left_edge=2, left_current=2, right_current=3, right_edge=2):
+                    last = self.pages
+                    for num in range(1, last + 1):
+                        if num <= left_edge or \
+                                (self.page - left_current - 1 < num < self.page + right_current) or \
+                                num > last - right_edge:
+                            yield num
+                        elif num == left_edge + 1 or num == self.page + right_current:
+                            yield None
+
+            pagination = MockPagination(page, per_page, total_count, alerts_list)
+
+        try:
+            total_alerts = CAPAlert.query.count()
+            active_alerts = get_active_alerts_query().count()
+            expired_alerts = get_expired_alerts_query().count()
+        except Exception as stats_error:
+            logger.warning(f"Error getting stats: {str(stats_error)}")
+            total_alerts = 0
+            active_alerts = 0
+            expired_alerts = 0
+
+        try:
+            statuses = db.session.query(CAPAlert.status).distinct().order_by(CAPAlert.status).all()
+            statuses = [s[0] for s in statuses if s[0]]
+
+            severities = db.session.query(CAPAlert.severity).filter(
+                CAPAlert.severity.isnot(None)
+            ).distinct().order_by(CAPAlert.severity).all()
+            severities = [s[0] for s in severities if s[0]]
+
+            events = db.session.query(CAPAlert.event).distinct().order_by(CAPAlert.event).limit(50).all()
+            events = [e[0] for e in events if e[0]]
+
+        except Exception as filter_error:
+            logger.warning(f"Error getting filter options: {str(filter_error)}")
+            statuses = []
+            severities = []
+            events = []
+
+        current_filters = {
+            'search': search,
+            'status': status_filter,
+            'severity': severity_filter,
+            'event': event_filter,
+            'per_page': per_page,
+            'show_expired': show_expired
+        }
 
         return render_template('alerts.html',
-                               alerts=alerts_pagination.items,
-                               pagination=alerts_pagination,
+                               alerts=alerts_list,
+                               pagination=pagination,
                                total_alerts=total_alerts,
                                active_alerts=active_alerts,
                                expired_alerts=expired_alerts,
                                statuses=statuses,
                                severities=severities,
                                events=events,
-                               current_filters={
-                                   'status': status_filter,
-                                   'severity': severity_filter,
-                                   'event': event_filter,
-                                   'search': search_query,
-                                   'show_expired': show_expired,
-                                   'per_page': per_page
-                               }
-                               )
+                               current_filters=current_filters)
 
     except Exception as e:
-        logger.error(f"Error loading alerts history: {str(e)}")
-        return f"<h1>Error loading alerts history</h1><p>{str(e)}</p><p><a href='/'>← Back to Main</a></p>"
+        logger.error(f"Error loading alerts page: {str(e)}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
 
+        return render_template_string("""
+        <h1>Error Loading Alerts</h1>
+        <div class="alert alert-danger">
+            <strong>Error:</strong> {{ error }}
+        </div>
+        <p><a href="/" class="btn btn-primary">← Back to Main</a></p>
+        {% if debug %}
+        <details class="mt-3">
+            <summary>Debug Information</summary>
+            <pre>{{ debug }}</pre>
+        </details>
+        {% endif %}
+        """, error=str(e), debug=traceback.format_exc() if app.debug else None)
+
+@app.route('/api/alerts/<int:alert_id>/geometry')
+def get_alert_geometry(alert_id):
+    """Get specific alert geometry and intersecting boundaries as GeoJSON"""
+    try:
+        # Get the alert with geometry
+        alert = db.session.query(
+            CAPAlert.id, CAPAlert.identifier, CAPAlert.event, CAPAlert.severity,
+            CAPAlert.urgency, CAPAlert.headline, CAPAlert.description, CAPAlert.expires,
+            CAPAlert.sent, CAPAlert.area_desc, CAPAlert.status,
+            func.ST_AsGeoJSON(CAPAlert.geom).label('geometry')
+        ).filter(CAPAlert.id == alert_id).first()
+
+        if not alert:
+            return jsonify({'error': 'Alert not found'}), 404
+
+        # Get county boundary for fallback
+        county_boundary = None
+        try:
+            county_geom = db.session.query(
+                func.ST_AsGeoJSON(Boundary.geom).label('geometry')
+            ).filter(Boundary.type == 'county').first()
+
+            if county_geom and county_geom.geometry:
+                county_boundary = json.loads(county_geom.geometry)
+        except Exception as e:
+            logger.warning(f"Could not get county boundary: {str(e)}")
+
+        # Determine geometry and county-wide status
+        geometry = None
+        is_county_wide = False
+
+        if alert.geometry:
+            geometry = json.loads(alert.geometry)
+        elif alert.area_desc:
+            area_lower = alert.area_desc.lower()
+            if any(county_term in area_lower for county_term in ['county', 'putnam', 'ohio']):
+                if county_boundary:
+                    geometry = county_boundary
+                    is_county_wide = True
+
+        # Get intersecting boundaries
+        intersecting_boundaries = []
+        if geometry:
+            intersections = db.session.query(Intersection, Boundary).join(
+                Boundary, Intersection.boundary_id == Boundary.id
+            ).filter(Intersection.cap_alert_id == alert_id).all()
+
+            # Convert intersecting boundaries to GeoJSON features
+            for intersection, boundary in intersections:
+                boundary_geom = db.session.query(
+                    func.ST_AsGeoJSON(Boundary.geom).label('geometry')
+                ).filter(Boundary.id == boundary.id).first()
+
+                if boundary_geom and boundary_geom.geometry:
+                    intersecting_boundaries.append({
+                        'type': 'Feature',
+                        'properties': {
+                            'id': boundary.id,
+                            'name': boundary.name,
+                            'type': boundary.type,
+                            'description': boundary.description,
+                            'intersection_area': intersection.intersection_area
+                        },
+                        'geometry': json.loads(boundary_geom.geometry)
+                    })
+
+        # Format dates
+        expires_iso = None
+        if alert.expires:
+            if alert.expires.tzinfo is None:
+                expires_dt = alert.expires.replace(tzinfo=UTC_TZ)
+            else:
+                expires_dt = alert.expires.astimezone(UTC_TZ)
+            expires_iso = expires_dt.isoformat()
+
+        sent_iso = None
+        if alert.sent:
+            if alert.sent.tzinfo is None:
+                sent_dt = alert.sent.replace(tzinfo=UTC_TZ)
+            else:
+                sent_dt = alert.sent.astimezone(UTC_TZ)
+            sent_iso = sent_dt.isoformat()
+
+        # Build response
+        response_data = {
+            'alert': {
+                'type': 'Feature',
+                'properties': {
+                    'id': alert.id,
+                    'identifier': alert.identifier,
+                    'event': alert.event,
+                    'severity': alert.severity,
+                    'urgency': alert.urgency,
+                    'headline': alert.headline,
+                    'description': alert.description,
+                    'sent': sent_iso,
+                    'expires': expires_iso,
+                    'area_desc': alert.area_desc,
+                    'status': alert.status,
+                    'is_county_wide': is_county_wide
+                },
+                'geometry': geometry
+            } if geometry else None,
+            'intersecting_boundaries': {
+                'type': 'FeatureCollection',
+                'features': intersecting_boundaries
+            }
+        }
+
+        return jsonify(response_data)
+
+    except Exception as e:
+        logger.error(f"Error getting alert geometry: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/alerts/<int:alert_id>')
 def alert_detail(alert_id):
-    """Individual alert detail page"""
+    """Individual alert detail page with intersection display"""
     try:
         alert = CAPAlert.query.get_or_404(alert_id)
 
@@ -1188,9 +1409,23 @@ def alert_detail(alert_id):
             Boundary, Intersection.boundary_id == Boundary.id
         ).filter(Intersection.cap_alert_id == alert_id).all()
 
+        logger.info(f"Found {len(intersections)} intersections for alert {alert_id}")
+
+        is_county_wide = False
+        if alert.area_desc:
+            area_lower = alert.area_desc.lower()
+            if not alert.geom:
+                if any(term in area_lower for term in ['county', 'putnam county', 'entire county']):
+                    is_county_wide = True
+                elif 'putnam' in area_lower:
+                    separator_count = max(area_lower.count(';'), area_lower.count(','))
+                    if separator_count >= 2:
+                        is_county_wide = True
+
         return render_template('alert_detail.html',
                                alert=alert,
-                               intersections=intersections
+                               intersections=intersections,
+                               is_county_wide=is_county_wide
                                )
 
     except Exception as e:
@@ -1199,91 +1434,190 @@ def alert_detail(alert_id):
 
 
 # =============================================================================
-# ADMINISTRATIVE ROUTES
+# API ROUTES
 # =============================================================================
 
-@app.route('/admin')
-def admin():
-    """Admin interface"""
+@app.route('/api/alerts')
+def get_alerts():
+    """Get active CAP alerts as GeoJSON using new active logic with timezone support"""
     try:
-        # Get some basic stats for the admin dashboard using new helper functions
-        total_boundaries = Boundary.query.count()
-        total_alerts = CAPAlert.query.count()
-        active_alerts = get_active_alerts_query().count()
-        expired_alerts = get_expired_alerts_query().count()
+        alerts_query = get_active_alerts_query()
 
-        # Get boundary counts by type
-        boundary_stats = db.session.query(
-            Boundary.type, func.count(Boundary.id).label('count')
-        ).group_by(Boundary.type).all()
+        alerts = db.session.query(
+            CAPAlert.id, CAPAlert.identifier, CAPAlert.event, CAPAlert.severity,
+            CAPAlert.urgency, CAPAlert.headline, CAPAlert.description, CAPAlert.expires,
+            CAPAlert.area_desc, func.ST_AsGeoJSON(CAPAlert.geom).label('geometry')
+        ).filter(
+            CAPAlert.id.in_(alerts_query.with_entities(CAPAlert.id).subquery())
+        ).all()
 
-        return render_template('admin.html',
-                               total_boundaries=total_boundaries,
-                               total_alerts=total_alerts,
-                               active_alerts=active_alerts,
-                               expired_alerts=expired_alerts,
-                               boundary_stats=boundary_stats
-                               )
-    except Exception as e:
-        logger.error(f"Error rendering admin template: {str(e)}")
-        return f"<h1>Admin Interface</h1><p>Admin panel loading...</p><p><a href='/'>← Back to Main</a></p>"
+        county_boundary = None
+        try:
+            county_geom = db.session.query(
+                func.ST_AsGeoJSON(Boundary.geom).label('geometry')
+            ).filter(
+                Boundary.type == 'county'
+            ).first()
 
+            if county_geom and county_geom.geometry:
+                county_boundary = json.loads(county_geom.geometry)
+        except Exception as e:
+            logger.warning(f"Could not get county boundary: {str(e)}")
 
-@app.route('/logs')
-def logs():
-    """View system logs"""
-    try:
-        logs = SystemLog.query.order_by(SystemLog.timestamp.desc()).limit(100).all()
-        return render_template('logs.html', logs=logs)
-    except Exception as e:
-        logger.error(f"Error loading logs: {str(e)}")
-        return f"<h1>Error loading logs</h1><p>{str(e)}</p><p><a href='/'>← Back to Main</a></p>"
+        features = []
+        for alert in alerts:
+            geometry = None
+            is_county_wide = False
 
+            if alert.geometry:
+                geometry = json.loads(alert.geometry)
+            elif alert.area_desc and any(county_term in alert.area_desc.lower()
+                                         for county_term in ['county', 'putnam', 'ohio']):
+                if county_boundary:
+                    geometry = county_boundary
+                    is_county_wide = True
 
-# =============================================================================
-# LED CONTROL ROUTES
-# =============================================================================
+            if geometry:
+                expires_iso = None
+                if alert.expires:
+                    if alert.expires.tzinfo is None:
+                        expires_dt = alert.expires.replace(tzinfo=UTC_TZ)
+                    else:
+                        expires_dt = alert.expires.astimezone(UTC_TZ)
+                    expires_iso = expires_dt.isoformat()
 
-@app.route('/led_control')
-def led_control():
-    """LED sign control interface"""
-    try:
-        # Get LED status
-        led_status = None
-        if led_controller:
-            led_status = led_controller.get_status()
-
-        # Get recent LED messages
-        recent_messages = LEDMessage.query.order_by(
-            LEDMessage.created_at.desc()
-        ).limit(10).all()
-
-        # Get available canned messages
-        canned_messages = []
-        if led_controller:
-            for name, config in led_controller.canned_messages.items():
-                canned_messages.append({
-                    'name': name,
-                    'text': config['text'],
-                    'color': config['color'].name,
-                    'font': config['font'].name,
-                    'effect': config['effect'].name
+                features.append({
+                    'type': 'Feature',
+                    'properties': {
+                        'id': alert.id,
+                        'identifier': alert.identifier,
+                        'event': alert.event,
+                        'severity': alert.severity,
+                        'urgency': alert.urgency,
+                        'headline': alert.headline,
+                        'description': alert.description[:500] + '...' if len(
+                            alert.description) > 500 else alert.description,
+                        'area_desc': alert.area_desc,
+                        'expires_iso': expires_iso,
+                        'is_county_wide': is_county_wide
+                    },
+                    'geometry': geometry
                 })
 
-        return render_template('led_control.html',
-                               led_status=led_status,
-                               recent_messages=recent_messages,
-                               canned_messages=canned_messages,
-                               led_available=LED_AVAILABLE)
+        return jsonify({
+            'type': 'FeatureCollection',
+            'features': features
+        })
 
     except Exception as e:
-        logger.error(f"Error loading LED control page: {e}")
-        return f"<h1>LED Control Error</h1><p>{str(e)}</p><p><a href='/'>← Back to Main</a></p>"
+        logger.error(f"Error getting alerts: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 
-# =============================================================================
-# API ROUTES - CORE DATA
-# =============================================================================
+@app.route('/api/alerts/historical')
+def get_historical_alerts():
+    """Get historical alerts as GeoJSON with date filtering"""
+    try:
+        # Get query parameters
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        include_active = request.args.get('include_active', 'false').lower() == 'true'
+
+        # Base query - all alerts or just expired
+        if include_active:
+            query = CAPAlert.query
+        else:
+            query = get_expired_alerts_query()
+
+        # Apply date filters
+        if start_date:
+            start_dt = datetime.fromisoformat(start_date).replace(tzinfo=UTC_TZ)
+            query = query.filter(CAPAlert.sent >= start_dt)
+
+        if end_date:
+            end_dt = datetime.fromisoformat(end_date).replace(tzinfo=UTC_TZ)
+            query = query.filter(CAPAlert.sent <= end_dt)
+
+        # Get alerts with geometry
+        alerts = db.session.query(
+            CAPAlert.id, CAPAlert.identifier, CAPAlert.event, CAPAlert.severity,
+            CAPAlert.urgency, CAPAlert.headline, CAPAlert.description, CAPAlert.expires,
+            CAPAlert.sent, CAPAlert.area_desc, func.ST_AsGeoJSON(CAPAlert.geom).label('geometry')
+        ).filter(
+            CAPAlert.id.in_(query.with_entities(CAPAlert.id).subquery())
+        ).all()
+
+        # Get county boundary for fallback
+        county_boundary = None
+        try:
+            county_geom = db.session.query(
+                func.ST_AsGeoJSON(Boundary.geom).label('geometry')
+            ).filter(Boundary.type == 'county').first()
+
+            if county_geom and county_geom.geometry:
+                county_boundary = json.loads(county_geom.geometry)
+        except Exception as e:
+            logger.warning(f"Could not get county boundary: {str(e)}")
+
+        # Build GeoJSON features
+        features = []
+        for alert in alerts:
+            geometry = None
+            is_county_wide = False
+
+            if alert.geometry:
+                geometry = json.loads(alert.geometry)
+            elif alert.area_desc and any(county_term in alert.area_desc.lower()
+                                         for county_term in ['county', 'putnam', 'ohio']):
+                if county_boundary:
+                    geometry = county_boundary
+                    is_county_wide = True
+
+            if geometry:
+                expires_iso = None
+                if alert.expires:
+                    if alert.expires.tzinfo is None:
+                        expires_dt = alert.expires.replace(tzinfo=UTC_TZ)
+                    else:
+                        expires_dt = alert.expires.astimezone(UTC_TZ)
+                    expires_iso = expires_dt.isoformat()
+
+                sent_iso = None
+                if alert.sent:
+                    if alert.sent.tzinfo is None:
+                        sent_dt = alert.sent.replace(tzinfo=UTC_TZ)
+                    else:
+                        sent_dt = alert.sent.astimezone(UTC_TZ)
+                    sent_iso = sent_dt.isoformat()
+
+                features.append({
+                    'type': 'Feature',
+                    'properties': {
+                        'id': alert.id,
+                        'identifier': alert.identifier,
+                        'event': alert.event,
+                        'severity': alert.severity,
+                        'urgency': alert.urgency,
+                        'headline': alert.headline,
+                        'description': alert.description[:500] + '...' if len(
+                            alert.description) > 500 else alert.description,
+                        'sent': sent_iso,
+                        'expires': expires_iso,
+                        'area_desc': alert.area_desc,
+                        'is_historical': True,
+                        'is_county_wide': is_county_wide
+                    },
+                    'geometry': geometry
+                })
+
+        return jsonify({
+            'type': 'FeatureCollection',
+            'features': features
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting historical alerts: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/boundaries')
 def get_boundaries():
@@ -1329,130 +1663,6 @@ def get_boundaries():
         })
     except Exception as e:
         logger.error(f"Error fetching boundaries: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/alerts')
-def get_alerts():
-    """Get active CAP alerts as GeoJSON using new active logic with timezone support"""
-    try:
-        # Use helper function for consistent active alerts logic
-        alerts_query = get_active_alerts_query()
-
-        alerts = db.session.query(
-            CAPAlert.id, CAPAlert.identifier, CAPAlert.event, CAPAlert.severity,
-            CAPAlert.urgency, CAPAlert.headline, CAPAlert.description, CAPAlert.expires,
-            CAPAlert.area_desc, func.ST_AsGeoJSON(CAPAlert.geom).label('geometry')
-        ).filter(
-            CAPAlert.id.in_(alerts_query.with_entities(CAPAlert.id).subquery())
-        ).all()
-
-        # Get the actual county boundary geometry for fallback
-        county_boundary = None
-        try:
-            county_geom = db.session.query(
-                func.ST_AsGeoJSON(Boundary.geom).label('geometry')
-            ).filter(
-                Boundary.type == 'county'
-            ).first()
-
-            if county_geom and county_geom.geometry:
-                county_boundary = json.loads(county_geom.geometry)
-        except Exception as e:
-            logger.warning(f"Could not get county boundary: {str(e)}")
-
-        features = []
-        for alert in alerts:
-            # Use existing geometry or fall back to county boundary
-            geometry = None
-            is_county_wide = False
-
-            if alert.geometry:
-                geometry = json.loads(alert.geometry)
-            elif alert.area_desc and any(county_term in alert.area_desc.lower()
-                                         for county_term in ['county', 'putnam', 'ohio']):
-                # Use actual county boundary if available
-                if county_boundary:
-                    geometry = county_boundary
-                    is_county_wide = True
-                else:
-                    # Fallback to approximate Putnam County boundary
-                    geometry = {
-                        "type": "Polygon",
-                        "coordinates": [[
-                            [-84.255, 40.954], [-84.254, 40.935], [-84.239, 40.921], [-84.226, 40.903],
-                            [-84.210, 40.896], [-84.198, 40.880], [-84.186, 40.866], [-84.174, 40.852],
-                            [-84.162, 40.838], [-84.150, 40.824], [-84.138, 40.810], [-84.126, 40.796],
-                            [-84.114, 40.782], [-84.102, 40.768], [-84.090, 40.754], [-84.078, 40.740],
-                            [-84.066, 40.726], [-84.054, 40.712], [-84.042, 40.698], [-84.030, 40.684],
-                            [-84.018, 40.670], [-84.006, 40.656], [-83.994, 40.642], [-83.982, 40.628],
-                            [-83.970, 40.614], [-83.958, 40.600], [-83.946, 40.586], [-83.934, 40.572],
-                            [-83.922, 40.558], [-83.910, 40.544], [-83.898, 40.530], [-83.886, 40.516],
-                            [-83.874, 40.502], [-83.862, 40.488], [-83.850, 40.474], [-83.838, 40.460],
-                            [-83.826, 40.446], [-83.814, 40.432], [-83.802, 40.418], [-83.790, 40.404],
-                            [-83.778, 40.390], [-83.766, 40.376], [-83.754, 40.362], [-83.742, 40.348],
-                            [-83.730, 40.334], [-83.718, 40.320], [-83.706, 40.306], [-83.694, 40.292],
-                            [-83.682, 40.278], [-83.670, 40.264], [-83.658, 40.250], [-83.646, 40.236],
-                            [-83.634, 40.222], [-83.622, 40.208], [-83.610, 40.194], [-83.598, 40.180],
-                            [-83.586, 40.166], [-83.574, 40.152], [-83.562, 40.138], [-83.550, 40.124],
-                            [-83.538, 40.110], [-83.526, 40.096], [-83.514, 40.082], [-83.502, 40.068],
-                            [-83.490, 40.054], [-83.478, 40.040], [-83.466, 40.026], [-83.454, 40.012],
-                            [-83.442, 39.998], [-83.430, 39.984], [-83.750, 40.650], [-84.000, 40.850],
-                            [-84.255, 40.954]
-                        ]]
-                    }
-                    is_county_wide = True
-
-            # Check if this should be marked as county-wide based on area description
-            if not is_county_wide and alert.area_desc:
-                area_lower = alert.area_desc.lower()
-
-                # Multi-county alerts that include Putnam should be treated as county-wide for Putnam
-                if 'putnam' in area_lower:
-                    # Count counties (semicolons or commas usually separate them)
-                    separator_count = max(area_lower.count(';'), area_lower.count(','))
-                    if separator_count >= 2:  # 3+ counties = treat as county-wide
-                        is_county_wide = True
-
-                # Direct county-wide keywords
-                county_keywords = ['county', 'putnam county', 'entire county']
-                if any(keyword in area_lower for keyword in county_keywords):
-                    is_county_wide = True
-
-            if geometry:
-                # Convert expires to ISO format for JavaScript (will be in UTC)
-                expires_iso = None
-                if alert.expires:
-                    if alert.expires.tzinfo is None:
-                        expires_dt = alert.expires.replace(tzinfo=UTC_TZ)
-                    else:
-                        expires_dt = alert.expires.astimezone(UTC_TZ)
-                    expires_iso = expires_dt.isoformat()
-
-                features.append({
-                    'type': 'Feature',
-                    'properties': {
-                        'id': alert.id,
-                        'identifier': alert.identifier,
-                        'event': alert.event,
-                        'severity': alert.severity,
-                        'urgency': alert.urgency,
-                        'headline': alert.headline,
-                        'description': alert.description,
-                        'area_desc': alert.area_desc,
-                        'expires': expires_iso,
-                        'is_county_wide': is_county_wide,
-                        'geometry_source': 'county_boundary' if is_county_wide and county_boundary else 'original'
-                    },
-                    'geometry': geometry
-                })
-
-        return jsonify({
-            'type': 'FeatureCollection',
-            'features': features
-        })
-    except Exception as e:
-        logger.error(f"Error fetching alerts: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -1511,6 +1721,620 @@ def api_system_health():
 
 
 # =============================================================================
+# ADMINISTRATIVE ROUTES
+# =============================================================================
+
+@app.route('/admin')
+def admin():
+    """Admin interface"""
+    try:
+        total_boundaries = Boundary.query.count()
+        total_alerts = CAPAlert.query.count()
+        active_alerts = get_active_alerts_query().count()
+        expired_alerts = get_expired_alerts_query().count()
+
+        boundary_stats = db.session.query(
+            Boundary.type, func.count(Boundary.id).label('count')
+        ).group_by(Boundary.type).all()
+
+        return render_template('admin.html',
+                               total_boundaries=total_boundaries,
+                               total_alerts=total_alerts,
+                               active_alerts=active_alerts,
+                               expired_alerts=expired_alerts,
+                               boundary_stats=boundary_stats
+                               )
+    except Exception as e:
+        logger.error(f"Error rendering admin template: {str(e)}")
+        return f"<h1>Admin Interface</h1><p>Admin panel loading...</p><p><a href='/'>← Back to Main</a></p>"
+
+
+@app.route('/logs')
+def logs():
+    """View system logs"""
+    try:
+        logs = SystemLog.query.order_by(SystemLog.timestamp.desc()).limit(100).all()
+        return render_template('logs.html', logs=logs)
+    except Exception as e:
+        logger.error(f"Error loading logs: {str(e)}")
+        return f"<h1>Error loading logs</h1><p>{str(e)}</p><p><a href='/'>← Back to Main</a></p>"
+
+
+@app.route('/admin/trigger_poll', methods=['POST'])
+def trigger_poll():
+    """Manually trigger CAP alert polling with timezone logging"""
+    try:
+        log_entry = SystemLog(
+            level='INFO',
+            message='Manual CAP poll triggered',
+            module='admin',
+            details={
+                'triggered_at_utc': utc_now().isoformat(),
+                'triggered_at_local': local_now().isoformat()
+            }
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+
+        return jsonify({'message': 'CAP poll triggered successfully'})
+    except Exception as e:
+        logger.error(f"Error triggering poll: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/mark_expired', methods=['POST'])
+def mark_expired():
+    """Mark expired alerts as inactive without deleting them (SAFE OPTION)"""
+    try:
+        now = utc_now()
+
+        expired_alerts = CAPAlert.query.filter(
+            CAPAlert.expires < now,
+            CAPAlert.status != 'Expired'
+        ).all()
+
+        count = len(expired_alerts)
+
+        if count == 0:
+            return jsonify({'message': 'No alerts need to be marked as expired'})
+
+        for alert in expired_alerts:
+            alert.status = 'Expired'
+            alert.updated_at = now
+
+        db.session.commit()
+
+        log_entry = SystemLog(
+            level='INFO',
+            message=f'Marked {count} alerts as expired (data preserved)',
+            module='admin',
+            details={
+                'marked_at_utc': now.isoformat(),
+                'marked_at_local': local_now().isoformat(),
+                'count': count
+            }
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+
+        return jsonify({
+            'message': f'Marked {count} alerts as expired',
+            'note': 'Alert data has been preserved in the database',
+            'marked_count': count
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error marking expired alerts: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# =============================================================================
+# INTERSECTION CALCULATION ROUTES
+# =============================================================================
+
+@app.route('/admin/fix_county_intersections', methods=['POST'])
+def fix_county_intersections():
+    """Calculate intersections for alerts that have geometry but no intersections"""
+    try:
+        logger.info("Starting intersection calculation for alerts with geometry")
+
+        alerts_to_process = db.session.query(CAPAlert).filter(
+            CAPAlert.geom.isnot(None),
+            ~CAPAlert.id.in_(
+                db.session.query(Intersection.cap_alert_id).distinct()
+            )
+        ).all()
+
+        if not alerts_to_process:
+            alerts_to_process = db.session.query(CAPAlert).filter(
+                CAPAlert.geom.isnot(None)
+            ).all()
+
+        stats = {
+            'alerts_processed': 0,
+            'intersections_created': 0,
+            'errors': 0
+        }
+
+        for alert in alerts_to_process:
+            try:
+                intersections_created = calculate_alert_intersections(alert)
+                stats['alerts_processed'] += 1
+                stats['intersections_created'] += intersections_created
+                logger.info(f"Processed alert {alert.identifier}: {intersections_created} intersections")
+            except Exception as e:
+                stats['errors'] += 1
+                logger.error(f"Error processing alert {alert.identifier}: {str(e)}")
+
+        db.session.commit()
+
+        message = f"Processed {stats['alerts_processed']} alerts, created {stats['intersections_created']} intersections"
+        if stats['errors'] > 0:
+            message += f" ({stats['errors']} errors)"
+
+        logger.info(message)
+        return jsonify({
+            'success': message,
+            'stats': stats
+        })
+
+    except Exception as e:
+        logger.error(f"Error in fix_county_intersections: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': f'Failed to calculate intersections: {str(e)}'}), 500
+
+
+@app.route('/admin/recalculate_intersections', methods=['POST'])
+def recalculate_intersections():
+    """Recalculate all alert-boundary intersections"""
+    try:
+        logger.info("Starting full intersection recalculation")
+
+        deleted_count = db.session.query(Intersection).delete()
+        logger.info(f"Cleared {deleted_count} existing intersections")
+
+        alerts_with_geometry = db.session.query(CAPAlert).filter(
+            CAPAlert.geom.isnot(None)
+        ).all()
+
+        stats = {
+            'alerts_processed': 0,
+            'intersections_created': 0,
+            'errors': 0,
+            'deleted_intersections': deleted_count
+        }
+
+        for alert in alerts_with_geometry:
+            try:
+                intersections_created = calculate_alert_intersections(alert)
+                stats['alerts_processed'] += 1
+                stats['intersections_created'] += intersections_created
+            except Exception as e:
+                stats['errors'] += 1
+                logger.error(f"Error processing alert {alert.identifier}: {str(e)}")
+
+        db.session.commit()
+
+        message = f"Recalculated intersections for {stats['alerts_processed']} alerts, created {stats['intersections_created']} new intersections"
+        if stats['errors'] > 0:
+            message += f" ({stats['errors']} errors)"
+
+        logger.info(message)
+        return jsonify({
+            'success': message,
+            'stats': stats
+        })
+
+    except Exception as e:
+        logger.error(f"Error in recalculate_intersections: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': f'Failed to recalculate intersections: {str(e)}'}), 500
+
+
+@app.route('/admin/calculate_single_alert/<int:alert_id>', methods=['POST'])
+def calculate_single_alert(alert_id):
+    """Calculate intersections for a single alert"""
+    try:
+        alert = CAPAlert.query.get_or_404(alert_id)
+
+        if not alert.geom:
+            return jsonify({'error': 'Alert has no geometry data'}), 400
+
+        deleted_count = Intersection.query.filter_by(cap_alert_id=alert_id).delete()
+
+        boundaries = Boundary.query.all()
+
+        if not boundaries:
+            return jsonify({'error': 'No boundaries found in database. Upload some boundary files first.'}), 400
+
+        intersections_created = 0
+        errors = []
+
+        for boundary in boundaries:
+            try:
+                intersection_query = db.session.query(
+                    func.ST_Area(
+                        func.ST_Intersection(alert.geom, boundary.geom)
+                    ).label('intersection_area')
+                ).filter(
+                    func.ST_Intersects(alert.geom, boundary.geom)
+                ).first()
+
+                if intersection_query and intersection_query.intersection_area > 0:
+                    intersection = Intersection(
+                        cap_alert_id=alert_id,
+                        boundary_id=boundary.id,
+                        intersection_area=intersection_query.intersection_area
+                    )
+                    db.session.add(intersection)
+                    intersections_created += 1
+
+            except Exception as boundary_error:
+                error_msg = f"Boundary {boundary.id}: {str(boundary_error)}"
+                errors.append(error_msg)
+                logger.warning(error_msg)
+
+        db.session.commit()
+
+        return jsonify({
+            'success': f'Successfully calculated {intersections_created} boundary intersections',
+            'intersections_created': intersections_created,
+            'boundaries_tested': len(boundaries),
+            'deleted_intersections': deleted_count,
+            'errors': errors
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error calculating single alert: {str(e)}")
+        return jsonify({'error': f'Failed to calculate intersections: {str(e)}'}), 500
+
+
+# =============================================================================
+# BOUNDARY MANAGEMENT ROUTES
+# =============================================================================
+
+@app.route('/admin/upload_boundaries', methods=['POST'])
+def upload_boundaries():
+    """Upload GeoJSON boundary file with enhanced processing"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+
+        file = request.files['file']
+        boundary_type = request.form.get('boundary_type', 'unknown')
+
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+
+        if not file.filename.lower().endswith('.geojson'):
+            return jsonify({'error': 'File must be a GeoJSON file'}), 400
+
+        try:
+            geojson_data = json.loads(file.read().decode('utf-8'))
+        except json.JSONDecodeError:
+            return jsonify({'error': 'Invalid GeoJSON format'}), 400
+
+        features = geojson_data.get('features', [])
+        boundaries_added = 0
+        errors = []
+
+        for i, feature in enumerate(features):
+            try:
+                properties = feature.get('properties', {})
+                geometry = feature.get('geometry')
+
+                if not geometry:
+                    errors.append(f"Feature {i + 1}: No geometry")
+                    continue
+
+                name, description = extract_name_and_description(properties, boundary_type)
+
+                geometry_json = json.dumps(geometry)
+
+                boundary = Boundary(
+                    name=name,
+                    type=boundary_type,
+                    description=description,
+                    created_at=utc_now(),
+                    updated_at=utc_now()
+                )
+
+                boundary.geom = db.session.execute(
+                    text("SELECT ST_GeomFromGeoJSON(:geom)"),
+                    {"geom": geometry_json}
+                ).scalar()
+
+                db.session.add(boundary)
+                boundaries_added += 1
+
+            except Exception as e:
+                errors.append(f"Feature {i + 1}: {str(e)}")
+
+        try:
+            db.session.commit()
+            logger.info(f"Successfully uploaded {boundaries_added} {boundary_type} boundaries")
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': f'Database error: {str(e)}'}), 500
+
+        response_data = {
+            'success': f'Successfully uploaded {boundaries_added} {boundary_type} boundaries',
+            'boundaries_added': boundaries_added,
+            'total_features': len(features),
+            'errors': errors[:10] if errors else []
+        }
+
+        if errors:
+            response_data['warning'] = f'{len(errors)} features had errors'
+
+        return jsonify(response_data)
+
+    except Exception as e:
+        logger.error(f"Error uploading boundaries: {str(e)}")
+        return jsonify({'error': f'Upload failed: {str(e)}'}), 500
+
+
+@app.route('/admin/clear_boundaries/<boundary_type>', methods=['DELETE'])
+def clear_boundaries(boundary_type):
+    """Clear all boundaries of a specific type"""
+    try:
+        if boundary_type == 'all':
+            deleted_count = Boundary.query.delete()
+            message = f'Deleted all {deleted_count} boundaries'
+        else:
+            deleted_count = Boundary.query.filter_by(type=boundary_type).delete()
+            message = f'Deleted {deleted_count} {boundary_type} boundaries'
+
+        db.session.commit()
+
+        log_entry = SystemLog(
+            level='WARNING',
+            message=message,
+            module='admin',
+            details={
+                'boundary_type': boundary_type,
+                'deleted_count': deleted_count,
+                'deleted_at_utc': utc_now().isoformat(),
+                'deleted_at_local': local_now().isoformat()
+            }
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+
+        return jsonify({'success': message, 'deleted_count': deleted_count})
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error clearing boundaries: {str(e)}")
+        return jsonify({'error': f'Failed to clear boundaries: {str(e)}'}), 500
+
+
+@app.route('/admin/clear_all_boundaries', methods=['DELETE'])
+def clear_all_boundaries():
+    """Clear all boundaries (requires confirmation)"""
+    try:
+        data = request.get_json() or {}
+
+        confirmation_level = data.get('confirmation_level', 0)
+        text_confirmation = data.get('text_confirmation', '')
+
+        if confirmation_level < 2 or text_confirmation != 'DELETE ALL BOUNDARIES':
+            return jsonify({'error': 'Invalid confirmation. This action requires proper confirmation.'}), 400
+
+        deleted_count = Boundary.query.delete()
+        db.session.commit()
+
+        log_entry = SystemLog(
+            level='CRITICAL',
+            message=f'DELETED ALL BOUNDARIES: {deleted_count} boundaries permanently removed',
+            module='admin',
+            details={
+                'deleted_count': deleted_count,
+                'confirmation_level': confirmation_level,
+                'deleted_at_utc': utc_now().isoformat(),
+                'deleted_at_local': local_now().isoformat()
+            }
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+
+        return jsonify({
+            'success': f'Successfully deleted all {deleted_count} boundaries',
+            'deleted_count': deleted_count
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error clearing all boundaries: {str(e)}")
+        return jsonify({'error': f'Failed to clear all boundaries: {str(e)}'}), 500
+
+
+# =============================================================================
+# DEBUG AND TESTING ROUTES
+# =============================================================================
+
+@app.route('/debug/alert/<int:alert_id>')
+def debug_alert(alert_id):
+    """Debug route to inspect alert geometry and intersections"""
+    try:
+        alert = CAPAlert.query.get_or_404(alert_id)
+
+        geometry_info = None
+        if alert.geom:
+            geom_result = db.session.execute(
+                text("""
+                    SELECT 
+                        ST_GeometryType(:geom) as type,
+                        ST_SRID(:geom) as srid,
+                        ST_Area(:geom) as area
+                """),
+                {"geom": alert.geom}
+            ).fetchone()
+
+            geometry_info = {
+                'type': geom_result.type,
+                'srid': geom_result.srid,
+                'area': float(geom_result.area)
+            }
+
+        intersection_results = []
+        if alert.geom:
+            boundaries = Boundary.query.all()
+            for boundary in boundaries:
+                if boundary.geom:
+                    try:
+                        intersection_result = db.session.execute(
+                            text("""
+                                SELECT ST_Intersects(:alert_geom, :boundary_geom) as intersects,
+                                       ST_Area(ST_Intersection(:alert_geom, :boundary_geom)) as area
+                            """),
+                            {
+                                'alert_geom': alert.geom,
+                                'boundary_geom': boundary.geom
+                            }
+                        ).fetchone()
+
+                        intersection_results.append({
+                            'boundary_id': boundary.id,
+                            'boundary_name': boundary.name,
+                            'boundary_type': boundary.type,
+                            'intersects': bool(intersection_result.intersects),
+                            'intersection_area': float(intersection_result.area) if intersection_result.area else 0
+                        })
+                    except Exception as e:
+                        logger.error(f"Error checking intersection with boundary {boundary.id}: {e}")
+
+        existing_intersections = db.session.query(Intersection).filter_by(cap_alert_id=alert_id).count()
+        boundaries_in_db = Boundary.query.count()
+
+        debug_info = {
+            'alert_id': alert_id,
+            'alert_event': alert.event,
+            'alert_area_desc': alert.area_desc,
+            'has_geometry': alert.geom is not None,
+            'geometry_info': geometry_info,
+            'boundaries_in_db': boundaries_in_db,
+            'existing_intersections': existing_intersections,
+            'intersection_results': intersection_results,
+            'intersections_found': len([r for r in intersection_results if r['intersects']]),
+            'errors': []
+        }
+
+        return jsonify(debug_info)
+
+    except Exception as e:
+        logger.error(f"Error debugging alert {alert_id}: {str(e)}")
+        return jsonify({'error': f'Debug failed: {str(e)}'}), 500
+
+
+@app.route('/debug/boundaries/<int:alert_id>')
+def debug_boundaries(alert_id):
+    """Debug boundary intersections for a specific alert"""
+    try:
+        alert = CAPAlert.query.get_or_404(alert_id)
+
+        debug_info = {
+            'alert_id': alert_id,
+            'alert_event': alert.event,
+            'alert_area_desc': alert.area_desc,
+            'has_geometry': alert.geom is not None,
+            'boundaries_in_db': Boundary.query.count(),
+            'existing_intersections': Intersection.query.filter_by(cap_alert_id=alert_id).count(),
+            'errors': []
+        }
+
+        if not alert.geom:
+            debug_info['errors'].append('Alert has no geometry data')
+            return jsonify(debug_info)
+
+        boundaries = Boundary.query.all()
+        intersection_results = []
+
+        for boundary in boundaries:
+            try:
+                intersection_test = db.session.query(
+                    func.ST_Intersects(alert.geom, boundary.geom).label('intersects'),
+                    func.ST_Area(func.ST_Intersection(alert.geom, boundary.geom)).label('area')
+                ).first()
+
+                intersection_results.append({
+                    'boundary_id': boundary.id,
+                    'boundary_name': boundary.name,
+                    'boundary_type': boundary.type,
+                    'intersects': bool(
+                        intersection_test.intersects) if intersection_test.intersects is not None else False,
+                    'intersection_area': float(intersection_test.area) if intersection_test.area else 0
+                })
+
+            except Exception as boundary_error:
+                debug_info['errors'].append(f'Error testing boundary {boundary.id}: {str(boundary_error)}')
+
+        debug_info['intersection_results'] = intersection_results
+        debug_info['intersections_found'] = len([r for r in intersection_results if r['intersects']])
+
+        try:
+            geom_info = db.session.query(
+                func.ST_GeometryType(alert.geom).label('geom_type'),
+                func.ST_SRID(alert.geom).label('srid'),
+                func.ST_Area(alert.geom).label('area')
+            ).first()
+
+            debug_info['geometry_info'] = {
+                'type': geom_info.geom_type if geom_info else 'Unknown',
+                'srid': geom_info.srid if geom_info else 'Unknown',
+                'area': float(geom_info.area) if geom_info and geom_info.area else 0
+            }
+        except Exception as geom_error:
+            debug_info['errors'].append(f'Error getting geometry info: {str(geom_error)}')
+
+        return jsonify(debug_info)
+
+    except Exception as e:
+        logger.error(f"Error in debug_boundaries: {str(e)}")
+        return jsonify({'error': str(e), 'alert_id': alert_id}), 500
+
+
+# =============================================================================
+# LED CONTROL ROUTES
+# =============================================================================
+
+@app.route('/led_control')
+def led_control():
+    """LED sign control interface"""
+    try:
+        led_status = None
+        if led_controller:
+            led_status = led_controller.get_status()
+
+        recent_messages = LEDMessage.query.order_by(
+            LEDMessage.created_at.desc()
+        ).limit(10).all()
+
+        canned_messages = []
+        if led_controller:
+            for name, config in led_controller.canned_messages.items():
+                canned_messages.append({
+                    'name': name,
+                    'text': config['text'],
+                    'color': config['color'].name,
+                    'font': config['font'].name,
+                    'effect': config['effect'].name
+                })
+
+        return render_template('led_control.html',
+                               led_status=led_status,
+                               recent_messages=recent_messages,
+                               canned_messages=canned_messages,
+                               led_available=LED_AVAILABLE)
+
+    except Exception as e:
+        logger.error(f"Error loading LED control page: {e}")
+        return f"<h1>LED Control Error</h1><p>{str(e)}</p><p><a href='/'>← Back to Main</a></p>"
+
+
+# =============================================================================
 # LED SIGN API ROUTES
 # =============================================================================
 
@@ -1523,7 +2347,6 @@ def api_led_send_message():
         if not led_controller:
             return jsonify({'success': False, 'error': 'LED controller not available'})
 
-        # Extract parameters with defaults
         text = data.get('text', '')
         if not text:
             return jsonify({'success': False, 'error': 'Message text is required'})
@@ -1544,7 +2367,6 @@ def api_led_send_message():
         except (KeyError, ValueError) as e:
             return jsonify({'success': False, 'error': f'Invalid parameter: {str(e)}'})
 
-        # Create database record
         led_message = LEDMessage(
             message_type='custom',
             content=text,
@@ -1559,7 +2381,6 @@ def api_led_send_message():
         db.session.add(led_message)
         db.session.commit()
 
-        # Send to LED sign
         result = led_controller.send_message(
             text=text,
             color=color,
@@ -1599,17 +2420,15 @@ def api_led_send_canned():
         if not led_controller:
             return jsonify({'success': False, 'error': 'LED controller not available'})
 
-        # Create database record
         led_message = LEDMessage(
             message_type='canned',
             content=message_name,
-            priority=2,  # Normal priority for canned messages
+            priority=2,
             scheduled_time=utc_now()
         )
         db.session.add(led_message)
         db.session.commit()
 
-        # Send to LED sign
         result = led_controller.send_canned_message(message_name, **parameters)
 
         if result:
@@ -1637,7 +2456,6 @@ def api_led_clear():
         result = led_controller.clear_display()
 
         if result:
-            # Log the clear action
             led_message = LEDMessage(
                 message_type='system',
                 content='DISPLAY_CLEARED',
@@ -1671,7 +2489,6 @@ def api_led_brightness():
         result = led_controller.set_brightness(brightness)
 
         if result:
-            # Update database status
             status = LEDSignStatus.query.filter_by(sign_ip=LED_SIGN_IP).first()
             if status:
                 status.brightness_level = brightness
@@ -1694,7 +2511,6 @@ def api_led_test():
 
         result = led_controller.test_all_features()
 
-        # Log the test
         led_message = LEDMessage(
             message_type='system',
             content='FEATURE_TEST',
@@ -1723,11 +2539,10 @@ def api_led_emergency():
         if not led_controller:
             return jsonify({'success': False, 'error': 'LED controller not available'})
 
-        # Create database record
         led_message = LEDMessage(
             message_type='emergency',
             content=message,
-            priority=0,  # Highest priority
+            priority=0,
             display_time=duration,
             scheduled_time=utc_now()
         )
@@ -1765,7 +2580,6 @@ def api_led_status():
         if led_controller:
             status.update(led_controller.get_status())
 
-        # Get database status
         db_status = LEDSignStatus.query.filter_by(sign_ip=LED_SIGN_IP).first()
         if db_status:
             status.update({
@@ -1849,7 +2663,7 @@ def api_led_canned_messages():
 
 
 # =============================================================================
-# API ROUTES - DATA EXPORT
+# DATA EXPORT ROUTES
 # =============================================================================
 
 @app.route('/export/alerts')
@@ -1860,7 +2674,6 @@ def export_alerts():
 
         alerts_data = []
         for alert in alerts:
-            # Format times in local timezone for export
             sent_local = format_local_datetime(alert.sent, include_utc=False) if alert.sent else ''
             expires_local = format_local_datetime(alert.expires, include_utc=False) if alert.expires else ''
             created_local = format_local_datetime(alert.created_at, include_utc=False) if alert.created_at else ''
@@ -1988,79 +2801,50 @@ def export_statistics():
         return jsonify({'error': 'Failed to export statistics data'}), 500
 
 
-# =============================================================================
-# ADMIN API ROUTES - SYSTEM OPERATIONS
-# =============================================================================
-
-@app.route('/admin/trigger_poll', methods=['POST'])
-def trigger_poll():
-    """Manually trigger CAP alert polling with timezone logging"""
+@app.route('/export/intersections')
+def export_intersections():
+    """Export intersection data with full details"""
     try:
-        log_entry = SystemLog(
-            level='INFO',
-            message='Manual CAP poll triggered',
-            module='admin',
-            details={
-                'triggered_at_utc': utc_now().isoformat(),
-                'triggered_at_local': local_now().isoformat()
-            }
-        )
-        db.session.add(log_entry)
-        db.session.commit()
-
-        return jsonify({'message': 'CAP poll triggered successfully'})
-    except Exception as e:
-        logger.error(f"Error triggering poll: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/admin/mark_expired', methods=['POST'])
-def mark_expired():
-    """Mark expired alerts as inactive without deleting them (SAFE OPTION)"""
-    try:
-        now = utc_now()
-
-        # Find alerts that are expired but not marked as such
-        expired_alerts = CAPAlert.query.filter(
-            CAPAlert.expires < now,
-            CAPAlert.status != 'Expired'
+        intersections = db.session.query(
+            Intersection, CAPAlert, Boundary
+        ).join(
+            CAPAlert, Intersection.cap_alert_id == CAPAlert.id
+        ).join(
+            Boundary, Intersection.boundary_id == Boundary.id
         ).all()
 
-        count = len(expired_alerts)
+        intersection_data = []
+        for intersection, alert, boundary in intersections:
+            created_local = format_local_datetime(intersection.created_at,
+                                                  include_utc=False) if intersection.created_at else ''
+            alert_sent_local = format_local_datetime(alert.sent, include_utc=False) if alert.sent else ''
 
-        if count == 0:
-            return jsonify({'message': 'No alerts need to be marked as expired'})
-
-        # Mark as expired instead of deleting
-        for alert in expired_alerts:
-            alert.status = 'Expired'
-            alert.updated_at = now
-
-        db.session.commit()
-
-        log_entry = SystemLog(
-            level='INFO',
-            message=f'Marked {count} alerts as expired (data preserved)',
-            module='admin',
-            details={
-                'marked_at_utc': now.isoformat(),
-                'marked_at_local': local_now().isoformat(),
-                'count': count
-            }
-        )
-        db.session.add(log_entry)
-        db.session.commit()
+            intersection_data.append({
+                'Intersection_ID': intersection.id,
+                'Alert_ID': alert.id,
+                'Alert_Identifier': alert.identifier,
+                'Alert_Event': alert.event,
+                'Alert_Severity': alert.severity or '',
+                'Alert_Sent_Local': alert_sent_local,
+                'Boundary_ID': boundary.id,
+                'Boundary_Name': boundary.name,
+                'Boundary_Type': boundary.type,
+                'Intersection_Area': intersection.intersection_area or 0,
+                'Created_Local_Time': created_local,
+                'Created_UTC': intersection.created_at.isoformat() if intersection.created_at else ''
+            })
 
         return jsonify({
-            'message': f'Marked {count} alerts as expired',
-            'note': 'Alert data has been preserved in the database',
-            'marked_count': count
+            'data': intersection_data,
+            'total': len(intersection_data),
+            'exported_at': utc_now().isoformat(),
+            'exported_at_local': local_now().isoformat(),
+            'timezone': str(PUTNAM_COUNTY_TZ)
         })
 
     except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error marking expired alerts: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error exporting intersections: {str(e)}")
+        return jsonify({'error': 'Failed to export intersection data'}), 500
 
 
 # =============================================================================
@@ -2070,7 +2854,11 @@ def mark_expired():
 @app.errorhandler(404)
 def not_found_error(error):
     """Enhanced 404 error page"""
-    return "<h1>404 - Page Not Found</h1><p><a href='/'>← Back to Main</a></p>", 404
+    return render_template_string("""
+    <h1>404 - Page Not Found</h1>
+    <p>The page you're looking for doesn't exist.</p>
+    <p><a href='/'>← Back to Main</a> | <a href='/admin'>Admin</a> | <a href='/alerts'>Alerts</a></p>
+    """), 404
 
 
 @app.errorhandler(500)
@@ -2078,7 +2866,218 @@ def internal_error(error):
     """Enhanced 500 error page"""
     if hasattr(db, 'session') and db.session:
         db.session.rollback()
-    return "<h1>500 - Internal Server Error</h1><p><a href='/'>← Back to Main</a></p>", 500
+
+    return render_template_string("""
+    <h1>500 - Internal Server Error</h1>
+    <p>Something went wrong on our end. Please try again later.</p>
+    <p><a href='/'>← Back to Main</a> | <a href='/admin'>Admin</a></p>
+    """), 500
+
+
+@app.errorhandler(403)
+def forbidden_error(error):
+    """403 Forbidden error page"""
+    return render_template_string("""
+    <h1>403 - Forbidden</h1>
+    <p>You don't have permission to access this resource.</p>
+    <p><a href='/'>← Back to Main</a></p>
+    """), 403
+
+
+@app.errorhandler(400)
+def bad_request_error(error):
+    """400 Bad Request error page"""
+    return render_template_string("""
+    <h1>400 - Bad Request</h1>
+    <p>The request was malformed or invalid.</p>
+    <p><a href='/'>← Back to Main</a></p>
+    """), 400
+
+
+# =============================================================================
+# HEALTH CHECK AND MONITORING ROUTES
+# =============================================================================
+
+@app.route('/health')
+def health_check():
+    """Simple health check endpoint"""
+    try:
+        # Test database connection
+        db.session.execute(text('SELECT 1')).fetchone()
+
+        return jsonify({
+            'status': 'healthy',
+            'timestamp': utc_now().isoformat(),
+            'local_timestamp': local_now().isoformat(),
+            'version': '2.0',
+            'database': 'connected',
+            'led_available': LED_AVAILABLE
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'timestamp': utc_now().isoformat(),
+            'local_timestamp': local_now().isoformat()
+        }), 500
+
+
+@app.route('/ping')
+def ping():
+    """Simple ping endpoint"""
+    return jsonify({
+        'pong': True,
+        'timestamp': utc_now().isoformat(),
+        'local_timestamp': local_now().isoformat()
+    })
+
+
+@app.route('/version')
+def version():
+    """Version information endpoint"""
+    return jsonify({
+        'version': '2.0',
+        'name': 'NOAA CAP Alerts System',
+        'author': 'KR8MER Amateur Radio Emergency Communications',
+        'description': 'Emergency alert system for Putnam County, Ohio',
+        'timezone': str(PUTNAM_COUNTY_TZ),
+        'led_available': LED_AVAILABLE,
+        'timestamp': utc_now().isoformat(),
+        'local_timestamp': local_now().isoformat()
+    })
+
+
+# =============================================================================
+# ADDITIONAL UTILITY ROUTES
+# =============================================================================
+
+@app.route('/favicon.ico')
+def favicon():
+    """Serve favicon"""
+    return '', 204
+
+
+@app.route('/robots.txt')
+def robots():
+    """Robots.txt for web crawlers"""
+    return """User-agent: *
+Disallow: /admin/
+Disallow: /api/
+Disallow: /debug/
+Allow: /
+""", 200, {'Content-Type': 'text/plain'}
+
+
+# =============================================================================
+# CONTEXT PROCESSORS FOR TEMPLATES
+# =============================================================================
+
+@app.context_processor
+def inject_global_vars():
+    """Inject global variables into all templates"""
+    return {
+        'current_utc_time': utc_now(),
+        'current_local_time': local_now(),
+        'timezone_name': str(PUTNAM_COUNTY_TZ),
+        'led_available': LED_AVAILABLE,
+        'system_version': '2.0'
+    }
+
+
+# =============================================================================
+# REQUEST HOOKS
+# =============================================================================
+
+@app.before_request
+def before_request():
+    """Before request hook for logging and setup"""
+    # Log API requests for debugging
+    if request.path.startswith('/api/') and request.method in ['POST', 'PUT', 'DELETE']:
+        logger.info(f"{request.method} {request.path} from {request.remote_addr}")
+
+
+@app.after_request
+def after_request(response):
+    """After request hook for headers and cleanup"""
+    # Add CORS headers for API endpoints
+    if request.path.startswith('/api/'):
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+
+    # Add security headers
+    response.headers.add('X-Content-Type-Options', 'nosniff')
+    response.headers.add('X-Frame-Options', 'DENY')
+    response.headers.add('X-XSS-Protection', '1; mode=block')
+
+    return response
+
+
+# =============================================================================
+# CLI COMMANDS (for future use with Flask CLI)
+# =============================================================================
+
+@app.cli.command()
+def init_db():
+    """Initialize the database tables"""
+    db.create_all()
+    logger.info("Database tables created successfully")
+
+
+@app.cli.command()
+def test_led():
+    """Test LED controller connection"""
+    if led_controller:
+        try:
+            status = led_controller.get_status()
+            logger.info(f"LED Status: {status}")
+
+            # Send test message
+            result = led_controller.send_message("TEST MESSAGE")
+            logger.info(f"Test message sent: {result}")
+        except Exception as e:
+            logger.error(f"LED test failed: {e}")
+    else:
+        logger.warning("LED controller not available")
+
+
+@app.cli.command()
+def cleanup_expired():
+    """Mark expired alerts as expired (safe cleanup)"""
+    try:
+        now = utc_now()
+        expired_alerts = CAPAlert.query.filter(
+            CAPAlert.expires < now,
+            CAPAlert.status != 'Expired'
+        ).all()
+
+        count = 0
+        for alert in expired_alerts:
+            alert.status = 'Expired'
+            alert.updated_at = now
+            count += 1
+
+        db.session.commit()
+        logger.info(f"Marked {count} alerts as expired")
+
+    except Exception as e:
+        logger.error(f"Error in cleanup: {e}")
+        db.session.rollback()
+
+
+# =============================================================================
+# APPLICATION STARTUP AND CONFIGURATION
+# =============================================================================
+
+def create_app(config=None):
+    """Application factory pattern for testing"""
+    if config:
+        app.config.update(config)
+
+    with app.app_context():
+        db.create_all()
+
+    return app
 
 
 # =============================================================================

@@ -26,6 +26,36 @@
         box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         margin-bottom: 20px;
     }
+/* Historical alerts styling */
+    .historical-badge {
+        background: linear-gradient(45deg, #6c757d, #495057);
+        color: white;
+        font-size: 0.7em;
+        padding: 2px 6px;
+        border-radius: 8px;
+        margin-left: 5px;
+    }
+
+    #date-filters {
+        background: #f8f9fa;
+        border-radius: 6px;
+        padding: 10px;
+        border: 1px solid #e9ecef;
+    }
+
+    #date-filters .form-label {
+        font-weight: 600;
+        color: #495057;
+    }
+
+    .layer-group .form-check-label.small {
+        font-size: 0.875em;
+    }
+
+    /* Historical alert popup styling */
+    .leaflet-popup-content .badge.bg-secondary {
+        font-size: 0.7em;
+    }
 
     .form-check-input:checked {
         background-color: #0d6efd;
@@ -170,7 +200,41 @@
                     </div>
                 </div>
             </div>
+<!-- Historical Alert Controls -->
+                <div class="layer-group">
+                    <h6><i class="fas fa-history"></i> Historical Alerts</h6>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="toggle-historical">
+                        <label class="form-check-label" for="toggle-historical">
+                            Show Historical Alerts
+                        </label>
+                    </div>
 
+                    <div id="date-filters" style="display: none;" class="mt-2">
+                        <div class="row">
+                            <div class="col-12 mb-2">
+                                <label class="form-label small">Start Date:</label>
+                                <input type="date" id="start-date" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-12 mb-2">
+                                <label class="form-label small">End Date:</label>
+                                <input type="date" id="end-date" class="form-control form-control-sm">
+                            </div>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="include-active">
+                            <label class="form-check-label small" for="include-active">
+                                Include Active Alerts
+                            </label>
+                        </div>
+                        <button class="btn btn-sm btn-primary w-100" onclick="loadHistoricalAlerts()">
+                            <i class="fas fa-search"></i> Load Historical
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary w-100 mt-1" onclick="clearHistoricalAlerts()" style="display: none;" id="clear-historical-btn">
+                            <i class="fas fa-times"></i> Clear Historical
+                        </button>
+                    </div>
+                </div>
             <!-- System Status -->
             <div class="status-panel">
                 <h5 class="mb-3">
@@ -527,6 +591,165 @@ function updateAlertSummary(alerts) {
 
     summaryDiv.innerHTML = summaryHtml;
     summaryDiv.style.display = 'block';
+}
+// Historical alerts functionality
+let historicalAlertsLayer;
+
+// Toggle historical controls
+document.addEventListener('DOMContentLoaded', function() {
+    // Set up historical toggle
+    const historicalToggle = document.getElementById('toggle-historical');
+    if (historicalToggle) {
+        historicalToggle.addEventListener('change', function() {
+            const dateFilters = document.getElementById('date-filters');
+            if (this.checked) {
+                dateFilters.style.display = 'block';
+                // Set default date range (last 30 days)
+                const end = new Date();
+                const start = new Date();
+                start.setDate(start.getDate() - 30);
+
+                document.getElementById('end-date').value = end.toISOString().split('T')[0];
+                document.getElementById('start-date').value = start.toISOString().split('T')[0];
+            } else {
+                dateFilters.style.display = 'none';
+                clearHistoricalAlerts();
+            }
+        });
+    }
+});
+
+// Load historical alerts
+function loadHistoricalAlerts() {
+    const startDate = document.getElementById('start-date').value;
+    const endDate = document.getElementById('end-date').value;
+    const includeActive = document.getElementById('include-active').checked;
+
+    if (!startDate || !endDate) {
+        alert('Please select both start and end dates');
+        return;
+    }
+
+    // Build URL with parameters
+    let url = `/api/alerts/historical?start_date=${startDate}&end_date=${endDate}`;
+    if (includeActive) {
+        url += '&include_active=true';
+    }
+
+    console.log('Loading historical alerts from:', url);
+
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            // Remove existing historical layer
+            if (historicalAlertsLayer) {
+                map.removeLayer(historicalAlertsLayer);
+            }
+
+            if (data.features && data.features.length > 0) {
+                historicalAlertsLayer = L.geoJSON(data, {
+                    style: function(feature) {
+                        const severity = feature.properties.severity;
+                        let color = '#666'; // default gray for historical
+
+                        // Use severity colors but more muted for historical
+                        switch(severity) {
+                            case 'Extreme': color = '#c0392b'; break;
+                            case 'Severe': color = '#d68910'; break;
+                            case 'Moderate': color = '#b7950b'; break;
+                            case 'Minor': color = '#2980b9'; break;
+                        }
+
+                        return {
+                            color: color,
+                            weight: 2,
+                            opacity: 0.7,
+                            fillOpacity: 0.2,
+                            dashArray: '8, 4' // Dashed lines for historical
+                        };
+                    },
+                    onEachFeature: function(feature, layer) {
+                        const props = feature.properties;
+                        const sentDate = props.sent ? new Date(props.sent).toLocaleString() : 'Unknown';
+                        const expiresDate = props.expires ? new Date(props.expires).toLocaleString() : 'No expiration';
+
+                        const popup = `
+                            <div class="popup-title">
+                                ${props.event}
+                                <span class="badge bg-secondary ms-1">Historical</span>
+                                ${props.is_county_wide ? '<span class="county-wide-badge">COUNTY-WIDE</span>' : ''}
+                            </div>
+                            <div class="popup-detail"><strong>Sent:</strong> ${sentDate}</div>
+                            <div class="popup-detail"><strong>Expires:</strong> ${expiresDate}</div>
+                            <div class="popup-detail"><strong>Severity:</strong> ${props.severity || 'Unknown'}</div>
+                            <div class="popup-detail"><strong>Urgency:</strong> ${props.urgency || 'Unknown'}</div>
+                            ${props.headline ? `<div class="popup-detail"><strong>Headline:</strong> ${props.headline}</div>` : ''}
+                            ${props.area_desc ? `<div class="popup-detail"><strong>Area:</strong> ${props.area_desc}</div>` : ''}
+                            <div class="mt-2">
+                                <a href="/alerts/${props.id}" class="btn btn-sm btn-primary">View Details</a>
+                            </div>
+                        `;
+                        layer.bindPopup(popup);
+                    }
+                });
+
+                historicalAlertsLayer.addTo(map);
+
+                // Show clear button
+                const clearBtn = document.getElementById('clear-historical-btn');
+                if (clearBtn) {
+                    clearBtn.style.display = 'block';
+                }
+
+                // Show success message
+                console.log(`Loaded ${data.features.length} historical alerts`);
+                if (typeof showToast === 'function') {
+                    showToast(`Loaded ${data.features.length} historical alerts`, 'success');
+                } else {
+                    alert(`Loaded ${data.features.length} historical alerts`);
+                }
+
+                // Zoom to fit all historical alerts
+                if (data.features.length > 0) {
+                    try {
+                        map.fitBounds(historicalAlertsLayer.getBounds(), {padding: [10, 10]});
+                    } catch (e) {
+                        console.log('Could not fit bounds to historical alerts');
+                    }
+                }
+
+            } else {
+                if (typeof showToast === 'function') {
+                    showToast('No historical alerts found for the selected date range', 'info');
+                } else {
+                    alert('No historical alerts found for the selected date range');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error loading historical alerts:', error);
+            if (typeof showToast === 'function') {
+                showToast('Error loading historical alerts: ' + error.message, 'error');
+            } else {
+                alert('Error loading historical alerts: ' + error.message);
+            }
+        });
+}
+
+// Clear historical alerts from map
+function clearHistoricalAlerts() {
+    if (historicalAlertsLayer) {
+        map.removeLayer(historicalAlertsLayer);
+        historicalAlertsLayer = null;
+
+        // Hide clear button
+        const clearBtn = document.getElementById('clear-historical-btn');
+        if (clearBtn) {
+            clearBtn.style.display = 'none';
+        }
+
+        console.log('Cleared historical alerts from map');
+    }
 }
 
 // Setup layer toggles
