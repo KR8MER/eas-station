@@ -118,6 +118,7 @@ except Exception as e:
 def utc_now():
     """Get current UTC time with timezone awareness"""
     return datetime.now(UTC_TZ)
+    return base_time - timedelta(minutes=60)
 
 
 def local_now():
@@ -1401,36 +1402,44 @@ def get_alert_geometry(alert_id):
 
 @app.route('/alerts/<int:alert_id>')
 def alert_detail(alert_id):
-    """Individual alert detail page with intersection display"""
+    """Show detailed information about a specific alert with accurate coverage calculation"""
     try:
         alert = CAPAlert.query.get_or_404(alert_id)
 
+        # Get intersections
         intersections = db.session.query(Intersection, Boundary).join(
             Boundary, Intersection.boundary_id == Boundary.id
         ).filter(Intersection.cap_alert_id == alert_id).all()
 
-        logger.info(f"Found {len(intersections)} intersections for alert {alert_id}")
-
+        # Determine if this should be considered county-wide based on area description
         is_county_wide = False
         if alert.area_desc:
             area_lower = alert.area_desc.lower()
-            if not alert.geom:
-                if any(term in area_lower for term in ['county', 'putnam county', 'entire county']):
-                    is_county_wide = True
-                elif 'putnam' in area_lower:
-                    separator_count = max(area_lower.count(';'), area_lower.count(','))
-                    if separator_count >= 2:
-                        is_county_wide = True
+            is_county_wide = (
+                'putnam county' in area_lower or
+                'entire county' in area_lower or
+                ('county' in area_lower and 'ohio' in area_lower) or
+                ('putnam' in area_lower and (area_lower.count(';') >= 2 or area_lower.count(',') >= 2))
+            )
+
+        # Calculate actual coverage percentages
+        coverage_data = calculate_coverage_percentages(alert_id, intersections)
+
+        # Determine actual coverage status
+        county_coverage = coverage_data.get('county', {}).get('coverage_percentage', 0)
+        is_actually_county_wide = county_coverage >= 95.0  # Consider 95%+ as county-wide
 
         return render_template('alert_detail.html',
-                               alert=alert,
-                               intersections=intersections,
-                               is_county_wide=is_county_wide
-                               )
+                             alert=alert,
+                             intersections=intersections,
+                             is_county_wide=is_county_wide,
+                             is_actually_county_wide=is_actually_county_wide,
+                             coverage_data=coverage_data)
 
     except Exception as e:
-        logger.error(f"Error loading alert details: {str(e)}")
-        return f"<h1>Error loading alert details</h1><p>{str(e)}</p><p><a href='/alerts'>← Back to Alerts</a></p>"
+        logger.error(f"Error in alert_detail route: {str(e)}")
+        flash(f'Error loading alert details: {str(e)}', 'error')
+        return redirect(url_for('index'))
 
 
 # =============================================================================
@@ -1439,9 +1448,20 @@ def alert_detail(alert_id):
 
 @app.route('/api/alerts')
 def get_alerts():
-    """Get active CAP alerts as GeoJSON using new active logic with timezone support"""
+    """Get CAP alerts as GeoJSON with optional inclusion of expired alerts"""
     try:
-        alerts_query = get_active_alerts_query()
+        # Check if we should include expired alerts
+        include_expired = request.args.get('include_expired', 'false').lower() == 'true'
+
+        # Use different query based on whether expired alerts are requested
+        if include_expired:
+            # Get ALL alerts (active and expired)
+            alerts_query = CAPAlert.query
+            logger.info("Including expired alerts in API response")
+        else:
+            # Get only active alerts (existing behavior)
+            alerts_query = get_active_alerts_query()
+            logger.info("Including only active alerts in API response")
 
         alerts = db.session.query(
             CAPAlert.id, CAPAlert.identifier, CAPAlert.event, CAPAlert.severity,
@@ -1451,6 +1471,7 @@ def get_alerts():
             CAPAlert.id.in_(alerts_query.with_entities(CAPAlert.id).subquery())
         ).all()
 
+        # Get the actual county boundary geometry for fallback
         county_boundary = None
         try:
             county_geom = db.session.query(
@@ -1466,6 +1487,7 @@ def get_alerts():
 
         features = []
         for alert in alerts:
+            # Use existing geometry or fall back to county boundary
             geometry = None
             is_county_wide = False
 
@@ -1473,11 +1495,29 @@ def get_alerts():
                 geometry = json.loads(alert.geometry)
             elif alert.area_desc and any(county_term in alert.area_desc.lower()
                                          for county_term in ['county', 'putnam', 'ohio']):
+                # Use actual county boundary if available
                 if county_boundary:
                     geometry = county_boundary
                     is_county_wide = True
 
+            # Check if this should be marked as county-wide based on area description
+            if not is_county_wide and alert.area_desc:
+                area_lower = alert.area_desc.lower()
+
+                # Multi-county alerts that include Putnam should be treated as county-wide for Putnam
+                if 'putnam' in area_lower:
+                    # Count counties (semicolons or commas usually separate them)
+                    separator_count = max(area_lower.count(';'), area_lower.count(','))
+                    if separator_count >= 2:  # 3+ counties = treat as county-wide
+                        is_county_wide = True
+
+                # Direct county-wide keywords
+                county_keywords = ['county', 'putnam county', 'entire county']
+                if any(keyword in area_lower for keyword in county_keywords):
+                    is_county_wide = True
+
             if geometry:
+                # Convert expires to ISO format for JavaScript (will be in UTC)
                 expires_iso = None
                 if alert.expires:
                     if alert.expires.tzinfo is None:
@@ -1499,20 +1539,27 @@ def get_alerts():
                             alert.description) > 500 else alert.description,
                         'area_desc': alert.area_desc,
                         'expires_iso': expires_iso,
-                        'is_county_wide': is_county_wide
+                        'is_county_wide': is_county_wide,
+                        'is_expired': is_alert_expired(alert.expires)  # Add expiration status
                     },
                     'geometry': geometry
                 })
 
+        logger.info(f"Returning {len(features)} alerts (include_expired={include_expired})")
+
         return jsonify({
             'type': 'FeatureCollection',
-            'features': features
+            'features': features,
+            'metadata': {
+                'total_features': len(features),
+                'include_expired': include_expired,
+                'generated_at': utc_now().isoformat()
+            }
         })
 
     except Exception as e:
         logger.error(f"Error getting alerts: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/api/alerts/historical')
 def get_historical_alerts():
@@ -1835,54 +1882,49 @@ def mark_expired():
 
 @app.route('/admin/fix_county_intersections', methods=['POST'])
 def fix_county_intersections():
-    """Calculate intersections for alerts that have geometry but no intersections"""
+    """Recalculate intersection areas for all active alerts"""
     try:
-        logger.info("Starting intersection calculation for alerts with geometry")
+        active_alerts = get_active_alerts_query().all()
+        total_updated = 0
 
-        alerts_to_process = db.session.query(CAPAlert).filter(
-            CAPAlert.geom.isnot(None),
-            ~CAPAlert.id.in_(
-                db.session.query(Intersection.cap_alert_id).distinct()
-            )
-        ).all()
+        for alert in active_alerts:
+            if not alert.geom:
+                continue
 
-        if not alerts_to_process:
-            alerts_to_process = db.session.query(CAPAlert).filter(
-                CAPAlert.geom.isnot(None)
+            # Delete existing intersections
+            Intersection.query.filter_by(cap_alert_id=alert.id).delete()
+
+            # Find all intersecting boundaries
+            intersecting_boundaries = db.session.query(
+                Boundary.id,
+                func.ST_Area(func.ST_Intersection(alert.geom, Boundary.geom)).label('intersection_area')
+            ).filter(
+                func.ST_Intersects(alert.geom, Boundary.geom),
+                func.ST_Area(func.ST_Intersection(alert.geom, Boundary.geom)) > 0
             ).all()
 
-        stats = {
-            'alerts_processed': 0,
-            'intersections_created': 0,
-            'errors': 0
-        }
-
-        for alert in alerts_to_process:
-            try:
-                intersections_created = calculate_alert_intersections(alert)
-                stats['alerts_processed'] += 1
-                stats['intersections_created'] += intersections_created
-                logger.info(f"Processed alert {alert.identifier}: {intersections_created} intersections")
-            except Exception as e:
-                stats['errors'] += 1
-                logger.error(f"Error processing alert {alert.identifier}: {str(e)}")
+            # Create new intersection records
+            for boundary_id, intersection_area in intersecting_boundaries:
+                intersection = Intersection(
+                    cap_alert_id=alert.id,
+                    boundary_id=boundary_id,
+                    intersection_area=intersection_area
+                )
+                db.session.add(intersection)
+                total_updated += 1
 
         db.session.commit()
 
-        message = f"Processed {stats['alerts_processed']} alerts, created {stats['intersections_created']} intersections"
-        if stats['errors'] > 0:
-            message += f" ({stats['errors']} errors)"
-
-        logger.info(message)
         return jsonify({
-            'success': message,
-            'stats': stats
+            'success': f'Successfully recalculated intersections for {len(active_alerts)} alerts. Updated {total_updated} intersection records.',
+            'alerts_processed': len(active_alerts),
+            'intersections_updated': total_updated
         })
 
     except Exception as e:
-        logger.error(f"Error in fix_county_intersections: {str(e)}")
         db.session.rollback()
-        return jsonify({'error': f'Failed to calculate intersections: {str(e)}'}), 500
+        logger.error(f"Error fixing county intersections: {str(e)}")
+        return jsonify({'error': f'Failed to fix intersections: {str(e)}'}), 500
 
 
 @app.route('/admin/recalculate_intersections', methods=['POST'])
@@ -1930,6 +1972,244 @@ def recalculate_intersections():
         logger.error(f"Error in recalculate_intersections: {str(e)}")
         db.session.rollback()
         return jsonify({'error': f'Failed to recalculate intersections: {str(e)}'}), 500
+
+
+@app.route('/admin/calculate_intersections/<int:alert_id>', methods=['POST'])
+def calculate_intersections_for_alert(alert_id):
+    """Calculate and store intersections for a specific alert"""
+    try:
+        alert = CAPAlert.query.get_or_404(alert_id)
+
+        if not alert.geom:
+            return jsonify({'error': f'Alert {alert_id} has no geometry'}), 400
+
+        # Remove existing intersections for this alert
+        existing_count = Intersection.query.filter_by(cap_alert_id=alert_id).count()
+        if existing_count > 0:
+            Intersection.query.filter_by(cap_alert_id=alert_id).delete()
+            logger.info(f"Removed {existing_count} existing intersections for alert {alert_id}")
+
+        # Get all boundaries
+        boundaries = Boundary.query.all()
+
+        intersections_created = 0
+        intersections_with_area = 0
+
+        for boundary in boundaries:
+            if not boundary.geom:
+                continue
+
+            # Calculate intersection using PostGIS
+            intersection_result = db.session.query(
+                func.ST_Intersects(alert.geom, boundary.geom).label('intersects'),
+                func.ST_Area(func.ST_Intersection(alert.geom, boundary.geom)).label('intersection_area')
+            ).first()
+
+            if intersection_result.intersects:
+                # Create intersection record
+                intersection = Intersection(
+                    cap_alert_id=alert_id,
+                    boundary_id=boundary.id,
+                    intersection_area=intersection_result.intersection_area or 0
+                )
+                db.session.add(intersection)
+                intersections_created += 1
+
+                if intersection_result.intersection_area and intersection_result.intersection_area > 0:
+                    intersections_with_area += 1
+
+        db.session.commit()
+
+        # Log the operation
+        log_entry = SystemLog(
+            level='INFO',
+            message=f'Calculated intersections for alert {alert_id}',
+            module='admin',
+            details={
+                'alert_id': alert_id,
+                'alert_event': alert.event,
+                'intersections_created': intersections_created,
+                'intersections_with_area': intersections_with_area,
+                'boundaries_checked': len(boundaries),
+                'calculated_at': utc_now().isoformat()
+            }
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+
+        return jsonify({
+            'success': f'Calculated intersections for alert {alert_id}',
+            'intersections_created': intersections_created,
+            'intersections_with_area': intersections_with_area,
+            'boundaries_checked': len(boundaries),
+            'alert_event': alert.event
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error calculating intersections for alert {alert_id}: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/calculate_all_intersections', methods=['POST'])
+def calculate_all_intersections():
+    """Calculate intersections for all alerts"""
+    try:
+        # Get all alerts with geometry
+        alerts_with_geom = CAPAlert.query.filter(CAPAlert.geom.isnot(None)).all()
+
+        total_alerts = len(alerts_with_geom)
+        total_intersections = 0
+        processed_alerts = 0
+
+        for alert in alerts_with_geom:
+            # Remove existing intersections for this alert
+            Intersection.query.filter_by(cap_alert_id=alert.id).delete()
+
+            # Get all boundaries
+            boundaries = Boundary.query.all()
+
+            alert_intersections = 0
+            for boundary in boundaries:
+                if not boundary.geom:
+                    continue
+
+                # Calculate intersection using PostGIS
+                intersection_result = db.session.query(
+                    func.ST_Intersects(alert.geom, boundary.geom).label('intersects'),
+                    func.ST_Area(func.ST_Intersection(alert.geom, boundary.geom)).label('intersection_area')
+                ).first()
+
+                if intersection_result.intersects:
+                    intersection = Intersection(
+                        cap_alert_id=alert.id,
+                        boundary_id=boundary.id,
+                        intersection_area=intersection_result.intersection_area or 0
+                    )
+                    db.session.add(intersection)
+                    alert_intersections += 1
+
+            total_intersections += alert_intersections
+            processed_alerts += 1
+
+            # Commit every 10 alerts to avoid memory issues
+            if processed_alerts % 10 == 0:
+                db.session.commit()
+                logger.info(f"Processed {processed_alerts}/{total_alerts} alerts")
+
+        # Final commit
+        db.session.commit()
+
+        # Log the operation
+        log_entry = SystemLog(
+            level='INFO',
+            message=f'Calculated intersections for all alerts',
+            module='admin',
+            details={
+                'total_alerts_processed': processed_alerts,
+                'total_intersections_created': total_intersections,
+                'calculated_at': utc_now().isoformat()
+            }
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+
+        return jsonify({
+            'success': f'Calculated intersections for all alerts',
+            'alerts_processed': processed_alerts,
+            'total_intersections_created': total_intersections
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error calculating all intersections: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+def calculate_coverage_percentages(alert_id, intersections):
+    """
+    Calculate actual coverage percentages for each boundary type and overall county coverage
+    """
+    coverage_data = {}
+
+    try:
+        # Get the alert polygon
+        alert = CAPAlert.query.get(alert_id)
+        if not alert or not alert.geom:
+            return coverage_data
+
+        # Group intersections by boundary type
+        boundary_types = {}
+        for intersection, boundary in intersections:
+            if boundary.type not in boundary_types:
+                boundary_types[boundary.type] = []
+            boundary_types[boundary.type].append((intersection, boundary))
+
+        # Calculate coverage for each boundary type
+        for boundary_type, boundaries in boundary_types.items():
+            # Get all boundaries of this type in the county
+            all_boundaries_of_type = Boundary.query.filter_by(type=boundary_type).all()
+
+            if not all_boundaries_of_type:
+                continue
+
+            # Calculate total area for this boundary type
+            total_area_query = db.session.query(
+                func.sum(func.ST_Area(Boundary.geom)).label('total_area')
+            ).filter(Boundary.type == boundary_type).first()
+
+            total_area = total_area_query.total_area if total_area_query.total_area else 0
+
+            # Calculate intersected area
+            intersected_area = sum(
+                intersection.intersection_area or 0
+                for intersection, boundary in boundaries
+            )
+
+            # Calculate coverage percentage
+            coverage_percentage = 0.0
+            if total_area > 0:
+                coverage_percentage = (intersected_area / total_area) * 100
+                coverage_percentage = min(100.0, max(0.0, coverage_percentage))  # Clamp to 0-100%
+
+            coverage_data[boundary_type] = {
+                'total_boundaries': len(all_boundaries_of_type),
+                'affected_boundaries': len(boundaries),
+                'coverage_percentage': round(coverage_percentage, 1),
+                'total_area_sqm': total_area,
+                'intersected_area_sqm': intersected_area
+            }
+
+        # Calculate overall county coverage
+        county_boundary = Boundary.query.filter_by(type='county').first()
+        if county_boundary and county_boundary.geom:
+            # Calculate intersection area between alert and county
+            county_intersection_query = db.session.query(
+                func.ST_Area(
+                    func.ST_Intersection(alert.geom, county_boundary.geom)
+                ).label('intersection_area'),
+                func.ST_Area(county_boundary.geom).label('total_county_area')
+            ).first()
+
+            if county_intersection_query:
+                county_coverage = 0.0
+                if county_intersection_query.total_county_area > 0:
+                    county_coverage = (
+                                              county_intersection_query.intersection_area /
+                                              county_intersection_query.total_county_area
+                                      ) * 100
+                    county_coverage = min(100.0, max(0.0, county_coverage))
+
+                coverage_data['county'] = {
+                    'coverage_percentage': round(county_coverage, 1),
+                    'total_area_sqm': county_intersection_query.total_county_area,
+                    'intersected_area_sqm': county_intersection_query.intersection_area
+                }
+
+    except Exception as e:
+        logger.error(f"Error calculating coverage percentages: {str(e)}")
+
+    return coverage_data
 
 
 @app.route('/admin/calculate_single_alert/<int:alert_id>', methods=['POST'])

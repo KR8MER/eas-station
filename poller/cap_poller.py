@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Enhanced NOAA CAP Alert Poller for Putnam County, OH (OHZ016/OHC137)
+Fixed NOAA CAP Alert Poller for Putnam County, OH (OHZ016/OHC137) ONLY
 Includes LED sign integration and proper geometry handling with intersection calculation
+FIXED: Only alerts specifically for Putnam County will be included
 """
 
 import os
@@ -216,7 +217,7 @@ if not FLASK_MODELS_AVAILABLE:
 
 
 class CAPPoller:
-    """Enhanced CAP alert poller with LED sign integration and proper geometry handling"""
+    """Enhanced CAP alert poller with LED sign integration and STRICT Putnam County filtering"""
 
     def __init__(self, database_url: str, led_sign_ip: str = None, led_sign_port: int = 10001):
         """
@@ -263,22 +264,23 @@ class CAPPoller:
         elif led_sign_ip:
             self.logger.warning("LED sign IP provided but controller not available")
 
-        # CAP alert endpoints
+        # FIXED CAP alert endpoints - using correct API endpoints
         self.cap_endpoints = [
-            'https://api.weather.gov/alerts/active?zone=OHZ016',  # Putnam County Zone
-            'https://api.weather.gov/alerts/active?area=OH',  # All Ohio alerts (we'll filter)
+            'https://api.weather.gov/alerts/active?zone=OHZ016',  # Putnam County forecast zone
+            'https://api.weather.gov/alerts/active?zone=OHC137',  # Putnam County FIPS code
         ]
 
-        # Area filters for relevance checking
-        self.area_filters = [
+        # STRICT area filters for Putnam County ONLY
+        # Removed broad city names that could match other counties
+        self.putnam_county_identifiers = [
             'OHZ016',  # Putnam County forecast zone
             'OHC137',  # Putnam County FIPS code
-            'PUTNAM',  # County name
-            'COLUMBUS',  # Major nearby city
-            'FINDLAY',  # Regional city
-            'LIMA',  # Regional city
+            'PUTNAM COUNTY',  # Full county name
+            'PUTNAM CO',  # Abbreviated county name
+            # Only local communities within Putnam County
             'OTTAWA',  # County seat
-            'LEIPSIC', 'PANDORA', 'GLANDORF', 'KALIDA', 'FORT JENNINGS'  # Local communities
+            'LEIPSIC', 'PANDORA', 'GLANDORF', 'KALIDA', 'FORT JENNINGS',
+            'COLUMBUS GROVE', 'DUPONT', 'MILLER CITY', 'OTTOVILLE'
         ]
 
     def fetch_cap_alerts(self, timeout: int = 30) -> List[Dict]:
@@ -323,33 +325,47 @@ class CAPPoller:
         return unique_alerts
 
     def is_relevant_alert(self, alert_data: Dict) -> bool:
-        """Enhanced relevance checking for alerts"""
+        """STRICT relevance checking - ONLY Putnam County alerts"""
         try:
             properties = alert_data.get('properties', {})
 
-            # Check UGC codes
+            # Extract alert details for logging
+            event = properties.get('event', 'Unknown')
+            identifier = properties.get('identifier', 'Unknown')[:50]
+
+            # Check UGC codes FIRST (most reliable)
             geocode = properties.get('geocode', {})
             ugc_codes = geocode.get('UGC', [])
 
             for ugc in ugc_codes:
-                if any(area in ugc.upper() for area in ['OHZ016', 'OHC137']):
-                    self.logger.debug(f"Alert relevant by UGC code: {ugc}")
+                if ugc in ['OHZ016', 'OHC137']:
+                    self.logger.info(f"? Alert ACCEPTED by UGC code: {event} ({ugc})")
                     return True
 
-            # Check area description
+            # Check area description for exact Putnam County matches
             area_desc = properties.get('areaDesc', '').upper()
-            if any(area in area_desc for area in self.area_filters):
-                self.logger.debug(f"Alert relevant by area description: {area_desc}")
+            
+            # Must contain "PUTNAM" to be considered
+            if 'PUTNAM' not in area_desc:
+                self.logger.debug(f"? Alert REJECTED - no 'PUTNAM' in area: {event} - {area_desc}")
+                return False
+
+            # Check for specific Putnam County identifiers
+            for identifier_term in self.putnam_county_identifiers:
+                if identifier_term.upper() in area_desc:
+                    self.logger.info(f"? Alert ACCEPTED by area description: {event} ({identifier_term})")
+                    return True
+
+            # If we get here, it has "PUTNAM" but not our specific identifiers
+            # This could be a multi-county alert that mentions Putnam
+            # Let's be more strict and only accept if it's clearly for Putnam County
+            putnam_county_terms = ['PUTNAM COUNTY', 'PUTNAM CO']
+            if any(term in area_desc for term in putnam_county_terms):
+                self.logger.info(f"? Alert ACCEPTED - contains Putnam County: {event}")
                 return True
 
-            # Check event severity - always include severe alerts for nearby areas
-            severity = properties.get('severity', '').upper()
-            if severity in ['SEVERE', 'EXTREME']:
-                # Check if it's in Ohio
-                if 'OHIO' in area_desc or any(ugc.startswith('OH') for ugc in ugc_codes):
-                    self.logger.debug(f"Severe alert included from Ohio: {severity}")
-                    return True
-
+            # Reject everything else
+            self.logger.info(f"? Alert REJECTED - not specifically for Putnam County: {event} - {area_desc}")
             return False
 
         except Exception as e:
@@ -440,7 +456,7 @@ class CAPPoller:
 
                 # Calculate intersections if geometry changed or no intersections exist
                 if (existing_alert.geom != old_geom) or self._needs_intersection_calculation(existing_alert):
-                    self._calculate_alert_intersections(existing_alert)
+                    self.process_intersections(existing_alert)
 
                 # Update LED display if this is an active alert
                 if self.led_controller and not self.is_alert_expired(existing_alert):
@@ -462,7 +478,7 @@ class CAPPoller:
 
                 # Calculate intersections for new alert with geometry
                 if new_alert.geom:
-                    self._calculate_alert_intersections(new_alert)
+                    self.process_intersections(new_alert)
 
                 # Update LED display for new active alerts
                 if self.led_controller and not self.is_alert_expired(new_alert):
@@ -499,70 +515,62 @@ class CAPPoller:
             self.logger.warning(f"Could not set geometry for alert {alert.identifier}: {e}")
             alert.geom = None
 
-    def _calculate_alert_intersections(self, alert: CAPAlert):
-        """Calculate intersections between an alert and all boundaries"""
-        if not alert.geom:
-            self.logger.debug(f"No geometry for alert {alert.identifier}, skipping intersections")
-            return 0
-
-        intersections_created = 0
-
+    def process_intersections(self, alert: CAPAlert):
+        """Process alert intersections with boundaries - IMPROVED VERSION"""
         try:
-            # Get all boundaries
-            boundaries = self.db_session.query(Boundary).all()
+            if not alert.geom:
+                self.logger.debug(f"Alert {alert.id} has no geometry, skipping intersection calculation")
+                return
 
-            # Clear existing intersections for this alert
+            # Remove any existing intersections for this alert (in case of updates)
             self.db_session.query(Intersection).filter_by(cap_alert_id=alert.id).delete()
-
+            
+            # Get all boundaries
+            boundaries = self.db_session.query(Boundary).filter(Boundary.geom.isnot(None)).all()
+            
+            intersections_created = 0
+            intersections_with_area = 0
+            
             for boundary in boundaries:
-                if not boundary.geom:
-                    continue
-
                 try:
-                    # Check if alert geometry intersects with boundary geometry
-                    intersection_result = self.db_session.execute(
-                        text("""
-                            SELECT ST_Intersects(:alert_geom, :boundary_geom) as intersects,
-                                   ST_Area(ST_Intersection(:alert_geom, :boundary_geom)) as area
-                        """),
-                        {
-                            'alert_geom': alert.geom,
-                            'boundary_geom': boundary.geom
-                        }
-                    ).fetchone()
-
+                    # Calculate intersection using PostGIS
+                    intersection_result = self.db_session.query(
+                        func.ST_Intersects(alert.geom, boundary.geom).label('intersects'),
+                        func.ST_Area(func.ST_Intersection(alert.geom, boundary.geom)).label('intersection_area')
+                    ).first()
+                    
                     if intersection_result and intersection_result.intersects:
-                        # Create new intersection record
+                        # Create intersection record
                         intersection = Intersection(
                             cap_alert_id=alert.id,
                             boundary_id=boundary.id,
-                            intersection_area=float(intersection_result.area) if intersection_result.area else 0.0,
+                            intersection_area=float(intersection_result.intersection_area or 0),
                             created_at=utc_now()
                         )
                         self.db_session.add(intersection)
                         intersections_created += 1
-
+                        
+                        if intersection_result.intersection_area and intersection_result.intersection_area > 0:
+                            intersections_with_area += 1
+                            
                         self.logger.debug(
-                            f"Created intersection: Alert {alert.identifier} <-> Boundary {boundary.name}")
-
-                except Exception as e:
-                    self.logger.error(f"Error calculating intersection for boundary {boundary.id}: {str(e)}")
+                            f"Created intersection: Alert {alert.identifier} <-> Boundary {boundary.name}"
+                        )
+                            
+                except Exception as boundary_error:
+                    self.logger.warning(f"Error calculating intersection with boundary {boundary.id}: {boundary_error}")
                     continue
-
-            # Commit intersection changes
+            
+            # Commit the intersections
             self.db_session.commit()
-
+            
             if intersections_created > 0:
-                self.logger.info(f"Created {intersections_created} intersections for alert {alert.identifier}")
-
+                self.logger.info(f"Calculated intersections for alert {alert.id} ({alert.event}): "
+                                f"{intersections_created} intersections, {intersections_with_area} with area > 0")
+            
         except Exception as e:
-            self.logger.error(f"Error calculating intersections for alert {alert.identifier}: {str(e)}")
-            try:
-                self.db_session.rollback()
-            except:
-                pass
-
-        return intersections_created
+            self.db_session.rollback()
+            self.logger.error(f"Error processing intersections for alert {alert.id}: {str(e)}")
 
     def _needs_intersection_calculation(self, alert: CAPAlert) -> bool:
         """Check if an alert needs intersection calculation"""
@@ -649,7 +657,8 @@ class CAPPoller:
                             self.logger.debug(f"Fixed geometry for alert {alert.identifier}")
 
                             # Calculate intersections for this alert
-                            intersections = self._calculate_alert_intersections(alert)
+                            self.process_intersections(alert)
+                            intersections = self.db_session.query(Intersection).filter_by(cap_alert_id=alert.id).count()
                             if intersections > 0:
                                 stats['intersections_calculated'] += intersections
 
@@ -772,7 +781,7 @@ class CAPPoller:
                 pass
 
     def poll_and_process(self) -> Dict:
-        """Main polling function with LED integration"""
+        """Main polling function with LED integration and STRICT Putnam County filtering"""
         start_time = time.time()
         poll_start_utc = utc_now()
         poll_start_local = local_now()
@@ -782,11 +791,12 @@ class CAPPoller:
             'alerts_new': 0,
             'alerts_updated': 0,
             'alerts_filtered': 0,
+            'alerts_accepted': 0,
             'intersections_calculated': 0,
             'execution_time_ms': 0,
             'status': 'SUCCESS',
             'error_message': None,
-            'zone': 'OHZ016/OHC137 (Putnam County, OH)',
+            'zone': 'OHZ016/OHC137 (Putnam County, OH) - STRICT FILTERING',
             'poll_time_utc': poll_start_utc.isoformat(),
             'poll_time_local': poll_start_local.isoformat(),
             'timezone': str(PUTNAM_COUNTY_TZ),
@@ -795,14 +805,14 @@ class CAPPoller:
 
         try:
             self.logger.info(
-                f"Starting CAP alert polling cycle for Putnam County, OH at {format_local_datetime(poll_start_utc)}"
+                f"Starting CAP alert polling cycle for Putnam County, OH (STRICT MODE) at {format_local_datetime(poll_start_utc)}"
             )
 
             # Fetch alerts
             alerts_data = self.fetch_cap_alerts()
             stats['alerts_fetched'] = len(alerts_data)
 
-            # Process each alert
+            # Process each alert with STRICT filtering
             for alert_data in alerts_data:
                 props = alert_data.get('properties', {})
                 event = props.get('event', 'Unknown')
@@ -811,12 +821,14 @@ class CAPPoller:
                 self.logger.info(
                     f"Processing alert: {event} (ID: {alert_id[:20] if alert_id != 'No ID' else 'No ID'}...)")
 
+                # STRICT relevance check - only Putnam County alerts
                 if not self.is_relevant_alert(alert_data):
-                    self.logger.info(f"Alert {event} filtered out - not relevant")
+                    self.logger.info(f"? Alert {event} FILTERED OUT - not specifically for Putnam County")
                     stats['alerts_filtered'] += 1
                     continue
 
-                self.logger.info(f"Alert {event} passed relevance check - processing...")
+                self.logger.info(f"? Alert {event} ACCEPTED for Putnam County - processing...")
+                stats['alerts_accepted'] += 1
 
                 parsed_alert = self.parse_cap_alert(alert_data)
                 if parsed_alert:
@@ -826,19 +838,19 @@ class CAPPoller:
                         stats['alerts_new'] += 1
                         if alert and hasattr(alert, 'sent') and alert.sent:
                             self.logger.info(
-                                f"Saved new alert: {alert.event} - Sent: {format_local_datetime(alert.sent)}"
+                                f"Saved new Putnam County alert: {alert.event} - Sent: {format_local_datetime(alert.sent)}"
                             )
                         else:
-                            self.logger.info(f"Saved new alert: {parsed_alert['event']}")
+                            self.logger.info(f"Saved new Putnam County alert: {parsed_alert['event']}")
                         stats['led_updated'] = True
                     else:
                         stats['alerts_updated'] += 1
                         if alert and hasattr(alert, 'sent') and alert.sent:
                             self.logger.info(
-                                f"Updated existing alert: {alert.event} - Sent: {format_local_datetime(alert.sent)}"
+                                f"Updated existing Putnam County alert: {alert.event} - Sent: {format_local_datetime(alert.sent)}"
                             )
                         else:
-                            self.logger.info(f"Updated existing alert: {parsed_alert['event']}")
+                            self.logger.info(f"Updated existing Putnam County alert: {parsed_alert['event']}")
                 else:
                     self.logger.warning(f"Failed to parse alert: {event}")
 
@@ -857,11 +869,11 @@ class CAPPoller:
             stats['execution_time_ms'] = int((time.time() - start_time) * 1000)
 
             self.logger.info(
-                f"Polling cycle completed: {stats['alerts_new']} new, {stats['alerts_updated']} updated, {stats['alerts_filtered']} filtered"
+                f"Polling cycle completed: {stats['alerts_accepted']} accepted, {stats['alerts_new']} new, {stats['alerts_updated']} updated, {stats['alerts_filtered']} filtered"
             )
 
             # Log successful poll
-            self.log_system_event('INFO', f'CAP polling successful: {stats["alerts_new"]} new alerts', stats)
+            self.log_system_event('INFO', f'CAP polling successful: {stats["alerts_new"]} new Putnam County alerts', stats)
 
         except Exception as e:
             stats['status'] = 'ERROR'
@@ -885,7 +897,7 @@ class CAPPoller:
 
 def main():
     """Main entry point"""
-    parser = argparse.ArgumentParser(description='NOAA CAP Alert Poller with LED Sign Integration')
+    parser = argparse.ArgumentParser(description='NOAA CAP Alert Poller with LED Sign Integration - PUTNAM COUNTY ONLY')
     parser.add_argument('--database-url',
                         default='postgresql://noaa_user:rkhkeq@localhost:5432/noaa_alerts',
                         help='Database connection URL')
@@ -925,7 +937,7 @@ def main():
     logger = logging.getLogger(__name__)
 
     startup_utc = utc_now()
-    logger.info(f"Starting NOAA CAP Alert Poller with LED Integration")
+    logger.info(f"Starting NOAA CAP Alert Poller with LED Integration - PUTNAM COUNTY STRICT MODE")
     logger.info(f"Startup time: {format_local_datetime(startup_utc)}")
     if args.led_ip:
         logger.info(f"LED Sign: {args.led_ip}:{args.led_port}")

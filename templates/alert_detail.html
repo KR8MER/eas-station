@@ -14,54 +14,12 @@
         box-shadow: 0 4px 15px rgba(0,0,0,0.2);
     }
 
-    /* Alert detail map styling */
-    #alert-map {
-        border-radius: 0;
-        border: none;
-    }
-
-    .leaflet-container {
-        font-family: inherit;
-    }
-
-    .alert-popup-title {
-        font-weight: bold;
-        color: #0d6efd;
-        margin-bottom: 8px;
-        border-bottom: 1px solid #dee2e6;
-        padding-bottom: 5px;
-    }
-
-    .alert-popup-detail {
-        margin-bottom: 5px;
-        font-size: 0.9em;
-    }
-
-    .boundary-popup-title {
-        font-weight: bold;
-        color: #6c757d;
-        margin-bottom: 8px;
-    }
-
-    .boundary-popup-detail {
-        margin-bottom: 3px;
-        font-size: 0.85em;
-    }
-
-    .map-loading-error {
-        background: #f8f9fa;
-        border: 1px solid #dee2e6;
-        padding: 20px;
-        text-align: center;
-        color: #6c757d;
-    }
-
     .county-wide-icon {
         font-size: 2em;
         margin-bottom: 10px;
         display: block;
     }
-    
+
     .affected-summary {
         background: #f8f9fa;
         border-left: 4px solid #007bff;
@@ -69,14 +27,14 @@
         margin-bottom: 20px;
         border-radius: 0 8px 8px 0;
     }
-    
+
     .boundary-type-group {
         margin-bottom: 20px;
         border: 1px solid #dee2e6;
         border-radius: 8px;
         overflow: hidden;
     }
-    
+
     .boundary-type-header {
         background: #f8f9fa;
         padding: 10px 15px;
@@ -84,46 +42,60 @@
         font-weight: 600;
         color: #495057;
     }
-    
+
     .boundary-list {
         padding: 0;
         margin: 0;
         list-style: none;
     }
-    
-    .boundary-item {
-        padding: 10px 15px;
+
+    .boundary-item-simple {
+        padding: 8px 15px;
         border-bottom: 1px solid #f8f9fa;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
     }
-    
-    .boundary-item:last-child {
+
+    .boundary-item-simple:last-child {
         border-bottom: none;
     }
-    
-    .boundary-item:nth-child(even) {
+
+    .boundary-item-simple:nth-child(even) {
         background: #fdfdfe;
     }
-    
-    .boundary-name {
+
+    .boundary-item-simple .boundary-name {
         font-weight: 500;
     }
-    
-    .boundary-area {
-        font-size: 0.9em;
-        color: #6c757d;
-    }
-    
+
     .coverage-badge {
-        background: #28a745;
-        color: white;
         padding: 3px 8px;
         border-radius: 12px;
         font-size: 0.8em;
+        color: white;
+        margin-left: 5px;
     }
-    
+
+    .coverage-badge.bg-success {
+        background-color: #28a745 !important;
+    }
+
+    .coverage-badge.bg-warning {
+        background-color: #ffc107 !important;
+        color: #212529 !important;
+    }
+
+    .coverage-badge.bg-info {
+        background-color: #17a2b8 !important;
+    }
+
+    .coverage-badge.bg-secondary {
+        background-color: #6c757d !important;
+    }
+
+    .coverage-breakdown .badge {
+        font-size: 0.7em;
+        margin-bottom: 2px;
+    }
+
     .alert-scope-indicator {
         display: inline-flex;
         align-items: center;
@@ -133,120 +105,40 @@
         font-size: 0.85em;
         font-weight: 500;
     }
-    
+
     .scope-county-wide {
         background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
         color: white;
     }
-    
+
     .scope-localized {
         background: #e9ecef;
         color: #495057;
     }
-    
+
     .impact-stats {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        display: flex;
+        flex-wrap: wrap;
         gap: 15px;
         margin: 15px 0;
     }
-    
+
     .impact-stat {
         text-align: center;
-        padding: 15px;
-        background: white;
-        border-radius: 8px;
-        border: 1px solid #dee2e6;
+        min-width: 80px;
     }
-    
+
     .impact-number {
         font-size: 1.5em;
         font-weight: bold;
         color: #007bff;
     }
-    
+
     .impact-label {
-        font-size: 0.9em;
-        color: #6c757d;
-        margin-top: 5px;
-    }
-
-    /* Enhanced timezone display styles */
-    .time-info-card {
-        background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
-        border: 1px solid #bbdefb;
-        border-radius: 8px;
-        padding: 15px;
-        margin-bottom: 15px;
-    }
-
-    .time-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 10px;
-        padding: 8px 0;
-        border-bottom: 1px solid rgba(0,0,0,0.1);
-    }
-
-    .time-row:last-child {
-        border-bottom: none;
-        margin-bottom: 0;
-    }
-
-    .time-label {
-        font-weight: 600;
-        color: #1976d2;
-    }
-
-    .time-value {
-        text-align: right;
-    }
-
-    .local-time-display {
-        font-weight: 600;
-        color: #2e7d32;
-        font-size: 1.1em;
-    }
-
-    .utc-time-display {
-        color: #666;
-        font-size: 0.9em;
-        margin-top: 2px;
-    }
-
-    .expired-badge {
-        background: #f44336;
-        color: white;
-        padding: 4px 8px;
-        border-radius: 12px;
-        font-size: 0.8em;
-        font-weight: 600;
-    }
-
-    .active-badge {
-        background: #4caf50;
-        color: white;
-        padding: 4px 8px;
-        border-radius: 12px;
-        font-size: 0.8em;
-        font-weight: 600;
-    }
-
-    .timezone-note {
-        background: #fff3e0;
-        border: 1px solid #ffcc02;
-        border-radius: 4px;
-        padding: 8px;
-        margin-top: 10px;
         font-size: 0.85em;
-        color: #e65100;
-    }
-
-    /* Enhanced alert content styling */
-    .alert-content {
-        line-height: 1.6;
-        font-size: 1.05em;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
 
     .alert-description {
@@ -270,6 +162,74 @@
         color: #856404;
         margin-bottom: 15px;
         font-weight: 600;
+    }
+
+    .alert-content {
+        line-height: 1.6;
+    }
+
+    .timing-card {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+    }
+
+    .timing-item {
+        margin-bottom: 12px;
+    }
+
+    .timing-label {
+        font-weight: 600;
+        color: #495057;
+        display: block;
+        margin-bottom: 2px;
+    }
+
+    .timing-value {
+        color: #007bff;
+    }
+
+    .technical-details {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+    }
+
+    .detail-item {
+        margin-bottom: 10px;
+    }
+
+    .detail-label {
+        font-weight: 600;
+        color: #495057;
+        margin-right: 8px;
+    }
+
+    .coverage-summary {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+        margin: 20px 0;
+    }
+
+    .coverage-number {
+        font-size: 3em;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+
+    .coverage-label {
+        font-size: 1.2em;
+        margin-bottom: 10px;
+    }
+
+    .coverage-sublabel {
+        opacity: 0.9;
+        font-size: 0.9em;
     }
 </style>
 {% endblock %}
@@ -328,14 +288,29 @@
                             <h5 class="mb-0">
                                 <i class="fas fa-info-circle"></i> Alert Information
                                 <span class="float-end">
-                                    {% if is_county_wide %}
-                                    <span class="alert-scope-indicator scope-county-wide">
-                                        <i class="fas fa-globe"></i> County-Wide Coverage
-                                    </span>
+                                    {% if coverage_data and coverage_data.get('county') %}
+                                        {% set county_coverage = coverage_data['county']['coverage_percentage'] %}
+                                        {% if county_coverage >= 95 %}
+                                            <span class="alert-scope-indicator scope-county-wide">
+                                                <i class="fas fa-globe"></i> {{ county_coverage }}% County Coverage
+                                            </span>
+                                        {% elif county_coverage >= 75 %}
+                                            <span class="alert-scope-indicator" style="background: linear-gradient(45deg, #ffc107, #fd7e14); color: white;">
+                                                <i class="fas fa-map"></i> {{ county_coverage }}% County Coverage
+                                            </span>
+                                        {% else %}
+                                            <span class="alert-scope-indicator scope-localized">
+                                                <i class="fas fa-map-marker-alt"></i> {{ county_coverage }}% County Coverage
+                                            </span>
+                                        {% endif %}
+                                    {% elif is_county_wide %}
+                                        <span class="alert-scope-indicator" style="background: #6c757d; color: white;">
+                                            <i class="fas fa-question"></i> Coverage Calculating...
+                                        </span>
                                     {% else %}
-                                    <span class="alert-scope-indicator scope-localized">
-                                        <i class="fas fa-map-marker-alt"></i> Localized Alert
-                                    </span>
+                                        <span class="alert-scope-indicator scope-localized">
+                                            <i class="fas fa-map-marker-alt"></i> Localized Alert
+                                        </span>
                                     {% endif %}
                                 </span>
                             </h5>
@@ -350,23 +325,21 @@
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <h6 class="text-muted mb-1">Event Type</h6>
-                                    <span class="badge bg-primary fs-6">{{ alert.event }}</span>
+                                    <span class="fs-5 fw-bold text-primary">{{ alert.event }}</span>
                                 </div>
                                 <div class="col-md-6">
                                     <h6 class="text-muted mb-1">Status</h6>
-                                    <span class="badge bg-secondary fs-6">{{ alert.status }}</span>
-                                    {% if alert.expires and alert.expires | is_expired %}
-                                    <span class="expired-badge">EXPIRED</span>
-                                    {% elif alert.expires %}
-                                    <span class="active-badge">ACTIVE</span>
-                                    {% endif %}
+                                    <span class="badge bg-{% if alert.status == 'Actual' %}success{% else %}secondary{% endif %} fs-6">
+                                        {{ alert.status }}
+                                        {% if alert.expires | is_expired %}
+                                        EXPIRED
+                                        {% endif %}
+                                    </span>
                                 </div>
                                 <div class="col-md-6">
                                     <h6 class="text-muted mb-1">Severity</h6>
                                     {% if alert.severity %}
-                                    <span class="badge {% if alert.severity == 'Extreme' %}bg-danger{% elif alert.severity == 'Severe' %}bg-warning{% elif alert.severity == 'Moderate' %}bg-info{% else %}bg-secondary{% endif %} fs-6">
-                                        {{ alert.severity }}
-                                    </span>
+                                    <span class="badge bg-{% if alert.severity == 'Extreme' %}danger{% elif alert.severity == 'Severe' %}warning{% elif alert.severity == 'Moderate' %}info{% else %}secondary{% endif %} fs-6">{{ alert.severity }}</span>
                                     {% else %}
                                     <span class="text-muted">Not specified</span>
                                     {% endif %}
@@ -374,7 +347,7 @@
                                 <div class="col-md-6">
                                     <h6 class="text-muted mb-1">Urgency</h6>
                                     {% if alert.urgency %}
-                                    <span class="badge bg-info fs-6">{{ alert.urgency }}</span>
+                                    <span class="badge bg-warning fs-6">{{ alert.urgency }}</span>
                                     {% else %}
                                     <span class="text-muted">Not specified</span>
                                     {% endif %}
@@ -426,58 +399,195 @@
                         </div>
                     </div>
 
-                    <!-- Alert Map Visualization -->
+                    <!-- Alert Coverage Map -->
                     <div class="card mb-4">
                         <div class="card-header">
                             <h5 class="mb-0">
                                 <i class="fas fa-map"></i> Alert Coverage Map
-                                <span class="float-end">
-                                    <button class="btn btn-sm btn-outline-primary" onclick="fitMapToBounds()">
-                                        <i class="fas fa-crosshairs"></i> Zoom to Fit
-                                    </button>
-                                </span>
                             </h5>
                         </div>
-                        <div class="card-body p-0">
-                            <div id="alert-map" style="height: 400px; width: 100%;">
-                                <div class="d-flex justify-content-center align-items-center h-100">
+                        <div class="card-body">
+                            <!-- Leaflet CSS -->
+                            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+
+                            <div id="map" style="height: 500px; background: #f8f9fa; border-radius: 5px;">
+                                <div class="d-flex align-items-center justify-content-center h-100">
                                     <div class="text-center">
-                                        <div class="spinner-border text-primary" role="status">
-                                            <span class="visually-hidden">Loading map...</span>
-                                        </div>
-                                        <p class="mt-2 text-muted">Loading alert coverage map...</p>
+                                        <div class="spinner-border text-primary" role="status"></div>
+                                        <p class="mt-2 text-muted">Loading map...</p>
+                                        <small class="text-muted">Loading alert coverage map...</small>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                        <div class="card-footer">
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <h6>Map Legend:</h6>
-                                    <div class="d-flex flex-wrap gap-2">
-                                        <span class="badge" style="background-color: {% if alert.severity == 'Extreme' %}#e74c3c{% elif alert.severity == 'Severe' %}#e67e22{% elif alert.severity == 'Moderate' %}#f39c12{% elif alert.severity == 'Minor' %}#3498db{% else %}#95a5a6{% endif %};">Alert Area</span>
-                                        <span class="badge bg-secondary">Affected Boundaries</span>
-                                    </div>
+                            <div class="d-flex justify-content-between align-items-center mt-3">
+                                <div class="map-legend">
+                                    <small>
+                                        <span class="badge" style="background: #ff6b35;">Alert Area</span>
+                                        <span class="badge" style="background: #004e89;">Affected Boundaries</span>
+                                    </small>
                                 </div>
-                                <div class="col-md-6">
-                                    <div class="text-end">
-                                        <small class="text-muted">
-                                            <i class="fas fa-info-circle"></i>
-                                            {% if is_county_wide %}
-                                            County-wide coverage shown
-                                            {% else %}
-                                            Geographic coverage area
-                                            {% endif %}
-                                        </small>
-                                    </div>
-                                </div>
+                                <small class="text-muted">
+                                    <i class="fas fa-info-circle"></i>
+                                    {% if is_county_wide %}County-wide coverage shown{% else %}Specific alert area shown{% endif %}
+                                </small>
                             </div>
+
+                            <!-- Leaflet JS -->
+                            <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+                            <!-- Inline Map Script -->
+                            <script>
+                            (function() {
+                                console.log('Map script starting...');
+
+                                // Wait for Leaflet to load
+                                setTimeout(function() {
+                                    try {
+                                        console.log('Initializing map for alert {{ alert.id }}');
+
+                                        // Initialize map
+                                        var map = L.map('map').setView([41.0167, -84.1330], 11);
+
+                                        // Add OpenStreetMap tiles
+                                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                                            attribution: '© OpenStreetMap contributors'
+                                        }).addTo(map);
+
+                                        console.log('Map initialized successfully');
+
+                                        // Try to load alert data with expired alerts included
+                                        fetch('/api/alerts?include_expired=true')
+                                            .then(function(response) {
+                                                console.log('API response:', response.status);
+                                                return response.json();
+                                            })
+                                            .then(function(data) {
+                                                console.log('Data received:', data);
+
+                                                if (data.features) {
+                                                    var currentAlert = null;
+                                                    for (var i = 0; i < data.features.length; i++) {
+                                                        if (data.features[i].properties.id === {{ alert.id }}) {
+                                                            currentAlert = data.features[i];
+                                                            break;
+                                                        }
+                                                    }
+
+                                                    if (currentAlert && currentAlert.geometry) {
+                                                        console.log('Found alert geometry in API with expired=true');
+                                                        displayAlertGeometry(map, currentAlert);
+                                                    } else {
+                                                        console.log('No geometry found for alert {{ alert.id }} even with expired=true');
+                                                        showError('Alert #{{ alert.id }} has no geographic data');
+                                                    }
+                                                } else {
+                                                    console.log('No features in API response');
+                                                    showError('No alert data available from API');
+                                                }
+                                            })
+                                            .catch(function(error) {
+                                                console.error('API Error:', error);
+                                                showError('Error loading alert data: ' + error.message);
+                                            });
+
+                                    } catch (error) {
+                                        console.error('Map Error:', error);
+                                        showError('Error initializing map: ' + error.message);
+                                    }
+                                }, 1000);
+
+                                function displayAlertGeometry(map, alertData) {
+                                    console.log('Displaying alert geometry:', alertData);
+
+                                    try {
+                                        // Add alert to map with styling based on severity
+                                        var severity = '{{ alert.severity }}';
+                                        var color = '#ff6b35'; // default orange
+
+                                        switch(severity) {
+                                            case 'Extreme': color = '#e74c3c'; break;
+                                            case 'Severe': color = '#e67e22'; break;
+                                            case 'Moderate': color = '#f39c12'; break;
+                                            case 'Minor': color = '#3498db'; break;
+                                        }
+
+                                        var alertLayer = L.geoJSON(alertData, {
+                                            style: {
+                                                color: color,
+                                                weight: 3,
+                                                opacity: 0.8,
+                                                fillOpacity: 0.3,
+                                                fillColor: color
+                                            }
+                                        }).addTo(map);
+
+                                        // Fit map to alert
+                                        var bounds = alertLayer.getBounds();
+                                        if (bounds.isValid()) {
+                                            map.fitBounds(bounds, { padding: [20, 20] });
+                                            console.log('Map fitted to alert bounds');
+                                        }
+
+                                        // Add popup
+                                        alertLayer.bindPopup(
+                                            '<b>{{ alert.event }}</b><br>' +
+                                            'Alert #{{ alert.id }}<br>' +
+                                            'Severity: ' + severity + '<br>' +
+                                            'Status: {{ alert.status }}'
+                                        );
+
+                                        // Add county boundary for reference
+                                        fetch('/api/boundaries?type=county')
+                                            .then(function(response) { return response.json(); })
+                                            .then(function(data) {
+                                                if (data.features && data.features.length > 0) {
+                                                    L.geoJSON(data.features[0], {
+                                                        style: {
+                                                            color: '#e74c3c',
+                                                            weight: 2,
+                                                            opacity: 0.6,
+                                                            fillOpacity: 0.05,
+                                                            fillColor: '#e74c3c'
+                                                        }
+                                                    }).addTo(map);
+                                                    console.log('County boundary added');
+                                                }
+                                            })
+                                            .catch(function(error) {
+                                                console.log('County boundary load failed (non-critical):', error);
+                                            });
+
+                                        console.log('Alert displayed successfully');
+
+                                    } catch (error) {
+                                        console.error('Error displaying alert:', error);
+                                        showError('Error displaying alert on map: ' + error.message);
+                                    }
+                                }
+
+                                function showError(message) {
+                                    console.log('Showing error:', message);
+                                    document.getElementById('map').innerHTML =
+                                        '<div style="height: 500px; display: flex; align-items: center; justify-content: center; background: #f8f9fa;">' +
+                                        '<div style="text-align: center;">' +
+                                        '<i class="fas fa-exclamation-triangle" style="font-size: 3em; color: #ffc107; margin-bottom: 15px;"></i>' +
+                                        '<h5>Map Error</h5>' +
+                                        '<p>' + message + '</p>' +
+                                        '<button class="btn btn-outline-primary" onclick="location.reload()">Retry</button>' +
+                                        '<br><small style="margin-top: 10px; color: #6c757d;">Alert ID: {{ alert.id }}</small>' +
+                                        '</div></div>';
+                                }
+                            })();
+                            </script>
                         </div>
                     </div>
+                </div>
 
+                <!-- Sidebar -->
+                <div class="col-lg-4">
                     <!-- Affected Boundaries -->
                     {% if intersections %}
-                    <div class="card">
+                    <div class="card mb-4">
                         <div class="card-header">
                             <h5 class="mb-0">
                                 <i class="fas fa-map-marked-alt"></i>
@@ -490,56 +600,116 @@
                             </h5>
                         </div>
                         <div class="card-body">
-                            {% if is_county_wide %}
-                            <div class="affected-summary">
-                                <h6><i class="fas fa-globe-americas"></i> County-Wide Impact</h6>
-                                <p class="mb-0">This alert affects <strong>all {{ intersections|length }} emergency service boundaries</strong> within Putnam County, ensuring complete coverage across all districts and municipalities.</p>
-                            </div>
+                            <!-- County Coverage Summary -->
+                            {% if coverage_data and coverage_data.get('county') %}
+                                {% set county_coverage = coverage_data['county']['coverage_percentage'] %}
+                                <div class="affected-summary">
+                                    <h6>
+                                        <i class="fas fa-{% if county_coverage >= 95 %}globe-americas text-success{% elif county_coverage >= 75 %}map text-warning{% else %}map-marker-alt text-info{% endif %}"></i>
+                                        {% if county_coverage >= 95 %}
+                                            County-Wide Impact
+                                        {% elif county_coverage >= 75 %}
+                                            Major County Impact
+                                        {% elif county_coverage >= 50 %}
+                                            Significant County Impact
+                                        {% else %}
+                                            Localized County Impact
+                                        {% endif %}
+                                    </h6>
+                                    <p class="mb-2">
+                                        This alert covers <strong>{{ county_coverage }}%</strong> of Putnam County
+                                        {% if county_coverage >= 95 %}
+                                            , affecting virtually all emergency service boundaries.
+                                        {% elif county_coverage >= 75 %}
+                                            , affecting most emergency service boundaries.
+                                        {% elif county_coverage >= 50 %}
+                                            , affecting many emergency service boundaries.
+                                        {% else %}
+                                            , affecting some emergency service boundaries.
+                                        {% endif %}
+                                    </p>
 
-                            <!-- Impact Statistics -->
-                            <div class="impact-stats">
-                                {% set boundary_types = intersections | groupby('1.type') %}
-                                {% for boundary_type, boundaries in boundary_types %}
-                                <div class="impact-stat">
-                                    <div class="impact-number">{{ boundaries|list|length }}</div>
-                                    <div class="impact-label">{{ boundary_type.title() }}{% if boundaries|list|length != 1 %}s{% endif %}</div>
+                                    <!-- Coverage breakdown -->
+                                    {% if coverage_data %}
+                                    <div class="coverage-breakdown">
+                                        <small class="text-muted">Coverage by Service Type:</small>
+                                        <div class="row mt-2">
+                                            {% for service_type, data in coverage_data.items() %}
+                                                {% if service_type != 'county' and data.coverage_percentage > 0 %}
+                                                <div class="col-auto">
+                                                    <span class="badge bg-{% if data.coverage_percentage >= 95 %}success{% elif data.coverage_percentage >= 75 %}warning{% elif data.coverage_percentage >= 50 %}info{% else %}secondary{% endif %} me-1">
+                                                        {{ service_type.title() }}: {{ data.coverage_percentage }}%
+                                                    </span>
+                                                </div>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                    {% endif %}
                                 </div>
-                                {% endfor %}
-                            </div>
+                            {% elif is_county_wide %}
+                                <!-- Fallback for when detailed coverage isn't calculated yet -->
+                                <div class="affected-summary">
+                                    <h6><i class="fas fa-exclamation-triangle text-warning"></i> County-Wide Alert - Coverage Analysis Needed</h6>
+                                    <p class="mb-2">This alert appears to affect county-wide areas, but exact coverage percentages need to be calculated.</p>
+                                    <button class="btn btn-warning btn-sm" onclick="triggerIntersectionFix()">
+                                        <i class="fas fa-calculator"></i> Calculate Exact Coverage
+                                    </button>
+                                </div>
                             {% endif %}
 
-                            <!-- Group boundaries by type -->
+                            <!-- Group boundaries by type with dynamic coverage -->
                             {% set boundary_groups = intersections | groupby('1.type') %}
                             {% for boundary_type, boundaries in boundary_groups %}
                             <div class="boundary-type-group">
+
+                                <!-- Create deduplicated list by name -->
+                                {% set unique_names = [] %}
+                                {% for intersection, boundary in boundaries %}
+                                    {% if boundary.name not in unique_names %}
+                                        {% set _ = unique_names.append(boundary.name) %}
+                                    {% endif %}
+                                {% endfor %}
+
                                 <div class="boundary-type-header">
                                     <i class="fas fa-{% if boundary_type == 'fire' %}fire{% elif boundary_type == 'ems' %}ambulance{% elif boundary_type == 'electric' %}bolt{% elif boundary_type == 'township' %}home{% elif boundary_type == 'village' %}building{% elif boundary_type == 'telephone' %}phone{% elif boundary_type == 'school' %}school{% else %}map{% endif %}"></i>
-                                    {{ boundary_type.title() }}{% if boundaries|list|length != 1 %}s{% endif %}
-                                    <span class="badge bg-primary">{{ boundaries|list|length }}</span>
-                                    {% if is_county_wide %}
-                                    <span class="coverage-badge">100% Coverage</span>
+                                    {{ boundary_type.title() }}{% if boundary_type.endswith('s') %}{% else %}s{% endif %}
+                                    <span class="badge bg-primary">{{ unique_names|length }}</span>
+
+                                    <!-- Dynamic Coverage Badge -->
+                                    {% if coverage_data and coverage_data.get(boundary_type) %}
+                                        {% set coverage_pct = coverage_data[boundary_type]['coverage_percentage'] %}
+                                        {% if coverage_pct >= 95 %}
+                                            <span class="coverage-badge bg-success">{{ coverage_pct }}% Coverage</span>
+                                        {% elif coverage_pct >= 75 %}
+                                            <span class="coverage-badge bg-warning">{{ coverage_pct }}% Coverage</span>
+                                        {% elif coverage_pct >= 50 %}
+                                            <span class="coverage-badge bg-info">{{ coverage_pct }}% Coverage</span>
+                                        {% else %}
+                                            <span class="coverage-badge bg-secondary">{{ coverage_pct }}% Coverage</span>
+                                        {% endif %}
+
+                                        <!-- Additional coverage details -->
+                                        <small class="text-muted ms-2">
+                                            ({{ coverage_data[boundary_type]['affected_boundaries'] }} of {{ coverage_data[boundary_type]['total_boundaries'] }} {{ boundary_type }}s)
+                                        </small>
+                                    {% else %}
+                                        <!-- Fallback for when coverage data isn't available -->
+                                        {% if is_county_wide %}
+                                            <span class="coverage-badge bg-warning">Coverage Calculating...</span>
+                                            <button class="btn btn-sm btn-outline-secondary ms-1" onclick="triggerIntersectionFix()" title="Calculate exact coverage">
+                                                <i class="fas fa-calculator"></i>
+                                            </button>
+                                        {% else %}
+                                            <span class="coverage-badge bg-secondary">Partial Coverage</span>
+                                        {% endif %}
                                     {% endif %}
                                 </div>
+
                                 <ul class="boundary-list">
-                                    {% for intersection, boundary in boundaries %}
-                                    <li class="boundary-item">
-                                        <div>
-                                            <div class="boundary-name">{{ boundary.name }}</div>
-                                            {% if boundary.description %}
-                                            <small class="text-muted">{{ boundary.description[:100] }}{% if boundary.description|length > 100 %}...{% endif %}</small>
-                                            {% endif %}
-                                        </div>
-                                        <div class="text-end">
-                                            {% if intersection.intersection_area and intersection.intersection_area > 0 %}
-                                            <div class="boundary-area">
-                                                {{ "%.2f"|format(intersection.intersection_area * 3.86102e-7) }} sq mi
-                                            </div>
-                                            {% else %}
-                                            <div class="boundary-area text-muted">
-                                                {% if is_county_wide %}Full coverage{% else %}Area not calculated{% endif %}
-                                            </div>
-                                            {% endif %}
-                                        </div>
+                                    {% for name in unique_names|sort %}
+                                    <li class="boundary-item-simple">
+                                        <div class="boundary-name">{{ name }}</div>
                                     </li>
                                     {% endfor %}
                                 </ul>
@@ -549,7 +719,7 @@
                     </div>
                     {% else %}
                     <!-- No intersections found -->
-                    <div class="card">
+                    <div class="card mb-4">
                         <div class="card-header">
                             <h5 class="mb-0">
                                 <i class="fas fa-map-marked-alt"></i> Affected Boundaries
@@ -569,191 +739,171 @@
                             <div class="text-center py-4">
                                 <i class="fas fa-map fa-3x text-muted mb-3"></i>
                                 <h5 class="text-muted">No Boundary Intersections Found</h5>
-                                <p class="text-muted">This alert may not intersect with any configured emergency service boundaries, or intersection analysis is pending.</p>
+                                <p class="text-muted">This alert may not intersect with any configured emergency service boundaries.</p>
                             </div>
                             {% endif %}
                         </div>
                     </div>
                     {% endif %}
-                </div>
 
-                <!-- Sidebar -->
-                <div class="col-lg-4">
-                    <!-- Enhanced Timing Information with Timezone Support -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h6 class="mb-0">
-                                <i class="fas fa-clock"></i> Timing Information
-                                <small class="text-muted">(Putnam County Time)</small>
-                            </h6>
-                        </div>
-                        <div class="card-body">
-                            <div class="time-info-card">
-                                <div class="time-row">
-                                    <div class="time-label">Alert Sent:</div>
-                                    <div class="time-value">
-                                        {% if alert.sent %}
-                                        <div class="local-time-display">{{ alert.sent | format_local_datetime(false) }}</div>
-                                        <div class="utc-time-display">{{ alert.sent.strftime('%H:%M UTC') if alert.sent else 'Unknown' }}</div>
-                                        {% else %}
-                                        <div class="text-muted">Unknown</div>
-                                        {% endif %}
-                                    </div>
-                                </div>
-
-                                <div class="time-row">
-                                    <div class="time-label">Expires:</div>
-                                    <div class="time-value">
-                                        {% if alert.expires %}
-                                        <div class="local-time-display {% if alert.expires | is_expired %}text-danger{% else %}text-success{% endif %}">
-                                            {{ alert.expires | format_local_datetime(false) }}
-                                        </div>
-                                        <div class="utc-time-display">{{ alert.expires.strftime('%H:%M UTC') if alert.expires else 'No expiration' }}</div>
-                                        {% else %}
-                                        <div class="text-muted">No expiration set</div>
-                                        <div class="badge bg-warning mt-1">INDEFINITE</div>
-                                        {% endif %}
-                                    </div>
-                                </div>
-
-                                <div class="time-row">
-                                    <div class="time-label">Added to System:</div>
-                                    <div class="time-value">
-                                        {% if alert.created_at %}
-                                        <div class="local-time-display">{{ alert.created_at | format_local_datetime(false) }}</div>
-                                        <div class="utc-time-display">{{ alert.created_at.strftime('%H:%M UTC') if alert.created_at else 'Unknown' }}</div>
-                                        {% else %}
-                                        <div class="text-muted">Unknown</div>
-                                        {% endif %}
-                                    </div>
-                                </div>
-
-                                {% if alert.updated_at != alert.created_at %}
-                                <div class="time-row">
-                                    <div class="time-label">Last Updated:</div>
-                                    <div class="time-value">
-                                        <div class="local-time-display">{{ alert.updated_at | format_local_datetime(false) }}</div>
-                                        <div class="utc-time-display">{{ alert.updated_at.strftime('%H:%M UTC') if alert.updated_at else 'Unknown' }}</div>
-                                    </div>
-                                </div>
+                    <!-- Emergency Service Coverage Summary -->
+                    {% if coverage_data and coverage_data.get('county') %}
+                        {% set county_coverage = coverage_data['county']['coverage_percentage'] %}
+                        <div class="coverage-summary">
+                            <div class="coverage-number">{{ county_coverage }}%</div>
+                            <div class="coverage-label">
+                                {% if county_coverage >= 95 %}
+                                    Complete County Coverage
+                                {% elif county_coverage >= 75 %}
+                                    Major County Coverage
+                                {% elif county_coverage >= 50 %}
+                                    Significant Coverage
+                                {% else %}
+                                    Localized Coverage
                                 {% endif %}
                             </div>
-
-                            <div class="timezone-note">
-                                <i class="fas fa-info-circle"></i> All times shown in Eastern Time (Putnam County local time) with UTC reference.
-                                Times automatically adjust for daylight saving changes.
+                            <div class="coverage-sublabel">
+                                {{ intersections|length }} Affected Boundaries<br>
+                                {% set boundary_types = intersections | groupby('1.type') %}
+                                {{ boundary_types|length }} Service Types
                             </div>
                         </div>
-                    </div>
-
-                    <!-- Coverage Summary -->
-                    {% if is_county_wide and intersections %}
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h6 class="mb-0">
-                                <i class="fas fa-shield-alt"></i> Emergency Service Coverage
-                            </h6>
-                        </div>
-                        <div class="card-body">
-                            <div class="text-center">
-                                <div class="display-6 text-success mb-2">100%</div>
-                                <p class="text-muted mb-3">Complete County Coverage</p>
-                            </div>
-
-                            <div class="row text-center">
-                                <div class="col-6">
-                                    <div class="border-end">
-                                        <div class="h5 mb-0">{{ intersections|length }}</div>
-                                        <small class="text-muted">Boundaries</small>
-                                    </div>
-                                </div>
-                                <div class="col-6">
-                                    <div class="h5 mb-0">{{ (intersections | groupby('1.type') | list | length) }}</div>
-                                    <small class="text-muted">Service Types</small>
-                                </div>
+                    {% elif is_county_wide and intersections %}
+                        <div class="coverage-summary">
+                            <div class="coverage-number">?</div>
+                            <div class="coverage-label">Coverage Calculating</div>
+                            <div class="coverage-sublabel">
+                                {{ intersections|length }} Boundaries<br>
+                                {% set boundary_types = intersections | groupby('1.type') %}
+                                {{ boundary_types|length }} Service Types
                             </div>
                         </div>
-                    </div>
                     {% endif %}
 
-                    <!-- Technical Details -->
+                    <!-- Timing Information -->
                     <div class="card mb-4">
                         <div class="card-header">
-                            <h6 class="mb-0">
-                                <i class="fas fa-code"></i> Technical Details
-                            </h6>
+                            <h5 class="mb-0">
+                                <i class="fas fa-clock"></i> Timing Information
+                                <small class="text-muted">(Putnam County Time)</small>
+                            </h5>
                         </div>
-                        <div class="card-body">
-                            <div class="mb-3">
-                                <h6 class="text-muted mb-1">Alert Identifier</h6>
-                                <code class="text-break">{{ alert.identifier }}</code>
+                        <div class="card-body timing-card">
+                            <div class="timing-item">
+                                <span class="timing-label">Alert Sent:</span>
+                                <div class="timing-value">
+                                    {% if alert.sent %}
+                                    {{ alert.sent | format_local_datetime(false) }}<br>
+                                    <small class="text-muted">{{ alert.sent | format_local_time }}</small>
+                                    {% else %}
+                                    <span class="text-muted">Unknown</span>
+                                    {% endif %}
+                                </div>
                             </div>
-
-                            <div class="mb-3">
-                                <h6 class="text-muted mb-1">Scope</h6>
-                                <span class="badge bg-secondary">{{ alert.scope }}</span>
+                            <div class="timing-item">
+                                <span class="timing-label">Expires:</span>
+                                <div class="timing-value">
+                                    {% if alert.expires %}
+                                    {{ alert.expires | format_local_datetime(false) }}<br>
+                                    <small class="text-muted">{{ alert.expires | format_local_time }}</small>
+                                    {% else %}
+                                    <span class="text-muted">No expiration</span>
+                                    {% endif %}
+                                </div>
                             </div>
+                            <div class="timing-item">
+                                <span class="timing-label">Added to System:</span>
+                                <div class="timing-value">
+                                    {{ alert.created_at | format_local_datetime(false) if alert.created_at else 'Unknown' }}<br>
+                                    <small class="text-muted">{{ alert.created_at | format_local_time if alert.created_at else 'Unknown timezone' }}</small>
+                                </div>
+                            </div>
+                            <div class="timing-item">
+                                <span class="timing-label">Last Updated:</span>
+                                <div class="timing-value">
+                                    {{ alert.updated_at | format_local_datetime(false) if alert.updated_at else 'Unknown' }}<br>
+                                    <small class="text-muted">{{ alert.updated_at | format_local_time if alert.updated_at else 'Unknown timezone' }}</small>
+                                </div>
+                            </div>
+                            <hr>
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle"></i> All times shown in Eastern Time (Putnam County local time) with UTC reference.
+                                Times automatically adjust for daylight saving changes.
+                            </small>
+                        </div>
+                    </div>
 
-                            {% if alert.category %}
-                            <div class="mb-3">
-                                <h6 class="text-muted mb-1">Category</h6>
-                                <span class="badge bg-info">{{ alert.category }}</span>
+                    <!-- Technical Details -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-cog"></i> Technical Details
+                            </h5>
+                        </div>
+                        <div class="card-body technical-details">
+                            <div class="detail-item">
+                                <span class="detail-label">Alert Identifier</span>
+                                <code>{{ alert.identifier }}</code>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Scope</span>
+                                {{ alert.scope }}
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Category</span>
+                                {{ alert.category or 'Not specified' }}
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Database ID</span>
+                                #{{ alert.id }}
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Coverage Type</span>
+                                {% if coverage_data and coverage_data.get('county') %}
+                                    {% set county_coverage = coverage_data['county']['coverage_percentage'] %}
+                                    {% if county_coverage >= 95 %}County-Wide{% elif county_coverage >= 75 %}Major Coverage{% else %}Localized{% endif %}
+                                {% elif is_county_wide %}County-Wide (Estimated){% else %}Localized{% endif %}
+                            </div>
+                            {% if coverage_data and coverage_data.get('county') %}
+                            <div class="detail-item">
+                                <span class="detail-label">Exact Coverage</span>
+                                {{ coverage_data['county']['coverage_percentage'] }}% of Putnam County
                             </div>
                             {% endif %}
-
-                            <div class="mb-3">
-                                <h6 class="text-muted mb-1">Database ID</h6>
-                                <code>#{{ alert.id }}</code>
-                            </div>
-
-                            {% if is_county_wide %}
-                            <div class="mb-3">
-                                <h6 class="text-muted mb-1">Coverage Type</h6>
-                                <span class="badge bg-primary">County-Wide</span>
-                            </div>
-                            {% endif %}
-
-                            <div class="mb-3">
-                                <h6 class="text-muted mb-1">Timezone Processing</h6>
-                                <small class="text-muted">
-                                    Source times converted from NWS format (UTC/EST/EDT) to local Eastern Time for display.
-                                </small>
+                            <hr>
+                            <div class="detail-item">
+                                <span class="detail-label">Timezone Processing</span>
+                                <small class="text-muted">Source times converted from NWS format (UTC/EST/EDT) to local Eastern Time for display.</small>
                             </div>
                         </div>
                     </div>
 
                     <!-- Actions -->
-                    <div class="card">
+                    <div class="card mt-4">
                         <div class="card-header">
-                            <h6 class="mb-0">
+                            <h5 class="mb-0">
                                 <i class="fas fa-tools"></i> Actions
-                            </h6>
+                            </h5>
                         </div>
                         <div class="card-body">
                             <div class="d-grid gap-2">
-                                {% if alert.raw_json %}
-                                <button class="btn btn-outline-secondary" onclick="showRawData()">
-                                    <i class="fas fa-code"></i> View Raw CAP Data
+                                <button class="btn btn-outline-info" onclick="window.print()">
+                                    <i class="fas fa-print"></i> View Raw CAP Data
                                 </button>
-                                {% endif %}
-
-                                <a href="/alerts?search={{ alert.event }}" class="btn btn-outline-primary">
+                                <button class="btn btn-outline-success" onclick="findSimilarAlerts()">
                                     <i class="fas fa-search"></i> Find Similar Alerts
-                                </a>
-
-                                <a href="/" class="btn btn-primary">
+                                </button>
+                                <a href="/" class="btn btn-outline-primary">
                                     <i class="fas fa-map"></i> View on Interactive Map
                                 </a>
-
-                                {% if is_county_wide and not intersections %}
+                                <button class="btn btn-outline-warning" onclick="debugBoundaries()">
+                                    <i class="fas fa-bug"></i> Debug Boundaries
+                                </button>
+                                {% if not coverage_data or not coverage_data.get('county') %}
                                 <button class="btn btn-warning" onclick="triggerIntersectionFix()">
-                                    <i class="fas fa-wrench"></i> Calculate Boundaries
+                                    <i class="fas fa-calculator"></i> Calculate Coverage Percentage
                                 </button>
                                 {% endif %}
-
-                                <a href="/debug/boundaries/{{ alert.id }}" class="btn btn-outline-info" target="_blank">
-                                    <i class="fas fa-bug"></i> Debug Boundaries
-                                </a>
                             </div>
                         </div>
                     </div>
@@ -763,94 +913,205 @@
     </div>
 </div>
 
-<!-- Raw Data Modal -->
-{% if alert.raw_json %}
-<div class="modal fade" id="rawDataModal" tabindex="-1" aria-labelledby="rawDataModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="rawDataModalLabel">
-                    <i class="fas fa-code"></i> Raw CAP Alert Data
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="d-flex justify-content-end mb-2">
-                    <button class="btn btn-sm btn-outline-secondary" onclick="copyRawData()">
-                        <i class="fas fa-copy"></i> Copy to Clipboard
-                    </button>
-                </div>
-                <pre id="rawDataContent" class="bg-light p-3 rounded" style="max-height: 400px; overflow-y: auto;"><code>{{ alert.raw_json | tojson(indent=2) }}</code></pre>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+<!-- Footer -->
+<footer class="mt-5 py-4 bg-light border-top">
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12 text-center">
+                <small class="text-muted">
+                    <i class="fas fa-satellite-dish"></i> 2025 KR8MER CAP Emergency Alert System<br>
+                    <i class="fas fa-radio"></i> Amateur Radio Emergency Communications |
+                    {{ local_current_time() | format_local_time }}
+                </small>
             </div>
         </div>
     </div>
-</div>
-{% endif %}
+</footer>
+{% endblock %}
+
+{% block scripts %}
+<!-- Leaflet CSS and JS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
 <script>
-function showRawData() {
-    const modal = new bootstrap.Modal(document.getElementById('rawDataModal'));
-    modal.show();
+// Initialize the map
+let map;
+let alertLayer;
+let boundaryLayers = {};
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize map centered on Putnam County, OH (same as main map)
+    map = L.map('map').setView([41.0167, -84.1330], 11);
+
+    // Add tile layer (same as main map)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Load alert geometry first, then boundaries
+    loadAlertGeometry();
+    loadBoundaries();
+});
+
+function loadAlertGeometry() {
+    // Load all alerts and find the current one
+    fetch('/api/alerts')
+        .then(response => response.json())
+        .then(data => {
+            if (data.features && data.features.length > 0) {
+                // Find the current alert by ID
+                const currentAlert = data.features.find(f => f.properties.id === {{ alert.id }});
+
+                if (currentAlert && currentAlert.geometry) {
+                    // Determine styling based on severity
+                    const severity = currentAlert.properties.severity;
+                    let color = '#ff6b35'; // default orange
+
+                    switch(severity) {
+                        case 'Extreme': color = '#e74c3c'; break;
+                        case 'Severe': color = '#e67e22'; break;
+                        case 'Moderate': color = '#f39c12'; break;
+                        case 'Minor': color = '#3498db'; break;
+                    }
+
+                    // Create alert layer with proper styling
+                    alertLayer = L.geoJSON(currentAlert, {
+                        style: {
+                            color: color,
+                            weight: currentAlert.properties.is_county_wide ? 4 : 3,
+                            opacity: 0.8,
+                            fillOpacity: currentAlert.properties.is_county_wide ? 0.2 : 0.3,
+                            fillColor: color,
+                            dashArray: currentAlert.properties.is_county_wide ? '10, 5' : ''
+                        }
+                    }).addTo(map);
+
+                    // Fit map to alert bounds with padding
+                    map.fitBounds(alertLayer.getBounds(), { padding: [20, 20] });
+
+                    // Add popup with alert info
+                    alertLayer.bindPopup(`
+                        <div class="popup-title">
+                            {{ alert.event }}
+                            {% if is_county_wide %}<span class="county-wide-badge">COUNTY-WIDE</span>{% endif %}
+                        </div>
+                        <div class="popup-detail"><strong>Severity:</strong> {{ alert.severity or 'Unknown' }}</div>
+                        <div class="popup-detail"><strong>Status:</strong> {{ alert.status }}</div>
+                        <div class="popup-detail"><strong>Urgency:</strong> {{ alert.urgency or 'Unknown' }}</div>
+                        {% if alert.expires %}<div class="popup-detail"><strong>Expires:</strong> {{ alert.expires | format_local_datetime(false) }}</div>{% endif %}
+                        {% if alert.headline %}<div class="popup-detail"><strong>Headline:</strong> {{ alert.headline[:100] }}{% if alert.headline|length > 100 %}...{% endif %}</div>{% endif %}
+                    `);
+
+                    console.log('Alert geometry loaded successfully');
+                } else {
+                    console.log('No geometry found for alert ID {{ alert.id }}');
+                    showMapError('Alert geometry not available');
+                }
+            } else {
+                console.log('No alerts data received');
+                showMapError('No alert data available');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading alert geometry:', error);
+            showMapError('Error loading alert data: ' + error.message);
+        });
 }
 
-function copyRawData() {
-    const content = document.getElementById('rawDataContent').textContent;
-    navigator.clipboard.writeText(content).then(function() {
-        const btn = event.target.closest('button');
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
-        btn.classList.remove('btn-outline-secondary');
-        btn.classList.add('btn-success');
+function loadBoundaries() {
+    // Load boundaries using the same approach as index.html
+    const boundaryTypes = ['county', 'fire', 'ems', 'electric', 'township', 'villages', 'telephone', 'school'];
 
-        setTimeout(function() {
-            btn.innerHTML = originalText;
-            btn.classList.remove('btn-success');
-            btn.classList.add('btn-outline-secondary');
-        }, 2000);
-    }).catch(function(err) {
-        console.error('Failed to copy: ', err);
-        alert('Failed to copy to clipboard');
+    // Color scheme matching index.html
+    const colors = {
+        county: '#e74c3c',
+        fire: '#e67e22',
+        ems: '#f39c12',
+        electric: '#2ecc71',
+        township: '#3498db',
+        villages: '#9b59b6',
+        telephone: '#1abc9c',
+        school: '#34495e'
+    };
+
+    boundaryTypes.forEach(type => {
+        fetch(`/api/boundaries?type=${type}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.features && data.features.length > 0) {
+                    // Create boundary layer
+                    boundaryLayers[type] = L.geoJSON(data, {
+                        style: {
+                            color: colors[type] || '#95a5a6',
+                            weight: type === 'county' ? 3 : 1,
+                            opacity: 0.6,
+                            fillOpacity: type === 'county' ? 0.05 : 0.1,
+                            fillColor: colors[type] || '#95a5a6'
+                        },
+                        onEachFeature: function(feature, layer) {
+                            const props = feature.properties;
+                            layer.bindPopup(`
+                                <div class="popup-title">${props.name}</div>
+                                <div class="popup-detail"><strong>Type:</strong> ${props.type}</div>
+                                ${props.description ? `<div class="popup-detail">${props.description}</div>` : ''}
+                            `);
+                        }
+                    });
+
+                    // Add only county boundaries by default (others can be added if needed)
+                    if (type === 'county') {
+                        boundaryLayers[type].addTo(map);
+                    }
+                }
+            })
+            .catch(error => {
+                console.error(`Error loading ${type} boundaries:`, error);
+            });
     });
 }
 
+function showMapError(message) {
+    // Show error in map container
+    const mapContainer = document.getElementById('map');
+    if (mapContainer) {
+        mapContainer.innerHTML = `
+            <div class="d-flex align-items-center justify-content-center h-100">
+                <div class="text-center">
+                    <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
+                    <h5>Map Loading Issue</h5>
+                    <p class="text-muted">${message}</p>
+                    <button class="btn btn-outline-primary" onclick="location.reload()">
+                        <i class="fas fa-refresh"></i> Retry
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+}
+
+// Enhanced function to trigger intersection calculation
 async function triggerIntersectionFix() {
     try {
-        // Get the alert ID from the current page
-        const alertId = {{ alert.id }};
-
-        // Call the single alert calculation endpoint
-        const response = await fetch(`/admin/calculate_single_alert/${alertId}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-
+        const response = await fetch('/admin/fix_county_intersections', { method: 'POST' });
         const result = await response.json();
 
         if (response.ok) {
             if (typeof showToast === 'function') {
-                showToast('Boundary analysis completed! Refreshing page...', 'success');
-            } else {
-                alert(`Success: ${result.success}\nIntersections created: ${result.intersections_created}`);
+                showToast('Coverage calculation completed! Refreshing page...', 'success');
             }
-
-            // Refresh the page to show the calculated boundaries
             setTimeout(() => {
                 window.location.reload();
             }, 2000);
         } else {
             if (typeof showToast === 'function') {
-                showToast(result.error || 'Failed to calculate boundaries', 'error');
+                showToast(result.error || 'Failed to calculate coverage', 'error');
             } else {
-                alert(result.error || 'Failed to calculate boundaries');
+                alert(result.error || 'Failed to calculate coverage');
             }
         }
     } catch (error) {
-        console.error('Error calculating boundaries:', error);
+        console.error('Error calculating coverage:', error);
         if (typeof showToast === 'function') {
             showToast('Error: ' + error.message, 'error');
         } else {
@@ -859,238 +1120,36 @@ async function triggerIntersectionFix() {
     }
 }
 
-// Update any existing time displays when page loads
-document.addEventListener('DOMContentLoaded', function() {
-    // Convert any remaining time displays to local timezone
-    const timeElements = document.querySelectorAll('[data-utc-time]');
-    timeElements.forEach(element => {
-        const utcTime = element.getAttribute('data-utc-time');
-        if (utcTime) {
-            element.textContent = formatLocalDateTime(utcTime);
-        }
-    });
-
-    // Update relative time displays
-    updateRelativeTimes();
-});
-
-function updateRelativeTimes() {
-    // Update "time ago" displays
-    const relativeTimeElements = document.querySelectorAll('.relative-time');
-    relativeTimeElements.forEach(element => {
-        const timestamp = element.getAttribute('data-timestamp');
-        if (timestamp) {
-            const timeAgo = getTimeAgo(timestamp);
-            element.textContent = timeAgo;
-        }
-    });
+function findSimilarAlerts() {
+    // Implement similar alerts search
+    alert('Similar alerts search would be implemented here.');
 }
 
-function getTimeAgo(timestamp) {
-    const now = new Date();
-    const past = new Date(timestamp);
-    const diffMs = now - past;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 60) {
-        return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
-    } else if (diffHours < 24) {
-        return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-    } else {
-        return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
-    }
+function debugBoundaries() {
+    // Open debug view for boundaries
+    window.open(`/debug/boundaries/{{ alert.id }}`, '_blank');
 }
-
-// Set up periodic updates for relative times
-
-let alertDetailMap;
-let alertLayer;
-let boundariesLayer;
-
-// Initialize the alert detail map
-function initAlertDetailMap() {
-    // Create map centered on Putnam County, Ohio
-    alertDetailMap = L.map('alert-map').setView([41.0167, -84.1330], 11);
-
-    // Add base layer
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-    }).addTo(alertDetailMap);
-
-    // Add scale control
-    L.control.scale({
-        position: 'bottomleft'
-    }).addTo(alertDetailMap);
-
-    // Load alert data
-    loadAlertGeometry();
-}
-
-// Load alert geometry and intersecting boundaries
-function loadAlertGeometry() {
-    const alertId = {{ alert.id }};
-
-    fetch(`/api/alerts/${alertId}/geometry`)
-        .then(response => response.json())
-        .then(data => {
-            // Clear existing layers
-            if (alertLayer) {
-                alertDetailMap.removeLayer(alertLayer);
-            }
-            if (boundariesLayer) {
-                alertDetailMap.removeLayer(boundariesLayer);
-            }
-
-            // Add alert geometry
-            if (data.alert && data.alert.geometry) {
-                const alertProps = data.alert.properties;
-
-                // Determine color based on severity
-                let alertColor = '#95a5a6'; // default gray
-                switch(alertProps.severity) {
-                    case 'Extreme': alertColor = '#e74c3c'; break;
-                    case 'Severe': alertColor = '#e67e22'; break;
-                    case 'Moderate': alertColor = '#f39c12'; break;
-                    case 'Minor': alertColor = '#3498db'; break;
-                }
-
-                alertLayer = L.geoJSON(data.alert, {
-                    style: {
-                        color: alertColor,
-                        weight: alertProps.is_county_wide ? 4 : 3,
-                        opacity: 0.9,
-                        fillOpacity: 0.3,
-                        dashArray: alertProps.is_county_wide ? '10, 5' : null
-                    },
-                    onEachFeature: function(feature, layer) {
-                        const props = feature.properties;
-                        const sentDate = props.sent ? new Date(props.sent).toLocaleString() : 'Unknown';
-                        const expiresDate = props.expires ? new Date(props.expires).toLocaleString() : 'No expiration';
-
-                        const popup = `
-                            <div class="alert-popup-title">
-                                ${props.event}
-                                ${props.is_county_wide ? '<span class="badge bg-warning ms-1">COUNTY-WIDE</span>' : ''}
-                            </div>
-                            <div class="alert-popup-detail"><strong>Severity:</strong> ${props.severity || 'Unknown'}</div>
-                            <div class="alert-popup-detail"><strong>Status:</strong> ${props.status || 'Unknown'}</div>
-                            <div class="alert-popup-detail"><strong>Sent:</strong> ${sentDate}</div>
-                            <div class="alert-popup-detail"><strong>Expires:</strong> ${expiresDate}</div>
-                            ${props.headline ? `<div class="alert-popup-detail"><strong>Headline:</strong> ${props.headline}</div>` : ''}
-                            ${props.area_desc ? `<div class="alert-popup-detail"><strong>Area:</strong> ${props.area_desc}</div>` : ''}
-                        `;
-                        layer.bindPopup(popup);
-                    }
-                }).addTo(alertDetailMap);
-            }
-
-            // Add intersecting boundaries
-            if (data.intersecting_boundaries && data.intersecting_boundaries.features.length > 0) {
-                // Color scheme for different boundary types
-                const boundaryColors = {
-                    county: '#e74c3c',
-                    fire: '#e67e22',
-                    ems: '#f39c12',
-                    electric: '#2ecc71',
-                    township: '#3498db',
-                    villages: '#9b59b6',
-                    telephone: '#1abc9c',
-                    school: '#34495e'
-                };
-
-                boundariesLayer = L.geoJSON(data.intersecting_boundaries, {
-                    style: function(feature) {
-                        const boundaryType = feature.properties.type;
-                        return {
-                            color: boundaryColors[boundaryType] || '#95a5a6',
-                            weight: 2,
-                            opacity: 0.7,
-                            fillOpacity: 0.15,
-                            dashArray: '5, 3'
-                        };
-                    },
-                    onEachFeature: function(feature, layer) {
-                        const props = feature.properties;
-
-                        const popup = `
-                            <div class="boundary-popup-title">
-                                ${props.name}
-                                <span class="badge bg-secondary ms-1">${props.type}</span>
-                            </div>
-                            ${props.description ? `<div class="boundary-popup-detail"><strong>Details:</strong> ${props.description}</div>` : ''}
-                            ${props.intersection_area ? `<div class="boundary-popup-detail"><strong>Affected Area:</strong> ${(props.intersection_area * 3.86102e-7).toFixed(4)} sq mi</div>` : ''}
-                            <div class="boundary-popup-detail"><strong>Type:</strong> ${props.type.charAt(0).toUpperCase() + props.type.slice(1)}</div>
-                        `;
-                        layer.bindPopup(popup);
-                    }
-                }).addTo(alertDetailMap);
-            }
-
-            // Fit map to show all features
-            fitMapToBounds();
-
-            console.log('Alert detail map loaded successfully');
-        })
-        .catch(error => {
-            console.error('Error loading alert geometry:', error);
-            document.getElementById('alert-map').innerHTML = `
-                <div class="map-loading-error">
-                    <i class="fas fa-exclamation-triangle fa-2x text-warning mb-2"></i>
-                    <h6>Error Loading Map</h6>
-                    <p class="mb-0">Could not load alert geometry data.</p>
-                </div>
-            `;
-        });
-}
-
-// Fit map bounds to show all features
-function fitMapToBounds() {
-    if (!alertDetailMap) return;
-
-    const group = new L.featureGroup();
-
-    if (alertLayer) {
-        group.addLayer(alertLayer);
-    }
-    if (boundariesLayer) {
-        group.addLayer(boundariesLayer);
-    }
-
-    if (group.getLayers().length > 0) {
-        try {
-            alertDetailMap.fitBounds(group.getBounds(), {
-                padding: [20, 20],
-                maxZoom: 13
-            });
-        } catch (e) {
-            console.log('Could not fit bounds, using default view');
-            alertDetailMap.setView([41.0167, -84.1330], 11);
-        }
-    } else {
-        // Fallback to default view
-        alertDetailMap.setView([41.0167, -84.1330], 11);
-    }
-}
-
-// Check if Leaflet is available and initialize map
-document.addEventListener('DOMContentLoaded', function() {
-    if (typeof L !== 'undefined') {
-        // Initialize map after a short delay to ensure DOM is ready
-        setTimeout(initAlertDetailMap, 100);
-    } else {
-        // Show error if Leaflet is not available
-        document.getElementById('alert-map').innerHTML = `
-            <div class="map-loading-error">
-                <i class="fas fa-exclamation-triangle fa-2x text-danger mb-2"></i>
-                <h6>Map Library Not Available</h6>
-                <p class="mb-0">Leaflet mapping library is required to display the map.</p>
-            </div>
-        `;
-    }
-});
-
-setInterval(updateRelativeTimes, 60000); // Update every minute
 </script>
+
+<style>
+.county-wide-badge {
+    background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+    color: white;
+    font-size: 0.75em;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: 5px;
+}
+
+.popup-title {
+    font-weight: bold;
+    color: #0d6efd;
+    margin-bottom: 8px;
+}
+
+.popup-detail {
+    margin-bottom: 5px;
+    font-size: 0.9em;
+}
+</style>
 {% endblock %}
