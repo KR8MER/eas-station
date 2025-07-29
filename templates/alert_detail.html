@@ -231,6 +231,46 @@
         opacity: 0.9;
         font-size: 0.9em;
     }
+
+    /* Raw CAP Data styling */
+    .raw-data-container {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        max-height: 500px;
+        overflow-y: auto;
+    }
+
+    .raw-data-content {
+        background: #ffffff;
+        padding: 15px;
+        margin: 0;
+        font-family: 'Courier New', monospace;
+        font-size: 0.85em;
+        line-height: 1.4;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+
+    .county-wide-badge {
+        background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+        color: white;
+        font-size: 0.75em;
+        padding: 2px 6px;
+        border-radius: 10px;
+        margin-left: 5px;
+    }
+
+    .popup-title {
+        font-weight: bold;
+        color: #0d6efd;
+        margin-bottom: 8px;
+    }
+
+    .popup-detail {
+        margin-bottom: 5px;
+        font-size: 0.9em;
+    }
 </style>
 {% endblock %}
 
@@ -887,9 +927,17 @@
                         </div>
                         <div class="card-body">
                             <div class="d-grid gap-2">
-                                <button class="btn btn-outline-info" onclick="window.print()">
-                                    <i class="fas fa-print"></i> View Raw CAP Data
+                                <!-- FIXED: Raw CAP Data button -->
+                                <button class="btn btn-outline-info" onclick="toggleRawData()">
+                                    <i class="fas fa-code"></i> View Raw CAP Data
                                 </button>
+
+                                <!-- FIXED: Separate Print button -->
+                                <button class="btn btn-outline-secondary" onclick="window.print()">
+                                    <i class="fas fa-print"></i> Print This Page
+                                </button>
+
+                                <!-- Keep the other buttons as they were -->
                                 <button class="btn btn-outline-success" onclick="findSimilarAlerts()">
                                     <i class="fas fa-search"></i> Find Similar Alerts
                                 </button>
@@ -905,6 +953,42 @@
                                 </button>
                                 {% endif %}
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Raw CAP Data Display Card (hidden by default) -->
+                    <div class="card mt-4" id="rawDataCard" style="display: none;">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-code"></i> Raw CAP Alert Data
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <small class="text-muted">
+                                    <i class="fas fa-info-circle"></i> Original JSON data received from NOAA National Weather Service
+                                </small>
+                                <div>
+                                    <button class="btn btn-sm btn-outline-secondary me-2" onclick="copyRawData()">
+                                        <i class="fas fa-copy"></i> Copy to Clipboard
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="downloadRawData()">
+                                        <i class="fas fa-download"></i> Download JSON
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="raw-data-container">
+                                <pre class="raw-data-content" id="rawDataContent">{{ alert.raw_json | tojson(indent=2) if alert.raw_json else '{"error": "No raw CAP data available for this alert"}' }}</pre>
+                            </div>
+
+                            {% if alert.raw_json %}
+                            <div class="mt-3">
+                                <small class="text-muted">
+                                    <strong>Data Source:</strong> {{ alert.raw_json.get('properties', {}).get('@id', 'Unknown') if alert.raw_json.get('properties') else 'Unknown' }}<br>
+                                    <strong>Last Updated:</strong> {{ alert.updated_at | format_local_datetime if alert.updated_at else 'Unknown' }}
+                                </small>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -1090,6 +1174,83 @@ function showMapError(message) {
     }
 }
 
+// FIXED: Raw CAP Data Functions
+function toggleRawData() {
+    const card = document.getElementById('rawDataCard');
+    const button = event.target.closest('button');
+
+    if (card.style.display === 'none') {
+        card.style.display = 'block';
+        button.innerHTML = '<i class="fas fa-eye-slash"></i> Hide Raw CAP Data';
+        // Smooth scroll to the raw data card
+        setTimeout(() => {
+            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+    } else {
+        card.style.display = 'none';
+        button.innerHTML = '<i class="fas fa-code"></i> View Raw CAP Data';
+    }
+}
+
+function copyRawData() {
+    const content = document.getElementById('rawDataContent').textContent;
+    const button = event.target.closest('button');
+
+    navigator.clipboard.writeText(content).then(() => {
+        // Visual feedback
+        const originalHTML = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-check"></i> Copied!';
+        button.classList.remove('btn-outline-secondary');
+        button.classList.add('btn-success');
+
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
+            button.classList.remove('btn-success');
+            button.classList.add('btn-outline-secondary');
+        }, 2000);
+    }).catch(() => {
+        // Fallback for browsers that don't support clipboard API
+        const textArea = document.createElement('textarea');
+        textArea.value = content;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+
+        try {
+            document.execCommand('copy');
+            button.innerHTML = '<i class="fas fa-check"></i> Copied!';
+            button.classList.add('btn-success');
+        } catch (err) {
+            alert('Unable to copy to clipboard. Please select the text manually and copy.');
+        }
+
+        document.body.removeChild(textArea);
+
+        setTimeout(() => {
+            button.innerHTML = '<i class="fas fa-copy"></i> Copy to Clipboard';
+            button.classList.remove('btn-success');
+        }, 2000);
+    });
+}
+
+function downloadRawData() {
+    const content = document.getElementById('rawDataContent').textContent;
+    const alertId = '{{ alert.identifier }}';
+    const blob = new Blob([content], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = `cap_alert_${alertId}.json`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+}
+
 // Enhanced function to trigger intersection calculation
 async function triggerIntersectionFix() {
     try {
@@ -1130,26 +1291,4 @@ function debugBoundaries() {
     window.open(`/debug/boundaries/{{ alert.id }}`, '_blank');
 }
 </script>
-
-<style>
-.county-wide-badge {
-    background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
-    color: white;
-    font-size: 0.75em;
-    padding: 2px 6px;
-    border-radius: 10px;
-    margin-left: 5px;
-}
-
-.popup-title {
-    font-weight: bold;
-    color: #0d6efd;
-    margin-bottom: 8px;
-}
-
-.popup-detail {
-    margin-bottom: 5px;
-    font-size: 0.9em;
-}
-</style>
 {% endblock %}

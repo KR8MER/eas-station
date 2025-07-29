@@ -21,7 +21,7 @@ import subprocess
 import shutil
 import time
 import pytz
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from enum import Enum
 
@@ -152,8 +152,9 @@ def parse_nws_datetime(dt_string):
         try:
             dt_clean = dt_string.replace(' EDT', '').replace('EDT', '')
             dt = datetime.fromisoformat(dt_clean)
-            edt_tz = pytz.timezone('US/Eastern')
-            dt = edt_tz.localize(dt)
+            # FIXED - Treats time as already in EDT:
+            edt_tz = timezone(timedelta(hours=-4))
+            dt = dt.replace(tzinfo=edt_tz)  # ← This just adds timezone info
             return dt.astimezone(UTC_TZ)
         except ValueError:
             pass
