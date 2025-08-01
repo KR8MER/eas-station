@@ -1,32 +1,151 @@
 {% extends "base.html" %}
 
-{% block title %}Interactive Map - KR8MER CAP Alerts{% endblock %}
+{% block title %}Interactive Map - KR8MER CAP Emergency Alert System{% endblock %}
 
 {% block extra_css %}
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+
 <style>
     #map {
         height: 600px;
         width: 100%;
         border-radius: 8px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        border: 1px solid var(--border-color);
+        box-shadow: 0 2px 10px var(--shadow-color);
     }
 
     .map-controls {
-        background: white;
+        background: var(--bg-color);
+        border: 1px solid var(--border-color);
         border-radius: 8px;
         padding: 15px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         margin-bottom: 20px;
+        box-shadow: 0 2px 10px var(--shadow-color);
     }
 
     .status-panel {
-        background: white;
+        background: var(--bg-color);
+        border: 1px solid var(--border-color);
         border-radius: 8px;
         padding: 15px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         margin-bottom: 20px;
+        box-shadow: 0 2px 10px var(--shadow-color);
     }
-/* Historical alerts styling */
+
+    .status-item {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 8px;
+        padding: 5px 0;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .status-item:last-child {
+        border-bottom: none;
+    }
+
+    .status-value {
+        font-weight: 600;
+        color: var(--primary-color);
+    }
+
+    .alert-summary {
+        background: var(--light-color);
+        border-radius: 5px;
+        padding: 15px;
+        margin-top: 15px;
+    }
+
+    .layer-group {
+        margin-bottom: 15px;
+    }
+
+    .layer-group h6 {
+        color: var(--text-color);
+        margin-bottom: 10px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .form-check {
+        margin-bottom: 8px;
+    }
+
+    .form-check-input:checked {
+        background-color: var(--primary-color);
+        border-color: var(--primary-color);
+    }
+
+    .legend {
+        background: var(--bg-color);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 15px;
+        margin-top: 20px;
+    }
+
+    .legend h6 {
+        color: var(--primary-color);
+        margin-bottom: 15px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .legend-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+
+    .legend-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        margin-right: 10px;
+        border: 1px solid var(--border-color);
+    }
+
+    .loading-message {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 600px;
+        color: var(--secondary-color);
+        flex-direction: column;
+        background: var(--light-color);
+        border-radius: 8px;
+        border: 1px solid var(--border-color);
+    }
+
+    .spinner {
+        border: 3px solid var(--border-color);
+        border-top: 3px solid var(--primary-color);
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin-bottom: 15px;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .map-error {
+        text-align: center;
+        color: var(--danger-color);
+        padding: 40px;
+        background: var(--light-color);
+        border-radius: 8px;
+        border: 1px solid var(--danger-color);
+    }
+
     .historical-badge {
         background: linear-gradient(45deg, #6c757d, #495057);
         color: white;
@@ -37,64 +156,44 @@
     }
 
     #date-filters {
-        background: #f8f9fa;
+        background: var(--light-color);
         border-radius: 6px;
-        padding: 10px;
-        border: 1px solid #e9ecef;
+        padding: 15px;
+        border: 1px solid var(--border-color);
+        margin-top: 10px;
     }
 
-    #date-filters .form-label {
-        font-weight: 600;
-        color: #495057;
+    .btn-outline-success:hover {
+        background-color: var(--success-color);
+        border-color: var(--success-color);
     }
 
-    .layer-group .form-check-label.small {
-        font-size: 0.875em;
+    .btn-outline-primary:hover {
+        background-color: var(--primary-color);
+        border-color: var(--primary-color);
     }
 
-    /* Historical alert popup styling */
-    .leaflet-popup-content .badge.bg-secondary {
-        font-size: 0.7em;
+    .alert-active {
+        border: 2px solid var(--danger-color) !important;
+        background-color: rgba(220, 53, 69, 0.1) !important;
     }
 
-    .form-check-input:checked {
-        background-color: #0d6efd;
-        border-color: #0d6efd;
+    .alert-expired {
+        border: 2px solid var(--secondary-color) !important;
+        background-color: rgba(108, 117, 125, 0.1) !important;
+        opacity: 0.7;
     }
 
-    .layer-group {
-        margin-bottom: 15px;
-    }
-
-    .layer-group h6 {
-        color: #495057;
-        margin-bottom: 10px;
-        font-weight: 600;
-    }
-
-    .status-item {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 8px;
-    }
-
-    .status-value {
-        font-weight: 600;
-    }
-
-    .btn-group-sm .btn {
-        padding: 0.25rem 0.5rem;
-        font-size: 0.875rem;
-    }
-
+    /* Leaflet popup customization */
     .leaflet-popup-content {
         max-width: 300px;
     }
 
     .popup-title {
         font-weight: bold;
-        color: #0d6efd;
+        color: var(--primary-color);
         margin-bottom: 8px;
+        font-size: 1.1em;
     }
 
     .popup-detail {
@@ -102,158 +201,154 @@
         font-size: 0.9em;
     }
 
-    .alert-summary {
-        background: #f8f9fa;
-        border-radius: 5px;
-        padding: 10px;
-        margin-top: 10px;
-    }
-
-    .county-wide-badge {
-        background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
-        color: white;
-        font-size: 0.75em;
+    .popup-badge {
+        display: inline-block;
         padding: 2px 6px;
-        border-radius: 10px;
-        margin-left: 5px;
+        border-radius: 4px;
+        font-size: 0.8em;
+        font-weight: 600;
+        margin: 2px;
     }
 
-    @media (max-width: 768px) {
-        #map {
-            height: 400px;
-        }
-
-        .col-md-3 {
-            margin-bottom: 20px;
-        }
-    }
+    .severity-extreme { background: #dc3545; color: white; }
+    .severity-severe { background: #fd7e14; color: white; }
+    .severity-moderate { background: #ffc107; color: black; }
+    .severity-minor { background: #17a2b8; color: white; }
+    .severity-unknown { background: #6c757d; color: white; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
+<div class="container-fluid mt-3">
     <div class="row">
-        <div class="col-12">
-            <h1 class="h3 text-primary mb-4">
-                <i class="fas fa-map"></i> Interactive Emergency Alert Map
-                <small class="text-muted">- Putnam County, Ohio</small>
-            </h1>
-        </div>
-    </div>
-
-    <div class="row">
-        <!-- Sidebar Controls -->
+        <!-- Control Panel -->
         <div class="col-md-3">
             <!-- Map Controls -->
-            <div class="map-controls">
+            <div class="status-panel">
                 <h5 class="mb-3">
-                    <i class="fas fa-sliders-h"></i> Map Controls
+                    <i class="fas fa-layer-group"></i> Map Layers
                 </h5>
-
-                <!-- Boundary Layers -->
-                <div class="layer-group">
-                    <h6><i class="fas fa-layer-group"></i> Boundary Layers</h6>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="toggle-county" checked>
-                        <label class="form-check-label" for="toggle-county">County</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="toggle-fire" checked>
-                        <label class="form-check-label" for="toggle-fire">Fire Districts</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="toggle-ems" checked>
-                        <label class="form-check-label" for="toggle-ems">EMS Districts</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="toggle-electric" checked>
-                        <label class="form-check-label" for="toggle-electric">Electric Districts</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="toggle-township" checked>
-                        <label class="form-check-label" for="toggle-township">Townships</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="toggle-villages" checked>
-                        <label class="form-check-label" for="toggle-villages">Villages</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="toggle-telephone" checked>
-                        <label class="form-check-label" for="toggle-telephone">Telephone</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="toggle-school" checked>
-                        <label class="form-check-label" for="toggle-school">School Districts</label>
-                    </div>
-                </div>
 
                 <!-- Alert Layers -->
                 <div class="layer-group">
-                    <h6><i class="fas fa-exclamation-triangle"></i> Alert Layers</h6>
+                    <h6><i class="fas fa-exclamation-triangle"></i> Alert Types</h6>
                     <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="toggle-alerts" checked>
-                        <label class="form-check-label" for="toggle-alerts">Active Alerts</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="toggle-county-alerts" checked>
-                        <label class="form-check-label" for="toggle-county-alerts">County-wide Alerts</label>
-                    </div>
-                </div>
-            </div>
-<!-- Historical Alert Controls -->
-                <div class="layer-group">
-                    <h6><i class="fas fa-history"></i> Historical Alerts</h6>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="toggle-historical">
-                        <label class="form-check-label" for="toggle-historical">
-                            Show Historical Alerts
+                        <input class="form-check-input" type="checkbox" id="show-active" checked>
+                        <label class="form-check-label" for="show-active">
+                            <i class="fas fa-circle text-danger"></i> Active Alerts
                         </label>
                     </div>
-
-                    <div id="date-filters" style="display: none;" class="mt-2">
-                        <div class="row">
-                            <div class="col-12 mb-2">
-                                <label class="form-label small">Start Date:</label>
-                                <input type="date" id="start-date" class="form-control form-control-sm">
-                            </div>
-                            <div class="col-12 mb-2">
-                                <label class="form-label small">End Date:</label>
-                                <input type="date" id="end-date" class="form-control form-control-sm">
-                            </div>
-                        </div>
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" id="include-active">
-                            <label class="form-check-label small" for="include-active">
-                                Include Active Alerts
-                            </label>
-                        </div>
-                        <button class="btn btn-sm btn-primary w-100" onclick="loadHistoricalAlerts()">
-                            <i class="fas fa-search"></i> Load Historical
-                        </button>
-                        <button class="btn btn-sm btn-outline-secondary w-100 mt-1" onclick="clearHistoricalAlerts()" style="display: none;" id="clear-historical-btn">
-                            <i class="fas fa-times"></i> Clear Historical
-                        </button>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="show-expired">
+                        <label class="form-check-label" for="show-expired">
+                            <i class="fas fa-circle text-secondary"></i> Historical Alerts
+                        </label>
                     </div>
                 </div>
+
+                <!-- Boundary Layers -->
+                <div class="layer-group">
+                    <h6><i class="fas fa-map-marked-alt"></i> Geographic Boundaries</h6>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="show-counties" checked>
+                        <label class="form-check-label" for="show-counties">
+                            <i class="fas fa-square text-secondary"></i> Counties (<span id="counties-count">0</span>)
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="show-townships">
+                        <label class="form-check-label" for="show-townships">
+                            <i class="fas fa-square text-success"></i> Townships (<span id="townships-count">0</span>)
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="show-villages">
+                        <label class="form-check-label" for="show-villages">
+                            <i class="fas fa-square text-info"></i> Villages (<span id="villages-count">0</span>)
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Service Boundaries -->
+                <div class="layer-group">
+                    <h6><i class="fas fa-shield-alt"></i> Service Boundaries</h6>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="show-fire">
+                        <label class="form-check-label" for="show-fire">
+                            <i class="fas fa-square text-danger"></i> Fire Districts (<span id="fire-count">0</span>)
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="show-ems">
+                        <label class="form-check-label" for="show-ems">
+                            <i class="fas fa-square text-primary"></i> EMS Districts (<span id="ems-count">0</span>)
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="show-school">
+                        <label class="form-check-label" for="show-school">
+                            <i class="fas fa-square text-warning"></i> School Districts (<span id="school-count">0</span>)
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Infrastructure Boundaries -->
+                <div class="layer-group">
+                    <h6><i class="fas fa-tools"></i> Infrastructure</h6>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="show-electric">
+                        <label class="form-check-label" for="show-electric">
+                            <i class="fas fa-square" style="color: #ffc107;"></i> Electric Utilities (<span id="electric-count">0</span>)
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="show-telephone">
+                        <label class="form-check-label" for="show-telephone">
+                            <i class="fas fa-square" style="color: #6f42c1;"></i> Telephone Service (<span id="telephone-count">0</span>)
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Date Filters for Historical -->
+                <div id="date-filters" style="display: none;">
+                    <h6><i class="fas fa-calendar-alt"></i> Date Range</h6>
+                    <div class="mb-2">
+                        <label for="start-date" class="form-label small">From:</label>
+                        <input type="date" class="form-control form-control-sm" id="start-date">
+                    </div>
+                    <div class="mb-2">
+                        <label for="end-date" class="form-label small">To:</label>
+                        <input type="date" class="form-control form-control-sm" id="end-date">
+                    </div>
+                    <button class="btn btn-primary btn-sm w-100" onclick="loadHistoricalAlerts()">
+                        <i class="fas fa-search"></i> Apply Filter
+                    </button>
+                </div>
+            </div>
+
             <!-- System Status -->
             <div class="status-panel">
                 <h5 class="mb-3">
-                    <i class="fas fa-server"></i> System Status
+                    <i class="fas fa-info-circle"></i> System Status
                 </h5>
                 <div class="status-item">
-                    <span>Database:</span>
-                    <span class="status-value text-success" id="db-status">Connected</span>
+                    <span><i class="fas fa-exclamation-triangle"></i> Active Alerts:</span>
+                    <span class="status-value" id="active-alert-count">Loading...</span>
                 </div>
                 <div class="status-item">
-                    <span>Boundaries:</span>
+                    <span><i class="fas fa-map-marked"></i> Boundaries:</span>
                     <span class="status-value" id="boundary-count">Loading...</span>
                 </div>
                 <div class="status-item">
-                    <span>Alerts:</span>
-                    <span class="status-value" id="alert-count">Loading...</span>
+                    <span><i class="fas fa-clock"></i> Last Update:</span>
+                    <span class="status-value" id="last-update">Loading...</span>
+                </div>
+                <div class="status-item">
+                    <span><i class="fas fa-map"></i> Map Status:</span>
+                    <span class="status-value" id="map-status">Initializing...</span>
                 </div>
 
-                <div id="alert-summary" class="alert-summary mt-3" style="display: none;">
+                <div id="alert-summary" class="alert-summary" style="display: none;">
                     <!-- Alert summary will be populated by JavaScript -->
                 </div>
             </div>
@@ -264,23 +359,23 @@
                     <i class="fas fa-bolt"></i> Quick Actions
                 </h5>
                 <div class="d-grid gap-2">
-                    <a href="/alerts" class="btn btn-primary btn-sm">
-                        <i class="fas fa-history"></i> View Alerts History
+                    <button class="btn btn-outline-success btn-sm" onclick="refreshData()">
+                        <i class="fas fa-sync-alt" id="refresh-icon"></i> Refresh Map
+                    </button>
+                    <a href="/alerts" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-history"></i> View History
+                    </a>
+                    <a href="/stats" class="btn btn-outline-info btn-sm">
+                        <i class="fas fa-chart-bar"></i> Statistics
                     </a>
                     <a href="/admin" class="btn btn-outline-secondary btn-sm">
                         <i class="fas fa-cog"></i> Admin Panel
                     </a>
-                    <a href="/stats" class="btn btn-outline-info btn-sm">
-                        <i class="fas fa-chart-bar"></i> View Statistics
-                    </a>
-                    <a href="/system_health" class="btn btn-outline-success btn-sm">
-                        <i class="fas fa-heartbeat"></i> System Health
-                    </a>
-                    <button class="btn btn-outline-success btn-sm" onclick="refreshData()">
-                        <i class="fas fa-sync-alt"></i> Refresh Data
+                    <button class="btn btn-outline-warning btn-sm" onclick="centerOnPutnamCounty()">
+                        <i class="fas fa-crosshairs"></i> Center Map
                     </button>
-                    <button class="btn btn-outline-warning btn-sm" onclick="fixCountyIntersections()">
-                        <i class="fas fa-wrench"></i> Fix County Intersections
+                    <button class="btn btn-outline-info btn-sm" onclick="inspectBoundaries()">
+                        <i class="fas fa-search"></i> Inspect Boundaries
                     </button>
                 </div>
             </div>
@@ -288,41 +383,87 @@
 
         <!-- Map Column -->
         <div class="col-md-9">
-            <div id="map"></div>
-        </div>
-    </div>
-
-    <!-- Map Legend Row -->
-    <div class="row mt-3">
-        <div class="col-12">
             <div class="card">
                 <div class="card-header">
-                    <h6 class="mb-0"><i class="fas fa-map-signs"></i> Map Legend</h6>
+                    <h5 class="mb-0">
+                        <i class="fas fa-map"></i> Interactive Emergency Alert Map
+                        <span class="badge bg-success ms-2" id="map-status-badge">Loading...</span>
+                    </h5>
                 </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <h6>Alert Severity Colors:</h6>
-                            <div class="d-flex flex-wrap gap-2">
-                                <span class="badge" style="background-color: #e74c3c;">Extreme</span>
-                                <span class="badge" style="background-color: #e67e22;">Severe</span>
-                                <span class="badge" style="background-color: #f39c12;">Moderate</span>
-                                <span class="badge" style="background-color: #3498db;">Minor</span>
-                                <span class="badge" style="background-color: #95a5a6;">Unknown</span>
-                            </div>
+                <div class="card-body p-0">
+                    <div id="map">
+                        <div class="loading-message">
+                            <div class="spinner"></div>
+                            <div><strong>Loading Interactive Map...</strong></div>
+                            <div class="text-muted">Initializing Leaflet map for Putnam County, OH</div>
                         </div>
-                        <div class="col-md-6">
-                            <h6>Boundary Types:</h6>
-                            <div class="d-flex flex-wrap gap-1">
-                                <span class="badge" style="background-color: #e74c3c;">County</span>
-                                <span class="badge" style="background-color: #e67e22;">Fire</span>
-                                <span class="badge" style="background-color: #f39c12;">Electric</span>
-                                <span class="badge" style="background-color: #2ecc71;">Township</span>
-                                <span class="badge" style="background-color: #3498db;">EMS</span>
-                                <span class="badge" style="background-color: #9b59b6;">Villages</span>
-                                <span class="badge" style="background-color: #1abc9c;">Telephone</span>
-                                <span class="badge" style="background-color: #34495e;">School</span>
-                            </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Map Legend -->
+            <div class="legend">
+                <h6><i class="fas fa-list"></i> Map Legend</h6>
+                <div class="row">
+                    <div class="col-md-4">
+                        <strong>Alert Severity:</strong>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #dc3545;"></div>
+                            <span>Extreme</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #fd7e14;"></div>
+                            <span>Severe</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #ffc107;"></div>
+                            <span>Moderate</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #17a2b8;"></div>
+                            <span>Minor</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <strong>Geographic Boundaries:</strong>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #6c757d;"></div>
+                            <span>Counties</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #28a745;"></div>
+                            <span>Townships</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #17a2b8;"></div>
+                            <span>Villages</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: repeating-linear-gradient(45deg, #6c757d, #6c757d 3px, transparent 3px, transparent 6px);"></div>
+                            <span>Historical Alerts</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <strong>Service Districts:</strong>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #dc3545;"></div>
+                            <span>Fire Districts</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #007bff;"></div>
+                            <span>EMS Districts</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #ffc107;"></div>
+                            <span>School Districts</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #fd7e14;"></div>
+                            <span>Electric Utilities</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #6f42c1;"></div>
+                            <span>Telephone Service</span>
                         </div>
                     </div>
                 </div>
@@ -332,567 +473,812 @@
 </div>
 {% endblock %}
 
-{% block extra_js %}
+{% block scripts %}
+<!-- Load Leaflet -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+
 <script>
+console.log('🗺️ Interactive map page initializing...');
+
+// Global map variables
 let map;
-let boundaryLayers = {};
 let alertLayer;
-let countyWideAlertLayer;
+let boundaryLayers = {};
+let alertData = { active: [], historical: [] };
 
-// Initialize map
+// Map initialization
 function initMap() {
-    // Create map centered on Putnam County, Ohio
-    map = L.map('map').setView([41.0167, -84.1330], 11);
+    try {
+        console.log('🗺️ Initializing Leaflet map...');
 
-    // Add base layers
-    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-    });
+        // Create map centered on Putnam County, OH
+        map = L.map('map').setView([41.0167, -84.1330], 11);
 
-    const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles © Esri'
-    });
+        // Add OpenStreetMap tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 18,
+            minZoom: 8
+        }).addTo(map);
 
-    const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenTopoMap contributors'
-    });
+        // Initialize layer groups
+        alertLayer = L.layerGroup().addTo(map);
+        boundaryLayers = {
+            counties: L.layerGroup(),
+            townships: L.layerGroup(),
+            villages: L.layerGroup(),
+            fire: L.layerGroup(),
+            ems: L.layerGroup(),
+            school: L.layerGroup(),
+            electric: L.layerGroup(),
+            telephone: L.layerGroup()
+        };
 
-    // Add default layer
-    osmLayer.addTo(map);
+        // Add scale control
+        L.control.scale({
+            position: 'bottomleft'
+        }).addTo(map);
 
-    // Layer control
-    const baseLayers = {
-        "OpenStreetMap": osmLayer,
-        "Satellite": satelliteLayer,
-        "Topographic": topoLayer
-    };
+        console.log('✅ Map initialized successfully');
+        updateMapStatus('Ready', 'success');
 
-    L.control.layers(baseLayers).addTo(map);
+        // Load initial data
+        loadAlerts();
+        loadBoundaries();
+        updateSystemStatus();
 
-    // Load data
-    loadBoundaries();
-    loadAlerts();
-    updateSystemStatus();
+        // Set up event listeners
+        setupEventListeners();
 
-    // Set up layer toggles
-    setupLayerToggles();
-}
-
-// Load boundaries from API
-function loadBoundaries() {
-    const boundaryTypes = ['county', 'fire', 'ems', 'electric', 'township', 'villages', 'telephone', 'school'];
-    let totalBoundaries = 0;
-
-    boundaryTypes.forEach(type => {
-        fetch(`/api/boundaries?type=${type}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.features && data.features.length > 0) {
-                    // Color scheme for different boundary types
-                    const colors = {
-                        county: '#e74c3c',
-                        fire: '#e67e22',
-                        ems: '#f39c12',
-                        electric: '#2ecc71',
-                        township: '#3498db',
-                        villages: '#9b59b6',
-                        telephone: '#1abc9c',
-                        school: '#34495e'
-                    };
-
-                    // Create layer for this boundary type
-                    boundaryLayers[type] = L.geoJSON(data, {
-                        style: {
-                            color: colors[type] || '#95a5a6',
-                            weight: type === 'county' ? 3 : 2,
-                            opacity: 0.8,
-                            fillOpacity: type === 'county' ? 0.05 : 0.1
-                        },
-                        onEachFeature: function(feature, layer) {
-                            const props = feature.properties;
-                            const popup = `
-                                <div class="popup-title">${props.name}</div>
-                                <div class="popup-detail"><strong>Type:</strong> ${props.type}</div>
-                                ${props.description ? `<div class="popup-detail"><strong>Details:</strong> ${props.description}</div>` : ''}
-                            `;
-                            layer.bindPopup(popup);
-                        }
-                    });
-
-                    // Add to map if toggle is checked
-                    if (document.getElementById(`toggle-${type}`).checked) {
-                        boundaryLayers[type].addTo(map);
-                    }
-
-                    totalBoundaries += data.features.length;
-                    document.getElementById('boundary-count').textContent = totalBoundaries;
-                }
-            })
-            .catch(error => {
-                console.error(`Error loading ${type} boundaries:`, error);
-            });
-    });
-}
-
-// Load alerts from API with county-wide support
-function loadAlerts() {
-    fetch('/api/alerts')
-        .then(response => response.json())
-        .then(data => {
-            // Clear existing alert layers
-            if (alertLayer) {
-                map.removeLayer(alertLayer);
-            }
-            if (countyWideAlertLayer) {
-                map.removeLayer(countyWideAlertLayer);
-            }
-
-            if (data.features && data.features.length > 0) {
-                // Separate regular alerts from county-wide alerts
-                const regularAlerts = data.features.filter(f => !f.properties.is_county_wide);
-                const countyWideAlerts = data.features.filter(f => f.properties.is_county_wide);
-
-                // Create regular alerts layer
-                if (regularAlerts.length > 0) {
-                    alertLayer = L.geoJSON(regularAlerts, {
-                        style: function(feature) {
-                            const severity = feature.properties.severity;
-                            let color = '#95a5a6'; // default gray
-
-                            switch(severity) {
-                                case 'Extreme': color = '#e74c3c'; break;
-                                case 'Severe': color = '#e67e22'; break;
-                                case 'Moderate': color = '#f39c12'; break;
-                                case 'Minor': color = '#3498db'; break;
-                            }
-
-                            return {
-                                color: color,
-                                weight: 3,
-                                opacity: 0.9,
-                                fillOpacity: 0.3
-                            };
-                        },
-                        onEachFeature: function(feature, layer) {
-                            const props = feature.properties;
-                            const popup = `
-                                <div class="popup-title">${props.event}</div>
-                                <div class="popup-detail"><strong>Severity:</strong> ${props.severity || 'Unknown'}</div>
-                                <div class="popup-detail"><strong>Urgency:</strong> ${props.urgency || 'Unknown'}</div>
-                                <div class="popup-detail"><strong>Expires:</strong> ${props.expires ? new Date(props.expires).toLocaleString() : 'No expiration'}</div>
-                                ${props.headline ? `<div class="popup-detail"><strong>Headline:</strong> ${props.headline}</div>` : ''}
-                                ${props.area_desc ? `<div class="popup-detail"><strong>Area:</strong> ${props.area_desc}</div>` : ''}
-                                <div class="mt-2">
-                                    <a href="/alerts/${props.id}" class="btn btn-sm btn-primary">View Details</a>
-                                </div>
-                            `;
-                            layer.bindPopup(popup);
-                        }
-                    });
-
-                    if (document.getElementById('toggle-alerts').checked) {
-                        alertLayer.addTo(map);
-                    }
-                }
-
-                // Create county-wide alerts layer with special styling
-                if (countyWideAlerts.length > 0) {
-                    countyWideAlertLayer = L.geoJSON(countyWideAlerts, {
-                        style: function(feature) {
-                            const severity = feature.properties.severity;
-                            let color = '#95a5a6';
-
-                            switch(severity) {
-                                case 'Extreme': color = '#e74c3c'; break;
-                                case 'Severe': color = '#e67e22'; break;
-                                case 'Moderate': color = '#f39c12'; break;
-                                case 'Minor': color = '#3498db'; break;
-                            }
-
-                            return {
-                                color: color,
-                                weight: 4,
-                                opacity: 0.8,
-                                fillOpacity: 0.2,
-                                dashArray: '10, 5' // Dashed line for county-wide alerts
-                            };
-                        },
-                        onEachFeature: function(feature, layer) {
-                            const props = feature.properties;
-                            const popup = `
-                                <div class="popup-title">
-                                    ${props.event}
-                                    <span class="county-wide-badge">COUNTY-WIDE</span>
-                                </div>
-                                <div class="popup-detail"><strong>Severity:</strong> ${props.severity || 'Unknown'}</div>
-                                <div class="popup-detail"><strong>Urgency:</strong> ${props.urgency || 'Unknown'}</div>
-                                <div class="popup-detail"><strong>Expires:</strong> ${props.expires ? new Date(props.expires).toLocaleString() : 'No expiration'}</div>
-                                ${props.headline ? `<div class="popup-detail"><strong>Headline:</strong> ${props.headline}</div>` : ''}
-                                <div class="popup-detail"><strong>Coverage:</strong> County-wide alert</div>
-                                <div class="mt-2">
-                                    <a href="/alerts/${props.id}" class="btn btn-sm btn-primary">View Details</a>
-                                </div>
-                            `;
-                            layer.bindPopup(popup);
-                        }
-                    });
-
-                    if (document.getElementById('toggle-county-alerts').checked) {
-                        countyWideAlertLayer.addTo(map);
-                    }
-                }
-
-                // Update alert summary
-                updateAlertSummary(data.features);
-                document.getElementById('alert-count').textContent = data.features.length;
-            } else {
-                document.getElementById('alert-count').textContent = '0';
-                document.getElementById('alert-summary').style.display = 'none';
-            }
-        })
-        .catch(error => {
-            console.error('Error loading alerts:', error);
-            document.getElementById('alert-count').textContent = 'Error';
-        });
-}
-
-// Update alert summary
-function updateAlertSummary(alerts) {
-    const summaryDiv = document.getElementById('alert-summary');
-
-    if (alerts.length === 0) {
-        summaryDiv.style.display = 'none';
-        return;
+    } catch (error) {
+        console.error('❌ Error initializing map:', error);
+        showMapError('Failed to initialize map: ' + error.message);
+        updateMapStatus('Error', 'danger');
     }
-
-    const severityCounts = {};
-    const countyWideCount = alerts.filter(a => a.properties.is_county_wide).length;
-
-    alerts.forEach(alert => {
-        const severity = alert.properties.severity || 'Unknown';
-        severityCounts[severity] = (severityCounts[severity] || 0) + 1;
-    });
-
-    let summaryHtml = '<strong>Alert Summary:</strong><br>';
-    Object.entries(severityCounts).forEach(([severity, count]) => {
-        const badgeClass = {
-            'Extreme': 'danger',
-            'Severe': 'warning',
-            'Moderate': 'info',
-            'Minor': 'secondary'
-        }[severity] || 'secondary';
-
-        summaryHtml += `<span class="badge bg-${badgeClass} me-1">${severity}: ${count}</span>`;
-    });
-
-    if (countyWideCount > 0) {
-        summaryHtml += `<br><small class="text-muted mt-1">${countyWideCount} county-wide alert${countyWideCount > 1 ? 's' : ''}</small>`;
-    }
-
-    summaryDiv.innerHTML = summaryHtml;
-    summaryDiv.style.display = 'block';
 }
-// Historical alerts functionality
-let historicalAlertsLayer;
 
-// Toggle historical controls
-document.addEventListener('DOMContentLoaded', function() {
-    // Set up historical toggle
-    const historicalToggle = document.getElementById('toggle-historical');
-    if (historicalToggle) {
-        historicalToggle.addEventListener('change', function() {
-            const dateFilters = document.getElementById('date-filters');
-            if (this.checked) {
-                dateFilters.style.display = 'block';
-                // Set default date range (last 30 days)
-                const end = new Date();
-                const start = new Date();
-                start.setDate(start.getDate() - 30);
+// Load alerts from API
+async function loadAlerts() {
+    try {
+        console.log('📡 Loading alerts from API...');
+        const response = await fetch('/api/alerts');
 
-                document.getElementById('end-date').value = end.toISOString().split('T')[0];
-                document.getElementById('start-date').value = start.toISOString().split('T')[0];
-            } else {
-                dateFilters.style.display = 'none';
-                clearHistoricalAlerts();
+        if (!response.ok) {
+            throw new Error(`API responded with status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (response.ok && data.features) {
+            alertData.active = data.features;
+            displayAlerts(data.features);
+            updateAlertCount(data.features.length);
+            updateAlertSummary(data.features);
+            console.log(`✅ Loaded ${data.features.length} alerts`);
+
+            // Debug: Log the structure of the first alert if available
+            if (data.features.length > 0) {
+                console.log('📋 Sample alert structure:', data.features[0]);
             }
-        });
+        } else {
+            console.warn('⚠️ No alert features in API response:', data);
+            updateAlertCount(0);
+        }
+    } catch (error) {
+        console.error('❌ Error loading alerts:', error);
+        showToast('Failed to load alerts: ' + error.message, 'error');
+        updateAlertCount(0);
     }
-});
+}
 
 // Load historical alerts
-function loadHistoricalAlerts() {
+async function loadHistoricalAlerts() {
     const startDate = document.getElementById('start-date').value;
     const endDate = document.getElementById('end-date').value;
-    const includeActive = document.getElementById('include-active').checked;
 
     if (!startDate || !endDate) {
-        alert('Please select both start and end dates');
+        showToast('Please select both start and end dates', 'warning');
         return;
     }
 
-    // Build URL with parameters
-    let url = `/api/alerts/historical?start_date=${startDate}&end_date=${endDate}`;
-    if (includeActive) {
-        url += '&include_active=true';
+    try {
+        const response = await fetch(`/api/alerts/historical?start=${startDate}&end=${endDate}`);
+        const data = await response.json();
+
+        if (response.ok && data.features) {
+            alertData.historical = data.features;
+            if (document.getElementById('show-expired').checked) {
+                displayHistoricalAlerts(data.features);
+            }
+            showToast(`Loaded ${data.features.length} historical alerts`, 'success');
+        }
+    } catch (error) {
+        console.error('❌ Error loading historical alerts:', error);
+        showToast('Failed to load historical alerts: ' + error.message, 'error');
     }
-
-    console.log('Loading historical alerts from:', url);
-
-    fetch(url)
-        .then(response => response.json())
-        .then(data => {
-            // Remove existing historical layer
-            if (historicalAlertsLayer) {
-                map.removeLayer(historicalAlertsLayer);
-            }
-
-            if (data.features && data.features.length > 0) {
-                historicalAlertsLayer = L.geoJSON(data, {
-                    style: function(feature) {
-                        const severity = feature.properties.severity;
-                        let color = '#666'; // default gray for historical
-
-                        // Use severity colors but more muted for historical
-                        switch(severity) {
-                            case 'Extreme': color = '#c0392b'; break;
-                            case 'Severe': color = '#d68910'; break;
-                            case 'Moderate': color = '#b7950b'; break;
-                            case 'Minor': color = '#2980b9'; break;
-                        }
-
-                        return {
-                            color: color,
-                            weight: 2,
-                            opacity: 0.7,
-                            fillOpacity: 0.2,
-                            dashArray: '8, 4' // Dashed lines for historical
-                        };
-                    },
-                    onEachFeature: function(feature, layer) {
-                        const props = feature.properties;
-                        const sentDate = props.sent ? new Date(props.sent).toLocaleString() : 'Unknown';
-                        const expiresDate = props.expires ? new Date(props.expires).toLocaleString() : 'No expiration';
-
-                        const popup = `
-                            <div class="popup-title">
-                                ${props.event}
-                                <span class="badge bg-secondary ms-1">Historical</span>
-                                ${props.is_county_wide ? '<span class="county-wide-badge">COUNTY-WIDE</span>' : ''}
-                            </div>
-                            <div class="popup-detail"><strong>Sent:</strong> ${sentDate}</div>
-                            <div class="popup-detail"><strong>Expires:</strong> ${expiresDate}</div>
-                            <div class="popup-detail"><strong>Severity:</strong> ${props.severity || 'Unknown'}</div>
-                            <div class="popup-detail"><strong>Urgency:</strong> ${props.urgency || 'Unknown'}</div>
-                            ${props.headline ? `<div class="popup-detail"><strong>Headline:</strong> ${props.headline}</div>` : ''}
-                            ${props.area_desc ? `<div class="popup-detail"><strong>Area:</strong> ${props.area_desc}</div>` : ''}
-                            <div class="mt-2">
-                                <a href="/alerts/${props.id}" class="btn btn-sm btn-primary">View Details</a>
-                            </div>
-                        `;
-                        layer.bindPopup(popup);
-                    }
-                });
-
-                historicalAlertsLayer.addTo(map);
-
-                // Show clear button
-                const clearBtn = document.getElementById('clear-historical-btn');
-                if (clearBtn) {
-                    clearBtn.style.display = 'block';
-                }
-
-                // Show success message
-                console.log(`Loaded ${data.features.length} historical alerts`);
-                if (typeof showToast === 'function') {
-                    showToast(`Loaded ${data.features.length} historical alerts`, 'success');
-                } else {
-                    alert(`Loaded ${data.features.length} historical alerts`);
-                }
-
-                // Zoom to fit all historical alerts
-                if (data.features.length > 0) {
-                    try {
-                        map.fitBounds(historicalAlertsLayer.getBounds(), {padding: [10, 10]});
-                    } catch (e) {
-                        console.log('Could not fit bounds to historical alerts');
-                    }
-                }
-
-            } else {
-                if (typeof showToast === 'function') {
-                    showToast('No historical alerts found for the selected date range', 'info');
-                } else {
-                    alert('No historical alerts found for the selected date range');
-                }
-            }
-        })
-        .catch(error => {
-            console.error('Error loading historical alerts:', error);
-            if (typeof showToast === 'function') {
-                showToast('Error loading historical alerts: ' + error.message, 'error');
-            } else {
-                alert('Error loading historical alerts: ' + error.message);
-            }
-        });
 }
 
-// Clear historical alerts from map
-function clearHistoricalAlerts() {
-    if (historicalAlertsLayer) {
-        map.removeLayer(historicalAlertsLayer);
-        historicalAlertsLayer = null;
+// Display alerts on map
+function displayAlerts(alerts) {
+    alertLayer.clearLayers();
 
-        // Hide clear button
-        const clearBtn = document.getElementById('clear-historical-btn');
-        if (clearBtn) {
-            clearBtn.style.display = 'none';
+    if (!alerts || alerts.length === 0) {
+        console.log('ℹ️ No alerts to display');
+        return;
+    }
+
+    alerts.forEach(alert => {
+        if (alert.geometry) {
+            const severity = alert.properties.severity || 'Unknown';
+            const color = getSeverityColor(severity);
+            const isActive = !isAlertExpired(alert.properties.expires);
+
+            const alertFeature = L.geoJSON(alert, {
+                style: {
+                    color: color,
+                    weight: alert.properties.is_county_wide ? 4 : 3,
+                    opacity: isActive ? 0.8 : 0.5,
+                    fillOpacity: alert.properties.is_county_wide ? 0.3 : 0.4,
+                    fillColor: color,
+                    dashArray: alert.properties.is_county_wide ? '10,5' : null,
+                    className: isActive ? 'alert-active' : 'alert-expired'
+                },
+                onEachFeature: function(feature, layer) {
+                    const props = feature.properties;
+                    const popupContent = createAlertPopup(props);
+                    layer.bindPopup(popupContent, { maxWidth: 300 });
+                }
+            });
+
+            alertLayer.addLayer(alertFeature);
+        }
+    });
+
+    console.log(`✅ Displayed ${alerts.length} alerts on map`);
+}
+
+// Display historical alerts
+function displayHistoricalAlerts(alerts) {
+    alerts.forEach(alert => {
+        if (alert.geometry) {
+            const alertFeature = L.geoJSON(alert, {
+                style: {
+                    color: '#6c757d',
+                    weight: 2,
+                    opacity: 0.6,
+                    fillOpacity: 0.1,
+                    fillColor: '#6c757d',
+                    dashArray: '5,5',
+                    className: 'alert-expired'
+                },
+                onEachFeature: function(feature, layer) {
+                    const props = feature.properties;
+                    const popupContent = createHistoricalAlertPopup(props);
+                    layer.bindPopup(popupContent, { maxWidth: 300 });
+                }
+            });
+
+            alertLayer.addLayer(alertFeature);
+        }
+    });
+}
+
+// Load boundaries
+async function loadBoundaries() {
+    try {
+        console.log('📡 Loading boundaries from API...');
+        const response = await fetch('/api/boundaries');
+
+        if (!response.ok) {
+            throw new Error(`API responded with status: ${response.status}`);
         }
 
-        console.log('Cleared historical alerts from map');
+        const data = await response.json();
+
+        if (data.features && Array.isArray(data.features)) {
+            console.log(`✅ Received ${data.features.length} boundaries`);
+
+            // Debug: Log the structure of the first boundary
+            if (data.features.length > 0) {
+                console.log('📋 Sample boundary structure:', data.features[0]);
+            }
+
+            // Group boundaries by type
+            const boundariesByType = {
+                counties: [],
+                townships: [],
+                villages: [],
+                fire: [],
+                ems: [],
+                school: [],
+                electric: [],
+                telephone: []
+            };
+
+            let totalLoaded = 0;
+            data.features.forEach(boundary => {
+                const type = boundary.properties.type;
+                if (type && typeof type === 'string') {
+                    const lowerType = type.toLowerCase();
+
+                    if (lowerType.includes('county') || lowerType === 'county') {
+                        boundariesByType.counties.push(boundary);
+                    } else if (lowerType.includes('township') || lowerType === 'township') {
+                        boundariesByType.townships.push(boundary);
+                    } else if (lowerType.includes('village') || lowerType === 'village') {
+                        boundariesByType.villages.push(boundary);
+                    } else if (lowerType.includes('fire') || lowerType === 'fire') {
+                        boundariesByType.fire.push(boundary);
+                    } else if (lowerType.includes('ems') || lowerType === 'ems') {
+                        boundariesByType.ems.push(boundary);
+                    } else if (lowerType.includes('school') || lowerType === 'school') {
+                        boundariesByType.school.push(boundary);
+                    } else if (lowerType.includes('electric') || lowerType === 'electric') {
+                        boundariesByType.electric.push(boundary);
+                    } else if (lowerType.includes('telephone') || lowerType === 'telephone') {
+                        boundariesByType.telephone.push(boundary);
+                    } else {
+                        // For truly unknown types, add to counties but log it
+                        console.log(`📋 Unrecognized boundary type: ${type} - adding to counties`);
+                        boundariesByType.counties.push(boundary);
+                    }
+                } else {
+                    console.warn(`❓ Boundary with no type property:`, boundary.properties);
+                    boundariesByType.counties.push(boundary);
+                }
+                totalLoaded++;
+            });
+
+            // Create map layers for each type
+            Object.keys(boundariesByType).forEach(type => {
+                const boundaries = boundariesByType[type];
+                if (boundaries.length > 0) {
+                    const color = getBoundaryColor(type);
+
+                    const boundaryFeature = L.geoJSON(boundaries, {
+                        style: {
+                            color: color,
+                            weight: 1,
+                            opacity: 0.6,
+                            fillOpacity: 0.1,
+                            fillColor: color
+                        },
+                        onEachFeature: function(feature, layer) {
+                            const props = feature.properties;
+                            const popupContent = createBoundaryPopup(props, type);
+                            layer.bindPopup(popupContent);
+                        }
+                    });
+
+                    boundaryLayers[type].addLayer(boundaryFeature);
+                    console.log(`✅ Loaded ${boundaries.length} ${type} - Color: ${color}`);
+
+                    // Update count in UI
+                    updateBoundaryTypeCount(type, boundaries.length);
+                }
+            });
+
+            updateBoundaryCount(totalLoaded);
+
+        } else {
+            console.warn('⚠️ No boundary features in API response');
+            updateBoundaryCount(0);
+        }
+    } catch (error) {
+        console.error('❌ Error loading boundaries:', error);
+        showToast('Failed to load boundaries: ' + error.message, 'error');
+        updateBoundaryCount(0);
     }
 }
 
-// Setup layer toggles
-function setupLayerToggles() {
-    const boundaryTypes = ['county', 'fire', 'ems', 'electric', 'township', 'villages', 'telephone', 'school'];
+// Create alert popup content
+function createAlertPopup(props) {
+    const severityClass = `severity-${(props.severity || 'unknown').toLowerCase()}`;
+    const isActive = !isAlertExpired(props.expires);
+    const statusBadge = isActive ?
+        '<span class="popup-badge" style="background: #28a745; color: white;">ACTIVE</span>' :
+        '<span class="popup-badge" style="background: #6c757d; color: white;">EXPIRED</span>';
 
-    boundaryTypes.forEach(type => {
-        const toggle = document.getElementById(`toggle-${type}`);
-        if (toggle) {
-            toggle.addEventListener('change', function() {
-                if (boundaryLayers[type]) {
-                    if (this.checked) {
-                        boundaryLayers[type].addTo(map);
-                    } else {
-                        map.removeLayer(boundaryLayers[type]);
-                    }
+    return `
+        <div class="popup-title">${props.event || 'Unknown Event'}</div>
+        <div class="popup-detail">
+            <span class="popup-badge ${severityClass}">${props.severity || 'Unknown'}</span>
+            ${statusBadge}
+            ${props.is_county_wide ? '<span class="popup-badge" style="background: #17a2b8; color: white;">COUNTY-WIDE</span>' : ''}
+        </div>
+        <div class="popup-detail"><strong>Area:</strong> ${props.area_desc || 'Unknown'}</div>
+        <div class="popup-detail"><strong>Effective:</strong> ${props.effective ? new Date(props.effective).toLocaleString() : 'Unknown'}</div>
+        <div class="popup-detail"><strong>Expires:</strong> ${props.expires ? new Date(props.expires).toLocaleString() : 'Unknown'}</div>
+        ${props.headline ? `<div class="popup-detail"><strong>Headline:</strong> ${props.headline}</div>` : ''}
+        <div class="mt-2">
+            <a href="/alerts/${props.id}" class="btn btn-sm btn-primary">View Details</a>
+        </div>
+    `;
+}
+
+// Create historical alert popup content
+function createHistoricalAlertPopup(props) {
+    return `
+        <div class="popup-title">
+            ${props.event || 'Unknown Event'}
+            <span class="historical-badge">Historical</span>
+        </div>
+        <div class="popup-detail"><strong>Severity:</strong> ${props.severity || 'Unknown'}</div>
+        <div class="popup-detail"><strong>Area:</strong> ${props.area_desc || 'Unknown'}</div>
+        <div class="popup-detail"><strong>Date:</strong> ${props.effective ? new Date(props.effective).toLocaleDateString() : 'Unknown'}</div>
+        <div class="mt-2">
+            <a href="/alerts/${props.id}" class="btn btn-sm btn-outline-secondary">View Details</a>
+        </div>
+    `;
+}
+
+// Create boundary popup content
+function createBoundaryPopup(props, type) {
+    return `
+        <div class="popup-title">${props.name || 'Unnamed'}</div>
+        <div class="popup-detail"><strong>Type:</strong> ${props.type || type}</div>
+        <div class="popup-detail"><strong>ID:</strong> ${props.id}</div>
+        ${props.description ? `<div class="popup-detail"><strong>Description:</strong> ${props.description}</div>` : ''}
+        ${props.population ? `<div class="popup-detail"><strong>Population:</strong> ${props.population.toLocaleString()}</div>` : ''}
+        ${props.area ? `<div class="popup-detail"><strong>Area:</strong> ${props.area} sq mi</div>` : ''}
+    `;
+}
+
+// Utility functions
+function getSeverityColor(severity) {
+    const colors = {
+        'Extreme': '#dc3545',
+        'Severe': '#fd7e14',
+        'Moderate': '#ffc107',
+        'Minor': '#17a2b8'
+    };
+    return colors[severity] || '#6c757d';
+}
+
+// FIXED: getBoundaryColor function with missing colors added
+function getBoundaryColor(type) {
+    const colors = {
+        'counties': '#6c757d',      // Grey
+        'townships': '#28a745',     // Green
+        'villages': '#17a2b8',      // Blue
+        // MISSING COLORS THAT WERE CAUSING GREY BOUNDARIES:
+        'fire': '#dc3545',          // Red (matches your legend)
+        'ems': '#007bff',           // Blue (matches your legend)
+        'school': '#ffc107',        // Yellow (matches your legend)
+        'electric': '#fd7e14',      // Orange (matches your legend)
+        'telephone': '#6f42c1'      // Purple (matches your legend)
+    };
+    return colors[type] || '#6c757d';
+}
+
+function isAlertExpired(expiresDate) {
+    if (!expiresDate) return false;
+    return new Date(expiresDate) < new Date();
+}
+
+// Update UI functions
+function updateMapStatus(status, type) {
+    const badge = document.getElementById('map-status-badge');
+    const statusElement = document.getElementById('map-status');
+
+    if (badge) {
+        badge.textContent = status;
+        badge.className = `badge bg-${type} ms-2`;
+    }
+
+    if (statusElement) {
+        statusElement.textContent = status;
+    }
+}
+
+function updateAlertCount(count) {
+    const element = document.getElementById('active-alert-count');
+    if (element) {
+        element.textContent = count;
+    }
+}
+
+function updateBoundaryCount(count) {
+    const element = document.getElementById('boundary-count');
+    if (element) {
+        element.textContent = count;
+    }
+}
+
+function updateBoundaryTypeCount(type, count) {
+    const element = document.getElementById(`${type}-count`);
+    if (element) {
+        element.textContent = count;
+    }
+}
+
+function updateAlertSummary(alerts) {
+    const summaryElement = document.getElementById('alert-summary');
+    if (!summaryElement || !alerts || alerts.length === 0) return;
+
+    const activeCounts = {};
+    alerts.forEach(alert => {
+        const event = alert.properties.event || 'Unknown';
+        activeCounts[event] = (activeCounts[event] || 0) + 1;
+    });
+
+    const summaryHtml = Object.entries(activeCounts)
+        .map(([event, count]) => `<div><strong>${event}:</strong> ${count}</div>`)
+        .join('');
+
+    summaryElement.innerHTML = `<h6>Active Alerts by Type:</h6>${summaryHtml}`;
+    summaryElement.style.display = 'block';
+}
+
+async function updateSystemStatus() {
+    try {
+        const response = await fetch('/api/system_status');
+        if (response.ok) {
+            const data = await response.json();
+            console.log('✅ System status updated:', data);
+            // Update any additional system status here if needed
+        }
+    } catch (error) {
+        console.warn('Could not fetch system status:', error);
+    }
+
+    // Update timestamp
+    const element = document.getElementById('last-update');
+    if (element) {
+        element.textContent = new Date().toLocaleTimeString();
+    }
+}
+
+// Event handlers
+function setupEventListeners() {
+    // Layer toggles
+    document.getElementById('show-active').addEventListener('change', function() {
+        if (this.checked && alertData.active) {
+            displayAlerts(alertData.active);
+        } else if (!this.checked) {
+            alertLayer.clearLayers();
+        }
+    });
+
+    document.getElementById('show-expired').addEventListener('change', function() {
+        const dateFilters = document.getElementById('date-filters');
+        if (this.checked) {
+            dateFilters.style.display = 'block';
+            // Set default dates (last 30 days)
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - 30);
+
+            document.getElementById('end-date').value = endDate.toISOString().split('T')[0];
+            document.getElementById('start-date').value = startDate.toISOString().split('T')[0];
+        } else {
+            dateFilters.style.display = 'none';
+            // Remove historical alerts from map
+            if (alertData.active) {
+                displayAlerts(alertData.active);
+            }
+        }
+    });
+
+    // Boundary layer toggles
+    ['counties', 'townships', 'villages', 'fire', 'ems', 'school', 'electric', 'telephone'].forEach(type => {
+        const checkbox = document.getElementById(`show-${type}`);
+        if (checkbox) {
+            checkbox.addEventListener('change', function() {
+                if (this.checked) {
+                    map.addLayer(boundaryLayers[type]);
+                } else {
+                    map.removeLayer(boundaryLayers[type]);
                 }
             });
         }
     });
-
-    // Regular alert toggle
-    const alertToggle = document.getElementById('toggle-alerts');
-    if (alertToggle) {
-        alertToggle.addEventListener('change', function() {
-            if (alertLayer) {
-                if (this.checked) {
-                    alertLayer.addTo(map);
-                } else {
-                    map.removeLayer(alertLayer);
-                }
-            }
-        });
-    }
-
-    // County-wide alert toggle
-    const countyAlertToggle = document.getElementById('toggle-county-alerts');
-    if (countyAlertToggle) {
-        countyAlertToggle.addEventListener('change', function() {
-            if (countyWideAlertLayer) {
-                if (this.checked) {
-                    countyWideAlertLayer.addTo(map);
-                } else {
-                    map.removeLayer(countyWideAlertLayer);
-                }
-            }
-        });
-    }
 }
 
-// Update system status
-function updateSystemStatus() {
-    fetch('/api/system_status')
-        .then(response => response.json())
-        .then(data => {
-            if (data.database_status === 'connected') {
-                document.getElementById('db-status').textContent = 'Connected';
-                document.getElementById('db-status').className = 'status-value text-success';
-            } else {
-                document.getElementById('db-status').textContent = 'Error';
-                document.getElementById('db-status').className = 'status-value text-danger';
-            }
-        })
-        .catch(error => {
-            console.error('Error getting system status:', error);
-            document.getElementById('db-status').textContent = 'Error';
-            document.getElementById('db-status').className = 'status-value text-danger';
-        });
-}
+// Action functions
+async function refreshData() {
+    const refreshBtn = document.getElementById('refresh-icon');
+    if (refreshBtn) {
+        refreshBtn.classList.add('fa-spin');
+    }
 
-// Refresh all data
-function refreshData() {
-    const refreshBtn = document.querySelector('button[onclick="refreshData()"] i');
-    refreshBtn.classList.add('fa-spin');
-
-    loadBoundaries();
-    loadAlerts();
-    updateSystemStatus();
-
-    // Show toast notification
-    if (typeof showToast === 'function') {
-        showToast('Map data refreshed successfully!', 'success');
+    try {
+        await Promise.all([
+            loadAlerts(),
+            updateSystemStatus()
+        ]);
+        showToast('Map data refreshed successfully', 'success');
+    } catch (error) {
+        showToast('Failed to refresh data', 'error');
     }
 
     setTimeout(() => {
-        refreshBtn.classList.remove('fa-spin');
+        if (refreshBtn) {
+            refreshBtn.classList.remove('fa-spin');
+        }
     }, 2000);
 }
 
-// Fix county intersections function
-async function fixCountyIntersections() {
-    if (!confirm('Fix intersection calculations for county-wide alerts? This will recalculate affected boundaries.')) return;
-
-    try {
-        const response = await fetch('/admin/fix_county_intersections', { method: 'POST' });
-        const result = await response.json();
-
-        if (response.ok) {
-            if (typeof showToast === 'function') {
-                showToast(result.success || result.message, 'success');
-            } else {
-                alert(result.success || result.message);
-            }
-        } else {
-            if (typeof showToast === 'function') {
-                showToast(result.error || 'Failed to fix intersections', 'error');
-            } else {
-                alert(result.error || 'Failed to fix intersections');
-            }
-        }
-    } catch (error) {
-        console.error('Error fixing intersections:', error);
-        if (typeof showToast === 'function') {
-            showToast('Error fixing intersections: ' + error.message, 'error');
-        } else {
-            alert('Error fixing intersections: ' + error.message);
-        }
+function centerOnPutnamCounty() {
+    if (map) {
+        map.setView([41.0167, -84.1330], 11);
+        showToast('Map centered on Putnam County, OH', 'info');
     }
 }
 
-// Add map controls for better UX
-function addMapControls() {
-    // Add scale control
-    L.control.scale({
-        position: 'bottomleft'
-    }).addTo(map);
+async function inspectBoundaries() {
+    try {
+        console.log('🔍 Inspecting boundaries...');
+        const response = await fetch('/api/boundaries');
+
+        if (!response.ok) {
+            throw new Error(`API responded with status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.features && Array.isArray(data.features)) {
+            // Group boundaries by type for inspection
+            const boundariesByType = {};
+            data.features.forEach(boundary => {
+                const type = boundary.properties.type || 'unknown';
+                if (!boundariesByType[type]) {
+                    boundariesByType[type] = [];
+                }
+                boundariesByType[type].push({
+                    id: boundary.properties.id,
+                    name: boundary.properties.name,
+                    description: boundary.properties.description,
+                    type: type
+                });
+            });
+
+            // Sort types for better display
+            const sortedTypes = Object.keys(boundariesByType).sort();
+
+            // Create inspection report
+            let report = `📊 COMPREHENSIVE BOUNDARY INSPECTION REPORT\n`;
+            report += `=========================================================\n`;
+            report += `Total Boundaries: ${data.features.length}\n`;
+            report += `Boundary Types: ${sortedTypes.length}\n`;
+            report += `Generated: ${new Date().toLocaleString()}\n\n`;
+
+            // Summary by type
+            report += `SUMMARY BY TYPE:\n`;
+            report += `================\n`;
+            sortedTypes.forEach(type => {
+                const count = boundariesByType[type].length;
+                report += `${type.toUpperCase()}: ${count}\n`;
+            });
+            report += `\n`;
+
+            // Detailed listings
+            sortedTypes.forEach(type => {
+                const boundaries = boundariesByType[type];
+                report += `${type.toUpperCase()} DETAILS (${boundaries.length}):\n`;
+                report += `${'='.repeat(type.length + 15)}\n`;
+                boundaries.forEach((boundary, index) => {
+                    report += `  ${index + 1}. ${boundary.name} (ID: ${boundary.id})\n`;
+                    if (boundary.description) {
+                        report += `     Description: ${boundary.description}\n`;
+                    }
+                });
+                report += `\n`;
+            });
+
+            // Show in console
+            console.log(report);
+
+            // Create enhanced inspection window
+            const inspectionWindow = window.open('', '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
+            inspectionWindow.document.write(`
+                <html>
+                <head>
+                    <title>Comprehensive Boundary Inspection Report</title>
+                    <style>
+                        body {
+                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                            padding: 20px;
+                            background: #f5f5f5;
+                            margin: 0;
+                        }
+                        .report {
+                            background: white;
+                            padding: 30px;
+                            border-radius: 8px;
+                            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                            max-width: 1000px;
+                            margin: 0 auto;
+                        }
+                        h1 {
+                            color: #007bff;
+                            border-bottom: 3px solid #007bff;
+                            padding-bottom: 10px;
+                        }
+                        .summary {
+                            background: #e9ecef;
+                            padding: 20px;
+                            border-radius: 8px;
+                            margin: 20px 0;
+                        }
+                        .summary h2 {
+                            color: #28a745;
+                            margin-top: 0;
+                        }
+                        .type-section {
+                            margin-bottom: 30px;
+                            border: 1px solid #dee2e6;
+                            border-radius: 8px;
+                            padding: 20px;
+                        }
+                        .type-header {
+                            font-weight: bold;
+                            color: #dc3545;
+                            margin-bottom: 15px;
+                            font-size: 1.2em;
+                            border-bottom: 2px solid #dc3545;
+                            padding-bottom: 5px;
+                        }
+                        .boundary-item {
+                            margin-left: 20px;
+                            margin-bottom: 10px;
+                            padding: 8px;
+                            background: #f8f9fa;
+                            border-radius: 4px;
+                        }
+                        .boundary-name {
+                            font-weight: bold;
+                            color: #007bff;
+                        }
+                        .boundary-id {
+                            color: #6c757d;
+                            font-size: 0.9em;
+                        }
+                        .description {
+                            color: #495057;
+                            font-style: italic;
+                            margin-top: 5px;
+                            padding: 5px;
+                            background: white;
+                            border-radius: 4px;
+                        }
+                        .stats-grid {
+                            display: grid;
+                            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                            gap: 15px;
+                            margin: 20px 0;
+                        }
+                        .stat-box {
+                            background: #007bff;
+                            color: white;
+                            padding: 15px;
+                            border-radius: 8px;
+                            text-align: center;
+                        }
+                        .stat-number {
+                            font-size: 2em;
+                            font-weight: bold;
+                            display: block;
+                        }
+                        .stat-label {
+                            font-size: 0.9em;
+                            opacity: 0.9;
+                        }
+                        @media print {
+                            body { background: white; }
+                            .report { box-shadow: none; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="report">
+                        <h1>🗺️ Comprehensive Boundary Inspection Report</h1>
+
+                        <div class="summary">
+                            <h2>📊 System Overview</h2>
+                            <div class="stats-grid">
+                                <div class="stat-box">
+                                    <span class="stat-number">${data.features.length}</span>
+                                    <span class="stat-label">Total Boundaries</span>
+                                </div>
+                                <div class="stat-box">
+                                    <span class="stat-number">${sortedTypes.length}</span>
+                                    <span class="stat-label">Boundary Types</span>
+                                </div>
+                                <div class="stat-box">
+                                    <span class="stat-number">${new Date().toLocaleDateString()}</span>
+                                    <span class="stat-label">Report Date</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="summary">
+                            <h2>📈 Type Distribution</h2>
+                            ${sortedTypes.map(type => {
+                                const count = boundariesByType[type].length;
+                                const percentage = ((count / data.features.length) * 100).toFixed(1);
+                                return `<div><strong>${type.toUpperCase()}:</strong> ${count} boundaries (${percentage}%)</div>`;
+                            }).join('')}
+                        </div>
+
+                        ${sortedTypes.map(type => {
+                            const boundaries = boundariesByType[type];
+                            const typeColors = {
+                                'county': '#6c757d', 'township': '#28a745', 'village': '#17a2b8',
+                                'fire': '#dc3545', 'ems': '#007bff', 'school': '#ffc107',
+                                'electric': '#fd7e14', 'telephone': '#6f42c1'
+                            };
+                            const color = typeColors[type.toLowerCase()] || '#6c757d';
+
+                            return `
+                                <div class="type-section">
+                                    <div class="type-header" style="color: ${color}; border-bottom-color: ${color};">
+                                        ${type.toUpperCase()} BOUNDARIES (${boundaries.length})
+                                    </div>
+                                    ${boundaries.map((boundary, index) => `
+                                        <div class="boundary-item">
+                                            <div class="boundary-name">${boundary.name}</div>
+                                            <div class="boundary-id">ID: ${boundary.id} | Type: ${boundary.type}</div>
+                                            ${boundary.description ? `<div class="description">${boundary.description}</div>` : ''}
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            `;
+                        }).join('')}
+
+                        <div class="summary">
+                            <p><strong>📍 System Location:</strong> Putnam County, Ohio Emergency Management</p>
+                            <p><strong>🔧 Generated by:</strong> KR8MER CAP Emergency Alert System</p>
+                            <p><small>This comprehensive report shows all boundary data available in the emergency management system database.</small></p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `);
+
+            showToast(`Comprehensive boundary inspection complete: ${data.features.length} boundaries across ${sortedTypes.length} types`, 'success');
+
+        } else {
+            showToast('No boundaries found in system', 'warning');
+        }
+    } catch (error) {
+        console.error('❌ Error inspecting boundaries:', error);
+        showToast('Failed to inspect boundaries: ' + error.message, 'error');
+    }
 }
 
-// Initialize map when page loads
+// Error handling
+function showMapError(message) {
+    const mapContainer = document.getElementById('map');
+    if (mapContainer) {
+        mapContainer.innerHTML = `
+            <div class="map-error">
+                <i class="fas fa-exclamation-triangle" style="font-size: 3em; margin-bottom: 15px;"></i>
+                <h4>Map Loading Error</h4>
+                <p>${message}</p>
+                <button class="btn btn-primary" onclick="window.location.reload()">
+                    <i class="fas fa-redo"></i> Reload Page
+                </button>
+            </div>
+        `;
+    }
+}
+
+// Initialize everything when page loads
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('📄 Interactive map page loaded');
+
     try {
         initMap();
-        addMapControls();
 
-        // Refresh data every 5 minutes
+        // Auto-refresh every 5 minutes
         setInterval(() => {
             loadAlerts();
             updateSystemStatus();
         }, 300000);
 
-        // Add keyboard shortcuts
+        // Keyboard shortcuts
         document.addEventListener('keydown', function(e) {
-            // Press 'R' to refresh
             if (e.key === 'r' || e.key === 'R') {
                 if (!e.ctrlKey && !e.metaKey) {
                     e.preventDefault();
@@ -900,39 +1286,86 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         });
-    } catch (error) {
-        console.error('Error initializing map:', error);
 
-        // Fallback: show error message in map container
-        const mapContainer = document.getElementById('map');
-        if (mapContainer) {
-            mapContainer.innerHTML = `
-                <div style="height: 600px; display: flex; align-items: center; justify-content: center; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px;">
-                    <div style="text-align: center;">
-                        <h4 style="color: #dc3545;">Map Loading Error</h4>
-                        <p style="color: #6c757d;">There was an issue loading the map. Please refresh the page.</p>
-                        <button onclick="window.location.reload()" style="background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">
-                            Refresh Page
-                        </button>
-                    </div>
-                </div>
-            `;
+    } catch (error) {
+        console.error('❌ Error initializing page:', error);
+        showMapError('Failed to initialize map interface: ' + error.message);
+    }
+});
+
+console.log('📜 Interactive map script loaded');
+
+// Make diagnostic functions available globally for debugging
+window.mapDebug = {
+    testAPIs: async function() {
+        console.log('🔍 Testing all API endpoints...');
+
+        const endpoints = [
+            '/api/alerts',
+            '/api/boundaries',
+            '/api/system_status'
+        ];
+
+        for (const endpoint of endpoints) {
+            try {
+                const response = await fetch(endpoint);
+                const data = await response.json();
+                console.log(`✅ ${endpoint}: ${response.status}`, data);
+            } catch (error) {
+                console.error(`❌ ${endpoint}: ${error.message}`);
+            }
+        }
+    },
+
+    refreshAll: function() {
+        console.log('🔄 Refreshing all map data...');
+        refreshData();
+    },
+
+    inspectMap: function() {
+        console.log('🗺️ Map inspection:');
+        console.log('Map object:', map);
+        console.log('Alert layer:', alertLayer);
+        console.log('Boundary layers:', boundaryLayers);
+        console.log('Alert data:', alertData);
+    },
+
+    analyzeBoundaries: async function() {
+        console.log('📊 Analyzing boundary data...');
+        try {
+            const response = await fetch('/api/boundaries');
+            const data = await response.json();
+
+            if (data.features) {
+                const analysis = {};
+                data.features.forEach(boundary => {
+                    const type = boundary.properties.type || 'unknown';
+                    if (!analysis[type]) {
+                        analysis[type] = { count: 0, examples: [] };
+                    }
+                    analysis[type].count++;
+                    if (analysis[type].examples.length < 3) {
+                        analysis[type].examples.push({
+                            name: boundary.properties.name,
+                            id: boundary.properties.id
+                        });
+                    }
+                });
+
+                console.log('📋 Boundary Analysis:');
+                console.table(analysis);
+                return analysis;
+            }
+        } catch (error) {
+            console.error('❌ Analysis failed:', error);
         }
     }
-});
+};
 
-// Add some utility functions for better error handling
-window.addEventListener('online', function() {
-    if (typeof showToast === 'function') {
-        showToast('Connection restored - refreshing data', 'success');
-    }
-    refreshData();
-});
-
-window.addEventListener('offline', function() {
-    if (typeof showToast === 'function') {
-        showToast('Connection lost - map data may be outdated', 'warning');
-    }
-});
+console.log('💡 Debug functions available:');
+console.log('  • window.mapDebug.testAPIs() - Test all API endpoints');
+console.log('  • window.mapDebug.refreshAll() - Refresh all map data');
+console.log('  • window.mapDebug.inspectMap() - Inspect map objects');
+console.log('  • window.mapDebug.analyzeBoundaries() - Analyze boundary types');
 </script>
 {% endblock %}

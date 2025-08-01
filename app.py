@@ -152,9 +152,9 @@ def parse_nws_datetime(dt_string):
         try:
             dt_clean = dt_string.replace(' EDT', '').replace('EDT', '')
             dt = datetime.fromisoformat(dt_clean)
-            # FIXED - Treats time as already in EDT:
-            edt_tz = timezone(timedelta(hours=-4))
-            dt = dt.replace(tzinfo=edt_tz)  # ← This just adds timezone info
+            # FIXED: Use pytz to properly localize as EDT
+            eastern_tz = pytz.timezone('US/Eastern')
+            dt = eastern_tz.localize(dt, is_dst=True)  # is_dst=True for EDT
             return dt.astimezone(UTC_TZ)
         except ValueError:
             pass

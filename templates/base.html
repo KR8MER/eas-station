@@ -6,21 +6,13 @@
     <title>{% block title %}KR8MER CAP - Emergency Alert System{% endblock %}</title>
     
     <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>??</text></svg>">
-    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>??</text></svg>">
-    
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
+
     <!-- Bootstrap CSS -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <!-- Leaflet CSS -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" rel="stylesheet">
-
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
-
-    <!-- Leaflet JavaScript -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 
     <style>
         :root {
@@ -69,7 +61,7 @@
             background-color: var(--bg-color);
             border: 1px solid var(--border-color);
             box-shadow: 0 0.125rem 0.25rem var(--shadow-color);
-            transition: all 0.3s ease;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
 
         .table {
@@ -158,78 +150,42 @@
         .health-warning { background-color: var(--warning-color); }
         .health-critical { background-color: var(--danger-color); }
 
-        /* Timezone display styling */
-        .timezone-info {
-            font-size: 0.85em;
-            color: var(--secondary-color);
-            margin-left: 0.5rem;
-        }
-
-        .local-time {
-            font-weight: 600;
-            color: var(--text-color);
-        }
-
-        .utc-time {
-            font-weight: normal;
-            color: var(--secondary-color);
-        }
-
-        .time-display {
-            display: inline-block;
-        }
-
-        .expired-alert {
-            opacity: 0.6;
-            text-decoration: line-through;
-        }
-
-        .active-alert {
-            font-weight: 500;
-        }
-
         @keyframes pulse {
-            0% { opacity: 1; }
+            0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
-            100% { opacity: 1; }
         }
 
-        .export-buttons {
-            display: flex;
-            gap: 10px;
-            margin: 20px 0;
+        /* Map styling */
+        .map-container {
+            position: relative;
+            z-index: 1;
         }
 
-        .help-tooltip {
-            cursor: help;
-            color: var(--info-color);
+        .leaflet-container {
+            background: var(--light-color);
         }
 
-        .error-container {
-            background: linear-gradient(135deg, var(--danger-color), #e74c3c);
-            color: white;
-            padding: 30px;
-            border-radius: 12px;
-            margin: 20px 0;
-            text-align: center;
+        /* Toast notifications */
+        .toast-container {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 9999;
         }
 
-        .error-icon {
-            font-size: 3em;
-            margin-bottom: 15px;
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .btn-theme-toggle {
+                top: 60px;
+                right: 10px;
+                width: 40px;
+                height: 40px;
+            }
         }
 
-        .error-actions {
-            margin-top: 20px;
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-
-        /* Print Styles */
+        /* Print styles */
         @media print {
-            .navbar, .footer, .btn-theme-toggle, .export-buttons {
+            .navbar, .btn-theme-toggle, .footer {
                 display: none !important;
             }
 
@@ -237,119 +193,6 @@
                 background: white !important;
                 color: black !important;
             }
-
-            .card {
-                border: 1px solid #ddd !important;
-                box-shadow: none !important;
-                break-inside: avoid;
-                margin-bottom: 20px;
-            }
-
-            .page-break {
-                page-break-before: always;
-            }
-
-            h1, h2, h3 {
-                page-break-after: avoid;
-            }
-
-            .stats-grid {
-                display: grid !important;
-                grid-template-columns: repeat(2, 1fr) !important;
-                gap: 10px !important;
-            }
-
-            .timezone-info {
-                color: #666 !important;
-            }
-        }
-
-        /* Mobile Responsive */
-        @media (max-width: 768px) {
-            .btn-theme-toggle {
-                top: 10px;
-                right: 10px;
-                width: 40px;
-                height: 40px;
-            }
-
-            .export-buttons {
-                flex-direction: column;
-            }
-
-            .d-flex.gap-2 {
-                flex-direction: column;
-                gap: 0.5rem !important;
-            }
-
-            .health-indicator {
-                display: none;
-            }
-
-            .timezone-info {
-                display: none;
-            }
-        }
-
-        /* Loading States */
-        .loading {
-            position: relative;
-            overflow: hidden;
-        }
-
-        .loading::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-            animation: loading 1.5s infinite;
-        }
-
-        @keyframes loading {
-            0% { left: -100%; }
-            100% { left: 100%; }
-        }
-
-        /* Accessibility */
-        .sr-only {
-            position: absolute;
-            width: 1px;
-            height: 1px;
-            padding: 0;
-            margin: -1px;
-            overflow: hidden;
-            clip: rect(0, 0, 0, 0);
-            white-space: nowrap;
-            border: 0;
-        }
-
-        /* Focus styles */
-        .btn:focus, .form-control:focus, .form-select:focus {
-            outline: 2px solid var(--primary-color);
-            outline-offset: 2px;
-        }
-
-        /* Dark mode specific overrides */
-        [data-theme="dark"] .table-light {
-            background-color: var(--light-color) !important;
-            color: var(--text-color) !important;
-        }
-
-        [data-theme="dark"] .bg-light {
-            background-color: var(--light-color) !important;
-        }
-
-        [data-theme="dark"] .text-muted {
-            color: var(--secondary-color) !important;
-        }
-
-        [data-theme="dark"] .alert {
-            background-color: var(--light-color);
-            border-color: var(--border-color);
-            color: var(--text-color);
         }
     </style>
 
@@ -357,210 +200,118 @@
 </head>
 <body>
     <!-- Theme Toggle Button -->
-    <button class="btn-theme-toggle" onclick="toggleTheme()" title="Toggle Dark Mode" aria-label="Toggle between light and dark theme">
-        <i class="fas fa-moon" id="theme-icon"></i>
+    <button class="btn-theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+        <i id="theme-icon" class="fas fa-moon"></i>
     </button>
+
+    <!-- Toast Container -->
+    <div class="toast-container"></div>
 
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container-fluid">
             <a class="navbar-brand" href="/">
-                <span class="brand-icon"><i class="fas fa-broadcast-tower"></i></span>
-                <span>KR8MER CAP</span>
-                <span class="timezone-info">
-                    <i class="fas fa-clock"></i> Putnam County, OH
-                </span>
+                <i class="fas fa-satellite-dish brand-icon"></i>
+                KR8MER CAP Emergency Alerts
+                <div class="health-indicator">
+                    <div class="health-dot health-good" id="system-health-dot"></div>
+                    <span id="system-health-text">System OK</span>
+                </div>
             </a>
 
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
 
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
+                <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="/" aria-label="Interactive map view">
-                            <i class="fas fa-map"></i> Map View
+                        <a class="nav-link" href="/">
+                            <i class="fas fa-map"></i> Interactive Map
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/alerts" aria-label="View alerts history">
+                        <a class="nav-link" href="/alerts">
                             <i class="fas fa-history"></i> Alerts History
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/stats" aria-label="View system statistics">
+                        <a class="nav-link" href="/stats">
                             <i class="fas fa-chart-bar"></i> Statistics
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/system_health" aria-label="View system health monitoring">
-                            <i class="fas fa-heartbeat"></i> System Health
-                            <span class="health-indicator" id="nav-health-indicator">
-                                <span class="health-dot health-good" id="nav-health-dot"></span>
-                                <span id="nav-health-text">Good</span>
-                            </span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/admin" aria-label="Administration panel">
+                        <a class="nav-link" href="/admin">
                             <i class="fas fa-cog"></i> Admin
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/logs" aria-label="View system logs">
-                            <i class="fas fa-list"></i> Logs
+                        <a class="nav-link" href="/led">
+                            <i class="fas fa-tv"></i> LED Control
                         </a>
-                    </li>
-                </ul>
-
-                <!-- System Status Indicator with Time -->
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <span class="navbar-text status-indicator" id="system-status">
-                            <span class="status-dot"></span>
-                            <span>System Online</span>
-                        </span>
-                    </li>
-                    <li class="nav-item">
-                        <span class="navbar-text">
-                            <span class="time-display" id="current-time-display">
-                                <span class="local-time" id="current-local-time">Loading...</span>
-                                <span class="utc-time" id="current-utc-time">(UTC)</span>
-                            </span>
-                        </span>
                     </li>
                 </ul>
             </div>
         </div>
     </nav>
 
-    <!-- Main Content -->
-    <div class="container-fluid mt-3">
-        <!-- Flash Messages -->
-        {% with messages = get_flashed_messages() %}
-            {% if messages %}
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            <div class="container-fluid mt-3">
                 {% for message in messages %}
                     <div class="alert alert-info alert-dismissible fade show" role="alert">
-                        <i class="fas fa-info-circle"></i> {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
                 {% endfor %}
-            {% endif %}
-        {% endwith %}
+            </div>
+        {% endif %}
+    {% endwith %}
 
+    <!-- Main Content -->
+    <main>
         {% block content %}{% endblock %}
-    </div>
+    </main>
 
     <!-- Footer -->
     <footer class="footer">
         <div class="container-fluid text-center">
-            <div class="row">
-                <div class="col-md-6 text-md-start">
-                    <small class="text-muted">
-                        <i class="fas fa-copyright"></i> 2025 KR8MER CAP Emergency Alert System
-                    </small>
-                </div>
-                <div class="col-md-6 text-md-end">
-                    <small class="text-muted">
-                        <i class="fas fa-radio"></i> Amateur Radio Emergency Communications |
-                        <span class="time-display">
-                            <span id="footer-time">Loading time...</span>
-                        </span>
-                    </small>
-                </div>
-            </div>
+            <small class="text-muted">
+                <i class="fas fa-satellite-dish"></i> 2025 KR8MER CAP Emergency Alert System |
+                <i class="fas fa-radio"></i> Amateur Radio Emergency Communications |
+                <i class="fas fa-server"></i> Raspberry Pi Server |
+                <span id="current-time">Loading...</span>
+            </small>
         </div>
     </footer>
 
-    <!-- Scripts -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <!-- SCRIPTS - Load order is important! -->
+    <!-- 1. Bootstrap first -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
-    <!-- Excel Export Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
+    <!-- 2. Base JavaScript functions -->
     <script>
-        // Timezone handling - Putnam County, Ohio (Eastern Time)
-        const PUTNAM_COUNTY_TZ = 'America/New_York';
-
-        // Global timezone functions
-        window.formatLocalDateTime = function(dateString, includeUTC = true) {
-            if (!dateString) return 'Unknown';
-
-            try {
-                const date = new Date(dateString);
-                const localTime = date.toLocaleString('en-US', {
-                    timeZone: PUTNAM_COUNTY_TZ,
-                    month: 'long',
-                    day: 'numeric',
-                    year: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    timeZoneName: 'short'
-                });
-
-                if (includeUTC) {
-                    const utcTime = date.toLocaleString('en-US', {
-                        timeZone: 'UTC',
-                        hour: 'numeric',
-                        minute: '2-digit',
-                        timeZoneName: 'short'
-                    });
-                    return `${localTime} (${utcTime})`;
-                }
-                return localTime;
-            } catch (error) {
-                console.error('Error formatting date:', error);
-                return dateString;
+        // Global utility functions
+        function updateCurrentTime() {
+            const now = new Date();
+            const timeString = now.toLocaleString('en-US', {
+                timeZone: 'America/New_York',
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                timeZoneName: 'short'
+            });
+            const timeElement = document.getElementById('current-time');
+            if (timeElement) {
+                timeElement.textContent = timeString;
             }
-        };
+        }
 
-        window.formatLocalDate = function(dateString) {
-            if (!dateString) return 'Unknown';
-
-            try {
-                const date = new Date(dateString);
-                return date.toLocaleDateString('en-US', {
-                    timeZone: PUTNAM_COUNTY_TZ,
-                    month: 'long',
-                    day: 'numeric',
-                    year: 'numeric'
-                });
-            } catch (error) {
-                console.error('Error formatting date:', error);
-                return dateString;
-            }
-        };
-
-        window.formatLocalTime = function(dateString) {
-            if (!dateString) return 'Unknown';
-
-            try {
-                const date = new Date(dateString);
-                const localTime = date.toLocaleString('en-US', {
-                    timeZone: PUTNAM_COUNTY_TZ,
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    timeZoneName: 'short'
-                });
-                const utcTime = date.toLocaleString('en-US', {
-                    timeZone: 'UTC',
-                    hour: 'numeric',
-                    minute: '2-digit'
-                });
-                return `${localTime} (${utcTime} UTC)`;
-            } catch (error) {
-                console.error('Error formatting time:', error);
-                return dateString;
-            }
-        };
-
-        window.isExpired = function(expiresString) {
-            if (!expiresString) return false;
-            return new Date(expiresString) < new Date();
-        };
-
-        // Theme Management
+        // Theme management
         function toggleTheme() {
             const currentTheme = document.documentElement.getAttribute('data-theme');
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
@@ -570,306 +321,119 @@
 
             // Update icon
             const icon = document.getElementById('theme-icon');
-            icon.className = newTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-
-            // Announce to screen readers
-            const announcement = newTheme === 'dark' ? 'Dark mode enabled' : 'Light mode enabled';
-            announceToScreenReader(announcement);
+            if (icon) {
+                icon.className = newTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+            }
         }
 
-        // Load saved theme
         function loadTheme() {
             const savedTheme = localStorage.getItem('theme') || 'light';
             document.documentElement.setAttribute('data-theme', savedTheme);
 
             const icon = document.getElementById('theme-icon');
-            icon.className = savedTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-        }
-
-        // Screen reader announcements
-        function announceToScreenReader(message) {
-            const announcement = document.createElement('div');
-            announcement.setAttribute('aria-live', 'polite');
-            announcement.setAttribute('aria-atomic', 'true');
-            announcement.className = 'sr-only';
-            announcement.textContent = message;
-            document.body.appendChild(announcement);
-
-            setTimeout(() => {
-                document.body.removeChild(announcement);
-            }, 1000);
-        }
-
-        // Excel Export Functionality
-        function exportToExcel(data, filename) {
-            try {
-                const ws = XLSX.utils.json_to_sheet(data);
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, 'Data');
-                XLSX.writeFile(wb, `${filename}_${new Date().toISOString().split('T')[0]}.xlsx`);
-
-                showToast('Excel file exported successfully!', 'success');
-            } catch (error) {
-                console.error('Export error:', error);
-                showToast('Error exporting to Excel. Please try again.', 'error');
+            if (icon) {
+                icon.className = savedTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
             }
         }
 
-        // Print Functionality
-        function printPage() {
-            // Add print class to body for print-specific styles
-            document.body.classList.add('printing');
+        // Toast notifications
+        function showToast(message, type = 'info', duration = 5000) {
+            const toastContainer = document.querySelector('.toast-container');
+            if (!toastContainer) return;
 
-            // Trigger print
-            window.print();
+            const toastId = 'toast_' + Date.now();
+            const bgClass = {
+                'success': 'bg-success',
+                'error': 'bg-danger',
+                'warning': 'bg-warning',
+                'info': 'bg-info'
+            }[type] || 'bg-info';
 
-            // Remove print class after print dialog closes
-            setTimeout(() => {
-                document.body.classList.remove('printing');
-            }, 1000);
-        }
-
-        // Toast Notifications
-        function showToast(message, type = 'info') {
-            const toastContainer = getOrCreateToastContainer();
-
-            const toast = document.createElement('div');
-            toast.className = `toast align-items-center text-white bg-${type === 'error' ? 'danger' : type} border-0`;
-            toast.setAttribute('role', 'alert');
-            toast.setAttribute('aria-live', 'assertive');
-            toast.setAttribute('aria-atomic', 'true');
-
-            toast.innerHTML = `
-                <div class="d-flex">
+            const toastHtml = `
+                <div id="${toastId}" class="toast ${bgClass} text-white" role="alert">
+                    <div class="toast-header ${bgClass} text-white border-0">
+                        <i class="fas fa-${type === 'error' ? 'exclamation-triangle' : 'info-circle'} me-2"></i>
+                        <strong class="me-auto">System Notification</strong>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+                    </div>
                     <div class="toast-body">
-                        <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-triangle' : 'info-circle'}"></i>
                         ${message}
                     </div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
                 </div>
             `;
 
-            toastContainer.appendChild(toast);
+            toastContainer.insertAdjacentHTML('beforeend', toastHtml);
 
-            const bsToast = new bootstrap.Toast(toast, {
-                autohide: true,
-                delay: type === 'error' ? 8000 : 5000
+            const toastElement = document.getElementById(toastId);
+            const toast = new bootstrap.Toast(toastElement, {
+                delay: duration,
+                autohide: true
             });
-            bsToast.show();
 
-            // Remove toast element after it's hidden
-            toast.addEventListener('hidden.bs.toast', () => {
-                toast.remove();
+            toast.show();
+
+            // Clean up after toast is hidden
+            toastElement.addEventListener('hidden.bs.toast', function() {
+                toastElement.remove();
             });
         }
 
-        function getOrCreateToastContainer() {
-            let container = document.getElementById('toast-container');
-            if (!container) {
-                container = document.createElement('div');
-                container.id = 'toast-container';
-                container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
-                container.style.zIndex = '1100';
-                document.body.appendChild(container);
-            }
-            return container;
-        }
-
-        // Time Updates with Timezone Support
-        function updateTime() {
-            const now = new Date();
-
-            // Local time for Putnam County
-            const localTimeString = now.toLocaleString('en-US', {
-                timeZone: PUTNAM_COUNTY_TZ,
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                timeZoneName: 'short'
-            });
-
-            // UTC time
-            const utcTimeString = now.toLocaleString('en-US', {
-                timeZone: 'UTC',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-
-            // Update various time displays
-            const localTimeEl = document.getElementById('current-local-time');
-            const utcTimeEl = document.getElementById('current-utc-time');
-            const footerTimeEl = document.getElementById('footer-time');
-
-            if (localTimeEl) localTimeEl.textContent = localTimeString;
-            if (utcTimeEl) utcTimeEl.textContent = `(${utcTimeString} UTC)`;
-            if (footerTimeEl) footerTimeEl.textContent = `${localTimeString} (${utcTimeString} UTC)`;
-        }
-
-        // System Status Monitoring - Enhanced for System Health
-        async function checkSystemStatus() {
+        // System health check
+        async function checkSystemHealth() {
             try {
                 const response = await fetch('/api/system_status');
-
-                // Check if response is JSON
-                const contentType = response.headers.get('content-type');
-                if (!contentType || !contentType.includes('application/json')) {
-                    throw new Error('Server returned non-JSON response');
-                }
-
                 const data = await response.json();
 
-                const statusElement = document.getElementById('system-status');
-                const statusDot = statusElement.querySelector('.status-dot');
-                const statusText = statusElement.querySelector('span:last-child');
+                const healthDot = document.getElementById('system-health-dot');
+                const healthText = document.getElementById('system-health-text');
 
-                // Update main system status
-                if (response.ok && data.status === 'online') {
-                    statusDot.style.backgroundColor = 'var(--success-color)';
-                    statusText.textContent = 'System Online';
-                } else if (response.ok && data.timestamp) {
-                    // If we get data but no explicit status, assume online
-                    statusDot.style.backgroundColor = 'var(--success-color)';
-                    statusText.textContent = 'System Online';
-                } else {
-                    statusDot.style.backgroundColor = 'var(--warning-color)';
-                    statusText.textContent = 'System Issues';
+                if (healthDot && healthText) {
+                    if (data.status === 'healthy') {
+                        healthDot.className = 'health-dot health-good';
+                        healthText.textContent = 'System OK';
+                    } else if (data.status === 'warning') {
+                        healthDot.className = 'health-dot health-warning';
+                        healthText.textContent = 'Warning';
+                    } else {
+                        healthDot.className = 'health-dot health-critical';
+                        healthText.textContent = 'Critical';
+                    }
                 }
-
-                // Update health indicator in navigation
-                updateHealthIndicator(data);
-
             } catch (error) {
-                console.warn('Could not fetch system status:', error);
-
-                const statusElement = document.getElementById('system-status');
-                if (statusElement) {
-                    const statusDot = statusElement.querySelector('.status-dot');
-                    const statusText = statusElement.querySelector('span:last-child');
-
-                    if (statusDot && statusText) {
-                        statusDot.style.backgroundColor = 'var(--danger-color)';
-                        statusText.textContent = 'System Offline';
-                    }
+                console.warn('Could not check system health:', error);
+                const healthDot = document.getElementById('system-health-dot');
+                const healthText = document.getElementById('system-health-text');
+                if (healthDot && healthText) {
+                    healthDot.className = 'health-dot health-warning';
+                    healthText.textContent = 'Unknown';
                 }
-
-                // Update health indicator to critical
-                updateHealthIndicatorOffline();
             }
         }
 
-        // Update health indicator in System Health nav item
-        function updateHealthIndicator(data) {
-            const healthDot = document.getElementById('nav-health-dot');
-            const healthText = document.getElementById('nav-health-text');
-
-            if (!healthDot || !healthText) return;
-
-            // Handle different API response formats
-            const cpu = data.system_resources?.cpu_usage_percent ||
-                       data.cpu_usage_percent || 0;
-            const memory = data.system_resources?.memory_usage_percent ||
-                          data.memory_usage_percent || 0;
-            const disk = data.system_resources?.disk_usage_percent ||
-                        data.disk_usage_percent || 0;
-
-            let status = 'good';
-            let statusText = 'Good';
-
-            if (cpu > 80 || memory > 90 || disk > 90) {
-                status = 'critical';
-                statusText = 'Critical';
-            } else if (cpu > 50 || memory > 75 || disk > 75) {
-                status = 'warning';
-                statusText = 'Warning';
-            }
-
-            healthDot.className = `health-dot health-${status}`;
-            healthText.textContent = statusText;
-        }
-
-        function updateHealthIndicatorOffline() {
-            const healthDot = document.getElementById('nav-health-dot');
-            const healthText = document.getElementById('nav-health-text');
-
-            if (healthDot && healthText) {
-                healthDot.className = 'health-dot health-critical';
-                healthText.textContent = 'Offline';
-            }
-        }
-
-        // Active Navigation Highlighting
-        function highlightActiveNav() {
-            const currentPath = window.location.pathname;
-            const navLinks = document.querySelectorAll('.navbar-nav .nav-link');
-
-            navLinks.forEach(link => {
-                if (link.getAttribute('href') === currentPath) {
-                    link.classList.add('active');
-                    link.setAttribute('aria-current', 'page');
-                }
-            });
-        }
-
-        // Loading States
-        function showLoading(element) {
-            element.classList.add('loading');
-            element.style.pointerEvents = 'none';
-        }
-
-        function hideLoading(element) {
-            element.classList.remove('loading');
-            element.style.pointerEvents = 'auto';
-        }
-
-        // Error Handling
-        function handleError(error, context = '') {
-            console.error(`Error in ${context}:`, error);
-            showToast(`An error occurred${context ? ` in ${context}` : ''}. Please try again or contact support if the problem persists.`, 'error');
-        }
-
-        // Keyboard Navigation
-        document.addEventListener('keydown', function(e) {
-            // Alt + T for theme toggle
-            if (e.altKey && e.key === 't') {
-                e.preventDefault();
-                toggleTheme();
-            }
-
-            // Alt + P for print
-            if (e.altKey && e.key === 'p') {
-                e.preventDefault();
-                printPage();
-            }
-        });
-
-        // Initialize on page load
+        // Initialize base functionality
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('Base template loaded, initializing...');
+
+            // Load saved theme
             loadTheme();
-            updateTime();
-            highlightActiveNav();
-            checkSystemStatus();
 
-            // Set up periodic updates
-            setInterval(updateTime, 30000); // Update time every 30 seconds
-            setInterval(checkSystemStatus, 30000); // Check status every 30 seconds
+            // Update time immediately and then every second
+            updateCurrentTime();
+            setInterval(updateCurrentTime, 1000);
 
-            // Add loading states to forms
-            document.querySelectorAll('form').forEach(form => {
-                form.addEventListener('submit', function() {
-                    const submitBtn = form.querySelector('button[type="submit"]');
-                    if (submitBtn) {
-                        showLoading(submitBtn);
-                    }
-                });
-            });
+            // Check system health immediately and then every 30 seconds
+            checkSystemHealth();
+            setInterval(checkSystemHealth, 30000);
+
+            console.log('Base template initialization complete');
         });
 
-        // Make timezone functions globally available
-        window.PUTNAM_COUNTY_TZ = PUTNAM_COUNTY_TZ;
+        // Make functions available globally
         window.showToast = showToast;
+        window.toggleTheme = toggleTheme;
     </script>
-    
-    {% block extra_js %}{% endblock %}
+
+    <!-- 3. Page-specific scripts -->
+    {% block scripts %}{% endblock %}
 </body>
 </html>
