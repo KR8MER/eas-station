@@ -1,0 +1,124 @@
+<!-- Navigation Component -->
+<nav class="navbar">
+    <div class="navbar-container">
+        <!-- Brand Section -->
+        <a href="{{ url_for('index') }}" class="navbar-brand">
+            <i class="fas fa-satellite-dish brand-icon"></i>
+            KR8MER CAP Emergency Alerts
+
+            <!-- System Health Indicator -->
+            <div class="health-indicator">
+                <div class="health-dot health-good" id="system-health-dot"></div>
+                <span id="system-health-text">System OK</span>
+            </div>
+        </a>
+
+        <!-- Mobile Toggle Button -->
+        <button class="navbar-toggle" onclick="toggleMobileNav()" aria-label="Toggle navigation">
+            <i class="fas fa-bars"></i>
+        </button>
+
+        <!-- Navigation Links -->
+        <ul class="navbar-nav" id="navbar-nav">
+            <li class="nav-item">
+                <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if request.endpoint == 'index' }}">
+                    <i class="fas fa-map"></i>
+                    Interactive Map
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="{{ url_for('alerts') if url_for('alerts') else '/alerts' }}" class="nav-link {{ 'active' if request.endpoint == 'alerts' }}">
+                    <i class="fas fa-history"></i>
+                    Alerts History
+                    <span class="alert-badge" id="alert-count" style="display: none;">0</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="{{ url_for('stats') if url_for('stats') else '/stats' }}" class="nav-link {{ 'active' if request.endpoint == 'stats' }}">
+                    <i class="fas fa-chart-bar"></i>
+                    Statistics
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="{{ url_for('admin') if url_for('admin') else '/admin' }}" class="nav-link {{ 'active' if request.endpoint == 'admin' }}">
+                    <i class="fas fa-cog"></i>
+                    Admin
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="{{ url_for('logs') if url_for('logs') else '/logs' }}" class="nav-link {{ 'active' if request.endpoint == 'logs' }}">
+                    <i class="fas fa-file-alt"></i>
+                    System Logs
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="{{ url_for('system_health') if url_for('system_health') else '/health' }}" class="nav-link {{ 'active' if request.endpoint == 'system_health' }}">
+                    <i class="fas fa-heartbeat"></i>
+                    System Health
+                </a>
+            </li>
+        </ul>
+    </div>
+</nav>
+
+<script>
+// Mobile navigation toggle
+function toggleMobileNav() {
+    const nav = document.getElementById('navbar-nav');
+    nav.classList.toggle('show');
+}
+
+// Update system health indicator
+function updateSystemHealth(status = 'good', message = 'System OK') {
+    const dot = document.getElementById('system-health-dot');
+    const text = document.getElementById('system-health-text');
+
+    if (dot && text) {
+        // Remove existing classes
+        dot.classList.remove('health-good', 'health-warning', 'health-danger');
+
+        // Add new status class
+        dot.classList.add(`health-${status}`);
+        text.textContent = message;
+    }
+}
+
+// Update alert count badge
+function updateAlertCount(count) {
+    const badge = document.getElementById('alert-count');
+    if (badge) {
+        if (count > 0) {
+            badge.textContent = count > 99 ? '99+' : count;
+            badge.style.display = 'flex';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+}
+
+// Check system health on load
+document.addEventListener('DOMContentLoaded', function() {
+    // You can implement actual health checking here
+    // For now, simulate a health check
+    setTimeout(() => {
+        fetch('/api/health')
+            .then(response => response.json())
+            .then(data => {
+                updateSystemHealth(data.status, data.message);
+            })
+            .catch(() => {
+                updateSystemHealth('warning', 'Health Check Failed');
+            });
+    }, 1000);
+
+    // Check for active alerts
+    fetch('/api/alert-count')
+        .then(response => response.json())
+        .then(data => {
+            updateAlertCount(data.count);
+        })
+        .catch(() => {
+            // Silently fail for alert count
+        });
+});
+</script>
