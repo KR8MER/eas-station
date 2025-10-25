@@ -50,7 +50,10 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
 # Database configuration
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://noaa_user:rkhkeq@localhost:5432/noaa_alerts')
+DATABASE_URL = os.getenv(
+    'DATABASE_URL',
+    'postgresql+psycopg2://casaos:casaos@postgresql:5432/casaos'
+)
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 

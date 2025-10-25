@@ -28,7 +28,8 @@ EXPOSE 5000
 # Default environment variables
 ENV FLASK_APP=app.py \
     FLASK_RUN_HOST=0.0.0.0 \
-    FLASK_RUN_PORT=5000
+    FLASK_RUN_PORT=5000 \
+    DATABASE_URL=postgresql+psycopg2://casaos:casaos@postgresql:5432/casaos
 
 # Use Gunicorn for production-ready serving
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]

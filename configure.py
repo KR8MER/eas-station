@@ -17,8 +17,10 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
     # Database settings
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL',
-                                             'postgresql://noaa_user:your_secure_password@localhost/noaa_alerts')
+    SQLALCHEMY_DATABASE_URI = os.environ.get(
+        'DATABASE_URL',
+        'postgresql+psycopg2://casaos:casaos@postgresql:5432/casaos'
+    )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_pre_ping': True,
