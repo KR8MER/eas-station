@@ -121,12 +121,15 @@ environment variable. If you do not already have a database running, you can
 start a disposable PostgreSQL container for local testing:
 
 ```bash
-docker run --name noaa-db -e POSTGRES_DB=noaa_alerts \
-    -e POSTGRES_USER=noaa_user -e POSTGRES_PASSWORD=change_me \
+docker run --name noaa-db -e POSTGRES_DB=casaos \
+    -e POSTGRES_USER=casaos -e POSTGRES_PASSWORD=casaos \
     -p 5432:5432 -d postgres:15
 ```
 
-Update the credentials and port as needed for your environment.
+Update the credentials and port as needed for your environment. If you are
+running the application and database in Docker, use the service/container name
+(`postgresql` in the provided compose file) as the hostname in
+`DATABASE_URL`.
 
 ### 3. Start the NOAA Alerts container
 
@@ -135,16 +138,16 @@ connection string and any other configuration you require:
 
 ```bash
 docker run --name noaa-alerts --rm -p 5000:5000 \
-    -e DATABASE_URL=postgresql://noaa_user:change_me@host.docker.internal:5432/noaa_alerts \
+    -e DATABASE_URL=postgresql+psycopg2://casaos:casaos@postgresql:5432/casaos \
     -e SECRET_KEY=replace-this-with-a-secret-value \
     -e LED_SIGN_IP=192.168.1.100 \
     -e LED_SIGN_PORT=10001 \
     noaa-alerts:latest
 ```
 
-* Use `host.docker.internal` if the PostgreSQL instance is running on your host
-  machine. Replace it with the appropriate hostname/IP when running in other
-  environments.
+* Replace the `DATABASE_URL` hostname (`postgresql`) if your database is hosted
+  elsewhere. Avoid using `localhost` inside containers; use the appropriate
+  Docker service name or network alias instead.
 * Remove or adjust the `LED_SIGN_*` variables if you do not have the hardware
   attached.
 
