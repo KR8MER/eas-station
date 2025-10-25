@@ -15,12 +15,12 @@ RUN apt-get update \
 # Create and set working directory
 WORKDIR /app
 
-# Install Python dependencies first for better layer caching
+# Install Python dependencies
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application source into the image
-COPY . ./
+# Copy application code
+COPY . .
 
 # Expose default Flask port
 EXPOSE 5000
