@@ -5,31 +5,22 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-ARG REPO_URL
-ARG REPO_REF=main
-
-# Install system dependencies required for psycopg2, GeoAlchemy, and git
+# Install system dependencies required for psycopg2 and GeoAlchemy
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
-        git \
         libpq-dev \
     && rm -rf /var/lib/apt/lists/*
-
-# Clone the NOAA Alerts repository inside the image. Providing REPO_URL is
-# required so the build knows which remote to fetch.
-RUN if [ -z "$REPO_URL" ]; then \
-        echo "ERROR: Provide --build-arg REPO_URL=<git repository URL>"; \
-        exit 1; \
-    fi; \
-    git clone --depth=1 --branch "$REPO_REF" "$REPO_URL" /app \
-    && rm -rf /app/.git
 
 # Create and set working directory
 WORKDIR /app
 
-# Install Python dependencies
+# Install Python dependencies first for better layer caching
+COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the application source into the image
+COPY . ./
 
 # Expose default Flask port
 EXPOSE 5000

@@ -1,82 +1,50 @@
 # NOAA Alerts System Container Usage
 
 This project ships with a production-oriented Dockerfile so you can run the
-Flask application in a container. Instead of copying the source code from your
-workstation into the image, the Dockerfile clones the repository directly from
-GitHub (or any other Git server you choose). The commands below assume Docker is
-installed on the machine where you are building or running the container.
+Flask application in a container. Now that the repository is public you no
+longer need to provide build arguments or copy the source from another machine.
+Docker can fetch the repository directly from GitHub when you build the image.
 
-Set two build arguments whenever you build the image:
+The commands below assume Docker is installed on the machine where you are
+building or running the container. Replace `your-account` with the actual GitHub
+owner of this repository when you paste the commands.
 
-* `REPO_URL` – the HTTPS or SSH URL to the Git repository that contains the
-  application.
-* `REPO_REF` – the branch, tag, or commit SHA to check out. Defaults to `main`.
+## Quick command reference (public GitHub repository)
 
-If you use Docker Compose, you can export these values into a `.env` file so you
-do not need to pass them on every command. See the examples in the next
-sections.
-
-Replace `https://github.com/your-org/noaa_alerts_systems.git` in the examples
-with the actual location of your repository before running the commands.
-
-## Quick command reference (private GitHub repository)
-
-When building directly from a private GitHub repository, authenticate with a
-personal access token (PAT) and provide it in the `REPO_URL`. The snippet below
-shows a complete build-and-run flow that clones the private repo, starts the
-containers, and tears them down when you are done. Replace
-`your-org/your-private-repo` and the token placeholder with your own values.
+You can hand Docker the HTTPS URL of the repository and let it download the
+source automatically. The optional `#main` suffix selects the branch to build;
+change it if you want a different ref.
 
 ```bash
-# 1. Export a short-lived PAT (read-only access is sufficient)
-export GITHUB_PAT='ghp_yourTokenGoesHere'
-
-# 2. Build the application image directly from GitHub
+# Build the application image straight from GitHub
 docker build -t noaa-alerts:latest \
-  --build-arg REPO_URL="https://oauth2:${GITHUB_PAT}@github.com/your-org/your-private-repo.git" \
-  --build-arg REPO_REF=main \
-  .
+  https://github.com/your-account/noaa_alerts_systems.git#main
 
-# 3. Start the stack with Docker Compose (uses the freshly built image)
+# Start the stack with Docker Compose (uses the freshly built image)
 docker compose up -d
 
-# 4. Inspect logs while the services run
+# Follow application logs
 docker compose logs -f app
 
-# 5. Shut everything down when finished
+# Shut everything down when finished
 docker compose down
-
-# 6. Clean up sensitive environment variables
-unset GITHUB_PAT
 ```
 
-Add `.env` to `.gitignore` (it already is) before storing secrets in that file,
-and remove it when no longer required. Delete the exported variable or close
-the terminal session after the build so the token is not left in memory.
+If you prefer to keep a local checkout instead of relying on the remote build
+context, clone the repository and run the same commands from the project root.
 
 ## Option A: Docker Compose (recommended for local development)
 
-The repository now includes a `docker-compose.yml` that provisions both the
-application and a PostgreSQL database. To build the container image and start
-everything with sane defaults:
+The repository includes a `docker-compose.yml` that provisions both the
+application and a PostgreSQL database. Build the container image and start the
+stack from a local checkout:
 
 ```bash
-REPO_URL=https://github.com/your-org/noaa_alerts_systems.git \
-REPO_REF=main \
-  docker compose build
+git clone https://github.com/your-account/noaa_alerts_systems.git
+cd noaa_alerts_systems
+docker compose build
 docker compose up -d
 ```
-
-> **Tip:** Save the build arguments in a `.env` file next to the
-> `docker-compose.yml` so future `docker compose` commands pick them up
-> automatically:
->
-> ```bash
-> cat <<'EOF' > .env
-> REPO_URL=https://github.com/your-org/noaa_alerts_systems.git
-> REPO_REF=main
-> EOF
-> ```
 
 The API will be available at http://localhost:5000 and PostgreSQL is exposed on
 localhost:5432. Edit the environment variables in `docker-compose.yml` to match
@@ -99,9 +67,7 @@ image directly.
 
 ```bash
 docker build -t noaa-alerts:latest \
-    --build-arg REPO_URL=https://github.com/your-org/noaa_alerts_systems.git \
-    --build-arg REPO_REF=main \
-    .
+    https://github.com/your-account/noaa_alerts_systems.git#main
 ```
 
 ### 2. Run database (if needed)

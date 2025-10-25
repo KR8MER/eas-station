@@ -5,9 +5,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        REPO_URL: ${REPO_URL:-https://github.com/your-org/noaa_alerts_systems.git}
-        REPO_REF: ${REPO_REF:-main}
     image: noaa-alerts:latest
     ports:
       - "5000:5000"
