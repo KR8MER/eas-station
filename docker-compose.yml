@@ -3,7 +3,7 @@ version: "3.9"
 services:
   app:
     build:
-      context: https://github.com/KR8MER/noaa_alerts_systems.git#main
+      context: https://github.com/KR8MER/noaa_alerts_systems.git#Test
       dockerfile: Dockerfile
     image: noaa-alerts:latest
     ports:
