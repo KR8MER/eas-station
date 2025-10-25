@@ -28,5 +28,8 @@ python-dotenv==1.0.0
 # Optional: For better datetime parsing if needed
 # python-dateutil==2.8.2  # Uncomment if needed
 
+# Production WSGI server
+gunicorn==21.2.0
+
 # Development and debugging (optional)
 # flask-debugtoolbar==0.13.1  # Uncomment for development
