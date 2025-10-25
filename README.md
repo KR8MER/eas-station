@@ -19,6 +19,41 @@ sections.
 Replace `https://github.com/your-org/noaa_alerts_systems.git` in the examples
 with the actual location of your repository before running the commands.
 
+## Quick command reference (private GitHub repository)
+
+When building directly from a private GitHub repository, authenticate with a
+personal access token (PAT) and provide it in the `REPO_URL`. The snippet below
+shows a complete build-and-run flow that clones the private repo, starts the
+containers, and tears them down when you are done. Replace
+`your-org/your-private-repo` and the token placeholder with your own values.
+
+```bash
+# 1. Export a short-lived PAT (read-only access is sufficient)
+export GITHUB_PAT='ghp_yourTokenGoesHere'
+
+# 2. Build the application image directly from GitHub
+docker build -t noaa-alerts:latest \
+  --build-arg REPO_URL="https://oauth2:${GITHUB_PAT}@github.com/your-org/your-private-repo.git" \
+  --build-arg REPO_REF=main \
+  .
+
+# 3. Start the stack with Docker Compose (uses the freshly built image)
+docker compose up -d
+
+# 4. Inspect logs while the services run
+docker compose logs -f app
+
+# 5. Shut everything down when finished
+docker compose down
+
+# 6. Clean up sensitive environment variables
+unset GITHUB_PAT
+```
+
+Add `.env` to `.gitignore` (it already is) before storing secrets in that file,
+and remove it when no longer required. Delete the exported variable or close
+the terminal session after the build so the token is not left in memory.
+
 ## Option A: Docker Compose (recommended for local development)
 
 The repository now includes a `docker-compose.yml` that provisions both the
