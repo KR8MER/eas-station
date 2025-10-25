@@ -6,6 +6,5 @@ __pycache__/
 *.sqlite3
 .env
 venv/
-.git
 logs/
 *.log
