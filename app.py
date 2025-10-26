@@ -132,7 +132,7 @@ def utc_now() -> datetime:
 
 def local_now():
     """Get current Putnam County local time"""
-D    return utc_now().astimezone(PUTNAM_COUNTY_TZ)
+    return utc_now().astimezone(PUTNAM_COUNTY_TZ)
 
 
 def parse_nws_datetime(dt_string):
