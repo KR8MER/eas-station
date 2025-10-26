@@ -3396,11 +3396,18 @@ def after_request(response):
 # server starts handling requests.
 @app.before_serving
 def initialize_database():
-    """Ensure all database tables exist when the app starts."""
+    """Create all database tables, logging any initialization failure."""
     try:
         db.create_all()
     except Exception as db_error:
         logger.error("Database initialization failed: %s", db_error)
+        raise
+    else:
+        logger.info("Database tables ensured on startup")
+
+
+with app.app_context():
+    initialize_database()
 
 
 with app.app_context():
