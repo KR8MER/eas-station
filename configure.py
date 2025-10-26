@@ -73,7 +73,7 @@ class Config:
     ENABLE_SMS_NOTIFICATIONS = os.environ.get('ENABLE_SMS_NOTIFICATIONS', 'False').lower() == 'true'
 
     # Email settings (if enabled)
-    MAIL_SERVER = os.environ.get('MAIL_SERVER', 'localhost')
+    MAIL_SERVER = os.environ.get('MAIL_SERVER', 'mail')
     MAIL_PORT = int(os.environ.get('MAIL_PORT', 587))
     MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'True').lower() == 'true'
     MAIL_USERNAME = os.environ.get('MAIL_USERNAME')

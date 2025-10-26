@@ -25,6 +25,9 @@ from typing import Dict, List, Optional, Tuple
 import argparse
 
 import pytz
+from dotenv import load_dotenv
+
+load_dotenv()
 from sqlalchemy import create_engine, text, func, or_
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError, OperationalError
