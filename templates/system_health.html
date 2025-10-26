@@ -1,12 +1,9 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Health Monitor - NOAA CAP Alerts</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <style>
+{% extends "base.html" %}
+
+{% block title %}System Health Monitor - NOAA CAP Alerts{% endblock %}
+
+{% block extra_css %}
+<style>
         .health-card { border-left: 4px solid #007bff; }
         .health-card.warning { border-left-color: #ffc107; }
         .health-card.danger { border-left-color: #dc3545; }
@@ -21,31 +18,10 @@
         .system-overview { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
         .system-overview .card-body { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); }
     </style>
-</head>
-<body class="bg-light">
-    <nav class="navbar navbar-dark bg-primary">
-        <div class="container-fluid">
-            <span class="navbar-brand">
-                <i class="fas fa-heartbeat"></i> System Health Monitor
-            </span>
-            <div>
-                <a href="/stats" class="btn btn-outline-light btn-sm me-2">
-                    <i class="fas fa-chart-bar"></i> Statistics
-                </a>
-                <a href="/alerts" class="btn btn-outline-light btn-sm me-2">
-                    <i class="fas fa-exclamation-triangle"></i> Alerts
-                </a>
-                <a href="/admin" class="btn btn-outline-light btn-sm me-2">
-                    <i class="fas fa-cog"></i> Admin
-                </a>
-                <a href="/" class="btn btn-outline-light btn-sm">
-                    <i class="fas fa-home"></i> Home
-                </a>
-            </div>
-        </div>
-    </nav>
+{% endblock %}
 
-    <div class="container-fluid mt-4">
+{% block content %}
+<div class="container-fluid mt-4">
         <!-- System Overview -->
         <div class="row mb-4">
             <div class="col-12">
@@ -94,7 +70,7 @@
                                     <div class="metric-label text-white-50">Last Updated</div>
                                     <div class="metric-value text-white" id="current-time"></div>
                                 </div>
-                                <button class="btn btn-light btn-sm mt-2" onclick="refreshPage()">
+                                <button class="btn btn-light btn-sm mt-2">
                                     <i class="fas fa-sync-alt"></i> Refresh Now
                                 </button>
                             </div>
@@ -423,11 +399,13 @@
     </div>
 
     <!-- Auto-refresh button -->
-    <button class="btn btn-primary refresh-btn" onclick="refreshPage()" title="Refresh system data">
+    <button class="btn btn-primary refresh-btn" title="Refresh system data">
         <i class="fas fa-sync-alt"></i>
     </button>
+</div>
+{% endblock %}
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+{% block scripts %}
     <script>
         // Update current time
         function updateTime() {
@@ -475,5 +453,4 @@
             }
         });
     </script>
-</body>
-</html>
+{% endblock %}
