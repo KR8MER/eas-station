@@ -3408,12 +3408,20 @@ def after_request(response):
 # application context.
 def initialize_database():
     """Create all database tables, logging any initialization failure."""
+    global _db_initialized, _db_initialization_error
+
+    if _db_initialized:
+        return
+
     try:
         db.create_all()
     except Exception as db_error:
+        _db_initialization_error = db_error
         logger.error("Database initialization failed: %s", db_error)
         raise
     else:
+        _db_initialized = True
+        _db_initialization_error = None
         logger.info("Database tables ensured on startup")
 
 
