@@ -277,11 +277,14 @@
     <!-- Footer -->
     <footer class="footer">
         <div class="container-fluid text-center">
-            <small class="text-muted">
-                <i class="fas fa-satellite-dish"></i> 2025 KR8MER CAP Emergency Alert System |
-                <i class="fas fa-radio"></i> Amateur Radio Emergency Communications |
-                <i class="fas fa-server"></i> Raspberry Pi Server |
-                <span id="current-time">Loading...</span>
+            <small class="text-muted d-flex flex-column flex-sm-row align-items-center justify-content-center gap-2">
+                <span>
+                    <i class="fas fa-satellite-dish"></i> 2025 KR8MER CAP Emergency Alert System |
+                    <i class="fas fa-radio"></i> Amateur Radio Emergency Communications |
+                    <i class="fas fa-server"></i> Raspberry Pi Server |
+                    <span id="current-time">Loading...</span>
+                </span>
+                <span class="text-uppercase fw-semibold">Version {{ system_version }}</span>
             </small>
         </div>
     </footer>

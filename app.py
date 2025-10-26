@@ -5,7 +5,7 @@ Flask Web Application with Enhanced Boundary Management and Alerts History
 
 Author: KR8MER Amateur Radio Emergency Communications
 Description: Emergency alert system for Putnam County, Ohio with proper timezone handling
-Version: 2.0 - Complete with All Routes and Functionality
+Version: 2.1.0 - Incremental build metadata surfaced in the UI footer
 """
 
 # =============================================================================
@@ -66,6 +66,9 @@ logger = logging.getLogger(__name__)
 # Create Flask app
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
+
+# Application versioning (exposed via templates for quick deployment verification)
+SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.0')
 
 # Database configuration
 DATABASE_URL = os.getenv(
@@ -3053,7 +3056,7 @@ def inject_global_vars():
         'current_local_time': local_now(),
         'timezone_name': str(PUTNAM_COUNTY_TZ),
         'led_available': LED_AVAILABLE,
-        'system_version': '2.0'
+        'system_version': SYSTEM_VERSION,
     }
 
 
