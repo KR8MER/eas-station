@@ -4,12 +4,14 @@ A Docker-based Flask application that polls NOAA Common Alerting Protocol (CAP) 
 
 ## Quick Start
 
-### Single-Command Installation
+### Single-Line Installation
 ```bash
-docker compose up -d --build
+git clone https://github.com/KR8MER/noaa_alerts_systems.git && cd noaa_alerts_systems && docker compose up -d --build
 ```
 
 This command will:
+- Clone the repository from GitHub
+- Change into the project directory
 - Build the Docker images
 - Start PostgreSQL database with PostGIS
 - Launch the Flask web application on port 5000
@@ -17,15 +19,15 @@ This command will:
 
 Access the application at **http://localhost:5000**
 
-### Single-Command Update
+### Single-Line Update
 ```bash
 git pull && docker compose build --pull && docker compose up -d --force-recreate
 ```
 
 This command will:
-- Pull the latest code from git
+- Pull the latest code from GitHub
 - Rebuild Docker images with updated base images
-- Recreate and restart all containers
+- Recreate and restart all containers with the new code
 
 ---
 
