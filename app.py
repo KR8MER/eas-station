@@ -3400,10 +3400,12 @@ def after_request(response):
     return response
 
 
-# Flask 3 removed the ``before_first_request`` hook, so we run our
-# initialization using ``before_serving`` which executes once when the
-# server starts handling requests.
-@app.before_serving
+# Flask 3 removed the ``before_first_request`` hook in favour of
+# ``before_serving``.  Older Flask releases (including the one bundled with
+# this project) do not provide ``before_serving`` though, so we register the
+# handler dynamically depending on which hook is available.  If neither hook is
+# present we fall back to running the initialization immediately within an
+# application context.
 def initialize_database():
     """Create all database tables, logging any initialization failure."""
     try:
@@ -3415,12 +3417,13 @@ def initialize_database():
         logger.info("Database tables ensured on startup")
 
 
-with app.app_context():
-    initialize_database()
-
-
-with app.app_context():
-    initialize_database()
+if hasattr(app, "before_serving"):
+    app.before_serving(initialize_database)
+elif hasattr(app, "before_first_request"):
+    app.before_first_request(initialize_database)
+else:
+    with app.app_context():
+        initialize_database()
 
 
 # =============================================================================
