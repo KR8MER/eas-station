@@ -3391,37 +3391,20 @@ def after_request(response):
     return response
 
 
-# Flask 3 removed the ``before_first_request`` hook, and the deployment target
-# we are working with does not expose the newer ``before_serving`` hook either.
-# Instead we perform the database bootstrap lazily the first time a request is
-# processed.  A lock guarantees the migration only runs once even when multiple
-# workers race to handle the initial traffic.
-_database_initialized = False
-_database_init_lock = threading.Lock()
+# Flask 3 removed the ``before_first_request`` hook, so we run our
+# initialization using ``before_serving`` which executes once when the
+# server starts handling requests.
+@app.before_serving
+def initialize_database():
+    """Ensure all database tables exist when the app starts."""
+    try:
+        db.create_all()
+    except Exception as db_error:
+        logger.error("Database initialization failed: %s", db_error)
 
 
-def initialize_database_once():
-    """Ensure all database tables exist exactly once at startup."""
-    global _database_initialized
-    if _database_initialized:
-        return
-
-    with _database_init_lock:
-        if _database_initialized:
-            return
-        try:
-            db.create_all()
-        except Exception as db_error:
-            logger.error("Database initialization failed: %s", db_error)
-            raise
-        else:
-            _database_initialized = True
-
-
-@app.before_request
-def ensure_database_initialized():
-    """Run before each request and lazily create tables on the first call."""
-    initialize_database_once()
+with app.app_context():
+    initialize_database()
 
 
 # =============================================================================
