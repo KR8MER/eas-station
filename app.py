@@ -124,8 +124,9 @@ else:
 # TIMEZONE AND DATETIME UTILITIES
 # =============================================================================
 
-def utc_now():
-    """Get current UTC time with timezone awareness"""
+def utc_now() -> datetime:
+    """Return the current timezone-aware UTC timestamp."""
+
     return datetime.now(UTC_TZ)
 
 
