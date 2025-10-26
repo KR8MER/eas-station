@@ -1,159 +1,359 @@
-# NOAA Alerts System – Container Deployment Guide
+# NOAA CAP Alerts System
 
-This repository contains a Flask web UI, a CAP alert poller, and supporting
-scripts for managing NOAA alert and GIS boundary data. The project now ships
-with a Docker-first workflow that keeps all runtime configuration in a `.env`
-file so you can run everything with a single `docker compose up`.
+A Docker-based Flask application that polls NOAA Common Alerting Protocol (CAP) alerts for Putnam County, OH, displays them on an interactive map, and optionally integrates with LED signage.
 
-## Prerequisites
+## Quick Start
 
-* Docker Engine 24+
-* Docker Compose V2 (usually bundled with Docker Engine)
-
-## 1. Configure environment variables
-
-Copy the provided `.env` file and adjust any values that differ in your
-environment. The defaults assume everything runs on the same Docker network and
-that PostgreSQL listens on the `postgresql` service defined in
-`docker-compose.yml`.
-
-```bash
-cp .env .env.local  # optional backup before editing
-```
-
-Key variables:
-
-| Variable | Purpose |
-| --- | --- |
-| `POSTGRES_HOST` | Hostname or service name for PostgreSQL (inside Docker use the service name, **not** `localhost`). |
-| `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Database connection parameters shared by the Flask app and poller. |
-| `DATABASE_URL` | SQLAlchemy connection string. Overridden automatically if you change the individual `POSTGRES_*` variables. |
-| `POLL_INTERVAL_SEC` | Interval (seconds) between CAP poller runs in continuous mode. |
-| `LED_SIGN_IP`, `LED_SIGN_PORT` | Optional LED sign integration. Remove or update if you do not use a sign. |
-| `UPLOAD_FOLDER` | Directory inside the container used for temporary GeoJSON uploads. |
-
-Avoid using `localhost` or `127.0.0.1` inside this file when both containers run
-on the same Docker network. Use the Docker service name instead (for example,
-`postgresql`).
-
-## 2. Build and start the stack
-
-From the project root run a single command that builds the images (if
-necessary) and starts every service in the background:
-
+### Single-Command Installation
 ```bash
 docker compose up -d --build
 ```
 
-Need everything in one go, including cloning the correct branch? Run this
-single Bash command on any Docker-capable host:
+This command will:
+- Build the Docker images
+- Start PostgreSQL database with PostGIS
+- Launch the Flask web application on port 5000
+- Start the continuous CAP alert poller
 
+Access the application at **http://localhost:5000**
+
+### Single-Command Update
 ```bash
-bash -c 'git clone -b Test https://github.com/KR8MER/noaa_alerts_systems.git \
-  && cd noaa_alerts_systems \
-  && docker compose up -d --build'
+git pull && docker compose build --pull && docker compose up -d --force-recreate
 ```
 
-The repository’s active branch is `Test`, so the command above ensures you pull
-the same branch the project uses in production before launching the stack.
+This command will:
+- Pull the latest code from git
+- Rebuild Docker images with updated base images
+- Recreate and restart all containers
 
-Services started by the compose file:
+---
 
-* **app** – Gunicorn serving the Flask UI and REST API on port 5000.
-* **poller** – Background CAP poller that runs continuously using the same
-  image as the web app.
-* **postgresql** – PostgreSQL 15 with PostGIS-capable extensions (install those
-  manually if you need them).
+## Prerequisites
 
-Access the UI at <http://localhost:5000> from the host machine. Inside Docker,
-other services reach the web app via the `app` service name.
+- **Docker Engine 24+** (with Docker Compose V2)
+- **Git** (for cloning and updates)
 
-To tail logs or stop everything:
+---
 
+## Configuration
+
+The application uses a `.env` file for all runtime configuration. Copy and customize it before first run:
 ```bash
-docker compose logs -f app
-# or poller / postgresql
+cp .env .env.local  # Optional: keep a backup
+nano .env           # Edit with your preferred editor
+```
 
+### Key Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POSTGRES_HOST` | `postgresql` | Database hostname (use service name for Docker) |
+| `POSTGRES_PORT` | `5432` | Database port |
+| `POSTGRES_DB` | `casaos` | Database name |
+| `POSTGRES_USER` | `casaos` | Database user |
+| `POSTGRES_PASSWORD` | `casaos` | Database password |
+| `POLL_INTERVAL_SEC` | `180` | Seconds between CAP poller runs |
+| `LED_SIGN_IP` | - | Optional LED sign IP address |
+| `LED_SIGN_PORT` | - | Optional LED sign port |
+| `UPLOAD_FOLDER` | `/app/uploads` | GeoJSON upload directory |
+| `SECRET_KEY` | (random) | Flask secret key (change in production!) |
+
+**Important:** Never use `localhost` or `127.0.0.1` for database connections when running in Docker. Use the service name `postgresql` instead.
+
+---
+
+## Architecture
+
+The Docker Compose stack includes three services:
+
+### 1. **app** - Web Application
+- Flask-based web UI and REST API
+- Served by Gunicorn on port 5000
+- Handles alert display, admin interface, and GIS boundary management
+
+### 2. **poller** - Background Alert Poller
+- Continuously fetches CAP alerts from NOAA
+- Runs every `POLL_INTERVAL_SEC` seconds
+- Auto-restarts on failure or system reboot
+- Stores alerts in PostgreSQL with PostGIS geometries
+
+### 3. **postgresql** - Database
+- PostgreSQL 15 with PostGIS support
+- Persistent data storage via Docker volume
+- Exposed on port 5432 for external tools (optional)
+
+---
+
+## Usage
+
+### Starting and Stopping
+```bash
+# Start all services
+docker compose up -d
+
+# Stop all services
 docker compose down
+
+# View logs
+docker compose logs -f app       # Web app logs
+docker compose logs -f poller    # Poller logs
+docker compose logs -f postgresql # Database logs
+
+# Restart a specific service
+docker compose restart app
 ```
 
-## 3. Running the CAP poller
+### Running the CAP Poller
 
-### 3.1 Continuous polling in its own container
-
-The compose file defines a dedicated **poller** service that launches
-`python poller/cap_poller.py --continuous` in its own container. Set the
-polling cadence in `.env` before starting the stack:
-
+The poller runs automatically in its own container. To run manual commands:
 ```bash
-POLL_INTERVAL_SEC=180  # 3 minutes between requests to NOAA
-```
+# Run poller once (manual fetch)
+docker compose run --rm poller python poller/cap_poller.py
 
-Bring the poller online alongside the web app:
-
-```bash
-docker compose up -d poller
-```
-
-The container uses `restart: unless-stopped`, so it will automatically reconnect
-to NOAA every three minutes and resume after Docker or host restarts. View the
-poller logs at any time with:
-
-```bash
-docker compose logs -f poller
-```
-
-### 3.2 Running the CAP poller manually
-
-To run the poller once or execute maintenance commands you can use `docker
-compose run`:
-
-```bash
+# Fix geometry issues
 docker compose run --rm poller python poller/cap_poller.py --fix-geometry
+
+# Run with custom interval
+docker compose run --rm poller python poller/cap_poller.py --continuous --interval 300
 ```
 
-`cap_poller.py` now loads environment variables via `python-dotenv`, so the
-poller behaves the same whether it runs inside Docker or from a local checkout.
-It builds the database URL from the `POSTGRES_*` variables when `DATABASE_URL`
-is not set, ensuring it connects to the `postgresql` service instead of trying
-`127.0.0.1`.
+### Uploading GIS Boundary Files
 
-## 4. Uploading boundary files
+1. Navigate to **http://localhost:5000/admin**
+2. Use the upload form to add GeoJSON boundary files
+3. Ensure files are valid UTF-8 with a `features` array
 
-A recent bug in the admin UI pointed the upload form at
-`/admin/upload_boundary`, which returned HTTP 404 in containerized deployments.
-The JavaScript now calls `/admin/upload_boundaries`, matching the Flask route, so
-GeoJSON uploads succeed again. If you still encounter upload failures ensure
-that:
+**Troubleshooting uploads:**
+- Verify `UPLOAD_FOLDER` is writable by the container
+- Check that PostGIS extension is installed: `CREATE EXTENSION postgis;`
+- Validate GeoJSON format at [geojson.io](https://geojson.io)
 
-* The `UPLOAD_FOLDER` path from `.env` is writable by the container user.
-* Your GeoJSON file is valid UTF-8 and contains a `features` array.
-* PostgreSQL has the PostGIS extension installed (`CREATE EXTENSION postgis;`).
+---
 
-## 5. Debug utilities
+## Database Management
 
-`debug_apis.sh` now reads the base URL from the `API_BASE_URL` environment
-variable (defaulting to `http://app:5000`) so you can run the script from inside
-or outside Docker without editing it.
-
-## 6. Production deployment notes
-
-* Override `SECRET_KEY` in your `.env` file before exposing the app publicly.
-* Map a Docker volume to `logs/` or the upload directory if you need to persist
-  data across container restarts.
-* Configure an SMTP relay via `MAIL_SERVER`, `MAIL_PORT`, and related settings in
-  `.env`. The default no longer points at `localhost` to avoid misconfigured
-  containers.
-
-## 7. Updating containers
-
-Pull the latest source and rebuild:
-
+### Accessing PostgreSQL
 ```bash
-git pull
-docker compose build --pull
-docker compose up -d --force-recreate
+# Access psql inside the container
+docker compose exec postgresql psql -U casaos -d casaos
+
+# Or from your host (if you have psql installed)
+psql -h localhost -p 5432 -U casaos -d casaos
 ```
 
-Use `docker compose logs -f poller` to verify the CAP poller is running and
-processing alerts.
+### Database Backups
+```bash
+# Backup
+docker compose exec postgresql pg_dump -U casaos casaos > backup_$(date +%Y%m%d).sql
+
+# Restore
+cat backup_20241026.sql | docker compose exec -T postgresql psql -U casaos -d casaos
+```
+
+### Enable PostGIS (if needed)
+```sql
+CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS postgis_topology;
+```
+
+---
+
+## Development
+
+### Local Development without Docker
+
+1. Create a virtual environment:
+```bash
+   python3 -m venv venv
+   source venv/bin/activate  # or `venv\Scripts\activate` on Windows
+```
+
+2. Install dependencies:
+```bash
+   pip install -r requirements.txt
+```
+
+3. Set up local PostgreSQL and configure `.env`
+
+4. Run the Flask app:
+```bash
+   flask run
+```
+
+5. Run the poller manually:
+```bash
+   python poller/cap_poller.py
+```
+
+### Debugging
+
+The `debug_apis.sh` script can test API endpoints:
+```bash
+# Inside Docker
+docker compose exec app bash
+./debug_apis.sh
+
+# From host (if API_BASE_URL is set)
+API_BASE_URL=http://localhost:5000 ./debug_apis.sh
+```
+
+---
+
+## Production Deployment
+
+### Security Checklist
+
+- [ ] Change `SECRET_KEY` to a strong random value
+- [ ] Update `POSTGRES_PASSWORD` to a secure password
+- [ ] Use a reverse proxy (nginx/Caddy) with SSL/TLS
+- [ ] Restrict PostgreSQL port (remove from `docker-compose.yml` or firewall it)
+- [ ] Configure SMTP settings for email alerts (if used)
+- [ ] Enable Docker logging with rotation
+- [ ] Set up monitoring and alerting
+
+### Persistent Storage
+
+Map Docker volumes for important data:
+```yaml
+services:
+  app:
+    volumes:
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+```
+
+### SMTP Configuration
+
+Add to `.env` for email notifications:
+```bash
+MAIL_SERVER=smtp.example.com
+MAIL_PORT=587
+MAIL_USE_TLS=true
+MAIL_USERNAME=alerts@example.com
+MAIL_PASSWORD=yourpassword
+MAIL_DEFAULT_SENDER=NOAA Alerts <alerts@example.com>
+```
+
+---
+
+## Monitoring
+
+### Health Checks
+```bash
+# Check if services are running
+docker compose ps
+
+# Check application health
+curl http://localhost:5000/health
+
+# View resource usage
+docker stats
+```
+
+### Log Files
+
+Logs are stored in the `logs/` directory (if mounted):
+- `logs/app.log` - Flask application logs
+- `logs/poller.log` - CAP poller logs
+
+View logs in real-time:
+```bash
+docker compose logs -f --tail=100 app poller
+```
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+**Problem:** Database connection refused  
+**Solution:** Ensure `POSTGRES_HOST=postgresql` (not `localhost`) in `.env`
+
+**Problem:** Poller not fetching alerts  
+**Solution:** Check logs with `docker compose logs -f poller` and verify network connectivity
+
+**Problem:** Upload failures  
+**Solution:** Verify `UPLOAD_FOLDER` permissions and PostGIS is installed
+
+**Problem:** Port 5000 already in use  
+**Solution:** Change port mapping in `docker-compose.yml`: `"8080:5000"`
+
+### Container Logs
+```bash
+# All services
+docker compose logs -f
+
+# Specific service with timestamps
+docker compose logs -f --timestamps app
+
+# Last 50 lines
+docker compose logs --tail=50 poller
+```
+
+### Rebuilding from Scratch
+```bash
+# Stop and remove everything including volumes
+docker compose down -v
+
+# Rebuild and start fresh
+docker compose up -d --build
+```
+
+---
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Main map interface |
+| `/admin` | GET | Admin dashboard |
+| `/api/alerts` | GET | List all active alerts (JSON) |
+| `/api/alerts/<id>` | GET | Get specific alert (JSON) |
+| `/api/stats` | GET | System statistics |
+| `/health` | GET | Health check endpoint |
+| `/admin/upload_boundaries` | POST | Upload GeoJSON boundaries |
+
+---
+
+## Technology Stack
+
+- **Python 3.11** - Core language
+- **Flask 2.3** - Web framework
+- **SQLAlchemy 2.0** - ORM and database toolkit
+- **PostgreSQL 15** - Relational database
+- **PostGIS** - Spatial database extension
+- **Gunicorn** - WSGI HTTP server
+- **Docker** - Containerization
+- **Bootstrap 5** - Frontend UI framework
+
+---
+
+## License
+
+[Specify your license here]
+
+## Contributing
+
+[Add contribution guidelines here]
+
+## Support
+
+For issues or questions:
+1. Check the troubleshooting section above
+2. Review logs with `docker compose logs -f`
+3. Open an issue on the repository
+
+---
+
+## Changelog
+
+### Latest Changes
+- Docker-first deployment with single-command install/update
+- Environment-based configuration (`.env` file)
+- Continuous CAP poller in dedicated container
+- PostGIS geometry support for spatial queries
+- Admin UI for GeoJSON boundary uploads
+- Optional LED sign integration
+- Production-ready Gunicorn deployment
