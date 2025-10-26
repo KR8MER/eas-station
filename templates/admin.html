@@ -1,53 +1,9 @@
-<!DOCTYPE html>
-<html lang="en" data-theme="light">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Panel - KR8MER CAP Emergency Alert System</title>
+{% extends "base.html" %}
 
-    <!-- Bootstrap CSS -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+{% block title %}Admin Panel - KR8MER CAP Emergency Alert System{% endblock %}
 
-    <style>
-        :root {
-            --primary-color: #007bff;
-            --secondary-color: #6c757d;
-            --success-color: #28a745;
-            --danger-color: #dc3545;
-            --warning-color: #ffc107;
-            --info-color: #17a2b8;
-            --light-color: #f8f9fa;
-            --dark-color: #343a40;
-            --bg-color: #ffffff;
-            --text-color: #212529;
-            --border-color: #dee2e6;
-            --shadow-color: rgba(0, 0, 0, 0.1);
-        }
-
-        [data-theme="dark"] {
-            --primary-color: #4dabf7;
-            --secondary-color: #adb5bd;
-            --success-color: #51cf66;
-            --danger-color: #ff6b6b;
-            --warning-color: #ffd43b;
-            --info-color: #339af0;
-            --light-color: #495057;
-            --dark-color: #212529;
-            --bg-color: #1a1a1a;
-            --text-color: #f8f9fa;
-            --border-color: #495057;
-            --shadow-color: rgba(255, 255, 255, 0.1);
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            transition: background-color 0.3s ease, color 0.3s ease;
-        }
-
+{% block extra_css %}
+<style>
         .admin-header {
             background: linear-gradient(135deg, var(--primary-color), var(--info-color));
             color: white;
@@ -315,29 +271,6 @@
             opacity: 1;
         }
 
-        .btn-theme-toggle {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 1000;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            box-shadow: 0 4px 12px var(--shadow-color);
-            transition: all 0.3s ease;
-        }
-
-        .btn-theme-toggle:hover {
-            transform: scale(1.1);
-            box-shadow: 0 6px 20px var(--shadow-color);
-        }
-
         @media (max-width: 768px) {
             .stats-grid, .operation-grid {
                 grid-template-columns: 1fr;
@@ -351,29 +284,19 @@
             .tab-content-custom {
                 padding: 1rem;
             }
-
-            .btn-theme-toggle {
-                top: 10px;
-                right: 10px;
-                width: 40px;
-                height: 40px;
-            }
         }
 
         /* Print styles */
         @media print {
-            .keyboard-shortcuts, .btn, .nav-tabs-custom, .btn-theme-toggle {
+            .keyboard-shortcuts, .nav-tabs-custom {
                 display: none !important;
             }
         }
     </style>
-</head>
-<body>
-    <!-- Theme Toggle Button -->
-    <button class="btn-theme-toggle" onclick="toggleTheme()" title="Toggle Dark Mode" aria-label="Toggle between light and dark theme">
-        <i class="fas fa-moon" id="theme-icon"></i>
-    </button>
+{% endblock %}
 
+{% block content %}
+<div class="container-fluid py-4">
     <!-- Admin Header -->
     <div class="admin-header">
         <div class="container-fluid">
@@ -712,10 +635,10 @@
     <div class="keyboard-shortcuts">
         <i class="fas fa-keyboard"></i> Alt+1-6: Switch Tabs | Alt+R: Refresh | Alt+H: Help
     </div>
+</div>
+{% endblock %}
 
-    <!-- Scripts -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
-
+{% block scripts %}
     <script>
         // Global variables
         let confirmationModal;
@@ -727,34 +650,12 @@
             loadBoundaries();
             loadSystemHealth();
             setupKeyboardShortcuts();
-            loadTheme();
 
             // Auto-refresh every 30 seconds
             setInterval(() => {
                 loadSystemHealth();
             }, 30000);
         });
-
-        // Theme Management
-        function toggleTheme() {
-            const currentTheme = document.documentElement.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-
-            document.documentElement.setAttribute('data-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-
-            // Update icon
-            const icon = document.getElementById('theme-icon');
-            icon.className = newTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-        }
-
-        function loadTheme() {
-            const savedTheme = localStorage.getItem('theme') || 'light';
-            document.documentElement.setAttribute('data-theme', savedTheme);
-
-            const icon = document.getElementById('theme-icon');
-            icon.className = savedTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-        }
 
         // Keyboard shortcuts
         function setupKeyboardShortcuts() {
@@ -1324,5 +1225,4 @@
             }
         }
     </script>
-</body>
-</html>
+{% endblock %}
