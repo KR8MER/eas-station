@@ -20,6 +20,7 @@ import socket
 import subprocess
 import shutil
 import time
+import threading
 import importlib
 import importlib.util
 import pytz
@@ -66,6 +67,11 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize database
 db = SQLAlchemy(app)
+
+# Guard database schema preparation so we only attempt it once per process.
+_db_initialized = False
+_db_initialization_error = None
+_db_init_lock = threading.Lock()
 
 # Timezone configuration for Putnam County, Ohio (Eastern Time)
 PUTNAM_COUNTY_TZ = pytz.timezone('America/New_York')
@@ -3372,6 +3378,9 @@ def before_request():
     if request.path.startswith('/api/') and request.method in ['POST', 'PUT', 'DELETE']:
         logger.info(f"{request.method} {request.path} from {request.remote_addr}")
 
+    # Ensure the database schema exists before handling the request.
+    ensure_database_initialized()
+
 
 @app.after_request
 def after_request(response):
@@ -3390,13 +3399,38 @@ def after_request(response):
     return response
 
 
-@app.before_first_request
-def initialize_database():
-    """Ensure all database tables exist when the app starts."""
-    try:
-        db.create_all()
-    except Exception as db_error:
-        logger.error("Database initialization failed: %s", db_error)
+# Flask 3 removed the ``before_first_request`` hook, and some minimal builds do
+# not ship ``before_serving`` either.  We therefore guard database
+# initialisation manually so the application can start even when the database is
+# temporarily unavailable at import time.
+
+
+def ensure_database_initialized():
+    """Create all database tables once per process, caching failures."""
+    global _db_initialized, _db_initialization_error
+
+    if _db_initialized:
+        return
+
+    if _db_initialization_error is not None:
+        # Re-raise the cached exception so callers see the original failure.
+        raise _db_initialization_error
+
+    with _db_init_lock:
+        if _db_initialized:
+            return
+        if _db_initialization_error is not None:
+            raise _db_initialization_error
+
+        try:
+            db.create_all()
+        except Exception as db_error:
+            logger.error("Database initialization failed: %s", db_error)
+            _db_initialization_error = db_error
+            raise
+        else:
+            logger.info("Database tables ensured on first request")
+            _db_initialized = True
 
 
 # =============================================================================
@@ -3406,7 +3440,7 @@ def initialize_database():
 @app.cli.command()
 def init_db():
     """Initialize the database tables"""
-    db.create_all()
+    ensure_database_initialized()
     logger.info("Database tables created successfully")
 
 
