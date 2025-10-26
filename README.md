@@ -6,9 +6,7 @@ A Docker-based Flask application that polls NOAA Common Alerting Protocol (CAP) 
 
 ### Single-Line Installation
 ```bash
-git clone https://github.com/KR8MER/noaa_alerts_systems.git \
-  && cd noaa_alerts_systems \
-  && docker compose up -d --build
+git clone https://github.com/KR8MER/noaa_alerts_systems.git && cd noaa_alerts_systems && docker compose up -d --build
 ```
 
 This command will:
@@ -20,13 +18,6 @@ This command will:
 - Start the continuous CAP alert poller
 
 Access the application at **http://localhost:5000**
-
-> **How the stack stays isolated**
->
-> The Compose file sets `name: noaa-alerts`, so the web app, poller, and database always run in their own
-> Docker Compose project (for example, containers will appear as `noaa-alerts-app-1` and `noaa-alerts-poller-1`).
-> You can still override the project name with `docker compose -p <custom-name> ...` if you need a different
-> stack on the same host.
 
 ### Single-Line Update
 ```bash
@@ -76,8 +67,7 @@ nano .env           # Edit with your preferred editor
 
 ## Architecture
 
-The Docker Compose stack includes three services and should generally run independently from any other Compose project so
-that its containers, volumes, and networks remain isolated:
+The Docker Compose stack includes three services:
 
 ### 1. **app** - Web Application
 - Flask-based web UI and REST API
