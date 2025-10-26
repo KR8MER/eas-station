@@ -92,117 +92,21 @@ def _fallback_message_priority():
         LOW = 3
 
     return _MessagePriority
-def _build_simple_enum(name, members):
-    """Create a simple string-backed Enum for graceful LED fallbacks."""
 
-    if isinstance(members, dict):
-        enum_members = members
-    else:
-        enum_members = {member: member for member in members}
-
-    return Enum(name, enum_members)
-
-
-FALLBACK_COLORS = [
-    'RED',
-    'GREEN',
-    'AMBER',
-    'DIM_RED',
-    'DIM_GREEN',
-    'BROWN',
-    'ORANGE',
-    'YELLOW',
-    'RAINBOW_1',
-    'RAINBOW_2',
-    'COLOR_MIX',
-    'AUTO_COLOR',
-]
-
-FALLBACK_FONTS = [
-    'FONT_5x7',
-    'FONT_6x7',
-    'FONT_7x9',
-    'FONT_8x7',
-    'FONT_7x11',
-    'FONT_15x7',
-    'FONT_19x7',
-    'FONT_7x13',
-    'FONT_16x9',
-    'FONT_32x16',
-]
-
-FALLBACK_DISPLAY_MODES = [
-    'HOLD',
-    'FLASH',
-    'SCROLL',
-    'ROTATE',
-    'ROLL_LEFT',
-    'ROLL_RIGHT',
-    'ROLL_UP',
-    'ROLL_DOWN',
-    'WIPE_LEFT',
-    'WIPE_RIGHT',
-    'WIPE_UP',
-    'WIPE_DOWN',
-    'AUTO_MODE',
-    'ROLL_IN',
-    'ROLL_OUT',
-    'WIPE_IN',
-    'WIPE_OUT',
-    'COMPRESSED_ROTATE',
-    'EXPLODE',
-    'CLOCK',
-]
-
-FALLBACK_SPEEDS = ['SPEED_1', 'SPEED_2', 'SPEED_3', 'SPEED_4', 'SPEED_5']
-
-
-def _load_led_module():
-    """Attempt to import the LED sign controller from common locations."""
-
-    module_name = 'led_sign_controller'
-
-    try:
-        return importlib.import_module(module_name)
-    except ImportError as primary_error:
-        module_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'led_sign_controller.py')
-
-        if not os.path.exists(module_path):
-            logger.warning(f"LED controller module not found: {primary_error}")
-            return None
-
-        spec = importlib.util.spec_from_file_location(module_name, module_path)
-        if not spec or not spec.loader:
-            logger.warning("LED controller spec could not be created from %s", module_path)
-            return None
-
-        module = importlib.util.module_from_spec(spec)
-        try:
-            spec.loader.exec_module(module)
-            return module
-        except Exception as secondary_error:
-            logger.error("Failed loading LED controller from %s: %s", module_path, secondary_error)
-            return None
-
-
-led_module = _load_led_module()
-
-Color = _build_simple_enum('Color', FALLBACK_COLORS)
-Font = _build_simple_enum('Font', FALLBACK_FONTS)
-DisplayMode = _build_simple_enum('DisplayMode', FALLBACK_DISPLAY_MODES)
-Speed = _build_simple_enum('Speed', FALLBACK_SPEEDS)
-MessagePriority = _fallback_message_priority()
-LEDSignController = None
-
-if led_module:
-    Color = getattr(led_module, 'Color', Color)
-    Font = getattr(led_module, 'Font', Font)
-    DisplayMode = getattr(led_module, 'DisplayMode', DisplayMode)
-    Speed = getattr(led_module, 'Speed', Speed)
-    MessagePriority = getattr(led_module, 'MessagePriority', MessagePriority)
-    LEDSignController = getattr(led_module, 'LEDSignController', None)
-
-if LEDSignController:
+try:
+    from led_sign_controller import (
+        LEDSignController,
+        Color,
+        FontSize,
+        Effect,
+        Speed,
+        MessagePriority,
+    )
+except ImportError as e:
+    logger.warning(f"LED controller module not found: {e}")
+    LED_AVAILABLE = False
+    MessagePriority = _fallback_message_priority()
+else:
     try:
         led_controller = LEDSignController(LED_SIGN_IP, LED_SIGN_PORT)
         LED_AVAILABLE = True
@@ -214,9 +118,8 @@ if LEDSignController:
     except Exception as e:
         logger.error(f"Failed to initialize LED controller: {e}")
         LED_AVAILABLE = False
-        led_controller = None
-else:
-    LED_AVAILABLE = False
+
+        MessagePriority = _fallback_message_priority()
 
 
 # =============================================================================
@@ -230,7 +133,7 @@ def utc_now():
 
 def local_now():
     """Get current Putnam County local time"""
-    return utc_now().astimezone(PUTNAM_COUNTY_TZ)
+D    return utc_now().astimezone(PUTNAM_COUNTY_TZ)
 
 
 def parse_nws_datetime(dt_string):
