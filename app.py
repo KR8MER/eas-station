@@ -3390,7 +3390,10 @@ def after_request(response):
     return response
 
 
-@app.before_first_request
+# Flask 3 removed the ``before_first_request`` hook, so we run our
+# initialization using ``before_serving`` which executes once when the
+# server starts handling requests.
+@app.before_serving
 def initialize_database():
     """Ensure all database tables exist when the app starts."""
     try:
