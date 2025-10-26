@@ -10,8 +10,8 @@ services:
       - "5000:5000"
     env_file:
       - .env
-    depends_on:
-      - postgresql
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   poller:
     image: noaa-alerts:latest
@@ -19,17 +19,5 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    depends_on:
-      - postgresql
-
-  postgresql:
-    image: postgres:15
-    environment:
-      POSTGRES_DB: casaos
-      POSTGRES_USER: casaos
-      POSTGRES_PASSWORD: casaos
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-
-volumes:
-  pgdata:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
