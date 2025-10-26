@@ -19,6 +19,7 @@ import platform
 import socket
 import subprocess
 import shutil
+import threading
 import time
 import threading
 import importlib
@@ -3399,38 +3400,27 @@ def after_request(response):
     return response
 
 
-# Flask 3 removed the ``before_first_request`` hook, and some minimal builds do
-# not ship ``before_serving`` either.  We therefore guard database
-# initialisation manually so the application can start even when the database is
-# temporarily unavailable at import time.
+# Flask 3 removed the ``before_first_request`` hook, so we run our
+# initialization using ``before_serving`` which executes once when the
+# server starts handling requests.
+@app.before_serving
+def initialize_database():
+    """Create all database tables, logging any initialization failure."""
+    try:
+        db.create_all()
+    except Exception as db_error:
+        logger.error("Database initialization failed: %s", db_error)
+        raise
+    else:
+        logger.info("Database tables ensured on startup")
 
 
-def ensure_database_initialized():
-    """Create all database tables once per process, caching failures."""
-    global _db_initialized, _db_initialization_error
+with app.app_context():
+    initialize_database()
 
-    if _db_initialized:
-        return
 
-    if _db_initialization_error is not None:
-        # Re-raise the cached exception so callers see the original failure.
-        raise _db_initialization_error
-
-    with _db_init_lock:
-        if _db_initialized:
-            return
-        if _db_initialization_error is not None:
-            raise _db_initialization_error
-
-        try:
-            db.create_all()
-        except Exception as db_error:
-            logger.error("Database initialization failed: %s", db_error)
-            _db_initialization_error = db_error
-            raise
-        else:
-            logger.info("Database tables ensured on first request")
-            _db_initialized = True
+with app.app_context():
+    initialize_database()
 
 
 # =============================================================================
