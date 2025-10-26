@@ -3390,10 +3390,10 @@ def after_request(response):
     return response
 
 
-# Flask 3 removed the ``before_first_request`` hook, and the production
-# environment we run on does not provide ``before_serving`` either. To keep
-# the database bootstrap behaviour we execute the initialization eagerly when
-# the module is imported, inside an application context so ``db`` is bound.
+# Flask 3 removed the ``before_first_request`` hook, so we run our
+# initialization using ``before_serving`` which executes once when the
+# server starts handling requests.
+@app.before_serving
 def initialize_database():
     """Ensure all database tables exist when the app starts."""
     try:
