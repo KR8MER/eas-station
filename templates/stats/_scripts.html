@@ -1305,9 +1305,21 @@ function initializeFilters() {
     updateDateInputs();
 }
 
-updateSystemInfo();
-initializeFilters();
-updateDashboard();
-
-console.log('📊 Dashboard ready');
+document.addEventListener('DOMContentLoaded', () => {
+    try {
+        updateSystemInfo();
+        initializeFilters();
+        updateDashboard();
+        console.log('📊 Dashboard ready');
+    } catch (error) {
+        console.error('❌ Statistics dashboard failed to initialize', error);
+        const root = document.getElementById('statisticsDashboardRoot');
+        if (root) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-danger mt-3';
+            alert.innerHTML = '<strong>Statistics failed to load.</strong> Please check the browser console for details.';
+            root.prepend(alert);
+        }
+    }
+});
 </script>

@@ -5,7 +5,7 @@ Flask Web Application with Enhanced Boundary Management and Alerts History
 
 Author: KR8MER Amateur Radio Emergency Communications
 Description: Emergency alert system for Putnam County, Ohio with proper timezone handling
-Version: 2.1.3 - Incremental build metadata surfaced in the UI footer
+Version: 2.1.4 - Incremental build metadata surfaced in the UI footer
 """
 
 # =============================================================================
@@ -72,7 +72,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
 # Application versioning (exposed via templates for quick deployment verification)
-SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.3')
+SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.4')
 
 # NOAA API configuration for manual alert import workflows
 NOAA_API_BASE_URL = 'https://api.weather.gov/alerts'
@@ -1812,6 +1812,7 @@ def build_noaa_alert_request(
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
     zone: Optional[str] = None,
+    area: Optional[str] = None,
     event: Optional[str] = None,
     status: Optional[str] = None,
     message_type: Optional[str] = None,
@@ -1829,7 +1830,6 @@ def build_noaa_alert_request(
         params = {
             'limit': safe_limit,
             'sort': 'sent',
-            'format': 'geojson',
         }
         if status:
             params['status'] = status
@@ -1843,7 +1843,9 @@ def build_noaa_alert_request(
             formatted_end = format_noaa_timestamp(end)
             if formatted_end:
                 params['end'] = formatted_end
-        if zone:
+        if area:
+            params['area'] = area
+        elif zone:
             params['zone'] = zone
         if event:
             params['event'] = event
@@ -1857,6 +1859,7 @@ def retrieve_noaa_alerts(
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
     zone: Optional[str] = None,
+    area: Optional[str] = None,
     event: Optional[str] = None,
     status: Optional[str] = None,
     message_type: Optional[str] = None,
@@ -1868,6 +1871,7 @@ def retrieve_noaa_alerts(
         start=start,
         end=end,
         zone=zone,
+        area=area,
         event=event,
         status=status,
         message_type=message_type,
@@ -1966,6 +1970,7 @@ def import_specific_alert():
     start_raw = (data.get('start') or '').strip()
     end_raw = (data.get('end') or '').strip()
     zone = (data.get('zone') or '').strip()
+    area = (data.get('area') or '').strip()
     event_filter = (data.get('event') or '').strip()
     status_input = (data.get('status') or '').strip().lower()
     message_input = (data.get('message_type') or '').strip().lower()
@@ -2014,12 +2019,16 @@ def import_specific_alert():
     if start_dt and end_dt and start_dt > end_dt:
         return jsonify({'error': 'The start time must be before the end time.'}), 400
 
+    normalized_area = area.upper()[:2] if area else None
+    normalized_zone = zone.upper() if zone else None
+
     try:
         alerts_payloads, query_url, params = retrieve_noaa_alerts(
             identifier=identifier or None,
             start=start_dt,
             end=end_dt,
-            zone=zone or None,
+            zone=normalized_zone,
+            area=normalized_area,
             event=event_filter or None,
             status=status_filter or None,
             message_type=message_type or None,
@@ -2110,7 +2119,8 @@ def import_specific_alert():
                     'identifier': identifier or None,
                     'start': start_iso,
                     'end': end_iso,
-                    'zone': zone or None,
+                    'area': normalized_area,
+                    'zone': normalized_zone,
                     'event': event_filter or None,
                     'status': status_filter or 'any',
                     'message_type': message_type or 'any',

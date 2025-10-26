@@ -101,6 +101,7 @@ def execute_import(args: argparse.Namespace) -> int:
     """Run the manual import workflow using the shared Flask application context."""
     identifier = (args.identifier or '').strip()
     zone = (args.zone or '').strip()
+    area = (args.area or '').strip()
     event_filter = (args.event or '').strip()
     status_filter = sanitize_status(args.status)
     message_type_filter = sanitize_message_type(args.message_type)
@@ -110,10 +111,14 @@ def execute_import(args: argparse.Namespace) -> int:
     start_iso = format_noaa_timestamp(start_dt)
     end_iso = format_noaa_timestamp(end_dt)
 
+    zone_filter = zone.upper() if zone else None
+    area_filter = area.upper()[:2] if area else None
+
     logger.info(
-        "Manual NOAA fetch starting with identifier=%s, zone=%s, start=%s, end=%s",
+        "Manual NOAA fetch starting with identifier=%s, area=%s, zone=%s, start=%s, end=%s",
         identifier or '—',
-        zone or '—',
+        area_filter or '—',
+        zone_filter or '—',
         start_iso or '—',
         end_iso or '—',
     )
@@ -123,7 +128,8 @@ def execute_import(args: argparse.Namespace) -> int:
             identifier=identifier or None,
             start=start_dt,
             end=end_dt,
-            zone=zone or None,
+            zone=zone_filter,
+            area=area_filter,
             event=event_filter or None,
             status=status_filter,
             message_type=message_type_filter,
@@ -232,7 +238,8 @@ def execute_import(args: argparse.Namespace) -> int:
                     'identifier': identifier or None,
                     'start': start_iso,
                     'end': end_iso,
-                    'zone': zone or None,
+                    'area': area_filter,
+                    'zone': zone_filter,
                     'event': event_filter or None,
                     'status': status_filter or 'any',
                     'message_type': message_type_filter or 'any',
@@ -263,6 +270,7 @@ def build_parser() -> argparse.ArgumentParser:
         description='Fetch NOAA alerts (including expired) and store them locally.'
     )
     parser.add_argument('--identifier', help='Specific alert identifier to import.')
+    parser.add_argument('--area', help='NOAA area (state/territory) code (e.g., OH).')
     parser.add_argument('--zone', help='NOAA zone identifier (e.g., OHZ016).')
     parser.add_argument('--event', help='Filter by event name (e.g., Tornado Warning).')
     parser.add_argument('--status', default='actual', help='NOAA alert status filter (actual/test/exercise/system/any).')
