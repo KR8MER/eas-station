@@ -80,7 +80,17 @@ LED_SIGN_PORT = int(os.getenv('LED_SIGN_PORT', '10001'))
 LED_AVAILABLE = False
 led_controller = None
 
-# Try to import and initialize LED controller
+
+def _fallback_message_priority():
+    class _MessagePriority(Enum):
+        EMERGENCY = 0
+        URGENT = 1
+        NORMAL = 2
+        LOW = 3
+
+    return _MessagePriority
+
+
 try:
     from led_sign_controller import (
         LEDSignController,
@@ -88,34 +98,25 @@ try:
         FontSize,
         Effect,
         Speed,
-        MessagePriority
+        MessagePriority,
     )
-
-    led_controller = LEDSignController(LED_SIGN_IP, LED_SIGN_PORT)
-    LED_AVAILABLE = True
-    logger.info(f"LED controller initialized successfully for {LED_SIGN_IP}:{LED_SIGN_PORT}")
-
 except ImportError as e:
     logger.warning(f"LED controller module not found: {e}")
     LED_AVAILABLE = False
-
-
-    class MessagePriority(Enum):
-        EMERGENCY = 0
-        URGENT = 1
-        NORMAL = 2
-        LOW = 3
-
-except Exception as e:
-    logger.error(f"Failed to initialize LED controller: {e}")
-    LED_AVAILABLE = False
-
-
-    class MessagePriority(Enum):
-        EMERGENCY = 0
-        URGENT = 1
-        NORMAL = 2
-        LOW = 3
+    MessagePriority = _fallback_message_priority()
+else:
+    try:
+        led_controller = LEDSignController(LED_SIGN_IP, LED_SIGN_PORT)
+        LED_AVAILABLE = True
+        logger.info(
+            "LED controller initialized successfully for %s:%s",
+            LED_SIGN_IP,
+            LED_SIGN_PORT,
+        )
+    except Exception as e:
+        logger.error(f"Failed to initialize LED controller: {e}")
+        LED_AVAILABLE = False
+        MessagePriority = _fallback_message_priority()
 
 
 # =============================================================================
@@ -125,7 +126,6 @@ except Exception as e:
 def utc_now():
     """Get current UTC time with timezone awareness"""
     return datetime.now(UTC_TZ)
-    return base_time - timedelta(minutes=60)
 
 
 def local_now():
@@ -250,8 +250,8 @@ class Boundary(db.Model):
     type = db.Column(db.String(50), nullable=False)
     description = db.Column(db.Text)
     geom = db.Column(Geometry('MULTIPOLYGON', srid=4326))
-    created_at = db.Column(db.DateTime, default=utc_now)
-    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
+    updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
 
 class CAPAlert(db.Model):
@@ -259,8 +259,8 @@ class CAPAlert(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     identifier = db.Column(db.String(255), unique=True, nullable=False)
-    sent = db.Column(db.DateTime, nullable=False)
-    expires = db.Column(db.DateTime)
+    sent = db.Column(db.DateTime(timezone=True), nullable=False)
+    expires = db.Column(db.DateTime(timezone=True))
     status = db.Column(db.String(50), nullable=False)
     message_type = db.Column(db.String(50), nullable=False)
     scope = db.Column(db.String(50), nullable=False)
@@ -275,15 +275,15 @@ class CAPAlert(db.Model):
     instruction = db.Column(db.Text)
     raw_json = db.Column(db.JSON)
     geom = db.Column(Geometry('POLYGON', srid=4326))
-    created_at = db.Column(db.DateTime, default=utc_now)
-    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
+    updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
 
 class SystemLog(db.Model):
     __tablename__ = 'system_log'
 
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, default=utc_now)
+    timestamp = db.Column(db.DateTime(timezone=True), default=utc_now)
     level = db.Column(db.String(20), nullable=False)
     message = db.Column(db.Text, nullable=False)
     module = db.Column(db.String(100))
@@ -297,14 +297,14 @@ class Intersection(db.Model):
     cap_alert_id = db.Column(db.Integer, db.ForeignKey('cap_alerts.id', ondelete='CASCADE'))
     boundary_id = db.Column(db.Integer, db.ForeignKey('boundaries.id', ondelete='CASCADE'))
     intersection_area = db.Column(db.Float)
-    created_at = db.Column(db.DateTime, default=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
 
 
 class PollHistory(db.Model):
     __tablename__ = 'poll_history'
 
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, default=utc_now)
+    timestamp = db.Column(db.DateTime(timezone=True), default=utc_now)
     status = db.Column(db.String(20), nullable=False)
     alerts_fetched = db.Column(db.Integer, default=0)
     alerts_new = db.Column(db.Integer, default=0)
@@ -329,12 +329,12 @@ class LEDMessage(db.Model):
     effect = db.Column(db.String(20))
     speed = db.Column(db.String(20))
     display_time = db.Column(db.Integer)
-    scheduled_time = db.Column(db.DateTime)
-    sent_at = db.Column(db.DateTime)
+    scheduled_time = db.Column(db.DateTime(timezone=True))
+    sent_at = db.Column(db.DateTime(timezone=True))
     is_active = db.Column(db.Boolean, default=True)
     alert_id = db.Column(db.Integer, db.ForeignKey('cap_alerts.id'))
     repeat_interval = db.Column(db.Integer)
-    created_at = db.Column(db.DateTime, default=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
 
 
 class LEDSignStatus(db.Model):
@@ -345,7 +345,7 @@ class LEDSignStatus(db.Model):
     brightness_level = db.Column(db.Integer, default=10)
     error_count = db.Column(db.Integer, default=0)
     last_error = db.Column(db.Text)
-    last_update = db.Column(db.DateTime, default=utc_now)
+    last_update = db.Column(db.DateTime(timezone=True), default=utc_now)
     is_connected = db.Column(db.Boolean, default=False)
 
 
@@ -495,6 +495,48 @@ def ensure_multipolygon(geometry):
 # =============================================================================
 # SYSTEM MONITORING UTILITIES
 # =============================================================================
+
+
+def check_service_status(service_name):
+    """Return a friendly service status string even when systemd is unavailable."""
+    systemctl_path = shutil.which('systemctl')
+    if not systemctl_path:
+        return 'unavailable (systemctl not found)'
+
+    try:
+        result = subprocess.run(
+            [systemctl_path, 'is-active', service_name],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return 'timeout contacting systemd'
+    except FileNotFoundError:
+        return 'unavailable (systemctl missing)'
+    except Exception as exc:
+        logger.debug('Service status probe failed for %s: %s', service_name, exc)
+        return 'unknown'
+
+    stdout = (result.stdout or '').strip()
+    stderr = (result.stderr or '').strip()
+
+    if result.returncode == 0:
+        return stdout or 'active'
+
+    combined = stdout or stderr
+    if combined:
+        lower_combined = combined.lower()
+        if 'system has not been booted with systemd' in lower_combined or 'failed to connect to bus' in lower_combined:
+            return 'unavailable (systemd not running)'
+        return combined
+
+    if result.returncode == 3:
+        return 'inactive'
+
+    return 'unknown'
+
 
 def get_system_health():
     """Get comprehensive system health information"""
@@ -655,20 +697,10 @@ def get_system_health():
         except Exception as e:
             db_status = f'error: {str(e)}'
 
-        services_status = {}
-        try:
-            result = subprocess.run(['systemctl', 'is-active', 'apache2'],
-                                    capture_output=True, text=True, timeout=5)
-            services_status['apache2'] = result.stdout.strip()
-        except:
-            services_status['apache2'] = 'unknown'
-
-        try:
-            result = subprocess.run(['systemctl', 'is-active', 'postgresql'],
-                                    capture_output=True, text=True, timeout=5)
-            services_status['postgresql'] = result.stdout.strip()
-        except:
-            services_status['postgresql'] = 'unknown'
+        services_status = {
+            'apache2': check_service_status('apache2'),
+            'postgresql': check_service_status('postgresql')
+        }
 
         temperature_info = {}
         try:
@@ -2587,6 +2619,12 @@ def debug_boundaries(alert_id):
 # =============================================================================
 # LED CONTROL ROUTES
 # =============================================================================
+
+@app.route('/led')
+def led_redirect():
+    """Maintain legacy /led URL by redirecting to the control dashboard."""
+    return redirect(url_for('led_control'))
+
 
 @app.route('/led_control')
 def led_control():
