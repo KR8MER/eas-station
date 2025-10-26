@@ -4,7 +4,6 @@ from datetime import datetime
 import os
 import platform
 import socket
-import shutil
 import subprocess
 import time
 from typing import Any, Dict
@@ -162,10 +161,9 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
         db_info: Dict[str, Any] = {}
         try:
             result = db.session.execute(text("SELECT version()"))
-            row = result.fetchone()
-            if row:
+            if result:
                 db_status = "connected"
-                db_info["version"] = row[0] if row[0] else "Unknown"
+                db_info["version"] = result[0] if result[0] else "Unknown"
 
                 try:
                     size_result = db.session.execute(
@@ -188,29 +186,21 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
             db_status = f"error: {exc}"
 
         services_status: Dict[str, Any] = {}
-        systemctl_path = shutil.which("systemctl")
-        if systemctl_path:
-            for service_name in ("apache2", "postgresql"):
-                try:
-                    result = subprocess.run(
-                        [systemctl_path, "is-active", service_name],
-                        capture_output=True,
-                        text=True,
-                        timeout=5,
-                    )
-                    output = result.stdout.strip()
-                    if result.returncode == 0:
-                        services_status[service_name] = output or "active"
-                    else:
-                        error_message = output or result.stderr.strip() or "inactive"
-                        services_status[service_name] = f"inactive ({error_message})"
-                except Exception as exc:
-                    services_status[service_name] = f"error: {exc}"
-        else:
-            services_status = {
-                "apache2": "unsupported (systemctl unavailable)",
-                "postgresql": "unsupported (systemctl unavailable)",
-            }
+        try:
+            result = subprocess.run(
+                ["systemctl", "is-active", "apache2"], capture_output=True, text=True, timeout=5
+            )
+            services_status["apache2"] = result.stdout.strip()
+        except Exception:
+            services_status["apache2"] = "unknown"
+
+        try:
+            result = subprocess.run(
+                ["systemctl", "is-active", "postgresql"], capture_output=True, text=True, timeout=5
+            )
+            services_status["postgresql"] = result.stdout.strip()
+        except Exception:
+            services_status["postgresql"] = "unknown"
 
         temperature_info: Dict[str, Any] = {}
         try:
