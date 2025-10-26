@@ -19,6 +19,7 @@ import platform
 import socket
 import subprocess
 import shutil
+import threading
 import time
 import importlib
 import importlib.util
@@ -3390,13 +3391,10 @@ def after_request(response):
     return response
 
 
-# Flask 3 removed the ``before_first_request`` hook, and the deployment target
-# we are working with does not expose the newer ``before_serving`` hook either.
-# Instead of relying on lifecycle callbacks we eagerly ensure the database
-# schema exists when the module is imported.  This keeps startup behaviour close
-# to Flask 2.x while remaining compatible with the trimmed Flask 3 API surface.
-
-
+# Flask 3 removed the ``before_first_request`` hook, so we run our
+# initialization using ``before_serving`` which executes once when the
+# server starts handling requests.
+@app.before_serving
 def initialize_database():
     """Create all database tables, logging any initialization failure."""
     try:
@@ -3406,6 +3404,10 @@ def initialize_database():
         raise
     else:
         logger.info("Database tables ensured on startup")
+
+
+with app.app_context():
+    initialize_database()
 
 
 with app.app_context():
