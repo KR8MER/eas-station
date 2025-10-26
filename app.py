@@ -5,7 +5,7 @@ Flask Web Application with Enhanced Boundary Management and Alerts History
 
 Author: KR8MER Amateur Radio Emergency Communications
 Description: Emergency alert system for Putnam County, Ohio with proper timezone handling
-Version: 2.1.0 - Incremental build metadata surfaced in the UI footer
+Version: 2.1.1 - Incremental build metadata surfaced in the UI footer
 """
 
 # =============================================================================
@@ -68,7 +68,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
 # Application versioning (exposed via templates for quick deployment verification)
-SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.0')
+SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.1')
 
 # Database configuration
 DATABASE_URL = os.getenv(
@@ -847,6 +847,110 @@ def stats():
         except Exception as e:
             logger.error(f"Error getting fun stats: {str(e)}")
             stats_data['fun_stats'] = {'longest_headline': 0, 'most_common_event': 'None'}
+
+        # Alert analytics dataset for interactive dashboard features
+        try:
+            now = utc_now()
+            year_ago = now - timedelta(days=365)
+
+            alert_rows = db.session.query(
+                CAPAlert.identifier,
+                CAPAlert.sent,
+                CAPAlert.expires,
+                CAPAlert.severity,
+                CAPAlert.status,
+                CAPAlert.event
+            ).filter(
+                CAPAlert.sent.isnot(None),
+                CAPAlert.sent >= year_ago
+            ).order_by(CAPAlert.sent).all()
+
+            def _ensure_local(dt):
+                if dt is None:
+                    return None
+                if dt.tzinfo is None:
+                    dt = UTC_TZ.localize(dt)
+                return dt.astimezone(PUTNAM_COUNTY_TZ)
+
+            alert_events = []
+            severity_set = set()
+            status_set = set()
+            event_set = set()
+            dow_hour_matrix = [[0] * 24 for _ in range(7)]
+            daily_counts = defaultdict(int)
+            timeline_rows = []
+
+            for identifier, sent, expires, severity, status, event in alert_rows:
+                local_sent = _ensure_local(sent)
+                if local_sent is None:
+                    continue
+                local_expires = _ensure_local(expires)
+
+                severity_label = severity or 'Unknown'
+                status_label = status or 'Unknown'
+                event_label = event or 'Unknown'
+
+                severity_set.add(severity_label)
+                status_set.add(status_label)
+                event_set.add(event_label)
+
+                dow_index = (local_sent.weekday() + 1) % 7
+                dow_hour_matrix[dow_index][local_sent.hour] += 1
+                daily_counts[local_sent.date()] += 1
+
+                alert_events.append({
+                    'id': identifier,
+                    'sent': local_sent.isoformat(),
+                    'expires': local_expires.isoformat() if local_expires else None,
+                    'severity': severity_label,
+                    'status': status_label,
+                    'event': event_label
+                })
+
+                timeline_rows.append((
+                    identifier,
+                    event_label,
+                    severity_label,
+                    status_label,
+                    local_sent,
+                    local_expires
+                ))
+
+            timeline_rows.sort(key=lambda row: row[4], reverse=True)
+            stats_data['lifecycle_timeline'] = [
+                {
+                    'id': row[0],
+                    'event': row[1],
+                    'severity': row[2],
+                    'status': row[3],
+                    'start': row[4].isoformat(),
+                    'end': row[5].isoformat() if row[5] else None,
+                    'duration_hours': round(((row[5] - row[4]).total_seconds() / 3600), 2) if row[5] else None
+                }
+                for row in timeline_rows[:30]
+            ]
+            stats_data['alert_events'] = alert_events
+            stats_data['filter_options'] = {
+                'severities': sorted(severity_set),
+                'statuses': sorted(status_set),
+                'events': sorted(event_set)
+            }
+            stats_data['dow_hour_matrix'] = dow_hour_matrix
+            stats_data['daily_alerts'] = [
+                {'date': date.isoformat(), 'count': count}
+                for date, count in sorted(daily_counts.items())
+            ]
+        except Exception as e:
+            logger.error(f"Error preparing analytics dataset: {str(e)}")
+            stats_data.setdefault('lifecycle_timeline', [])
+            stats_data.setdefault('alert_events', [])
+            stats_data.setdefault('filter_options', {
+                'severities': [],
+                'statuses': [],
+                'events': []
+            })
+            stats_data.setdefault('dow_hour_matrix', [[0] * 24 for _ in range(7)])
+            stats_data.setdefault('daily_alerts', [])
 
         # Add utility functions to template context
         stats_data['format_bytes'] = format_bytes
