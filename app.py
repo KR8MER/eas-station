@@ -864,9 +864,11 @@ def system_health_page():
     """Dedicated system health monitoring page"""
     try:
         health_data = get_system_health()
-        health_data['format_bytes'] = format_bytes
-        health_data['format_uptime'] = format_uptime
-        return render_template('system_health.html', **health_data)
+        template_context = dict(health_data)
+        template_context['format_bytes'] = format_bytes
+        template_context['format_uptime'] = format_uptime
+        template_context['health_data_json'] = json.dumps(health_data)
+        return render_template('system_health.html', **template_context)
     except Exception as e:
         logger.error(f"Error loading system health page: {str(e)}")
         return f"<h1>Error loading system health</h1><p>{str(e)}</p><p><a href='/'>← Back to Main</a></p>"
