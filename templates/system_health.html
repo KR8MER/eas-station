@@ -253,9 +253,18 @@
                         <hr>
                         <h6 class="text-muted">System Services</h6>
                         {% for service_name, status in services.items() %}
+                        {% set normalized_status = (status or 'unknown')|lower %}
                         <div class="d-flex justify-content-between align-items-center mb-1">
                             <span class="metric-label">{{ service_name.title() }}</span>
-                            {% set service_class = 'success' if status == 'active' else 'danger' %}
+                            {% if 'active' in normalized_status %}
+                                {% set service_class = 'success' %}
+                            {% elif 'unavailable' in normalized_status or 'unknown' in normalized_status %}
+                                {% set service_class = 'secondary' %}
+                            {% elif 'inactive' in normalized_status or 'failed' in normalized_status %}
+                                {% set service_class = 'danger' %}
+                            {% else %}
+                                {% set service_class = 'warning' %}
+                            {% endif %}
                             <span class="badge bg-{{ service_class }} status-badge">{{ status }}</span>
                         </div>
                         {% endfor %}
