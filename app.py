@@ -29,9 +29,10 @@ from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from enum import Enum
+from contextlib import nullcontext
 
 # Flask and extensions
-from flask import Flask, request, jsonify, render_template, flash, redirect, url_for, render_template_string
+from flask import Flask, request, jsonify, render_template, flash, redirect, url_for, render_template_string, has_app_context
 from flask_sqlalchemy import SQLAlchemy
 
 # Database imports
@@ -89,6 +90,10 @@ LED_SIGN_IP = os.getenv('LED_SIGN_IP', '192.168.1.100')
 LED_SIGN_PORT = int(os.getenv('LED_SIGN_PORT', '10001'))
 LED_AVAILABLE = False
 led_controller = None
+
+_led_tables_initialized = False
+_led_tables_error = None
+_led_tables_lock = threading.Lock()
 
 
 def _fallback_message_priority():
@@ -356,6 +361,73 @@ class LEDSignStatus(db.Model):
     last_error = db.Column(db.Text)
     last_update = db.Column(db.DateTime(timezone=True), default=utc_now)
     is_connected = db.Column(db.Boolean, default=False)
+
+
+# =============================================================================
+# LED TABLE INITIALIZATION HELPERS
+# =============================================================================
+
+
+def _ensure_led_tables_impl():
+    global _led_tables_initialized, _led_tables_error
+
+    if _led_tables_initialized:
+        return True
+
+    base_ready = initialize_database()
+    if not base_ready:
+        return False
+
+    context = nullcontext() if has_app_context() else app.app_context()
+
+    with context:
+        try:
+            LEDMessage.__table__.create(db.engine, checkfirst=True)
+            LEDSignStatus.__table__.create(db.engine, checkfirst=True)
+        except OperationalError as led_error:
+            _led_tables_error = led_error
+            logger.error("LED table initialization failed: %s", led_error)
+            return False
+        except Exception as led_error:
+            _led_tables_error = led_error
+            logger.error("LED table initialization failed: %s", led_error)
+            raise
+        else:
+            _led_tables_initialized = True
+            _led_tables_error = None
+            logger.info("LED tables ensured")
+            return True
+
+
+def ensure_led_tables(force: bool = False):
+    global _led_tables_initialized, _led_tables_error
+
+    if force:
+        _led_tables_initialized = False
+        _led_tables_error = None
+
+    if _led_tables_initialized:
+        return True
+
+    if isinstance(_led_tables_error, OperationalError):
+        logger.debug("Skipping LED table initialization due to prior OperationalError")
+        return False
+
+    if _led_tables_error is not None:
+        raise _led_tables_error
+
+    with _led_tables_lock:
+        if _led_tables_initialized:
+            return True
+
+        if isinstance(_led_tables_error, OperationalError):
+            logger.debug("Skipping LED table initialization due to prior OperationalError")
+            return False
+
+        if _led_tables_error is not None:
+            raise _led_tables_error
+
+        return _ensure_led_tables_impl()
 
 
 # =============================================================================
@@ -3380,7 +3452,7 @@ def before_request():
         logger.info(f"{request.method} {request.path} from {request.remote_addr}")
 
     # Ensure the database schema exists before handling the request.
-    ensure_database_initialized()
+    initialize_database()
 
 
 @app.after_request
@@ -3400,27 +3472,77 @@ def after_request(response):
     return response
 
 
-# Flask 3 removed the ``before_first_request`` hook, so we run our
-# initialization using ``before_serving`` which executes once when the
-# server starts handling requests.
-@app.before_serving
-def initialize_database():
+# Flask 3 removed the ``before_first_request`` hook in favour of
+# ``before_serving``.  Older Flask releases (including the one bundled with
+# this project) do not provide ``before_serving`` though, so we register the
+# handler dynamically depending on which hook is available.  If neither hook is
+# present we fall back to running the initialization immediately within an
+# application context.
+def _initialize_database_impl():
     """Create all database tables, logging any initialization failure."""
+    global _db_initialized, _db_initialization_error
+
+    if _db_initialized:
+        return True
+
     try:
         db.create_all()
+    except OperationalError as db_error:
+        _db_initialization_error = db_error
+        logger.error("Database initialization failed: %s", db_error)
+        return False
     except Exception as db_error:
+        _db_initialization_error = db_error
         logger.error("Database initialization failed: %s", db_error)
         raise
     else:
+        _db_initialized = True
+        _db_initialization_error = None
         logger.info("Database tables ensured on startup")
+        return True
 
 
-with app.app_context():
-    initialize_database()
+def initialize_database(force: bool = False):
+    """Ensure the database schema has been created, caching failures."""
+    global _db_initialized, _db_initialization_error
+
+    if force:
+        _db_initialized = False
+        _db_initialization_error = None
+
+    if _db_initialized:
+        return True
+
+    if isinstance(_db_initialization_error, OperationalError):
+        # Database connectivity issues should not crash the entire request
+        # stack; log the failure and allow non-database routes to continue.
+        logger.debug("Skipping database initialization due to prior OperationalError")
+        return False
+
+    if _db_initialization_error is not None:
+        raise _db_initialization_error
+
+    with _db_init_lock:
+        if _db_initialized:
+            return True
+
+        if isinstance(_db_initialization_error, OperationalError):
+            logger.debug("Skipping database initialization due to prior OperationalError")
+            return False
+
+        if _db_initialization_error is not None:
+            raise _db_initialization_error
+
+        return _initialize_database_impl()
 
 
-with app.app_context():
-    initialize_database()
+if hasattr(app, "before_serving"):
+    app.before_serving(initialize_database)
+elif hasattr(app, "before_first_request"):
+    app.before_first_request(initialize_database)
+else:
+    with app.app_context():
+        initialize_database()
 
 
 # =============================================================================
@@ -3430,7 +3552,7 @@ with app.app_context():
 @app.cli.command()
 def init_db():
     """Initialize the database tables"""
-    ensure_database_initialized()
+    initialize_database()
     logger.info("Database tables created successfully")
 
 
