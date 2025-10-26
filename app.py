@@ -92,7 +92,6 @@ def _fallback_message_priority():
         LOW = 3
 
     return _MessagePriority
-
 try:
     from led_sign_controller import (
         LEDSignController,
@@ -118,7 +117,6 @@ else:
     except Exception as e:
         logger.error(f"Failed to initialize LED controller: {e}")
         LED_AVAILABLE = False
-
         MessagePriority = _fallback_message_priority()
 
 
@@ -2627,12 +2625,12 @@ def debug_boundaries(alert_id):
 def led_redirect():
     """Maintain legacy /led URL by redirecting to the control dashboard."""
     return redirect(url_for('led_control'))
-
-
 @app.route('/led_control')
 def led_control():
     """LED sign control interface"""
     try:
+        ensure_led_tables()
+
         led_status = None
         if led_controller:
             led_status = led_controller.get_status()
@@ -2689,6 +2687,8 @@ def led_control():
 def api_led_send_message():
     """Send custom message to LED sign"""
     try:
+        ensure_led_tables()
+
         data = request.get_json()
 
         if not led_controller:
@@ -2771,6 +2771,8 @@ def api_led_send_message():
 def api_led_send_canned():
     """Send canned message to LED sign"""
     try:
+        ensure_led_tables()
+
         data = request.get_json()
         message_name = data.get('message_name')
         parameters = data.get('parameters', {})
@@ -2811,6 +2813,8 @@ def api_led_send_canned():
 def api_led_clear():
     """Clear LED display"""
     try:
+        ensure_led_tables()
+
         if not led_controller:
             return jsonify({'success': False, 'error': 'LED controller not available'})
 
@@ -2838,6 +2842,8 @@ def api_led_clear():
 def api_led_brightness():
     """Set LED display brightness"""
     try:
+        ensure_led_tables()
+
         data = request.get_json()
         brightness = int(data.get('brightness', 10))
 
@@ -2931,6 +2937,8 @@ def api_led_emergency():
 def api_led_status():
     """Get LED sign status"""
     try:
+        ensure_led_tables()
+
         status = {
             'controller_available': led_controller is not None,
             'sign_ip': LED_SIGN_IP,
@@ -2961,6 +2969,8 @@ def api_led_status():
 def api_led_messages():
     """Get LED message history"""
     try:
+        ensure_led_tables()
+
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
 

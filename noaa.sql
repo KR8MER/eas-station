@@ -79,6 +79,28 @@ CREATE TABLE poll_history (
 
 CREATE INDEX idx_poll_history_timestamp ON poll_history(timestamp);
 
+-- Create LED message history table to mirror application models
+CREATE TABLE IF NOT EXISTS led_messages (
+    id SERIAL PRIMARY KEY,
+    message_type VARCHAR(50) NOT NULL,
+    content TEXT NOT NULL,
+    priority INTEGER DEFAULT 2,
+    color VARCHAR(20),
+    font_size VARCHAR(20),
+    effect VARCHAR(20),
+    speed VARCHAR(20),
+    display_time INTEGER,
+    scheduled_time TIMESTAMP WITH TIME ZONE,
+    sent_at TIMESTAMP WITH TIME ZONE,
+    is_active BOOLEAN DEFAULT TRUE,
+    alert_id INTEGER REFERENCES cap_alerts(id),
+    repeat_interval INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_led_messages_created_at ON led_messages(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_led_messages_active ON led_messages(is_active);
+
 -- Create intersections table to log alert-boundary overlaps
 CREATE TABLE intersections (
     id SERIAL PRIMARY KEY,
@@ -104,6 +126,19 @@ CREATE TABLE notifications (
 
 CREATE INDEX idx_notifications_cap_alert ON notifications(cap_alert_id);
 CREATE INDEX idx_notifications_boundary ON notifications(boundary_id);
+
+-- Create LED sign status table used by the dashboard and background pollers
+CREATE TABLE IF NOT EXISTS led_sign_status (
+    id SERIAL PRIMARY KEY,
+    sign_ip VARCHAR(15) NOT NULL,
+    brightness_level INTEGER DEFAULT 10,
+    error_count INTEGER DEFAULT 0,
+    last_error TEXT,
+    last_update TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    is_connected BOOLEAN DEFAULT FALSE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_led_sign_status_ip ON led_sign_status(sign_ip);
 
 -- Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
