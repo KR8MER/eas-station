@@ -20,6 +20,8 @@ import socket
 import subprocess
 import shutil
 import time
+import importlib
+import importlib.util
 import pytz
 from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
@@ -34,6 +36,7 @@ from flask_sqlalchemy import SQLAlchemy
 from geoalchemy2 import Geometry
 from geoalchemy2.functions import ST_GeomFromGeoJSON, ST_Intersects, ST_AsGeoJSON
 from sqlalchemy import text, func, or_, desc
+from sqlalchemy.exc import OperationalError
 
 # Logging
 import logging
@@ -80,42 +83,140 @@ LED_SIGN_PORT = int(os.getenv('LED_SIGN_PORT', '10001'))
 LED_AVAILABLE = False
 led_controller = None
 
-# Try to import and initialize LED controller
-try:
-    from led_sign_controller import (
-        LEDSignController,
-        Color,
-        FontSize,
-        Effect,
-        Speed,
-        MessagePriority
-    )
 
-    led_controller = LEDSignController(LED_SIGN_IP, LED_SIGN_PORT)
-    LED_AVAILABLE = True
-    logger.info(f"LED controller initialized successfully for {LED_SIGN_IP}:{LED_SIGN_PORT}")
-
-except ImportError as e:
-    logger.warning(f"LED controller module not found: {e}")
-    LED_AVAILABLE = False
-
-
-    class MessagePriority(Enum):
+def _fallback_message_priority():
+    class _MessagePriority(Enum):
         EMERGENCY = 0
         URGENT = 1
         NORMAL = 2
         LOW = 3
 
-except Exception as e:
-    logger.error(f"Failed to initialize LED controller: {e}")
+    return _MessagePriority
+def _build_simple_enum(name, members):
+    """Create a simple string-backed Enum for graceful LED fallbacks."""
+
+    if isinstance(members, dict):
+        enum_members = members
+    else:
+        enum_members = {member: member for member in members}
+
+    return Enum(name, enum_members)
+
+
+FALLBACK_COLORS = [
+    'RED',
+    'GREEN',
+    'AMBER',
+    'DIM_RED',
+    'DIM_GREEN',
+    'BROWN',
+    'ORANGE',
+    'YELLOW',
+    'RAINBOW_1',
+    'RAINBOW_2',
+    'COLOR_MIX',
+    'AUTO_COLOR',
+]
+
+FALLBACK_FONTS = [
+    'FONT_5x7',
+    'FONT_6x7',
+    'FONT_7x9',
+    'FONT_8x7',
+    'FONT_7x11',
+    'FONT_15x7',
+    'FONT_19x7',
+    'FONT_7x13',
+    'FONT_16x9',
+    'FONT_32x16',
+]
+
+FALLBACK_DISPLAY_MODES = [
+    'HOLD',
+    'FLASH',
+    'SCROLL',
+    'ROTATE',
+    'ROLL_LEFT',
+    'ROLL_RIGHT',
+    'ROLL_UP',
+    'ROLL_DOWN',
+    'WIPE_LEFT',
+    'WIPE_RIGHT',
+    'WIPE_UP',
+    'WIPE_DOWN',
+    'AUTO_MODE',
+    'ROLL_IN',
+    'ROLL_OUT',
+    'WIPE_IN',
+    'WIPE_OUT',
+    'COMPRESSED_ROTATE',
+    'EXPLODE',
+    'CLOCK',
+]
+
+FALLBACK_SPEEDS = ['SPEED_1', 'SPEED_2', 'SPEED_3', 'SPEED_4', 'SPEED_5']
+
+
+def _load_led_module():
+    """Attempt to import the LED sign controller from common locations."""
+
+    module_name = 'led_sign_controller'
+
+    try:
+        return importlib.import_module(module_name)
+    except ImportError as primary_error:
+        module_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'led_sign_controller.py')
+
+        if not os.path.exists(module_path):
+            logger.warning(f"LED controller module not found: {primary_error}")
+            return None
+
+        spec = importlib.util.spec_from_file_location(module_name, module_path)
+        if not spec or not spec.loader:
+            logger.warning("LED controller spec could not be created from %s", module_path)
+            return None
+
+        module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)
+            return module
+        except Exception as secondary_error:
+            logger.error("Failed loading LED controller from %s: %s", module_path, secondary_error)
+            return None
+
+
+led_module = _load_led_module()
+
+Color = _build_simple_enum('Color', FALLBACK_COLORS)
+Font = _build_simple_enum('Font', FALLBACK_FONTS)
+DisplayMode = _build_simple_enum('DisplayMode', FALLBACK_DISPLAY_MODES)
+Speed = _build_simple_enum('Speed', FALLBACK_SPEEDS)
+MessagePriority = _fallback_message_priority()
+LEDSignController = None
+
+if led_module:
+    Color = getattr(led_module, 'Color', Color)
+    Font = getattr(led_module, 'Font', Font)
+    DisplayMode = getattr(led_module, 'DisplayMode', DisplayMode)
+    Speed = getattr(led_module, 'Speed', Speed)
+    MessagePriority = getattr(led_module, 'MessagePriority', MessagePriority)
+    LEDSignController = getattr(led_module, 'LEDSignController', None)
+
+if LEDSignController:
+    try:
+        led_controller = LEDSignController(LED_SIGN_IP, LED_SIGN_PORT)
+        LED_AVAILABLE = True
+        logger.info(
+            "LED controller initialized successfully for %s:%s",
+            LED_SIGN_IP,
+            LED_SIGN_PORT,
+        )
+    except Exception as e:
+        logger.error(f"Failed to initialize LED controller: {e}")
+        LED_AVAILABLE = False
+        led_controller = None
+else:
     LED_AVAILABLE = False
-
-
-    class MessagePriority(Enum):
-        EMERGENCY = 0
-        URGENT = 1
-        NORMAL = 2
-        LOW = 3
 
 
 # =============================================================================
@@ -125,7 +226,6 @@ except Exception as e:
 def utc_now():
     """Get current UTC time with timezone awareness"""
     return datetime.now(UTC_TZ)
-    return base_time - timedelta(minutes=60)
 
 
 def local_now():
@@ -250,8 +350,8 @@ class Boundary(db.Model):
     type = db.Column(db.String(50), nullable=False)
     description = db.Column(db.Text)
     geom = db.Column(Geometry('MULTIPOLYGON', srid=4326))
-    created_at = db.Column(db.DateTime, default=utc_now)
-    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
+    updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
 
 class CAPAlert(db.Model):
@@ -259,8 +359,8 @@ class CAPAlert(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     identifier = db.Column(db.String(255), unique=True, nullable=False)
-    sent = db.Column(db.DateTime, nullable=False)
-    expires = db.Column(db.DateTime)
+    sent = db.Column(db.DateTime(timezone=True), nullable=False)
+    expires = db.Column(db.DateTime(timezone=True))
     status = db.Column(db.String(50), nullable=False)
     message_type = db.Column(db.String(50), nullable=False)
     scope = db.Column(db.String(50), nullable=False)
@@ -275,15 +375,15 @@ class CAPAlert(db.Model):
     instruction = db.Column(db.Text)
     raw_json = db.Column(db.JSON)
     geom = db.Column(Geometry('POLYGON', srid=4326))
-    created_at = db.Column(db.DateTime, default=utc_now)
-    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
+    updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
 
 class SystemLog(db.Model):
     __tablename__ = 'system_log'
 
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, default=utc_now)
+    timestamp = db.Column(db.DateTime(timezone=True), default=utc_now)
     level = db.Column(db.String(20), nullable=False)
     message = db.Column(db.Text, nullable=False)
     module = db.Column(db.String(100))
@@ -297,14 +397,14 @@ class Intersection(db.Model):
     cap_alert_id = db.Column(db.Integer, db.ForeignKey('cap_alerts.id', ondelete='CASCADE'))
     boundary_id = db.Column(db.Integer, db.ForeignKey('boundaries.id', ondelete='CASCADE'))
     intersection_area = db.Column(db.Float)
-    created_at = db.Column(db.DateTime, default=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
 
 
 class PollHistory(db.Model):
     __tablename__ = 'poll_history'
 
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, default=utc_now)
+    timestamp = db.Column(db.DateTime(timezone=True), default=utc_now)
     status = db.Column(db.String(20), nullable=False)
     alerts_fetched = db.Column(db.Integer, default=0)
     alerts_new = db.Column(db.Integer, default=0)
@@ -329,12 +429,12 @@ class LEDMessage(db.Model):
     effect = db.Column(db.String(20))
     speed = db.Column(db.String(20))
     display_time = db.Column(db.Integer)
-    scheduled_time = db.Column(db.DateTime)
-    sent_at = db.Column(db.DateTime)
+    scheduled_time = db.Column(db.DateTime(timezone=True))
+    sent_at = db.Column(db.DateTime(timezone=True))
     is_active = db.Column(db.Boolean, default=True)
     alert_id = db.Column(db.Integer, db.ForeignKey('cap_alerts.id'))
     repeat_interval = db.Column(db.Integer)
-    created_at = db.Column(db.DateTime, default=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
 
 
 class LEDSignStatus(db.Model):
@@ -345,7 +445,7 @@ class LEDSignStatus(db.Model):
     brightness_level = db.Column(db.Integer, default=10)
     error_count = db.Column(db.Integer, default=0)
     last_error = db.Column(db.Text)
-    last_update = db.Column(db.DateTime, default=utc_now)
+    last_update = db.Column(db.DateTime(timezone=True), default=utc_now)
     is_connected = db.Column(db.Boolean, default=False)
 
 
@@ -495,6 +595,48 @@ def ensure_multipolygon(geometry):
 # =============================================================================
 # SYSTEM MONITORING UTILITIES
 # =============================================================================
+
+
+def check_service_status(service_name):
+    """Return a friendly service status string even when systemd is unavailable."""
+    systemctl_path = shutil.which('systemctl')
+    if not systemctl_path:
+        return 'unavailable (systemctl not found)'
+
+    try:
+        result = subprocess.run(
+            [systemctl_path, 'is-active', service_name],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return 'timeout contacting systemd'
+    except FileNotFoundError:
+        return 'unavailable (systemctl missing)'
+    except Exception as exc:
+        logger.debug('Service status probe failed for %s: %s', service_name, exc)
+        return 'unknown'
+
+    stdout = (result.stdout or '').strip()
+    stderr = (result.stderr or '').strip()
+
+    if result.returncode == 0:
+        return stdout or 'active'
+
+    combined = stdout or stderr
+    if combined:
+        lower_combined = combined.lower()
+        if 'system has not been booted with systemd' in lower_combined or 'failed to connect to bus' in lower_combined:
+            return 'unavailable (systemd not running)'
+        return combined
+
+    if result.returncode == 3:
+        return 'inactive'
+
+    return 'unknown'
+
 
 def get_system_health():
     """Get comprehensive system health information"""
@@ -655,20 +797,10 @@ def get_system_health():
         except Exception as e:
             db_status = f'error: {str(e)}'
 
-        services_status = {}
-        try:
-            result = subprocess.run(['systemctl', 'is-active', 'apache2'],
-                                    capture_output=True, text=True, timeout=5)
-            services_status['apache2'] = result.stdout.strip()
-        except:
-            services_status['apache2'] = 'unknown'
-
-        try:
-            result = subprocess.run(['systemctl', 'is-active', 'postgresql'],
-                                    capture_output=True, text=True, timeout=5)
-            services_status['postgresql'] = result.stdout.strip()
-        except:
-            services_status['postgresql'] = 'unknown'
+        services_status = {
+            'apache2': check_service_status('apache2'),
+            'postgresql': check_service_status('postgresql')
+        }
 
         temperature_info = {}
         try:
@@ -2588,6 +2720,12 @@ def debug_boundaries(alert_id):
 # LED CONTROL ROUTES
 # =============================================================================
 
+@app.route('/led')
+def led_redirect():
+    """Maintain legacy /led URL by redirecting to the control dashboard."""
+    return redirect(url_for('led_control'))
+
+
 @app.route('/led_control')
 def led_control():
     """LED sign control interface"""
@@ -2596,19 +2734,37 @@ def led_control():
         if led_controller:
             led_status = led_controller.get_status()
 
-        recent_messages = LEDMessage.query.order_by(
-            LEDMessage.created_at.desc()
-        ).limit(10).all()
+        recent_messages = []
+        try:
+            recent_messages = LEDMessage.query.order_by(
+                LEDMessage.created_at.desc()
+            ).limit(10).all()
+        except OperationalError as db_error:
+            if 'led_messages' in str(db_error.orig):
+                logger.warning("LED messages table missing; creating tables now")
+                db.create_all()
+                recent_messages = LEDMessage.query.order_by(
+                    LEDMessage.created_at.desc()
+                ).limit(10).all()
+            else:
+                raise
 
         canned_messages = []
         if led_controller:
             for name, config in led_controller.canned_messages.items():
+                lines = config.get('lines') or config.get('text') or []
+                if isinstance(lines, str):
+                    lines = [lines]
+
                 canned_messages.append({
                     'name': name,
-                    'text': config['text'],
-                    'color': config['color'].name,
-                    'font': config['font'].name,
-                    'effect': config['effect'].name
+                    'lines': lines,
+                    'color': getattr(config.get('color'), 'name', str(config.get('color'))),
+                    'font': getattr(config.get('font'), 'name', str(config.get('font'))),
+                    'mode': getattr(config.get('mode'), 'name', str(config.get('mode'))),
+                    'speed': getattr(config.get('speed'), 'name', str(config.get('speed', Speed.SPEED_3))),
+                    'hold_time': config.get('hold_time', 5),
+                    'priority': getattr(config.get('priority'), 'name', str(config.get('priority', MessagePriority.NORMAL)))
                 })
 
         return render_template('led_control.html',
@@ -2635,33 +2791,46 @@ def api_led_send_message():
         if not led_controller:
             return jsonify({'success': False, 'error': 'LED controller not available'})
 
-        text = data.get('text', '')
-        if not text:
-            return jsonify({'success': False, 'error': 'Message text is required'})
+        lines = data.get('lines')
+        if isinstance(lines, str):
+            lines = [line for line in lines.splitlines() if line.strip()]
+
+        if not lines:
+            return jsonify({'success': False, 'error': 'At least one line of text is required'})
 
         color_name = data.get('color', 'GREEN')
-        font_name = data.get('font', 'MEDIUM')
-        effect_name = data.get('effect', 'IMMEDIATE')
-        speed_name = data.get('speed', 'MEDIUM')
+        font_name = data.get('font', 'FONT_7x9')
+        mode_name = data.get('mode', 'HOLD')
+        speed_name = data.get('speed', 'SPEED_3')
         hold_time = int(data.get('hold_time', 5))
         priority_value = int(data.get('priority', MessagePriority.NORMAL.value))
 
         try:
             color = Color[color_name.upper()]
-            font = FontSize[font_name.upper()]
-            effect = Effect[effect_name.upper()]
+            font = Font[font_name.upper()]
+            mode = DisplayMode[mode_name.upper()]
             speed = Speed[speed_name.upper()]
             priority = MessagePriority(priority_value)
         except (KeyError, ValueError) as e:
             return jsonify({'success': False, 'error': f'Invalid parameter: {str(e)}'})
 
+        special_functions_raw = data.get('special_functions', []) or []
+        special_functions = []
+        special_enum = getattr(led_module, 'SpecialFunction', None) if led_module else None
+        if special_enum:
+            for func_name in special_functions_raw:
+                try:
+                    special_functions.append(special_enum[func_name.upper()])
+                except KeyError:
+                    logger.warning("Ignoring unknown special function: %s", func_name)
+
         led_message = LEDMessage(
             message_type='custom',
-            content=text,
+            content='\n'.join(lines),
             priority=priority.value,
             color=color.name,
             font_size=font.name,
-            effect=effect.name,
+            effect=mode.name,
             speed=speed.name,
             display_time=hold_time,
             scheduled_time=utc_now()
@@ -2670,12 +2839,13 @@ def api_led_send_message():
         db.session.commit()
 
         result = led_controller.send_message(
-            text=text,
+            lines=lines,
             color=color,
             font=font,
-            effect=effect,
+            mode=mode,
             speed=speed,
             hold_time=hold_time,
+            special_functions=special_functions or None,
             priority=priority
         )
 
@@ -2933,14 +3103,19 @@ def api_led_canned_messages():
 
         canned_messages = []
         for name, config in led_controller.canned_messages.items():
+            lines = config.get('lines') or config.get('text') or []
+            if isinstance(lines, str):
+                lines = [lines]
+
             canned_messages.append({
                 'name': name,
-                'text': config['text'],
-                'color': config['color'].name,
-                'font': config['font'].name,
-                'effect': config['effect'].name,
-                'speed': config.get('speed', Speed.MEDIUM).name,
-                'hold_time': config.get('hold_time', 5)
+                'lines': lines,
+                'color': getattr(config.get('color'), 'name', str(config.get('color'))),
+                'font': getattr(config.get('font'), 'name', str(config.get('font'))),
+                'mode': getattr(config.get('mode'), 'name', str(config.get('mode'))),
+                'speed': getattr(config.get('speed'), 'name', str(config.get('speed', Speed.SPEED_3))),
+                'hold_time': config.get('hold_time', 5),
+                'priority': getattr(config.get('priority'), 'name', str(config.get('priority', MessagePriority.NORMAL)))
             })
 
         return jsonify({'canned_messages': canned_messages})
@@ -3299,6 +3474,15 @@ def after_request(response):
     response.headers.add('X-XSS-Protection', '1; mode=block')
 
     return response
+
+
+@app.before_first_request
+def initialize_database():
+    """Ensure all database tables exist when the app starts."""
+    try:
+        db.create_all()
+    except Exception as db_error:
+        logger.error("Database initialization failed: %s", db_error)
 
 
 # =============================================================================
