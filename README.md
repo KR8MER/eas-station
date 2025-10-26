@@ -1,206 +1,159 @@
-# NOAA Alerts System Container Usage
+# NOAA Alerts System – Container Deployment Guide
 
-This project ships with a production-oriented Dockerfile so you can run the
-Flask application in a container. Now that the repository is public you no
-longer need to provide build arguments or copy the source from another machine.
-Docker can fetch the repository directly from GitHub when you build the image.
+This repository contains a Flask web UI, a CAP alert poller, and supporting
+scripts for managing NOAA alert and GIS boundary data. The project now ships
+with a Docker-first workflow that keeps all runtime configuration in a `.env`
+file so you can run everything with a single `docker compose up`.
 
-The commands below assume Docker is installed on the machine where you are
-building or running the container. Substitute a different branch name if you do
-not want to build `main`.
+## Prerequisites
 
-## Quick command reference (public GitHub repository)
+* Docker Engine 24+
+* Docker Compose V2 (usually bundled with Docker Engine)
 
-You can hand Docker the HTTPS URL of the repository and let it download the
-source automatically. The optional `#main` suffix selects the branch to build;
-change it if you want a different ref.
+## 1. Configure environment variables
+
+Copy the provided `.env` file and adjust any values that differ in your
+environment. The defaults assume everything runs on the same Docker network and
+that PostgreSQL listens on the `postgresql` service defined in
+`docker-compose.yml`.
 
 ```bash
-# Build the application image straight from GitHub
-docker build -t noaa-alerts:latest \
-  https://github.com/KR8MER/noaa_alerts_systems.git#main
+cp .env .env.local  # optional backup before editing
+```
 
-# Start the stack with Docker Compose (uses the freshly built image)
-docker compose up -d
+Key variables:
 
-# Follow application logs
+| Variable | Purpose |
+| --- | --- |
+| `POSTGRES_HOST` | Hostname or service name for PostgreSQL (inside Docker use the service name, **not** `localhost`). |
+| `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Database connection parameters shared by the Flask app and poller. |
+| `DATABASE_URL` | SQLAlchemy connection string. Overridden automatically if you change the individual `POSTGRES_*` variables. |
+| `POLL_INTERVAL_SEC` | Interval (seconds) between CAP poller runs in continuous mode. |
+| `LED_SIGN_IP`, `LED_SIGN_PORT` | Optional LED sign integration. Remove or update if you do not use a sign. |
+| `UPLOAD_FOLDER` | Directory inside the container used for temporary GeoJSON uploads. |
+
+Avoid using `localhost` or `127.0.0.1` inside this file when both containers run
+on the same Docker network. Use the Docker service name instead (for example,
+`postgresql`).
+
+## 2. Build and start the stack
+
+From the project root run a single command that builds the images (if
+necessary) and starts every service in the background:
+
+```bash
+docker compose up -d --build
+```
+
+Need everything in one go, including cloning the correct branch? Run this
+single Bash command on any Docker-capable host:
+
+```bash
+bash -c 'git clone -b Test https://github.com/KR8MER/noaa_alerts_systems.git \
+  && cd noaa_alerts_systems \
+  && docker compose up -d --build'
+```
+
+The repository’s active branch is `Test`, so the command above ensures you pull
+the same branch the project uses in production before launching the stack.
+
+Services started by the compose file:
+
+* **app** – Gunicorn serving the Flask UI and REST API on port 5000.
+* **poller** – Background CAP poller that runs continuously using the same
+  image as the web app.
+* **postgresql** – PostgreSQL 15 with PostGIS-capable extensions (install those
+  manually if you need them).
+
+Access the UI at <http://localhost:5000> from the host machine. Inside Docker,
+other services reach the web app via the `app` service name.
+
+To tail logs or stop everything:
+
+```bash
 docker compose logs -f app
+# or poller / postgresql
 
-# Shut everything down when finished
 docker compose down
 ```
 
-If you prefer to keep a local checkout instead of relying on the remote build
-context, clone the repository and run the same commands from the project root.
+## 3. Running the CAP poller
 
-If you want Docker Compose to fetch everything without keeping a working copy
-of the repository on disk, you can point Compose directly at the file hosted in
-GitHub. Because the compose file now references the repository URL as its build
-context, Docker downloads the application source as part of the build step.
+### 3.1 Continuous polling in its own container
+
+The compose file defines a dedicated **poller** service that launches
+`python poller/cap_poller.py --continuous` in its own container. Set the
+polling cadence in `.env` before starting the stack:
 
 ```bash
-docker compose -f https://raw.githubusercontent.com/KR8MER/noaa_alerts_systems/main/docker-compose.yml up -d
+POLL_INTERVAL_SEC=180  # 3 minutes between requests to NOAA
 ```
 
-When you are finished, stop the stack in the same way:
+Bring the poller online alongside the web app:
 
 ```bash
-docker compose -f https://raw.githubusercontent.com/KR8MER/noaa_alerts_systems/main/docker-compose.yml down
+docker compose up -d poller
 ```
 
-### Getting fresh code after a repository update
-
-Docker caches both the downloaded source and the layers built from it. If you
-push new commits and the container still serves old code, force Docker to grab
-the latest revision and rebuild the image.
+The container uses `restart: unless-stopped`, so it will automatically reconnect
+to NOAA every three minutes and resume after Docker or host restarts. View the
+poller logs at any time with:
 
 ```bash
-# If you are using the remote compose file
-docker compose -f https://raw.githubusercontent.com/KR8MER/noaa_alerts_systems/main/docker-compose.yml build --pull --no-cache
-docker compose -f https://raw.githubusercontent.com/KR8MER/noaa_alerts_systems/main/docker-compose.yml up -d --force-recreate
+docker compose logs -f poller
+```
 
-# Or, from a local checkout
-docker compose build --pull --no-cache
+### 3.2 Running the CAP poller manually
+
+To run the poller once or execute maintenance commands you can use `docker
+compose run`:
+
+```bash
+docker compose run --rm poller python poller/cap_poller.py --fix-geometry
+```
+
+`cap_poller.py` now loads environment variables via `python-dotenv`, so the
+poller behaves the same whether it runs inside Docker or from a local checkout.
+It builds the database URL from the `POSTGRES_*` variables when `DATABASE_URL`
+is not set, ensuring it connects to the `postgresql` service instead of trying
+`127.0.0.1`.
+
+## 4. Uploading boundary files
+
+A recent bug in the admin UI pointed the upload form at
+`/admin/upload_boundary`, which returned HTTP 404 in containerized deployments.
+The JavaScript now calls `/admin/upload_boundaries`, matching the Flask route, so
+GeoJSON uploads succeed again. If you still encounter upload failures ensure
+that:
+
+* The `UPLOAD_FOLDER` path from `.env` is writable by the container user.
+* Your GeoJSON file is valid UTF-8 and contains a `features` array.
+* PostgreSQL has the PostGIS extension installed (`CREATE EXTENSION postgis;`).
+
+## 5. Debug utilities
+
+`debug_apis.sh` now reads the base URL from the `API_BASE_URL` environment
+variable (defaulting to `http://app:5000`) so you can run the script from inside
+or outside Docker without editing it.
+
+## 6. Production deployment notes
+
+* Override `SECRET_KEY` in your `.env` file before exposing the app publicly.
+* Map a Docker volume to `logs/` or the upload directory if you need to persist
+  data across container restarts.
+* Configure an SMTP relay via `MAIL_SERVER`, `MAIL_PORT`, and related settings in
+  `.env`. The default no longer points at `localhost` to avoid misconfigured
+  containers.
+
+## 7. Updating containers
+
+Pull the latest source and rebuild:
+
+```bash
+git pull
+docker compose build --pull
 docker compose up -d --force-recreate
 ```
 
-If you still see stale code, clear the cached build context and image layers
-before rebuilding:
-
-```bash
-docker builder prune
-docker image prune -f
-```
-
-> **Tip:** When invoking Compose with a remote file, Docker stores the build
-> context in a temporary directory under `~/.docker`. Removing that cache with
-> `docker builder prune` guarantees that Docker downloads the most recent
-> commit on the next build.
-
-## Option A: Docker Compose (recommended for local development)
-
-The repository includes a `docker-compose.yml` that provisions both the
-application and a PostgreSQL database. Build the container image and start the
-stack from a local checkout:
-
-```bash
-git clone https://github.com/KR8MER/noaa_alerts_systems.git
-cd noaa_alerts_systems
-docker compose build
-docker compose up -d
-```
-
-The API will be available at http://localhost:5000 and PostgreSQL is exposed on
-localhost:5432. Edit the environment variables in `docker-compose.yml` to match
-your hardware (for example the LED sign IP/port) or to point at an existing
-database instead of the bundled container.
-
-To inspect logs or shut the stack down:
-
-```bash
-docker compose logs -f app
-docker compose down
-```
-
-## Option B: Manual Docker commands
-
-If you prefer to manage dependencies yourself, you can still work with the
-image directly.
-
-### 1. Build the image
-
-```bash
-docker build -t noaa-alerts:latest \
-    https://github.com/KR8MER/noaa_alerts_systems.git#main
-```
-
-### 2. Run database (if needed)
-
-The application expects a PostgreSQL database exposed via the `DATABASE_URL`
-environment variable. If you do not already have a database running, you can
-start a disposable PostgreSQL container for local testing:
-
-```bash
-docker run --name noaa-db -e POSTGRES_DB=casaos \
-    -e POSTGRES_USER=casaos -e POSTGRES_PASSWORD=casaos \
-    -p 5432:5432 -d postgres:15
-```
-
-Update the credentials and port as needed for your environment. If you are
-running the application and database in Docker, use the service/container name
-(`postgresql` in the provided compose file) as the hostname in
-`DATABASE_URL`.
-
-### 3. Start the NOAA Alerts container
-
-Run the application container and link it to your database by providing the
-connection string and any other configuration you require:
-
-```bash
-docker run --name noaa-alerts --rm -p 5000:5000 \
-    -e DATABASE_URL=postgresql+psycopg2://casaos:casaos@postgresql:5432/casaos \
-    -e SECRET_KEY=replace-this-with-a-secret-value \
-    -e LED_SIGN_IP=192.168.1.100 \
-    -e LED_SIGN_PORT=10001 \
-    noaa-alerts:latest
-```
-
-* Replace the `DATABASE_URL` hostname (`postgresql`) if your database is hosted
-  elsewhere. Avoid using `localhost` inside containers; use the appropriate
-  Docker service name or network alias instead.
-* Remove or adjust the `LED_SIGN_*` variables if you do not have the hardware
-  attached.
-
-The application will now be available at http://localhost:5000.
-
-### 4. View logs / stop containers
-
-```bash
-docker logs -f noaa-alerts
-```
-
-When you are done, stop the containers:
-
-```bash
-docker stop noaa-alerts
-# (Optional) stop and remove the database container as well
-docker stop noaa-db && docker rm noaa-db
-```
-
-These steps should let you reproduce the deployment locally. Adapt the
-configuration for production as needed.
-
-## Applying this pull request to your repository
-
-If you want to take the changes from the **Enable Compose builds from GitHub
-source** pull request and land them in your own fork, you can do it entirely
-from the command line. Replace `PR_NUMBER` with the pull request number on
-GitHub (for example, `42`).
-
-### Option 1: GitHub CLI (easiest)
-
-```bash
-gh repo clone KR8MER/noaa_alerts_systems
-cd noaa_alerts_systems
-gh pr checkout PR_NUMBER             # downloads the PR branch locally
-# review / test the changes
-gh pr merge PR_NUMBER --merge        # or --squash / --rebase as you prefer
-```
-
-### Option 2: Plain git commands
-
-```bash
-git clone https://github.com/KR8MER/noaa_alerts_systems.git
-cd noaa_alerts_systems
-git fetch origin pull/PR_NUMBER/head:pr-worktree
-git checkout pr-worktree            # look around, run tests, etc.
-
-# When you are ready to integrate the code:
-git checkout main
-git merge pr-worktree               # or `git cherry-pick` if you prefer
-git push origin main
-```
-
-This workflow keeps the pull request branch separate while you review and test
-the changes. Once you are satisfied, merge or cherry-pick the commits into your
-main branch and push them back to GitHub.
+Use `docker compose logs -f poller` to verify the CAP poller is running and
+processing alerts.

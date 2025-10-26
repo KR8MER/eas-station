@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
-import sys
 import os
+import sys
 
-# Set working directory
-project_dir = '/home/pi/noaa_alerts_system'
+
+def _project_root() -> str:
+    """Return the project root based on this file's location."""
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+project_dir = _project_root()
+if project_dir not in sys.path:
+    sys.path.insert(0, project_dir)
+
 os.chdir(project_dir)
-sys.path.insert(0, project_dir)
 
-# Import Flask application
-from app import app
+from app import app as application  # noqa: E402
 
-# WSGI application object
-application = app
+
+__all__ = ["application"]
