@@ -20,6 +20,8 @@ import socket
 import subprocess
 import shutil
 import time
+import importlib
+import importlib.util
 import pytz
 from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
@@ -34,6 +36,7 @@ from flask_sqlalchemy import SQLAlchemy
 from geoalchemy2 import Geometry
 from geoalchemy2.functions import ST_GeomFromGeoJSON, ST_Intersects, ST_AsGeoJSON
 from sqlalchemy import text, func, or_, desc
+from sqlalchemy.exc import OperationalError
 
 # Logging
 import logging
@@ -90,7 +93,6 @@ def _fallback_message_priority():
 
     return _MessagePriority
 
-
 try:
     from led_sign_controller import (
         LEDSignController,
@@ -116,6 +118,7 @@ else:
     except Exception as e:
         logger.error(f"Failed to initialize LED controller: {e}")
         LED_AVAILABLE = False
+
         MessagePriority = _fallback_message_priority()
 
 
@@ -130,7 +133,7 @@ def utc_now():
 
 def local_now():
     """Get current Putnam County local time"""
-    return utc_now().astimezone(PUTNAM_COUNTY_TZ)
+D    return utc_now().astimezone(PUTNAM_COUNTY_TZ)
 
 
 def parse_nws_datetime(dt_string):
@@ -2634,19 +2637,37 @@ def led_control():
         if led_controller:
             led_status = led_controller.get_status()
 
-        recent_messages = LEDMessage.query.order_by(
-            LEDMessage.created_at.desc()
-        ).limit(10).all()
+        recent_messages = []
+        try:
+            recent_messages = LEDMessage.query.order_by(
+                LEDMessage.created_at.desc()
+            ).limit(10).all()
+        except OperationalError as db_error:
+            if 'led_messages' in str(db_error.orig):
+                logger.warning("LED messages table missing; creating tables now")
+                db.create_all()
+                recent_messages = LEDMessage.query.order_by(
+                    LEDMessage.created_at.desc()
+                ).limit(10).all()
+            else:
+                raise
 
         canned_messages = []
         if led_controller:
             for name, config in led_controller.canned_messages.items():
+                lines = config.get('lines') or config.get('text') or []
+                if isinstance(lines, str):
+                    lines = [lines]
+
                 canned_messages.append({
                     'name': name,
-                    'text': config['text'],
-                    'color': config['color'].name,
-                    'font': config['font'].name,
-                    'effect': config['effect'].name
+                    'lines': lines,
+                    'color': getattr(config.get('color'), 'name', str(config.get('color'))),
+                    'font': getattr(config.get('font'), 'name', str(config.get('font'))),
+                    'mode': getattr(config.get('mode'), 'name', str(config.get('mode'))),
+                    'speed': getattr(config.get('speed'), 'name', str(config.get('speed', Speed.SPEED_3))),
+                    'hold_time': config.get('hold_time', 5),
+                    'priority': getattr(config.get('priority'), 'name', str(config.get('priority', MessagePriority.NORMAL)))
                 })
 
         return render_template('led_control.html',
@@ -2673,33 +2694,46 @@ def api_led_send_message():
         if not led_controller:
             return jsonify({'success': False, 'error': 'LED controller not available'})
 
-        text = data.get('text', '')
-        if not text:
-            return jsonify({'success': False, 'error': 'Message text is required'})
+        lines = data.get('lines')
+        if isinstance(lines, str):
+            lines = [line for line in lines.splitlines() if line.strip()]
+
+        if not lines:
+            return jsonify({'success': False, 'error': 'At least one line of text is required'})
 
         color_name = data.get('color', 'GREEN')
-        font_name = data.get('font', 'MEDIUM')
-        effect_name = data.get('effect', 'IMMEDIATE')
-        speed_name = data.get('speed', 'MEDIUM')
+        font_name = data.get('font', 'FONT_7x9')
+        mode_name = data.get('mode', 'HOLD')
+        speed_name = data.get('speed', 'SPEED_3')
         hold_time = int(data.get('hold_time', 5))
         priority_value = int(data.get('priority', MessagePriority.NORMAL.value))
 
         try:
             color = Color[color_name.upper()]
-            font = FontSize[font_name.upper()]
-            effect = Effect[effect_name.upper()]
+            font = Font[font_name.upper()]
+            mode = DisplayMode[mode_name.upper()]
             speed = Speed[speed_name.upper()]
             priority = MessagePriority(priority_value)
         except (KeyError, ValueError) as e:
             return jsonify({'success': False, 'error': f'Invalid parameter: {str(e)}'})
 
+        special_functions_raw = data.get('special_functions', []) or []
+        special_functions = []
+        special_enum = getattr(led_module, 'SpecialFunction', None) if led_module else None
+        if special_enum:
+            for func_name in special_functions_raw:
+                try:
+                    special_functions.append(special_enum[func_name.upper()])
+                except KeyError:
+                    logger.warning("Ignoring unknown special function: %s", func_name)
+
         led_message = LEDMessage(
             message_type='custom',
-            content=text,
+            content='\n'.join(lines),
             priority=priority.value,
             color=color.name,
             font_size=font.name,
-            effect=effect.name,
+            effect=mode.name,
             speed=speed.name,
             display_time=hold_time,
             scheduled_time=utc_now()
@@ -2708,12 +2742,13 @@ def api_led_send_message():
         db.session.commit()
 
         result = led_controller.send_message(
-            text=text,
+            lines=lines,
             color=color,
             font=font,
-            effect=effect,
+            mode=mode,
             speed=speed,
             hold_time=hold_time,
+            special_functions=special_functions or None,
             priority=priority
         )
 
@@ -2971,14 +3006,19 @@ def api_led_canned_messages():
 
         canned_messages = []
         for name, config in led_controller.canned_messages.items():
+            lines = config.get('lines') or config.get('text') or []
+            if isinstance(lines, str):
+                lines = [lines]
+
             canned_messages.append({
                 'name': name,
-                'text': config['text'],
-                'color': config['color'].name,
-                'font': config['font'].name,
-                'effect': config['effect'].name,
-                'speed': config.get('speed', Speed.MEDIUM).name,
-                'hold_time': config.get('hold_time', 5)
+                'lines': lines,
+                'color': getattr(config.get('color'), 'name', str(config.get('color'))),
+                'font': getattr(config.get('font'), 'name', str(config.get('font'))),
+                'mode': getattr(config.get('mode'), 'name', str(config.get('mode'))),
+                'speed': getattr(config.get('speed'), 'name', str(config.get('speed', Speed.SPEED_3))),
+                'hold_time': config.get('hold_time', 5),
+                'priority': getattr(config.get('priority'), 'name', str(config.get('priority', MessagePriority.NORMAL)))
             })
 
         return jsonify({'canned_messages': canned_messages})
@@ -3337,6 +3377,15 @@ def after_request(response):
     response.headers.add('X-XSS-Protection', '1; mode=block')
 
     return response
+
+
+@app.before_first_request
+def initialize_database():
+    """Ensure all database tables exist when the app starts."""
+    try:
+        db.create_all()
+    except Exception as db_error:
+        logger.error("Database initialization failed: %s", db_error)
 
 
 # =============================================================================
