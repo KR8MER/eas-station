@@ -3400,27 +3400,77 @@ def after_request(response):
     return response
 
 
-# Flask 3 removed the ``before_first_request`` hook, so we run our
-# initialization using ``before_serving`` which executes once when the
-# server starts handling requests.
-@app.before_serving
+# Flask 3 removed the ``before_first_request`` hook in favour of
+# ``before_serving``.  Older Flask releases (including the one bundled with
+# this project) do not provide ``before_serving`` though, so we register the
+# handler dynamically depending on which hook is available.  If neither hook is
+# present we fall back to running the initialization immediately within an
+# application context.
 def initialize_database():
     """Create all database tables, logging any initialization failure."""
+    global _db_initialized, _db_initialization_error
+
+    if _db_initialized:
+        return True
+
     try:
         db.create_all()
+    except OperationalError as db_error:
+        _db_initialization_error = db_error
+        logger.error("Database initialization failed: %s", db_error)
+        return False
     except Exception as db_error:
+        _db_initialization_error = db_error
         logger.error("Database initialization failed: %s", db_error)
         raise
     else:
+        _db_initialized = True
+        _db_initialization_error = None
         logger.info("Database tables ensured on startup")
+        return True
 
 
-with app.app_context():
-    initialize_database()
+def ensure_database_initialized(force: bool = False):
+    """Ensure the database schema has been created, caching failures."""
+    global _db_initialized, _db_initialization_error
+
+    if force:
+        _db_initialized = False
+        _db_initialization_error = None
+
+    if _db_initialized:
+        return True
+
+    if isinstance(_db_initialization_error, OperationalError):
+        # Database connectivity issues should not crash the entire request
+        # stack; log the failure and allow non-database routes to continue.
+        logger.debug("Skipping database initialization due to prior OperationalError")
+        return False
+
+    if _db_initialization_error is not None:
+        raise _db_initialization_error
+
+    with _db_init_lock:
+        if _db_initialized:
+            return True
+
+        if isinstance(_db_initialization_error, OperationalError):
+            logger.debug("Skipping database initialization due to prior OperationalError")
+            return False
+
+        if _db_initialization_error is not None:
+            raise _db_initialization_error
+
+        return initialize_database()
 
 
-with app.app_context():
-    initialize_database()
+if hasattr(app, "before_serving"):
+    app.before_serving(ensure_database_initialized)
+elif hasattr(app, "before_first_request"):
+    app.before_first_request(ensure_database_initialized)
+else:
+    with app.app_context():
+        ensure_database_initialized()
 
 
 # =============================================================================
