@@ -3411,7 +3411,7 @@ def initialize_database():
     global _db_initialized, _db_initialization_error
 
     if _db_initialized:
-        return True
+        return
 
     try:
         db.create_all()
@@ -3430,47 +3430,13 @@ def initialize_database():
         return True
 
 
-def ensure_database_initialized(force: bool = False):
-    """Ensure the database schema has been created, caching failures."""
-    global _db_initialized, _db_initialization_error
-
-    if force:
-        _db_initialized = False
-        _db_initialization_error = None
-
-    if _db_initialized:
-        return True
-
-    if isinstance(_db_initialization_error, OperationalError):
-        # Database connectivity issues should not crash the entire request
-        # stack; log the failure and allow non-database routes to continue.
-        logger.debug("Skipping database initialization due to prior OperationalError")
-        return False
-
-    if _db_initialization_error is not None:
-        raise _db_initialization_error
-
-    with _db_init_lock:
-        if _db_initialized:
-            return True
-
-        if isinstance(_db_initialization_error, OperationalError):
-            logger.debug("Skipping database initialization due to prior OperationalError")
-            return False
-
-        if _db_initialization_error is not None:
-            raise _db_initialization_error
-
-        return initialize_database()
-
-
 if hasattr(app, "before_serving"):
-    app.before_serving(ensure_database_initialized)
+    app.before_serving(initialize_database)
 elif hasattr(app, "before_first_request"):
-    app.before_first_request(ensure_database_initialized)
+    app.before_first_request(initialize_database)
 else:
     with app.app_context():
-        ensure_database_initialized()
+        initialize_database()
 
 
 # =============================================================================
