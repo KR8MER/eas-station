@@ -15,21 +15,29 @@ Version: 2.0 - Complete with All Routes and Functionality
 import os
 import json
 import psutil
-import platform
-import socket
-import subprocess
-import shutil
 import threading
-import time
-import threading
-import importlib
-import importlib.util
-import pytz
-from dotenv import load_dotenv
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from collections import defaultdict
 from enum import Enum
 from contextlib import nullcontext
+
+from dotenv import load_dotenv
+
+# Application utilities
+from app_utils import (
+    PUTNAM_COUNTY_TZ,
+    UTC_TZ,
+    build_system_health_snapshot,
+    format_bytes,
+    format_local_date,
+    format_local_datetime,
+    format_local_time,
+    format_uptime,
+    is_alert_expired,
+    local_now,
+    parse_nws_datetime as _parse_nws_datetime,
+    utc_now,
+)
 
 # Flask and extensions
 from flask import Flask, request, jsonify, render_template, flash, redirect, url_for, render_template_string, has_app_context
@@ -74,10 +82,6 @@ db = SQLAlchemy(app)
 _db_initialized = False
 _db_initialization_error = None
 _db_init_lock = threading.Lock()
-
-# Timezone configuration for Putnam County, Ohio (Eastern Time)
-PUTNAM_COUNTY_TZ = pytz.timezone('America/New_York')
-UTC_TZ = pytz.UTC
 
 logger.info("NOAA Alerts System startup")
 
@@ -136,120 +140,11 @@ else:
 # TIMEZONE AND DATETIME UTILITIES
 # =============================================================================
 
-def utc_now() -> datetime:
-    """Return the current timezone-aware UTC timestamp."""
-
-    return datetime.now(UTC_TZ)
-
-
-def local_now():
-    """Get current Putnam County local time"""
-    return utc_now().astimezone(PUTNAM_COUNTY_TZ)
-
 
 def parse_nws_datetime(dt_string):
-    """Parse NWS datetime strings which can be in various formats"""
-    if not dt_string:
-        return None
+    """Parse NWS datetime strings while reusing the shared utility logger."""
 
-    dt_string = str(dt_string).strip()
-
-    if dt_string.endswith('Z'):
-        try:
-            dt = datetime.fromisoformat(dt_string.replace('Z', '+00:00'))
-            return dt.astimezone(UTC_TZ)
-        except ValueError:
-            pass
-
-    try:
-        dt = datetime.fromisoformat(dt_string)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=UTC_TZ)
-        return dt.astimezone(UTC_TZ)
-    except ValueError:
-        pass
-
-    if 'EDT' in dt_string:
-        try:
-            dt_clean = dt_string.replace(' EDT', '').replace('EDT', '')
-            dt = datetime.fromisoformat(dt_clean)
-            # FIXED: Use pytz to properly localize as EDT
-            eastern_tz = pytz.timezone('US/Eastern')
-            dt = eastern_tz.localize(dt, is_dst=True)  # is_dst=True for EDT
-            return dt.astimezone(UTC_TZ)
-        except ValueError:
-            pass
-
-    if 'EST' in dt_string:
-        try:
-            dt_clean = dt_string.replace(' EST', '').replace('EST', '')
-            dt = datetime.fromisoformat(dt_clean)
-            est_tz = pytz.timezone('US/Eastern')
-            dt = est_tz.localize(dt)
-            return dt.astimezone(UTC_TZ)
-        except ValueError:
-            pass
-
-    logger.warning(f"Could not parse datetime: {dt_string}")
-    return None
-
-
-def format_local_datetime(dt, include_utc=True):
-    """Format datetime in Putnam County local time with optional UTC"""
-    if not dt:
-        return "Unknown"
-
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC_TZ)
-
-    local_dt = dt.astimezone(PUTNAM_COUNTY_TZ)
-    local_str = local_dt.strftime('%B %d, %Y at %I:%M %p %Z')
-
-    if include_utc:
-        utc_str = dt.astimezone(UTC_TZ).strftime('%H:%M UTC')
-        return f"{local_str} ({utc_str})"
-    else:
-        return local_str
-
-
-def format_local_date(dt):
-    """Format date in Putnam County local time"""
-    if not dt:
-        return "Unknown"
-
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC_TZ)
-
-    local_dt = dt.astimezone(PUTNAM_COUNTY_TZ)
-    return local_dt.strftime('%B %d, %Y')
-
-
-def format_local_time(dt):
-    """Format time only in Putnam County local time with UTC"""
-    if not dt:
-        return "Unknown"
-
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC_TZ)
-
-    local_dt = dt.astimezone(PUTNAM_COUNTY_TZ)
-    utc_dt = dt.astimezone(UTC_TZ)
-
-    local_str = local_dt.strftime('%I:%M %p %Z')
-    utc_str = utc_dt.strftime('%H:%M UTC')
-
-    return f"{local_str} ({utc_str})"
-
-
-def is_alert_expired(expires_dt):
-    """Check if alert is expired using current time"""
-    if not expires_dt:
-        return False
-
-    if expires_dt.tzinfo is None:
-        expires_dt = expires_dt.replace(tzinfo=UTC_TZ)
-
-    return expires_dt < utc_now()
+    return _parse_nws_datetime(dt_string, logger=logger)
 
 
 # =============================================================================
@@ -577,257 +472,11 @@ def ensure_multipolygon(geometry):
 # SYSTEM MONITORING UTILITIES
 # =============================================================================
 
+
 def get_system_health():
-    """Get comprehensive system health information"""
-    try:
-        uname = platform.uname()
-        boot_time = psutil.boot_time()
+    """Get comprehensive system health information."""
 
-        cpu_info = {
-            'physical_cores': psutil.cpu_count(logical=False),
-            'total_cores': psutil.cpu_count(logical=True),
-            'max_frequency': psutil.cpu_freq().max if psutil.cpu_freq() else 0,
-            'current_frequency': psutil.cpu_freq().current if psutil.cpu_freq() else 0,
-            'cpu_usage_percent': psutil.cpu_percent(interval=1),
-            'cpu_usage_per_core': psutil.cpu_percent(interval=1, percpu=True)
-        }
-
-        memory = psutil.virtual_memory()
-        swap = psutil.swap_memory()
-        memory_info = {
-            'total': memory.total,
-            'available': memory.available,
-            'used': memory.used,
-            'free': memory.free,
-            'percentage': memory.percent,
-            'swap_total': swap.total,
-            'swap_used': swap.used,
-            'swap_free': swap.free,
-            'swap_percentage': swap.percent
-        }
-
-        disk_info = []
-        try:
-            partitions = psutil.disk_partitions()
-            for partition in partitions:
-                try:
-                    partition_usage = psutil.disk_usage(partition.mountpoint)
-                    disk_info.append({
-                        'device': partition.device,
-                        'mountpoint': partition.mountpoint,
-                        'fstype': partition.fstype,
-                        'total': partition_usage.total,
-                        'used': partition_usage.used,
-                        'free': partition_usage.free,
-                        'percentage': (partition_usage.used / partition_usage.total) * 100
-                    })
-                except PermissionError:
-                    continue
-        except:
-            disk_usage = psutil.disk_usage('/')
-            disk_info.append({
-                'device': '/',
-                'mountpoint': '/',
-                'fstype': 'unknown',
-                'total': disk_usage.total,
-                'used': disk_usage.used,
-                'free': disk_usage.free,
-                'percentage': (disk_usage.used / disk_usage.total) * 100
-            })
-
-        network_info = {
-            'hostname': socket.gethostname(),
-            'interfaces': []
-        }
-
-        try:
-            net_if_addrs = psutil.net_if_addrs()
-            net_if_stats = psutil.net_if_stats()
-
-            for interface_name, interface_addresses in net_if_addrs.items():
-                interface_info = {
-                    'name': interface_name,
-                    'addresses': [],
-                    'is_up': net_if_stats[interface_name].isup if interface_name in net_if_stats else False
-                }
-
-                for address in interface_addresses:
-                    if address.family == socket.AF_INET:
-                        interface_info['addresses'].append({
-                            'type': 'IPv4',
-                            'address': address.address,
-                            'netmask': address.netmask,
-                            'broadcast': address.broadcast
-                        })
-                    elif address.family == socket.AF_INET6:
-                        interface_info['addresses'].append({
-                            'type': 'IPv6',
-                            'address': address.address,
-                            'netmask': address.netmask
-                        })
-
-                if interface_info['addresses']:
-                    network_info['interfaces'].append(interface_info)
-        except:
-            pass
-
-        process_info = {
-            'total_processes': len(psutil.pids()),
-            'running_processes': len(
-                [p for p in psutil.process_iter(['status']) if p.info['status'] == psutil.STATUS_RUNNING]),
-            'top_processes': []
-        }
-
-        try:
-            processes = []
-            for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'username']):
-                try:
-                    proc.cpu_percent()
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-
-            time.sleep(0.1)
-
-            for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'username']):
-                try:
-                    pinfo = proc.as_dict(attrs=['pid', 'name', 'cpu_percent', 'memory_percent', 'username'])
-                    if pinfo['cpu_percent'] is not None:
-                        processes.append(pinfo)
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-
-            processes.sort(key=lambda x: x['cpu_percent'] or 0, reverse=True)
-            process_info['top_processes'] = processes[:10]
-        except:
-            pass
-
-        load_averages = None
-        try:
-            if hasattr(os, 'getloadavg'):
-                load_averages = os.getloadavg()
-        except:
-            pass
-
-        db_status = 'unknown'
-        db_info = {}
-        try:
-            result = db.session.execute(text('SELECT version()')).fetchone()
-            if result:
-                db_status = 'connected'
-                db_info['version'] = result[0] if result[0] else 'Unknown'
-
-                try:
-                    size_result = db.session.execute(text(
-                        "SELECT pg_size_pretty(pg_database_size(current_database()))"
-                    )).fetchone()
-                    if size_result:
-                        db_info['size'] = size_result[0]
-                except:
-                    db_info['size'] = 'Unknown'
-
-                try:
-                    conn_result = db.session.execute(text(
-                        "SELECT count(*) FROM pg_stat_activity WHERE state = 'active'"
-                    )).fetchone()
-                    if conn_result:
-                        db_info['active_connections'] = conn_result[0]
-                except:
-                    db_info['active_connections'] = 'Unknown'
-        except Exception as e:
-            db_status = f'error: {str(e)}'
-
-        services_status = {}
-        try:
-            result = subprocess.run(['systemctl', 'is-active', 'apache2'],
-                                    capture_output=True, text=True, timeout=5)
-            services_status['apache2'] = result.stdout.strip()
-        except:
-            services_status['apache2'] = 'unknown'
-
-        try:
-            result = subprocess.run(['systemctl', 'is-active', 'postgresql'],
-                                    capture_output=True, text=True, timeout=5)
-            services_status['postgresql'] = result.stdout.strip()
-        except:
-            services_status['postgresql'] = 'unknown'
-
-        temperature_info = {}
-        try:
-            temps = psutil.sensors_temperatures()
-            if temps:
-                for name, entries in temps.items():
-                    temperature_info[name] = []
-                    for entry in entries:
-                        temperature_info[name].append({
-                            'label': entry.label or 'Unknown',
-                            'current': entry.current,
-                            'high': entry.high,
-                            'critical': entry.critical
-                        })
-        except:
-            pass
-
-        return {
-            'timestamp': utc_now().isoformat(),
-            'local_timestamp': local_now().isoformat(),
-            'system': {
-                'hostname': uname.node,
-                'system': uname.system,
-                'release': uname.release,
-                'version': uname.version,
-                'machine': uname.machine,
-                'processor': uname.processor,
-                'boot_time': datetime.fromtimestamp(boot_time, UTC_TZ).isoformat(),
-                'uptime_seconds': time.time() - boot_time
-            },
-            'cpu': cpu_info,
-            'memory': memory_info,
-            'disk': disk_info,
-            'network': network_info,
-            'processes': process_info,
-            'load_averages': load_averages,
-            'database': {
-                'status': db_status,
-                'info': db_info
-            },
-            'services': services_status,
-            'temperature': temperature_info
-        }
-
-    except Exception as e:
-        logger.error(f"Error getting system health: {str(e)}")
-        return {
-            'error': str(e),
-            'timestamp': utc_now().isoformat(),
-            'local_timestamp': local_now().isoformat()
-        }
-
-
-def format_bytes(bytes_value):
-    """Format bytes into human readable format"""
-    if bytes_value == 0:
-        return "0 B"
-
-    size_names = ["B", "KB", "MB", "GB", "TB", "PB"]
-    import math
-    i = int(math.floor(math.log(bytes_value, 1024)))
-    p = math.pow(1024, i)
-    s = round(bytes_value / p, 2)
-    return f"{s} {size_names[i]}"
-
-
-def format_uptime(seconds):
-    """Format uptime seconds into human readable format"""
-    days = int(seconds // 86400)
-    hours = int((seconds % 86400) // 3600)
-    minutes = int((seconds % 3600) // 60)
-
-    if days > 0:
-        return f"{days}d {hours}h {minutes}m"
-    elif hours > 0:
-        return f"{hours}h {minutes}m"
-    else:
-        return f"{minutes}m"
+    return build_system_health_snapshot(db, logger)
 
 
 # =============================================================================
