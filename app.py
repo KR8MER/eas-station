@@ -3348,7 +3348,7 @@ def before_request():
         logger.info(f"{request.method} {request.path} from {request.remote_addr}")
 
     # Ensure the database schema exists before handling the request.
-    ensure_database_initialized()
+    initialize_database()
 
 
 @app.after_request
@@ -3414,7 +3414,7 @@ else:
 @app.cli.command()
 def init_db():
     """Initialize the database tables"""
-    ensure_database_initialized()
+    initialize_database()
     logger.info("Database tables created successfully")
 
 
