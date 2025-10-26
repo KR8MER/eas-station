@@ -2620,6 +2620,12 @@ def debug_boundaries(alert_id):
 # LED CONTROL ROUTES
 # =============================================================================
 
+@app.route('/led')
+def led_redirect():
+    """Maintain legacy /led URL by redirecting to the control dashboard."""
+    return redirect(url_for('led_control'))
+
+
 @app.route('/led_control')
 def led_control():
     """LED sign control interface"""
