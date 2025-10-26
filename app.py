@@ -3415,6 +3415,10 @@ def initialize_database():
 
     try:
         db.create_all()
+    except OperationalError as db_error:
+        _db_initialization_error = db_error
+        logger.error("Database initialization failed: %s", db_error)
+        return False
     except Exception as db_error:
         _db_initialization_error = db_error
         logger.error("Database initialization failed: %s", db_error)
@@ -3423,6 +3427,7 @@ def initialize_database():
         _db_initialized = True
         _db_initialization_error = None
         logger.info("Database tables ensured on startup")
+        return True
 
 
 if hasattr(app, "before_serving"):
