@@ -1292,17 +1292,9 @@
                     body: JSON.stringify(payload),
                 });
 
-                let rawBody = '';
-                let result = null;
+                const result = await response.json();
 
-                try {
-                    rawBody = await response.text();
-                    result = rawBody ? JSON.parse(rawBody) : {};
-                } catch (parseError) {
-                    console.error('Manual NOAA import response was not valid JSON', parseError, rawBody);
-                }
-
-                if (response.ok && result && !result.error) {
+                if (response.ok) {
                     const summaryParts = [];
                     if (typeof result.inserted === 'number') {
                         summaryParts.push(`${result.inserted} inserted`);
@@ -1325,8 +1317,7 @@
                         `;
                     }
                 } else {
-                    const fallbackMessage = rawBody && rawBody.trim() ? rawBody.trim() : 'Manual alert import failed.';
-                    const message = (result && result.error) || fallbackMessage;
+                    const message = result.error || 'Manual alert import failed.';
                     showStatus(`❌ ${message}`, response.status === 404 ? 'warning' : 'danger');
                     if (resultsDiv) {
                         resultsDiv.textContent = '';
