@@ -532,6 +532,66 @@
                         </div>
 
                         <div class="operation-card">
+                            <i class="fas fa-history fa-2x text-secondary mb-3"></i>
+                            <h6>Import Archived Alert</h6>
+                            <p class="text-muted small">Query NOAA for specific alerts (including expired) and store them locally.</p>
+                            <div class="mb-3">
+                                <label class="form-label">Alert Identifier</label>
+                                <input type="text" class="form-control" id="manualAlertIdentifier" placeholder="e.g. NWS-ID-123456" autocomplete="off">
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label class="form-label">Start (local)</label>
+                                    <input type="datetime-local" class="form-control" id="manualAlertStart">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">End (local)</label>
+                                    <input type="datetime-local" class="form-control" id="manualAlertEnd">
+                                </div>
+                            </div>
+                            <div class="row g-2 mt-2">
+                                <div class="col-md-4">
+                                    <label class="form-label">Zone (UGC)</label>
+                                    <input type="text" class="form-control" id="manualAlertZone" value="OHC137" placeholder="OHC137">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Status</label>
+                                    <select class="form-select" id="manualAlertStatus">
+                                        <option value="actual" selected>Actual</option>
+                                        <option value="any">Any</option>
+                                        <option value="test">Test</option>
+                                        <option value="exercise">Exercise</option>
+                                        <option value="system">System</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Message Type</label>
+                                    <select class="form-select" id="manualAlertMessageType">
+                                        <option value="alert" selected>Alert</option>
+                                        <option value="any">Any</option>
+                                        <option value="update">Update</option>
+                                        <option value="cancel">Cancel</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row g-2 mt-2">
+                                <div class="col-md-6">
+                                    <label class="form-label">Event Filter</label>
+                                    <input type="text" class="form-control" id="manualAlertEvent" placeholder="e.g. Tornado Warning">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Result Limit</label>
+                                    <input type="number" class="form-control" id="manualAlertLimit" min="1" max="50" value="5">
+                                </div>
+                            </div>
+                            <div class="form-text mt-2">Provide an identifier for the fastest lookup, or specify a start and end range to search the NOAA archive.</div>
+                            <button onclick="manualImportAlert()" class="btn btn-custom btn-secondary w-100 mt-3">
+                                <i class="fas fa-cloud-download-alt"></i> Fetch &amp; Save
+                            </button>
+                            <div id="manualImportResults" class="small text-muted mt-2"></div>
+                        </div>
+
+                        <div class="operation-card">
                             <i class="fas fa-database fa-2x text-success mb-3"></i>
                             <h6>Database Optimization</h6>
                             <p class="text-muted small">Optimize database performance</p>
@@ -1159,6 +1219,115 @@
                 }
             } catch (error) {
                 showStatus(`❌ Error: ${error.message}`, 'danger');
+            }
+        }
+
+        async function manualImportAlert() {
+            const identifierInput = document.getElementById('manualAlertIdentifier');
+            const startInput = document.getElementById('manualAlertStart');
+            const endInput = document.getElementById('manualAlertEnd');
+            const zoneInput = document.getElementById('manualAlertZone');
+            const statusSelect = document.getElementById('manualAlertStatus');
+            const messageTypeSelect = document.getElementById('manualAlertMessageType');
+            const eventInput = document.getElementById('manualAlertEvent');
+            const limitInput = document.getElementById('manualAlertLimit');
+            const resultsDiv = document.getElementById('manualImportResults');
+
+            if (resultsDiv) {
+                resultsDiv.textContent = '';
+            }
+
+            const identifier = identifierInput ? identifierInput.value.trim() : '';
+            const startValue = startInput ? startInput.value : '';
+            const endValue = endInput ? endInput.value : '';
+            const zone = zoneInput ? zoneInput.value.trim() : '';
+            const status = statusSelect ? statusSelect.value : 'actual';
+            const messageType = messageTypeSelect ? messageTypeSelect.value : 'alert';
+            const eventFilter = eventInput ? eventInput.value.trim() : '';
+            const limit = limitInput ? parseInt(limitInput.value, 10) : 5;
+
+            const normalizeDate = (value) => {
+                if (!value) {
+                    return null;
+                }
+                const parsed = Date.parse(value);
+                if (Number.isNaN(parsed)) {
+                    return null;
+                }
+                return new Date(parsed).toISOString();
+            };
+
+            const startIso = normalizeDate(startValue);
+            const endIso = normalizeDate(endValue);
+
+            if (!identifier && (!startIso || !endIso)) {
+                showStatus('Please provide an alert identifier or both start and end timestamps.', 'warning');
+                return;
+            }
+
+            const payload = {
+                identifier,
+                zone,
+                event: eventFilter,
+                limit: Number.isNaN(limit) ? 5 : limit,
+                status,
+                message_type: messageType,
+            };
+
+            if (startIso) {
+                payload.start = startIso;
+            }
+            if (endIso) {
+                payload.end = endIso;
+            }
+
+            if (resultsDiv) {
+                resultsDiv.textContent = 'Contacting NOAA API…';
+            }
+
+            try {
+                const response = await fetch('/admin/import_alert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    const summaryParts = [];
+                    if (typeof result.inserted === 'number') {
+                        summaryParts.push(`${result.inserted} inserted`);
+                    }
+                    if (typeof result.updated === 'number') {
+                        summaryParts.push(`${result.updated} updated`);
+                    }
+                    if (typeof result.skipped === 'number' && result.skipped > 0) {
+                        summaryParts.push(`${result.skipped} skipped`);
+                    }
+
+                    const identifiers = (result.identifiers || []).map(id => `<code>${id}</code>`).join(', ');
+
+                    showStatus(`✅ ${result.message || 'Alert import completed successfully.'}`, 'success');
+
+                    if (resultsDiv) {
+                        resultsDiv.innerHTML = `
+                            ${summaryParts.length ? `<div>${summaryParts.join(' • ')}</div>` : ''}
+                            ${identifiers ? `<div class="mt-1">Identifiers: ${identifiers}</div>` : ''}
+                        `;
+                    }
+                } else {
+                    const message = result.error || 'Manual alert import failed.';
+                    showStatus(`❌ ${message}`, response.status === 404 ? 'warning' : 'danger');
+                    if (resultsDiv) {
+                        resultsDiv.textContent = '';
+                    }
+                }
+            } catch (error) {
+                showStatus(`❌ NOAA import failed: ${error.message}`, 'danger');
+                if (resultsDiv) {
+                    resultsDiv.textContent = '';
+                }
             }
         }
 
