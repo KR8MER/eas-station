@@ -681,28 +681,39 @@ function aggregateAlerts(alerts, filters) {
     };
 }
 
-function createOrUpdateChart(key, chartFactory) {
-    if (state.charts[key]) {
-        state.charts[key].destroy();
+function createOrUpdateChart(containerId, chartFactory) {
+    const container = document.getElementById(containerId);
+    if (!container) {
+        return;
     }
-    const chart = chartFactory();
+    if (state.charts[containerId]) {
+        state.charts[containerId].destroy();
+    }
+    container.innerHTML = '';
+    const chart = chartFactory(container);
     if (chart) {
-        state.charts[key] = chart;
+        state.charts[containerId] = chart;
     }
 }
 
 function showError(containerId, message) {
     const container = document.getElementById(containerId);
-    if (container) {
-        container.innerHTML = `<div class="simple-chart text-danger"><i class="fas fa-exclamation-triangle"></i> ${message}</div>`;
+    if (!container) return;
+    if (state.charts[containerId]) {
+        state.charts[containerId].destroy();
+        delete state.charts[containerId];
     }
+    container.innerHTML = `<div class="simple-chart text-danger"><i class="fas fa-exclamation-triangle"></i> ${message}</div>`;
 }
 
 function showNoData(containerId, message) {
     const container = document.getElementById(containerId);
-    if (container) {
-        container.innerHTML = `<div class="simple-chart text-muted"><i class="fas fa-info-circle"></i> ${message}</div>`;
+    if (!container) return;
+    if (state.charts[containerId]) {
+        state.charts[containerId].destroy();
+        delete state.charts[containerId];
     }
+    container.innerHTML = `<div class="simple-chart text-muted"><i class="fas fa-info-circle"></i> ${message}</div>`;
 }
 function createAlertTypesChart(aggregates) {
     const containerId = 'alertTypesChart';
