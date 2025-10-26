@@ -505,48 +505,6 @@ def ensure_multipolygon(geometry):
 # SYSTEM MONITORING UTILITIES
 # =============================================================================
 
-
-def check_service_status(service_name):
-    """Return a friendly service status string even when systemd is unavailable."""
-    systemctl_path = shutil.which('systemctl')
-    if not systemctl_path:
-        return 'unavailable (systemctl not found)'
-
-    try:
-        result = subprocess.run(
-            [systemctl_path, 'is-active', service_name],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return 'timeout contacting systemd'
-    except FileNotFoundError:
-        return 'unavailable (systemctl missing)'
-    except Exception as exc:
-        logger.debug('Service status probe failed for %s: %s', service_name, exc)
-        return 'unknown'
-
-    stdout = (result.stdout or '').strip()
-    stderr = (result.stderr or '').strip()
-
-    if result.returncode == 0:
-        return stdout or 'active'
-
-    combined = stdout or stderr
-    if combined:
-        lower_combined = combined.lower()
-        if 'system has not been booted with systemd' in lower_combined or 'failed to connect to bus' in lower_combined:
-            return 'unavailable (systemd not running)'
-        return combined
-
-    if result.returncode == 3:
-        return 'inactive'
-
-    return 'unknown'
-
-
 def get_system_health():
     """Get comprehensive system health information"""
     try:
@@ -706,10 +664,20 @@ def get_system_health():
         except Exception as e:
             db_status = f'error: {str(e)}'
 
-        services_status = {
-            'apache2': check_service_status('apache2'),
-            'postgresql': check_service_status('postgresql')
-        }
+        services_status = {}
+        try:
+            result = subprocess.run(['systemctl', 'is-active', 'apache2'],
+                                    capture_output=True, text=True, timeout=5)
+            services_status['apache2'] = result.stdout.strip()
+        except:
+            services_status['apache2'] = 'unknown'
+
+        try:
+            result = subprocess.run(['systemctl', 'is-active', 'postgresql'],
+                                    capture_output=True, text=True, timeout=5)
+            services_status['postgresql'] = result.stdout.strip()
+        except:
+            services_status['postgresql'] = 'unknown'
 
         temperature_info = {}
         try:
@@ -3406,12 +3374,12 @@ def after_request(response):
 # handler dynamically depending on which hook is available.  If neither hook is
 # present we fall back to running the initialization immediately within an
 # application context.
-def _initialize_database_impl():
+def initialize_database():
     """Create all database tables, logging any initialization failure."""
     global _db_initialized, _db_initialization_error
 
     if _db_initialized:
-        return True
+        return
 
     try:
         db.create_all()
@@ -3428,40 +3396,6 @@ def _initialize_database_impl():
         _db_initialization_error = None
         logger.info("Database tables ensured on startup")
         return True
-
-
-def initialize_database(force: bool = False):
-    """Ensure the database schema has been created, caching failures."""
-    global _db_initialized, _db_initialization_error
-
-    if force:
-        _db_initialized = False
-        _db_initialization_error = None
-
-    if _db_initialized:
-        return True
-
-    if isinstance(_db_initialization_error, OperationalError):
-        # Database connectivity issues should not crash the entire request
-        # stack; log the failure and allow non-database routes to continue.
-        logger.debug("Skipping database initialization due to prior OperationalError")
-        return False
-
-    if _db_initialization_error is not None:
-        raise _db_initialization_error
-
-    with _db_init_lock:
-        if _db_initialized:
-            return True
-
-        if isinstance(_db_initialization_error, OperationalError):
-            logger.debug("Skipping database initialization due to prior OperationalError")
-            return False
-
-        if _db_initialization_error is not None:
-            raise _db_initialization_error
-
-        return _initialize_database_impl()
 
 
 if hasattr(app, "before_serving"):
