@@ -21,6 +21,7 @@ import subprocess
 import shutil
 import threading
 import time
+import threading
 import importlib
 import importlib.util
 import pytz
@@ -67,6 +68,11 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize database
 db = SQLAlchemy(app)
+
+# Guard database schema preparation so we only attempt it once per process.
+_db_initialized = False
+_db_initialization_error = None
+_db_init_lock = threading.Lock()
 
 # Timezone configuration for Putnam County, Ohio (Eastern Time)
 PUTNAM_COUNTY_TZ = pytz.timezone('America/New_York')
@@ -3373,6 +3379,9 @@ def before_request():
     if request.path.startswith('/api/') and request.method in ['POST', 'PUT', 'DELETE']:
         logger.info(f"{request.method} {request.path} from {request.remote_addr}")
 
+    # Ensure the database schema exists before handling the request.
+    ensure_database_initialized()
+
 
 @app.after_request
 def after_request(response):
@@ -3421,7 +3430,7 @@ with app.app_context():
 @app.cli.command()
 def init_db():
     """Initialize the database tables"""
-    db.create_all()
+    ensure_database_initialized()
     logger.info("Database tables created successfully")
 
 
