@@ -21,6 +21,7 @@ import subprocess
 import shutil
 import time
 import pytz
+from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from enum import Enum
@@ -40,6 +41,9 @@ import logging
 # =============================================================================
 # CONFIGURATION AND SETUP
 # =============================================================================
+
+# Load environment variables early for local CLI usage
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

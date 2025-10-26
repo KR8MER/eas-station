@@ -22,14 +22,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application source into the image
 COPY . ./
 
-# Expose default Flask port
+# Expose default Flask port and start Gunicorn
 EXPOSE 5000
 
-# Default environment variables
-ENV FLASK_APP=app.py \
-    FLASK_RUN_HOST=0.0.0.0 \
-    FLASK_RUN_PORT=5000 \
-    DATABASE_URL=postgresql+psycopg2://casaos:casaos@postgresql:5432/casaos
-
-# Use Gunicorn for production-ready serving
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
