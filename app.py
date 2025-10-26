@@ -3402,6 +3402,10 @@ def initialize_database():
         logger.error("Database initialization failed: %s", db_error)
 
 
+with app.app_context():
+    initialize_database()
+
+
 # =============================================================================
 # CLI COMMANDS (for future use with Flask CLI)
 # =============================================================================
