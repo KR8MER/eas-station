@@ -17,7 +17,7 @@ import json
 import psutil
 import threading
 import hashlib
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 from datetime import datetime, timedelta
 from collections import defaultdict
 from enum import Enum
@@ -1757,6 +1757,206 @@ def trigger_poll():
         return jsonify({'error': str(e)}), 500
 
 
+class NOAAImportError(Exception):
+    """Raised when manual NOAA alert retrieval fails."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: Optional[int] = None,
+        query_url: Optional[str] = None,
+        params: Optional[Dict[str, Union[str, int]]] = None,
+        detail: Optional[str] = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.query_url = query_url
+        self.params = params
+        self.detail = detail
+
+
+def normalize_manual_import_datetime(value: Union[str, datetime, None]) -> Optional[datetime]:
+    """Normalize manual import datetimes to UTC for consistent NOAA queries."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        dt_value = value
+    else:
+        raw_value = str(value).strip()
+        if not raw_value:
+            return None
+        try:
+            dt_value = datetime.fromisoformat(raw_value)
+        except ValueError:
+            try:
+                dt_value = datetime.fromisoformat(raw_value.replace('Z', '+00:00'))
+            except ValueError:
+                logger.warning("Manual import received unrecognized datetime format: %s", raw_value)
+                return None
+    if dt_value.tzinfo is None:
+        dt_value = PUTNAM_COUNTY_TZ.localize(dt_value)
+    return dt_value.astimezone(UTC_TZ)
+
+
+def format_noaa_timestamp(dt_value: Optional[datetime]) -> Optional[str]:
+    """Render UTC timestamps in the NOAA API's preferred ISO format."""
+    if not dt_value:
+        return None
+    return dt_value.astimezone(UTC_TZ).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def build_noaa_alert_request(
+    *,
+    identifier: Optional[str] = None,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+    zone: Optional[str] = None,
+    event: Optional[str] = None,
+    status: Optional[str] = None,
+    message_type: Optional[str] = None,
+    limit: int = 10,
+) -> Tuple[str, Optional[Dict[str, Union[str, int]]]]:
+    """Construct the NOAA alerts endpoint and query parameters for manual imports."""
+    query_url = NOAA_API_BASE_URL
+    params: Optional[Dict[str, Union[str, int]]] = None
+
+    if identifier:
+        encoded_identifier = quote(identifier.strip(), safe=':.')
+        query_url = f"{NOAA_API_BASE_URL}/{encoded_identifier}.json"
+    else:
+        safe_limit = max(1, min(int(limit or 10), 50))
+        params = {
+            'limit': safe_limit,
+            'sort': 'sent',
+            'format': 'geojson',
+        }
+        if status:
+            params['status'] = status
+        if message_type:
+            params['message_type'] = message_type
+        if start:
+            formatted_start = format_noaa_timestamp(start)
+            if formatted_start:
+                params['start'] = formatted_start
+        if end:
+            formatted_end = format_noaa_timestamp(end)
+            if formatted_end:
+                params['end'] = formatted_end
+        if zone:
+            params['zone'] = zone
+        if event:
+            params['event'] = event
+
+    return query_url, params
+
+
+def retrieve_noaa_alerts(
+    *,
+    identifier: Optional[str] = None,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+    zone: Optional[str] = None,
+    event: Optional[str] = None,
+    status: Optional[str] = None,
+    message_type: Optional[str] = None,
+    limit: int = 10,
+) -> Tuple[List[dict], str, Optional[Dict[str, Union[str, int]]]]:
+    """Execute a NOAA alerts query and return parsed features."""
+    query_url, params = build_noaa_alert_request(
+        identifier=identifier,
+        start=start,
+        end=end,
+        zone=zone,
+        event=event,
+        status=status,
+        message_type=message_type,
+        limit=limit,
+    )
+
+    headers = {
+        'Accept': 'application/geo+json, application/json;q=0.9',
+        'User-Agent': NOAA_USER_AGENT,
+    }
+
+    try:
+        response = requests.get(query_url, params=params, headers=headers, timeout=20)
+    except requests.RequestException as exc:
+        logger.error("NOAA alert import request failed: %s", exc)
+        raise NOAAImportError(
+            f'Failed to retrieve NOAA alert data: {exc}',
+            query_url=query_url,
+            params=params,
+        ) from exc
+
+    final_url = response.url
+
+    if response.status_code == 404:
+        raise NOAAImportError(
+            'No alert was found for the supplied identifier or filters.',
+            status_code=404,
+            query_url=final_url,
+            params=params,
+        )
+
+    if response.status_code >= 400:
+        error_detail: Optional[str] = None
+        try:
+            error_payload = response.json()
+            if isinstance(error_payload, dict):
+                error_detail = error_payload.get('detail') or error_payload.get('title')
+        except ValueError:
+            error_detail = response.text.strip() or None
+
+        logger.error(
+            "NOAA manual import returned %s for %s with params %s: %s",
+            response.status_code,
+            final_url,
+            params,
+            error_detail or 'no error payload provided'
+        )
+
+        message = f'Failed to retrieve NOAA alert data: {response.status_code} {response.reason}'
+        if error_detail:
+            message = f"{message} ({error_detail})"
+
+        raise NOAAImportError(
+            message,
+            status_code=response.status_code,
+            query_url=final_url,
+            params=params,
+            detail=error_detail,
+        )
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        logger.error("NOAA alert import returned invalid JSON: %s", exc)
+        raise NOAAImportError(
+            'NOAA API response could not be decoded as JSON.',
+            query_url=final_url,
+            params=params,
+        ) from exc
+
+    if identifier:
+        if isinstance(payload, dict) and 'features' in payload:
+            alerts_payloads = payload.get('features', []) or []
+        else:
+            alerts_payloads = [payload]
+    else:
+        alerts_payloads = payload.get('features', []) if isinstance(payload, dict) else []
+
+    if not alerts_payloads:
+        raise NOAAImportError(
+            'NOAA API did not return any alerts for the provided criteria.',
+            status_code=404,
+            query_url=final_url,
+            params=params,
+        )
+
+    return alerts_payloads, final_url, params
+
+
 @app.route('/admin/import_alert', methods=['POST'])
 def import_specific_alert():
     """Manually import NOAA alerts (including expired) by identifier or date range."""
@@ -1790,26 +1990,8 @@ def import_specific_alert():
         limit_value = 10
     limit_value = max(1, min(limit_value, 50))
 
-    def normalize_datetime(value: str) -> Optional[datetime]:
-        if not value:
-            return None
-        try:
-            parsed = datetime.fromisoformat(value)
-        except ValueError:
-            try:
-                parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
-            except ValueError:
-                logger.warning("Manual import received unrecognized datetime format: %s", value)
-                return None
-        if parsed.tzinfo is None:
-            parsed = PUTNAM_COUNTY_TZ.localize(parsed)
-        return parsed.astimezone(UTC_TZ)
-
-    def to_noaa_iso(dt_value: datetime) -> str:
-        return dt_value.astimezone(UTC_TZ).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
-
-    start_dt = normalize_datetime(start_raw)
-    end_dt = normalize_datetime(end_raw)
+    start_dt = normalize_manual_import_datetime(start_raw)
+    end_dt = normalize_manual_import_datetime(end_raw)
 
     if start_raw and start_dt is None:
         return jsonify({'error': 'Could not parse the provided start timestamp. Use ISO 8601 format (e.g., 2025-01-15T13:00:00-05:00).'}), 400
@@ -1832,93 +2014,33 @@ def import_specific_alert():
     if start_dt and end_dt and start_dt > end_dt:
         return jsonify({'error': 'The start time must be before the end time.'}), 400
 
-    start = to_noaa_iso(start_dt) if start_dt else ''
-    end = to_noaa_iso(end_dt) if end_dt else ''
-
-    query_url = NOAA_API_BASE_URL
-    params: Optional[dict] = None
-
-    if identifier:
-        encoded_identifier = quote(identifier, safe=':.')
-        query_url = f"{NOAA_API_BASE_URL}/{encoded_identifier}.json"
-    else:
-        params = {
-            'limit': limit_value,
-            'sort': 'sent',
-            'format': 'geojson',
-        }
-        if status_filter:
-            params['status'] = status_filter
-        if message_type:
-            params['message_type'] = message_type
-        if start:
-            params['start'] = start
-        if end:
-            params['end'] = end
-        if zone:
-            params['zone'] = zone
-        if event_filter:
-            params['event'] = event_filter
-
-    headers = {
-        'Accept': 'application/geo+json, application/json;q=0.9',
-        'User-Agent': NOAA_USER_AGENT,
-    }
-
     try:
-        response = requests.get(query_url, params=params, headers=headers, timeout=20)
-    except requests.RequestException as exc:
-        logger.error("NOAA alert import request failed: %s", exc)
-        return jsonify({'error': f'Failed to retrieve NOAA alert data: {exc}'}), 502
-
-    if response.status_code == 404:
-        return jsonify({
-            'error': 'No alert was found for the supplied identifier or filters.',
-            'identifier': identifier or None
-        }), 404
-
-    if response.status_code >= 400:
-        error_detail: Optional[str] = None
-        try:
-            error_payload = response.json()
-            if isinstance(error_payload, dict):
-                error_detail = error_payload.get('detail') or error_payload.get('title')
-        except ValueError:
-            error_detail = response.text.strip() or None
-        logger.error(
-            "NOAA manual import returned %s for %s with params %s: %s",
-            response.status_code,
-            response.url,
-            params,
-            error_detail or 'no error payload provided'
+        alerts_payloads, query_url, params = retrieve_noaa_alerts(
+            identifier=identifier or None,
+            start=start_dt,
+            end=end_dt,
+            zone=zone or None,
+            event=event_filter or None,
+            status=status_filter or None,
+            message_type=message_type or None,
+            limit=limit_value,
         )
-        message = f'Failed to retrieve NOAA alert data: {response.status_code} {response.reason}'
-        if error_detail:
-            message = f"{message} ({error_detail})"
-        return jsonify({
-            'error': message,
-            'status_code': response.status_code,
-            'query_url': response.url,
-            'params': params
-        }), response.status_code
+    except NOAAImportError as exc:
+        status_code = exc.status_code or 502
+        response_payload = {
+            'error': str(exc),
+            'status_code': exc.status_code,
+            'query_url': exc.query_url,
+            'params': exc.params,
+        }
+        if exc.detail:
+            response_payload['detail'] = exc.detail
+        if status_code == 404 and identifier:
+            response_payload['identifier'] = identifier
+        return jsonify(response_payload), status_code
 
-    try:
-        payload = response.json()
-    except ValueError as exc:
-        logger.error("NOAA alert import returned invalid JSON: %s", exc)
-        return jsonify({'error': 'NOAA API response could not be decoded as JSON.'}), 502
-
-    alerts_payloads: List[dict]
-    if identifier:
-        if isinstance(payload, dict) and 'features' in payload:
-            alerts_payloads = payload.get('features', []) or []
-        else:
-            alerts_payloads = [payload]
-    else:
-        alerts_payloads = payload.get('features', []) if isinstance(payload, dict) else []
-
-    if not alerts_payloads:
-        return jsonify({'error': 'NOAA API did not return any alerts for the provided criteria.'}), 404
+    start_iso = format_noaa_timestamp(start_dt)
+    end_iso = format_noaa_timestamp(end_dt)
 
     inserted = 0
     updated = 0
@@ -1986,8 +2108,8 @@ def import_specific_alert():
                 'params': params,
                 'requested_filters': {
                     'identifier': identifier or None,
-                    'start': start or None,
-                    'end': end or None,
+                    'start': start_iso,
+                    'end': end_iso,
                     'zone': zone or None,
                     'event': event_filter or None,
                     'status': status_filter or 'any',
