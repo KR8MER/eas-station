@@ -215,6 +215,162 @@
         font-size: 0.9rem;
         color: var(--secondary-color);
     }
+
+    .stat-delta {
+        font-size: 0.85rem;
+        opacity: 0.85;
+        margin-top: 5px;
+    }
+
+    .stat-delta.positive { color: #28a745; }
+    .stat-delta.negative { color: #dc3545; }
+
+    .stat-sparkline {
+        height: 60px;
+        margin-top: 10px;
+    }
+
+    .filters-panel {
+        background: var(--bg-color);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 10px var(--shadow-color);
+    }
+
+    .filters-panel h3 {
+        margin-top: 0;
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: var(--primary-color);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .filters-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 15px;
+    }
+
+    .filters-panel label {
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: var(--secondary-color);
+        display: block;
+        margin-bottom: 6px;
+    }
+
+    .filters-panel select,
+    .filters-panel input {
+        width: 100%;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 8px;
+        background: var(--light-color);
+        color: var(--text-color);
+    }
+
+    .filters-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 15px;
+        flex-wrap: wrap;
+    }
+
+    .filters-actions button {
+        border: none;
+        padding: 10px 16px;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.2s ease, background 0.2s ease;
+    }
+
+    .filters-actions button.apply {
+        background: var(--primary-color);
+        color: #fff;
+    }
+
+    .filters-actions button.reset {
+        background: var(--light-color);
+        color: var(--text-color);
+        border: 1px solid var(--border-color);
+    }
+
+    .filters-actions button:hover {
+        transform: translateY(-1px);
+    }
+
+    .filter-summary {
+        margin: 10px 0 0;
+        font-size: 0.9rem;
+        color: var(--secondary-color);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .filter-pill {
+        background: var(--light-color);
+        border-radius: 999px;
+        padding: 4px 10px;
+        border: 1px solid var(--border-color);
+        font-weight: 500;
+    }
+
+    .chart-toolbar {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+    }
+
+    .chart-toolbar button {
+        background: var(--light-color);
+        border: 1px solid var(--border-color);
+        color: var(--text-color);
+        border-radius: 6px;
+        padding: 8px 14px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s ease;
+    }
+
+    .chart-toolbar button:hover {
+        background: var(--primary-color);
+        color: #fff;
+    }
+
+    .analytics-section {
+        margin-top: 40px;
+    }
+
+    .timeline-annotations {
+        font-size: 0.85rem;
+        color: var(--secondary-color);
+        margin-top: 10px;
+    }
+
+    .lifecycle-legend {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+    }
+
+    .legend-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 6px;
+    }
 </style>
 {% endblock %}
 
@@ -229,34 +385,105 @@
         </div>
     </div>
 
+    <div class="filters-panel">
+        <h3><i class="fas fa-filter"></i> Advanced Filtering</h3>
+        <div class="filters-grid">
+            <div>
+                <label for="dateRangePreset">Date Range</label>
+                <select id="dateRangePreset">
+                    <option value="last7">Last 7 days</option>
+                    <option value="last30" selected>Last 30 days</option>
+                    <option value="last90">Last 90 days</option>
+                    <option value="last180">Last 180 days</option>
+                    <option value="last365">Last 365 days</option>
+                    <option value="custom">Custom range</option>
+                </select>
+            </div>
+            <div>
+                <label for="startDateInput">Start Date</label>
+                <input type="date" id="startDateInput">
+            </div>
+            <div>
+                <label for="endDateInput">End Date</label>
+                <input type="date" id="endDateInput">
+            </div>
+            <div>
+                <label for="severityFilter">Severities</label>
+                <select id="severityFilter" multiple></select>
+            </div>
+            <div>
+                <label for="statusFilter">Statuses</label>
+                <select id="statusFilter" multiple></select>
+            </div>
+            <div>
+                <label for="eventFilter">Alert Types</label>
+                <select id="eventFilter" multiple></select>
+            </div>
+        </div>
+        <div class="filters-actions">
+            <button class="apply" id="applyFiltersBtn"><i class="fas fa-sync"></i> Apply Filters</button>
+            <button class="reset" id="resetFiltersBtn"><i class="fas fa-undo"></i> Reset</button>
+            <button class="reset" id="exportDashboardBtn"><i class="fas fa-file-export"></i> Export Filtered Data</button>
+        </div>
+        <div class="filter-summary" id="filterSummary">
+            <span><i class="fas fa-info-circle"></i> Filters active across all charts.</span>
+        </div>
+    </div>
+
+    <div class="quick-stats" id="filteredQuickStats">
+        <div class="quick-stat">
+            <div class="quick-stat-number" id="filteredTotalAlerts">0</div>
+            <div class="quick-stat-label">Alerts in Range</div>
+        </div>
+        <div class="quick-stat">
+            <div class="quick-stat-number" id="filteredAvgPerDay">0</div>
+            <div class="quick-stat-label">Average Per Day</div>
+        </div>
+        <div class="quick-stat">
+            <div class="quick-stat-number" id="filteredTopSeverity">—</div>
+            <div class="quick-stat-label">Top Severity</div>
+        </div>
+        <div class="quick-stat">
+            <div class="quick-stat-number" id="filteredTopEvent">—</div>
+            <div class="quick-stat-label">Top Alert Type</div>
+        </div>
+    </div>
+
     <!-- Key Metrics Cards -->
     <div class="row">
         <div class="col-lg-2 col-md-4 col-sm-6">
             <div class="stat-card green">
-                <div class="stat-number">{{ active_alerts or 0 }}</div>
+                <div class="stat-number" id="activeAlertsCount">{{ active_alerts or 0 }}</div>
                 <div class="stat-label">Active Alerts</div>
                 <div class="stat-subtitle">Currently active</div>
+                <div class="stat-delta" id="activeAlertsDelta"></div>
+                <div class="stat-sparkline" id="sparkline-active"></div>
             </div>
         </div>
         <div class="col-lg-2 col-md-4 col-sm-6">
             <div class="stat-card orange">
-                <div class="stat-number">{{ expired_alerts or 0 }}</div>
+                <div class="stat-number" id="expiredAlertsCount">{{ expired_alerts or 0 }}</div>
                 <div class="stat-label">Expired Alerts</div>
                 <div class="stat-subtitle">No longer active</div>
+                <div class="stat-delta" id="expiredAlertsDelta"></div>
+                <div class="stat-sparkline" id="sparkline-expired"></div>
             </div>
         </div>
         <div class="col-lg-2 col-md-4 col-sm-6">
             <div class="stat-card blue">
-                <div class="stat-number">{{ total_alerts or 0 }}</div>
+                <div class="stat-number" id="totalAlertsCount">{{ total_alerts or 0 }}</div>
                 <div class="stat-label">Total Alerts</div>
                 <div class="stat-subtitle">All time</div>
+                <div class="stat-delta" id="totalAlertsDelta"></div>
+                <div class="stat-sparkline" id="sparkline-total"></div>
             </div>
         </div>
         <div class="col-lg-2 col-md-4 col-sm-6">
             <div class="stat-card purple">
-                <div class="stat-number">{{ total_boundaries or 0 }}</div>
+                <div class="stat-number" id="boundaryCount">{{ total_boundaries or 0 }}</div>
                 <div class="stat-label">Boundaries</div>
                 <div class="stat-subtitle">Geographic regions</div>
+                <div class="stat-delta" id="boundaryDelta"></div>
             </div>
         </div>
         <div class="col-lg-2 col-md-4 col-sm-6">
@@ -264,13 +491,63 @@
                 <div class="stat-number" id="uptime-days">Loading...</div>
                 <div class="stat-label">System Uptime</div>
                 <div class="stat-subtitle">Days online</div>
+                <div class="stat-delta" id="uptimeDelta"></div>
             </div>
         </div>
         <div class="col-lg-2 col-md-4 col-sm-6">
             <div class="stat-card teal">
-                <div class="stat-number">{{ (polling.success_rate * 100) | round(1) if polling and polling.success_rate else 95 }}%</div>
+                <div class="stat-number" id="reliabilityDisplay">{{ (polling.success_rate * 100) | round(1) if polling and polling.success_rate else 95 }}%</div>
                 <div class="stat-label">Reliability</div>
                 <div class="stat-subtitle">System uptime</div>
+                <div class="stat-delta" id="reliabilityDelta"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="analytics-section">
+        <h2 class="section-header">
+            <i class="fas fa-chart-area"></i> Advanced Time-Series Analytics
+        </h2>
+
+        <div class="chart-grid-large">
+            <div class="chart-container">
+                <div class="chart-title">
+                    <i class="fas fa-stream"></i> Multi-Timeline Comparison
+                </div>
+                <div id="multiTimelineChart">
+                    <div class="loading-message">
+                        <div class="spinner"></div>
+                        <div>Preparing comparative timelines...</div>
+                    </div>
+                </div>
+                <div class="timeline-annotations" id="timelineAnnotations"></div>
+            </div>
+        </div>
+
+        <div class="chart-grid">
+            <div class="chart-container">
+                <div class="chart-title">
+                    <i class="fas fa-project-diagram"></i> Predictive Alert Forecast (Next 7 Days)
+                </div>
+                <div id="forecastChart">
+                    <div class="loading-message">
+                        <div class="spinner"></div>
+                        <div>Computing alert forecast...</div>
+                    </div>
+                </div>
+                <div class="timeline-annotations" id="forecastSummary"></div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">
+                    <i class="fas fa-layer-group"></i> Master-Detail Alert Drilldown
+                </div>
+                <div id="masterDetailChart">
+                    <div class="loading-message">
+                        <div class="spinner"></div>
+                        <div>Building drilldown hierarchy...</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -313,16 +590,16 @@
         <i class="fas fa-clock"></i> Time-Based Analysis
     </h2>
 
-    <!-- Hourly Heatmap -->
+    <!-- Temporal Heatmap -->
     <div class="chart-grid-large">
         <div class="chart-container">
             <div class="chart-title">
-                <i class="fas fa-calendar-day"></i> Alert Activity by Hour of Day
+                <i class="fas fa-calendar-day"></i> Alert Activity Heatmap (Day of Week × Hour)
             </div>
-            <div id="hourlyHeatmapChart">
+            <div id="temporalHeatmapChart">
                 <div class="loading-message">
                     <div class="spinner"></div>
-                    <div>Loading hourly activity chart...</div>
+                    <div>Loading temporal activity matrix...</div>
                 </div>
             </div>
         </div>
@@ -541,6 +818,1863 @@
         </div>
     </div>
     {% endif %}
+
+    <div class="analytics-section">
+        <h2 class="section-header">
+            <i class="fas fa-tasks"></i> Alert Lifecycle Timeline
+        </h2>
+
+        <div class="lifecycle-legend">
+            <span><span class="legend-dot" style="background:#dc3545"></span>Extreme</span>
+            <span><span class="legend-dot" style="background:#fd7e14"></span>Severe</span>
+            <span><span class="legend-dot" style="background:#ffc107"></span>Moderate</span>
+            <span><span class="legend-dot" style="background:#17a2b8"></span>Minor/Other</span>
+        </div>
+
+        <div class="chart-grid-large">
+            <div class="chart-container">
+                <div class="chart-title">
+                    <i class="fas fa-business-time"></i> Issuance Through Expiration
+                </div>
+                <div id="lifecycleChart">
+                    <div class="loading-message">
+                        <div class="spinner"></div>
+                        <div>Loading lifecycle timeline...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fun Statistics -->
+    {% if fun_stats %}
+    <h2 class="section-header">
+        <i class="fas fa-star"></i> Interesting System Facts
+    </h2>
+
+    <div class="fun-stats">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="fun-stat">
+                    <h4>{{ fun_stats.busiest_hour or 'N/A' }}</h4>
+                    <p>Peak alert hour</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="fun-stat">
+                    <h4>{{ fun_stats.busiest_day or 'N/A' }}</h4>
+                    <p>Most active day</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="fun-stat">
+                    <h4>{{ fun_stats.avg_duration or 'N/A' }}</h4>
+                    <p>Average alert duration</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="fun-stat">
+                    <h4>"{{ fun_stats.most_common_event or 'None' }}"</h4>
+                    <p>Most common alert type</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Footer Info -->
+    <div class="mt-5 text-center text-muted">
+        <small>
+            <i class="fas fa-info-circle"></i> Statistics generated from {{ total_alerts or 0 }} total alerts across {{ total_boundaries or 0 }} geographic boundaries
+            <br>
+            Dashboard last updated: <span id="stats-timestamp"></span> |
+            Data refresh interval: 5 minutes |
+            <a href="/export/statistics" class="text-decoration-none">
+                <i class="fas fa-download"></i> Export Data
+            </a>
+        </small>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- Load Highcharts and modules -->
+<script src="https://code.highcharts.com/11.4.1/stock/highstock.js"></script>
+<script src="https://code.highcharts.com/11.4.1/highcharts-more.js"></script>
+<script src="https://code.highcharts.com/11.4.1/modules/heatmap.js"></script>
+<script src="https://code.highcharts.com/11.4.1/modules/solid-gauge.js"></script>
+<script src="https://code.highcharts.com/11.4.1/modules/drilldown.js"></script>
+<script src="https://code.highcharts.com/11.4.1/modules/exporting.js"></script>
+<script src="https://code.highcharts.com/11.4.1/modules/export-data.js"></script>
+<script src="https://code.highcharts.com/11.4.1/modules/accessibility.js"></script>
+
+<script>
+console.log('🚀 Statistics dashboard initializing...');
+
+const statsData = {
+    alertByEvent: {{ alert_by_event | tojson | safe }} || [],
+    alertBySeverity: {{ alert_by_severity | tojson | safe }} || [],
+    alertByStatus: {{ alert_by_status | tojson | safe }} || [],
+    alertByYear: {{ alert_by_year | tojson | safe }} || [],
+    mostAffectedBoundaries: {{ most_affected_boundaries | tojson | safe }} || [],
+    avgDurations: {{ avg_durations | tojson | safe }} || [],
+    recentByDay: {{ recent_by_day | tojson | safe }} || [],
+    boundaryStats: {{ boundary_stats | tojson | safe }} || [],
+    polling: {{ polling | tojson | safe }} || {},
+    alertEvents: {{ alert_events | tojson | safe }} || [],
+    filterOptions: {{ filter_options | tojson | safe }} || {"severities": [], "statuses": [], "events": []},
+    dailyAlerts: {{ daily_alerts | tojson | safe }} || [],
+    dowHourMatrix: {{ dow_hour_matrix | tojson | safe }} || Array.from({ length: 7 }, () => Array(24).fill(0)),
+    lifecycleTimeline: {{ lifecycle_timeline | tojson | safe }} || []
+};
+console.log('✅ Data loaded:', statsData);
+
+const baseAlerts = (statsData.alertEvents || []).map(alert => ({
+    ...alert,
+    sentDate: alert.sent ? new Date(alert.sent) : null,
+    expiresDate: alert.expires ? new Date(alert.expires) : null
+})).filter(alert => alert.sentDate && !Number.isNaN(alert.sentDate.getTime()));
+
+const ACTIVE_STATUS_CANDIDATES = ['actual', 'active', 'alert', 'in effect'];
+const EXPIRED_STATUS_CANDIDATES = ['expired', 'past', 'cancelled', 'canceled', 'cancel', 'ended', 'test'];
+
+const severityColors = {
+    'Extreme': '#dc3545',
+    'Severe': '#fd7e14',
+    'Moderate': '#ffc107',
+    'Minor': '#17a2b8',
+    'Unknown': '#6c757d'
+};
+
+const state = {
+    charts: {},
+    filters: {
+        preset: 'last30',
+        startDate: null,
+        endDate: null,
+        severities: new Set(),
+        statuses: new Set(),
+        events: new Set()
+    },
+    filteredAlerts: [],
+    aggregates: null,
+    staticChartsInitialized: false
+};
+
+Highcharts.setOptions({
+    colors: ['#007bff', '#28a745', '#ffc107', '#dc3545', '#17a2b8', '#6f42c1', '#fd7e14', '#20c997', '#6c757d'],
+    chart: {
+        backgroundColor: 'transparent',
+        style: { fontFamily: 'Segoe UI, sans-serif' }
+    },
+    credits: { enabled: false },
+    title: { style: { color: '#212529', fontSize: '16px' } }
+});
+
+function populateFilterSelect(id, options) {
+    const select = document.getElementById(id);
+    if (!select) return;
+    select.innerHTML = '';
+    options.forEach(option => {
+        const opt = document.createElement('option');
+        opt.value = option;
+        opt.textContent = option;
+        select.appendChild(opt);
+    });
+}
+
+function setPresetDates(preset) {
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+    const start = new Date(end);
+    switch (preset) {
+        case 'last7':
+            start.setDate(end.getDate() - 6);
+            break;
+        case 'last30':
+            start.setDate(end.getDate() - 29);
+            break;
+        case 'last90':
+            start.setDate(end.getDate() - 89);
+            break;
+        case 'last180':
+            start.setDate(end.getDate() - 179);
+            break;
+        case 'last365':
+            start.setDate(end.getDate() - 364);
+            break;
+        default:
+            return;
+    }
+    start.setHours(0, 0, 0, 0);
+    state.filters.preset = preset;
+    state.filters.startDate = start;
+    state.filters.endDate = end;
+    updateDateInputs();
+}
+
+function updateDateInputs() {
+    const startInput = document.getElementById('startDateInput');
+    const endInput = document.getElementById('endDateInput');
+    if (startInput) {
+        startInput.value = state.filters.startDate ? state.filters.startDate.toISOString().slice(0, 10) : '';
+    }
+    if (endInput) {
+        const endDate = state.filters.endDate ? new Date(state.filters.endDate) : null;
+        if (endDate) {
+            endDate.setHours(0, 0, 0, 0);
+        }
+        endInput.value = endDate ? endDate.toISOString().slice(0, 10) : '';
+    }
+}
+
+function handlePresetChange(event) {
+    const preset = event.target.value;
+    if (preset !== 'custom') {
+        setPresetDates(preset);
+        applyFiltersFromInputs();
+    } else {
+        state.filters.preset = 'custom';
+    }
+}
+
+function getSelectedValues(selectElement) {
+    if (!selectElement) return [];
+    return Array.from(selectElement.selectedOptions).map(option => option.value);
+}
+
+function applyFiltersFromInputs() {
+    const datePreset = document.getElementById('dateRangePreset');
+    const presetValue = datePreset ? datePreset.value : state.filters.preset;
+    if (presetValue === 'custom') {
+        state.filters.preset = 'custom';
+        const startInput = document.getElementById('startDateInput');
+        const endInput = document.getElementById('endDateInput');
+        state.filters.startDate = startInput && startInput.value ? new Date(startInput.value + 'T00:00:00') : null;
+        state.filters.endDate = endInput && endInput.value ? new Date(endInput.value + 'T23:59:59') : null;
+    } else {
+        setPresetDates(presetValue);
+    }
+
+    const severityFilter = document.getElementById('severityFilter');
+    const statusFilter = document.getElementById('statusFilter');
+    const eventFilter = document.getElementById('eventFilter');
+
+    state.filters.severities = new Set(getSelectedValues(severityFilter));
+    state.filters.statuses = new Set(getSelectedValues(statusFilter));
+    state.filters.events = new Set(getSelectedValues(eventFilter));
+
+    updateDashboard();
+}
+
+function resetFilters() {
+    state.filters = {
+        preset: 'last30',
+        startDate: null,
+        endDate: null,
+        severities: new Set(),
+        statuses: new Set(),
+        events: new Set()
+    };
+    const datePreset = document.getElementById('dateRangePreset');
+    if (datePreset) {
+        datePreset.value = 'last30';
+    }
+    ['severityFilter', 'statusFilter', 'eventFilter'].forEach(id => {
+        const select = document.getElementById(id);
+        if (select) {
+            Array.from(select.options).forEach(option => { option.selected = false; });
+        }
+    });
+    setPresetDates('last30');
+    updateDashboard();
+}
+
+function exportFilteredData() {
+    if (!state.filteredAlerts.length) {
+        alert('No filtered alerts to export.');
+        return;
+    }
+    const header = ['identifier', 'sent', 'expires', 'severity', 'status', 'event'];
+    const rows = state.filteredAlerts.map(alert => [
+        `"${alert.id || ''}"`,
+        alert.sentDate ? alert.sentDate.toISOString() : '',
+        alert.expiresDate ? alert.expiresDate.toISOString() : '',
+        `"${alert.severity}"`,
+        `"${alert.status}"`,
+        `"${alert.event}"`
+    ].join(','));
+    const csvContent = [header.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'filtered_alerts.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+function updateFilterSummary(filteredAlerts) {
+    const summary = document.getElementById('filterSummary');
+    if (!summary) return;
+    const formatter = new Intl.NumberFormat();
+    const pieces = [];
+    pieces.push(`<strong>${formatter.format(filteredAlerts.length)}</strong> alerts match the current filters.`);
+    if (state.filters.startDate || state.filters.endDate) {
+        const startText = state.filters.startDate ? state.filters.startDate.toLocaleDateString() : 'beginning';
+        const endText = state.filters.endDate ? state.filters.endDate.toLocaleDateString() : 'now';
+        pieces.push(`<span class="filter-pill"><i class="fas fa-calendar"></i> ${startText} → ${endText}</span>`);
+    }
+    if (state.filters.severities.size) {
+        pieces.push(`<span class="filter-pill"><i class="fas fa-exclamation-triangle"></i> ${Array.from(state.filters.severities).join(', ')}</span>`);
+    }
+    if (state.filters.statuses.size) {
+        pieces.push(`<span class="filter-pill"><i class="fas fa-toggle-on"></i> ${Array.from(state.filters.statuses).join(', ')}</span>`);
+    }
+    if (state.filters.events.size) {
+        pieces.push(`<span class="filter-pill"><i class="fas fa-bell"></i> ${Array.from(state.filters.events).join(', ')}</span>`);
+    }
+    summary.innerHTML = pieces.join(' ');
+}
+
+function updateQuickStats(aggregates) {
+    const formatter = new Intl.NumberFormat();
+    const totalEl = document.getElementById('filteredTotalAlerts');
+    if (totalEl) {
+        totalEl.textContent = formatter.format(aggregates.totalAlerts);
+    }
+    const avgEl = document.getElementById('filteredAvgPerDay');
+    if (avgEl) {
+        avgEl.textContent = aggregates.avgPerDay ? aggregates.avgPerDay.toFixed(1) : '0';
+    }
+    const severityEl = document.getElementById('filteredTopSeverity');
+    if (severityEl) {
+        severityEl.textContent = aggregates.topSeverity || '—';
+    }
+    const eventEl = document.getElementById('filteredTopEvent');
+    if (eventEl) {
+        eventEl.textContent = aggregates.topEvent || '—';
+    }
+}
+
+function sumStatusCounts(aggregates, candidates) {
+    if (!aggregates.statusTotalsNormalized) {
+        return 0;
+    }
+    return candidates.reduce((acc, candidate) => acc + (aggregates.statusTotalsNormalized.get(candidate.toLowerCase()) || 0), 0);
+}
+
+function updateKpiCards(aggregates) {
+    const formatter = new Intl.NumberFormat();
+    const totalDelta = document.getElementById('totalAlertsDelta');
+    if (totalDelta) {
+        totalDelta.textContent = `Filtered: ${formatter.format(aggregates.totalAlerts)}`;
+    }
+    const activeDelta = document.getElementById('activeAlertsDelta');
+    if (activeDelta) {
+        const activeCount = sumStatusCounts(aggregates, ACTIVE_STATUS_CANDIDATES);
+        activeDelta.textContent = `Filtered: ${formatter.format(activeCount)}`;
+        activeDelta.classList.toggle('positive', activeCount > 0);
+    }
+    const expiredDelta = document.getElementById('expiredAlertsDelta');
+    if (expiredDelta) {
+        const expiredCount = sumStatusCounts(aggregates, EXPIRED_STATUS_CANDIDATES);
+        expiredDelta.textContent = `Filtered: ${formatter.format(expiredCount)}`;
+        expiredDelta.classList.toggle('negative', expiredCount > 0);
+    }
+    const boundaryDelta = document.getElementById('boundaryDelta');
+    if (boundaryDelta) {
+        boundaryDelta.textContent = 'Static: based on configured geography';
+    }
+    const uptimeDelta = document.getElementById('uptimeDelta');
+    if (uptimeDelta) {
+        uptimeDelta.textContent = 'Approximate launch date baseline';
+    }
+    const reliabilityDelta = document.getElementById('reliabilityDelta');
+    if (reliabilityDelta && statsData.polling) {
+        reliabilityDelta.textContent = `Source: ${statsData.polling.data_source || 'poll_history'}`;
+    }
+}
+
+function buildStatusSparklineSeries(aggregates, candidates) {
+    if (!aggregates.dailyStatusCounts) {
+        return [];
+    }
+    const combined = new Map();
+    candidates.forEach(candidate => {
+        const series = aggregates.dailyStatusCounts.get(candidate.toLowerCase());
+        if (!series) return;
+        series.forEach((count, day) => {
+            combined.set(day, (combined.get(day) || 0) + count);
+        });
+    });
+    return Array.from(combined.entries())
+        .sort((a, b) => new Date(a[0]) - new Date(b[0]))
+        .slice(-14)
+        .map(([date, count]) => [new Date(date).getTime(), count]);
+}
+
+function createSparkline(containerId, series, color) {
+    const container = document.getElementById(containerId);
+    if (!container || !series.length) {
+        return;
+    }
+    if (state.charts[containerId]) {
+        state.charts[containerId].destroy();
+    }
+    state.charts[containerId] = Highcharts.chart(containerId, {
+        chart: {
+            type: 'areaspline',
+            backgroundColor: 'transparent',
+            height: 60,
+            margin: [0, 0, 0, 0]
+        },
+        title: { text: null },
+        credits: { enabled: false },
+        legend: { enabled: false },
+        xAxis: {
+            type: 'datetime',
+            labels: { enabled: false },
+            lineWidth: 0,
+            tickLength: 0
+        },
+        yAxis: {
+            labels: { enabled: false },
+            title: { text: null },
+            gridLineWidth: 0
+        },
+        tooltip: {
+            valueDecimals: 0,
+            valueSuffix: ' alerts',
+            xDateFormat: '%b %e'
+        },
+        plotOptions: {
+            areaspline: {
+                marker: { enabled: false },
+                lineWidth: 1.5,
+                fillOpacity: 0.3
+            }
+        },
+        series: [{
+            data: series,
+            color
+        }]
+    });
+}
+
+function renderSparklines(aggregates) {
+    const totalSeries = aggregates.dailySeries.slice(-14).map(item => [new Date(item.date).getTime(), item.count]);
+    if (totalSeries.length) {
+        createSparkline('sparkline-total', totalSeries, '#007bff');
+    }
+    const activeSeries = buildStatusSparklineSeries(aggregates, ACTIVE_STATUS_CANDIDATES);
+    if (activeSeries.length) {
+        createSparkline('sparkline-active', activeSeries, '#28a745');
+    }
+    const expiredSeries = buildStatusSparklineSeries(aggregates, EXPIRED_STATUS_CANDIDATES);
+    if (expiredSeries.length) {
+        createSparkline('sparkline-expired', expiredSeries, '#dc3545');
+    }
+}
+
+function getFilteredAlerts() {
+    const start = state.filters.startDate ? new Date(state.filters.startDate) : null;
+    const end = state.filters.endDate ? new Date(state.filters.endDate) : null;
+    if (start) {
+        start.setHours(0, 0, 0, 0);
+    }
+    if (end) {
+        end.setHours(23, 59, 59, 999);
+    }
+    return baseAlerts.filter(alert => {
+        if (start && alert.sentDate < start) return false;
+        if (end && alert.sentDate > end) return false;
+        if (state.filters.severities.size && !state.filters.severities.has(alert.severity)) return false;
+        if (state.filters.statuses.size && !state.filters.statuses.has(alert.status)) return false;
+        if (state.filters.events.size && !state.filters.events.has(alert.event)) return false;
+        return true;
+    });
+}
+function computeMovingAverage(dailySeries, window) {
+    if (!dailySeries.length) return [];
+    const values = dailySeries.map(item => item.count);
+    return dailySeries.map((item, idx) => {
+        const start = Math.max(0, idx - window + 1);
+        const slice = values.slice(start, idx + 1);
+        const avg = slice.reduce((acc, value) => acc + value, 0) / slice.length;
+        return { date: item.date, value: Number(avg.toFixed(2)) };
+    });
+}
+
+function startOfWeek(date) {
+    const result = new Date(date);
+    result.setHours(0, 0, 0, 0);
+    const day = result.getDay();
+    const diff = (day + 6) % 7;
+    result.setDate(result.getDate() - diff);
+    return result;
+}
+
+function computeTimelineComparison(dailySeries, filters) {
+    if (!dailySeries.length) {
+        return null;
+    }
+    const endDate = filters.endDate ? new Date(filters.endDate) : new Date(dailySeries[dailySeries.length - 1].date);
+    endDate.setHours(0, 0, 0, 0);
+    const currentWeekStart = startOfWeek(endDate);
+    const previousWeekStart = new Date(currentWeekStart);
+    previousWeekStart.setDate(previousWeekStart.getDate() - 7);
+    const lastYearStart = new Date(currentWeekStart);
+    lastYearStart.setFullYear(lastYearStart.getFullYear() - 1);
+
+    const dayMap = new Map(dailySeries.map(item => [item.date, item.count]));
+
+    function buildSeries(start) {
+        const series = [];
+        for (let i = 0; i < 7; i += 1) {
+            const day = new Date(start);
+            day.setDate(start.getDate() + i);
+            const key = day.toISOString().slice(0, 10);
+            series.push({ date: key, count: dayMap.get(key) || 0 });
+        }
+        return series;
+    }
+
+    const movingAverages = {
+        sevenDay: computeMovingAverage(dailySeries, 7),
+        thirtyDay: computeMovingAverage(dailySeries, 30),
+        ninetyDay: computeMovingAverage(dailySeries, 90)
+    };
+
+    const peakDay = dailySeries.reduce((acc, item) => {
+        if (!acc || item.count > acc.count) return item;
+        return acc;
+    }, null);
+
+    return {
+        currentWeek: buildSeries(currentWeekStart),
+        previousWeek: buildSeries(previousWeekStart),
+        lastYearWeek: buildSeries(lastYearStart),
+        movingAverages,
+        annotations: peakDay ? [{ date: peakDay.date, text: `Peak: ${peakDay.count} alerts` }] : []
+    };
+}
+
+function computeSeasonalAverage(dailySeries) {
+    const buckets = Array.from({ length: 7 }, () => []);
+    dailySeries.forEach(item => {
+        const dow = new Date(item.date).getDay();
+        buckets[dow].push(item.count);
+    });
+    return buckets.map((values, index) => ({
+        dow: index,
+        average: values.length ? Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(2)) : 0
+    }));
+}
+
+function computeForecast(dailySeries) {
+    if (dailySeries.length < 7) {
+        return null;
+    }
+    const counts = dailySeries.map(item => item.count);
+    const x = dailySeries.map((_, idx) => idx);
+    const meanX = x.reduce((acc, val) => acc + val, 0) / x.length;
+    const meanY = counts.reduce((acc, val) => acc + val, 0) / counts.length;
+    const numerator = x.reduce((acc, val, idx) => acc + (val - meanX) * (counts[idx] - meanY), 0);
+    const denominator = x.reduce((acc, val) => acc + Math.pow(val - meanX, 2), 0) || 1;
+    const slope = numerator / denominator;
+    const intercept = meanY - slope * meanX;
+    const residuals = counts.map((value, idx) => value - (slope * x[idx] + intercept));
+    const variance = residuals.reduce((acc, val) => acc + Math.pow(val, 2), 0) / (residuals.length || 1);
+    const stdDev = Math.sqrt(variance);
+    const interval = 1.96 * stdDev;
+
+    const lastDate = new Date(dailySeries[dailySeries.length - 1].date);
+    const projection = [];
+    let total = 0;
+
+    for (let i = 1; i <= 7; i += 1) {
+        const forecastDate = new Date(lastDate);
+        forecastDate.setDate(forecastDate.getDate() + i);
+        const xi = x.length + i - 1;
+        const value = slope * xi + intercept;
+        const normalized = Math.max(value, 0);
+        total += normalized;
+        projection.push({
+            date: forecastDate.toISOString().slice(0, 10),
+            value: Number(normalized.toFixed(2)),
+            lower: Number(Math.max(normalized - interval, 0).toFixed(2)),
+            upper: Number((normalized + interval).toFixed(2))
+        });
+    }
+
+    return {
+        projection,
+        interval,
+        expectedNext7: Number(total.toFixed(1)),
+        seasonal: computeSeasonalAverage(dailySeries)
+    };
+}
+
+function formatMonthKey(monthKey) {
+    const [year, month] = monthKey.split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, 1));
+    return date.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+}
+
+function computeMasterDetail(alerts) {
+    const events = new Map();
+    alerts.forEach(alert => {
+        const eventName = alert.event || 'Unknown';
+        const sent = alert.sentDate;
+        if (!sent) return;
+        const monthKey = `${sent.getFullYear()}-${String(sent.getMonth() + 1).padStart(2, '0')}`;
+        if (!events.has(eventName)) {
+            events.set(eventName, { total: 0, months: new Map() });
+        }
+        const eventEntry = events.get(eventName);
+        eventEntry.total += 1;
+        if (!eventEntry.months.has(monthKey)) {
+            eventEntry.months.set(monthKey, { count: 0, days: new Map() });
+        }
+        const monthEntry = eventEntry.months.get(monthKey);
+        monthEntry.count += 1;
+        const dayKey = sent.toISOString().slice(0, 10);
+        monthEntry.days.set(dayKey, (monthEntry.days.get(dayKey) || 0) + 1);
+    });
+
+    const baseSeries = [];
+    const drilldownSeries = [];
+    const sortedEvents = Array.from(events.entries()).sort((a, b) => b[1].total - a[1].total).slice(0, 6);
+
+    sortedEvents.forEach(([eventName, data]) => {
+        baseSeries.push({ name: eventName, y: data.total, drilldown: eventName });
+        const months = Array.from(data.months.entries())
+            .sort((a, b) => new Date(`${a[0]}-01`) - new Date(`${b[0]}-01`))
+            .slice(-12);
+
+        months.forEach(([monthKey, monthData]) => {
+            const drillId = `${eventName}|${monthKey}`;
+            drilldownSeries.push({
+                id: drillId,
+                name: `${eventName} in ${formatMonthKey(monthKey)}`,
+                type: 'column',
+                data: Array.from(monthData.days.entries())
+                    .sort((a, b) => new Date(a[0]) - new Date(b[0]))
+                    .map(([day, count]) => [day, count])
+            });
+        });
+
+        drilldownSeries.push({
+            id: eventName,
+            name: `${eventName} by month`,
+            type: 'column',
+            data: months.map(([monthKey, monthData]) => [formatMonthKey(monthKey), monthData.count])
+        });
+    });
+
+    return { baseSeries, drilldownSeries };
+}
+function aggregateAlerts(alerts, filters) {
+    const eventCounts = new Map();
+    const severityCounts = new Map();
+    const statusCounts = new Map();
+    const statusTotalsNormalized = new Map();
+    const statusDisplayNames = new Map();
+    const hourlyTotals = Array(24).fill(0);
+    const monthlyTotals = Array(12).fill(0);
+    const yearlyCounts = new Map();
+    const hourlyMatrix = Array.from({ length: 7 }, () => Array(24).fill(0));
+    const dailyCounts = new Map();
+    const dailyStatusCounts = new Map();
+
+    alerts.forEach(alert => {
+        const sent = alert.sentDate;
+        if (!sent) return;
+        const dayKey = sent.toISOString().slice(0, 10);
+        const hour = sent.getHours();
+        const dow = sent.getDay();
+        const month = sent.getMonth();
+        const year = sent.getFullYear();
+
+        const severity = alert.severity || 'Unknown';
+        const status = alert.status || 'Unknown';
+        const eventName = alert.event || 'Unknown';
+        const statusKey = status.toLowerCase();
+
+        eventCounts.set(eventName, (eventCounts.get(eventName) || 0) + 1);
+        severityCounts.set(severity, (severityCounts.get(severity) || 0) + 1);
+        statusCounts.set(status, (statusCounts.get(status) || 0) + 1);
+        statusTotalsNormalized.set(statusKey, (statusTotalsNormalized.get(statusKey) || 0) + 1);
+        if (!statusDisplayNames.has(statusKey)) {
+            statusDisplayNames.set(statusKey, status);
+        }
+
+        hourlyTotals[hour] += 1;
+        hourlyMatrix[dow][hour] += 1;
+        monthlyTotals[month] += 1;
+        yearlyCounts.set(year, (yearlyCounts.get(year) || 0) + 1);
+        dailyCounts.set(dayKey, (dailyCounts.get(dayKey) || 0) + 1);
+
+        if (!dailyStatusCounts.has(statusKey)) {
+            dailyStatusCounts.set(statusKey, new Map());
+        }
+        const statusDaily = dailyStatusCounts.get(statusKey);
+        statusDaily.set(dayKey, (statusDaily.get(dayKey) || 0) + 1);
+    });
+
+    const dailySeries = Array.from(dailyCounts.entries())
+        .sort((a, b) => new Date(a[0]) - new Date(b[0]))
+        .map(([date, count]) => ({ date, count }));
+    const recentByDay = dailySeries.slice(-30);
+    const dowTotals = hourlyMatrix.map(row => row.reduce((acc, value) => acc + value, 0));
+    const timelineComparison = computeTimelineComparison(dailySeries, filters);
+    const forecast = computeForecast(dailySeries);
+    const masterDetail = computeMasterDetail(alerts);
+    const yearlyTotals = Array.from(yearlyCounts.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([year, count]) => ({ year, count }));
+
+    const alertByEvent = Array.from(eventCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([event, count]) => ({ event, count }));
+
+    const alertBySeverity = Array.from(severityCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([severity, count]) => ({ severity, count }));
+
+    const alertByStatus = Array.from(statusCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([status, count]) => ({ status, count }));
+
+    const totalAlerts = alerts.length;
+    const avgPerDay = dailySeries.length ? (dailySeries.reduce((acc, item) => acc + item.count, 0) / dailySeries.length) : 0;
+    const topSeverity = alertBySeverity.length ? alertBySeverity[0].severity : '—';
+    const topEvent = alertByEvent.length ? alertByEvent[0].event : '—';
+    const peakDay = timelineComparison && timelineComparison.annotations.length ? timelineComparison.annotations[0] : null;
+
+    return {
+        totalAlerts,
+        alertByEvent,
+        alertBySeverity,
+        alertByStatus,
+        hourlyTotals,
+        hourlyMatrix,
+        dowTotals,
+        monthlyTotals,
+        yearlyTotals,
+        dailySeries,
+        recentByDay,
+        timelineComparison,
+        forecast,
+        masterDetail,
+        avgPerDay,
+        topSeverity,
+        topEvent,
+        statusTotalsNormalized,
+        statusDisplayNames,
+        dailyStatusCounts,
+        peakDay
+    };
+}
+
+function createOrUpdateChart(key, chartFactory) {
+    if (state.charts[key]) {
+        state.charts[key].destroy();
+    }
+    const chart = chartFactory();
+    if (chart) {
+        state.charts[key] = chart;
+    }
+}
+
+function showError(containerId, message) {
+    const container = document.getElementById(containerId);
+    if (container) {
+        container.innerHTML = `<div class="simple-chart text-danger"><i class="fas fa-exclamation-triangle"></i> ${message}</div>`;
+    }
+}
+
+function showNoData(containerId, message) {
+    const container = document.getElementById(containerId);
+    if (container) {
+        container.innerHTML = `<div class="simple-chart text-muted"><i class="fas fa-info-circle"></i> ${message}</div>`;
+    }
+}
+function createAlertTypesChart(aggregates) {
+    const containerId = 'alertTypesChart';
+    if (!document.getElementById(containerId)) return;
+    if (!aggregates.alertByEvent.length) {
+        showNoData(containerId, 'No alert type data available for this filter');
+        return;
+    }
+    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
+        chart: { type: 'pie', height: 350 },
+        title: { text: null },
+        plotOptions: {
+            pie: {
+                allowPointSelect: true,
+                cursor: 'pointer',
+                dataLabels: {
+                    enabled: true,
+                    format: '<b>{point.name}</b><br>{point.percentage:.1f}%'
+                },
+                showInLegend: true
+            }
+        },
+        series: [{
+            name: 'Alerts',
+            data: aggregates.alertByEvent.map(item => ({
+                name: item.event || 'Unknown',
+                y: item.count || 0
+            }))
+        }]
+    }));
+}
+
+function createSeverityChart(aggregates) {
+    const containerId = 'severityChart';
+    if (!document.getElementById(containerId)) return;
+    if (!aggregates.alertBySeverity.length) {
+        showNoData(containerId, 'No severity data available for this filter');
+        return;
+    }
+    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
+        chart: { type: 'column', height: 350 },
+        title: { text: null },
+        xAxis: {
+            categories: aggregates.alertBySeverity.map(item => item.severity),
+            title: { text: 'Severity Level' }
+        },
+        yAxis: { title: { text: 'Number of Alerts' } },
+        plotOptions: {
+            column: { colorByPoint: true }
+        },
+        series: [{
+            name: 'Alerts',
+            data: aggregates.alertBySeverity.map(item => ({
+                name: item.severity,
+                y: item.count,
+                color: severityColors[item.severity] || severityColors.Unknown
+            }))
+        }]
+    }));
+}
+
+function createStatusChart(aggregates) {
+    const containerId = 'statusChart';
+    if (!document.getElementById(containerId)) return;
+    if (!aggregates.alertByStatus.length) {
+        showNoData(containerId, 'No status data available for this filter');
+        return;
+    }
+    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
+        chart: { type: 'pie', height: 350 },
+        title: { text: null },
+        plotOptions: {
+            pie: {
+                dataLabels: {
+                    enabled: true,
+                    format: '<b>{point.name}</b>: {point.y}'
+                }
+            }
+        },
+        series: [{
+            name: 'Alerts',
+            data: aggregates.alertByStatus.map(item => ({
+                name: item.status || 'Unknown',
+                y: item.count || 0
+            }))
+        }]
+    }));
+}
+function createTemporalHeatmapChart(aggregates) {
+    const containerId = 'temporalHeatmapChart';
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const matrix = aggregates.hourlyMatrix || [];
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const data = [];
+    matrix.forEach((row, dow) => {
+        row.forEach((value, hour) => {
+            data.push([hour, dow, value || 0]);
+        });
+    });
+    if (!data.some(point => point[2] > 0)) {
+        showNoData(containerId, 'No temporal activity for this filter');
+        return;
+    }
+    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
+        chart: { type: 'heatmap', height: 340 },
+        title: { text: null },
+        xAxis: {
+            categories: Array.from({ length: 24 }, (_, i) => `${i}:00`),
+            title: { text: 'Hour of Day' }
+        },
+        yAxis: {
+            categories: dayNames,
+            title: { text: 'Day of Week' },
+            reversed: true
+        },
+        colorAxis: {
+            min: 0,
+            minColor: '#FFFFFF',
+            maxColor: '#007bff'
+        },
+        tooltip: {
+            formatter() {
+                return `${dayNames[this.point.y]} ${this.point.x}:00 → <b>${this.point.value}</b> alerts`;
+            }
+        },
+        series: [{
+            name: 'Alerts per hour',
+            borderWidth: 1,
+            data,
+            dataLabels: {
+                enabled: false
+            }
+        }]
+    }));
+}
+
+function createDayOfWeekChart(aggregates) {
+    const containerId = 'dayOfWeekChart';
+    if (!document.getElementById(containerId)) return;
+    if (!aggregates.dowTotals.some(value => value > 0)) {
+        showNoData(containerId, 'No day-of-week activity for this filter');
+        return;
+    }
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
+        chart: { type: 'column', height: 350 },
+        title: { text: null },
+        xAxis: {
+            categories: dayNames,
+            title: { text: 'Day of Week' }
+        },
+        yAxis: { title: { text: 'Number of Alerts' } },
+        series: [{
+            name: 'Alerts',
+            data: aggregates.dowTotals,
+            color: '#28a745'
+        }]
+    }));
+}
+
+function createMonthlyChart(aggregates) {
+    const containerId = 'monthlyChart';
+    if (!document.getElementById(containerId)) return;
+    if (!aggregates.monthlyTotals.some(value => value > 0)) {
+        showNoData(containerId, 'No monthly activity for this filter');
+        return;
+    }
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
+        chart: { type: 'area', height: 350 },
+        title: { text: null },
+        xAxis: {
+            categories: monthNames,
+            title: { text: 'Month' }
+        },
+        yAxis: { title: { text: 'Number of Alerts' } },
+        plotOptions: {
+            area: {
+                fillOpacity: 0.3,
+                marker: { enabled: false }
+            }
+        },
+        series: [{
+            name: 'Monthly Alerts',
+            data: aggregates.monthlyTotals,
+            color: '#007bff'
+        }]
+    }));
+}
+
+function createYearlyTrendChart(aggregates) {
+    const containerId = 'yearlyTrendChart';
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const data = aggregates.yearlyTotals && aggregates.yearlyTotals.length ? aggregates.yearlyTotals : (statsData.alertByYear || []);
+    if (!data.length) {
+        showNoData(containerId, 'Not enough yearly data to plot');
+        return;
+    }
+    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
+        chart: { type: 'line', height: 300 },
+        title: { text: null },
+        xAxis: {
+            categories: data.map(item => item.year),
+            title: { text: 'Year' }
+        },
+        yAxis: { title: { text: 'Number of Alerts' } },
+        plotOptions: {
+            line: {
+                dataLabels: { enabled: true },
+                marker: { enabled: true, radius: 5 }
+            }
+        },
+        series: [{
+            name: 'Annual Alerts',
+            data: data.map(item => item.count),
+            color: '#6f42c1'
+        }]
+    }));
+}
+
+function createRecentActivityChart(aggregates) {
+    const containerId = 'recentActivityChart';
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const series = aggregates.recentByDay.length ? aggregates.recentByDay : (statsData.recentByDay || []);
+    if (!series.length) {
+        showNoData(containerId, 'No recent activity available');
+        return;
+    }
+    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
+        chart: { type: 'spline', height: 300 },
+        title: { text: null },
+        xAxis: {
+            categories: series.map(item => new Date(item.date).toLocaleDateString()),
+            title: { text: 'Date' }
+        },
+        yAxis: { title: { text: 'Number of Alerts' } },
+        plotOptions: {
+            spline: {
+                marker: { enabled: true, radius: 4 },
+                lineWidth: 3
+            }
+        },
+        series: [{
+            name: 'Daily Alerts',
+            data: series.map(item => item.count),
+            color: '#20c997'
+        }]
+    }));
+}
+function createMultiTimelineChart(aggregates) {
+    const containerId = 'multiTimelineChart';
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const comparison = aggregates.timelineComparison;
+    if (!comparison) {
+        showNoData(containerId, 'Not enough timeline data to compare weeks');
+        return;
+    }
+    const toSeries = points => points.map(point => [new Date(point.date).getTime(), point.count]);
+    const series = [
+        { name: 'Current Week', data: toSeries(comparison.currentWeek), color: '#007bff' },
+        { name: 'Previous Week', data: toSeries(comparison.previousWeek), color: '#20c997' },
+        { name: 'Same Week Last Year', data: toSeries(comparison.lastYearWeek), color: '#6c757d' }
+    ];
+    const movingAverages = [
+        { name: '7-day Avg', data: comparison.movingAverages.sevenDay.map(p => [new Date(p.date).getTime(), p.value]), color: '#fd7e14', dashStyle: 'ShortDash' },
+        { name: '30-day Avg', data: comparison.movingAverages.thirtyDay.map(p => [new Date(p.date).getTime(), p.value]), color: '#dc3545', dashStyle: 'Dot' }
+    ];
+    createOrUpdateChart(containerId, () => Highcharts.stockChart(containerId, {
+        rangeSelector: { enabled: false },
+        navigator: { enabled: false },
+        scrollbar: { enabled: false },
+        title: { text: null },
+        xAxis: { type: 'datetime' },
+        yAxis: { title: { text: 'Alerts' } },
+        series: [...series, ...movingAverages]
+    }));
+    const annotations = document.getElementById('timelineAnnotations');
+    if (annotations) {
+        annotations.textContent = comparison.annotations.length ? comparison.annotations.map(item => `${new Date(item.date).toLocaleDateString()}: ${item.text}`).join(' | ') : 'No notable peaks detected in this range.';
+    }
+}
+
+function createForecastChart(aggregates) {
+    const containerId = 'forecastChart';
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const forecast = aggregates.forecast;
+    if (!forecast) {
+        showNoData(containerId, 'Need more history to forecast alerts');
+        return;
+    }
+    const actualSeries = aggregates.dailySeries.slice(-30).map(item => [new Date(item.date).getTime(), item.count]);
+    const projectionSeries = forecast.projection.map(item => [new Date(item.date).getTime(), item.value]);
+    const lowerBand = forecast.projection.map(item => [new Date(item.date).getTime(), item.lower]);
+    const upperBand = forecast.projection.map(item => [new Date(item.date).getTime(), item.upper]);
+
+    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
+        chart: { type: 'areaspline', height: 350 },
+        title: { text: null },
+        xAxis: { type: 'datetime' },
+        yAxis: { title: { text: 'Alerts' } },
+        tooltip: { shared: true },
+        series: [
+            { name: 'Last 30 Days', type: 'spline', data: actualSeries, color: '#007bff', marker: { enabled: false } },
+            {
+                name: 'Confidence Interval',
+                type: 'arearange',
+                data: upperBand.map((point, idx) => [point[0], lowerBand[idx][1], point[1]]),
+                color: 'rgba(0, 123, 255, 0.15)',
+                lineWidth: 0,
+                linkedTo: ':previous'
+            },
+            { name: 'Projected', type: 'spline', data: projectionSeries, color: '#dc3545', dashStyle: 'ShortDash', marker: { enabled: true } }
+        ]
+    }));
+    const summary = document.getElementById('forecastSummary');
+    if (summary) {
+        summary.textContent = `Expected alerts next 7 days: ${forecast.expectedNext7}`;
+    }
+}
+
+function createMasterDetailChart(aggregates) {
+    const containerId = 'masterDetailChart';
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const masterDetail = aggregates.masterDetail;
+    if (!masterDetail || !masterDetail.baseSeries.length) {
+        showNoData(containerId, 'Not enough alert variety to build drilldown');
+        return;
+    }
+    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
+        chart: { type: 'column', height: 350 },
+        title: { text: null },
+        xAxis: { type: 'category' },
+        yAxis: { title: { text: 'Alerts' } },
+        legend: { enabled: false },
+        drilldown: { series: masterDetail.drilldownSeries },
+        series: [{
+            name: 'Alerts',
+            colorByPoint: true,
+            data: masterDetail.baseSeries
+        }]
+    }));
+}
+
+function createLifecycleChart(filteredAlerts) {
+    const containerId = 'lifecycleChart';
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const alerts = filteredAlerts
+        .filter(alert => alert.sentDate)
+        .sort((a, b) => b.sentDate - a.sentDate)
+        .slice(0, 25);
+    if (!alerts.length) {
+        showNoData(containerId, 'No alerts with lifecycle data in this filter');
+        return;
+    }
+    const categories = alerts.map(alert => `${alert.event} (${alert.severity})`);
+    const points = alerts.map((alert, index) => {
+        const start = alert.sentDate.getTime();
+        const end = alert.expiresDate ? alert.expiresDate.getTime() : start + (60 * 60 * 1000);
+        return {
+            x: start,
+            x2: end,
+            y: index,
+            color: severityColors[alert.severity] || severityColors.Unknown,
+            name: alert.event
+        };
+    });
+    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
+        chart: { type: 'xrange', height: 400 },
+        title: { text: null },
+        xAxis: { type: 'datetime', title: { text: 'Timeline' } },
+        yAxis: {
+            categories,
+            reversed: true,
+            title: { text: null }
+        },
+        tooltip: {
+            pointFormatter() {
+                const start = new Date(this.x).toLocaleString();
+                const end = new Date(this.x2).toLocaleString();
+                return `<b>${this.name}</b><br>Start: ${start}<br>End: ${end}`;
+            }
+        },
+        series: [{
+            name: 'Alert Lifecycle',
+            borderColor: 'rgba(0,0,0,0.15)',
+            data: points
+        }]
+    }));
+}
+function createAffectedAreasChart() {
+    const containerId = 'affectedAreasChart';
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    if (!statsData.mostAffectedBoundaries || !statsData.mostAffectedBoundaries.length) {
+        showNoData(containerId, 'No boundary impact data available');
+        return;
+    }
+    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
+        chart: { type: 'bar', height: 400 },
+        title: { text: null },
+        xAxis: {
+            categories: statsData.mostAffectedBoundaries.map(item => item.name),
+            title: { text: 'Boundary' }
+        },
+        yAxis: { title: { text: 'Number of Alerts' } },
+        series: [{
+            name: 'Alert Count',
+            data: statsData.mostAffectedBoundaries.map(item => item.count),
+            color: '#17a2b8'
+        }]
+    }));
+}
+
+function createBoundaryTypesChart() {
+    const containerId = 'boundaryTypesChart';
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    if (!statsData.boundaryStats || !statsData.boundaryStats.length) {
+        showNoData(containerId, 'No boundary types data available');
+        return;
+    }
+    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
+        chart: { type: 'pie', height: 350 },
+        title: { text: null },
+        plotOptions: {
+            pie: { dataLabels: { enabled: true } }
+        },
+        series: [{
+            name: 'Boundary Types',
+            data: statsData.boundaryStats.map(item => ({ name: item.type, y: item.count }))
+        }]
+    }));
+}
+
+function createReliabilityGauge() {
+    const containerId = 'reliabilityGauge';
+    const container = document.getElementById(containerId);
+    if (!container || !statsData.polling || typeof statsData.polling.success_rate === 'undefined') return;
+    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
+        chart: { type: 'solidgauge', height: 300 },
+        title: { text: null },
+        pane: {
+            center: ['50%', '85%'],
+            size: '140%',
+            startAngle: -90,
+            endAngle: 90,
+            background: {
+                backgroundColor: '#EEE',
+                innerRadius: '60%',
+                outerRadius: '100%',
+                shape: 'arc'
+            }
+        },
+        yAxis: {
+            min: 0,
+            max: 1,
+            stops: [
+                [0.1, '#dc3545'],
+                [0.5, '#ffc107'],
+                [0.9, '#28a745']
+            ],
+            lineWidth: 0,
+            tickWidth: 0,
+            minorTickInterval: null,
+            tickAmount: 2,
+            title: { y: -70, text: 'System Reliability' },
+            labels: {
+                y: 16,
+                formatter() {
+                    return Math.round(this.value * 100) + '%';
+                }
+            }
+        },
+        series: [{
+            name: 'Reliability',
+            data: [statsData.polling.success_rate || 0],
+            dataLabels: {
+                format: '<div style="text-align:center"><span style="font-size:24px">{y:.1%}</span><br/><span style="font-size:12px;color:silver">Uptime</span></div>'
+            }
+        }]
+    }));
+}
+
+function createDurationChart() {
+    const containerId = 'durationChart';
+    const container = document.getElementById(containerId);
+    if (!container || !statsData.avgDurations || !statsData.avgDurations.length) return;
+    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
+        chart: { type: 'column', height: 350 },
+        title: { text: null },
+        xAxis: {
+            categories: statsData.avgDurations.map(item => item.event),
+            title: { text: 'Alert Type' }
+        },
+        yAxis: { title: { text: 'Average Duration (hours)' } },
+        series: [{
+            name: 'Duration',
+            data: statsData.avgDurations.map(item => Math.round(item.avg_hours * 10) / 10),
+            color: '#fd7e14'
+        }]
+    }));
+}
+
+function renderDynamicCharts(aggregates) {
+    createAlertTypesChart(aggregates);
+    createSeverityChart(aggregates);
+    createStatusChart(aggregates);
+    createTemporalHeatmapChart(aggregates);
+    createDayOfWeekChart(aggregates);
+    createMonthlyChart(aggregates);
+    createYearlyTrendChart(aggregates);
+    createRecentActivityChart(aggregates);
+    createMultiTimelineChart(aggregates);
+    createForecastChart(aggregates);
+    createMasterDetailChart(aggregates);
+    createLifecycleChart(state.filteredAlerts);
+}
+
+function renderStaticCharts() {
+    createAffectedAreasChart();
+    createBoundaryTypesChart();
+    createReliabilityGauge();
+    createDurationChart();
+}
+
+function updateSystemInfo() {
+    const timestamp = document.getElementById('stats-timestamp');
+    if (timestamp) {
+        timestamp.textContent = new Date().toLocaleString();
+    }
+    const uptimeDays = document.getElementById('uptime-days');
+    if (uptimeDays) {
+        const startDate = new Date('2025-01-01T00:00:00');
+        const now = new Date();
+        const days = Math.max(0, Math.floor((now - startDate) / (1000 * 60 * 60 * 24)));
+        uptimeDays.textContent = days.toLocaleString();
+    }
+}
+
+function updateDashboard() {
+    state.filteredAlerts = getFilteredAlerts();
+    updateFilterSummary(state.filteredAlerts);
+    state.aggregates = aggregateAlerts(state.filteredAlerts, state.filters);
+    updateQuickStats(state.aggregates);
+    updateKpiCards(state.aggregates);
+    renderSparklines(state.aggregates);
+    renderDynamicCharts(state.aggregates);
+    if (!state.staticChartsInitialized) {
+        renderStaticCharts();
+        state.staticChartsInitialized = true;
+    }
+}
+
+function initializeFilters() {
+    populateFilterSelect('severityFilter', statsData.filterOptions.severities || []);
+    populateFilterSelect('statusFilter', statsData.filterOptions.statuses || []);
+    populateFilterSelect('eventFilter', statsData.filterOptions.events || []);
+
+    const presetSelect = document.getElementById('dateRangePreset');
+    if (presetSelect) {
+        presetSelect.addEventListener('change', handlePresetChange);
+    }
+    const applyBtn = document.getElementById('applyFiltersBtn');
+    if (applyBtn) {
+        applyBtn.addEventListener('click', () => {
+            if (presetSelect && presetSelect.value === 'custom') {
+                state.filters.preset = 'custom';
+            }
+            applyFiltersFromInputs();
+        });
+    }
+    const resetBtn = document.getElementById('resetFiltersBtn');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', resetFilters);
+    }
+    const exportBtn = document.getElementById('exportDashboardBtn');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', exportFilteredData);
+    }
+
+    setPresetDates('last30');
+    updateDateInputs();
+}
+
+updateSystemInfo();
+initializeFilters();
+updateDashboard();
+
+console.log('📊 Dashboard ready');
+</script>
+{% endblock %}
+
+
+
+{% block content %}
+<div class="container-fluid mt-3">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-4">
+                <i class="fas fa-chart-bar"></i> Emergency Alert Statistics Dashboard
+                <small class="text-muted">Comprehensive system analytics and insights</small>
+            </h1>
+        </div>
+    </div>
+
+    <div class="filters-panel">
+        <h3><i class="fas fa-filter"></i> Advanced Filtering</h3>
+        <div class="filters-grid">
+            <div>
+                <label for="dateRangePreset">Date Range</label>
+                <select id="dateRangePreset">
+                    <option value="last7">Last 7 days</option>
+                    <option value="last30" selected>Last 30 days</option>
+                    <option value="last90">Last 90 days</option>
+                    <option value="last180">Last 180 days</option>
+                    <option value="last365">Last 365 days</option>
+                    <option value="custom">Custom range</option>
+                </select>
+            </div>
+            <div>
+                <label for="startDateInput">Start Date</label>
+                <input type="date" id="startDateInput">
+            </div>
+            <div>
+                <label for="endDateInput">End Date</label>
+                <input type="date" id="endDateInput">
+            </div>
+            <div>
+                <label for="severityFilter">Severities</label>
+                <select id="severityFilter" multiple></select>
+            </div>
+            <div>
+                <label for="statusFilter">Statuses</label>
+                <select id="statusFilter" multiple></select>
+            </div>
+            <div>
+                <label for="eventFilter">Alert Types</label>
+                <select id="eventFilter" multiple></select>
+            </div>
+        </div>
+        <div class="filters-actions">
+            <button class="apply" id="applyFiltersBtn"><i class="fas fa-sync"></i> Apply Filters</button>
+            <button class="reset" id="resetFiltersBtn"><i class="fas fa-undo"></i> Reset</button>
+            <button class="reset" id="exportDashboardBtn"><i class="fas fa-file-export"></i> Export Filtered Data</button>
+        </div>
+        <div class="filter-summary" id="filterSummary">
+            <span><i class="fas fa-info-circle"></i> Filters active across all charts.</span>
+        </div>
+    </div>
+
+    <div class="quick-stats" id="filteredQuickStats">
+        <div class="quick-stat">
+            <div class="quick-stat-number" id="filteredTotalAlerts">0</div>
+            <div class="quick-stat-label">Alerts in Range</div>
+        </div>
+        <div class="quick-stat">
+            <div class="quick-stat-number" id="filteredAvgPerDay">0</div>
+            <div class="quick-stat-label">Average Per Day</div>
+        </div>
+        <div class="quick-stat">
+            <div class="quick-stat-number" id="filteredTopSeverity">—</div>
+            <div class="quick-stat-label">Top Severity</div>
+        </div>
+        <div class="quick-stat">
+            <div class="quick-stat-number" id="filteredTopEvent">—</div>
+            <div class="quick-stat-label">Top Alert Type</div>
+        </div>
+    </div>
+
+    <!-- Key Metrics Cards -->
+    <div class="row">
+        <div class="col-lg-2 col-md-4 col-sm-6">
+            <div class="stat-card green">
+                <div class="stat-number" id="activeAlertsCount">{{ active_alerts or 0 }}</div>
+                <div class="stat-label">Active Alerts</div>
+                <div class="stat-subtitle">Currently active</div>
+                <div class="stat-delta" id="activeAlertsDelta"></div>
+                <div class="stat-sparkline" id="sparkline-active"></div>
+            </div>
+        </div>
+        <div class="col-lg-2 col-md-4 col-sm-6">
+            <div class="stat-card orange">
+                <div class="stat-number" id="expiredAlertsCount">{{ expired_alerts or 0 }}</div>
+                <div class="stat-label">Expired Alerts</div>
+                <div class="stat-subtitle">No longer active</div>
+                <div class="stat-delta" id="expiredAlertsDelta"></div>
+                <div class="stat-sparkline" id="sparkline-expired"></div>
+            </div>
+        </div>
+        <div class="col-lg-2 col-md-4 col-sm-6">
+            <div class="stat-card blue">
+                <div class="stat-number" id="totalAlertsCount">{{ total_alerts or 0 }}</div>
+                <div class="stat-label">Total Alerts</div>
+                <div class="stat-subtitle">All time</div>
+                <div class="stat-delta" id="totalAlertsDelta"></div>
+                <div class="stat-sparkline" id="sparkline-total"></div>
+            </div>
+        </div>
+        <div class="col-lg-2 col-md-4 col-sm-6">
+            <div class="stat-card purple">
+                <div class="stat-number" id="boundaryCount">{{ total_boundaries or 0 }}</div>
+                <div class="stat-label">Boundaries</div>
+                <div class="stat-subtitle">Geographic regions</div>
+                <div class="stat-delta" id="boundaryDelta"></div>
+            </div>
+        </div>
+        <div class="col-lg-2 col-md-4 col-sm-6">
+            <div class="stat-card red">
+                <div class="stat-number" id="uptime-days">Loading...</div>
+                <div class="stat-label">System Uptime</div>
+                <div class="stat-subtitle">Days online</div>
+                <div class="stat-delta" id="uptimeDelta"></div>
+            </div>
+        </div>
+        <div class="col-lg-2 col-md-4 col-sm-6">
+            <div class="stat-card teal">
+                <div class="stat-number" id="reliabilityDisplay">{{ (polling.success_rate * 100) | round(1) if polling and polling.success_rate else 95 }}%</div>
+                <div class="stat-label">Reliability</div>
+                <div class="stat-subtitle">System uptime</div>
+                <div class="stat-delta" id="reliabilityDelta"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="analytics-section">
+        <h2 class="section-header">
+            <i class="fas fa-chart-area"></i> Advanced Time-Series Analytics
+        </h2>
+
+        <div class="chart-grid-large">
+            <div class="chart-container">
+                <div class="chart-title">
+                    <i class="fas fa-stream"></i> Multi-Timeline Comparison
+                </div>
+                <div id="multiTimelineChart">
+                    <div class="loading-message">
+                        <div class="spinner"></div>
+                        <div>Preparing comparative timelines...</div>
+                    </div>
+                </div>
+                <div class="timeline-annotations" id="timelineAnnotations"></div>
+            </div>
+        </div>
+
+        <div class="chart-grid">
+            <div class="chart-container">
+                <div class="chart-title">
+                    <i class="fas fa-project-diagram"></i> Predictive Alert Forecast (Next 7 Days)
+                </div>
+                <div id="forecastChart">
+                    <div class="loading-message">
+                        <div class="spinner"></div>
+                        <div>Computing alert forecast...</div>
+                    </div>
+                </div>
+                <div class="timeline-annotations" id="forecastSummary"></div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">
+                    <i class="fas fa-layer-group"></i> Master-Detail Alert Drilldown
+                </div>
+                <div id="masterDetailChart">
+                    <div class="loading-message">
+                        <div class="spinner"></div>
+                        <div>Building drilldown hierarchy...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Analysis -->
+    <h2 class="section-header">
+        <i class="fas fa-tags"></i> Alert Analysis
+    </h2>
+
+    <div class="chart-grid">
+        <!-- Alert Types Distribution -->
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-chart-pie"></i> Alert Types Distribution
+            </div>
+            <div id="alertTypesChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading alert types chart...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alert Severity -->
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-exclamation-triangle"></i> Alert Severity Levels
+            </div>
+            <div id="severityChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading severity chart...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Time-Based Analysis -->
+    <h2 class="section-header">
+        <i class="fas fa-clock"></i> Time-Based Analysis
+    </h2>
+
+    <!-- Temporal Heatmap -->
+    <div class="chart-grid-large">
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-calendar-day"></i> Alert Activity Heatmap (Day of Week × Hour)
+            </div>
+            <div id="temporalHeatmapChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading temporal activity matrix...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="chart-grid-small">
+        <!-- Day of Week -->
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-calendar-week"></i> Alerts by Day of Week
+            </div>
+            <div id="dayOfWeekChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading day of week chart...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Monthly Distribution -->
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-calendar-alt"></i> Monthly Alert Distribution
+            </div>
+            <div id="monthlyChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading monthly chart...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alert Status -->
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-list-ul"></i> Alert Status Breakdown
+            </div>
+            <div id="statusChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading status chart...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Historical Trend -->
+    {% if alert_by_year and alert_by_year|length > 1 %}
+    <div class="chart-grid-large">
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-chart-line"></i> Historical Alert Trend
+            </div>
+            <div id="yearlyTrendChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading yearly trend...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Geographic Impact -->
+    {% if most_affected_boundaries and most_affected_boundaries|length > 0 %}
+    <h2 class="section-header">
+        <i class="fas fa-map-marked-alt"></i> Geographic Impact Analysis
+    </h2>
+
+    <div class="chart-grid">
+        <!-- Most Affected Areas -->
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-map-pin"></i> Most Affected Boundaries
+            </div>
+            <div id="affectedAreasChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading affected areas...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Boundary Types -->
+        {% if boundary_stats and boundary_stats|length > 0 %}
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-layer-group"></i> Boundary Types Distribution
+            </div>
+            <div id="boundaryTypesChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading boundary types...</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Impact Details Table -->
+    <div class="chart-container">
+        <div class="chart-title">
+            <i class="fas fa-table"></i> Detailed Impact Report
+        </div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Boundary Name</th>
+                    <th>Type</th>
+                    <th>Alert Count</th>
+                    <th>Impact Level</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for boundary in most_affected_boundaries[:10] %}
+                <tr>
+                    <td><strong>{{ boundary.name }}</strong></td>
+                    <td>
+                        <span class="badge bg-secondary">{{ boundary.type.title() }}</span>
+                    </td>
+                    <td>{{ boundary.count }}</td>
+                    <td>
+                        {% if boundary.count >= 10 %}
+                        <span class="impact-badge impact-high">High Impact</span>
+                        {% elif boundary.count >= 5 %}
+                        <span class="impact-badge impact-medium">Medium Impact</span>
+                        {% else %}
+                        <span class="impact-badge impact-low">Low Impact</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- System Performance -->
+    {% if polling or avg_durations %}
+    <h2 class="section-header">
+        <i class="fas fa-tachometer-alt"></i> System Performance Metrics
+    </h2>
+
+    <div class="chart-grid">
+        <!-- Reliability Gauge -->
+        {% if polling and polling.success_rate %}
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-shield-alt"></i> System Reliability
+            </div>
+            <div id="reliabilityGauge">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading reliability gauge...</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Average Alert Duration -->
+        {% if avg_durations and avg_durations|length > 0 %}
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-hourglass-half"></i> Average Alert Duration
+            </div>
+            <div id="durationChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading duration chart...</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Performance Quick Stats -->
+    {% if polling %}
+    <div class="quick-stats">
+        <div class="quick-stat">
+            <div class="quick-stat-number">{{ polling.total_polls or 0 }}</div>
+            <div class="quick-stat-label">Total Polls</div>
+        </div>
+        <div class="quick-stat">
+            <div class="quick-stat-number">{{ polling.successful_polls or 0 }}</div>
+            <div class="quick-stat-label">Successful</div>
+        </div>
+        <div class="quick-stat">
+            <div class="quick-stat-number">{{ polling.failed_polls or 0 }}</div>
+            <div class="quick-stat-label">Failed</div>
+        </div>
+        <div class="quick-stat">
+            <div class="quick-stat-number">{{ polling.avg_time_ms | round(0) if polling.avg_time_ms else 0 }}ms</div>
+            <div class="quick-stat-label">Avg Response</div>
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <!-- Recent Activity -->
+    {% if recent_by_day and recent_by_day|length > 0 %}
+    <h2 class="section-header">
+        <i class="fas fa-history"></i> Recent Activity Trends
+    </h2>
+
+    <div class="chart-grid-large">
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-chart-area"></i> Recent Alert Activity (Last 30 Days)
+            </div>
+            <div id="recentActivityChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading recent activity...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="analytics-section">
+        <h2 class="section-header">
+            <i class="fas fa-tasks"></i> Alert Lifecycle Timeline
+        </h2>
+
+        <div class="lifecycle-legend">
+            <span><span class="legend-dot" style="background:#dc3545"></span>Extreme</span>
+            <span><span class="legend-dot" style="background:#fd7e14"></span>Severe</span>
+            <span><span class="legend-dot" style="background:#ffc107"></span>Moderate</span>
+            <span><span class="legend-dot" style="background:#17a2b8"></span>Minor/Other</span>
+        </div>
+
+        <div class="chart-grid-large">
+            <div class="chart-container">
+                <div class="chart-title">
+                    <i class="fas fa-business-time"></i> Issuance Through Expiration
+                </div>
+                <div id="lifecycleChart">
+                    <div class="loading-message">
+                        <div class="spinner"></div>
+                        <div>Loading lifecycle timeline...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Fun Statistics -->
     {% if fun_stats %}
