@@ -3,6 +3,7 @@
 from datetime import datetime
 import os
 import platform
+import shutil
 import socket
 import subprocess
 import time
@@ -24,13 +25,21 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
         uname = platform.uname()
         boot_time = psutil.boot_time()
 
+        cpu_freq = psutil.cpu_freq()
+        cpu_usage_per_core = psutil.cpu_percent(interval=1, percpu=True)
+        cpu_usage_percent = (
+            sum(cpu_usage_per_core) / len(cpu_usage_per_core)
+            if cpu_usage_per_core
+            else psutil.cpu_percent(interval=None) or 0
+        )
+
         cpu_info = {
             "physical_cores": psutil.cpu_count(logical=False),
             "total_cores": psutil.cpu_count(logical=True),
-            "max_frequency": psutil.cpu_freq().max if psutil.cpu_freq() else 0,
-            "current_frequency": psutil.cpu_freq().current if psutil.cpu_freq() else 0,
-            "cpu_usage_percent": psutil.cpu_percent(interval=1),
-            "cpu_usage_per_core": psutil.cpu_percent(interval=1, percpu=True),
+            "max_frequency": cpu_freq.max if cpu_freq else 0,
+            "current_frequency": cpu_freq.current if cpu_freq else 0,
+            "cpu_usage_percent": cpu_usage_percent,
+            "cpu_usage_per_core": cpu_usage_per_core,
         }
 
         memory = psutil.virtual_memory()
@@ -160,10 +169,11 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
         db_status = "unknown"
         db_info: Dict[str, Any] = {}
         try:
-            result = db.session.execute(text("SELECT version()"))
-            if result:
+            version_result = db.session.execute(text("SELECT version()"))
+            if version_result:
                 db_status = "connected"
-                db_info["version"] = result[0] if result[0] else "Unknown"
+                version_value = version_result.scalar()
+                db_info["version"] = version_value if version_value else "Unknown"
 
                 try:
                     size_result = db.session.execute(
@@ -186,21 +196,25 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
             db_status = f"error: {exc}"
 
         services_status: Dict[str, Any] = {}
-        try:
-            result = subprocess.run(
-                ["systemctl", "is-active", "apache2"], capture_output=True, text=True, timeout=5
-            )
-            services_status["apache2"] = result.stdout.strip()
-        except Exception:
-            services_status["apache2"] = "unknown"
+        services_to_check = ["apache2", "postgresql"]
+        systemctl_path = shutil.which("systemctl")
 
-        try:
-            result = subprocess.run(
-                ["systemctl", "is-active", "postgresql"], capture_output=True, text=True, timeout=5
-            )
-            services_status["postgresql"] = result.stdout.strip()
-        except Exception:
-            services_status["postgresql"] = "unknown"
+        if systemctl_path:
+            for service in services_to_check:
+                try:
+                    result = subprocess.run(
+                        [systemctl_path, "is-active", service],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                    )
+                    service_status = result.stdout.strip() if result.stdout else "unknown"
+                    services_status[service] = service_status or "unknown"
+                except Exception:
+                    services_status[service] = "unknown"
+        else:
+            for service in services_to_check:
+                services_status[service] = "unavailable"
 
         temperature_info: Dict[str, Any] = {}
         try:
