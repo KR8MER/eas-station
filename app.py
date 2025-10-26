@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 from enum import Enum
 from contextlib import nullcontext
+from urllib.parse import quote
 
 from dotenv import load_dotenv
 import requests
