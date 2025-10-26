@@ -72,7 +72,14 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
 # Application versioning (exposed via templates for quick deployment verification)
-SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.1')
+SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.2')
+
+# NOAA API configuration for manual alert import workflows
+NOAA_API_BASE_URL = 'https://api.weather.gov/alerts'
+NOAA_USER_AGENT = os.environ.get(
+    'NOAA_USER_AGENT',
+    'KR8MER CAP Alert System/2.1 (+https://github.com/KR8MER/noaa_alerts_systems)'
+)
 
 # Database configuration
 DATABASE_URL = os.getenv(
@@ -1807,14 +1814,16 @@ def import_specific_alert():
         }), 400
 
     query_url = NOAA_API_BASE_URL
-    params = None
+    params: Optional[dict] = None
 
     if identifier:
-        query_url = f"{NOAA_API_BASE_URL}/{identifier}"
+        encoded_identifier = quote(identifier, safe=':.')
+        query_url = f"{NOAA_API_BASE_URL}/{encoded_identifier}.json"
     else:
         params = {
             'limit': limit_value,
             'sort': 'sent',
+            'format': 'geojson',
         }
         if status_filter:
             params['status'] = status_filter
@@ -1830,7 +1839,7 @@ def import_specific_alert():
             params['event'] = event_filter
 
     headers = {
-        'Accept': 'application/geo+json',
+        'Accept': 'application/geo+json, application/json;q=0.9',
         'User-Agent': NOAA_USER_AGENT,
     }
 
