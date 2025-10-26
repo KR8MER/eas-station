@@ -5,7 +5,7 @@ Flask Web Application with Enhanced Boundary Management and Alerts History
 
 Author: KR8MER Amateur Radio Emergency Communications
 Description: Emergency alert system for Putnam County, Ohio with proper timezone handling
-Version: 2.1.0 - Incremental build metadata surfaced in the UI footer
+Version: 2.1.3 - Incremental build metadata surfaced in the UI footer
 """
 
 # =============================================================================
@@ -16,12 +16,16 @@ import os
 import json
 import psutil
 import threading
+import hashlib
+from typing import List, Optional, Tuple
 from datetime import datetime, timedelta
 from collections import defaultdict
 from enum import Enum
 from contextlib import nullcontext
+from urllib.parse import quote
 
 from dotenv import load_dotenv
+import requests
 
 # Application utilities
 from app_utils import (
@@ -68,7 +72,14 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
 # Application versioning (exposed via templates for quick deployment verification)
-SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.0')
+SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.3')
+
+# NOAA API configuration for manual alert import workflows
+NOAA_API_BASE_URL = 'https://api.weather.gov/alerts'
+NOAA_USER_AGENT = os.environ.get(
+    'NOAA_USER_AGENT',
+    'KR8MER CAP Alert System/2.1 (+https://github.com/KR8MER/noaa_alerts_systems)'
+)
 
 # Database configuration
 DATABASE_URL = os.getenv(
@@ -540,6 +551,76 @@ def calculate_alert_intersections(alert):
     return intersections_created
 
 
+def assign_alert_geometry(alert: CAPAlert, geometry_data: Optional[dict]) -> bool:
+    """Assign GeoJSON geometry to an alert record, returning True when data changed."""
+    previous_geom = alert.geom
+
+    try:
+        if geometry_data and isinstance(geometry_data, dict):
+            normalized = ensure_multipolygon(geometry_data) if geometry_data.get('type') == 'Polygon' else geometry_data
+            geom_json = json.dumps(normalized)
+            alert.geom = db.session.execute(
+                text("SELECT ST_SetSRID(ST_GeomFromGeoJSON(:geom), 4326)"),
+                {'geom': geom_json}
+            ).scalar()
+        else:
+            alert.geom = None
+    except Exception as exc:
+        logger.warning(
+            "Failed to assign geometry for alert %s: %s",
+            getattr(alert, 'identifier', '?'),
+            exc
+        )
+        alert.geom = None
+
+    return previous_geom != alert.geom
+
+
+def parse_noaa_cap_alert(alert_payload: dict) -> Optional[Tuple[dict, Optional[dict]]]:
+    """Parse a NOAA API alert payload into CAPAlert column values and geometry."""
+    try:
+        properties = alert_payload.get('properties', {}) or {}
+        geometry = alert_payload.get('geometry')
+
+        identifier = properties.get('identifier')
+        if not identifier:
+            event_name = properties.get('event', 'Unknown')
+            sent_value = properties.get('sent', '') or ''
+            hash_input = f"{event_name}:{sent_value}:{utc_now().isoformat()}"
+            identifier = f"manual_{hashlib.md5(hash_input.encode('utf-8')).hexdigest()[:16]}"
+
+        sent_dt = parse_nws_datetime(properties.get('sent')) if properties.get('sent') else None
+        expires_dt = parse_nws_datetime(properties.get('expires')) if properties.get('expires') else None
+
+        area_desc = properties.get('areaDesc', '')
+        if isinstance(area_desc, list):
+            area_desc = '; '.join([part for part in area_desc if part])
+
+        parsed = {
+            'identifier': identifier,
+            'sent': sent_dt or utc_now(),
+            'expires': expires_dt,
+            'status': properties.get('status', 'Unknown'),
+            'message_type': properties.get('messageType', 'Unknown'),
+            'scope': properties.get('scope', 'Unknown'),
+            'category': properties.get('category', 'Unknown'),
+            'event': properties.get('event', 'Unknown'),
+            'urgency': properties.get('urgency', 'Unknown'),
+            'severity': properties.get('severity', 'Unknown'),
+            'certainty': properties.get('certainty', 'Unknown'),
+            'area_desc': area_desc or '',
+            'headline': properties.get('headline', '') or '',
+            'description': properties.get('description', '') or '',
+            'instruction': properties.get('instruction', '') or '',
+            'raw_json': alert_payload,
+        }
+
+        return parsed, geometry
+    except Exception as exc:
+        logger.error("Failed to parse NOAA alert payload: %s", exc)
+        return None
+
+
 # =============================================================================
 # TEMPLATE FILTERS AND GLOBALS
 # =============================================================================
@@ -848,6 +929,110 @@ def stats():
             logger.error(f"Error getting fun stats: {str(e)}")
             stats_data['fun_stats'] = {'longest_headline': 0, 'most_common_event': 'None'}
 
+        # Alert analytics dataset for interactive dashboard features
+        try:
+            now = utc_now()
+            year_ago = now - timedelta(days=365)
+
+            alert_rows = db.session.query(
+                CAPAlert.identifier,
+                CAPAlert.sent,
+                CAPAlert.expires,
+                CAPAlert.severity,
+                CAPAlert.status,
+                CAPAlert.event
+            ).filter(
+                CAPAlert.sent.isnot(None),
+                CAPAlert.sent >= year_ago
+            ).order_by(CAPAlert.sent).all()
+
+            def _ensure_local(dt):
+                if dt is None:
+                    return None
+                if dt.tzinfo is None:
+                    dt = UTC_TZ.localize(dt)
+                return dt.astimezone(PUTNAM_COUNTY_TZ)
+
+            alert_events = []
+            severity_set = set()
+            status_set = set()
+            event_set = set()
+            dow_hour_matrix = [[0] * 24 for _ in range(7)]
+            daily_counts = defaultdict(int)
+            timeline_rows = []
+
+            for identifier, sent, expires, severity, status, event in alert_rows:
+                local_sent = _ensure_local(sent)
+                if local_sent is None:
+                    continue
+                local_expires = _ensure_local(expires)
+
+                severity_label = severity or 'Unknown'
+                status_label = status or 'Unknown'
+                event_label = event or 'Unknown'
+
+                severity_set.add(severity_label)
+                status_set.add(status_label)
+                event_set.add(event_label)
+
+                dow_index = (local_sent.weekday() + 1) % 7
+                dow_hour_matrix[dow_index][local_sent.hour] += 1
+                daily_counts[local_sent.date()] += 1
+
+                alert_events.append({
+                    'id': identifier,
+                    'sent': local_sent.isoformat(),
+                    'expires': local_expires.isoformat() if local_expires else None,
+                    'severity': severity_label,
+                    'status': status_label,
+                    'event': event_label
+                })
+
+                timeline_rows.append((
+                    identifier,
+                    event_label,
+                    severity_label,
+                    status_label,
+                    local_sent,
+                    local_expires
+                ))
+
+            timeline_rows.sort(key=lambda row: row[4], reverse=True)
+            stats_data['lifecycle_timeline'] = [
+                {
+                    'id': row[0],
+                    'event': row[1],
+                    'severity': row[2],
+                    'status': row[3],
+                    'start': row[4].isoformat(),
+                    'end': row[5].isoformat() if row[5] else None,
+                    'duration_hours': round(((row[5] - row[4]).total_seconds() / 3600), 2) if row[5] else None
+                }
+                for row in timeline_rows[:30]
+            ]
+            stats_data['alert_events'] = alert_events
+            stats_data['filter_options'] = {
+                'severities': sorted(severity_set),
+                'statuses': sorted(status_set),
+                'events': sorted(event_set)
+            }
+            stats_data['dow_hour_matrix'] = dow_hour_matrix
+            stats_data['daily_alerts'] = [
+                {'date': date.isoformat(), 'count': count}
+                for date, count in sorted(daily_counts.items())
+            ]
+        except Exception as e:
+            logger.error(f"Error preparing analytics dataset: {str(e)}")
+            stats_data.setdefault('lifecycle_timeline', [])
+            stats_data.setdefault('alert_events', [])
+            stats_data.setdefault('filter_options', {
+                'severities': [],
+                'statuses': [],
+                'events': []
+            })
+            stats_data.setdefault('dow_hour_matrix', [[0] * 24 for _ in range(7)])
+            stats_data.setdefault('daily_alerts', [])
+
         # Add utility functions to template context
         stats_data['format_bytes'] = format_bytes
         stats_data['format_uptime'] = format_uptime
@@ -864,9 +1049,11 @@ def system_health_page():
     """Dedicated system health monitoring page"""
     try:
         health_data = get_system_health()
-        health_data['format_bytes'] = format_bytes
-        health_data['format_uptime'] = format_uptime
-        return render_template('system_health.html', **health_data)
+        template_context = dict(health_data)
+        template_context['format_bytes'] = format_bytes
+        template_context['format_uptime'] = format_uptime
+        template_context['health_data_json'] = json.dumps(health_data)
+        return render_template('system_health.html', **template_context)
     except Exception as e:
         logger.error(f"Error loading system health page: {str(e)}")
         return f"<h1>Error loading system health</h1><p>{str(e)}</p><p><a href='/'>← Back to Main</a></p>"
@@ -1568,6 +1755,266 @@ def trigger_poll():
     except Exception as e:
         logger.error(f"Error triggering poll: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/import_alert', methods=['POST'])
+def import_specific_alert():
+    """Manually import NOAA alerts (including expired) by identifier or date range."""
+    data = request.get_json(silent=True) or request.form or {}
+
+    identifier = (data.get('identifier') or '').strip()
+    start_raw = (data.get('start') or '').strip()
+    end_raw = (data.get('end') or '').strip()
+    zone = (data.get('zone') or '').strip()
+    event_filter = (data.get('event') or '').strip()
+    status_input = (data.get('status') or '').strip().lower()
+    message_input = (data.get('message_type') or '').strip().lower()
+
+    if status_input in {'actual', 'test', 'exercise', 'system'}:
+        status_filter = status_input
+    elif status_input == 'any':
+        status_filter = ''
+    else:
+        status_filter = 'actual'
+
+    if message_input in {'alert', 'update', 'cancel', 'ack', 'error'}:
+        message_type = message_input
+    elif message_input == 'any':
+        message_type = ''
+    else:
+        message_type = 'alert'
+
+    try:
+        limit_value = int(data.get('limit', 10))
+    except (TypeError, ValueError):
+        limit_value = 10
+    limit_value = max(1, min(limit_value, 50))
+
+    def normalize_datetime(value: str) -> Optional[datetime]:
+        if not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            try:
+                parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            except ValueError:
+                logger.warning("Manual import received unrecognized datetime format: %s", value)
+                return None
+        if parsed.tzinfo is None:
+            parsed = PUTNAM_COUNTY_TZ.localize(parsed)
+        return parsed.astimezone(UTC_TZ)
+
+    def to_noaa_iso(dt_value: datetime) -> str:
+        return dt_value.astimezone(UTC_TZ).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
+
+    start_dt = normalize_datetime(start_raw)
+    end_dt = normalize_datetime(end_raw)
+
+    if start_raw and start_dt is None:
+        return jsonify({'error': 'Could not parse the provided start timestamp. Use ISO 8601 format (e.g., 2025-01-15T13:00:00-05:00).'}), 400
+
+    if end_raw and end_dt is None:
+        return jsonify({'error': 'Could not parse the provided end timestamp. Use ISO 8601 format (e.g., 2025-01-15T18:00:00-05:00).'}), 400
+
+    if not identifier and not (start_dt and end_dt):
+        return jsonify({
+            'error': 'Provide an alert identifier or both start and end timestamps.'
+        }), 400
+
+    now_utc = utc_now()
+    if end_dt and end_dt > now_utc:
+        logger.info(
+            "Clamping manual NOAA import end time %s to current UTC %s", end_dt.isoformat(), now_utc.isoformat()
+        )
+        end_dt = now_utc
+
+    if start_dt and end_dt and start_dt > end_dt:
+        return jsonify({'error': 'The start time must be before the end time.'}), 400
+
+    start = to_noaa_iso(start_dt) if start_dt else ''
+    end = to_noaa_iso(end_dt) if end_dt else ''
+
+    query_url = NOAA_API_BASE_URL
+    params: Optional[dict] = None
+
+    if identifier:
+        encoded_identifier = quote(identifier, safe=':.')
+        query_url = f"{NOAA_API_BASE_URL}/{encoded_identifier}.json"
+    else:
+        params = {
+            'limit': limit_value,
+            'sort': 'sent',
+            'format': 'geojson',
+        }
+        if status_filter:
+            params['status'] = status_filter
+        if message_type:
+            params['message_type'] = message_type
+        if start:
+            params['start'] = start
+        if end:
+            params['end'] = end
+        if zone:
+            params['zone'] = zone
+        if event_filter:
+            params['event'] = event_filter
+
+    headers = {
+        'Accept': 'application/geo+json, application/json;q=0.9',
+        'User-Agent': NOAA_USER_AGENT,
+    }
+
+    try:
+        response = requests.get(query_url, params=params, headers=headers, timeout=20)
+    except requests.RequestException as exc:
+        logger.error("NOAA alert import request failed: %s", exc)
+        return jsonify({'error': f'Failed to retrieve NOAA alert data: {exc}'}), 502
+
+    if response.status_code == 404:
+        return jsonify({
+            'error': 'No alert was found for the supplied identifier or filters.',
+            'identifier': identifier or None
+        }), 404
+
+    if response.status_code >= 400:
+        error_detail: Optional[str] = None
+        try:
+            error_payload = response.json()
+            if isinstance(error_payload, dict):
+                error_detail = error_payload.get('detail') or error_payload.get('title')
+        except ValueError:
+            error_detail = response.text.strip() or None
+        logger.error(
+            "NOAA manual import returned %s for %s with params %s: %s",
+            response.status_code,
+            response.url,
+            params,
+            error_detail or 'no error payload provided'
+        )
+        message = f'Failed to retrieve NOAA alert data: {response.status_code} {response.reason}'
+        if error_detail:
+            message = f"{message} ({error_detail})"
+        return jsonify({
+            'error': message,
+            'status_code': response.status_code,
+            'query_url': response.url,
+            'params': params
+        }), response.status_code
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        logger.error("NOAA alert import returned invalid JSON: %s", exc)
+        return jsonify({'error': 'NOAA API response could not be decoded as JSON.'}), 502
+
+    alerts_payloads: List[dict]
+    if identifier:
+        if isinstance(payload, dict) and 'features' in payload:
+            alerts_payloads = payload.get('features', []) or []
+        else:
+            alerts_payloads = [payload]
+    else:
+        alerts_payloads = payload.get('features', []) if isinstance(payload, dict) else []
+
+    if not alerts_payloads:
+        return jsonify({'error': 'NOAA API did not return any alerts for the provided criteria.'}), 404
+
+    inserted = 0
+    updated = 0
+    skipped = 0
+    identifiers: List[str] = []
+
+    try:
+        for feature in alerts_payloads:
+            parsed_result = parse_noaa_cap_alert(feature)
+            if not parsed_result:
+                skipped += 1
+                continue
+
+            parsed, geometry = parsed_result
+            alert_identifier = parsed['identifier']
+            if alert_identifier not in identifiers:
+                identifiers.append(alert_identifier)
+
+            existing = CAPAlert.query.filter_by(identifier=alert_identifier).first()
+
+            if existing:
+                for key, value in parsed.items():
+                    setattr(existing, key, value)
+                existing.updated_at = utc_now()
+                assign_alert_geometry(existing, geometry)
+                db.session.flush()
+                try:
+                    if existing.geom:
+                        calculate_alert_intersections(existing)
+                except Exception as intersection_error:
+                    logger.warning(
+                        "Intersection recalculation failed for alert %s: %s",
+                        alert_identifier,
+                        intersection_error
+                    )
+                updated += 1
+            else:
+                new_alert = CAPAlert(**parsed)
+                new_alert.created_at = utc_now()
+                new_alert.updated_at = utc_now()
+                assign_alert_geometry(new_alert, geometry)
+                db.session.add(new_alert)
+                db.session.flush()
+                try:
+                    if new_alert.geom:
+                        calculate_alert_intersections(new_alert)
+                except Exception as intersection_error:
+                    logger.warning(
+                        "Intersection calculation failed for new alert %s: %s",
+                        alert_identifier,
+                        intersection_error
+                    )
+                inserted += 1
+
+        log_entry = SystemLog(
+            level='INFO',
+            message='Manual NOAA alert import executed',
+            module='admin',
+            details={
+                'identifiers': identifiers,
+                'inserted': inserted,
+                'updated': updated,
+                'skipped': skipped,
+                'query_url': query_url,
+                'params': params,
+                'requested_filters': {
+                    'identifier': identifier or None,
+                    'start': start or None,
+                    'end': end or None,
+                    'zone': zone or None,
+                    'event': event_filter or None,
+                    'status': status_filter or 'any',
+                    'message_type': message_type or 'any',
+                    'limit': limit_value,
+                },
+                'requested_at_utc': utc_now().isoformat(),
+                'requested_at_local': local_now().isoformat()
+            }
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+
+    except Exception as exc:
+        db.session.rollback()
+        logger.error("Manual NOAA alert import failed: %s", exc)
+        return jsonify({'error': f'Failed to import NOAA alert data: {exc}'}), 500
+
+    return jsonify({
+        'message': f'Imported {inserted} alert(s) and updated {updated} existing alert(s).',
+        'inserted': inserted,
+        'updated': updated,
+        'skipped': skipped,
+        'identifiers': identifiers,
+        'query_url': query_url,
+        'params': params
+    })
 
 
 @app.route('/admin/mark_expired', methods=['POST'])
