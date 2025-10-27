@@ -393,6 +393,11 @@
                             <i class="fas fa-heartbeat"></i> System Health
                         </button>
                     </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="location-tab" data-bs-toggle="tab" data-bs-target="#location-settings" type="button" role="tab">
+                            <i class="fas fa-map-marker-alt"></i> Location Settings
+                        </button>
+                    </li>
                 </ul>
             </div>
 
@@ -416,8 +421,17 @@
                                         <option value="ems">🚑 EMS Districts</option>
                                         <option value="township">🏘️ Townships</option>
                                         <option value="telephone">📞 Telephone Providers</option>
+                                        <option value="railroads">🚆 Railroads</option>
+                                        <option value="rivers">🌊 Rivers & Streams</option>
+                                        <option value="waterbodies">💧 Lakes & Ponds</option>
                                         <option value="county">🗺️ County Outlines</option>
+                                        <option value="custom">➕ Custom Type…</option>
                                     </select>
+                                </div>
+                                <div class="mb-3" id="customBoundaryTypeWrapper" style="display: none;">
+                                    <label for="customBoundaryType" class="form-label fw-bold">Custom Type Name</label>
+                                    <input type="text" id="customBoundaryType" class="form-control" placeholder="e.g. Railroads">
+                                    <div class="form-text">Letters, numbers, and spaces are allowed. The system will create a safe identifier automatically.</div>
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -455,8 +469,17 @@
                                         <option value="ems">🚑 EMS Districts</option>
                                         <option value="township">🏘️ Townships</option>
                                         <option value="telephone">📞 Telephone Providers</option>
+                                        <option value="railroads">🚆 Railroads</option>
+                                        <option value="rivers">🌊 Rivers & Streams</option>
+                                        <option value="waterbodies">💧 Lakes & Ponds</option>
                                         <option value="county">🗺️ County Outlines</option>
+                                        <option value="custom">➕ Custom Type…</option>
                                     </select>
+                                </div>
+                                <div class="mb-3" id="customPreviewBoundaryTypeWrapper" style="display: none;">
+                                    <label for="customPreviewBoundaryType" class="form-label fw-bold">Custom Type Name</label>
+                                    <input type="text" id="customPreviewBoundaryType" class="form-control" placeholder="e.g. Rivers">
+                                    <div class="form-text">Provide a descriptive name; the system will handle the identifier.</div>
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -493,21 +516,30 @@
                         <div class="col-md-4">
                             <h5>Bulk Operations</h5>
                             <div class="operation-card">
-                                <h6>Delete by Type</h6>
-                                <select id="deleteType" class="form-select mb-3">
-                                    <option value="">Select boundary type...</option>
-                                    <option value="electric">⚡ Electric Providers</option>
-                                    <option value="villages">🏘️ Villages</option>
-                                    <option value="school">🏫 School Districts</option>
-                                    <option value="fire">🔥 Fire Districts</option>
-                                    <option value="ems">🚑 EMS Districts</option>
-                                    <option value="township">🏘️ Townships</option>
-                                    <option value="telephone">📞 Telephone Providers</option>
-                                    <option value="county">🗺️ County Outlines</option>
-                                </select>
-                                <button onclick="deleteBoundariesByType()" class="btn btn-custom btn-warning w-100 mb-2">
-                                    <i class="fas fa-trash-alt"></i> Delete by Type
-                                </button>
+                            <h6>Delete by Type</h6>
+                            <select id="deleteType" class="form-select mb-3">
+                                <option value="">Select boundary type...</option>
+                                <option value="electric">⚡ Electric Providers</option>
+                                <option value="villages">🏘️ Villages</option>
+                                <option value="school">🏫 School Districts</option>
+                                <option value="fire">🔥 Fire Districts</option>
+                                <option value="ems">🚑 EMS Districts</option>
+                                <option value="township">🏘️ Townships</option>
+                                <option value="telephone">📞 Telephone Providers</option>
+                                <option value="railroads">🚆 Railroads</option>
+                                <option value="rivers">🌊 Rivers & Streams</option>
+                                <option value="waterbodies">💧 Lakes & Ponds</option>
+                                <option value="county">🗺️ County Outlines</option>
+                                <option value="custom">➕ Custom Type…</option>
+                            </select>
+                            <div class="mb-3" id="customDeleteBoundaryTypeWrapper" style="display: none;">
+                                <label for="customDeleteBoundaryType" class="form-label fw-bold">Custom Type Name</label>
+                                <input type="text" id="customDeleteBoundaryType" class="form-control" placeholder="e.g. Rail Corridors">
+                                <div class="form-text">Enter the custom type you previously uploaded to remove it from the system.</div>
+                            </div>
+                            <button onclick="deleteBoundariesByType()" class="btn btn-custom btn-warning w-100 mb-2">
+                                <i class="fas fa-trash-alt"></i> Delete by Type
+                            </button>
                                 <button onclick="clearAllBoundaries()" class="btn btn-custom btn-danger w-100">
                                     <i class="fas fa-exclamation-triangle"></i> Clear ALL
                                 </button>
@@ -677,6 +709,66 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Location Settings Tab -->
+                <div class="tab-pane fade" id="location-settings" role="tabpanel">
+                    <h4><i class="fas fa-map-marker-alt text-primary"></i> Location Configuration</h4>
+                    <p class="text-muted">Update the jurisdiction, timezone, and NOAA filters used by the system.</p>
+
+                    <form id="locationSettingsForm" class="mt-4">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="locationCountyName" class="form-label fw-bold">County / Jurisdiction Name</label>
+                                <input type="text" class="form-control" id="locationCountyName" name="county_name" value="{{ location_settings.county_name | default('') }}" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label for="locationStateCode" class="form-label fw-bold">State Code</label>
+                                <input type="text" class="form-control" id="locationStateCode" name="state_code" value="{{ location_settings.state_code | default('') }}" maxlength="2" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="locationTimezone" class="form-label fw-bold">Timezone (IANA identifier)</label>
+                                <input type="text" class="form-control" id="locationTimezone" name="timezone" value="{{ location_settings.timezone | default('America/New_York') }}" required>
+                                <small class="text-muted">Example: America/New_York, America/Chicago</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="locationZoneCodes" class="form-label fw-bold">NOAA Zone / UGC Codes</label>
+                                <textarea class="form-control" id="locationZoneCodes" name="zone_codes" rows="3" placeholder="One code per line">{{ (location_settings.zone_codes or []) | join('\n') }}</textarea>
+                                <small class="text-muted">These codes are queried from api.weather.gov (e.g. OHZ016).</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="locationAreaTerms" class="form-label fw-bold">Area Match Keywords</label>
+                                <textarea class="form-control" id="locationAreaTerms" name="area_terms" rows="3" placeholder="Names that indicate a relevant alert">{{ (location_settings.area_terms or []) | join('\n') }}</textarea>
+                                <small class="text-muted">Used to match alerts that list multiple counties.</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="locationMapLat" class="form-label fw-bold">Map Center Latitude</label>
+                                <input type="number" step="0.0001" class="form-control" id="locationMapLat" name="map_center_lat" value="{{ location_settings.map_center_lat | default('0') }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="locationMapLng" class="form-label fw-bold">Map Center Longitude</label>
+                                <input type="number" step="0.0001" class="form-control" id="locationMapLng" name="map_center_lng" value="{{ location_settings.map_center_lng | default('0') }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="locationMapZoom" class="form-label fw-bold">Map Default Zoom</label>
+                                <input type="number" class="form-control" id="locationMapZoom" name="map_default_zoom" value="{{ location_settings.map_default_zoom | default('9') }}">
+                            </div>
+                            <div class="col-12">
+                                <label for="locationLedLines" class="form-label fw-bold">LED Sign Default Lines</label>
+                                <textarea class="form-control" id="locationLedLines" name="led_default_lines" rows="4" placeholder="Each line shown on the LED sign">{{ (location_settings.led_default_lines or []) | join('\n') }}</textarea>
+                                <small class="text-muted">These lines are used for canned messages and previews.</small>
+                            </div>
+                            <div class="col-12 d-flex align-items-center">
+                                <button type="submit" class="btn btn-custom btn-primary">
+                                    <i class="fas fa-save"></i> Save Location Settings
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary ms-2" id="resetLocationSettings">
+                                    <i class="fas fa-undo"></i> Reset Changes
+                                </button>
+                                <span class="text-muted small ms-3" id="locationSettingsStatus"></span>
+                            </div>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
 
@@ -822,13 +914,16 @@
 
     <!-- Keyboard Shortcuts Info -->
     <div class="keyboard-shortcuts">
-        <i class="fas fa-keyboard"></i> Alt+1-6: Switch Tabs | Alt+R: Refresh | Alt+H: Help
+        <i class="fas fa-keyboard"></i> Alt+1-7: Switch Tabs | Alt+R: Refresh | Alt+H: Help
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
     <script>
+        const BOUNDARY_TYPE_CONFIG = window.BOUNDARY_TYPE_CONFIG || {};
+        const DEFAULT_BOUNDARY_TYPES = new Set(Object.keys(BOUNDARY_TYPE_CONFIG));
+
         // Global variables
         let confirmationModal;
         let currentOperation = null;
@@ -837,6 +932,146 @@
         let adminAlertFilters = { includeExpired: false, search: '' };
         let alertSearchTimeout = null;
         let editingAlertId = null;
+        let locationSettingsCache = window.APP_LOCATION ? { ...window.APP_LOCATION } : null;
+
+        const sanitizeBoundaryTypeInput = (value) => {
+            if (!value) {
+                return '';
+            }
+            return value
+                .toString()
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '_')
+                .replace(/_+/g, '_')
+                .replace(/^_+|_+$/g, '');
+        };
+
+        function formatBoundaryLabel(type) {
+            const sanitized = sanitizeBoundaryTypeInput(type);
+            const config = BOUNDARY_TYPE_CONFIG[sanitized];
+            if (config && config.label) {
+                return config.label;
+            }
+            if (!sanitized) {
+                return 'Custom Layer';
+            }
+            return sanitized.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+        }
+
+        function initializeCustomTypeControls() {
+            const controls = [
+                { selectId: 'boundaryType', wrapperId: 'customBoundaryTypeWrapper', inputId: 'customBoundaryType' },
+                { selectId: 'previewBoundaryType', wrapperId: 'customPreviewBoundaryTypeWrapper', inputId: 'customPreviewBoundaryType' },
+                { selectId: 'deleteType', wrapperId: 'customDeleteBoundaryTypeWrapper', inputId: 'customDeleteBoundaryType' }
+            ];
+
+            controls.forEach(({ selectId, wrapperId, inputId }) => {
+                const select = document.getElementById(selectId);
+                const wrapper = document.getElementById(wrapperId);
+                const input = document.getElementById(inputId);
+                if (!select || !wrapper) {
+                    return;
+                }
+
+                const updateVisibility = () => {
+                    if (select.value === 'custom') {
+                        wrapper.style.display = 'block';
+                        if (input) {
+                            input.focus();
+                        }
+                    } else {
+                        wrapper.style.display = 'none';
+                        if (input) {
+                            input.value = '';
+                        }
+                    }
+                };
+
+                if (!select.dataset.customTypeBound) {
+                    select.addEventListener('change', updateVisibility);
+                    select.dataset.customTypeBound = 'true';
+                }
+                updateVisibility();
+            });
+        }
+
+        function getSelectedBoundaryType(selectId, inputId) {
+            const select = document.getElementById(selectId);
+            if (!select) {
+                return { type: null, label: null };
+            }
+
+            if (select.value === 'custom') {
+                const input = document.getElementById(inputId);
+                const rawValue = input ? input.value.trim() : '';
+                if (!rawValue) {
+                    throw new Error('Please provide a custom type name.');
+                }
+                const sanitized = sanitizeBoundaryTypeInput(rawValue);
+                if (!sanitized) {
+                    throw new Error('Custom type name must include at least one letter or number.');
+                }
+                return { type: sanitized, label: rawValue };
+            }
+
+            if (!select.value) {
+                return { type: null, label: null };
+            }
+
+            const sanitized = sanitizeBoundaryTypeInput(select.value);
+            if (!sanitized) {
+                return { type: null, label: null };
+            }
+
+            return { type: sanitized, label: formatBoundaryLabel(sanitized) };
+        }
+
+        function addOptionIfMissing(select, value, label) {
+            if (!select || !value || select.querySelector(`option[value="${value}"]`)) {
+                return;
+            }
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            const customOption = select.querySelector('option[value="custom"]');
+            if (customOption) {
+                select.insertBefore(option, customOption);
+            } else {
+                select.appendChild(option);
+            }
+        }
+
+        function ensureDynamicBoundaryOptions(typeEntries) {
+            const typeSet = new Set((typeEntries || []).map(entry => entry.key));
+            const selects = [
+                document.getElementById('boundaryType'),
+                document.getElementById('previewBoundaryType'),
+                document.getElementById('deleteType')
+            ].filter(Boolean);
+
+            selects.forEach(select => {
+                Array.from(select.options).forEach(option => {
+                    const value = option.value;
+                    if (!value || value === 'custom' || DEFAULT_BOUNDARY_TYPES.has(value)) {
+                        return;
+                    }
+                    if (!typeSet.has(value)) {
+                        option.remove();
+                    }
+                });
+            });
+
+            (typeEntries || []).forEach(entry => {
+                if (!entry || !entry.key || DEFAULT_BOUNDARY_TYPES.has(entry.key)) {
+                    return;
+                }
+                const label = entry.label || formatBoundaryLabel(entry.key);
+                addOptionIfMissing(document.getElementById('boundaryType'), entry.key, label);
+                addOptionIfMissing(document.getElementById('previewBoundaryType'), entry.key, label);
+                addOptionIfMissing(document.getElementById('deleteType'), entry.key, label);
+            });
+        }
 
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -849,6 +1084,8 @@
             loadSystemHealth();
             setupKeyboardShortcuts();
             initializeAlertManagement();
+            initializeLocationSettings();
+            initializeCustomTypeControls();
 
             // Auto-refresh every 30 seconds
             setInterval(() => {
@@ -867,6 +1104,7 @@
                         case '4': switchTab('operations-tab'); break;
                         case '5': switchTab('alerts-tab'); break;
                         case '6': switchTab('health-tab'); break;
+                        case '7': switchTab('location-tab'); break;
                         case 'r': e.preventDefault(); location.reload(); break;
                     }
                 }
@@ -971,6 +1209,140 @@
                     statusDiv.style.display = 'none';
                 }, duration);
             }
+        }
+
+        function updateLocationSettingsStatus(message, tone = 'muted') {
+            const statusEl = document.getElementById('locationSettingsStatus');
+            if (!statusEl) {
+                return;
+            }
+            statusEl.className = `ms-3 small text-${tone}`;
+            statusEl.textContent = message;
+        }
+
+        function parseListInput(value) {
+            if (!value) {
+                return [];
+            }
+            return value
+                .split(/\r?\n|,/)
+                .map((item) => item.trim())
+                .filter((item) => item.length > 0);
+        }
+
+        function populateLocationSettingsForm(settings) {
+            if (!settings) {
+                return;
+            }
+            locationSettingsCache = { ...settings };
+
+            const countyField = document.getElementById('locationCountyName');
+            const stateField = document.getElementById('locationStateCode');
+            const timezoneField = document.getElementById('locationTimezone');
+            const zoneField = document.getElementById('locationZoneCodes');
+            const areaField = document.getElementById('locationAreaTerms');
+            const latField = document.getElementById('locationMapLat');
+            const lngField = document.getElementById('locationMapLng');
+            const zoomField = document.getElementById('locationMapZoom');
+            const ledField = document.getElementById('locationLedLines');
+
+            if (countyField) countyField.value = settings.county_name || '';
+            if (stateField) stateField.value = settings.state_code || '';
+            if (timezoneField) timezoneField.value = settings.timezone || '';
+            if (zoneField) zoneField.value = (settings.zone_codes || []).join('\n');
+            if (areaField) areaField.value = (settings.area_terms || []).join('\n');
+            if (latField) latField.value = settings.map_center_lat ?? '';
+            if (lngField) lngField.value = settings.map_center_lng ?? '';
+            if (zoomField) zoomField.value = settings.map_default_zoom ?? '';
+            if (ledField) ledField.value = (settings.led_default_lines || []).join('\n');
+
+            updateLocationSettingsStatus('Loaded current configuration.', 'muted');
+        }
+
+        function serializeLocationSettingsForm() {
+            return {
+                county_name: document.getElementById('locationCountyName')?.value.trim() || '',
+                state_code: document.getElementById('locationStateCode')?.value.trim().toUpperCase() || '',
+                timezone: document.getElementById('locationTimezone')?.value.trim() || '',
+                zone_codes: parseListInput(document.getElementById('locationZoneCodes')?.value),
+                area_terms: parseListInput(document.getElementById('locationAreaTerms')?.value),
+                map_center_lat: document.getElementById('locationMapLat')?.value,
+                map_center_lng: document.getElementById('locationMapLng')?.value,
+                map_default_zoom: document.getElementById('locationMapZoom')?.value,
+                led_default_lines: parseListInput(document.getElementById('locationLedLines')?.value)
+            };
+        }
+
+        async function loadLocationSettings(force = false) {
+            try {
+                const response = await fetch('/admin/location_settings');
+                const result = await response.json();
+                if (response.ok && result.settings) {
+                    locationSettingsCache = { ...result.settings };
+                    window.APP_LOCATION = { ...result.settings };
+                    if (force) {
+                        populateLocationSettingsForm(result.settings);
+                    }
+                    updateLocationSettingsStatus('Configuration synced.', 'muted');
+                } else if (result.error) {
+                    updateLocationSettingsStatus(result.error, 'danger');
+                }
+            } catch (error) {
+                console.error('Failed to load location settings', error);
+                updateLocationSettingsStatus('Failed to load settings.', 'danger');
+            }
+        }
+
+        async function saveLocationSettings(event) {
+            event.preventDefault();
+            const payload = serializeLocationSettingsForm();
+            updateLocationSettingsStatus('Saving changes...', 'info');
+
+            try {
+                const response = await fetch('/admin/location_settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    showStatus('Location settings updated successfully.', 'success');
+                    if (result.settings) {
+                        populateLocationSettingsForm(result.settings);
+                        window.APP_LOCATION = { ...result.settings };
+                    }
+                    updateLocationSettingsStatus('Saved at ' + new Date().toLocaleTimeString(), 'success');
+                } else {
+                    const errorMessage = result.error || 'Failed to update settings.';
+                    showStatus(errorMessage, 'danger');
+                    updateLocationSettingsStatus(errorMessage, 'danger');
+                }
+            } catch (error) {
+                console.error('Failed to save location settings', error);
+                showStatus(`Failed to save location settings: ${error.message}`, 'danger');
+                updateLocationSettingsStatus('Save failed.', 'danger');
+            }
+        }
+
+        function initializeLocationSettings() {
+            const form = document.getElementById('locationSettingsForm');
+            if (!form) {
+                return;
+            }
+
+            form.addEventListener('submit', saveLocationSettings);
+
+            const resetButton = document.getElementById('resetLocationSettings');
+            if (resetButton) {
+                resetButton.addEventListener('click', () => {
+                    populateLocationSettingsForm(locationSettingsCache || window.APP_LOCATION || {});
+                    updateLocationSettingsStatus('Reverted to last saved values.', 'info');
+                });
+            }
+
+            populateLocationSettingsForm(locationSettingsCache || window.APP_LOCATION || {});
+            loadLocationSettings(true);
         }
 
         function initializeAlertManagement() {
@@ -1410,7 +1782,21 @@
         document.getElementById('uploadForm').addEventListener('submit', async function(e) {
             e.preventDefault();
 
+            let selection;
+            try {
+                selection = getSelectedBoundaryType('boundaryType', 'customBoundaryType');
+            } catch (error) {
+                showStatus(error.message, 'warning');
+                return;
+            }
+
+            if (!selection.type) {
+                showStatus('Please select a boundary type before uploading.', 'warning');
+                return;
+            }
+
             const formData = new FormData(this);
+            formData.set('boundary_type', selection.type);
             const submitBtn = this.querySelector('button[type="submit"]');
             const originalText = submitBtn.innerHTML;
 
@@ -1428,6 +1814,7 @@
                 if (response.ok) {
                     showStatus(`✅ ${result.success}`, 'success');
                     this.reset();
+                    initializeCustomTypeControls();
                     loadBoundaries();
                 } else {
                     showStatus(`❌ ${result.error}`, 'danger');
@@ -1443,8 +1830,29 @@
         // Preview extraction
         async function previewExtraction() {
             const form = document.getElementById('previewForm');
-            const formData = new FormData(form);
             const resultsDiv = document.getElementById('previewResults');
+
+            let selection;
+            try {
+                selection = getSelectedBoundaryType('previewBoundaryType', 'customPreviewBoundaryType');
+            } catch (error) {
+                showStatus(error.message, 'warning');
+                if (resultsDiv) {
+                    resultsDiv.innerHTML = '';
+                }
+                return;
+            }
+
+            if (!selection.type) {
+                showStatus('Please select a boundary type to preview.', 'warning');
+                if (resultsDiv) {
+                    resultsDiv.innerHTML = '';
+                }
+                return;
+            }
+
+            const formData = new FormData(form);
+            formData.set('boundary_type', selection.type);
 
             resultsDiv.innerHTML = '<div class="text-center py-3"><div class="loading-spinner"></div><span class="ms-2">Analyzing file...</span></div>';
 
@@ -1505,19 +1913,32 @@
                 if (data.features && data.features.length > 0) {
                     const boundariesByType = {};
                     data.features.forEach(feature => {
-                        const type = feature.properties.type;
-                        if (!boundariesByType[type]) {
-                            boundariesByType[type] = [];
+                        const props = feature.properties || {};
+                        const typeKey = sanitizeBoundaryTypeInput(props.canonical_type || props.type || props.raw_type || 'unknown');
+                        const displayLabel = props.display_type || formatBoundaryLabel(typeKey);
+                        if (!boundariesByType[typeKey]) {
+                            boundariesByType[typeKey] = {
+                                label: displayLabel,
+                                items: []
+                            };
                         }
-                        boundariesByType[type].push(feature.properties);
+                        boundariesByType[typeKey].items.push(props);
                     });
 
+                    const dynamicTypes = Object.entries(boundariesByType).map(([key, group]) => ({
+                        key,
+                        label: group.label || formatBoundaryLabel(key)
+                    }));
+                    ensureDynamicBoundaryOptions(dynamicTypes);
+
                     let html = '<div class="row">';
-                    for (const [type, boundaries] of Object.entries(boundariesByType)) {
+                    for (const [typeKey, group] of Object.entries(boundariesByType)) {
+                        const boundaries = group.items;
+                        const displayLabel = group.label || formatBoundaryLabel(typeKey);
                         html += `
                             <div class="col-md-6 col-lg-4 mb-3">
                                 <div class="operation-card">
-                                    <h6>${type.charAt(0).toUpperCase() + type.slice(1)} (${boundaries.length})</h6>
+                                    <h6>${escapeHtml(displayLabel)} (${boundaries.length})</h6>
                                     <div style="max-height: 200px; overflow-y: auto;">
                         `;
                         boundaries.slice(0, 10).forEach(boundary => {
@@ -1541,6 +1962,7 @@
                 } else {
                     listDiv.innerHTML = '<div class="alert alert-info-custom">No boundaries found. Use the upload form to add boundary files.</div>';
                 }
+                initializeCustomTypeControls();
             } catch (error) {
                 document.getElementById('boundariesList').innerHTML = `<div class="alert alert-danger-custom">Error loading boundaries: ${error.message}</div>`;
             }
@@ -1683,57 +2105,54 @@
         }
 
         async function deleteBoundariesByType() {
-            const boundaryType = document.getElementById('deleteType').value;
-            if (!boundaryType) {
+            let selection;
+            try {
+                selection = getSelectedBoundaryType('deleteType', 'customDeleteBoundaryType');
+            } catch (error) {
+                showStatus(error.message, 'warning');
+                return;
+            }
+
+            if (!selection.type) {
                 showStatus('Please select a boundary type to delete', 'warning');
                 return;
             }
 
-            try {
-                // First request
-                const response = await fetch('/admin/delete_boundaries_by_type', {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ boundary_type: boundaryType })
-                });
+            const displayLabel = selection.label || formatBoundaryLabel(selection.type);
 
-                const result = await response.json();
+            showConfirmation({
+                title: 'Delete Boundary Type',
+                message: `Delete all ${escapeHtml(displayLabel)} boundaries?`,
+                warning: 'This action cannot be undone.',
+                type: 'danger',
+                confirmText: 'Delete',
+                onConfirm: async () => {
+                    try {
+                        const response = await fetch(`/admin/clear_boundaries/${encodeURIComponent(selection.type)}`, {
+                            method: 'DELETE'
+                        });
+                        const result = await response.json();
 
-                if (result.requires_confirmation) {
-                    showConfirmation({
-                        title: 'Delete All Boundaries of Type',
-                        message: result.message,
-                        warning: result.warning,
-                        type: 'danger',
-                        confirmText: 'DELETE ALL',
-                        onConfirm: async () => {
-                            try {
-                                const confirmResponse = await fetch('/admin/delete_boundaries_by_type', {
-                                    method: 'DELETE',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ boundary_type: boundaryType, confirmed: true })
-                                });
-
-                                const confirmResult = await confirmResponse.json();
-
-                                if (confirmResponse.ok) {
-                                    showStatus(`✅ ${confirmResult.success}`, 'success');
-                                    loadBoundaries();
-                                    document.getElementById('deleteType').value = '';
-                                } else {
-                                    showStatus(`❌ ${confirmResult.error}`, 'danger');
-                                }
-                            } catch (error) {
-                                showStatus(`❌ Error: ${error.message}`, 'danger');
+                        if (response.ok) {
+                            showStatus(`✅ ${result.success}`, 'success');
+                            const select = document.getElementById('deleteType');
+                            if (select) {
+                                select.value = '';
                             }
+                            const customInput = document.getElementById('customDeleteBoundaryType');
+                            if (customInput) {
+                                customInput.value = '';
+                            }
+                            initializeCustomTypeControls();
+                            await loadBoundaries();
+                        } else {
+                            showStatus(`❌ ${result.error}`, 'danger');
                         }
-                    });
-                } else {
-                    showStatus(`ℹ️ ${result.message}`, 'info');
+                    } catch (error) {
+                        showStatus(`❌ ${error.message}`, 'danger');
+                    }
                 }
-            } catch (error) {
-                showStatus(`❌ Error: ${error.message}`, 'danger');
-            }
+            });
         }
 
         async function clearAllBoundaries() {

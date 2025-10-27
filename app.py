@@ -4,7 +4,7 @@ NOAA CAP Alerts and GIS Boundary Mapping System
 Flask Web Application with Enhanced Boundary Management and Alerts History
 
 Author: KR8MER Amateur Radio Emergency Communications
-Description: Emergency alert system for Putnam County, Ohio with proper timezone handling
+Description: Emergency alert system with configurable U.S. jurisdiction support and proper timezone handling
 Version: 2.1.5 - Incremental build metadata surfaced in the UI footer
 """
 
@@ -17,6 +17,7 @@ import json
 import psutil
 import threading
 import hashlib
+import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -26,10 +27,10 @@ from urllib.parse import quote
 
 from dotenv import load_dotenv
 import requests
+import pytz
 
 # Application utilities
 from app_utils import (
-    PUTNAM_COUNTY_TZ,
     UTC_TZ,
     build_system_health_snapshot,
     format_bytes,
@@ -37,11 +38,15 @@ from app_utils import (
     format_local_datetime,
     format_local_time,
     format_uptime,
+    get_location_timezone,
+    get_location_timezone_name,
     is_alert_expired,
     local_now,
     parse_nws_datetime as _parse_nws_datetime,
+    set_location_timezone,
     utc_now,
 )
+from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS, ensure_list, normalise_upper
 
 # Flask and extensions
 from flask import Flask, request, jsonify, render_template, flash, redirect, url_for, render_template_string, has_app_context
@@ -116,7 +121,140 @@ _db_initialized = False
 _db_initialization_error = None
 _db_init_lock = threading.Lock()
 
+_location_settings_cache: Optional[Dict[str, Any]] = None
+_location_settings_lock = threading.Lock()
+
 logger.info("NOAA Alerts System startup")
+
+# =============================================================================
+# BOUNDARY TYPE METADATA
+# =============================================================================
+
+BOUNDARY_GROUP_LABELS = {
+    'geographic': 'Geographic Boundaries',
+    'service': 'Service Boundaries',
+    'infrastructure': 'Infrastructure',
+    'hydrography': 'Water Features',
+    'custom': 'Custom Layers',
+    'unknown': 'Uncategorized Boundaries',
+}
+
+BOUNDARY_TYPE_CONFIG = {
+    'county': {
+        'label': 'Counties',
+        'group': 'geographic',
+        'color': '#6c757d',
+        'aliases': ['counties'],
+    },
+    'township': {
+        'label': 'Townships',
+        'group': 'geographic',
+        'color': '#28a745',
+        'aliases': ['townships'],
+    },
+    'villages': {
+        'label': 'Villages',
+        'group': 'geographic',
+        'color': '#17a2b8',
+        'aliases': ['village'],
+    },
+    'fire': {
+        'label': 'Fire Districts',
+        'group': 'service',
+        'color': '#dc3545',
+        'aliases': ['fire_districts'],
+    },
+    'ems': {
+        'label': 'EMS Districts',
+        'group': 'service',
+        'color': '#007bff',
+        'aliases': ['ems_districts'],
+    },
+    'school': {
+        'label': 'School Districts',
+        'group': 'service',
+        'color': '#ffc107',
+        'aliases': ['school_districts'],
+    },
+    'electric': {
+        'label': 'Electric Utilities',
+        'group': 'infrastructure',
+        'color': '#fd7e14',
+        'aliases': ['electric_utilities'],
+    },
+    'telephone': {
+        'label': 'Telephone Service',
+        'group': 'infrastructure',
+        'color': '#6f42c1',
+        'aliases': ['telephone_service'],
+    },
+    'railroads': {
+        'label': 'Railroads',
+        'group': 'infrastructure',
+        'color': '#b45309',
+        'aliases': ['railroad', 'rail', 'railway', 'railways'],
+    },
+    'rivers': {
+        'label': 'Rivers & Streams',
+        'group': 'hydrography',
+        'color': '#0ea5e9',
+        'aliases': ['river', 'streams', 'stream', 'creeks', 'creek', 'waterways', 'waterway'],
+    },
+    'waterbodies': {
+        'label': 'Lakes & Ponds',
+        'group': 'hydrography',
+        'color': '#2563eb',
+        'aliases': ['lakes', 'lake', 'ponds', 'pond', 'reservoirs', 'reservoir'],
+    },
+}
+
+
+def normalize_boundary_type(value: Optional[str]) -> str:
+    """Normalize boundary type strings for consistent storage and lookup."""
+
+    if value is None:
+        return 'unknown'
+
+    sanitized = re.sub(r'[^a-z0-9]+', '_', value.strip().lower())
+    sanitized = re.sub(r'_+', '_', sanitized).strip('_')
+
+    if not sanitized:
+        return 'unknown'
+
+    for key, config in BOUNDARY_TYPE_CONFIG.items():
+        aliases = {key}
+        aliases.update(config.get('aliases', []))
+        if sanitized in aliases:
+            return key
+
+    return sanitized
+
+
+def get_boundary_display_label(boundary_type: Optional[str]) -> str:
+    """Return a human-friendly label for a boundary type."""
+
+    normalized = normalize_boundary_type(boundary_type)
+    if normalized in BOUNDARY_TYPE_CONFIG:
+        return BOUNDARY_TYPE_CONFIG[normalized]['label']
+
+    if normalized in {'unknown', ''}:
+        return 'Unknown Boundary'
+
+    return normalized.replace('_', ' ').title()
+
+
+def get_boundary_group(boundary_type: Optional[str]) -> str:
+    """Return the logical group for a boundary type."""
+
+    normalized = normalize_boundary_type(boundary_type)
+    return BOUNDARY_TYPE_CONFIG.get(normalized, {}).get('group', 'custom')
+
+
+def get_boundary_color(boundary_type: Optional[str]) -> Optional[str]:
+    """Return a suggested color for a boundary type if one is defined."""
+
+    normalized = normalize_boundary_type(boundary_type)
+    return BOUNDARY_TYPE_CONFIG.get(normalized, {}).get('color')
 
 # =============================================================================
 # LED SIGN CONFIGURATION AND INITIALIZATION
@@ -156,7 +294,7 @@ except ImportError as e:
     MessagePriority = _fallback_message_priority()
 else:
     try:
-        led_controller = LEDSignController(LED_SIGN_IP, LED_SIGN_PORT)
+        led_controller = LEDSignController(LED_SIGN_IP, LED_SIGN_PORT, location_settings=get_location_settings())
         LED_AVAILABLE = True
         logger.info(
             "LED controller initialized successfully for %s:%s",
@@ -253,6 +391,37 @@ class PollHistory(db.Model):
     alerts_updated = db.Column(db.Integer, default=0)
     execution_time_ms = db.Column(db.Integer)
     error_message = db.Column(db.Text)
+
+
+class LocationSettings(db.Model):
+    __tablename__ = 'location_settings'
+
+    id = db.Column(db.Integer, primary_key=True)
+    county_name = db.Column(db.String(255), nullable=False, default=DEFAULT_LOCATION_SETTINGS['county_name'])
+    state_code = db.Column(db.String(2), nullable=False, default=DEFAULT_LOCATION_SETTINGS['state_code'])
+    timezone = db.Column(db.String(64), nullable=False, default=DEFAULT_LOCATION_SETTINGS['timezone'])
+    zone_codes = db.Column(db.JSON, nullable=False, default=lambda: list(DEFAULT_LOCATION_SETTINGS['zone_codes']))
+    area_terms = db.Column(db.JSON, nullable=False, default=lambda: list(DEFAULT_LOCATION_SETTINGS['area_terms']))
+    map_center_lat = db.Column(db.Float, nullable=False, default=DEFAULT_LOCATION_SETTINGS['map_center_lat'])
+    map_center_lng = db.Column(db.Float, nullable=False, default=DEFAULT_LOCATION_SETTINGS['map_center_lng'])
+    map_default_zoom = db.Column(db.Integer, nullable=False, default=DEFAULT_LOCATION_SETTINGS['map_default_zoom'])
+    led_default_lines = db.Column(db.JSON, nullable=False, default=lambda: list(DEFAULT_LOCATION_SETTINGS['led_default_lines']))
+    updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'id': self.id,
+            'county_name': self.county_name,
+            'state_code': self.state_code,
+            'timezone': self.timezone,
+            'zone_codes': list(self.zone_codes or []),
+            'area_terms': list(self.area_terms or []),
+            'map_center_lat': self.map_center_lat,
+            'map_center_lng': self.map_center_lng,
+            'map_default_zoom': self.map_default_zoom,
+            'led_default_lines': list(self.led_default_lines or []),
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
 
 
 # =============================================================================
@@ -356,6 +525,99 @@ def ensure_led_tables(force: bool = False):
             raise _led_tables_error
 
         return _ensure_led_tables_impl()
+
+
+# =============================================================================
+# LOCATION SETTINGS HELPERS
+# =============================================================================
+
+
+def _ensure_location_settings_record() -> LocationSettings:
+    settings = LocationSettings.query.first()
+    if not settings:
+        settings = LocationSettings()
+        db.session.add(settings)
+        db.session.commit()
+    return settings
+
+
+def _coerce_float(value: Any, fallback: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _coerce_int(value: Any, fallback: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def get_location_settings(force_reload: bool = False) -> Dict[str, Any]:
+    global _location_settings_cache
+
+    if force_reload:
+        _location_settings_cache = None
+
+    with _location_settings_lock:
+        if _location_settings_cache is None:
+            record = _ensure_location_settings_record()
+            _location_settings_cache = record.to_dict()
+            set_location_timezone(_location_settings_cache['timezone'])
+        return dict(_location_settings_cache)
+
+
+def update_location_settings(data: Dict[str, Any]) -> Dict[str, Any]:
+    global _location_settings_cache
+
+    with _location_settings_lock:
+        record = _ensure_location_settings_record()
+
+        county_name = str(data.get('county_name') or record.county_name or DEFAULT_LOCATION_SETTINGS['county_name']).strip()
+        state_code = str(data.get('state_code') or record.state_code or DEFAULT_LOCATION_SETTINGS['state_code']).strip().upper()
+        timezone_name = str(data.get('timezone') or record.timezone or DEFAULT_LOCATION_SETTINGS['timezone']).strip()
+
+        zone_codes = normalise_upper(data.get('zone_codes') or record.zone_codes or DEFAULT_LOCATION_SETTINGS['zone_codes'])
+        if not zone_codes:
+            zone_codes = list(DEFAULT_LOCATION_SETTINGS['zone_codes'])
+
+        area_terms = normalise_upper(data.get('area_terms') or record.area_terms or DEFAULT_LOCATION_SETTINGS['area_terms'])
+        if not area_terms:
+            area_terms = list(DEFAULT_LOCATION_SETTINGS['area_terms'])
+
+        led_lines = ensure_list(data.get('led_default_lines') or record.led_default_lines or DEFAULT_LOCATION_SETTINGS['led_default_lines'])
+        if not led_lines:
+            led_lines = list(DEFAULT_LOCATION_SETTINGS['led_default_lines'])
+
+        map_center_lat = _coerce_float(data.get('map_center_lat'), record.map_center_lat or DEFAULT_LOCATION_SETTINGS['map_center_lat'])
+        map_center_lng = _coerce_float(data.get('map_center_lng'), record.map_center_lng or DEFAULT_LOCATION_SETTINGS['map_center_lng'])
+        map_default_zoom = _coerce_int(data.get('map_default_zoom'), record.map_default_zoom or DEFAULT_LOCATION_SETTINGS['map_default_zoom'])
+
+        try:
+            pytz.timezone(timezone_name)
+        except Exception as exc:
+            logger.warning("Invalid timezone provided (%s), keeping %s: %s", timezone_name, record.timezone, exc)
+            timezone_name = record.timezone or DEFAULT_LOCATION_SETTINGS['timezone']
+
+        record.county_name = county_name
+        record.state_code = state_code
+        record.timezone = timezone_name
+        record.zone_codes = zone_codes
+        record.area_terms = area_terms
+        record.led_default_lines = led_lines
+        record.map_center_lat = map_center_lat
+        record.map_center_lng = map_center_lng
+        record.map_default_zoom = map_default_zoom
+
+        db.session.add(record)
+        db.session.commit()
+
+        _location_settings_cache = record.to_dict()
+        set_location_timezone(_location_settings_cache['timezone'])
+
+        return dict(_location_settings_cache)
 
 
 # =============================================================================
@@ -970,7 +1232,7 @@ def stats():
                     return None
                 if dt.tzinfo is None:
                     dt = UTC_TZ.localize(dt)
-                return dt.astimezone(PUTNAM_COUNTY_TZ)
+                return dt.astimezone(get_location_timezone())
 
             alert_events = []
             severity_set = set()
@@ -1451,7 +1713,7 @@ def get_alerts():
             if not is_county_wide and alert.area_desc:
                 area_lower = alert.area_desc.lower()
 
-                # Multi-county alerts that include Putnam should be treated as county-wide for Putnam
+                # Multi-county alerts that include the configured county should be treated as county-wide
                 if 'putnam' in area_lower:
                     # Count counties (semicolons or commas usually separate them)
                     separator_count = max(area_lower.count(';'), area_lower.count(','))
@@ -1628,7 +1890,8 @@ def get_boundaries():
         )
 
         if boundary_type:
-            query = query.filter(Boundary.type == boundary_type)
+            normalized_type = normalize_boundary_type(boundary_type)
+            query = query.filter(func.lower(Boundary.type) == normalized_type)
 
         if search:
             query = query.filter(Boundary.name.ilike(f'%{search}%'))
@@ -1640,12 +1903,17 @@ def get_boundaries():
         features = []
         for boundary in boundaries:
             if boundary.geometry:
+                normalized_type = normalize_boundary_type(boundary.type)
                 features.append({
                     'type': 'Feature',
                     'properties': {
                         'id': boundary.id,
                         'name': boundary.name,
-                        'type': boundary.type,
+                        'type': normalized_type,
+                        'raw_type': boundary.type,
+                        'display_type': get_boundary_display_label(boundary.type),
+                        'group': get_boundary_group(boundary.type),
+                        'color': get_boundary_color(boundary.type),
                         'description': boundary.description
                     },
                     'geometry': json.loads(boundary.geometry)
@@ -1676,17 +1944,18 @@ def api_system_status():
         current_utc = utc_now()
         current_local = local_now()
 
+        location_tz = get_location_timezone()
         return jsonify({
             'status': 'online',
             'timestamp': current_utc.isoformat(),
             'local_timestamp': current_local.isoformat(),
-            'timezone': str(PUTNAM_COUNTY_TZ),
+            'timezone': get_location_timezone_name(),
             'boundaries_count': total_boundaries,
             'active_alerts_count': active_alerts,
             'database_status': 'connected',
             'last_poll': {
                 'timestamp': last_poll.timestamp.isoformat() if last_poll else None,
-                'local_timestamp': last_poll.timestamp.astimezone(PUTNAM_COUNTY_TZ).isoformat() if last_poll else None,
+                'local_timestamp': last_poll.timestamp.astimezone(location_tz).isoformat() if last_poll else None,
                 'status': last_poll.status if last_poll else None,
                 'alerts_fetched': last_poll.alerts_fetched if last_poll else 0,
                 'alerts_new': last_poll.alerts_new if last_poll else 0
@@ -1731,12 +2000,15 @@ def admin():
             Boundary.type, func.count(Boundary.id).label('count')
         ).group_by(Boundary.type).all()
 
+        location_settings = get_location_settings()
+
         return render_template('admin.html',
                                total_boundaries=total_boundaries,
                                total_alerts=total_alerts,
                                active_alerts=active_alerts,
                                expired_alerts=expired_alerts,
-                               boundary_stats=boundary_stats
+                               boundary_stats=boundary_stats,
+                               location_settings=location_settings
                                )
     except Exception as e:
         logger.error(f"Error rendering admin template: {str(e)}")
@@ -1774,6 +2046,32 @@ def trigger_poll():
     except Exception as e:
         logger.error(f"Error triggering poll: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/location_settings', methods=['GET', 'PUT'])
+def admin_location_settings():
+    """Retrieve or update the configurable location settings."""
+    try:
+        if request.method == 'GET':
+            settings = get_location_settings()
+            return jsonify({'settings': settings})
+
+        payload = request.get_json(silent=True) or {}
+        updated = update_location_settings({
+            'county_name': payload.get('county_name'),
+            'state_code': payload.get('state_code'),
+            'timezone': payload.get('timezone'),
+            'zone_codes': payload.get('zone_codes'),
+            'area_terms': payload.get('area_terms'),
+            'led_default_lines': payload.get('led_default_lines'),
+            'map_center_lat': payload.get('map_center_lat'),
+            'map_center_lng': payload.get('map_center_lng'),
+            'map_default_zoom': payload.get('map_default_zoom'),
+        })
+        return jsonify({'success': 'Location settings updated', 'settings': updated})
+    except Exception as e:
+        logger.error("Error processing location settings update: %s", e)
+        return jsonify({'error': f'Failed to process location settings: {str(e)}'}), 500
 
 
 class NOAAImportError(Exception):
@@ -1814,7 +2112,7 @@ def normalize_manual_import_datetime(value: Union[str, datetime, None]) -> Optio
                 logger.warning("Manual import received unrecognized datetime format: %s", raw_value)
                 return None
     if dt_value.tzinfo is None:
-        dt_value = PUTNAM_COUNTY_TZ.localize(dt_value)
+        dt_value = get_location_timezone().localize(dt_value)
     return dt_value.astimezone(UTC_TZ)
 
 
@@ -2852,7 +3150,9 @@ def upload_boundaries():
             return jsonify({'error': 'No file provided'}), 400
 
         file = request.files['file']
-        boundary_type = request.form.get('boundary_type', 'unknown')
+        raw_boundary_type = request.form.get('boundary_type', 'unknown')
+        boundary_type = normalize_boundary_type(raw_boundary_type)
+        boundary_label = get_boundary_display_label(raw_boundary_type)
 
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
@@ -2903,16 +3203,22 @@ def upload_boundaries():
 
         try:
             db.session.commit()
-            logger.info(f"Successfully uploaded {boundaries_added} {boundary_type} boundaries")
+            logger.info(
+                "Successfully uploaded %s %s boundaries",
+                boundaries_added,
+                boundary_label,
+            )
         except Exception as e:
             db.session.rollback()
             return jsonify({'error': f'Database error: {str(e)}'}), 500
 
         response_data = {
-            'success': f'Successfully uploaded {boundaries_added} {boundary_type} boundaries',
+            'success': f'Successfully uploaded {boundaries_added} {boundary_label} boundaries',
             'boundaries_added': boundaries_added,
             'total_features': len(features),
-            'errors': errors[:10] if errors else []
+            'errors': errors[:10] if errors else [],
+            'normalized_type': boundary_type,
+            'display_label': boundary_label,
         }
 
         if errors:
@@ -2929,12 +3235,19 @@ def upload_boundaries():
 def clear_boundaries(boundary_type):
     """Clear all boundaries of a specific type"""
     try:
+        normalized_type = None
+
         if boundary_type == 'all':
             deleted_count = Boundary.query.delete()
             message = f'Deleted all {deleted_count} boundaries'
         else:
-            deleted_count = Boundary.query.filter_by(type=boundary_type).delete()
-            message = f'Deleted {deleted_count} {boundary_type} boundaries'
+            normalized_type = normalize_boundary_type(boundary_type)
+            deleted_count = Boundary.query.filter(
+                func.lower(Boundary.type) == normalized_type
+            ).delete(synchronize_session=False)
+            message = (
+                f"Deleted {deleted_count} {get_boundary_display_label(boundary_type)} boundaries"
+            )
 
         db.session.commit()
 
@@ -2944,6 +3257,7 @@ def clear_boundaries(boundary_type):
             module='admin',
             details={
                 'boundary_type': boundary_type,
+                'normalized_type': normalized_type if boundary_type != 'all' else 'all',
                 'deleted_count': deleted_count,
                 'deleted_at_utc': utc_now().isoformat(),
                 'deleted_at_local': local_now().isoformat()
@@ -3605,7 +3919,7 @@ def export_alerts():
             'total': len(alerts_data),
             'exported_at': utc_now().isoformat(),
             'exported_at_local': local_now().isoformat(),
-            'timezone': str(PUTNAM_COUNTY_TZ)
+            'timezone': get_location_timezone_name()
         })
 
     except Exception as e:
@@ -3640,7 +3954,7 @@ def export_boundaries():
             'total': len(boundaries_data),
             'exported_at': utc_now().isoformat(),
             'exported_at_local': local_now().isoformat(),
-            'timezone': str(PUTNAM_COUNTY_TZ)
+            'timezone': get_location_timezone_name()
         })
 
     except Exception as e:
@@ -3697,7 +4011,7 @@ def export_statistics():
             'total': len(stats_data),
             'exported_at': utc_now().isoformat(),
             'exported_at_local': local_now().isoformat(),
-            'timezone': str(PUTNAM_COUNTY_TZ)
+            'timezone': get_location_timezone_name()
         })
 
     except Exception as e:
@@ -3743,7 +4057,7 @@ def export_intersections():
             'total': len(intersection_data),
             'exported_at': utc_now().isoformat(),
             'exported_at_local': local_now().isoformat(),
-            'timezone': str(PUTNAM_COUNTY_TZ)
+            'timezone': get_location_timezone_name()
         })
 
     except Exception as e:
@@ -3839,12 +4153,13 @@ def ping():
 @app.route('/version')
 def version():
     """Version information endpoint"""
+    location = get_location_settings()
     return jsonify({
         'version': '2.0',
         'name': 'NOAA CAP Alerts System',
         'author': 'KR8MER Amateur Radio Emergency Communications',
-        'description': 'Emergency alert system for Putnam County, Ohio',
-        'timezone': str(PUTNAM_COUNTY_TZ),
+        'description': f"Emergency alert system for {location['county_name']}, {location['state_code']}",
+        'timezone': get_location_timezone_name(),
         'led_available': LED_AVAILABLE,
         'timestamp': utc_now().isoformat(),
         'local_timestamp': local_now().isoformat()
@@ -3879,12 +4194,16 @@ Allow: /
 @app.context_processor
 def inject_global_vars():
     """Inject global variables into all templates"""
+    location_settings = get_location_settings()
     return {
         'current_utc_time': utc_now(),
         'current_local_time': local_now(),
-        'timezone_name': str(PUTNAM_COUNTY_TZ),
+        'timezone_name': get_location_timezone_name(),
         'led_available': LED_AVAILABLE,
         'system_version': SYSTEM_VERSION,
+        'location_settings': location_settings,
+        'boundary_type_config': BOUNDARY_TYPE_CONFIG,
+        'boundary_group_labels': BOUNDARY_GROUP_LABELS,
     }
 
 
@@ -3935,6 +4254,8 @@ def initialize_database():
 
     try:
         db.create_all()
+        record = _ensure_location_settings_record()
+        set_location_timezone(record.timezone or DEFAULT_LOCATION_SETTINGS['timezone'])
     except OperationalError as db_error:
         _db_initialization_error = db_error
         logger.error("Database initialization failed: %s", db_error)
