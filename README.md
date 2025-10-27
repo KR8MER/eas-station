@@ -1,6 +1,6 @@
 # NOAA CAP Alerts System
 
-A Docker-based Flask application that polls NOAA Common Alerting Protocol (CAP) alerts for Putnam County, OH, displays them on an interactive map, and optionally integrates with LED signage.
+A Docker-based Flask application that polls NOAA Common Alerting Protocol (CAP) alerts for any configured U.S. jurisdiction, displays them on an interactive map, and optionally integrates with LED signage.
 
 ## Quick Start
 

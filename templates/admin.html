@@ -393,6 +393,11 @@
                             <i class="fas fa-heartbeat"></i> System Health
                         </button>
                     </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="location-tab" data-bs-toggle="tab" data-bs-target="#location-settings" type="button" role="tab">
+                            <i class="fas fa-map-marker-alt"></i> Location Settings
+                        </button>
+                    </li>
                 </ul>
             </div>
 
@@ -677,6 +682,66 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Location Settings Tab -->
+                <div class="tab-pane fade" id="location-settings" role="tabpanel">
+                    <h4><i class="fas fa-map-marker-alt text-primary"></i> Location Configuration</h4>
+                    <p class="text-muted">Update the jurisdiction, timezone, and NOAA filters used by the system.</p>
+
+                    <form id="locationSettingsForm" class="mt-4">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="locationCountyName" class="form-label fw-bold">County / Jurisdiction Name</label>
+                                <input type="text" class="form-control" id="locationCountyName" name="county_name" value="{{ location_settings.county_name | default('') }}" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label for="locationStateCode" class="form-label fw-bold">State Code</label>
+                                <input type="text" class="form-control" id="locationStateCode" name="state_code" value="{{ location_settings.state_code | default('') }}" maxlength="2" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="locationTimezone" class="form-label fw-bold">Timezone (IANA identifier)</label>
+                                <input type="text" class="form-control" id="locationTimezone" name="timezone" value="{{ location_settings.timezone | default('America/New_York') }}" required>
+                                <small class="text-muted">Example: America/New_York, America/Chicago</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="locationZoneCodes" class="form-label fw-bold">NOAA Zone / UGC Codes</label>
+                                <textarea class="form-control" id="locationZoneCodes" name="zone_codes" rows="3" placeholder="One code per line">{{ (location_settings.zone_codes or []) | join('\n') }}</textarea>
+                                <small class="text-muted">These codes are queried from api.weather.gov (e.g. OHZ016).</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="locationAreaTerms" class="form-label fw-bold">Area Match Keywords</label>
+                                <textarea class="form-control" id="locationAreaTerms" name="area_terms" rows="3" placeholder="Names that indicate a relevant alert">{{ (location_settings.area_terms or []) | join('\n') }}</textarea>
+                                <small class="text-muted">Used to match alerts that list multiple counties.</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="locationMapLat" class="form-label fw-bold">Map Center Latitude</label>
+                                <input type="number" step="0.0001" class="form-control" id="locationMapLat" name="map_center_lat" value="{{ location_settings.map_center_lat | default('0') }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="locationMapLng" class="form-label fw-bold">Map Center Longitude</label>
+                                <input type="number" step="0.0001" class="form-control" id="locationMapLng" name="map_center_lng" value="{{ location_settings.map_center_lng | default('0') }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="locationMapZoom" class="form-label fw-bold">Map Default Zoom</label>
+                                <input type="number" class="form-control" id="locationMapZoom" name="map_default_zoom" value="{{ location_settings.map_default_zoom | default('9') }}">
+                            </div>
+                            <div class="col-12">
+                                <label for="locationLedLines" class="form-label fw-bold">LED Sign Default Lines</label>
+                                <textarea class="form-control" id="locationLedLines" name="led_default_lines" rows="4" placeholder="Each line shown on the LED sign">{{ (location_settings.led_default_lines or []) | join('\n') }}</textarea>
+                                <small class="text-muted">These lines are used for canned messages and previews.</small>
+                            </div>
+                            <div class="col-12 d-flex align-items-center">
+                                <button type="submit" class="btn btn-custom btn-primary">
+                                    <i class="fas fa-save"></i> Save Location Settings
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary ms-2" id="resetLocationSettings">
+                                    <i class="fas fa-undo"></i> Reset Changes
+                                </button>
+                                <span class="text-muted small ms-3" id="locationSettingsStatus"></span>
+                            </div>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
 
@@ -822,7 +887,7 @@
 
     <!-- Keyboard Shortcuts Info -->
     <div class="keyboard-shortcuts">
-        <i class="fas fa-keyboard"></i> Alt+1-6: Switch Tabs | Alt+R: Refresh | Alt+H: Help
+        <i class="fas fa-keyboard"></i> Alt+1-7: Switch Tabs | Alt+R: Refresh | Alt+H: Help
     </div>
 </div>
 {% endblock %}
@@ -837,6 +902,7 @@
         let adminAlertFilters = { includeExpired: false, search: '' };
         let alertSearchTimeout = null;
         let editingAlertId = null;
+        let locationSettingsCache = window.APP_LOCATION ? { ...window.APP_LOCATION } : null;
 
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -849,6 +915,7 @@
             loadSystemHealth();
             setupKeyboardShortcuts();
             initializeAlertManagement();
+            initializeLocationSettings();
 
             // Auto-refresh every 30 seconds
             setInterval(() => {
@@ -867,6 +934,7 @@
                         case '4': switchTab('operations-tab'); break;
                         case '5': switchTab('alerts-tab'); break;
                         case '6': switchTab('health-tab'); break;
+                        case '7': switchTab('location-tab'); break;
                         case 'r': e.preventDefault(); location.reload(); break;
                     }
                 }
@@ -971,6 +1039,140 @@
                     statusDiv.style.display = 'none';
                 }, duration);
             }
+        }
+
+        function updateLocationSettingsStatus(message, tone = 'muted') {
+            const statusEl = document.getElementById('locationSettingsStatus');
+            if (!statusEl) {
+                return;
+            }
+            statusEl.className = `ms-3 small text-${tone}`;
+            statusEl.textContent = message;
+        }
+
+        function parseListInput(value) {
+            if (!value) {
+                return [];
+            }
+            return value
+                .split(/\r?\n|,/)
+                .map((item) => item.trim())
+                .filter((item) => item.length > 0);
+        }
+
+        function populateLocationSettingsForm(settings) {
+            if (!settings) {
+                return;
+            }
+            locationSettingsCache = { ...settings };
+
+            const countyField = document.getElementById('locationCountyName');
+            const stateField = document.getElementById('locationStateCode');
+            const timezoneField = document.getElementById('locationTimezone');
+            const zoneField = document.getElementById('locationZoneCodes');
+            const areaField = document.getElementById('locationAreaTerms');
+            const latField = document.getElementById('locationMapLat');
+            const lngField = document.getElementById('locationMapLng');
+            const zoomField = document.getElementById('locationMapZoom');
+            const ledField = document.getElementById('locationLedLines');
+
+            if (countyField) countyField.value = settings.county_name || '';
+            if (stateField) stateField.value = settings.state_code || '';
+            if (timezoneField) timezoneField.value = settings.timezone || '';
+            if (zoneField) zoneField.value = (settings.zone_codes || []).join('\n');
+            if (areaField) areaField.value = (settings.area_terms || []).join('\n');
+            if (latField) latField.value = settings.map_center_lat ?? '';
+            if (lngField) lngField.value = settings.map_center_lng ?? '';
+            if (zoomField) zoomField.value = settings.map_default_zoom ?? '';
+            if (ledField) ledField.value = (settings.led_default_lines || []).join('\n');
+
+            updateLocationSettingsStatus('Loaded current configuration.', 'muted');
+        }
+
+        function serializeLocationSettingsForm() {
+            return {
+                county_name: document.getElementById('locationCountyName')?.value.trim() || '',
+                state_code: document.getElementById('locationStateCode')?.value.trim().toUpperCase() || '',
+                timezone: document.getElementById('locationTimezone')?.value.trim() || '',
+                zone_codes: parseListInput(document.getElementById('locationZoneCodes')?.value),
+                area_terms: parseListInput(document.getElementById('locationAreaTerms')?.value),
+                map_center_lat: document.getElementById('locationMapLat')?.value,
+                map_center_lng: document.getElementById('locationMapLng')?.value,
+                map_default_zoom: document.getElementById('locationMapZoom')?.value,
+                led_default_lines: parseListInput(document.getElementById('locationLedLines')?.value)
+            };
+        }
+
+        async function loadLocationSettings(force = false) {
+            try {
+                const response = await fetch('/admin/location_settings');
+                const result = await response.json();
+                if (response.ok && result.settings) {
+                    locationSettingsCache = { ...result.settings };
+                    window.APP_LOCATION = { ...result.settings };
+                    if (force) {
+                        populateLocationSettingsForm(result.settings);
+                    }
+                    updateLocationSettingsStatus('Configuration synced.', 'muted');
+                } else if (result.error) {
+                    updateLocationSettingsStatus(result.error, 'danger');
+                }
+            } catch (error) {
+                console.error('Failed to load location settings', error);
+                updateLocationSettingsStatus('Failed to load settings.', 'danger');
+            }
+        }
+
+        async function saveLocationSettings(event) {
+            event.preventDefault();
+            const payload = serializeLocationSettingsForm();
+            updateLocationSettingsStatus('Saving changes...', 'info');
+
+            try {
+                const response = await fetch('/admin/location_settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    showStatus('Location settings updated successfully.', 'success');
+                    if (result.settings) {
+                        populateLocationSettingsForm(result.settings);
+                        window.APP_LOCATION = { ...result.settings };
+                    }
+                    updateLocationSettingsStatus('Saved at ' + new Date().toLocaleTimeString(), 'success');
+                } else {
+                    const errorMessage = result.error || 'Failed to update settings.';
+                    showStatus(errorMessage, 'danger');
+                    updateLocationSettingsStatus(errorMessage, 'danger');
+                }
+            } catch (error) {
+                console.error('Failed to save location settings', error);
+                showStatus(`Failed to save location settings: ${error.message}`, 'danger');
+                updateLocationSettingsStatus('Save failed.', 'danger');
+            }
+        }
+
+        function initializeLocationSettings() {
+            const form = document.getElementById('locationSettingsForm');
+            if (!form) {
+                return;
+            }
+
+            form.addEventListener('submit', saveLocationSettings);
+
+            const resetButton = document.getElementById('resetLocationSettings');
+            if (resetButton) {
+                resetButton.addEventListener('click', () => {
+                    populateLocationSettingsForm(locationSettingsCache || window.APP_LOCATION || {});
+                    updateLocationSettingsStatus('Reverted to last saved values.', 'info');
+                });
+            }
+
+            populateLocationSettingsForm(locationSettingsCache || window.APP_LOCATION || {});
+            loadLocationSettings(true);
         }
 
         function initializeAlertManagement() {
