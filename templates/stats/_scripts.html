@@ -1,12 +1,175 @@
 <!-- Load Highcharts and modules -->
-<script src="https://code.highcharts.com/11.4.1/stock/highstock.js"></script>
-<script src="https://code.highcharts.com/11.4.1/highcharts-more.js"></script>
-<script src="https://code.highcharts.com/11.4.1/modules/heatmap.js"></script>
-<script src="https://code.highcharts.com/11.4.1/modules/solid-gauge.js"></script>
-<script src="https://code.highcharts.com/11.4.1/modules/drilldown.js"></script>
-<script src="https://code.highcharts.com/11.4.1/modules/exporting.js"></script>
-<script src="https://code.highcharts.com/11.4.1/modules/export-data.js"></script>
-<script src="https://code.highcharts.com/11.4.1/modules/accessibility.js"></script>
+<script>
+(function setupHighchartsLoader() {
+    const HIGHCHARTS_VERSION = '12.4.0';
+    const HIGHCHARTS_VERSION_MINOR = '12.4';
+    const CDN_SOURCES = [
+        {
+            name: 'Highcharts Official (latest)',
+            resolve: (path) => `https://code.highcharts.com${path}`
+        },
+        {
+            name: `Highcharts Official v${HIGHCHARTS_VERSION}`,
+            resolve: (path) => path.startsWith('/stock/')
+                ? `https://code.highcharts.com/stock/${HIGHCHARTS_VERSION}${path.substring('/stock'.length)}`
+                : `https://code.highcharts.com/${HIGHCHARTS_VERSION}${path}`
+        },
+        {
+            name: `Highcharts Official ${HIGHCHARTS_VERSION_MINOR}.x`,
+            resolve: (path) => path.startsWith('/stock/')
+                ? `https://code.highcharts.com/stock/${HIGHCHARTS_VERSION_MINOR}${path.substring('/stock'.length)}`
+                : `https://code.highcharts.com/${HIGHCHARTS_VERSION_MINOR}${path}`
+        },
+        {
+            name: 'jsDelivr',
+            resolve: (path) => `https://cdn.jsdelivr.net/npm/highcharts@${HIGHCHARTS_VERSION}${path}`
+        },
+        {
+            name: 'unpkg',
+            resolve: (path) => `https://unpkg.com/highcharts@${HIGHCHARTS_VERSION}/dist${path}`
+        }
+    ];
+    const REQUIRED_SCRIPTS = [
+        '/stock/highstock.js',
+        '/highcharts-more.js',
+        '/modules/heatmap.js',
+        '/modules/solid-gauge.js',
+        '/modules/xrange.js',
+        '/modules/drilldown.js',
+        '/modules/exporting.js',
+        '/modules/export-data.js',
+        '/modules/accessibility.js'
+    ];
+
+    if (window.__highchartsLoadPromise) {
+        return;
+    }
+
+    function loadScript(src) {
+        return new Promise((resolve, reject) => {
+            const scripts = Array.from(document.getElementsByTagName('script'));
+            const existing = scripts.find((script) => script.src === src && script.dataset.highchartsLoader !== 'stats-dashboard-failed');
+
+            const cleanupListeners = (scriptElement, onLoad, onError) => {
+                if (!scriptElement) {
+                    return;
+                }
+                scriptElement.removeEventListener('load', onLoad);
+                scriptElement.removeEventListener('error', onError);
+            };
+
+            const resolveSuccess = (scriptElement) => {
+                if (scriptElement) {
+                    scriptElement.dataset.highchartsLoaded = 'true';
+                }
+                resolve();
+            };
+
+            const rejectFailure = (scriptElement) => {
+                if (scriptElement) {
+                    scriptElement.dataset.highchartsLoader = 'stats-dashboard-failed';
+                    if (scriptElement.parentNode) {
+                        scriptElement.parentNode.removeChild(scriptElement);
+                    }
+                }
+                reject(new Error(`Failed to load Highcharts resource: ${src}`));
+            };
+
+            if (existing) {
+                const managedByLoader = existing.dataset.highchartsLoader === 'stats-dashboard';
+                const alreadyLoaded = existing.dataset.highchartsLoaded === 'true'
+                    || !managedByLoader
+                    || existing.readyState === 'complete'
+                    || existing.readyState === 'loaded';
+                if (alreadyLoaded) {
+                    resolve();
+                    return;
+                }
+
+                const onLoad = () => {
+                    cleanupListeners(existing, onLoad, onError);
+                    resolveSuccess(existing);
+                };
+                const onError = () => {
+                    cleanupListeners(existing, onLoad, onError);
+                    rejectFailure(existing);
+                };
+
+                existing.addEventListener('load', onLoad, { once: true });
+                existing.addEventListener('error', onError, { once: true });
+                return;
+            }
+
+            const script = document.createElement('script');
+            script.src = src;
+            script.async = false;
+            script.dataset.highchartsLoader = 'stats-dashboard';
+
+            const onLoad = () => {
+                cleanupListeners(script, onLoad, onError);
+                resolveSuccess(script);
+            };
+            const onError = () => {
+                cleanupListeners(script, onLoad, onError);
+                rejectFailure(script);
+            };
+
+            script.addEventListener('load', onLoad, { once: true });
+            script.addEventListener('error', onError, { once: true });
+            document.head.appendChild(script);
+        });
+    }
+
+    function tryLoadFromCdn(cdn) {
+        console.log(`[Highcharts loader] 📦 Attempting to load Highcharts from ${cdn.name}...`);
+        return REQUIRED_SCRIPTS.reduce(
+            (chain, path) => chain.then(() => loadScript(cdn.resolve(path))),
+            Promise.resolve()
+        );
+    }
+
+    function attemptFromIndex(index) {
+        if (index >= CDN_SOURCES.length) {
+            return Promise.reject(new Error('Failed to load Highcharts from all available sources.'));
+        }
+        const cdn = CDN_SOURCES[index];
+        return tryLoadFromCdn(cdn)
+            .then(() => cdn)
+            .catch((error) => {
+                console.warn(`[Highcharts loader] ⚠️ ${cdn.name} failed: ${error.message}`);
+                return attemptFromIndex(index + 1);
+            });
+    }
+
+    if (window.Highcharts) {
+        window.__highchartsLoadPromise = Promise.resolve(window.Highcharts);
+        Promise.resolve().then(() => document.dispatchEvent(new Event('highcharts:loaded')));
+        return;
+    }
+
+    const loadPromise = attemptFromIndex(0)
+        .then((cdn) => {
+            if (!window.Highcharts) {
+                throw new Error('Highcharts did not initialize as expected.');
+            }
+            delete window.__highchartsLoadError;
+            console.log(`[Highcharts loader] ✅ Highcharts loaded successfully from ${cdn.name}.`);
+            return window.Highcharts;
+        });
+
+    window.__highchartsLoadPromise = loadPromise
+        .then((highcharts) => {
+            document.dispatchEvent(new Event('highcharts:loaded'));
+            return highcharts;
+        })
+        .catch((error) => {
+            window.__highchartsLoadError = error;
+            document.dispatchEvent(new CustomEvent('highcharts:failed', { detail: error }));
+            delete window.__highchartsLoadPromise;
+            throw error;
+        });
+})();
+</script>
 
 <script>
 console.log('🚀 Statistics dashboard initializing...');
@@ -61,15 +224,26 @@ const state = {
     staticChartsInitialized: false
 };
 
-Highcharts.setOptions({
-    colors: ['#007bff', '#28a745', '#ffc107', '#dc3545', '#17a2b8', '#6f42c1', '#fd7e14', '#20c997', '#6c757d'],
-    chart: {
-        backgroundColor: 'transparent',
-        style: { fontFamily: 'Segoe UI, sans-serif' }
-    },
-    credits: { enabled: false },
-    title: { style: { color: '#212529', fontSize: '16px' } }
-});
+let highchartsDefaultsConfigured = false;
+
+function configureHighchartsDefaults() {
+    if (highchartsDefaultsConfigured) {
+        return;
+    }
+    if (!window.Highcharts) {
+        throw new Error('Highcharts is not available.');
+    }
+    Highcharts.setOptions({
+        colors: ['#007bff', '#28a745', '#ffc107', '#dc3545', '#17a2b8', '#6f42c1', '#fd7e14', '#20c997', '#6c757d'],
+        chart: {
+            backgroundColor: 'transparent',
+            style: { fontFamily: 'Segoe UI, sans-serif' }
+        },
+        credits: { enabled: false },
+        title: { style: { color: '#212529', fontSize: '16px' } }
+    });
+    highchartsDefaultsConfigured = true;
+}
 
 function populateFilterSelect(id, options) {
     const select = document.getElementById(id);
@@ -1305,21 +1479,60 @@ function initializeFilters() {
     updateDateInputs();
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    try {
-        updateSystemInfo();
-        initializeFilters();
-        updateDashboard();
-        console.log('📊 Dashboard ready');
-    } catch (error) {
-        console.error('❌ Statistics dashboard failed to initialize', error);
-        const root = document.getElementById('statisticsDashboardRoot');
-        if (root) {
-            const alert = document.createElement('div');
-            alert.className = 'alert alert-danger mt-3';
-            alert.innerHTML = '<strong>Statistics failed to load.</strong> Please check the browser console for details.';
+function initializeDashboard() {
+    if (window.__statsDashboardInitialized) {
+        console.warn('Statistics dashboard initialization skipped because it already ran.');
+        return;
+    }
+
+    window.__statsDashboardInitialized = true;
+    configureHighchartsDefaults();
+    initializeFilters();
+    updateDashboard();
+    console.log('📊 Dashboard ready');
+}
+
+function renderInitializationFailure(message) {
+    const root = document.getElementById('statisticsDashboardRoot');
+    if (root) {
+        let alert = root.querySelector('.stats-init-error');
+        if (!alert) {
+            alert = document.createElement('div');
+            alert.className = 'alert alert-danger mt-3 stats-init-error';
             root.prepend(alert);
         }
+        alert.innerHTML = `<strong>${message}</strong> Please check the browser console for details.`;
     }
+    if (typeof showToast === 'function') {
+        showToast(message, 'error', 8000);
+    }
+}
+
+function handleInitializationError(error, message) {
+    console.error('❌ Statistics dashboard failed to initialize', error);
+    window.__statsDashboardInitialized = false;
+    renderInitializationFailure(message || 'Statistics failed to load.');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    updateSystemInfo();
+    const highchartsPromise = window.__highchartsLoadPromise;
+
+    if (!highchartsPromise) {
+        handleInitializationError(new Error('Highcharts loader was not initialized.'), 'Statistics failed to load because the charting library was not requested.');
+        return;
+    }
+
+    highchartsPromise
+        .then(() => {
+            try {
+                initializeDashboard();
+            } catch (error) {
+                handleInitializationError(error, 'Statistics failed to load.');
+            }
+        })
+        .catch((error) => {
+            handleInitializationError(error, 'Statistics failed to load because the charting library could not be loaded.');
+        });
 });
 </script>
