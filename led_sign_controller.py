@@ -15,6 +15,8 @@ from enum import Enum
 import json
 import re
 
+from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS, ensure_list
+
 
 class MessagePriority(Enum):
     """Message priority levels"""
@@ -114,7 +116,7 @@ class TimeFormat(Enum):
 class Alpha9120CController:
     """Complete Alpha 9120C LED Sign Controller with full M-Protocol support"""
 
-    def __init__(self, host: str, port: int = 10001, sign_id: str = '01', timeout: int = 10):
+    def __init__(self, host: str, port: int = 10001, sign_id: str = '01', timeout: int = 10, location_settings: Optional[Dict[str, Union[str, List[str]]]] = None):
         """
         Initialize Alpha 9120C controller with full M-Protocol support
 
@@ -129,6 +131,8 @@ class Alpha9120CController:
         self.sign_id = sign_id
         self.timeout = timeout
         self.logger = logging.getLogger(__name__)
+        self.location_settings = location_settings or DEFAULT_LOCATION_SETTINGS
+        self.default_lines = self._normalise_lines(self.location_settings.get('led_default_lines'))
 
         # Alpha 9120C specifications
         self.max_chars_per_line = 20
@@ -169,16 +173,26 @@ class Alpha9120CController:
         # Initialize connection
         self.connect()
 
+    def _normalise_lines(self, lines: Optional[Union[List[str], str]]) -> List[str]:
+        normalised = ensure_list(lines)
+        trimmed = [str(line)[:20] for line in normalised[:4]]
+        while len(trimmed) < 4:
+            trimmed.append('')
+        return trimmed
+
     def _load_canned_messages(self) -> Dict[str, Dict]:
         """Load predefined canned messages with full M-Protocol features"""
+        county_name = str(self.location_settings.get('county_name', 'Configured County')).upper()
+        welcome_lines = [
+            'WELCOME TO',
+            county_name,
+            'EMERGENCY MGMT',
+            ''
+        ]
+
         return {
             'welcome': {
-                'lines': [
-                    'WELCOME TO',
-                    'PUTNAM COUNTY',
-                    'EMERGENCY MGMT',
-                    ''
-                ],
+                'lines': welcome_lines,
                 'color': Color.GREEN,
                 'font': Font.FONT_7x9,
                 'mode': DisplayMode.WIPE_RIGHT,
@@ -230,12 +244,7 @@ class Alpha9120CController:
                 'priority': MessagePriority.NORMAL
             },
             'no_alerts': {
-                'lines': [
-                    'PUTNAM COUNTY',
-                    'NO ACTIVE',
-                    'ALERTS',
-                    'ALL CLEAR'
-                ],
+                'lines': self.default_lines,
                 'color': Color.GREEN,
                 'font': Font.FONT_7x9,
                 'mode': DisplayMode.ROLL_LEFT,
@@ -796,6 +805,10 @@ class Alpha9120CController:
         self.display_active = False
         self.disconnect()
         self.logger.info("Alpha 9120C M-Protocol controller closed")
+
+
+# Provide backwards-compatible alias used by the Flask app
+LEDSignController = Alpha9120CController
 
 
 # Example usage and testing

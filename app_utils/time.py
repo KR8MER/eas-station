@@ -1,13 +1,52 @@
-"""Time and timezone helpers used by the Flask application."""
+"""Timezone and datetime helpers for the NOAA alerts system."""
 
+from __future__ import annotations
+
+import logging
+import os
 from datetime import datetime
 from typing import Optional
 
 import pytz
 
-# Timezone configuration for Putnam County, Ohio (Eastern Time)
-PUTNAM_COUNTY_TZ = pytz.timezone("America/New_York")
+logger = logging.getLogger(__name__)
+
+DEFAULT_TIMEZONE_NAME = os.getenv("DEFAULT_TIMEZONE", "America/New_York")
 UTC_TZ = pytz.UTC
+_location_timezone = pytz.timezone(DEFAULT_TIMEZONE_NAME)
+
+
+def get_location_timezone():
+    """Return the configured location timezone object."""
+
+    return _location_timezone
+
+
+def get_location_timezone_name() -> str:
+    """Return the configured location timezone name."""
+
+    tz = get_location_timezone()
+    return getattr(tz, "zone", DEFAULT_TIMEZONE_NAME)
+
+
+def set_location_timezone(tz_name: Optional[str]) -> None:
+    """Update the location timezone used by helper utilities."""
+
+    global _location_timezone
+
+    if not tz_name:
+        return
+
+    try:
+        _location_timezone = pytz.timezone(tz_name)
+        logger.info("Updated location timezone to %s", tz_name)
+    except Exception as exc:  # pragma: no cover - safety fallback
+        logger.warning(
+            "Invalid timezone '%s', keeping %s: %s",
+            tz_name,
+            get_location_timezone_name(),
+            exc,
+        )
 
 
 def utc_now() -> datetime:
@@ -17,9 +56,9 @@ def utc_now() -> datetime:
 
 
 def local_now() -> datetime:
-    """Get the current Putnam County local time."""
+    """Get the current configured local time."""
 
-    return utc_now().astimezone(PUTNAM_COUNTY_TZ)
+    return utc_now().astimezone(get_location_timezone())
 
 
 def parse_nws_datetime(dt_string: Optional[str], logger=None) -> Optional[datetime]:
@@ -70,16 +109,23 @@ def parse_nws_datetime(dt_string: Optional[str], logger=None) -> Optional[dateti
     return None
 
 
+def _ensure_datetime(dt: Optional[datetime]) -> Optional[datetime]:
+    if dt and dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC_TZ)
+    return dt
+
+
 def format_local_datetime(dt: Optional[datetime], include_utc: bool = True) -> str:
-    """Format a datetime in Putnam County local time with optional UTC."""
+    """Format a datetime in the configured local time with optional UTC."""
 
     if not dt:
         return "Unknown"
 
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC_TZ)
+    dt = _ensure_datetime(dt)
+    if not dt:
+        return "Unknown"
 
-    local_dt = dt.astimezone(PUTNAM_COUNTY_TZ)
+    local_dt = dt.astimezone(get_location_timezone())
 
     if include_utc:
         utc_str = dt.astimezone(UTC_TZ).strftime("%H:%M UTC")
@@ -94,10 +140,11 @@ def format_local_date(dt: Optional[datetime]) -> str:
     if not dt:
         return "Unknown"
 
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC_TZ)
+    dt = _ensure_datetime(dt)
+    if not dt:
+        return "Unknown"
 
-    local_dt = dt.astimezone(PUTNAM_COUNTY_TZ)
+    local_dt = dt.astimezone(get_location_timezone())
     return local_dt.strftime("%Y-%m-%d")
 
 
@@ -107,10 +154,11 @@ def format_local_time(dt: Optional[datetime]) -> str:
     if not dt:
         return "Unknown"
 
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC_TZ)
+    dt = _ensure_datetime(dt)
+    if not dt:
+        return "Unknown"
 
-    local_dt = dt.astimezone(PUTNAM_COUNTY_TZ)
+    local_dt = dt.astimezone(get_location_timezone())
     return local_dt.strftime("%I:%M %p %Z")
 
 
@@ -120,7 +168,28 @@ def is_alert_expired(expires_dt: Optional[datetime]) -> bool:
     if not expires_dt:
         return False
 
-    if expires_dt.tzinfo is None:
-        expires_dt = expires_dt.replace(tzinfo=UTC_TZ)
+    checked_dt = _ensure_datetime(expires_dt)
+    if not checked_dt:
+        return False
 
-    return expires_dt < utc_now()
+    return checked_dt < utc_now()
+
+
+# Backwards compatibility exports -----------------------------------------------------
+# Older code imported PUTNAM_COUNTY_TZ directly. Provide a proxy that keeps backwards
+# compatibility while using the dynamic timezone implementation above.
+
+
+class _TimezoneProxy:
+    def __getattr__(self, item):  # pragma: no cover - simple delegation
+        return getattr(get_location_timezone(), item)
+
+    def __str__(self) -> str:  # pragma: no cover - simple delegation
+        return str(get_location_timezone())
+
+    def __repr__(self) -> str:  # pragma: no cover - simple delegation
+        return repr(get_location_timezone())
+
+
+PUTNAM_COUNTY_TZ = _TimezoneProxy()
+
