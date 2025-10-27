@@ -5,7 +5,7 @@ Flask Web Application with Enhanced Boundary Management and Alerts History
 
 Author: KR8MER Amateur Radio Emergency Communications
 Description: Emergency alert system for Putnam County, Ohio with proper timezone handling
-Version: 2.1.4 - Incremental build metadata surfaced in the UI footer
+Version: 2.1.5 - Incremental build metadata surfaced in the UI footer
 """
 
 # =============================================================================
@@ -17,7 +17,7 @@ import json
 import psutil
 import threading
 import hashlib
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 from datetime import datetime, timedelta
 from collections import defaultdict
 from enum import Enum
@@ -72,10 +72,29 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
 # Application versioning (exposed via templates for quick deployment verification)
-SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.4')
+SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.5')
 
 # NOAA API configuration for manual alert import workflows
 NOAA_API_BASE_URL = 'https://api.weather.gov/alerts'
+# Allowed query parameters documented at
+# https://www.weather.gov/documentation/services-web-api#/default/get_alerts
+NOAA_ALLOWED_QUERY_PARAMS = frozenset({
+    'area',
+    'zone',
+    'region',
+    'region_type',
+    'point',
+    'start',
+    'end',
+    'event',
+    'status',
+    'message_type',
+    'urgency',
+    'severity',
+    'certainty',
+    'limit',
+    'cursor',
+})
 NOAA_USER_AGENT = os.environ.get(
     'NOAA_USER_AGENT',
     'KR8MER CAP Alert System/2.1 (+https://github.com/KR8MER/noaa_alerts_systems)'
@@ -1811,11 +1830,8 @@ def build_noaa_alert_request(
     identifier: Optional[str] = None,
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
-    zone: Optional[str] = None,
     area: Optional[str] = None,
     event: Optional[str] = None,
-    status: Optional[str] = None,
-    message_type: Optional[str] = None,
     limit: int = 10,
 ) -> Tuple[str, Optional[Dict[str, Union[str, int]]]]:
     """Construct the NOAA alerts endpoint and query parameters for manual imports."""
@@ -1826,15 +1842,7 @@ def build_noaa_alert_request(
         encoded_identifier = quote(identifier.strip(), safe=':.')
         query_url = f"{NOAA_API_BASE_URL}/{encoded_identifier}.json"
     else:
-        safe_limit = max(1, min(int(limit or 10), 50))
-        params = {
-            'limit': safe_limit,
-            'sort': 'sent',
-        }
-        if status:
-            params['status'] = status
-        if message_type:
-            params['message_type'] = message_type
+        params = {}
         if start:
             formatted_start = format_noaa_timestamp(start)
             if formatted_start:
@@ -1845,12 +1853,56 @@ def build_noaa_alert_request(
                 params['end'] = formatted_end
         if area:
             params['area'] = area
-        elif zone:
-            params['zone'] = zone
         if event:
             params['event'] = event
 
+        if params:
+            params = {
+                key: value
+                for key, value in params.items()
+                if key in NOAA_ALLOWED_QUERY_PARAMS and value is not None
+            } or None
+        else:
+            params = None
+
     return query_url, params
+
+
+def _alert_datetime_to_iso(dt_value: Optional[datetime]) -> Optional[str]:
+    """Render alert datetimes in ISO8601 with UTC timezone."""
+
+    if not dt_value:
+        return None
+    if dt_value.tzinfo is None:
+        aware_value = dt_value.replace(tzinfo=UTC_TZ)
+    else:
+        aware_value = dt_value.astimezone(UTC_TZ)
+    return aware_value.isoformat()
+
+
+def serialize_admin_alert(alert: CAPAlert) -> Dict[str, Any]:
+    """Return a JSON-serializable representation of an alert for admin tooling."""
+
+    return {
+        'id': alert.id,
+        'identifier': alert.identifier,
+        'event': alert.event,
+        'headline': alert.headline,
+        'description': alert.description,
+        'instruction': alert.instruction,
+        'area_desc': alert.area_desc,
+        'status': alert.status,
+        'message_type': alert.message_type,
+        'scope': alert.scope,
+        'category': alert.category,
+        'severity': alert.severity,
+        'urgency': alert.urgency,
+        'certainty': alert.certainty,
+        'sent': _alert_datetime_to_iso(alert.sent),
+        'expires': _alert_datetime_to_iso(alert.expires),
+        'updated_at': _alert_datetime_to_iso(alert.updated_at),
+        'created_at': _alert_datetime_to_iso(alert.created_at),
+    }
 
 
 def retrieve_noaa_alerts(
@@ -1858,11 +1910,8 @@ def retrieve_noaa_alerts(
     identifier: Optional[str] = None,
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
-    zone: Optional[str] = None,
     area: Optional[str] = None,
     event: Optional[str] = None,
-    status: Optional[str] = None,
-    message_type: Optional[str] = None,
     limit: int = 10,
 ) -> Tuple[List[dict], str, Optional[Dict[str, Union[str, int]]]]:
     """Execute a NOAA alerts query and return parsed features."""
@@ -1870,11 +1919,8 @@ def retrieve_noaa_alerts(
         identifier=identifier,
         start=start,
         end=end,
-        zone=zone,
         area=area,
         event=event,
-        status=status,
-        message_type=message_type,
         limit=limit,
     )
 
@@ -1905,10 +1951,22 @@ def retrieve_noaa_alerts(
 
     if response.status_code >= 400:
         error_detail: Optional[str] = None
+        parameter_errors: Optional[List[str]] = None
         try:
             error_payload = response.json()
             if isinstance(error_payload, dict):
                 error_detail = error_payload.get('detail') or error_payload.get('title')
+                raw_parameter_errors = error_payload.get('parameterErrors')
+                if isinstance(raw_parameter_errors, list):
+                    formatted_errors = []
+                    for item in raw_parameter_errors:
+                        if isinstance(item, dict):
+                            name = item.get('parameter')
+                            message = item.get('message')
+                            if name and message:
+                                formatted_errors.append(f"{name}: {message}")
+                    if formatted_errors:
+                        parameter_errors = formatted_errors
         except ValueError:
             error_detail = response.text.strip() or None
 
@@ -1923,6 +1981,8 @@ def retrieve_noaa_alerts(
         message = f'Failed to retrieve NOAA alert data: {response.status_code} {response.reason}'
         if error_detail:
             message = f"{message} ({error_detail})"
+        if parameter_errors:
+            message = f"{message} — {'; '.join(parameter_errors)}"
 
         raise NOAAImportError(
             message,
@@ -1950,6 +2010,13 @@ def retrieve_noaa_alerts(
     else:
         alerts_payloads = payload.get('features', []) if isinstance(payload, dict) else []
 
+    if not identifier:
+        try:
+            effective_limit = max(1, min(int(limit or 10), 50))
+        except (TypeError, ValueError):
+            effective_limit = 10
+        alerts_payloads = alerts_payloads[:effective_limit]
+
     if not alerts_payloads:
         raise NOAAImportError(
             'NOAA API did not return any alerts for the provided criteria.',
@@ -1969,25 +2036,8 @@ def import_specific_alert():
     identifier = (data.get('identifier') or '').strip()
     start_raw = (data.get('start') or '').strip()
     end_raw = (data.get('end') or '').strip()
-    zone = (data.get('zone') or '').strip()
     area = (data.get('area') or '').strip()
     event_filter = (data.get('event') or '').strip()
-    status_input = (data.get('status') or '').strip().lower()
-    message_input = (data.get('message_type') or '').strip().lower()
-
-    if status_input in {'actual', 'test', 'exercise', 'system'}:
-        status_filter = status_input
-    elif status_input == 'any':
-        status_filter = ''
-    else:
-        status_filter = 'actual'
-
-    if message_input in {'alert', 'update', 'cancel', 'ack', 'error'}:
-        message_type = message_input
-    elif message_input == 'any':
-        message_type = ''
-    else:
-        message_type = 'alert'
 
     try:
         limit_value = int(data.get('limit', 10))
@@ -2019,19 +2069,23 @@ def import_specific_alert():
     if start_dt and end_dt and start_dt > end_dt:
         return jsonify({'error': 'The start time must be before the end time.'}), 400
 
-    normalized_area = area.upper()[:2] if area else None
-    normalized_zone = zone.upper() if zone else None
+    cleaned_area = ''.join(ch for ch in area.upper() if ch.isalpha()) if area else ''
+    normalized_area = cleaned_area[:2] if cleaned_area else None
+
+    if identifier:
+        if area and (not normalized_area or len(normalized_area) != 2):
+            return jsonify({'error': 'State filters must use the two-letter postal abbreviation.'}), 400
+    else:
+        if not normalized_area or len(normalized_area) != 2:
+            return jsonify({'error': 'Provide the two-letter state code when searching without an identifier.'}), 400
 
     try:
         alerts_payloads, query_url, params = retrieve_noaa_alerts(
             identifier=identifier or None,
             start=start_dt,
             end=end_dt,
-            zone=normalized_zone,
             area=normalized_area,
             event=event_filter or None,
-            status=status_filter or None,
-            message_type=message_type or None,
             limit=limit_value,
         )
     except NOAAImportError as exc:
@@ -2120,10 +2174,7 @@ def import_specific_alert():
                     'start': start_iso,
                     'end': end_iso,
                     'area': normalized_area,
-                    'zone': normalized_zone,
                     'event': event_filter or None,
-                    'status': status_filter or 'any',
-                    'message_type': message_type or 'any',
                     'limit': limit_value,
                 },
                 'requested_at_utc': utc_now().isoformat(),
@@ -2147,6 +2198,204 @@ def import_specific_alert():
         'query_url': query_url,
         'params': params
     })
+
+
+@app.route('/admin/alerts', methods=['GET'])
+def admin_list_alerts():
+    """List alerts for the admin UI with optional search and expiration filters."""
+
+    try:
+        include_expired = request.args.get('include_expired', 'false').lower() == 'true'
+        search_term = (request.args.get('search') or '').strip()
+        limit_param = request.args.get('limit', type=int)
+        limit = 100 if not limit_param else max(1, min(limit_param, 200))
+
+        base_query = CAPAlert.query
+
+        if not include_expired:
+            now = utc_now()
+            base_query = base_query.filter(
+                or_(CAPAlert.expires.is_(None), CAPAlert.expires > now)
+            )
+
+        if search_term:
+            like_pattern = f"%{search_term}%"
+            base_query = base_query.filter(
+                or_(
+                    CAPAlert.identifier.ilike(like_pattern),
+                    CAPAlert.event.ilike(like_pattern),
+                    CAPAlert.headline.ilike(like_pattern)
+                )
+            )
+
+        total_count = base_query.order_by(None).count()
+        alerts = (
+            base_query
+            .order_by(desc(CAPAlert.sent))
+            .limit(limit)
+            .all()
+        )
+
+        serialized_alerts = [serialize_admin_alert(alert) for alert in alerts]
+
+        return jsonify({
+            'alerts': serialized_alerts,
+            'returned': len(serialized_alerts),
+            'total': total_count,
+            'include_expired': include_expired,
+            'limit': limit,
+            'search': search_term or None,
+        })
+    except Exception as exc:
+        logger.error("Failed to load alerts for admin listing: %s", exc)
+        return jsonify({'error': 'Failed to load alerts.'}), 500
+
+
+@app.route('/admin/alerts/<int:alert_id>', methods=['GET', 'PATCH', 'DELETE'])
+def admin_alert_detail(alert_id: int):
+    """Retrieve, update, or delete a single alert from the admin interface."""
+
+    alert = CAPAlert.query.get(alert_id)
+    if not alert:
+        return jsonify({'error': 'Alert not found.'}), 404
+
+    if request.method == 'GET':
+        return jsonify({'alert': serialize_admin_alert(alert)})
+
+    if request.method == 'DELETE':
+        identifier = alert.identifier
+        try:
+            Intersection.query.filter_by(cap_alert_id=alert.id).delete(synchronize_session=False)
+
+            try:
+                if ensure_led_tables():
+                    LEDMessage.query.filter_by(alert_id=alert.id).delete(synchronize_session=False)
+            except Exception as led_cleanup_error:
+                logger.warning(
+                    "Failed to clean LED messages for alert %s during deletion: %s",
+                    identifier,
+                    led_cleanup_error,
+                )
+                db.session.rollback()
+                return jsonify({'error': 'Failed to remove LED sign entries linked to this alert.'}), 500
+
+            db.session.delete(alert)
+
+            log_entry = SystemLog(
+                level='WARNING',
+                message='Alert deleted from admin interface',
+                module='admin',
+                details={
+                    'alert_id': alert_id,
+                    'identifier': identifier,
+                    'deleted_at_utc': utc_now().isoformat(),
+                },
+            )
+            db.session.add(log_entry)
+            db.session.commit()
+
+            logger.info("Admin deleted alert %s (%s)", identifier, alert_id)
+            return jsonify({'message': f'Alert {identifier} deleted.', 'identifier': identifier})
+        except Exception as exc:
+            db.session.rollback()
+            logger.error("Failed to delete alert %s (%s): %s", identifier, alert_id, exc)
+            return jsonify({'error': 'Failed to delete alert.'}), 500
+
+    payload = request.get_json(silent=True) or {}
+    if not payload:
+        return jsonify({'error': 'No update payload provided.'}), 400
+
+    allowed_fields = {
+        'event',
+        'headline',
+        'description',
+        'instruction',
+        'area_desc',
+        'status',
+        'severity',
+        'urgency',
+        'certainty',
+        'category',
+        'expires',
+    }
+    required_non_empty = {'event', 'status'}
+
+    updates: Dict[str, Any] = {}
+    change_details: Dict[str, Dict[str, Optional[str]]] = {}
+
+    for field in allowed_fields:
+        if field not in payload:
+            continue
+
+        value = payload[field]
+
+        if field == 'expires':
+            if value in (None, '', []):
+                updates[field] = None
+            else:
+                normalized = normalize_manual_import_datetime(value)
+                if not normalized:
+                    return jsonify({'error': 'Could not parse the provided expiration time.'}), 400
+                updates[field] = normalized
+        else:
+            if isinstance(value, str):
+                value = value.strip()
+            if field in required_non_empty and not value:
+                return jsonify({'error': f'{field.replace("_", " ").title()} is required.'}), 400
+            updates[field] = value or None
+
+        previous_value = getattr(alert, field)
+        if isinstance(previous_value, datetime):
+            previous_rendered = _alert_datetime_to_iso(previous_value)
+        else:
+            previous_rendered = previous_value
+
+        new_value = updates[field]
+        if isinstance(new_value, datetime):
+            new_rendered: Optional[str] = new_value.isoformat()
+        else:
+            new_rendered = new_value
+
+        change_details[field] = {
+            'old': previous_rendered,
+            'new': new_rendered,
+        }
+
+    if not updates:
+        return jsonify({'message': 'No changes detected.', 'alert': serialize_admin_alert(alert)})
+
+    try:
+        for field, value in updates.items():
+            setattr(alert, field, value)
+
+        alert.updated_at = utc_now()
+
+        log_entry = SystemLog(
+            level='INFO',
+            message='Alert updated from admin interface',
+            module='admin',
+            details={
+                'alert_id': alert.id,
+                'identifier': alert.identifier,
+                'changes': change_details,
+                'updated_at_utc': alert.updated_at.isoformat(),
+            },
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+
+        logger.info(
+            "Admin updated alert %s fields: %s",
+            alert.identifier,
+            ', '.join(sorted(updates.keys())),
+        )
+
+        db.session.refresh(alert)
+        return jsonify({'message': 'Alert updated successfully.', 'alert': serialize_admin_alert(alert)})
+    except Exception as exc:
+        db.session.rollback()
+        logger.error("Failed to update alert %s (%s): %s", alert.identifier, alert.id, exc)
+        return jsonify({'error': 'Failed to update alert.'}), 500
 
 
 @app.route('/admin/mark_expired', methods=['POST'])

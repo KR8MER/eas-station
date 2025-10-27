@@ -26,10 +26,6 @@ from app import (
 )
 
 
-VALID_STATUSES = {'actual', 'test', 'exercise', 'system'}
-VALID_MESSAGE_TYPES = {'alert', 'update', 'cancel', 'ack', 'error'}
-
-
 def parse_cli_datetime(raw_value: str, description: str) -> datetime:
     """Parse a CLI datetime argument into a timezone-aware UTC datetime."""
     dt_value = normalize_manual_import_datetime(raw_value)
@@ -38,30 +34,6 @@ def parse_cli_datetime(raw_value: str, description: str) -> datetime:
             f"Could not parse {description} '{raw_value}'. Provide an ISO 8601 timestamp."
         )
     return dt_value
-
-
-def sanitize_status(value: Optional[str]) -> Optional[str]:
-    """Normalize CLI status input to the subset accepted by the NOAA API."""
-    normalized = (value or '').strip().lower()
-    if not normalized or normalized == 'any':
-        return None
-    if normalized in VALID_STATUSES:
-        return normalized
-    raise argparse.ArgumentTypeError(
-        f"Unsupported status '{value}'. Valid options: actual, test, exercise, system, any."
-    )
-
-
-def sanitize_message_type(value: Optional[str]) -> Optional[str]:
-    """Normalize CLI message type to the allowed NOAA values."""
-    normalized = (value or '').strip().lower()
-    if not normalized or normalized == 'any':
-        return None
-    if normalized in VALID_MESSAGE_TYPES:
-        return normalized
-    raise argparse.ArgumentTypeError(
-        f"Unsupported message type '{value}'. Valid options: alert, update, cancel, ack, error, any."
-    )
 
 
 def determine_window(args: argparse.Namespace) -> tuple[Optional[datetime], Optional[datetime]]:
@@ -100,25 +72,28 @@ def determine_window(args: argparse.Namespace) -> tuple[Optional[datetime], Opti
 def execute_import(args: argparse.Namespace) -> int:
     """Run the manual import workflow using the shared Flask application context."""
     identifier = (args.identifier or '').strip()
-    zone = (args.zone or '').strip()
     area = (args.area or '').strip()
     event_filter = (args.event or '').strip()
-    status_filter = sanitize_status(args.status)
-    message_type_filter = sanitize_message_type(args.message_type)
     limit_value = max(1, min(int(args.limit or 10), 50))
 
     start_dt, end_dt = determine_window(args)
     start_iso = format_noaa_timestamp(start_dt)
     end_iso = format_noaa_timestamp(end_dt)
 
-    zone_filter = zone.upper() if zone else None
-    area_filter = area.upper()[:2] if area else None
+    cleaned_area = ''.join(ch for ch in area.upper() if ch.isalpha()) if area else ''
+    area_filter = cleaned_area[:2] if cleaned_area else None
+
+    if identifier:
+        if area and (not area_filter or len(area_filter) != 2):
+            raise argparse.ArgumentTypeError('State filters must use the two-letter postal abbreviation.')
+    else:
+        if not area_filter or len(area_filter) != 2:
+            raise argparse.ArgumentTypeError('Provide the two-letter state code when searching without an identifier.')
 
     logger.info(
-        "Manual NOAA fetch starting with identifier=%s, area=%s, zone=%s, start=%s, end=%s",
+        "Manual NOAA fetch starting with identifier=%s, area=%s, start=%s, end=%s",
         identifier or '—',
         area_filter or '—',
-        zone_filter or '—',
         start_iso or '—',
         end_iso or '—',
     )
@@ -128,11 +103,8 @@ def execute_import(args: argparse.Namespace) -> int:
             identifier=identifier or None,
             start=start_dt,
             end=end_dt,
-            zone=zone_filter,
             area=area_filter,
             event=event_filter or None,
-            status=status_filter,
-            message_type=message_type_filter,
             limit=limit_value,
         )
     except NOAAImportError as exc:
@@ -239,10 +211,7 @@ def execute_import(args: argparse.Namespace) -> int:
                     'start': start_iso,
                     'end': end_iso,
                     'area': area_filter,
-                    'zone': zone_filter,
                     'event': event_filter or None,
-                    'status': status_filter or 'any',
-                    'message_type': message_type_filter or 'any',
                     'limit': limit_value,
                 },
                 'requested_at_utc': utc_now().isoformat(),
@@ -270,15 +239,8 @@ def build_parser() -> argparse.ArgumentParser:
         description='Fetch NOAA alerts (including expired) and store them locally.'
     )
     parser.add_argument('--identifier', help='Specific alert identifier to import.')
-    parser.add_argument('--area', help='NOAA area (state/territory) code (e.g., OH).')
-    parser.add_argument('--zone', help='NOAA zone identifier (e.g., OHZ016).')
+    parser.add_argument('--area', help='Two-letter NOAA area (state/territory) code (e.g., OH).')
     parser.add_argument('--event', help='Filter by event name (e.g., Tornado Warning).')
-    parser.add_argument('--status', default='actual', help='NOAA alert status filter (actual/test/exercise/system/any).')
-    parser.add_argument(
-        '--message-type',
-        default='alert',
-        help='NOAA message type (alert/update/cancel/ack/error/any).',
-    )
     parser.add_argument('--start', help='Start of the date range (ISO 8601).')
     parser.add_argument('--end', help='End of the date range (ISO 8601).')
     parser.add_argument(
