@@ -540,7 +540,7 @@
                                         {% endif %}
                                     </h6>
                                     <p class="mb-2">
-                                        This alert covers <strong>{{ county_coverage }}%</strong> of Putnam County
+                                        This alert covers <strong>{{ county_coverage }}%</strong> of {{ location_settings.county_name }}
                                         {% if county_coverage >= 95 %}
                                             , affecting virtually all emergency service boundaries.
                                         {% elif county_coverage >= 75 %}
@@ -748,7 +748,7 @@
                         <div class="card-header">
                             <h5 class="mb-0">
                                 <i class="fas fa-clock"></i> Timing Information
-                                <small class="text-muted">(Putnam County Time)</small>
+                                <small class="text-muted">({{ location_settings.county_name }} Time)</small>
                             </h5>
                         </div>
                         <div class="card-body timing-card">
@@ -790,7 +790,7 @@
                             </div>
                             <hr>
                             <small class="text-muted">
-                                <i class="fas fa-info-circle"></i> All times shown in Eastern Time (Putnam County local time) with UTC reference.
+                                <i class="fas fa-info-circle"></i> All times shown in {{ location_settings.timezone }} local time with UTC reference.
                                 Times automatically adjust for daylight saving changes.
                             </small>
                         </div>
@@ -830,7 +830,7 @@
                             {% if coverage_data and coverage_data.get('county') %}
                             <div class="detail-item">
                                 <span class="detail-label">Exact Coverage</span>
-                                {{ coverage_data['county']['coverage_percentage'] }}% of Putnam County
+                                {{ coverage_data['county']['coverage_percentage'] }}% of {{ location_settings.county_name }}
                             </div>
                             {% endif %}
                             <hr>
