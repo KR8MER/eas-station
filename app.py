@@ -76,6 +76,25 @@ SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.4')
 
 # NOAA API configuration for manual alert import workflows
 NOAA_API_BASE_URL = 'https://api.weather.gov/alerts'
+# Allowed query parameters documented at
+# https://www.weather.gov/documentation/services-web-api#/default/get_alerts
+NOAA_ALLOWED_QUERY_PARAMS = frozenset({
+    'area',
+    'zone',
+    'region',
+    'region_type',
+    'point',
+    'start',
+    'end',
+    'event',
+    'status',
+    'message_type',
+    'urgency',
+    'severity',
+    'certainty',
+    'limit',
+    'cursor',
+})
 NOAA_USER_AGENT = os.environ.get(
     'NOAA_USER_AGENT',
     'KR8MER CAP Alert System/2.1 (+https://github.com/KR8MER/noaa_alerts_systems)'
@@ -1811,11 +1830,8 @@ def build_noaa_alert_request(
     identifier: Optional[str] = None,
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
-    zone: Optional[str] = None,
     area: Optional[str] = None,
     event: Optional[str] = None,
-    status: Optional[str] = None,
-    message_type: Optional[str] = None,
     limit: int = 10,
 ) -> Tuple[str, Optional[Dict[str, Union[str, int]]]]:
     """Construct the NOAA alerts endpoint and query parameters for manual imports."""
@@ -1826,15 +1842,7 @@ def build_noaa_alert_request(
         encoded_identifier = quote(identifier.strip(), safe=':.')
         query_url = f"{NOAA_API_BASE_URL}/{encoded_identifier}.json"
     else:
-        safe_limit = max(1, min(int(limit or 10), 50))
-        params = {
-            'limit': safe_limit,
-            'sort': 'sent',
-        }
-        if status:
-            params['status'] = status
-        if message_type:
-            params['message_type'] = message_type
+        params = {}
         if start:
             formatted_start = format_noaa_timestamp(start)
             if formatted_start:
@@ -1845,10 +1853,17 @@ def build_noaa_alert_request(
                 params['end'] = formatted_end
         if area:
             params['area'] = area
-        elif zone:
-            params['zone'] = zone
         if event:
             params['event'] = event
+
+        if params:
+            params = {
+                key: value
+                for key, value in params.items()
+                if key in NOAA_ALLOWED_QUERY_PARAMS and value is not None
+            } or None
+        else:
+            params = None
 
     return query_url, params
 
@@ -1858,11 +1873,8 @@ def retrieve_noaa_alerts(
     identifier: Optional[str] = None,
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
-    zone: Optional[str] = None,
     area: Optional[str] = None,
     event: Optional[str] = None,
-    status: Optional[str] = None,
-    message_type: Optional[str] = None,
     limit: int = 10,
 ) -> Tuple[List[dict], str, Optional[Dict[str, Union[str, int]]]]:
     """Execute a NOAA alerts query and return parsed features."""
@@ -1870,11 +1882,8 @@ def retrieve_noaa_alerts(
         identifier=identifier,
         start=start,
         end=end,
-        zone=zone,
         area=area,
         event=event,
-        status=status,
-        message_type=message_type,
         limit=limit,
     )
 
@@ -1905,10 +1914,22 @@ def retrieve_noaa_alerts(
 
     if response.status_code >= 400:
         error_detail: Optional[str] = None
+        parameter_errors: Optional[List[str]] = None
         try:
             error_payload = response.json()
             if isinstance(error_payload, dict):
                 error_detail = error_payload.get('detail') or error_payload.get('title')
+                raw_parameter_errors = error_payload.get('parameterErrors')
+                if isinstance(raw_parameter_errors, list):
+                    formatted_errors = []
+                    for item in raw_parameter_errors:
+                        if isinstance(item, dict):
+                            name = item.get('parameter')
+                            message = item.get('message')
+                            if name and message:
+                                formatted_errors.append(f"{name}: {message}")
+                    if formatted_errors:
+                        parameter_errors = formatted_errors
         except ValueError:
             error_detail = response.text.strip() or None
 
@@ -1923,6 +1944,8 @@ def retrieve_noaa_alerts(
         message = f'Failed to retrieve NOAA alert data: {response.status_code} {response.reason}'
         if error_detail:
             message = f"{message} ({error_detail})"
+        if parameter_errors:
+            message = f"{message} — {'; '.join(parameter_errors)}"
 
         raise NOAAImportError(
             message,
@@ -1950,6 +1973,13 @@ def retrieve_noaa_alerts(
     else:
         alerts_payloads = payload.get('features', []) if isinstance(payload, dict) else []
 
+    if not identifier:
+        try:
+            effective_limit = max(1, min(int(limit or 10), 50))
+        except (TypeError, ValueError):
+            effective_limit = 10
+        alerts_payloads = alerts_payloads[:effective_limit]
+
     if not alerts_payloads:
         raise NOAAImportError(
             'NOAA API did not return any alerts for the provided criteria.',
@@ -1969,25 +1999,8 @@ def import_specific_alert():
     identifier = (data.get('identifier') or '').strip()
     start_raw = (data.get('start') or '').strip()
     end_raw = (data.get('end') or '').strip()
-    zone = (data.get('zone') or '').strip()
     area = (data.get('area') or '').strip()
     event_filter = (data.get('event') or '').strip()
-    status_input = (data.get('status') or '').strip().lower()
-    message_input = (data.get('message_type') or '').strip().lower()
-
-    if status_input in {'actual', 'test', 'exercise', 'system'}:
-        status_filter = status_input
-    elif status_input == 'any':
-        status_filter = ''
-    else:
-        status_filter = 'actual'
-
-    if message_input in {'alert', 'update', 'cancel', 'ack', 'error'}:
-        message_type = message_input
-    elif message_input == 'any':
-        message_type = ''
-    else:
-        message_type = 'alert'
 
     try:
         limit_value = int(data.get('limit', 10))
@@ -2019,19 +2032,23 @@ def import_specific_alert():
     if start_dt and end_dt and start_dt > end_dt:
         return jsonify({'error': 'The start time must be before the end time.'}), 400
 
-    normalized_area = area.upper()[:2] if area else None
-    normalized_zone = zone.upper() if zone else None
+    cleaned_area = ''.join(ch for ch in area.upper() if ch.isalpha()) if area else ''
+    normalized_area = cleaned_area[:2] if cleaned_area else None
+
+    if identifier:
+        if area and (not normalized_area or len(normalized_area) != 2):
+            return jsonify({'error': 'State filters must use the two-letter postal abbreviation.'}), 400
+    else:
+        if not normalized_area or len(normalized_area) != 2:
+            return jsonify({'error': 'Provide the two-letter state code when searching without an identifier.'}), 400
 
     try:
         alerts_payloads, query_url, params = retrieve_noaa_alerts(
             identifier=identifier or None,
             start=start_dt,
             end=end_dt,
-            zone=normalized_zone,
             area=normalized_area,
             event=event_filter or None,
-            status=status_filter or None,
-            message_type=message_type or None,
             limit=limit_value,
         )
     except NOAAImportError as exc:
@@ -2120,10 +2137,7 @@ def import_specific_alert():
                     'start': start_iso,
                     'end': end_iso,
                     'area': normalized_area,
-                    'zone': normalized_zone,
                     'event': event_filter or None,
-                    'status': status_filter or 'any',
-                    'message_type': message_type or 'any',
                     'limit': limit_value,
                 },
                 'requested_at_utc': utc_now().isoformat(),

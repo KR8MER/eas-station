@@ -550,45 +550,20 @@
                                 </div>
                             </div>
                             <div class="row g-2 mt-2">
-                                <div class="col-md-3">
+                                <div class="col-md-4">
                                     <label class="form-label">State (2-letter)</label>
                                     <input type="text" class="form-control" id="manualAlertArea" value="OH" placeholder="e.g. OH" maxlength="2">
                                 </div>
-                                <div class="col-md-3">
-                                    <label class="form-label">Zone (UGC, optional)</label>
-                                    <input type="text" class="form-control" id="manualAlertZone" placeholder="e.g. OHC137">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label">Status</label>
-                                    <select class="form-select" id="manualAlertStatus">
-                                        <option value="actual" selected>Actual</option>
-                                        <option value="any">Any</option>
-                                        <option value="test">Test</option>
-                                        <option value="exercise">Exercise</option>
-                                        <option value="system">System</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label">Message Type</label>
-                                    <select class="form-select" id="manualAlertMessageType">
-                                        <option value="alert" selected>Alert</option>
-                                        <option value="any">Any</option>
-                                        <option value="update">Update</option>
-                                        <option value="cancel">Cancel</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="row g-2 mt-2">
-                                <div class="col-md-6">
-                                    <label class="form-label">Event Filter</label>
+                                <div class="col-md-4">
+                                    <label class="form-label">Event Filter (optional)</label>
                                     <input type="text" class="form-control" id="manualAlertEvent" placeholder="e.g. Tornado Warning">
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-4">
                                     <label class="form-label">Result Limit</label>
                                     <input type="number" class="form-control" id="manualAlertLimit" min="1" max="50" value="5">
                                 </div>
                             </div>
-                            <div class="form-text mt-2">Provide an identifier for the fastest lookup, or specify a start and end range with the two-letter state code (zone filters are optional and require a state).</div>
+                            <div class="form-text mt-2">Provide an identifier for the fastest lookup, or specify a start and end range with the two-letter state code. NOAA manual imports require state-level queries.</div>
                             <button onclick="manualImportAlert()" class="btn btn-custom btn-secondary w-100 mt-3">
                                 <i class="fas fa-cloud-download-alt"></i> Fetch &amp; Save
                             </button>
@@ -1292,9 +1267,6 @@
             const startInput = document.getElementById('manualAlertStart');
             const endInput = document.getElementById('manualAlertEnd');
             const areaInput = document.getElementById('manualAlertArea');
-            const zoneInput = document.getElementById('manualAlertZone');
-            const statusSelect = document.getElementById('manualAlertStatus');
-            const messageTypeSelect = document.getElementById('manualAlertMessageType');
             const eventInput = document.getElementById('manualAlertEvent');
             const limitInput = document.getElementById('manualAlertLimit');
             const resultsDiv = document.getElementById('manualImportResults');
@@ -1308,10 +1280,6 @@
             const endValue = endInput ? endInput.value : '';
             const rawState = areaInput ? areaInput.value.trim().toUpperCase() : '';
             const sanitizedState = rawState.replace(/[^A-Z]/g, '').slice(0, 2);
-            const rawZone = zoneInput ? zoneInput.value.trim().toUpperCase() : '';
-            const sanitizedZone = rawZone.replace(/[^A-Z0-9]/g, '');
-            const status = statusSelect ? statusSelect.value : 'actual';
-            const messageType = messageTypeSelect ? messageTypeSelect.value : 'alert';
             const eventFilter = eventInput ? eventInput.value.trim() : '';
             const limit = limitInput ? parseInt(limitInput.value, 10) : 5;
 
@@ -1344,25 +1312,14 @@
                 return;
             }
 
-            if (rawZone && !sanitizedState) {
-                showStatus('Add a state code before filtering by zone.', 'warning');
-                return;
-            }
-
             const payload = {
                 identifier,
                 event: eventFilter,
                 limit: Number.isNaN(limit) ? 5 : limit,
-                status,
-                message_type: messageType,
             };
 
             if (sanitizedState && sanitizedState.length === 2) {
                 payload.area = sanitizedState;
-            }
-
-            if (sanitizedZone && sanitizedState && sanitizedState.length === 2) {
-                payload.zone = sanitizedZone;
             }
 
             if (startIso) {
