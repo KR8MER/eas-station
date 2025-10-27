@@ -17,6 +17,7 @@ import json
 import psutil
 import threading
 import hashlib
+import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -124,6 +125,136 @@ _location_settings_cache: Optional[Dict[str, Any]] = None
 _location_settings_lock = threading.Lock()
 
 logger.info("NOAA Alerts System startup")
+
+# =============================================================================
+# BOUNDARY TYPE METADATA
+# =============================================================================
+
+BOUNDARY_GROUP_LABELS = {
+    'geographic': 'Geographic Boundaries',
+    'service': 'Service Boundaries',
+    'infrastructure': 'Infrastructure',
+    'hydrography': 'Water Features',
+    'custom': 'Custom Layers',
+    'unknown': 'Uncategorized Boundaries',
+}
+
+BOUNDARY_TYPE_CONFIG = {
+    'county': {
+        'label': 'Counties',
+        'group': 'geographic',
+        'color': '#6c757d',
+        'aliases': ['counties'],
+    },
+    'township': {
+        'label': 'Townships',
+        'group': 'geographic',
+        'color': '#28a745',
+        'aliases': ['townships'],
+    },
+    'villages': {
+        'label': 'Villages',
+        'group': 'geographic',
+        'color': '#17a2b8',
+        'aliases': ['village'],
+    },
+    'fire': {
+        'label': 'Fire Districts',
+        'group': 'service',
+        'color': '#dc3545',
+        'aliases': ['fire_districts'],
+    },
+    'ems': {
+        'label': 'EMS Districts',
+        'group': 'service',
+        'color': '#007bff',
+        'aliases': ['ems_districts'],
+    },
+    'school': {
+        'label': 'School Districts',
+        'group': 'service',
+        'color': '#ffc107',
+        'aliases': ['school_districts'],
+    },
+    'electric': {
+        'label': 'Electric Utilities',
+        'group': 'infrastructure',
+        'color': '#fd7e14',
+        'aliases': ['electric_utilities'],
+    },
+    'telephone': {
+        'label': 'Telephone Service',
+        'group': 'infrastructure',
+        'color': '#6f42c1',
+        'aliases': ['telephone_service'],
+    },
+    'railroads': {
+        'label': 'Railroads',
+        'group': 'infrastructure',
+        'color': '#b45309',
+        'aliases': ['railroad', 'rail', 'railway', 'railways'],
+    },
+    'rivers': {
+        'label': 'Rivers & Streams',
+        'group': 'hydrography',
+        'color': '#0ea5e9',
+        'aliases': ['river', 'streams', 'stream', 'creeks', 'creek', 'waterways', 'waterway'],
+    },
+    'waterbodies': {
+        'label': 'Lakes & Ponds',
+        'group': 'hydrography',
+        'color': '#2563eb',
+        'aliases': ['lakes', 'lake', 'ponds', 'pond', 'reservoirs', 'reservoir'],
+    },
+}
+
+
+def normalize_boundary_type(value: Optional[str]) -> str:
+    """Normalize boundary type strings for consistent storage and lookup."""
+
+    if value is None:
+        return 'unknown'
+
+    sanitized = re.sub(r'[^a-z0-9]+', '_', value.strip().lower())
+    sanitized = re.sub(r'_+', '_', sanitized).strip('_')
+
+    if not sanitized:
+        return 'unknown'
+
+    for key, config in BOUNDARY_TYPE_CONFIG.items():
+        aliases = {key}
+        aliases.update(config.get('aliases', []))
+        if sanitized in aliases:
+            return key
+
+    return sanitized
+
+
+def get_boundary_display_label(boundary_type: Optional[str]) -> str:
+    """Return a human-friendly label for a boundary type."""
+
+    normalized = normalize_boundary_type(boundary_type)
+    if normalized in BOUNDARY_TYPE_CONFIG:
+        return BOUNDARY_TYPE_CONFIG[normalized]['label']
+
+    if normalized in {'unknown', ''}:
+        return 'Unknown Boundary'
+
+    return normalized.replace('_', ' ').title()
+
+
+def get_boundary_group(boundary_type: Optional[str]) -> str:
+    """Return the logical group for a boundary type."""
+
+    normalized = normalize_boundary_type(boundary_type)
+    return BOUNDARY_TYPE_CONFIG.get(normalized, {}).get('group', 'custom')
+
+
+def get_boundary_color(boundary_type: Optional[str]) -> Optional[str]:
+    """Return a suggested color for a boundary type if one is defined."""
+
+    normalized = normalize_boundary_type(boundary_type)
+    return BOUNDARY_TYPE_CONFIG.get(normalized, {}).get('color')
 
 # =============================================================================
 # LED SIGN CONFIGURATION AND INITIALIZATION
@@ -1759,7 +1890,8 @@ def get_boundaries():
         )
 
         if boundary_type:
-            query = query.filter(Boundary.type == boundary_type)
+            normalized_type = normalize_boundary_type(boundary_type)
+            query = query.filter(func.lower(Boundary.type) == normalized_type)
 
         if search:
             query = query.filter(Boundary.name.ilike(f'%{search}%'))
@@ -1771,12 +1903,17 @@ def get_boundaries():
         features = []
         for boundary in boundaries:
             if boundary.geometry:
+                normalized_type = normalize_boundary_type(boundary.type)
                 features.append({
                     'type': 'Feature',
                     'properties': {
                         'id': boundary.id,
                         'name': boundary.name,
-                        'type': boundary.type,
+                        'type': normalized_type,
+                        'raw_type': boundary.type,
+                        'display_type': get_boundary_display_label(boundary.type),
+                        'group': get_boundary_group(boundary.type),
+                        'color': get_boundary_color(boundary.type),
                         'description': boundary.description
                     },
                     'geometry': json.loads(boundary.geometry)
@@ -3013,7 +3150,9 @@ def upload_boundaries():
             return jsonify({'error': 'No file provided'}), 400
 
         file = request.files['file']
-        boundary_type = request.form.get('boundary_type', 'unknown')
+        raw_boundary_type = request.form.get('boundary_type', 'unknown')
+        boundary_type = normalize_boundary_type(raw_boundary_type)
+        boundary_label = get_boundary_display_label(raw_boundary_type)
 
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
@@ -3064,16 +3203,22 @@ def upload_boundaries():
 
         try:
             db.session.commit()
-            logger.info(f"Successfully uploaded {boundaries_added} {boundary_type} boundaries")
+            logger.info(
+                "Successfully uploaded %s %s boundaries",
+                boundaries_added,
+                boundary_label,
+            )
         except Exception as e:
             db.session.rollback()
             return jsonify({'error': f'Database error: {str(e)}'}), 500
 
         response_data = {
-            'success': f'Successfully uploaded {boundaries_added} {boundary_type} boundaries',
+            'success': f'Successfully uploaded {boundaries_added} {boundary_label} boundaries',
             'boundaries_added': boundaries_added,
             'total_features': len(features),
-            'errors': errors[:10] if errors else []
+            'errors': errors[:10] if errors else [],
+            'normalized_type': boundary_type,
+            'display_label': boundary_label,
         }
 
         if errors:
@@ -3090,12 +3235,19 @@ def upload_boundaries():
 def clear_boundaries(boundary_type):
     """Clear all boundaries of a specific type"""
     try:
+        normalized_type = None
+
         if boundary_type == 'all':
             deleted_count = Boundary.query.delete()
             message = f'Deleted all {deleted_count} boundaries'
         else:
-            deleted_count = Boundary.query.filter_by(type=boundary_type).delete()
-            message = f'Deleted {deleted_count} {boundary_type} boundaries'
+            normalized_type = normalize_boundary_type(boundary_type)
+            deleted_count = Boundary.query.filter(
+                func.lower(Boundary.type) == normalized_type
+            ).delete(synchronize_session=False)
+            message = (
+                f"Deleted {deleted_count} {get_boundary_display_label(boundary_type)} boundaries"
+            )
 
         db.session.commit()
 
@@ -3105,6 +3257,7 @@ def clear_boundaries(boundary_type):
             module='admin',
             details={
                 'boundary_type': boundary_type,
+                'normalized_type': normalized_type if boundary_type != 'all' else 'all',
                 'deleted_count': deleted_count,
                 'deleted_at_utc': utc_now().isoformat(),
                 'deleted_at_local': local_now().isoformat()
@@ -4049,6 +4202,8 @@ def inject_global_vars():
         'led_available': LED_AVAILABLE,
         'system_version': SYSTEM_VERSION,
         'location_settings': location_settings,
+        'boundary_type_config': BOUNDARY_TYPE_CONFIG,
+        'boundary_group_labels': BOUNDARY_GROUP_LABELS,
     }
 
 

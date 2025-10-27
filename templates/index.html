@@ -74,6 +74,37 @@
         margin-bottom: 8px;
     }
 
+    .layer-options {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .layer-swatch {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+        border: 1px solid var(--border-color);
+    }
+
+    .layer-options .form-check-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .layer-options .form-check-label .ms-auto {
+        margin-left: auto;
+    }
+
+    .layer-options .empty-placeholder {
+        font-style: italic;
+        color: var(--secondary-color);
+        font-size: 0.9rem;
+    }
+
     .form-check-input:checked {
         background-color: var(--primary-color);
         border-color: var(--primary-color);
@@ -100,6 +131,12 @@
         display: flex;
         align-items: center;
         margin-bottom: 8px;
+    }
+
+    .legend-dynamic {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
     }
 
     .legend-color {
@@ -249,64 +286,31 @@
                 <!-- Boundary Layers -->
                 <div class="layer-group">
                     <h6><i class="fas fa-map-marked-alt"></i> Geographic Boundaries</h6>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="show-counties" checked>
-                        <label class="form-check-label" for="show-counties">
-                            <i class="fas fa-square text-secondary"></i> Counties (<span id="counties-count">0</span>)
-                        </label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="show-townships">
-                        <label class="form-check-label" for="show-townships">
-                            <i class="fas fa-square text-success"></i> Townships (<span id="townships-count">0</span>)
-                        </label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="show-villages">
-                        <label class="form-check-label" for="show-villages">
-                            <i class="fas fa-square text-info"></i> Villages (<span id="villages-count">0</span>)
-                        </label>
-                    </div>
+                    <div id="layer-group-geographic" class="layer-options"></div>
                 </div>
 
                 <!-- Service Boundaries -->
                 <div class="layer-group">
                     <h6><i class="fas fa-shield-alt"></i> Service Boundaries</h6>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="show-fire">
-                        <label class="form-check-label" for="show-fire">
-                            <i class="fas fa-square text-danger"></i> Fire Districts (<span id="fire-count">0</span>)
-                        </label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="show-ems">
-                        <label class="form-check-label" for="show-ems">
-                            <i class="fas fa-square text-primary"></i> EMS Districts (<span id="ems-count">0</span>)
-                        </label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="show-school">
-                        <label class="form-check-label" for="show-school">
-                            <i class="fas fa-square text-warning"></i> School Districts (<span id="school-count">0</span>)
-                        </label>
-                    </div>
+                    <div id="layer-group-service" class="layer-options"></div>
                 </div>
 
                 <!-- Infrastructure Boundaries -->
                 <div class="layer-group">
                     <h6><i class="fas fa-tools"></i> Infrastructure</h6>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="show-electric">
-                        <label class="form-check-label" for="show-electric">
-                            <i class="fas fa-square" style="color: #ffc107;"></i> Electric Utilities (<span id="electric-count">0</span>)
-                        </label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="show-telephone">
-                        <label class="form-check-label" for="show-telephone">
-                            <i class="fas fa-square" style="color: #6f42c1;"></i> Telephone Service (<span id="telephone-count">0</span>)
-                        </label>
-                    </div>
+                    <div id="layer-group-infrastructure" class="layer-options"></div>
+                </div>
+
+                <!-- Water Features -->
+                <div class="layer-group">
+                    <h6><i class="fas fa-water"></i> Water Features</h6>
+                    <div id="layer-group-hydrography" class="layer-options"></div>
+                </div>
+
+                <!-- Custom Layers -->
+                <div class="layer-group">
+                    <h6><i class="fas fa-layer-group"></i> Custom Layers</h6>
+                    <div id="layer-group-custom" class="layer-options"></div>
                 </div>
 
                 <!-- Date Filters for Historical -->
@@ -425,18 +429,10 @@
                         </div>
                     </div>
                     <div class="col-md-4">
-                        <strong>Geographic Boundaries:</strong>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #6c757d;"></div>
-                            <span>Counties</span>
-                        </div>
+                        <strong>Alert Status:</strong>
                         <div class="legend-item">
                             <div class="legend-color" style="background-color: #28a745;"></div>
-                            <span>Townships</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #17a2b8;"></div>
-                            <span>Villages</span>
+                            <span>Active Alerts</span>
                         </div>
                         <div class="legend-item">
                             <div class="legend-color" style="background: repeating-linear-gradient(45deg, #6c757d, #6c757d 3px, transparent 3px, transparent 6px);"></div>
@@ -444,27 +440,9 @@
                         </div>
                     </div>
                     <div class="col-md-4">
-                        <strong>Service Districts:</strong>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #dc3545;"></div>
-                            <span>Fire Districts</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #007bff;"></div>
-                            <span>EMS Districts</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #ffc107;"></div>
-                            <span>School Districts</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #fd7e14;"></div>
-                            <span>Electric Utilities</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #6f42c1;"></div>
-                            <span>Telephone Service</span>
-                        </div>
+                        <strong>Boundaries & Layers:</strong>
+                        <div id="legend-boundary-layers" class="legend-dynamic"></div>
+                        <div id="legend-boundary-empty" class="text-muted small">Layers will appear when data is loaded.</div>
                     </div>
                 </div>
             </div>
@@ -486,6 +464,13 @@ let alertLayer;
 let boundaryLayers = {};
 let alertData = { active: [], historical: [] };
 
+const BOUNDARY_TYPE_CONFIG = window.BOUNDARY_TYPE_CONFIG || {};
+const BOUNDARY_GROUP_LABELS = window.BOUNDARY_GROUP_LABELS || {};
+const CUSTOM_BOUNDARY_PALETTE = ['#38bdf8', '#fb7185', '#845ef7', '#22c55e', '#f97316', '#14b8a6', '#facc15', '#64748b'];
+const boundaryTypeMetadata = new Map();
+const layerVisibility = {};
+const customColorAssignments = {};
+
 const LOCATION_SETTINGS = window.APP_LOCATION || {};
 const MAP_CENTER = [
     Number(LOCATION_SETTINGS.map_center_lat ?? 0) || 0,
@@ -493,6 +478,64 @@ const MAP_CENTER = [
 ];
 const MAP_ZOOM = Number(LOCATION_SETTINGS.map_default_zoom ?? 10) || 10;
 const LOCATION_LABEL = `${(LOCATION_SETTINGS.county_name || 'Configured Location')}${LOCATION_SETTINGS.state_code ? ', ' + LOCATION_SETTINGS.state_code : ''}`;
+
+// Boundary helpers
+function sanitizeBoundaryType(value) {
+    if (!value) {
+        return 'unknown';
+    }
+    const sanitized = value.toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+    return sanitized || 'unknown';
+}
+
+function resolveCanonicalBoundaryType(value) {
+    const sanitized = sanitizeBoundaryType(value);
+    for (const [key, config] of Object.entries(BOUNDARY_TYPE_CONFIG)) {
+        const aliases = Array.isArray(config.aliases) ? config.aliases.map(alias => sanitizeBoundaryType(alias)) : [];
+        if (sanitized === key || aliases.includes(sanitized)) {
+            return key;
+        }
+    }
+    return sanitized;
+}
+
+function formatBoundaryLabel(type) {
+    const canonical = resolveCanonicalBoundaryType(type);
+    const config = BOUNDARY_TYPE_CONFIG[canonical];
+    if (config && config.label) {
+        return config.label;
+    }
+    if (!canonical || canonical === 'unknown') {
+        return 'Unknown Boundary';
+    }
+    return canonical.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function assignCustomColor(typeKey) {
+    if (customColorAssignments[typeKey]) {
+        return customColorAssignments[typeKey];
+    }
+    const hash = Array.from(typeKey).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const color = CUSTOM_BOUNDARY_PALETTE[hash % CUSTOM_BOUNDARY_PALETTE.length];
+    customColorAssignments[typeKey] = color;
+    return color;
+}
+
+function getBoundaryMetadata(rawType, displayType, colorHint) {
+    const canonical = resolveCanonicalBoundaryType(rawType);
+    const config = BOUNDARY_TYPE_CONFIG[canonical];
+    const label = displayType || (config && config.label) || formatBoundaryLabel(canonical);
+    const group = config && config.group ? config.group : 'custom';
+    const color = colorHint || (config && config.color) || assignCustomColor(canonical || 'custom');
+
+    return {
+        key: canonical,
+        label,
+        group,
+        color,
+        rawType: rawType,
+    };
+}
 
 // Map initialization
 function initMap() {
@@ -511,16 +554,7 @@ function initMap() {
 
         // Initialize layer groups
         alertLayer = L.layerGroup().addTo(map);
-        boundaryLayers = {
-            counties: L.layerGroup(),
-            townships: L.layerGroup(),
-            villages: L.layerGroup(),
-            fire: L.layerGroup(),
-            ems: L.layerGroup(),
-            school: L.layerGroup(),
-            electric: L.layerGroup(),
-            telephone: L.layerGroup()
-        };
+        boundaryLayers = {};
 
         // Add scale control
         L.control.scale({
@@ -682,101 +716,223 @@ async function loadBoundaries() {
         }
 
         const data = await response.json();
+        const newKeys = new Set();
+        let totalLoaded = 0;
+        boundaryTypeMetadata.clear();
 
-        if (data.features && Array.isArray(data.features)) {
+        if (data.features && Array.isArray(data.features) && data.features.length > 0) {
             console.log(`✅ Received ${data.features.length} boundaries`);
 
-            // Debug: Log the structure of the first boundary
-            if (data.features.length > 0) {
-                console.log('📋 Sample boundary structure:', data.features[0]);
-            }
+            const featuresByType = new Map();
 
-            // Group boundaries by type
-            const boundariesByType = {
-                counties: [],
-                townships: [],
-                villages: [],
-                fire: [],
-                ems: [],
-                school: [],
-                electric: [],
-                telephone: []
-            };
+            data.features.forEach(feature => {
+                const props = feature.properties || {};
+                const rawType = props.canonical_type || props.type || props.raw_type || 'unknown';
+                const metadata = getBoundaryMetadata(rawType, props.display_type, props.color);
+                const typeKey = metadata.key || 'unknown';
 
-            let totalLoaded = 0;
-            data.features.forEach(boundary => {
-                const type = boundary.properties.type;
-                if (type && typeof type === 'string') {
-                    const lowerType = type.toLowerCase();
+                if (!featuresByType.has(typeKey)) {
+                    featuresByType.set(typeKey, { metadata, features: [] });
+                }
+                featuresByType.get(typeKey).features.push(feature);
+            });
 
-                    if (lowerType.includes('county') || lowerType === 'county') {
-                        boundariesByType.counties.push(boundary);
-                    } else if (lowerType.includes('township') || lowerType === 'township') {
-                        boundariesByType.townships.push(boundary);
-                    } else if (lowerType.includes('village') || lowerType === 'village') {
-                        boundariesByType.villages.push(boundary);
-                    } else if (lowerType.includes('fire') || lowerType === 'fire') {
-                        boundariesByType.fire.push(boundary);
-                    } else if (lowerType.includes('ems') || lowerType === 'ems') {
-                        boundariesByType.ems.push(boundary);
-                    } else if (lowerType.includes('school') || lowerType === 'school') {
-                        boundariesByType.school.push(boundary);
-                    } else if (lowerType.includes('electric') || lowerType === 'electric') {
-                        boundariesByType.electric.push(boundary);
-                    } else if (lowerType.includes('telephone') || lowerType === 'telephone') {
-                        boundariesByType.telephone.push(boundary);
-                    } else {
-                        // For truly unknown types, add to counties but log it
-                        console.log(`📋 Unrecognized boundary type: ${type} - adding to counties`);
-                        boundariesByType.counties.push(boundary);
-                    }
+            featuresByType.forEach(({ metadata, features }) => {
+                const typeKey = metadata.key || 'unknown';
+                newKeys.add(typeKey);
+                totalLoaded += features.length;
+
+                let layerGroup = boundaryLayers[typeKey];
+                if (!layerGroup) {
+                    layerGroup = L.layerGroup();
+                    boundaryLayers[typeKey] = layerGroup;
                 } else {
-                    console.warn(`❓ Boundary with no type property:`, boundary.properties);
-                    boundariesByType.counties.push(boundary);
+                    layerGroup.clearLayers();
                 }
-                totalLoaded++;
-            });
 
-            // Create map layers for each type
-            Object.keys(boundariesByType).forEach(type => {
-                const boundaries = boundariesByType[type];
-                if (boundaries.length > 0) {
-                    const color = getBoundaryColor(type);
+                const boundaryFeature = L.geoJSON(features, {
+                    style: {
+                        color: metadata.color,
+                        weight: 1,
+                        opacity: 0.6,
+                        fillOpacity: 0.1,
+                        fillColor: metadata.color
+                    },
+                    onEachFeature: function(feature, layer) {
+                        const props = feature.properties || {};
+                        const popupContent = createBoundaryPopup(props, typeKey);
+                        layer.bindPopup(popupContent);
+                    }
+                });
 
-                    const boundaryFeature = L.geoJSON(boundaries, {
-                        style: {
-                            color: color,
-                            weight: 1,
-                            opacity: 0.6,
-                            fillOpacity: 0.1,
-                            fillColor: color
-                        },
-                        onEachFeature: function(feature, layer) {
-                            const props = feature.properties;
-                            const popupContent = createBoundaryPopup(props, type);
-                            layer.bindPopup(popupContent);
-                        }
-                    });
+                layerGroup.addLayer(boundaryFeature);
 
-                    boundaryLayers[type].addLayer(boundaryFeature);
-                    console.log(`✅ Loaded ${boundaries.length} ${type} - Color: ${color}`);
-
-                    // Update count in UI
-                    updateBoundaryTypeCount(type, boundaries.length);
+                if (layerVisibility[typeKey] !== false) {
+                    layerVisibility[typeKey] = true;
+                    layerGroup.addTo(map);
+                } else {
+                    map.removeLayer(layerGroup);
                 }
+
+                boundaryTypeMetadata.set(typeKey, {
+                    key: typeKey,
+                    label: metadata.label,
+                    color: metadata.color,
+                    group: metadata.group || 'custom',
+                    count: features.length
+                });
+
+                console.log(`✅ Loaded ${features.length} ${metadata.label} features`);
             });
-
-            updateBoundaryCount(totalLoaded);
-
         } else {
             console.warn('⚠️ No boundary features in API response');
-            updateBoundaryCount(0);
         }
+
+        Object.keys(boundaryLayers).forEach(key => {
+            if (!newKeys.has(key)) {
+                map.removeLayer(boundaryLayers[key]);
+                delete boundaryLayers[key];
+                boundaryTypeMetadata.delete(key);
+                delete layerVisibility[key];
+            }
+        });
+
+        renderBoundaryControls();
+        renderBoundaryLegend();
+        updateBoundaryCount(totalLoaded);
     } catch (error) {
         console.error('❌ Error loading boundaries:', error);
         showToast('Failed to load boundaries: ' + error.message, 'error');
         updateBoundaryCount(0);
+        boundaryTypeMetadata.clear();
+        renderBoundaryControls();
+        renderBoundaryLegend();
     }
+}
+
+function renderBoundaryControls() {
+    const containers = {
+        geographic: document.getElementById('layer-group-geographic'),
+        service: document.getElementById('layer-group-service'),
+        infrastructure: document.getElementById('layer-group-infrastructure'),
+        hydrography: document.getElementById('layer-group-hydrography'),
+        custom: document.getElementById('layer-group-custom')
+    };
+
+    Object.values(containers).forEach(container => {
+        if (container) {
+            container.innerHTML = '';
+        }
+    });
+
+    const entries = Array.from(boundaryTypeMetadata.values()).sort((a, b) => a.label.localeCompare(b.label));
+
+    entries.forEach(meta => {
+        const groupKey = containers[meta.group] ? meta.group : 'custom';
+        const container = containers[groupKey] || containers.custom;
+        if (!container) {
+            return;
+        }
+
+        const checkboxId = `layer-toggle-${meta.key}`;
+        const isChecked = layerVisibility[meta.key] !== false;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'form-check';
+
+        const checkbox = document.createElement('input');
+        checkbox.className = 'form-check-input';
+        checkbox.type = 'checkbox';
+        checkbox.id = checkboxId;
+        checkbox.checked = isChecked;
+
+        const label = document.createElement('label');
+        label.className = 'form-check-label';
+        label.setAttribute('for', checkboxId);
+
+        const swatch = document.createElement('span');
+        swatch.className = 'layer-swatch';
+        swatch.style.backgroundColor = meta.color;
+
+        const labelText = document.createElement('span');
+        labelText.textContent = meta.label;
+
+        const countWrapper = document.createElement('span');
+        countWrapper.className = 'ms-auto text-muted small';
+        countWrapper.innerHTML = `(<span data-type-count="${meta.key}">${meta.count}</span>)`;
+
+        label.appendChild(swatch);
+        label.appendChild(labelText);
+        label.appendChild(countWrapper);
+
+        wrapper.appendChild(checkbox);
+        wrapper.appendChild(label);
+        container.appendChild(wrapper);
+
+        checkbox.addEventListener('change', function() {
+            layerVisibility[meta.key] = this.checked;
+            if (this.checked) {
+                if (boundaryLayers[meta.key]) {
+                    boundaryLayers[meta.key].addTo(map);
+                }
+            } else if (boundaryLayers[meta.key]) {
+                map.removeLayer(boundaryLayers[meta.key]);
+            }
+        });
+    });
+
+    Object.entries(containers).forEach(([groupKey, container]) => {
+        if (!container) {
+            return;
+        }
+
+        if (!container.children.length) {
+            const empty = document.createElement('div');
+            empty.className = 'empty-placeholder';
+            const groupLabel = BOUNDARY_GROUP_LABELS[groupKey] || 'Layers';
+            const labelText = typeof groupLabel === 'string' ? groupLabel.toLowerCase() : 'layers';
+            empty.textContent = `No ${labelText} loaded`;
+            container.appendChild(empty);
+        }
+    });
+}
+
+function renderBoundaryLegend() {
+    const container = document.getElementById('legend-boundary-layers');
+    const emptyMessage = document.getElementById('legend-boundary-empty');
+
+    if (!container || !emptyMessage) {
+        return;
+    }
+
+    container.innerHTML = '';
+
+    const entries = Array.from(boundaryTypeMetadata.values())
+        .filter(meta => meta.count > 0)
+        .sort((a, b) => a.label.localeCompare(b.label));
+
+    if (entries.length === 0) {
+        emptyMessage.style.display = 'block';
+        return;
+    }
+
+    emptyMessage.style.display = 'none';
+
+    entries.forEach(meta => {
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+
+        const swatch = document.createElement('div');
+        swatch.className = 'legend-color';
+        swatch.style.backgroundColor = meta.color;
+
+        const label = document.createElement('span');
+        label.textContent = `${meta.label} (${meta.count})`;
+
+        item.appendChild(swatch);
+        item.appendChild(label);
+        container.appendChild(item);
+    });
 }
 
 // Create alert popup content
@@ -822,9 +978,10 @@ function createHistoricalAlertPopup(props) {
 
 // Create boundary popup content
 function createBoundaryPopup(props, type) {
+    const displayType = props.display_type || formatBoundaryLabel(props.type || type);
     return `
         <div class="popup-title">${props.name || 'Unnamed'}</div>
-        <div class="popup-detail"><strong>Type:</strong> ${props.type || type}</div>
+        <div class="popup-detail"><strong>Type:</strong> ${displayType}</div>
         <div class="popup-detail"><strong>ID:</strong> ${props.id}</div>
         ${props.description ? `<div class="popup-detail"><strong>Description:</strong> ${props.description}</div>` : ''}
         ${props.population ? `<div class="popup-detail"><strong>Population:</strong> ${props.population.toLocaleString()}</div>` : ''}
@@ -841,22 +998,6 @@ function getSeverityColor(severity) {
         'Minor': '#17a2b8'
     };
     return colors[severity] || '#6c757d';
-}
-
-// FIXED: getBoundaryColor function with missing colors added
-function getBoundaryColor(type) {
-    const colors = {
-        'counties': '#6c757d',      // Grey
-        'townships': '#28a745',     // Green
-        'villages': '#17a2b8',      // Blue
-        // MISSING COLORS THAT WERE CAUSING GREY BOUNDARIES:
-        'fire': '#dc3545',          // Red (matches your legend)
-        'ems': '#007bff',           // Blue (matches your legend)
-        'school': '#ffc107',        // Yellow (matches your legend)
-        'electric': '#fd7e14',      // Orange (matches your legend)
-        'telephone': '#6f42c1'      // Purple (matches your legend)
-    };
-    return colors[type] || '#6c757d';
 }
 
 function isAlertExpired(expiresDate) {
@@ -888,13 +1029,6 @@ function updateAlertCount(count) {
 
 function updateBoundaryCount(count) {
     const element = document.getElementById('boundary-count');
-    if (element) {
-        element.textContent = count;
-    }
-}
-
-function updateBoundaryTypeCount(type, count) {
-    const element = document.getElementById(`${type}-count`);
     if (element) {
         element.textContent = count;
     }
@@ -968,19 +1102,6 @@ function setupEventListeners() {
         }
     });
 
-    // Boundary layer toggles
-    ['counties', 'townships', 'villages', 'fire', 'ems', 'school', 'electric', 'telephone'].forEach(type => {
-        const checkbox = document.getElementById(`show-${type}`);
-        if (checkbox) {
-            checkbox.addEventListener('change', function() {
-                if (this.checked) {
-                    map.addLayer(boundaryLayers[type]);
-                } else {
-                    map.removeLayer(boundaryLayers[type]);
-                }
-            });
-        }
-    });
 }
 
 // Action functions
@@ -1029,20 +1150,29 @@ async function inspectBoundaries() {
             // Group boundaries by type for inspection
             const boundariesByType = {};
             data.features.forEach(boundary => {
-                const type = boundary.properties.type || 'unknown';
-                if (!boundariesByType[type]) {
-                    boundariesByType[type] = [];
+                const props = boundary.properties || {};
+                const typeKey = resolveCanonicalBoundaryType(props.canonical_type || props.type || props.raw_type || 'unknown');
+                const displayLabel = props.display_type || formatBoundaryLabel(typeKey);
+                if (!boundariesByType[typeKey]) {
+                    boundariesByType[typeKey] = {
+                        label: displayLabel,
+                        items: []
+                    };
                 }
-                boundariesByType[type].push({
-                    id: boundary.properties.id,
-                    name: boundary.properties.name,
-                    description: boundary.properties.description,
-                    type: type
+                boundariesByType[typeKey].items.push({
+                    id: props.id,
+                    name: props.name,
+                    description: props.description,
+                    type: displayLabel
                 });
             });
 
             // Sort types for better display
-            const sortedTypes = Object.keys(boundariesByType).sort();
+            const sortedTypes = Object.keys(boundariesByType).sort((a, b) => {
+                const labelA = boundariesByType[a].label.toLowerCase();
+                const labelB = boundariesByType[b].label.toLowerCase();
+                return labelA.localeCompare(labelB);
+            });
 
             // Create inspection report
             let report = `📊 COMPREHENSIVE BOUNDARY INSPECTION REPORT\n`;
@@ -1055,16 +1185,18 @@ async function inspectBoundaries() {
             report += `SUMMARY BY TYPE:\n`;
             report += `================\n`;
             sortedTypes.forEach(type => {
-                const count = boundariesByType[type].length;
-                report += `${type.toUpperCase()}: ${count}\n`;
+                const group = boundariesByType[type];
+                const count = group.items.length;
+                report += `${group.label.toUpperCase()}: ${count}\n`;
             });
             report += `\n`;
 
             // Detailed listings
             sortedTypes.forEach(type => {
-                const boundaries = boundariesByType[type];
-                report += `${type.toUpperCase()} DETAILS (${boundaries.length}):\n`;
-                report += `${'='.repeat(type.length + 15)}\n`;
+                const group = boundariesByType[type];
+                const boundaries = group.items;
+                report += `${group.label.toUpperCase()} DETAILS (${boundaries.length}):\n`;
+                report += `${'='.repeat(group.label.length + 15)}\n`;
                 boundaries.forEach((boundary, index) => {
                     report += `  ${index + 1}. ${boundary.name} (ID: ${boundary.id})\n`;
                     if (boundary.description) {
@@ -1347,21 +1479,27 @@ window.mapDebug = {
             if (data.features) {
                 const analysis = {};
                 data.features.forEach(boundary => {
-                    const type = boundary.properties.type || 'unknown';
-                    if (!analysis[type]) {
-                        analysis[type] = { count: 0, examples: [] };
+                    const props = boundary.properties || {};
+                    const typeKey = resolveCanonicalBoundaryType(props.canonical_type || props.type || props.raw_type || 'unknown');
+                    if (!analysis[typeKey]) {
+                        analysis[typeKey] = { count: 0, examples: [], label: formatBoundaryLabel(typeKey) };
                     }
-                    analysis[type].count++;
-                    if (analysis[type].examples.length < 3) {
-                        analysis[type].examples.push({
-                            name: boundary.properties.name,
-                            id: boundary.properties.id
+                    analysis[typeKey].count++;
+                    if (analysis[typeKey].examples.length < 3) {
+                        analysis[typeKey].examples.push({
+                            name: props.name,
+                            id: props.id
                         });
                     }
                 });
 
                 console.log('📋 Boundary Analysis:');
-                console.table(analysis);
+                const tableData = Object.entries(analysis).map(([key, info]) => ({
+                    type: info.label || formatBoundaryLabel(key),
+                    count: info.count,
+                    examples: info.examples.map(example => example.name).join(', ')
+                }));
+                console.table(tableData);
                 return analysis;
             }
         } catch (error) {

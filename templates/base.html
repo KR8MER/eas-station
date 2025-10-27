@@ -20,6 +20,13 @@
     </script>
     {% endif %}
 
+    {% if boundary_type_config %}
+    <script>
+        window.BOUNDARY_TYPE_CONFIG = {{ boundary_type_config | tojson }};
+        window.BOUNDARY_GROUP_LABELS = {{ boundary_group_labels | tojson }};
+    </script>
+    {% endif %}
+
     <style>
         :root {
             --primary-color: #007bff;
