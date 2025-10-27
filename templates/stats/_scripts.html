@@ -1,16 +1,44 @@
 <!-- Load Highcharts and modules -->
 <script>
 (function setupHighchartsLoader() {
+    const HIGHCHARTS_VERSION = '12.4.0';
+    const HIGHCHARTS_VERSION_MINOR = '12.4';
+    const CDN_SOURCES = [
+        {
+            name: 'Highcharts Official (latest)',
+            resolve: (path) => `https://code.highcharts.com${path}`
+        },
+        {
+            name: `Highcharts Official v${HIGHCHARTS_VERSION}`,
+            resolve: (path) => path.startsWith('/stock/')
+                ? `https://code.highcharts.com/stock/${HIGHCHARTS_VERSION}${path.substring('/stock'.length)}`
+                : `https://code.highcharts.com/${HIGHCHARTS_VERSION}${path}`
+        },
+        {
+            name: `Highcharts Official ${HIGHCHARTS_VERSION_MINOR}.x`,
+            resolve: (path) => path.startsWith('/stock/')
+                ? `https://code.highcharts.com/stock/${HIGHCHARTS_VERSION_MINOR}${path.substring('/stock'.length)}`
+                : `https://code.highcharts.com/${HIGHCHARTS_VERSION_MINOR}${path}`
+        },
+        {
+            name: 'jsDelivr',
+            resolve: (path) => `https://cdn.jsdelivr.net/npm/highcharts@${HIGHCHARTS_VERSION}${path}`
+        },
+        {
+            name: 'unpkg',
+            resolve: (path) => `https://unpkg.com/highcharts@${HIGHCHARTS_VERSION}/dist${path}`
+        }
+    ];
     const REQUIRED_SCRIPTS = [
-        'https://code.highcharts.com/11.4.1/stock/highstock.js',
-        'https://code.highcharts.com/11.4.1/highcharts-more.js',
-        'https://code.highcharts.com/11.4.1/modules/heatmap.js',
-        'https://code.highcharts.com/11.4.1/modules/solid-gauge.js',
-        'https://code.highcharts.com/11.4.1/modules/xrange.js',
-        'https://code.highcharts.com/11.4.1/modules/drilldown.js',
-        'https://code.highcharts.com/11.4.1/modules/exporting.js',
-        'https://code.highcharts.com/11.4.1/modules/export-data.js',
-        'https://code.highcharts.com/11.4.1/modules/accessibility.js'
+        '/stock/highstock.js',
+        '/highcharts-more.js',
+        '/modules/heatmap.js',
+        '/modules/solid-gauge.js',
+        '/modules/xrange.js',
+        '/modules/drilldown.js',
+        '/modules/exporting.js',
+        '/modules/export-data.js',
+        '/modules/accessibility.js'
     ];
 
     if (window.__highchartsLoadPromise) {
@@ -19,7 +47,34 @@
 
     function loadScript(src) {
         return new Promise((resolve, reject) => {
-            const existing = Array.from(document.getElementsByTagName('script')).find((script) => script.src === src);
+            const scripts = Array.from(document.getElementsByTagName('script'));
+            const existing = scripts.find((script) => script.src === src && script.dataset.highchartsLoader !== 'stats-dashboard-failed');
+
+            const cleanupListeners = (scriptElement, onLoad, onError) => {
+                if (!scriptElement) {
+                    return;
+                }
+                scriptElement.removeEventListener('load', onLoad);
+                scriptElement.removeEventListener('error', onError);
+            };
+
+            const resolveSuccess = (scriptElement) => {
+                if (scriptElement) {
+                    scriptElement.dataset.highchartsLoaded = 'true';
+                }
+                resolve();
+            };
+
+            const rejectFailure = (scriptElement) => {
+                if (scriptElement) {
+                    scriptElement.dataset.highchartsLoader = 'stats-dashboard-failed';
+                    if (scriptElement.parentNode) {
+                        scriptElement.parentNode.removeChild(scriptElement);
+                    }
+                }
+                reject(new Error(`Failed to load Highcharts resource: ${src}`));
+            };
+
             if (existing) {
                 const managedByLoader = existing.dataset.highchartsLoader === 'stats-dashboard';
                 const alreadyLoaded = existing.dataset.highchartsLoaded === 'true'
@@ -30,23 +85,60 @@
                     resolve();
                     return;
                 }
-                existing.addEventListener('load', () => resolve(), { once: true });
-                existing.addEventListener('error', () => reject(new Error(`Failed to load Highcharts resource: ${src}`)), { once: true });
+
+                const onLoad = () => {
+                    cleanupListeners(existing, onLoad, onError);
+                    resolveSuccess(existing);
+                };
+                const onError = () => {
+                    cleanupListeners(existing, onLoad, onError);
+                    rejectFailure(existing);
+                };
+
+                existing.addEventListener('load', onLoad, { once: true });
+                existing.addEventListener('error', onError, { once: true });
                 return;
             }
 
             const script = document.createElement('script');
             script.src = src;
+            script.async = false;
             script.dataset.highchartsLoader = 'stats-dashboard';
-            script.addEventListener('load', () => {
-                script.dataset.highchartsLoaded = 'true';
-                resolve();
-            }, { once: true });
-            script.addEventListener('error', () => {
-                reject(new Error(`Failed to load Highcharts resource: ${src}`));
-            }, { once: true });
+
+            const onLoad = () => {
+                cleanupListeners(script, onLoad, onError);
+                resolveSuccess(script);
+            };
+            const onError = () => {
+                cleanupListeners(script, onLoad, onError);
+                rejectFailure(script);
+            };
+
+            script.addEventListener('load', onLoad, { once: true });
+            script.addEventListener('error', onError, { once: true });
             document.head.appendChild(script);
         });
+    }
+
+    function tryLoadFromCdn(cdn) {
+        console.log(`[Highcharts loader] 📦 Attempting to load Highcharts from ${cdn.name}...`);
+        return REQUIRED_SCRIPTS.reduce(
+            (chain, path) => chain.then(() => loadScript(cdn.resolve(path))),
+            Promise.resolve()
+        );
+    }
+
+    function attemptFromIndex(index) {
+        if (index >= CDN_SOURCES.length) {
+            return Promise.reject(new Error('Failed to load Highcharts from all available sources.'));
+        }
+        const cdn = CDN_SOURCES[index];
+        return tryLoadFromCdn(cdn)
+            .then(() => cdn)
+            .catch((error) => {
+                console.warn(`[Highcharts loader] ⚠️ ${cdn.name} failed: ${error.message}`);
+                return attemptFromIndex(index + 1);
+            });
     }
 
     if (window.Highcharts) {
@@ -55,23 +147,26 @@
         return;
     }
 
-    const loadPromise = REQUIRED_SCRIPTS.reduce((chain, src) => chain.then(() => loadScript(src)), Promise.resolve())
-        .then(() => {
+    const loadPromise = attemptFromIndex(0)
+        .then((cdn) => {
             if (!window.Highcharts) {
                 throw new Error('Highcharts did not initialize as expected.');
             }
+            delete window.__highchartsLoadError;
+            console.log(`[Highcharts loader] ✅ Highcharts loaded successfully from ${cdn.name}.`);
             return window.Highcharts;
         });
 
-    window.__highchartsLoadPromise = loadPromise;
-
-    loadPromise
-        .then(() => {
+    window.__highchartsLoadPromise = loadPromise
+        .then((highcharts) => {
             document.dispatchEvent(new Event('highcharts:loaded'));
+            return highcharts;
         })
         .catch((error) => {
             window.__highchartsLoadError = error;
             document.dispatchEvent(new CustomEvent('highcharts:failed', { detail: error }));
+            delete window.__highchartsLoadPromise;
+            throw error;
         });
 })();
 </script>
@@ -1392,7 +1487,6 @@ function initializeDashboard() {
 
     window.__statsDashboardInitialized = true;
     configureHighchartsDefaults();
-    updateSystemInfo();
     initializeFilters();
     updateDashboard();
     console.log('📊 Dashboard ready');
@@ -1421,6 +1515,7 @@ function handleInitializationError(error, message) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    updateSystemInfo();
     const highchartsPromise = window.__highchartsLoadPromise;
 
     if (!highchartsPromise) {
