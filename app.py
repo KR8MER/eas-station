@@ -5,7 +5,7 @@ Flask Web Application with Enhanced Boundary Management and Alerts History
 
 Author: KR8MER Amateur Radio Emergency Communications
 Description: Emergency alert system for Putnam County, Ohio with proper timezone handling
-Version: 2.1.4 - Incremental build metadata surfaced in the UI footer
+Version: 2.1.5 - Incremental build metadata surfaced in the UI footer
 """
 
 # =============================================================================
@@ -17,7 +17,7 @@ import json
 import psutil
 import threading
 import hashlib
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 from datetime import datetime, timedelta
 from collections import defaultdict
 from enum import Enum
@@ -72,7 +72,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
 # Application versioning (exposed via templates for quick deployment verification)
-SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.4')
+SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.5')
 
 # NOAA API configuration for manual alert import workflows
 NOAA_API_BASE_URL = 'https://api.weather.gov/alerts'
@@ -1868,6 +1868,43 @@ def build_noaa_alert_request(
     return query_url, params
 
 
+def _alert_datetime_to_iso(dt_value: Optional[datetime]) -> Optional[str]:
+    """Render alert datetimes in ISO8601 with UTC timezone."""
+
+    if not dt_value:
+        return None
+    if dt_value.tzinfo is None:
+        aware_value = dt_value.replace(tzinfo=UTC_TZ)
+    else:
+        aware_value = dt_value.astimezone(UTC_TZ)
+    return aware_value.isoformat()
+
+
+def serialize_admin_alert(alert: CAPAlert) -> Dict[str, Any]:
+    """Return a JSON-serializable representation of an alert for admin tooling."""
+
+    return {
+        'id': alert.id,
+        'identifier': alert.identifier,
+        'event': alert.event,
+        'headline': alert.headline,
+        'description': alert.description,
+        'instruction': alert.instruction,
+        'area_desc': alert.area_desc,
+        'status': alert.status,
+        'message_type': alert.message_type,
+        'scope': alert.scope,
+        'category': alert.category,
+        'severity': alert.severity,
+        'urgency': alert.urgency,
+        'certainty': alert.certainty,
+        'sent': _alert_datetime_to_iso(alert.sent),
+        'expires': _alert_datetime_to_iso(alert.expires),
+        'updated_at': _alert_datetime_to_iso(alert.updated_at),
+        'created_at': _alert_datetime_to_iso(alert.created_at),
+    }
+
+
 def retrieve_noaa_alerts(
     *,
     identifier: Optional[str] = None,
@@ -2161,6 +2198,204 @@ def import_specific_alert():
         'query_url': query_url,
         'params': params
     })
+
+
+@app.route('/admin/alerts', methods=['GET'])
+def admin_list_alerts():
+    """List alerts for the admin UI with optional search and expiration filters."""
+
+    try:
+        include_expired = request.args.get('include_expired', 'false').lower() == 'true'
+        search_term = (request.args.get('search') or '').strip()
+        limit_param = request.args.get('limit', type=int)
+        limit = 100 if not limit_param else max(1, min(limit_param, 200))
+
+        base_query = CAPAlert.query
+
+        if not include_expired:
+            now = utc_now()
+            base_query = base_query.filter(
+                or_(CAPAlert.expires.is_(None), CAPAlert.expires > now)
+            )
+
+        if search_term:
+            like_pattern = f"%{search_term}%"
+            base_query = base_query.filter(
+                or_(
+                    CAPAlert.identifier.ilike(like_pattern),
+                    CAPAlert.event.ilike(like_pattern),
+                    CAPAlert.headline.ilike(like_pattern)
+                )
+            )
+
+        total_count = base_query.order_by(None).count()
+        alerts = (
+            base_query
+            .order_by(desc(CAPAlert.sent))
+            .limit(limit)
+            .all()
+        )
+
+        serialized_alerts = [serialize_admin_alert(alert) for alert in alerts]
+
+        return jsonify({
+            'alerts': serialized_alerts,
+            'returned': len(serialized_alerts),
+            'total': total_count,
+            'include_expired': include_expired,
+            'limit': limit,
+            'search': search_term or None,
+        })
+    except Exception as exc:
+        logger.error("Failed to load alerts for admin listing: %s", exc)
+        return jsonify({'error': 'Failed to load alerts.'}), 500
+
+
+@app.route('/admin/alerts/<int:alert_id>', methods=['GET', 'PATCH', 'DELETE'])
+def admin_alert_detail(alert_id: int):
+    """Retrieve, update, or delete a single alert from the admin interface."""
+
+    alert = CAPAlert.query.get(alert_id)
+    if not alert:
+        return jsonify({'error': 'Alert not found.'}), 404
+
+    if request.method == 'GET':
+        return jsonify({'alert': serialize_admin_alert(alert)})
+
+    if request.method == 'DELETE':
+        identifier = alert.identifier
+        try:
+            Intersection.query.filter_by(cap_alert_id=alert.id).delete(synchronize_session=False)
+
+            try:
+                if ensure_led_tables():
+                    LEDMessage.query.filter_by(alert_id=alert.id).delete(synchronize_session=False)
+            except Exception as led_cleanup_error:
+                logger.warning(
+                    "Failed to clean LED messages for alert %s during deletion: %s",
+                    identifier,
+                    led_cleanup_error,
+                )
+                db.session.rollback()
+                return jsonify({'error': 'Failed to remove LED sign entries linked to this alert.'}), 500
+
+            db.session.delete(alert)
+
+            log_entry = SystemLog(
+                level='WARNING',
+                message='Alert deleted from admin interface',
+                module='admin',
+                details={
+                    'alert_id': alert_id,
+                    'identifier': identifier,
+                    'deleted_at_utc': utc_now().isoformat(),
+                },
+            )
+            db.session.add(log_entry)
+            db.session.commit()
+
+            logger.info("Admin deleted alert %s (%s)", identifier, alert_id)
+            return jsonify({'message': f'Alert {identifier} deleted.', 'identifier': identifier})
+        except Exception as exc:
+            db.session.rollback()
+            logger.error("Failed to delete alert %s (%s): %s", identifier, alert_id, exc)
+            return jsonify({'error': 'Failed to delete alert.'}), 500
+
+    payload = request.get_json(silent=True) or {}
+    if not payload:
+        return jsonify({'error': 'No update payload provided.'}), 400
+
+    allowed_fields = {
+        'event',
+        'headline',
+        'description',
+        'instruction',
+        'area_desc',
+        'status',
+        'severity',
+        'urgency',
+        'certainty',
+        'category',
+        'expires',
+    }
+    required_non_empty = {'event', 'status'}
+
+    updates: Dict[str, Any] = {}
+    change_details: Dict[str, Dict[str, Optional[str]]] = {}
+
+    for field in allowed_fields:
+        if field not in payload:
+            continue
+
+        value = payload[field]
+
+        if field == 'expires':
+            if value in (None, '', []):
+                updates[field] = None
+            else:
+                normalized = normalize_manual_import_datetime(value)
+                if not normalized:
+                    return jsonify({'error': 'Could not parse the provided expiration time.'}), 400
+                updates[field] = normalized
+        else:
+            if isinstance(value, str):
+                value = value.strip()
+            if field in required_non_empty and not value:
+                return jsonify({'error': f'{field.replace("_", " ").title()} is required.'}), 400
+            updates[field] = value or None
+
+        previous_value = getattr(alert, field)
+        if isinstance(previous_value, datetime):
+            previous_rendered = _alert_datetime_to_iso(previous_value)
+        else:
+            previous_rendered = previous_value
+
+        new_value = updates[field]
+        if isinstance(new_value, datetime):
+            new_rendered: Optional[str] = new_value.isoformat()
+        else:
+            new_rendered = new_value
+
+        change_details[field] = {
+            'old': previous_rendered,
+            'new': new_rendered,
+        }
+
+    if not updates:
+        return jsonify({'message': 'No changes detected.', 'alert': serialize_admin_alert(alert)})
+
+    try:
+        for field, value in updates.items():
+            setattr(alert, field, value)
+
+        alert.updated_at = utc_now()
+
+        log_entry = SystemLog(
+            level='INFO',
+            message='Alert updated from admin interface',
+            module='admin',
+            details={
+                'alert_id': alert.id,
+                'identifier': alert.identifier,
+                'changes': change_details,
+                'updated_at_utc': alert.updated_at.isoformat(),
+            },
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+
+        logger.info(
+            "Admin updated alert %s fields: %s",
+            alert.identifier,
+            ', '.join(sorted(updates.keys())),
+        )
+
+        db.session.refresh(alert)
+        return jsonify({'message': 'Alert updated successfully.', 'alert': serialize_admin_alert(alert)})
+    except Exception as exc:
+        db.session.rollback()
+        logger.error("Failed to update alert %s (%s): %s", alert.identifier, alert.id, exc)
+        return jsonify({'error': 'Failed to update alert.'}), 500
 
 
 @app.route('/admin/mark_expired', methods=['POST'])
