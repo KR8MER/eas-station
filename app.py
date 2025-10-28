@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 from enum import Enum
 from contextlib import nullcontext
-from urllib.parse import quote
+from urllib.parse import quote, urljoin, urlparse
 
 from dotenv import load_dotenv
 import requests
@@ -47,11 +47,28 @@ from app_utils import (
     set_location_timezone,
     utc_now,
 )
+from app_utils.eas import load_eas_config
 from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS, ensure_list, normalise_upper
 
 # Flask and extensions
-from flask import Flask, request, jsonify, render_template, flash, redirect, url_for, render_template_string, has_app_context
+from flask import (
+    Flask,
+    request,
+    jsonify,
+    render_template,
+    flash,
+    redirect,
+    url_for,
+    render_template_string,
+    has_app_context,
+    session,
+    g,
+)
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import (
+    check_password_hash as werkzeug_check_password_hash,
+    generate_password_hash as werkzeug_generate_password_hash,
+)
 
 # Database imports
 from geoalchemy2 import Geometry
@@ -61,6 +78,7 @@ from sqlalchemy.exc import OperationalError
 
 # Logging
 import logging
+import click
 
 # =============================================================================
 # CONFIGURATION AND SETUP
@@ -117,6 +135,12 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Initialize database
 db = SQLAlchemy(app)
 
+# Configure EAS output integration
+EAS_CONFIG = load_eas_config(app.root_path)
+app.config['EAS_BROADCAST_ENABLED'] = bool(EAS_CONFIG.get('enabled'))
+app.config['EAS_OUTPUT_DIR'] = EAS_CONFIG.get('output_dir')
+app.config['EAS_OUTPUT_WEB_SUBDIR'] = EAS_CONFIG.get('web_subdir', 'eas_messages')
+
 # Guard database schema preparation so we only attempt it once per process.
 _db_initialized = False
 _db_initialization_error = None
@@ -130,6 +154,8 @@ logger.info("NOAA Alerts System startup")
 # =============================================================================
 # BOUNDARY TYPE METADATA
 # =============================================================================
+
+USERNAME_PATTERN = re.compile(r'^[A-Za-z0-9_.-]{3,64}$')
 
 BOUNDARY_GROUP_LABELS = {
     'geographic': 'Geographic Boundaries',
@@ -369,6 +395,78 @@ class SystemLog(db.Model):
     message = db.Column(db.Text, nullable=False)
     module = db.Column(db.String(100))
     details = db.Column(db.JSON)
+
+
+class AdminUser(db.Model):
+    __tablename__ = 'admin_users'
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    salt = db.Column(db.String(64), nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
+    last_login_at = db.Column(db.DateTime(timezone=True))
+
+    def set_password(self, password: str) -> None:
+        self.password_hash = werkzeug_generate_password_hash(password)
+        self.salt = 'pbkdf2'
+
+    def check_password(self, password: str) -> bool:
+        if not self.password_hash:
+            return False
+
+        if self.salt and self.salt != 'pbkdf2':
+            if len(self.salt) == 32 and len(self.password_hash) == 64:
+                try:
+                    salt_bytes = bytes.fromhex(self.salt)
+                except ValueError:
+                    return False
+                hashed = hashlib.sha256(salt_bytes + password.encode('utf-8')).hexdigest()
+                if hashed == self.password_hash:
+                    self.set_password(password)
+                    return True
+            return False
+
+        try:
+            return werkzeug_check_password_hash(self.password_hash, password)
+        except ValueError:
+            logger.warning('Stored admin password hash has an unexpected format.')
+            return False
+
+    def to_safe_dict(self) -> Dict[str, Any]:
+        return {
+            'id': self.id,
+            'username': self.username,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'last_login_at': self.last_login_at.isoformat() if self.last_login_at else None,
+        }
+
+
+class EASMessage(db.Model):
+    __tablename__ = 'eas_messages'
+
+    id = db.Column(db.Integer, primary_key=True)
+    cap_alert_id = db.Column(db.Integer, db.ForeignKey('cap_alerts.id'), index=True)
+    same_header = db.Column(db.String(255), nullable=False)
+    audio_filename = db.Column(db.String(255), nullable=False)
+    text_filename = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
+    metadata = db.Column(db.JSON, default=dict)
+
+    cap_alert = db.relationship('CAPAlert', backref=db.backref('eas_messages', lazy='dynamic'))
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'id': self.id,
+            'cap_alert_id': self.cap_alert_id,
+            'same_header': self.same_header,
+            'audio_filename': self.audio_filename,
+            'text_filename': self.text_filename,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'metadata': self.metadata or {},
+        }
 
 
 class Intersection(db.Model):
@@ -2129,6 +2227,101 @@ def api_system_health():
 # ADMINISTRATIVE ROUTES
 # =============================================================================
 
+# =============================================================================
+# AUTHENTICATION ROUTES
+# =============================================================================
+
+
+def _is_safe_redirect_target(target: Optional[str]) -> bool:
+    if not target:
+        return False
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(urljoin(request.host_url, target))
+    return (
+        test_url.scheme in ('http', 'https')
+        and ref_url.netloc == test_url.netloc
+    )
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    next_param = request.args.get('next') if request.method == 'GET' else request.form.get('next')
+    if g.current_user:
+        target = next_param if _is_safe_redirect_target(next_param) else url_for('admin')
+        return redirect(target)
+
+    error = None
+    if request.method == 'POST':
+        username = (request.form.get('username') or '').strip()
+        password = request.form.get('password') or ''
+
+        if not username or not password:
+            error = 'Username and password are required.'
+        else:
+            user = AdminUser.query.filter(
+                func.lower(AdminUser.username) == username.lower()
+            ).first()
+            if user and user.is_active and user.check_password(password):
+                session['user_id'] = user.id
+                session.permanent = True
+                user.last_login_at = utc_now()
+                log_entry = SystemLog(
+                    level='INFO',
+                    message='Administrator logged in',
+                    module='auth',
+                    details={
+                        'username': user.username,
+                        'remote_addr': request.remote_addr,
+                    },
+                )
+                db.session.add(user)
+                db.session.add(log_entry)
+                db.session.commit()
+
+                target = next_param if _is_safe_redirect_target(next_param) else url_for('admin')
+                return redirect(target)
+
+            db.session.add(SystemLog(
+                level='WARNING',
+                message='Failed administrator login attempt',
+                module='auth',
+                details={
+                    'username': username,
+                    'remote_addr': request.remote_addr,
+                },
+            ))
+            db.session.commit()
+            error = 'Invalid username or password.'
+
+    show_setup = AdminUser.query.count() == 0
+
+    return render_template(
+        'login.html',
+        error=error,
+        next=next_param or url_for('admin'),
+        show_setup=show_setup,
+    )
+
+
+@app.route('/logout')
+def logout():
+    user = g.current_user
+    if user:
+        db.session.add(SystemLog(
+            level='INFO',
+            message='Administrator logged out',
+            module='auth',
+            details={
+                'username': user.username,
+                'remote_addr': request.remote_addr,
+            },
+        ))
+        db.session.commit()
+    session.pop('user_id', None)
+    flash('You have been signed out.')
+    return redirect(url_for('login'))
+
+
 @app.route('/admin')
 def admin():
     """Admin interface"""
@@ -2144,17 +2337,144 @@ def admin():
 
         location_settings = get_location_settings()
 
+        eas_enabled = app.config.get('EAS_BROADCAST_ENABLED', False)
+        total_eas_messages = EASMessage.query.count() if eas_enabled else 0
+        recent_eas_messages = []
+        if eas_enabled:
+            recent_eas_messages = (
+                EASMessage.query.order_by(EASMessage.created_at.desc()).limit(10).all()
+            )
+
         return render_template('admin.html',
                                total_boundaries=total_boundaries,
                                total_alerts=total_alerts,
                                active_alerts=active_alerts,
                                expired_alerts=expired_alerts,
                                boundary_stats=boundary_stats,
-                               location_settings=location_settings
+                               location_settings=location_settings,
+                               eas_enabled=eas_enabled,
+                               eas_total_messages=total_eas_messages,
+                               eas_recent_messages=recent_eas_messages,
+                               eas_web_subdir=app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages')
                                )
     except Exception as e:
         logger.error(f"Error rendering admin template: {str(e)}")
         return f"<h1>Admin Interface</h1><p>Admin panel loading...</p><p><a href='/'>← Back to Main</a></p>"
+
+
+@app.route('/admin/users', methods=['GET', 'POST'])
+def admin_users():
+    if request.method == 'GET':
+        users = AdminUser.query.order_by(AdminUser.username.asc()).all()
+        return jsonify({'users': [user.to_safe_dict() for user in users]})
+
+    payload = request.get_json(silent=True) or {}
+    username = (payload.get('username') or '').strip()
+    password = payload.get('password') or ''
+
+    if not username or not password:
+        return jsonify({'error': 'Username and password are required.'}), 400
+
+    if not USERNAME_PATTERN.match(username):
+        return jsonify({'error': 'Usernames must be 3-64 characters and may include letters, numbers, dots, underscores, and hyphens.'}), 400
+
+    if len(password) < 8:
+        return jsonify({'error': 'Password must be at least 8 characters long.'}), 400
+
+    existing = AdminUser.query.filter(func.lower(AdminUser.username) == username.lower()).first()
+    if existing:
+        return jsonify({'error': 'Username already exists.'}), 400
+
+    new_user = AdminUser(username=username)
+    new_user.set_password(password)
+    db.session.add(new_user)
+    db.session.add(SystemLog(
+        level='INFO',
+        message='Administrator account created',
+        module='auth',
+        details={
+            'username': new_user.username,
+            'created_by': g.current_user.username if g.current_user else None,
+        },
+    ))
+    db.session.commit()
+
+    return jsonify({'message': 'User created successfully.', 'user': new_user.to_safe_dict()}), 201
+
+
+@app.route('/admin/users/<int:user_id>', methods=['PATCH', 'DELETE'])
+def admin_user_detail(user_id: int):
+    user = AdminUser.query.get_or_404(user_id)
+
+    if request.method == 'PATCH':
+        payload = request.get_json(silent=True) or {}
+        password = payload.get('password') or ''
+        if len(password) < 8:
+            return jsonify({'error': 'Password must be at least 8 characters long.'}), 400
+
+        user.set_password(password)
+        db.session.add(user)
+        db.session.add(SystemLog(
+            level='INFO',
+            message='Administrator password reset',
+            module='auth',
+            details={
+                'username': user.username,
+                'updated_by': g.current_user.username if g.current_user else None,
+            },
+        ))
+        db.session.commit()
+        return jsonify({'message': 'Password updated successfully.', 'user': user.to_safe_dict()})
+
+    if user.id == getattr(g.current_user, 'id', None):
+        return jsonify({'error': 'You cannot delete your own account while logged in.'}), 400
+
+    active_users = AdminUser.query.filter(AdminUser.is_active.is_(True)).count()
+    if user.is_active and active_users <= 1:
+        return jsonify({'error': 'At least one active administrator account is required.'}), 400
+
+    db.session.delete(user)
+    db.session.add(SystemLog(
+        level='WARNING',
+        message='Administrator account deleted',
+        module='auth',
+        details={
+            'username': user.username,
+            'deleted_by': g.current_user.username if g.current_user else None,
+        },
+    ))
+    db.session.commit()
+    return jsonify({'message': 'User deleted successfully.'})
+
+
+@app.route('/admin/eas_messages', methods=['GET'])
+def admin_eas_messages():
+    if not app.config.get('EAS_BROADCAST_ENABLED', False):
+        return jsonify({'messages': [], 'total': 0})
+
+    try:
+        limit = request.args.get('limit', type=int) or 50
+        limit = min(max(limit, 1), 500)
+        base_query = EASMessage.query.order_by(EASMessage.created_at.desc())
+        messages = base_query.limit(limit).all()
+        total = base_query.count()
+
+        static_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+        items = []
+        for message in messages:
+            data = message.to_dict()
+            audio_path = '/'.join(part for part in [static_prefix, message.audio_filename] if part)
+            text_path = '/'.join(part for part in [static_prefix, message.text_filename] if part)
+            items.append({
+                **data,
+                'audio_url': url_for('static', filename=audio_path),
+                'text_url': url_for('static', filename=text_path),
+            })
+
+        return jsonify({'messages': items, 'total': total})
+    except Exception as exc:
+        logger.error(f"Failed to list EAS messages: {exc}")
+        return jsonify({'error': 'Unable to load EAS messages'}), 500
 
 
 @app.route('/logs')
@@ -4513,6 +4833,9 @@ def inject_global_vars():
         'location_settings': location_settings,
         'boundary_type_config': BOUNDARY_TYPE_CONFIG,
         'boundary_group_labels': BOUNDARY_GROUP_LABELS,
+        'current_user': getattr(g, 'current_user', None),
+        'eas_broadcast_enabled': app.config.get('EAS_BROADCAST_ENABLED', False),
+        'eas_output_web_subdir': app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages'),
     }
 
 
@@ -4529,6 +4852,29 @@ def before_request():
 
     # Ensure the database schema exists before handling the request.
     initialize_database()
+
+    # Load the current user from the session for downstream use.
+    g.current_user = None
+    user_id = session.get('user_id')
+    if user_id is not None:
+        user = AdminUser.query.get(user_id)
+        if user and user.is_active:
+            g.current_user = user
+        else:
+            session.pop('user_id', None)
+
+    # Allow authentication endpoints without additional checks.
+    if request.endpoint in {'login', 'static'}:
+        return
+
+    protected_prefixes = ('/admin', '/logs')
+    if any(request.path.startswith(prefix) for prefix in protected_prefixes):
+        if g.current_user is None:
+            accept_header = request.headers.get('Accept', '')
+            next_url = request.full_path if request.query_string else request.path
+            if request.method != 'GET' or 'application/json' in accept_header or request.is_json:
+                return jsonify({'error': 'Authentication required'}), 401
+            return redirect(url_for('login', next=next_url))
 
 
 @app.after_request
@@ -4616,6 +4962,38 @@ def test_led():
             logger.error(f"LED test failed: {e}")
     else:
         logger.warning("LED controller not available")
+
+
+@app.cli.command('create-admin-user')
+@click.option('--username', prompt=True)
+@click.option('--password', prompt=True, hide_input=True, confirmation_prompt=True)
+def create_admin_user_cli(username: str, password: str):
+    """Create a new administrator user account."""
+    initialize_database()
+
+    username = username.strip()
+    if not USERNAME_PATTERN.match(username):
+        raise click.ClickException('Usernames must be 3-64 characters and may include letters, numbers, dots, underscores, and hyphens.')
+
+    if len(password) < 8:
+        raise click.ClickException('Password must be at least 8 characters long.')
+
+    existing = AdminUser.query.filter(func.lower(AdminUser.username) == username.lower()).first()
+    if existing:
+        raise click.ClickException('That username already exists.')
+
+    user = AdminUser(username=username)
+    user.set_password(password)
+    db.session.add(user)
+    db.session.add(SystemLog(
+        level='INFO',
+        message='Administrator account created via CLI',
+        module='auth',
+        details={'username': username},
+    ))
+    db.session.commit()
+
+    click.echo(f'Created administrator account for {username}.')
 
 
 @app.cli.command()
