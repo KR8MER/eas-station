@@ -10,7 +10,7 @@ import struct
 import subprocess
 import time
 import wave
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -20,31 +20,7 @@ except Exception:  # pragma: no cover - gracefully handle non-RPi environments
     RPiGPIO = None
 
 
-SAME_EVENT_CODES: Dict[str, str] = {
-    'tornado warning': 'TOR',
-    'tornado watch': 'TOA',
-    'severe thunderstorm warning': 'SVR',
-    'severe thunderstorm watch': 'SVA',
-    'flash flood warning': 'FFW',
-    'flash flood watch': 'FFA',
-    'flood warning': 'FLW',
-    'flood watch': 'FLA',
-    'amber alert': 'CAE',
-    'child abduction emergency': 'CAE',
-    'civil danger warning': 'CDW',
-    'civil emergency message': 'CEM',
-    'fire warning': 'FRW',
-    'hurricane warning': 'HWW',
-    'hurricane watch': 'HUA',
-    'blizzard warning': 'BZW',
-    'winter storm warning': 'WSW',
-    'high wind warning': 'HWW',
-    'ice storm warning': 'ISW',
-    'snow squall warning': 'SQW',
-    'dust storm warning': 'DSW',
-    'radiological hazard warning': 'RHW',
-    'hazardous materials warning': 'HMW',
-}
+from app_utils.event_codes import resolve_event_code
 
 
 def _clean_identifier(value: str) -> str:
@@ -114,10 +90,64 @@ def _duration_code(sent: datetime, expires: Optional[datetime]) -> str:
     return f"{minutes:04d}"
 
 
+def _collect_event_code_candidates(alert: object, payload: Dict[str, object]) -> List[str]:
+    candidates: List[str] = []
+
+    def _extend(value) -> None:
+        if value is None:
+            return
+        if isinstance(value, str):
+            candidates.append(value)
+        elif isinstance(value, (list, tuple, set)):
+            for item in value:
+                if item is not None:
+                    candidates.append(str(item))
+
+    for key in ('event_code', 'eventCode', 'primary_event_code'):
+        if key in payload:
+            _extend(payload[key])
+    for key in ('event_codes', 'eventCodes'):
+        if key in payload:
+            _extend(payload[key])
+
+    raw_sources = []
+    for container in (payload.get('raw_json'), getattr(alert, 'raw_json', None)):
+        if isinstance(container, dict):
+            props = container.get('properties') or {}
+            raw_sources.append(props)
+        else:
+            raw_sources.append(None)
+
+    for props in raw_sources:
+        if not isinstance(props, dict):
+            continue
+        for key in ('event_code', 'eventCode', 'primary_event_code'):
+            if key in props:
+                _extend(props[key])
+        for key in ('event_codes', 'eventCodes'):
+            if key in props:
+                _extend(props[key])
+
+    ordered: List[str] = []
+    seen = set()
+    for candidate in candidates:
+        text = str(candidate).strip()
+        if not text:
+            continue
+        if text not in seen:
+            seen.add(text)
+            ordered.append(text)
+
+    return ordered
+
+
 def build_same_header(alert: object, payload: Dict[str, object], config: Dict[str, object],
-                      location_settings: Optional[Dict[str, object]] = None) -> Tuple[str, List[str]]:
+                      location_settings: Optional[Dict[str, object]] = None) -> Tuple[str, List[str], str]:
     event_name = (getattr(alert, 'event', '') or '').strip()
-    event_code = SAME_EVENT_CODES.get(event_name.lower(), 'EAS')
+    event_candidates = _collect_event_code_candidates(alert, payload)
+    event_code = resolve_event_code(event_name, event_candidates)
+    if 'resolved_event_code' not in payload:
+        payload['resolved_event_code'] = event_code
 
     geocode = (payload.get('raw_json', {}) or {}).get('properties', {}).get('geocode', {})
     same_codes = []
@@ -162,7 +192,14 @@ def build_same_header(alert: object, payload: Dict[str, object], config: Dict[st
     location_field = '-'.join(formatted_locations)
     header = f"ZCZC-{originator}-{event_code}-{location_field}+{duration_code}-{julian}-{station}-"
 
-    return header, formatted_locations
+    return header, formatted_locations, event_code
+
+
+def build_eom_header(config: Dict[str, object]) -> str:
+    originator = str(config.get('originator', 'WXR'))[:3].upper()
+    station = str(config.get('station_id', 'EASNODES')).ljust(8)[:8]
+    julian = _julian_time(datetime.now(timezone.utc))
+    return f"ZCZC-{originator}-EOM-000000+0000-{julian}-{station}-"
 
 
 def _compose_message_text(alert: object) -> str:
@@ -241,21 +278,36 @@ class GPIORelayController:
     pin: int
     active_high: bool
     hold_seconds: float
+    activated_at: Optional[float] = field(default=None, init=False)
 
     def __post_init__(self) -> None:  # pragma: no cover - hardware specific
         if RPiGPIO is None:
             raise RuntimeError('RPi.GPIO not available')
+        self._active_level = RPiGPIO.HIGH if self.active_high else RPiGPIO.LOW
+        self._resting_level = RPiGPIO.LOW if self.active_high else RPiGPIO.HIGH
         RPiGPIO.setmode(RPiGPIO.BCM)
-        RPiGPIO.setup(self.pin, RPiGPIO.OUT, initial=RPiGPIO.LOW if self.active_high else RPiGPIO.HIGH)
+        RPiGPIO.setup(self.pin, RPiGPIO.OUT, initial=self._resting_level)
 
     def activate(self, logger) -> None:  # pragma: no cover - hardware specific
         if RPiGPIO is None:
             return
-        try:
-            RPiGPIO.output(self.pin, RPiGPIO.HIGH if self.active_high else RPiGPIO.LOW)
-            time.sleep(self.hold_seconds)
-        finally:
-            RPiGPIO.output(self.pin, RPiGPIO.LOW if self.active_high else RPiGPIO.HIGH)
+        RPiGPIO.output(self.pin, self._active_level)
+        self.activated_at = time.monotonic()
+        if logger:
+            logger.debug('Activated GPIO relay on pin %s', self.pin)
+
+    def deactivate(self, logger) -> None:  # pragma: no cover - hardware specific
+        if RPiGPIO is None:
+            return
+        if self.activated_at is not None:
+            elapsed = time.monotonic() - self.activated_at
+            remaining = max(0.0, self.hold_seconds - elapsed)
+            if remaining > 0:
+                time.sleep(remaining)
+        RPiGPIO.output(self.pin, self._resting_level)
+        self.activated_at = None
+        if logger:
+            logger.debug('Released GPIO relay on pin %s', self.pin)
 
 
 class EASAudioGenerator:
@@ -322,6 +374,36 @@ class EASAudioGenerator:
 
         return audio_filename, text_filename, message_text
 
+    def build_eom_file(self) -> str:
+        header = build_eom_header(self.config)
+        timestamp = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
+        base_name = _clean_identifier(f"eom_{timestamp}")
+        audio_filename = f"{base_name}.wav"
+        audio_path = os.path.join(self.output_dir, audio_filename)
+
+        same_bits = _encode_same_bits(header)
+        amplitude = 0.7 * 32767
+        header_samples = _generate_fsk_samples(
+            same_bits,
+            sample_rate=self.sample_rate,
+            bit_rate=520.83,
+            mark_freq=2083.3,
+            space_freq=1562.5,
+            amplitude=amplitude,
+        )
+
+        samples: List[int] = []
+        for burst_index in range(3):
+            samples.extend(header_samples)
+            if burst_index < 2:
+                samples.extend(_generate_silence(1.0, self.sample_rate))
+
+        _write_wave_file(audio_path, samples, self.sample_rate)
+        if self.logger:
+            self.logger.debug('Generated EOM audio at %s', audio_path)
+
+        return audio_filename
+
 
 class EASBroadcaster:
     def __init__(self, db_session, model_cls, config: Dict[str, object], logger, location_settings: Optional[Dict[str, object]] = None) -> None:
@@ -373,18 +455,36 @@ class EASBroadcaster:
             self.logger.debug('Skipping EAS generation for message type %s', message_type)
             return
 
-        header, location_codes = build_same_header(alert, payload, self.config, self.location_settings)
+        header, location_codes, event_code = build_same_header(alert, payload, self.config, self.location_settings)
         audio_filename, text_filename, message_text = self.audio_generator.build_files(alert, payload, header, location_codes)
 
-        audio_path = os.path.join(self.audio_generator.output_dir, audio_filename)
+        try:
+            eom_filename = self.audio_generator.build_eom_file()
+        except Exception as exc:
+            self.logger.warning(f"Failed to generate EOM audio: {exc}")
+            eom_filename = None
 
-        if self.gpio_controller:
+        audio_path = os.path.join(self.audio_generator.output_dir, audio_filename)
+        eom_path = os.path.join(self.audio_generator.output_dir, eom_filename) if eom_filename else None
+
+        controller = self.gpio_controller
+        if controller:
             try:  # pragma: no cover - hardware specific
-                self.gpio_controller.activate(self.logger)
+                controller.activate(self.logger)
             except Exception as exc:
                 self.logger.warning(f"GPIO activation failed: {exc}")
+                controller = None
 
-        self._play_audio(audio_path)
+        try:
+            self._play_audio(audio_path)
+            if eom_path:
+                self._play_audio(eom_path)
+        finally:
+            if controller:
+                try:  # pragma: no cover - hardware specific
+                    controller.deactivate(self.logger)
+                except Exception as exc:
+                    self.logger.warning(f"GPIO release failed: {exc}")
 
         record = self.model_cls(
             cap_alert_id=getattr(alert, 'id', None),
@@ -394,10 +494,12 @@ class EASBroadcaster:
             created_at=datetime.now(timezone.utc),
             metadata={
                 'event': getattr(alert, 'event', ''),
+                'event_code': event_code,
                 'severity': getattr(alert, 'severity', ''),
                 'status': getattr(alert, 'status', ''),
                 'message_type': getattr(alert, 'message_type', ''),
                 'locations': location_codes,
+                'eom_filename': eom_filename,
             },
         )
 
