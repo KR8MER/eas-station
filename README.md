@@ -52,19 +52,33 @@
 ### Prerequisites
 - **Docker Engine 24+** with Docker Compose V2
 - **Git** for cloning the repository
-- **Dedicated PostgreSQL/PostGIS container** – the spatial database must run in its own service separate from the Flask application container. The provided `docker-compose.yml` spins up a compatible instance automatically, but self-hosted deployments must provision an equivalent database service before the app will start.
+- **Dedicated PostgreSQL/PostGIS container** – the spatial database must run in its own service separate from the Flask application container. The provided `docker-compose.yml` spins up a compatible instance automatically using the multi-architecture `postgis/postgis:17-3.4` image (works on AMD64 and ARM64), but self-hosted deployments must provision an equivalent database service before the app will start.
 - **4GB RAM** recommended (2GB minimum)
 - **Network Access** for NOAA CAP API polling
 
 ### One-Command Installation
 
 ```bash
-git clone https://github.com/KR8MER/noaa_alerts_systems.git
+bash -c "git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems.git && cd noaa_alerts_systems && cp .env.example .env && docker compose up -d --build"
+```
+
+> ⚠️ **Important:** The `.env.example` file only contains placeholder secrets so the
+> containers can boot. **Immediately after the first launch, open `.env` and change**
+> the `SECRET_KEY`, database password, and any other sensitive values, then restart
+> the stack so the new credentials are applied.
+
+If you prefer to run each step manually, the equivalent sequence is:
+
+```bash
+git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems.git
 cd noaa_alerts_systems
+# Copy the template environment file and edit it before exposing services.
 cp .env.example .env
 # IMPORTANT: Edit .env and set SECRET_KEY and POSTGRES_PASSWORD!
 # The docker compose stack will launch both the app service and a
-# separate PostgreSQL/PostGIS database container.
+# separate PostgreSQL/PostGIS database container. Set
+# ALERTS_DB_IMAGE in .env if you need to align with an existing
+# database deployment (defaults to postgis/postgis:17-3.4).
 docker compose up -d --build
 ```
 
@@ -72,10 +86,11 @@ docker compose up -d --build
 
 ### Configuration Before First Run
 
-1. **Copy the example environment file:**
-   ```bash
-   cp .env.example .env
-   ```
+1. **Copy and review the environment template:**
+   Run `cp .env.example .env` (already done in the quick start commands above)
+   and treat the result as your local configuration. The defaults mirror the
+   sample Portainer stack, but every secret and environment-specific value must
+   be replaced before production use.
 
 2. **Generate a secure SECRET_KEY:**
    ```bash
@@ -84,18 +99,22 @@ docker compose up -d --build
 
 3. **Edit `.env` and update:**
    - `SECRET_KEY` - Use the generated value
-   - `POSTGRES_PASSWORD` - Change from default
-   - Other settings as needed
+   - `POSTGRES_PASSWORD` (and matching `DATABASE_URL`) - Change from defaults
+   - `ALERTS_DB_IMAGE`, `TZ`, `WATCHTOWER_*`, or other infrastructure metadata as needed
 
 4. **Start the system (provisions the separate Postgres/PostGIS container automatically):**
    ```bash
    docker compose up -d --build
    ```
 
+   > Need to run a specific database image (for example `postgres:17-postgis-arm64`)?
+   > Set `ALERTS_DB_IMAGE` in `.env` before launching and Compose will pull
+   > that tag instead of the default `postgis/postgis:17-3.4` build.
+
 ### Quick Update (Pull Latest Changes)
 
 ```bash
-git pull
+git pull origin Experimental
 docker compose build --pull
 docker compose up -d --force-recreate
 ```
@@ -180,10 +199,12 @@ docker compose logs -f postgresql # Database
 The admin panel now requires an authenticated session backed by the database. Passwords are stored as salted SHA-256 hashes and never written in plain text.
 
 1. **Create the first administrator account** (only required once):
-   ```bash
-   docker compose run --rm app flask create-admin-user
-   ```
-   Follow the prompts to set a username (letters, numbers, `.`, `_`, `-`) and a password (minimum 8 characters).
+   - Open http://localhost:5000/admin and complete the **First-Time Administrator Setup** card to provision the initial user through the UI, **or**
+   - run the CLI helper if you prefer the terminal:
+     ```bash
+     docker compose run --rm app flask create-admin-user
+     ```
+   Both flows enforce the same username rules (letters, numbers, `.`, `_`, `-`) and require a password with at least 8 characters.
 
 2. **Sign in** at http://localhost:5000/login using the credentials created above. Successful login redirects to the admin dashboard.
 
@@ -223,13 +244,15 @@ When enabled, the poller generates full SAME header bursts, raises an optional G
 
 #### Generate a sample audio file
 
-You can produce a demonstration clip (without ingesting a live CAP product) using the bundled helper. The script reuses the SAME encoder and writes the files to the configured output directory:
+You can produce a demonstration clip (without ingesting a live CAP product) using the bundled helper. The script reuses the SAME encoder and writes the files to the configured output directory. From the host machine, run:
 
 ```bash
-python tools/generate_sample_audio.py
+docker compose exec app python tools/generate_sample_audio.py
 ```
 
-Pass `--output-dir` if you want the artifacts written somewhere other than the default `static/eas_messages/` folder.
+Inside the container the helper lives at `/app/tools/generate_sample_audio.py`. Pass
+`--output-dir` if you want the artifacts written somewhere other than the default
+`static/eas_messages/` folder.
 
 #### Optional Azure AI voiceover
 
