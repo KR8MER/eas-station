@@ -19,7 +19,7 @@
                         <li>Ensure the PostgreSQL + PostGIS container and Redis (if used) are running.</li>
                         <li>Launch the Flask web container and confirm the dashboard loads without errors.</li>
                         <li>Verify the <strong>System Health</strong> widget reports a green status and recent poll times.</li>
-                        <li>Run <code>tools/generate_sample_audio.py</code> to validate the audio encoder and Azure voiceover (when configured).</li>
+                        <li>Run <code>docker compose exec app python tools/generate_sample_audio.py</code> to validate the audio encoder and Azure voiceover (when configured).</li>
                         <li>Confirm the LED control page can reach the configured sign and display a test message.</li>
                     </ol>
                 </div>
@@ -74,7 +74,7 @@
                             <div id="manualTools" class="accordion-collapse collapse" aria-labelledby="manualToolsHeading" data-bs-parent="#operationsAccordion">
                                 <div class="accordion-body">
                                     <ul>
-                                        <li><code>tools/generate_sample_audio.py</code> – produce demo SAME audio for equipment checks.</li>
+                                        <li><code>docker compose exec app python tools/generate_sample_audio.py</code> – produce demo SAME audio for equipment checks.</li>
                                         <li><code>manual_eas_event.py</code> – inject CAP XML for manual activations with audit logging.</li>
                                         <li><code>manual_alert_fetch.py</code> – fetch individual CAP identifiers for debugging.</li>
                                         <li><code>fix_template_issues.py</code> – rebuild HTML templates if corruption occurs.</li>

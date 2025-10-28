@@ -52,30 +52,48 @@
 ### Prerequisites
 - **Docker Engine 24+** with Docker Compose V2
 - **Git** for cloning the repository
-- **Dedicated PostgreSQL/PostGIS container** – the spatial database must run in its own service separate from the Flask application container. The provided `docker-compose.yml` spins up a compatible instance automatically, but self-hosted deployments must provision an equivalent database service before the app will start.
+- **Dedicated PostgreSQL/PostGIS container** – the spatial database must run in its own service separate from the Flask application container. The provided `docker-compose.yml` exposes an optional `embedded-db` profile that launches a multi-architecture `postgis/postgis:17-3.4` instance, but self-hosted deployments can omit that profile and point the app at an existing PostGIS service instead.
 - **4GB RAM** recommended (2GB minimum)
 - **Network Access** for NOAA CAP API polling
 
 ### One-Command Installation
 
 ```bash
-git clone https://github.com/KR8MER/noaa_alerts_systems.git
+bash -c "git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems.git && cd noaa_alerts_systems && cp .env.example .env && docker compose --profile embedded-db up -d --build"
+```
+
+> 💡 Already have a PostGIS instance? Edit `.env` to point at it and rerun `docker compose up -d --build`
+> without the `--profile embedded-db` flag so Compose skips the bundled database container.
+
+> ⚠️ **Important:** The `.env.example` file only contains placeholder secrets so the
+> containers can boot. **Immediately after the first launch, open `.env` and change**
+> the `SECRET_KEY`, database password, and any other sensitive values, then restart
+> the stack so the new credentials are applied.
+
+If you prefer to run each step manually, the equivalent sequence is:
+
+```bash
+git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems.git
 cd noaa_alerts_systems
+# Copy the template environment file and edit it before exposing services.
 cp .env.example .env
 # IMPORTANT: Edit .env and set SECRET_KEY and POSTGRES_PASSWORD!
-# The docker compose stack will launch both the app service and a
-# separate PostgreSQL/PostGIS database container.
-docker compose up -d --build
+# Include the embedded-db profile to start the bundled PostGIS container.
+docker compose --profile embedded-db up -d --build
+# Pointing at an existing PostgreSQL/PostGIS host instead?
+# Omit the profile so Compose only launches the application services.
+# docker compose up -d --build
 ```
 
 **Access the application at:** http://localhost:5000
 
 ### Configuration Before First Run
 
-1. **Copy the example environment file:**
-   ```bash
-   cp .env.example .env
-   ```
+1. **Copy and review the environment template:**
+   Run `cp .env.example .env` (already done in the quick start commands above)
+   and treat the result as your local configuration. The defaults mirror the
+   sample Portainer stack, but every secret and environment-specific value must
+   be replaced before production use.
 
 2. **Generate a secure SECRET_KEY:**
    ```bash
@@ -84,20 +102,33 @@ docker compose up -d --build
 
 3. **Edit `.env` and update:**
    - `SECRET_KEY` - Use the generated value
-   - `POSTGRES_PASSWORD` - Change from default
-   - Other settings as needed
+   - `POSTGRES_PASSWORD` - Change from defaults (the application builds `DATABASE_URL` automatically from the `POSTGRES_*` values)
+   - `POSTGRES_HOST` - Point at your existing PostGIS host when not running the `embedded-db` profile
+   - `ALERTS_DB_IMAGE`, `TZ`, `WATCHTOWER_*`, or other infrastructure metadata as needed
 
-4. **Start the system (provisions the separate Postgres/PostGIS container automatically):**
-   ```bash
-   docker compose up -d --build
-   ```
+4. **Start the system:**
+   - **Bundled PostGIS:**
+     ```bash
+     docker compose --profile embedded-db up -d --build
+     ```
+
+   - **External PostGIS:**
+     ```bash
+     docker compose up -d --build
+     ```
+
+   > Need to run a specific database image (for example `postgres:17-postgis-arm64`)?
+   > Set `ALERTS_DB_IMAGE` in `.env` before launching and Compose will pull
+   > that tag when the `embedded-db` profile is enabled.
 
 ### Quick Update (Pull Latest Changes)
 
 ```bash
-git pull
+git pull origin Experimental
 docker compose build --pull
 docker compose up -d --force-recreate
+# Include --profile embedded-db in the command above when you want Compose to
+# refresh the bundled PostGIS container at the same time.
 ```
 
 ---
@@ -135,9 +166,9 @@ docker compose up -d --force-recreate
 |---------|---------|------------|
 | **app** | Web UI & REST API | Flask 2.3, Gunicorn, Bootstrap 5 |
 | **poller** | Background alert polling | Python 3.11, continuous daemon |
-| **postgresql** | Spatial database | PostgreSQL 15, PostGIS extension |
+| **alerts-db** *(profile: embedded-db)* | Optional spatial database | PostgreSQL/PostGIS (multi-arch) |
 
-> **Deployment Note:** The PostgreSQL/PostGIS database must remain isolated from the application containers. If you are not using the provided Docker Compose stack, provision a dedicated database container (or managed service) with the PostGIS extension enabled and update the app configuration to point to that external host.
+> **Deployment Note:** The PostgreSQL/PostGIS database must remain isolated from the application containers. Enable the `embedded-db` profile to let Compose provision one for you, or skip that profile and point the app at an existing PostGIS deployment by updating the connection variables in `.env`.
 
 ---
 
@@ -146,7 +177,10 @@ docker compose up -d --force-recreate
 ### Starting and Stopping Services
 
 ```bash
-# Start all services in background
+# Start everything, including the optional embedded database profile
+docker compose --profile embedded-db up -d
+
+# Start only the application services (use when pointing at an external PostGIS host)
 docker compose up -d
 
 # Stop all services
@@ -161,7 +195,7 @@ docker compose logs -f
 # View logs for specific service
 docker compose logs -f app       # Web application
 docker compose logs -f poller    # Alert poller
-docker compose logs -f postgresql # Database
+docker compose logs -f alerts-db  # Database (when the embedded-db profile is active)
 ```
 
 ### Accessing the Application
@@ -180,10 +214,12 @@ docker compose logs -f postgresql # Database
 The admin panel now requires an authenticated session backed by the database. Passwords are stored as salted SHA-256 hashes and never written in plain text.
 
 1. **Create the first administrator account** (only required once):
-   ```bash
-   docker compose run --rm app flask create-admin-user
-   ```
-   Follow the prompts to set a username (letters, numbers, `.`, `_`, `-`) and a password (minimum 8 characters).
+   - Open http://localhost:5000/admin and complete the **First-Time Administrator Setup** card to provision the initial user through the UI, **or**
+   - run the CLI helper if you prefer the terminal:
+     ```bash
+     docker compose run --rm app flask create-admin-user
+     ```
+   Both flows enforce the same username rules (letters, numbers, `.`, `_`, `-`) and require a password with at least 8 characters.
 
 2. **Sign in** at http://localhost:5000/login using the credentials created above. Successful login redirects to the admin dashboard.
 
@@ -204,7 +240,6 @@ When enabled, the poller generates full SAME header bursts, raises an optional G
    # Optional overrides:
    # EAS_OUTPUT_DIR=static/eas_messages        # Files must remain within the Flask static directory for web access
    # EAS_OUTPUT_WEB_SUBDIR=eas_messages        # Subdirectory under /static used for download links
-   # EAS_OUTPUT_WEB_PATH=eas_messages          # Legacy variable name still recognised
    # EAS_ORIGINATOR=WXR                        # SAME originator code (3 characters)
    # EAS_STATION_ID=EASNODES                   # Call sign or station identifier (up to 8 characters)
    # EAS_AUDIO_PLAYER="aplay"                  # Command used to play generated WAV files
@@ -221,15 +256,15 @@ When enabled, the poller generates full SAME header bursts, raises an optional G
    - A matching `*.txt` file stores the JSON metadata (identifier, timestamps, SAME header, and narrative).
    - The admin console lists the most recent transmissions, allowing operators to play audio or download the summary directly from the browser.
 
-#### Generate a sample audio file
+#### Build practice activations from the admin console
 
-You can produce a demonstration clip (without ingesting a live CAP product) using the bundled helper. The script reuses the SAME encoder and writes the files to the configured output directory:
+The **Manual Broadcast Builder** on the EAS Output tab mirrors the workflow of a commercial encoder:
 
-```bash
-python tools/generate_sample_audio.py
-```
+1. Open **Admin → EAS Output** and supply the event code, SAME/FIPS targets, and narration copy.
+2. Click **Generate Package** to produce discrete WAV files for the SAME bursts, attention tone (dual-tone or 1050 Hz), optional narration, and the EOM burst.
+3. Preview each element directly in the browser or download the files for playout testing. A composite file is also produced so you can audition the full activation end-to-end.
 
-Pass `--output-dir` if you want the artifacts written somewhere other than the default `static/eas_messages/` folder.
+Prefer scripts or automated testing? The legacy helper at `tools/generate_sample_audio.py` is still shipped with the project for command-line use.
 
 #### Optional Azure AI voiceover
 

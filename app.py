@@ -12,14 +12,16 @@ Version: 2.1.7 - Removes legacy artifacts and unused assets from the repository
 # IMPORTS AND DEPENDENCIES
 # =============================================================================
 
+import base64
 import os
 import json
 import re
 import psutil
 from typing import Any, Dict, List, Optional, Tuple, Union
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from urllib.parse import quote, urljoin, urlparse
+from types import SimpleNamespace
 
 from dotenv import load_dotenv
 import requests
@@ -42,7 +44,13 @@ from app_utils import (
     set_location_timezone,
     utc_now,
 )
-from app_utils.eas import load_eas_config
+from app_utils.eas import (
+    EASAudioGenerator,
+    build_same_header,
+    load_eas_config,
+    samples_to_wav_bytes,
+)
+from app_utils.event_codes import EVENT_CODE_REGISTRY
 
 # Flask and extensions
 from flask import (
@@ -162,11 +170,30 @@ NOAA_USER_AGENT = os.environ.get(
     'KR8MER CAP Alert System/2.1 (+https://github.com/KR8MER/noaa_alerts_systems)'
 )
 
+
+def _build_database_url() -> str:
+    url = os.getenv('DATABASE_URL')
+    if url:
+        return url
+
+    user = os.getenv('POSTGRES_USER', 'postgres') or 'postgres'
+    password = os.getenv('POSTGRES_PASSWORD', '')
+    host = os.getenv('POSTGRES_HOST', 'alerts-db') or 'alerts-db'
+    port = os.getenv('POSTGRES_PORT', '5432') or '5432'
+    database = os.getenv('POSTGRES_DB', user) or user
+
+    user_part = quote(user, safe='')
+    if password:
+        auth_part = f"{user_part}:{quote(password, safe='')}"
+    else:
+        auth_part = user_part
+
+    return f"postgresql+psycopg2://{auth_part}@{host}:{port}/{database}"
+
+
 # Database configuration
-DATABASE_URL = os.getenv(
-    'DATABASE_URL',
-    'postgresql+psycopg2://casaos:casaos@postgresql:5432/casaos'
-)
+DATABASE_URL = _build_database_url()
+os.environ.setdefault('DATABASE_URL', DATABASE_URL)
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -1425,6 +1452,9 @@ def logout():
 def admin():
     """Admin interface"""
     try:
+        setup_mode = getattr(g, 'admin_setup_mode', None)
+        if setup_mode is None:
+            setup_mode = AdminUser.query.count() == 0
         total_boundaries = Boundary.query.count()
         total_alerts = CAPAlert.query.count()
         active_alerts = get_active_alerts_query().count()
@@ -1444,6 +1474,12 @@ def admin():
                 EASMessage.query.order_by(EASMessage.created_at.desc()).limit(10).all()
             )
 
+        eas_event_options = [
+            {'code': code, 'name': entry.get('name', code)}
+            for code, entry in EVENT_CODE_REGISTRY.items()
+        ]
+        eas_event_options.sort(key=lambda item: item['code'])
+
         return render_template('admin.html',
                                total_boundaries=total_boundaries,
                                total_alerts=total_alerts,
@@ -1454,7 +1490,15 @@ def admin():
                                eas_enabled=eas_enabled,
                                eas_total_messages=total_eas_messages,
                                eas_recent_messages=recent_eas_messages,
-                               eas_web_subdir=app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages')
+                               eas_web_subdir=app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages'),
+                               eas_event_codes=eas_event_options,
+                               eas_originator=EAS_CONFIG.get('originator', 'WXR'),
+                               eas_station_id=EAS_CONFIG.get('station_id', 'EASNODES'),
+                               eas_call_sign=EAS_CONFIG.get('call_sign', 'EASNODES'),
+                               eas_attention_seconds=EAS_CONFIG.get('attention_tone_seconds', 8),
+                               eas_sample_rate=EAS_CONFIG.get('sample_rate', 44100),
+                               eas_tts_provider=(EAS_CONFIG.get('tts_provider') or '').strip().lower(),
+                               setup_mode=setup_mode,
                                )
     except Exception as e:
         logger.error(f"Error rendering admin template: {str(e)}")
@@ -1470,6 +1514,10 @@ def admin_users():
     payload = request.get_json(silent=True) or {}
     username = (payload.get('username') or '').strip()
     password = payload.get('password') or ''
+
+    creating_first_user = AdminUser.query.count() == 0
+    if g.current_user is None and not creating_first_user:
+        return jsonify({'error': 'Authentication required.'}), 401
 
     if not username or not password:
         return jsonify({'error': 'Username and password are required.'}), 400
@@ -1493,7 +1541,7 @@ def admin_users():
         module='auth',
         details={
             'username': new_user.username,
-            'created_by': g.current_user.username if g.current_user else None,
+            'created_by': g.current_user.username if g.current_user else 'initial_setup',
         },
     ))
     db.session.commit()
@@ -1574,6 +1622,212 @@ def admin_eas_messages():
     except Exception as exc:
         logger.error(f"Failed to list EAS messages: {exc}")
         return jsonify({'error': 'Unable to load EAS messages'}), 500
+
+
+@app.route('/admin/eas/manual_generate', methods=['POST'])
+def admin_manual_eas_generate():
+    creating_first_user = AdminUser.query.count() == 0
+    if g.current_user is None and not creating_first_user:
+        return jsonify({'error': 'Authentication required.'}), 401
+
+    payload = request.get_json(silent=True) or {}
+
+    def _validation_error(message: str, status: int = 400):
+        return jsonify({'error': message}), status
+
+    identifier = (payload.get('identifier') or '').strip()[:120]
+    if not identifier:
+        identifier = f"MANUAL-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+
+    event_code = (payload.get('event_code') or '').strip().upper()
+    if not event_code or len(event_code) != 3 or not all(ch.isalnum() or ch == '?' for ch in event_code):
+        return _validation_error('Event code must be a three-character SAME identifier.')
+
+    event_name = (payload.get('event_name') or '').strip()
+    if not event_name:
+        registry_entry = EVENT_CODE_REGISTRY.get(event_code)
+        event_name = registry_entry.get('name', event_code) if registry_entry else event_code
+
+    same_input = payload.get('same_codes')
+    if isinstance(same_input, str):
+        raw_codes = re.split(r'[^0-9]+', same_input)
+    elif isinstance(same_input, list):
+        raw_codes = []
+        for item in same_input:
+            if item is None:
+                continue
+            raw_codes.extend(re.split(r'[^0-9]+', str(item)))
+    else:
+        raw_codes = []
+
+    location_codes: List[str] = []
+    for code in raw_codes:
+        digits = ''.join(ch for ch in str(code) if ch.isdigit())
+        if not digits:
+            continue
+        location_codes.append(digits.zfill(6)[:6])
+
+    if not location_codes:
+        return _validation_error('At least one SAME/FIPS location code is required.')
+
+    try:
+        duration_minutes = float(payload.get('duration_minutes', 15) or 15)
+    except (TypeError, ValueError):
+        return _validation_error('Duration must be a numeric value representing minutes.')
+    if duration_minutes <= 0:
+        return _validation_error('Duration must be greater than zero minutes.')
+
+    tone_seconds = payload.get('tone_seconds')
+    try:
+        tone_seconds = float(tone_seconds) if tone_seconds is not None else None
+    except (TypeError, ValueError):
+        return _validation_error('Tone duration must be numeric.')
+
+    header_repeats = payload.get('header_repeats', 3)
+    try:
+        header_repeats = max(1, int(header_repeats))
+    except (TypeError, ValueError):
+        return _validation_error('Header repeat count must be an integer.')
+
+    tone_profile = (payload.get('tone_profile') or 'attention').strip().lower()
+    include_tts = bool(payload.get('include_tts', True))
+
+    originator = (payload.get('originator') or EAS_CONFIG.get('originator', 'WXR')).strip() or 'WXR'
+    station_id = (payload.get('station_id') or EAS_CONFIG.get('station_id', 'EASNODES')).strip() or 'EASNODES'
+    call_sign = (payload.get('call_sign') or EAS_CONFIG.get('call_sign', station_id)).strip() or station_id
+
+    status = (payload.get('status') or 'Actual').strip() or 'Actual'
+    message_type = (payload.get('message_type') or 'Alert').strip() or 'Alert'
+
+    try:
+        sample_rate = int(payload.get('sample_rate') or EAS_CONFIG.get('sample_rate', 44100) or 44100)
+    except (TypeError, ValueError):
+        return _validation_error('Sample rate must be an integer value.')
+    if sample_rate < 8000 or sample_rate > 48000:
+        return _validation_error('Sample rate must be between 8000 and 48000 Hz.')
+
+    sent_dt = datetime.now(timezone.utc)
+    expires_dt = sent_dt + timedelta(minutes=duration_minutes)
+
+    manual_config = dict(EAS_CONFIG)
+    manual_config['enabled'] = True
+    manual_config['originator'] = originator[:3].upper()
+    manual_config['station_id'] = station_id[:8]
+    manual_config['call_sign'] = call_sign
+    manual_config['attention_tone_seconds'] = tone_seconds if tone_seconds is not None else manual_config.get('attention_tone_seconds', 8)
+    manual_config['sample_rate'] = sample_rate
+
+    alert_object = SimpleNamespace(
+        identifier=identifier,
+        event=event_name or event_code,
+        headline=(payload.get('headline') or '').strip(),
+        description=(payload.get('message') or '').strip(),
+        instruction=(payload.get('instruction') or '').strip(),
+        sent=sent_dt,
+        expires=expires_dt,
+        status=status,
+        message_type=message_type,
+    )
+
+    payload_wrapper: Dict[str, Any] = {
+        'identifier': identifier,
+        'sent': sent_dt,
+        'expires': expires_dt,
+        'status': status,
+        'message_type': message_type,
+        'raw_json': {
+            'properties': {
+                'geocode': {
+                    'SAME': location_codes,
+                }
+            }
+        },
+    }
+
+    try:
+        header, formatted_locations, resolved_event_code = build_same_header(
+            alert_object,
+            payload_wrapper,
+            manual_config,
+            location_settings=None,
+        )
+        generator = EASAudioGenerator(manual_config, logger)
+        components = generator.build_manual_components(
+            alert_object,
+            header,
+            repeats=header_repeats,
+            tone_profile=tone_profile,
+            tone_duration=tone_seconds,
+            include_tts=include_tts,
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.error(f"Failed to build manual EAS package: {exc}")
+        return jsonify({'error': 'Unable to generate EAS audio components.'}), 500
+
+    def _safe_base(value: str) -> str:
+        cleaned = re.sub(r'[^A-Za-z0-9]+', '_', value).strip('_')
+        return cleaned or 'manual_eas'
+
+    base_name = _safe_base(identifier)
+    sample_rate = components.get('sample_rate', sample_rate)
+
+    def _package_audio(samples: List[int], suffix: str) -> Optional[Dict[str, Any]]:
+        if not samples:
+            return None
+        wav_bytes = samples_to_wav_bytes(samples, sample_rate)
+        data_url = f"data:audio/wav;base64,{base64.b64encode(wav_bytes).decode('ascii')}"
+        duration = round(len(samples) / sample_rate, 3)
+        return {
+            'filename': f"{base_name}_{suffix}.wav",
+            'data_url': data_url,
+            'duration_seconds': duration,
+            'size_bytes': len(wav_bytes),
+        }
+
+    response_payload: Dict[str, Any] = {
+        'identifier': identifier,
+        'event_code': resolved_event_code,
+        'event_name': event_name,
+        'same_header': header,
+        'same_locations': formatted_locations,
+        'eom_header': components.get('eom_header'),
+        'tone_profile': components.get('tone_profile'),
+        'tone_seconds': components.get('tone_seconds'),
+        'message_text': components.get('message_text'),
+        'tts_warning': components.get('tts_warning'),
+        'tts_provider': components.get('tts_provider'),
+        'duration_minutes': duration_minutes,
+        'sent_at': sent_dt.isoformat(),
+        'expires_at': expires_dt.isoformat(),
+        'components': {
+            'same': _package_audio(components.get('same_samples') or [], 'same'),
+            'attention': _package_audio(components.get('attention_samples') or [], 'attention'),
+            'tts': _package_audio(components.get('tts_samples') or [], 'tts'),
+            'eom': _package_audio(components.get('eom_samples') or [], 'eom'),
+            'composite': _package_audio(components.get('composite_samples') or [], 'full'),
+        },
+        'sample_rate': sample_rate,
+    }
+
+    try:
+        db.session.add(SystemLog(
+            level='INFO',
+            message='Manual EAS package generated',
+            module='admin',
+            details={
+                'identifier': identifier,
+                'event_code': resolved_event_code,
+                'location_count': len(formatted_locations),
+                'tone_profile': response_payload['tone_profile'],
+                'tts_included': bool(response_payload['components']['tts']),
+            },
+        ))
+        db.session.commit()
+    except Exception as exc:  # pragma: no cover - logging failures should not break response
+        db.session.rollback()
+        logger.warning(f"Failed to persist manual EAS generation log: {exc}")
+
+    return jsonify(response_payload)
 
 
 @app.route('/logs')
@@ -3998,6 +4252,11 @@ def before_request():
         else:
             session.pop('user_id', None)
 
+    try:
+        g.admin_setup_mode = AdminUser.query.count() == 0
+    except Exception:
+        g.admin_setup_mode = False
+
     # Allow authentication endpoints without additional checks.
     if request.endpoint in {'login', 'static'}:
         return
@@ -4005,6 +4264,9 @@ def before_request():
     protected_prefixes = ('/admin', '/logs')
     if any(request.path.startswith(prefix) for prefix in protected_prefixes):
         if g.current_user is None:
+            if g.admin_setup_mode and request.endpoint in {'admin', 'admin_users'}:
+                if request.method == 'GET' or (request.method == 'POST' and request.endpoint == 'admin_users'):
+                    return
             accept_header = request.headers.get('Accept', '')
             next_url = request.full_path if request.query_string else request.path
             if request.method != 'GET' or 'application/json' in accept_header or request.is_json:
