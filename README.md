@@ -710,11 +710,10 @@ noaa_alerts_systems/
 │   ├── led_control.html      # LED sign interface
 │   └── logs.html             # System logs viewer
 │
-├── static/                   # Static assets (CSS, JS, images)
-│   ├── styles/
-│   └── theme.js
+├── static/                   # Static tree for generated/downloadable assets
+│   └── .gitkeep              # Placeholder; EAS outputs populate subdirectories at runtime
 │
-├── logs/                     # Application logs (if mounted)
+├── logs/                     # Created at runtime for log output (ignored in git)
 └── uploads/                  # GeoJSON uploads (if mounted)
 ```
 

@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.1.x series.
 
+## [2.1.7] - 2025-10-29
+### Removed
+- Purged IDE metadata, historical log outputs, unused static assets, and legacy diagnostic scripts
+  that were no longer referenced by the application.
+### Changed
+- Updated ignore rules and documentation so generated EAS artifacts and runtime logs remain outside
+  version control while keeping the static directory available for downloads.
+
 ## [2.1.6] - 2025-10-28
 ### Changed
 - Aligned build metadata across environment defaults, the diagnostics endpoints, and the
