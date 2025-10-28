@@ -11,6 +11,7 @@ This document provides coding standards and guidelines for AI agents (including 
 3. **Test Before Commit**: Always verify changes work in Docker before committing
 4. **Focused Changes**: Keep fixes targeted to the specific issue
 5. **Document Changes**: Update relevant documentation when adding features
+   - Always record user-facing updates in `CHANGELOG.md` as part of each pull request
 
 ---
 
@@ -526,6 +527,7 @@ Before committing code, verify:
 - [ ] Database transactions properly handled (commit/rollback)
 - [ ] Tested in Docker locally
 - [ ] Documentation updated if needed
+- [ ] `CHANGELOG.md` updated with user-facing changes (or explicitly confirmed not needed)
 - [ ] Commit message follows format guidelines
 
 ---

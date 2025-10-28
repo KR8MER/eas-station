@@ -5,7 +5,7 @@ Flask Web Application with Enhanced Boundary Management and Alerts History
 
 Author: KR8MER Amateur Radio Emergency Communications
 Description: Emergency alert system with configurable U.S. jurisdiction support and proper timezone handling
-Version: 2.1.5 - Incremental build metadata surfaced in the UI footer
+Version: 2.1.6 - Incremental build metadata surfaced in the UI footer
 """
 
 # =============================================================================
@@ -96,7 +96,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
 # Application versioning (exposed via templates for quick deployment verification)
-SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.5')
+SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.6')
 
 # NOAA API configuration for manual alert import workflows
 NOAA_API_BASE_URL = 'https://api.weather.gov/alerts'
@@ -4756,7 +4756,7 @@ def health_check():
             'status': 'healthy',
             'timestamp': utc_now().isoformat(),
             'local_timestamp': local_now().isoformat(),
-            'version': '2.0',
+            'version': SYSTEM_VERSION,
             'database': 'connected',
             'led_available': LED_AVAILABLE
         })
@@ -4784,7 +4784,7 @@ def version():
     """Version information endpoint"""
     location = get_location_settings()
     return jsonify({
-        'version': '2.0',
+        'version': SYSTEM_VERSION,
         'name': 'NOAA CAP Alerts System',
         'author': 'KR8MER Amateur Radio Emergency Communications',
         'description': f"Emergency alert system for {location['county_name']}, {location['state_code']}",
