@@ -4,8 +4,6 @@ services:
       context: .
       dockerfile: Dockerfile
     image: noaa-alerts:latest
-    depends_on:
-      - alerts-db
     ports:
       - "5000:5000"
     env_file:
