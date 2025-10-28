@@ -26,6 +26,8 @@ services:
 
   alerts-db:
     image: ${ALERTS_DB_IMAGE:-postgis/postgis:17-3.4}
+    profiles:
+      - embedded-db
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-alerts}

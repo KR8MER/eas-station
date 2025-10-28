@@ -919,17 +919,6 @@
                         </a>
                     </div>
 
-                    <div class="alert alert-info-custom d-flex align-items-start gap-3">
-                        <div class="fs-4"><i class="fas fa-music"></i></div>
-                        <div>
-                            <strong>Need to generate test audio?</strong>
-                            Use the manual broadcast toolkit to create SAME practice clips, including the
-                            <code>tools/generate_sample_audio.py</code> utility.
-                            <a href="{{ url_for('help_page') }}#manualTools" class="alert-link">Open the documentation</a>
-                            for step-by-step instructions.
-                        </div>
-                    </div>
-
                     {% if eas_enabled %}
                         <div class="alert alert-success-custom">
                             <strong>EAS broadcasting is active.</strong>
@@ -967,7 +956,11 @@
                                         <div class="row g-3">
                                             <div class="col-md-6">
                                                 <label for="easEventCode" class="form-label fw-bold">Event Code</label>
-                                                <select class="form-select" id="easEventCode" name="event_code" required></select>
+                                                <select class="form-select" id="easEventCode" name="event_code" required>
+                                                    {% for option in eas_event_codes %}
+                                                        <option value="{{ option.code }}"{% if option.code == 'RWT' or (option.code != 'RWT' and loop.first) %} selected{% endif %}>{{ option.code }} — {{ option.name }}</option>
+                                                    {% endfor %}
+                                                </select>
                                                 <div class="form-text">Three-character SAME/EAS code.</div>
                                             </div>
                                             <div class="col-md-6">
@@ -1955,8 +1948,30 @@
                 return;
             }
 
-            const entries = Array.isArray(EAS_EVENT_CODES) ? [...EAS_EVENT_CODES] : [];
-            entries.sort((a, b) => a.code.localeCompare(b.code));
+            const previousValue = select.value;
+            const domEntries = Array.from(select.options || [])
+                .map((option) => {
+                    const code = option.value;
+                    const optionText = (option.textContent || '').trim();
+                    const parts = optionText.split('—').map((part) => part.trim()).filter(Boolean);
+                    const name = parts.length > 1 ? parts.slice(1).join(' — ') : (parts[0] || code);
+                    return { code, name };
+                })
+                .filter((entry) => entry.code);
+
+            let entries = Array.isArray(EAS_EVENT_CODES) ? [...EAS_EVENT_CODES] : [];
+            if (!entries.length && domEntries.length) {
+                entries = domEntries;
+            }
+
+            entries = entries
+                .map((entry) => ({ code: entry.code, name: entry.name || entry.code }))
+                .filter((entry) => entry.code)
+                .sort((a, b) => a.code.localeCompare(b.code));
+
+            if (!entries.length) {
+                entries = [{ code: 'RWT', name: 'Required Weekly Test' }];
+            }
 
             select.innerHTML = '';
             const fragment = document.createDocumentFragment();
@@ -1968,17 +1983,13 @@
                 fragment.appendChild(option);
             });
 
-            if (!entries.length) {
-                const fallback = document.createElement('option');
-                fallback.value = 'RWT';
-                fallback.textContent = 'RWT — Required Weekly Test';
-                fragment.appendChild(fallback);
-            }
-
             select.appendChild(fragment);
 
-            const defaultCode = entries.length ? entries[0].code : 'RWT';
-            select.value = defaultCode;
+            const preferredCode = entries.find((entry) => entry.code === previousValue)?.code
+                || entries.find((entry) => entry.code === 'RWT')?.code
+                || (entries.length ? entries[0].code : 'RWT');
+
+            select.value = preferredCode;
             syncEasEventName(true);
         }
 

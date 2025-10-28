@@ -6,7 +6,9 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 1. **Review the About document:** The [About page](ABOUT.md) covers system goals, core services, and the complete software stack.
 2. **Provision infrastructure:** Deploy Docker Engine 24+ with Docker Compose V2 and ensure a dedicated PostgreSQL 15 + PostGIS database container is available before starting the app stack.
 3. **Configure environment variables:** Copy `.env.example` to `.env`, set secure secrets, and update database connection details. Optional Azure AI speech settings can remain blank until credentials are available.
-4. **Launch the stack:** Run `docker compose up -d --build` to start the web application, background poller, and supporting services.
+4. **Launch the stack:**
+   - Use `docker compose --profile embedded-db up -d --build` to include the optional bundled PostGIS container.
+   - Use `docker compose up -d --build` when connecting to an existing PostgreSQL/PostGIS deployment.
 
 ## Routine Operations
 ### Accessing the Dashboard
@@ -30,6 +32,7 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 ## Troubleshooting
 ### Application Will Not Start
 - Confirm the PostgreSQL/PostGIS database container is running and reachable.
+- If you rely on the bundled service, ensure the `embedded-db` profile is enabled (check `COMPOSE_PROFILES` or rerun Compose with `--profile embedded-db`).
 - Verify environment variables in `.env` match the external database credentials and host.
 - Inspect logs using `docker compose logs -f app` and `docker compose logs -f poller` for detailed error messages.
 
@@ -49,7 +52,8 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 ## Reference Commands
 | Task | Command |
 |------|---------|
-| Build and start services | `docker compose up -d --build` |
+| Build and start services (embedded database) | `docker compose --profile embedded-db up -d --build` |
+| Build and start services (external database) | `docker compose up -d --build` |
 | View aggregate logs | `docker compose logs -f` |
 | Restart the web app | `docker compose restart app` |
 | Run database migrations (if applicable) | `flask db upgrade` |

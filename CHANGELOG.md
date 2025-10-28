@@ -24,12 +24,14 @@ tracks releases under the 2.1.x series.
   appropriate credentials and SDK are available.
 - Authored dedicated `ABOUT.md` and `HELP.md` documentation describing the system mission, software stack, and operational playbooks, with cross-links from the README for quick discovery.
 - Exposed in-app About and Help pages so operators can read the mission overview and operations guide directly from the dashboard navigation.
-- Docker Compose now provisions an `alerts-db` PostGIS container so application
-  services have a reachable database as soon as the stack starts.
+- Docker Compose exposes an optional `alerts-db` PostGIS profile so application
+  services can either rely on the bundled database or connect to an existing
+  PostGIS deployment without modifying the compose file.
 ### Changed
 - Clarified in the README and dependency notes that PostgreSQL with PostGIS must run in a dedicated container separate from the application services.
 - Documented a single-line command for cloning the Experimental branch and launching the Docker Compose stack so operators can bootstrap quickly.
 - Clarified the update instructions to explicitly pull the Experimental branch when refreshing deployments.
+- Documented the optional `embedded-db` compose profile, removed hard `depends_on` requirements, and ensured external PostGIS deployments no longer pull the bundled database image by default.
 - Reworked the EAS Output tab with an interactive Manual Broadcast Builder and refreshed the README/HELP documentation to cover the browser-based workflow.
 - Simplified database configuration by deriving `DATABASE_URL` from the `POSTGRES_*` variables when it is not explicitly set, eliminating duplicate secrets in `.env`.
 - Restored the `.env` template workflow, updated quick-start documentation to copy
@@ -48,6 +50,8 @@ tracks releases under the 2.1.x series.
   selected code names in CLI output and audit trails while the broadcaster consumes
   the resolved identifiers for header generation.
 ### Fixed
+- Ensured the Manual Broadcast Builder always renders the SAME event code list so operators can
+  pick the desired code even when client-side scripts are blocked or fail to load.
 - Restored the `.env.example` template and documented the startup error shown when the
   file is missing so Docker Compose deployments no longer fail with "env file not found".
 - Updated the Docker Compose PostGIS service to default to
