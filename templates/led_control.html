@@ -197,10 +197,10 @@
             </div>
             <div class="col-md-6">
                 <div class="message-preview" id="message-preview">
-                    <div class="preview-line">PUTNAM COUNTY</div>
-                    <div class="preview-line">EMERGENCY MGMT</div>
-                    <div class="preview-line">NO ALERTS</div>
-                    <div class="preview-line">SYSTEM READY</div>
+                    {% set preview_lines = location_settings.led_default_lines or ['LINE 1', 'LINE 2', 'LINE 3', 'LINE 4'] %}
+                    {% for line in preview_lines %}
+                    <div class="preview-line">{{ line }}</div>
+                    {% endfor %}
                 </div>
             </div>
         </div>

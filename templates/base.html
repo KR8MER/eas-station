@@ -14,6 +14,19 @@
     <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 
+    {% if location_settings %}
+    <script>
+        window.APP_LOCATION = {{ location_settings | tojson }};
+    </script>
+    {% endif %}
+
+    {% if boundary_type_config %}
+    <script>
+        window.BOUNDARY_TYPE_CONFIG = {{ boundary_type_config | tojson }};
+        window.BOUNDARY_GROUP_LABELS = {{ boundary_group_labels | tojson }};
+    </script>
+    {% endif %}
+
     <style>
         :root {
             --primary-color: #007bff;
