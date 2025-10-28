@@ -1865,30 +1865,83 @@
                 const result = await response.json();
 
                 if (response.ok) {
+                    const allFields = (result.all_fields || []).map(escapeHtml);
+                    const ownerFields = (result.owner_fields || []).map(escapeHtml);
+                    const lineIdFields = (result.line_id_fields || []).map(escapeHtml);
+                    const recommendedFields = (result.recommended_additional_fields || []).map(escapeHtml);
+
                     let html = `
                         <div class="preview-container">
                             <h5>📋 Preview Results</h5>
-                            <p><strong>Total Features:</strong> ${result.total_features}</p>
-                            <p><strong>Boundary Type:</strong> ${result.boundary_type}</p>
-                            <p><strong>Available Fields:</strong> ${result.all_fields.join(', ')}</p>
-                            <h6 class="mt-3">🔍 Sample Extractions (first ${result.preview_count}):</h6>
+                            <p><strong>Total Features:</strong> ${escapeHtml(String(result.total_features))}</p>
+                            <p><strong>Boundary Type:</strong> ${escapeHtml(result.boundary_type || 'Unknown')}</p>
+                            <p><strong>Available Fields:</strong> ${allFields.length ? allFields.join(', ') : 'None detected'}</p>
                     `;
 
+                    if (ownerFields.length) {
+                        html += `<p><strong>Owner Fields Detected:</strong> ${ownerFields.join(', ')}</p>`;
+                    }
+
+                    if (lineIdFields.length) {
+                        html += `<p><strong>Identifier Fields Detected:</strong> ${lineIdFields.join(', ')}</p>`;
+                    }
+
+                    if (recommendedFields.length) {
+                        html += `<p><strong>Suggested Metadata:</strong> ${recommendedFields.join(', ')}</p>`;
+                    }
+
+                    html += `<h6 class="mt-3">🔍 Sample Extractions (first ${escapeHtml(String(result.preview_count))}):</h6>`;
+
                     result.previews.forEach((preview, index) => {
+                        const nameLabel = escapeHtml(preview.name || 'Unknown');
+                        const ownerLabel = preview.owner ? escapeHtml(preview.owner) : 'Unknown';
+                        const descriptionLabel = preview.description ? escapeHtml(preview.description) : 'No description';
+                        const classificationLabel = preview.classification ? escapeHtml(preview.classification) : '';
+                        const mtfccLabel = preview.mtfcc ? escapeHtml(preview.mtfcc) : '';
+                        const lengthLabel = preview.length_label ? escapeHtml(preview.length_label) : '';
+                        const lineIdLabel = preview.line_id ? escapeHtml(preview.line_id) : '';
+
                         html += `
                             <div class="preview-item">
                                 <strong>Feature ${index + 1}:</strong><br>
-                                <strong>📝 Name:</strong> ${preview.name}<br>
-                                <strong>📄 Description:</strong> ${preview.description || 'No description'}
-                            </div>
+                                <strong>📝 Name:</strong> ${nameLabel}<br>
+                                <strong>👤 Owner:</strong> ${ownerLabel}<br>
+                                <strong>📄 Description:</strong> ${descriptionLabel}<br>
                         `;
+
+                        if (classificationLabel || mtfccLabel) {
+                            const classificationText = classificationLabel
+                                ? (mtfccLabel ? `${classificationLabel} (${mtfccLabel})` : classificationLabel)
+                                : mtfccLabel;
+                            html += `<strong>🏷 Classification:</strong> ${classificationText}<br>`;
+                        }
+
+                        if (lengthLabel) {
+                            html += `<strong>📏 Length:</strong> ${lengthLabel}<br>`;
+                        }
+
+                        if (lineIdLabel) {
+                            html += `<strong>🆔 Identifier:</strong> ${lineIdLabel}<br>`;
+                        }
+
+                        if (Array.isArray(preview.additional_details) && preview.additional_details.length) {
+                            html += '<ul class="mb-0 mt-1">';
+                            preview.additional_details.forEach(detail => {
+                                html += `<li>${escapeHtml(detail)}</li>`;
+                            });
+                            html += '</ul>';
+                        }
+
+                        html += '</div>';
                     });
 
                     if (result.field_mappings && Object.keys(result.field_mappings).length > 0) {
+                        const nameFields = result.field_mappings.name_fields || [];
+                        const descriptionFields = result.field_mappings.description_fields || [];
                         html += `
-                            <h6 class="mt-3">🗺️ Field Mappings for ${result.boundary_type}:</h6>
-                            <p><strong>Name Fields:</strong> ${result.field_mappings.name_fields ? result.field_mappings.name_fields.join(', ') : 'None configured'}</p>
-                            <p><strong>Description Fields:</strong> ${result.field_mappings.description_fields ? result.field_mappings.description_fields.join(', ') : 'None configured'}</p>
+                            <h6 class="mt-3">🗺️ Field Mappings for ${escapeHtml(result.boundary_type || 'Unknown')}:</h6>
+                            <p><strong>Name Fields:</strong> ${nameFields.length ? nameFields.map(escapeHtml).join(', ') : 'None configured'}</p>
+                            <p><strong>Description Fields:</strong> ${descriptionFields.length ? descriptionFields.map(escapeHtml).join(', ') : 'None configured'}</p>
                         `;
                     }
 
