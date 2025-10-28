@@ -178,7 +178,7 @@ def _build_database_url() -> str:
 
     user = os.getenv('POSTGRES_USER', 'postgres') or 'postgres'
     password = os.getenv('POSTGRES_PASSWORD', '')
-    host = os.getenv('POSTGRES_HOST', 'alerts-db') or 'alerts-db'
+    host = os.getenv('POSTGRES_HOST', 'postgres') or 'postgres'
     port = os.getenv('POSTGRES_PORT', '5432') or '5432'
     database = os.getenv('POSTGRES_DB', user) or user
 

@@ -7,8 +7,7 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 2. **Provision infrastructure:** Deploy Docker Engine 24+ with Docker Compose V2 and ensure a dedicated PostgreSQL 15 + PostGIS database container is available before starting the app stack.
 3. **Configure environment variables:** Copy `.env.example` to `.env`, set secure secrets, and update database connection details. Optional Azure AI speech settings can remain blank until credentials are available.
 4. **Launch the stack:**
-   - Use `docker compose -f docker-compose.yml -f docker-compose.embedded-db.yml up -d --build` to include the optional bundled PostGIS container.
-   - Use `docker compose up -d --build` when connecting to an existing PostgreSQL/PostGIS deployment.
+   - Run `docker compose up -d --build` after `.env` points at your PostgreSQL/PostGIS deployment.
 
 ## Routine Operations
 ### Accessing the Dashboard

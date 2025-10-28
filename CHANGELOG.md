@@ -31,7 +31,7 @@ tracks releases under the 2.1.x series.
 - Clarified in the README and dependency notes that PostgreSQL with PostGIS must run in a dedicated container separate from the application services.
 - Documented a single-line command for cloning the Experimental branch and launching the Docker Compose stack so operators can bootstrap quickly.
 - Clarified the update instructions to explicitly pull the Experimental branch when refreshing deployments.
-- Documented the optional embedded database compose overlay, removed hard `depends_on` requirements, and ensured external PostGIS deployments no longer pull the bundled database image by default.
+- Documented the expectation that deployments supply their own PostgreSQL/PostGIS host and simplified Compose instructions to run only the application services.
 - Reworked the EAS Output tab with an interactive Manual Broadcast Builder and refreshed the README/HELP documentation to cover the browser-based workflow.
 - Simplified database configuration by deriving `DATABASE_URL` from the `POSTGRES_*` variables when it is not explicitly set, eliminating duplicate secrets in `.env`.
 - Restored the `.env` template workflow, updated quick-start documentation to copy
@@ -50,17 +50,11 @@ tracks releases under the 2.1.x series.
   selected code names in CLI output and audit trails while the broadcaster consumes
   the resolved identifiers for header generation.
 ### Fixed
-- Eliminated `service "app" depends on undefined service "alerts-db"` errors by
-  moving the optional database into its own compose overlay and updating the
-  quick-start commands to include it only when required.
+- Eliminated `service "app" depends on undefined service "alerts-db"` errors by removing the optional compose overlay, deleting the unused service definition, and updating documentation to assume an external database.
 - Ensured the Manual Broadcast Builder always renders the SAME event code list so operators can
   pick the desired code even when client-side scripts are blocked or fail to load.
 - Restored the `.env.example` template and documented the startup error shown when the
   file is missing so Docker Compose deployments no longer fail with "env file not found".
-- Updated the Docker Compose PostGIS service to default to
-  `postgis/postgis:17-3.4` while allowing operators to override the image
-  via a new `ALERTS_DB_IMAGE` environment variable so existing
-  deployments (e.g., `postgres:17-postgis-arm64`) remain compatible.
 - Skip PostGIS-specific geometry checks when running against SQLite and store geometry
   fields as plain text on non-PostgreSQL databases so local development can initialize
   without spatial extensions.
