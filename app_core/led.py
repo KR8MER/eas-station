@@ -83,6 +83,15 @@ else:
             led_controller = None
             return None
 
+        if not getattr(led_controller, "connected", False):
+            logger.warning(
+                "LED controller reported as disconnected after initialization; "
+                "marking LED integration as unavailable"
+            )
+            LED_AVAILABLE = False
+            led_controller = None
+            return None
+
         LED_AVAILABLE = True
         logger.info(
             "LED controller initialized successfully for %s:%s",

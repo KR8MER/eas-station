@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+{% block title %}Help &amp; Operations Guide | KR8MER CAP Emergency Alerts{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-10 col-xl-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <h1 class="h3 mb-3"><i class="fas fa-life-ring me-2"></i>Help &amp; Operations Guide</h1>
+                    <p class="lead">Use this guide to bring the alert system online, verify daily health, and respond when an activation occurs.</p>
+                    <p class="mb-0">For an in-depth walkthrough, consult the <code>HELP.md</code> document in the repository root.</p>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3"><i class="fas fa-play-circle me-2"></i>Quick Start Checklist</h2>
+                    <ol class="mb-0 ps-3">
+                        <li>Ensure the PostgreSQL + PostGIS container and Redis (if used) are running.</li>
+                        <li>Launch the Flask web container and confirm the dashboard loads without errors.</li>
+                        <li>Verify the <strong>System Health</strong> widget reports a green status and recent poll times.</li>
+                        <li>Run <code>tools/generate_sample_audio.py</code> to validate the audio encoder and Azure voiceover (when configured).</li>
+                        <li>Confirm the LED control page can reach the configured sign and display a test message.</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3"><i class="fas fa-tasks me-2"></i>Routine Operations</h2>
+                    <div class="accordion" id="operationsAccordion">
+                        <div class="accordion-item">
+                            <h3 class="accordion-header" id="dailyChecksHeading">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#dailyChecks" aria-expanded="true" aria-controls="dailyChecks">
+                                    Daily System Checks
+                                </button>
+                            </h3>
+                            <div id="dailyChecks" class="accordion-collapse collapse show" aria-labelledby="dailyChecksHeading" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <ul>
+                                        <li>Review the dashboard map for active alerts and confirm geometry renders correctly.</li>
+                                        <li>Check <strong>Alerts History</strong> for recent CAP updates and resend failures.</li>
+                                        <li>Open the <strong>Statistics</strong> page to spot unusual ingest volumes.</li>
+                                        <li>Monitor LED sign acknowledgements within the LED Control page.</li>
+                                        <li>Audit the system log (Admin &rarr; Logs tab) for warnings or authentication attempts.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h3 class="accordion-header" id="activationHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#activationWorkflow" aria-expanded="false" aria-controls="activationWorkflow">
+                                    During an Alert Activation
+                                </button>
+                            </h3>
+                            <div id="activationWorkflow" class="accordion-collapse collapse" aria-labelledby="activationHeading" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <ol class="ps-3">
+                                        <li>Confirm the CAP alert details on the dashboard and review polygons or county overlays.</li>
+                                        <li>Use <strong>Alerts History</strong> to read the full message, verifying SAME codes and expiration.</li>
+                                        <li>Trigger the LED announcement or override message if the default automation is insufficient.</li>
+                                        <li>Monitor the audio encoder output directory for generated SAME and audio files.</li>
+                                        <li>Log operator actions in the Admin logs for post-event review.</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h3 class="accordion-header" id="manualToolsHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#manualTools" aria-expanded="false" aria-controls="manualTools">
+                                    Manual Tools &amp; Scripts
+                                </button>
+                            </h3>
+                            <div id="manualTools" class="accordion-collapse collapse" aria-labelledby="manualToolsHeading" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <ul>
+                                        <li><code>tools/generate_sample_audio.py</code> – produce demo SAME audio for equipment checks.</li>
+                                        <li><code>manual_eas_event.py</code> – inject CAP XML for manual activations with audit logging.</li>
+                                        <li><code>manual_alert_fetch.py</code> – fetch individual CAP identifiers for debugging.</li>
+                                        <li><code>fix_template_issues.py</code> – rebuild HTML templates if corruption occurs.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3"><i class="fas fa-tools me-2"></i>Troubleshooting</h2>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <h3 class="h6 text-uppercase text-muted">Common Issues</h3>
+                            <ul class="mb-0">
+                                <li>Database connection failures: verify the PostGIS container credentials and network reachability.</li>
+                                <li>Missing audio: confirm Azure credentials or disable voiceovers in the environment file.</li>
+                                <li>LED sign offline: recheck IP/port, power cycle the controller, and confirm firewall allowances.</li>
+                                <li>Poller stalled: inspect <code>poller/</code> logs and restart the ingestion service container.</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h3 class="h6 text-uppercase text-muted">Where to Get Help</h3>
+                            <ul class="mb-0">
+                                <li>Consult <strong>ABOUT.md</strong> and <strong>HELP.md</strong> for architecture references.</li>
+                                <li>Review <strong>CHANGELOG.md</strong> for recent behaviour adjustments.</li>
+                                <li>Coordinate with the KR8MER ARES engineering team for hardware-specific support.</li>
+                                <li>Open an issue on GitHub when software defects are suspected.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-5">
+                <div class="card-body p-4 d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
+                    <div>
+                        <h2 class="h4 mb-1"><i class="fas fa-question-circle me-2"></i>Need additional assistance?</h2>
+                        <p class="mb-0">Reach out through the KR8MER amateur radio channels or the project&apos;s GitHub discussions to collaborate with fellow operators.</p>
+                    </div>
+                    <a class="btn btn-primary" href="https://github.com/KR8MER/noaa_alerts_systems" target="_blank" rel="noopener">
+                        <i class="fab fa-github me-2"></i>Project Repository
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
