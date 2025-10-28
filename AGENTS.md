@@ -445,6 +445,12 @@ requests==2.31.0
 new-library==1.2.3  # Add with version
 ```
 
+### Environment Variable Hygiene
+
+- **Update `.env.example`** whenever you add a new configuration flag so operators know how to enable it.
+- **Document usage** in the README or module docstring if the variable changes runtime behaviour.
+- **Keep secrets out of the repo** – only placeholders or instructions belong in `.env.example`.
+
 ---
 
 ## 🔄 Git Workflow
