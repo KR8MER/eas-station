@@ -31,6 +31,10 @@ tracks releases under the 2.1.x series.
 ### Fixed
 - Corrected manual CAP allow-all FIPS logic to use 6-digit SAME identifiers so alerts configured
   for every county pass validation and display proper area labels.
+- Resolved an SQLAlchemy metadata attribute conflict so the Flask app and polling services can
+  load the EAS message model without raising declarative mapping errors.
+- Ensure the Flask application automatically enables the PostGIS extension before creating
+  tables so startup succeeds on fresh PostgreSQL deployments.
 
 ## [2.1.7] - 2025-10-29
 ### Removed

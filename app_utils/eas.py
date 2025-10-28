@@ -492,7 +492,7 @@ class EASBroadcaster:
             audio_filename=audio_filename,
             text_filename=text_filename,
             created_at=datetime.now(timezone.utc),
-            metadata={
+            metadata_payload={
                 'event': getattr(alert, 'event', ''),
                 'event_code': event_code,
                 'severity': getattr(alert, 'severity', ''),

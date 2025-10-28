@@ -137,7 +137,7 @@ class EASMessage(db.Model):
     audio_filename = db.Column(db.String(255), nullable=False)
     text_filename = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
-    metadata = db.Column(db.JSON, default=dict)
+    metadata_payload = db.Column("metadata", db.JSON, default=dict)
 
     cap_alert = db.relationship(
         "CAPAlert",
@@ -152,7 +152,7 @@ class EASMessage(db.Model):
             "audio_filename": self.audio_filename,
             "text_filename": self.text_filename,
             "created_at": self.created_at.isoformat() if self.created_at else None,
-            "metadata": self.metadata or {},
+            "metadata": dict(self.metadata_payload or {}),
         }
 
 

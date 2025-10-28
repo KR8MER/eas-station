@@ -212,7 +212,7 @@ except Exception as e:
         audio_filename = Column(String(255))
         text_filename = Column(String(255))
         created_at = Column(DateTime, default=utc_now)
-        metadata = Column(JSON)
+        metadata_payload = Column('metadata', JSON)
 
 # =======================================================================================
 # Poller

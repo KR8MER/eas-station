@@ -2715,6 +2715,29 @@ def ensure_boundary_geometry_column():
         db.session.rollback()
 
 
+def ensure_postgis_extension() -> bool:
+    """Enable the PostGIS extension when running against PostgreSQL."""
+
+    engine = db.engine
+    if engine.dialect.name != 'postgresql':
+        return True
+
+    try:
+        db.session.execute(text('CREATE EXTENSION IF NOT EXISTS postgis'))
+        db.session.commit()
+    except OperationalError as exc:
+        logger.error('Failed to enable PostGIS extension: %s', exc)
+        db.session.rollback()
+        return False
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.error('Unexpected error enabling PostGIS extension: %s', exc)
+        db.session.rollback()
+        raise
+    else:
+        logger.info('PostGIS extension ensured for the active database')
+        return True
+
+
 @app.route('/admin/check_db_health', methods=['GET'])
 def check_db_health():
     """Provide a quick health check of the database connection and size."""
@@ -3986,6 +4009,9 @@ def initialize_database():
         return
 
     try:
+        if not ensure_postgis_extension():
+            _db_initialization_error = RuntimeError("PostGIS extension could not be ensured")
+            return False
         db.create_all()
         ensure_boundary_geometry_column()
         settings = get_location_settings(force_reload=True)
