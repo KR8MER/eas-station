@@ -13,6 +13,8 @@ tracks releases under the 2.1.x series.
   locations are eligible for manual CAP forwarding.
 - Bundled the full national county/parish FIPS registry for manual activations and
   exposed helpers to authorize the entire dataset with a single configuration flag.
+- Cataloged the nationwide SAME event code registry together with helper utilities so
+  broadcasters and manual tools can resolve official names, presets, and headers.
 ### Changed
 - Updated the GPIO relay control so it remains engaged for the full alert audio playback,
   using `EAS_GPIO_HOLD_SECONDS` as the minimum release delay once audio finishes.
@@ -20,6 +22,9 @@ tracks releases under the 2.1.x series.
   so receivers reliably return to normal programming when playback completes.
 - Manual CAP tooling now validates inputs against the registry, surfaces friendly area
   names in CLI output and audit logs, and warns when CAP payloads reference unknown codes.
+- Manual CAP broadcasts enforce configurable SAME event allow-lists and display the
+  selected code names in CLI output and audit trails while the broadcaster consumes
+  the resolved identifiers for header generation.
 ### Fixed
 - Corrected manual CAP allow-all FIPS logic to use 6-digit SAME identifiers so alerts configured
   for every county pass validation and display proper area labels.

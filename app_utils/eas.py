@@ -20,31 +20,7 @@ except Exception:  # pragma: no cover - gracefully handle non-RPi environments
     RPiGPIO = None
 
 
-SAME_EVENT_CODES: Dict[str, str] = {
-    'tornado warning': 'TOR',
-    'tornado watch': 'TOA',
-    'severe thunderstorm warning': 'SVR',
-    'severe thunderstorm watch': 'SVA',
-    'flash flood warning': 'FFW',
-    'flash flood watch': 'FFA',
-    'flood warning': 'FLW',
-    'flood watch': 'FLA',
-    'amber alert': 'CAE',
-    'child abduction emergency': 'CAE',
-    'civil danger warning': 'CDW',
-    'civil emergency message': 'CEM',
-    'fire warning': 'FRW',
-    'hurricane warning': 'HWW',
-    'hurricane watch': 'HUA',
-    'blizzard warning': 'BZW',
-    'winter storm warning': 'WSW',
-    'high wind warning': 'HWW',
-    'ice storm warning': 'ISW',
-    'snow squall warning': 'SQW',
-    'dust storm warning': 'DSW',
-    'radiological hazard warning': 'RHW',
-    'hazardous materials warning': 'HMW',
-}
+from app_utils.event_codes import resolve_event_code
 
 
 def _clean_identifier(value: str) -> str:
@@ -114,10 +90,64 @@ def _duration_code(sent: datetime, expires: Optional[datetime]) -> str:
     return f"{minutes:04d}"
 
 
+def _collect_event_code_candidates(alert: object, payload: Dict[str, object]) -> List[str]:
+    candidates: List[str] = []
+
+    def _extend(value) -> None:
+        if value is None:
+            return
+        if isinstance(value, str):
+            candidates.append(value)
+        elif isinstance(value, (list, tuple, set)):
+            for item in value:
+                if item is not None:
+                    candidates.append(str(item))
+
+    for key in ('event_code', 'eventCode', 'primary_event_code'):
+        if key in payload:
+            _extend(payload[key])
+    for key in ('event_codes', 'eventCodes'):
+        if key in payload:
+            _extend(payload[key])
+
+    raw_sources = []
+    for container in (payload.get('raw_json'), getattr(alert, 'raw_json', None)):
+        if isinstance(container, dict):
+            props = container.get('properties') or {}
+            raw_sources.append(props)
+        else:
+            raw_sources.append(None)
+
+    for props in raw_sources:
+        if not isinstance(props, dict):
+            continue
+        for key in ('event_code', 'eventCode', 'primary_event_code'):
+            if key in props:
+                _extend(props[key])
+        for key in ('event_codes', 'eventCodes'):
+            if key in props:
+                _extend(props[key])
+
+    ordered: List[str] = []
+    seen = set()
+    for candidate in candidates:
+        text = str(candidate).strip()
+        if not text:
+            continue
+        if text not in seen:
+            seen.add(text)
+            ordered.append(text)
+
+    return ordered
+
+
 def build_same_header(alert: object, payload: Dict[str, object], config: Dict[str, object],
-                      location_settings: Optional[Dict[str, object]] = None) -> Tuple[str, List[str]]:
+                      location_settings: Optional[Dict[str, object]] = None) -> Tuple[str, List[str], str]:
     event_name = (getattr(alert, 'event', '') or '').strip()
-    event_code = SAME_EVENT_CODES.get(event_name.lower(), 'EAS')
+    event_candidates = _collect_event_code_candidates(alert, payload)
+    event_code = resolve_event_code(event_name, event_candidates)
+    if 'resolved_event_code' not in payload:
+        payload['resolved_event_code'] = event_code
 
     geocode = (payload.get('raw_json', {}) or {}).get('properties', {}).get('geocode', {})
     same_codes = []
@@ -162,7 +192,14 @@ def build_same_header(alert: object, payload: Dict[str, object], config: Dict[st
     location_field = '-'.join(formatted_locations)
     header = f"ZCZC-{originator}-{event_code}-{location_field}+{duration_code}-{julian}-{station}-"
 
-    return header, formatted_locations
+    return header, formatted_locations, event_code
+
+
+def build_eom_header(config: Dict[str, object]) -> str:
+    originator = str(config.get('originator', 'WXR'))[:3].upper()
+    station = str(config.get('station_id', 'EASNODES')).ljust(8)[:8]
+    julian = _julian_time(datetime.now(timezone.utc))
+    return f"ZCZC-{originator}-EOM-000000+0000-{julian}-{station}-"
 
 
 def build_eom_header(config: Dict[str, object]) -> str:
@@ -425,7 +462,7 @@ class EASBroadcaster:
             self.logger.debug('Skipping EAS generation for message type %s', message_type)
             return
 
-        header, location_codes = build_same_header(alert, payload, self.config, self.location_settings)
+        header, location_codes, event_code = build_same_header(alert, payload, self.config, self.location_settings)
         audio_filename, text_filename, message_text = self.audio_generator.build_files(alert, payload, header, location_codes)
 
         try:
@@ -464,6 +501,7 @@ class EASBroadcaster:
             created_at=datetime.now(timezone.utc),
             metadata={
                 'event': getattr(alert, 'event', ''),
+                'event_code': event_code,
                 'severity': getattr(alert, 'severity', ''),
                 'status': getattr(alert, 'status', ''),
                 'message_type': getattr(alert, 'message_type', ''),

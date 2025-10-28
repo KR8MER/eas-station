@@ -224,7 +224,16 @@ The script validates that at least one FIPS/SAME code in the CAP payload matches
 
 Add `--dry-run` to verify the CAP file and confirm matching FIPS codes without storing records or playing audio.
 
+Manual broadcasts also enforce SAME event code filtering so the encoder only fires for authorized products. Use the `EAS_MANUAL_EVENT_CODES` environment variable (comma-separated, `ALL`, or the `TESTS` preset) or the `--event` CLI flag to extend the allow-list for a single run:
+
+```bash
+export EAS_MANUAL_EVENT_CODES=TESTS  # RWT/RMT/DMO/NPT/NAT/NST
+./manual_eas_event.py manual_rwt.xml --event TOR
+```
+
 The repository now ships with the complete nationwide FIPS/SAME registry in `app_utils/fips_codes.py`. Set `EAS_MANUAL_FIPS_CODES=ALL` (or `US`/`USA`) to authorize every code, or keep a smaller allow-list for tighter control. CLI output and audit logs include the friendly county/parish names so operators can double-check the targeted areas.
+
+Similarly, the full SAME event registry in `app_utils/event_codes.py` keeps headers, logs, and CLI summaries aligned with official code descriptions.
 
 > **Tip:** Keep the output directory inside Flask's `static/` tree so the files can be served via `url_for('static', ...)`. If you relocate the directory, update both `EAS_OUTPUT_DIR` and `EAS_OUTPUT_WEB_SUBDIR` to maintain access from the UI.
 

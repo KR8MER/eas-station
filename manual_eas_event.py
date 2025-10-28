@@ -23,12 +23,23 @@ from app import (
     utc_now,
 )
 from app_utils.eas import EASBroadcaster, load_eas_config
+from app_utils.event_codes import (
+    ALL_EVENT_CODES,
+    DEFAULT_EVENT_CODES,
+    EVENT_CODE_ALLOW_ALL_TOKENS,
+    EVENT_CODE_PRESET_TOKENS,
+    describe_event_code,
+    format_event_code_list,
+    normalise_event_code,
+    resolve_event_code,
+)
 from app_utils.fips_codes import ALL_US_FIPS_CODES, US_FIPS_COUNTIES
 
 CAP_NAMESPACE = 'urn:oasis:names:tc:emergency:cap:1.2'
 NS = {'cap': CAP_NAMESPACE}
 DEFAULT_FIPS_CODES = {'039137'}
 FIPS_ALL_TOKENS = {'ALL', 'ANY', 'UNITED STATES', 'US', 'USA'}
+EVENT_ALL_TOKENS = EVENT_CODE_ALLOW_ALL_TOKENS
 
 
 class ManualCAPError(Exception):
@@ -80,6 +91,36 @@ def _extract_geocodes(info_element: ElementTree.Element) -> Tuple[List[str], Lis
             fips_codes.append(normalised)
 
     return same_codes, fips_codes
+
+
+def _extract_event_codes(info_element: ElementTree.Element) -> List[str]:
+    codes: List[str] = []
+
+    for node in info_element.findall('cap:eventCode', NS):
+        value = _find_text(node, 'cap:value')
+        code = normalise_event_code(value)
+        if code:
+            codes.append(code)
+
+    for param in info_element.findall('cap:parameter', NS):
+        name = _find_text(param, 'cap:valueName')
+        value = _find_text(param, 'cap:value')
+        if not value:
+            continue
+        if name and name.upper() not in {'EVENT', 'EVENTCODE', 'EVENT_CODE', 'SAME'}:
+            continue
+        code = normalise_event_code(value)
+        if code:
+            codes.append(code)
+
+    seen: Set[str] = set()
+    ordered: List[str] = []
+    for code in codes:
+        if code not in seen:
+            seen.add(code)
+            ordered.append(code)
+
+    return ordered
 
 
 def _extract_polygons(info_element: ElementTree.Element) -> Optional[Dict[str, object]]:
@@ -162,18 +203,26 @@ def parse_cap_xml(xml_text: str) -> Tuple[Dict[str, object], Set[str]]:
     parsed['area_desc'] = '; '.join(area_descs)
 
     same_codes, fips_codes = _extract_geocodes(info)
+    event_codes = _extract_event_codes(info)
+    resolved_event_code = resolve_event_code(parsed['event'], event_codes)
+    if resolved_event_code and resolved_event_code not in event_codes:
+        event_codes.append(resolved_event_code)
     geometry = _extract_polygons(info)
     parsed['_geometry_data'] = geometry
     parsed['geocode'] = {
         'same': same_codes,
         'fips': fips_codes,
     }
+    parsed['event_codes'] = event_codes
+    parsed['resolved_event_code'] = resolved_event_code
     parsed['raw_json'] = {
         'source': 'manual_cap',
         'xml': xml_text,
         'properties': {
             'identifier': parsed['identifier'],
             'event': parsed['event'],
+            'eventCode': resolved_event_code,
+            'eventCodes': event_codes,
             'sent': sent_text,
             'expires': expires_text,
             'status': parsed['status'],
@@ -205,6 +254,65 @@ def _normalise_manual_input(value: str, *, allow_all_token: bool = True) -> Opti
     if allow_all_token and token.upper() in FIPS_ALL_TOKENS:
         return 'ALL'
     return _normalise_fips(token)
+
+
+def _parse_event_inputs(values: Sequence[str]) -> Tuple[Set[str], bool, List[str]]:
+    codes: Set[str] = set()
+    allow_all = False
+    invalid_tokens: List[str] = []
+
+    for value in values:
+        token = value.strip()
+        if not token:
+            continue
+        upper = token.upper()
+        if upper in EVENT_ALL_TOKENS:
+            allow_all = True
+            continue
+        if upper in EVENT_CODE_PRESET_TOKENS:
+            codes.update(EVENT_CODE_PRESET_TOKENS[upper])
+            continue
+        code = normalise_event_code(token)
+        if code:
+            codes.add(code)
+            continue
+        invalid_tokens.append(token)
+
+    return codes, allow_all, invalid_tokens
+
+
+def determine_allowed_event_codes(cli_codes: Sequence[str]) -> Set[str]:
+    codes, allow_all_cli, invalid_cli = _parse_event_inputs(cli_codes)
+
+    env_codes: Set[str] = set()
+    allow_all_env = False
+    invalid_env: List[str] = []
+    env_setting = os.getenv('EAS_MANUAL_EVENT_CODES', '')
+    if env_setting:
+        env_values = [value for value in env_setting.split(',') if value]
+        env_codes, allow_all_env, invalid_env = _parse_event_inputs(env_values)
+
+    invalid_tokens = invalid_cli + invalid_env
+
+    combined: Set[str] = set()
+    combined.update(codes)
+    combined.update(env_codes)
+
+    if invalid_tokens:
+        logger.warning('Ignoring unrecognized manual event tokens: %s', ', '.join(sorted(set(invalid_tokens))))
+
+    invalid_codes = sorted(code for code in combined if code not in ALL_EVENT_CODES)
+    if invalid_codes:
+        logger.warning('Ignoring unsupported manual event codes: %s', ', '.join(invalid_codes))
+        combined.difference_update(invalid_codes)
+
+    if allow_all_cli or allow_all_env:
+        return set(ALL_EVENT_CODES)
+
+    if combined:
+        return combined
+
+    return set(DEFAULT_EVENT_CODES)
 
 
 def determine_allowed_fips(cli_codes: Sequence[str]) -> Set[str]:
@@ -261,6 +369,17 @@ def _summarise_fips_set(codes: Sequence[str]) -> str:
     return ', '.join(ordered)
 
 
+def _summarise_event_codes(codes: Sequence[str]) -> str:
+    ordered = list(sorted(codes))
+    if not ordered:
+        return ''
+    labels = format_event_code_list(ordered)
+    if len(labels) > 10:
+        preview = ', '.join(labels[:10])
+        return f"{preview}, ... ({len(labels)} total)"
+    return ', '.join(labels)
+
+
 def load_cap_source(args: argparse.Namespace) -> str:
     if args.cap_file:
         with open(args.cap_file, 'r', encoding='utf-8') as fh:
@@ -271,10 +390,23 @@ def load_cap_source(args: argparse.Namespace) -> str:
     return data
 
 
-def broadcast_manual_cap(xml_text: str, allowed_fips: Set[str], dry_run: bool = False) -> Tuple[str, List[str]]:
+def broadcast_manual_cap(
+    xml_text: str,
+    allowed_fips: Set[str],
+    allowed_event_codes: Set[str],
+    dry_run: bool = False,
+) -> Tuple[str, List[str], str]:
     parsed_alert, alert_fips = parse_cap_xml(xml_text)
     matched = sorted({code for code in alert_fips if code in allowed_fips})
     unknown_targets = sorted(code for code in alert_fips if code not in ALL_US_FIPS_CODES)
+    event_codes = list(parsed_alert.get('event_codes') or [])
+    resolved_event_code = parsed_alert.get('resolved_event_code') or resolve_event_code(parsed_alert.get('event', ''), [])
+    if resolved_event_code and resolved_event_code not in event_codes:
+        event_codes.append(resolved_event_code)
+    matched_events = sorted(code for code in event_codes if code in allowed_event_codes)
+    broadcast_event_code = resolved_event_code
+    if broadcast_event_code not in matched_events and matched_events:
+        broadcast_event_code = matched_events[0]
 
     if unknown_targets:
         logger.warning(
@@ -288,13 +420,21 @@ def broadcast_manual_cap(xml_text: str, allowed_fips: Set[str], dry_run: bool = 
             f"Allowed={_summarise_fips_set(allowed_fips)}, alert={_summarise_fips_set(alert_fips)}"
         )
 
+    if not matched_events:
+        raise ManualCAPError(
+            'CAP alert does not use an allowed event code. '
+            f"Allowed={_summarise_event_codes(allowed_event_codes)}, alert={_summarise_event_codes(event_codes)}"
+        )
+
     if dry_run:
-        return parsed_alert['identifier'], matched
+        return parsed_alert['identifier'], matched, broadcast_event_code
 
     with app.app_context():
         geometry_data = parsed_alert.get('_geometry_data')
         payload = dict(parsed_alert)
         payload.pop('_geometry_data', None)
+        payload['event_code'] = broadcast_event_code
+        payload['event_codes'] = event_codes
 
         existing = CAPAlert.query.filter_by(identifier=payload['identifier']).first()
         action = 'created'
@@ -345,6 +485,8 @@ def broadcast_manual_cap(xml_text: str, allowed_fips: Set[str], dry_run: bool = 
                     'action': action,
                     'matched_fips': {code: US_FIPS_COUNTIES.get(code) for code in matched},
                     'unknown_fips': unknown_targets,
+                    'event_code': broadcast_event_code,
+                    'event_labels': format_event_code_list(matched_events),
                 },
             )
             db.session.add(log_entry)
@@ -353,7 +495,7 @@ def broadcast_manual_cap(xml_text: str, allowed_fips: Set[str], dry_run: bool = 
             logger.warning('Failed to record manual CAP broadcast log: %s', exc)
             db.session.rollback()
 
-    return parsed_alert['identifier'], matched
+    return parsed_alert['identifier'], matched, broadcast_event_code
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -366,6 +508,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
         metavar='CODE',
         help='Additional FIPS/SAME codes to authorize for this broadcast (can be repeated).',
     )
+    parser.add_argument(
+        '--event',
+        action='append',
+        default=[],
+        metavar='CODE',
+        help='Additional SAME event codes to authorize for this broadcast (can be repeated).',
+    )
     parser.add_argument('--dry-run', action='store_true', help='Validate the CAP without storing data or broadcasting audio.')
     return parser
 
@@ -375,10 +524,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     allowed_fips = determine_allowed_fips(args.fips)
+    allowed_event_codes = determine_allowed_event_codes(args.event)
 
     try:
         xml_text = load_cap_source(args)
-        identifier, matched = broadcast_manual_cap(xml_text, allowed_fips, dry_run=args.dry_run)
+        identifier, matched, event_code = broadcast_manual_cap(
+            xml_text,
+            allowed_fips,
+            allowed_event_codes,
+            dry_run=args.dry_run,
+        )
     except ManualCAPError as exc:
         logger.error('Manual CAP broadcast aborted: %s', exc)
         return 2
@@ -388,9 +543,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     labels = _format_fips_labels(matched)
     if args.dry_run:
-        print(f"DRY RUN: CAP {identifier} would broadcast for {', '.join(labels)}")
+        print(
+            f"DRY RUN: CAP {identifier} {describe_event_code(event_code)} "
+            f"would broadcast for {', '.join(labels)}"
+        )
     else:
-        print(f"Broadcast complete for CAP {identifier} ({', '.join(labels)})")
+        print(
+            f"Broadcast complete for CAP {identifier} {describe_event_code(event_code)} "
+            f"({', '.join(labels)})"
+        )
 
     return 0
 
