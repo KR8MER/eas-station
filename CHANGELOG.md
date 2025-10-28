@@ -17,6 +17,7 @@ tracks releases under the 2.1.x series.
   broadcasters and manual tools can resolve official names, presets, and headers.
 - Added a CLI helper (`tools/generate_sample_audio.py`) to create demonstration SAME audio
   clips without ingesting a live CAP product.
+- Delivered an in-app Manual Broadcast Builder on the EAS Output tab so operators can generate SAME headers, attention tones (EAS dual-tone or 1050 Hz), optional narration, and composite audio without leaving the browser.
 - Unlocked an in-app first-run experience so the Admin panel exposes an
   "First-Time Administrator Setup" wizard when no accounts exist.
 - Introduced optional Azure AI speech synthesis to append narrated voiceovers when the
@@ -29,8 +30,8 @@ tracks releases under the 2.1.x series.
 - Clarified in the README and dependency notes that PostgreSQL with PostGIS must run in a dedicated container separate from the application services.
 - Documented a single-line command for cloning the Experimental branch and launching the Docker Compose stack so operators can bootstrap quickly.
 - Clarified the update instructions to explicitly pull the Experimental branch when refreshing deployments.
-- Highlighted the manual broadcast tooling from the EAS Output tab with a
-  direct link to the documentation for generating practice audio clips.
+- Reworked the EAS Output tab with an interactive Manual Broadcast Builder and refreshed the README/HELP documentation to cover the browser-based workflow.
+- Simplified database configuration by deriving `DATABASE_URL` from the `POSTGRES_*` variables when it is not explicitly set, eliminating duplicate secrets in `.env`.
 - Restored the `.env` template workflow, updated quick-start documentation to copy
   `.env.example`, and reiterated that operators must rotate the placeholder
   secrets immediately after bootstrapping the stack.
@@ -49,8 +50,10 @@ tracks releases under the 2.1.x series.
 ### Fixed
 - Restored the `.env.example` template and documented the startup error shown when the
   file is missing so Docker Compose deployments no longer fail with "env file not found".
-- Updated the Docker Compose PostGIS service to use the published `postgis/postgis:17-3.4`
-  image so pulls succeed on both AMD64 and ARM64 hosts.
+- Updated the Docker Compose PostGIS service to default to
+  `postgis/postgis:17-3.4` while allowing operators to override the image
+  via a new `ALERTS_DB_IMAGE` environment variable so existing
+  deployments (e.g., `postgres:17-postgis-arm64`) remain compatible.
 - Skip PostGIS-specific geometry checks when running against SQLite and store geometry
   fields as plain text on non-PostgreSQL databases so local development can initialize
   without spatial extensions.

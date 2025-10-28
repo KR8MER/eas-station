@@ -76,9 +76,9 @@ cd noaa_alerts_systems
 cp .env.example .env
 # IMPORTANT: Edit .env and set SECRET_KEY and POSTGRES_PASSWORD!
 # The docker compose stack will launch both the app service and a
-# separate PostgreSQL/PostGIS database container based on the
-# postgis/postgis:17-3.4 image. Adjust the tag if you need to
-# align with an existing database deployment.
+# separate PostgreSQL/PostGIS database container. Set
+# ALERTS_DB_IMAGE in .env if you need to align with an existing
+# database deployment (defaults to postgis/postgis:17-3.4).
 docker compose up -d --build
 ```
 
@@ -99,13 +99,17 @@ docker compose up -d --build
 
 3. **Edit `.env` and update:**
    - `SECRET_KEY` - Use the generated value
-   - `POSTGRES_PASSWORD` (and matching `DATABASE_URL`) - Change from defaults
-   - `ALERTS_DB_*`, `TZ`, `WATCHTOWER_*`, or other infrastructure metadata as needed
+   - `POSTGRES_PASSWORD` - Change from defaults (the application builds `DATABASE_URL` automatically from the `POSTGRES_*` values)
+   - `ALERTS_DB_IMAGE`, `TZ`, `WATCHTOWER_*`, or other infrastructure metadata as needed
 
 4. **Start the system (provisions the separate Postgres/PostGIS container automatically):**
    ```bash
    docker compose up -d --build
    ```
+
+   > Need to run a specific database image (for example `postgres:17-postgis-arm64`)?
+   > Set `ALERTS_DB_IMAGE` in `.env` before launching and Compose will pull
+   > that tag instead of the default `postgis/postgis:17-3.4` build.
 
 ### Quick Update (Pull Latest Changes)
 
@@ -221,7 +225,6 @@ When enabled, the poller generates full SAME header bursts, raises an optional G
    # Optional overrides:
    # EAS_OUTPUT_DIR=static/eas_messages        # Files must remain within the Flask static directory for web access
    # EAS_OUTPUT_WEB_SUBDIR=eas_messages        # Subdirectory under /static used for download links
-   # EAS_OUTPUT_WEB_PATH=eas_messages          # Legacy variable name still recognised
    # EAS_ORIGINATOR=WXR                        # SAME originator code (3 characters)
    # EAS_STATION_ID=EASNODES                   # Call sign or station identifier (up to 8 characters)
    # EAS_AUDIO_PLAYER="aplay"                  # Command used to play generated WAV files
@@ -238,15 +241,15 @@ When enabled, the poller generates full SAME header bursts, raises an optional G
    - A matching `*.txt` file stores the JSON metadata (identifier, timestamps, SAME header, and narrative).
    - The admin console lists the most recent transmissions, allowing operators to play audio or download the summary directly from the browser.
 
-#### Generate a sample audio file
+#### Build practice activations from the admin console
 
-You can produce a demonstration clip (without ingesting a live CAP product) using the bundled helper. The script reuses the SAME encoder and writes the files to the configured output directory:
+The **Manual Broadcast Builder** on the EAS Output tab mirrors the workflow of a commercial encoder:
 
-```bash
-python tools/generate_sample_audio.py
-```
+1. Open **Admin → EAS Output** and supply the event code, SAME/FIPS targets, and narration copy.
+2. Click **Generate Package** to produce discrete WAV files for the SAME bursts, attention tone (dual-tone or 1050 Hz), optional narration, and the EOM burst.
+3. Preview each element directly in the browser or download the files for playout testing. A composite file is also produced so you can audition the full activation end-to-end.
 
-Pass `--output-dir` if you want the artifacts written somewhere other than the default `static/eas_messages/` folder.
+Prefer scripts or automated testing? The legacy helper at `tools/generate_sample_audio.py` is still shipped with the project for command-line use.
 
 #### Optional Azure AI voiceover
 

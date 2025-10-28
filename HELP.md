@@ -24,8 +24,8 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 - Trigger manual broadcasts with `manual_eas_event.py` for drills or locally authored messages.
 
 ### Generating Sample Audio
-- Run `python tools/generate_sample_audio.py` to create demonstration SAME audio clips.
-- Include the `--azure-voice` flag after configuring Azure credentials to synthesize AI narration.
+- Use **Admin → EAS Output → Manual Broadcast Builder** to craft practice activations entirely in the browser. The tool outputs individual WAV files for the SAME header bursts, attention tone (EAS or 1050 Hz), optional narration, and the EOM burst.
+- The legacy helper remains available for automation: `docker compose exec app python tools/generate_sample_audio.py`.
 
 ## Troubleshooting
 ### Application Will Not Start
@@ -53,7 +53,7 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 | View aggregate logs | `docker compose logs -f` |
 | Restart the web app | `docker compose restart app` |
 | Run database migrations (if applicable) | `flask db upgrade` |
-| Generate sample audio | `python tools/generate_sample_audio.py` |
+| Legacy sample audio helper | `docker compose exec app python tools/generate_sample_audio.py` |
 | Manual CAP injection | `python manual_eas_event.py --help` |
 
 ## Getting Help
