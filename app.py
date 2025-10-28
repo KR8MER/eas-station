@@ -14,6 +14,7 @@ Version: 2.1.5 - Incremental build metadata surfaced in the UI footer
 
 import os
 import json
+import math
 import psutil
 import threading
 import hashlib
@@ -192,7 +193,7 @@ BOUNDARY_TYPE_CONFIG = {
         'label': 'Railroads',
         'group': 'infrastructure',
         'color': '#b45309',
-        'aliases': ['railroad', 'rail', 'railway', 'railways'],
+        'aliases': ['railroad', 'rail', 'railway', 'railways', 'rails'],
     },
     'rivers': {
         'label': 'Rivers & Streams',
@@ -681,6 +682,10 @@ def get_field_mappings():
         'county': {
             'name_fields': ['COUNTY', 'COUNTY_NAME', 'NAME'],
             'description_fields': ['FIPS_CODE', 'POPULATION', 'AREA_SQMI']
+        },
+        'railroads': {
+            'name_fields': ['FULLNAME', 'RAILROAD', 'NAME'],
+            'description_fields': ['LINEARID', 'MTFCC', 'ShapeSTLength']
         }
     }
 
@@ -699,7 +704,7 @@ def extract_name_and_description(properties, boundary_type):
 
     # Fallback name extraction
     if not name:
-        for field in ['name', 'NAME', 'Name', 'OBJECTID', 'ID', 'FID']:
+        for field in ['name', 'NAME', 'Name', 'FULLNAME', 'OBJECTID', 'ID', 'FID']:
             if field in properties and properties[field]:
                 name = str(properties[field]).strip()
                 break
@@ -751,6 +756,143 @@ def extract_name_and_description(properties, boundary_type):
 
     description = "; ".join(description_parts) if description_parts else ""
     return name, description
+
+
+def describe_mtfcc(code: Optional[str]) -> Optional[str]:
+    """Return a human-friendly description for common MTFCC codes."""
+    if not code:
+        return None
+
+    mtfcc_descriptions = {
+        'R1011': 'Primary railroad line',
+        'R1012': 'Secondary railroad line',
+        'R1051': 'Railroad siding or yard',
+    }
+
+    return mtfcc_descriptions.get(code.upper(), None)
+
+
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate the haversine distance between two points in kilometers."""
+    # Earth radius in kilometers (mean radius)
+    radius_km = 6371.0088
+
+    lat1_rad = math.radians(lat1)
+    lon1_rad = math.radians(lon1)
+    lat2_rad = math.radians(lat2)
+    lon2_rad = math.radians(lon2)
+
+    delta_lat = lat2_rad - lat1_rad
+    delta_lon = lon2_rad - lon1_rad
+
+    a = (
+        math.sin(delta_lat / 2) ** 2
+        + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon / 2) ** 2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    return radius_km * c
+
+
+def calculate_linestring_length_km(coordinates: List[List[float]]) -> float:
+    """Approximate the length of a LineString in kilometers using haversine distance."""
+    if not coordinates or len(coordinates) < 2:
+        return 0.0
+
+    total_km = 0.0
+    for start, end in zip(coordinates[:-1], coordinates[1:]):
+        if len(start) >= 2 and len(end) >= 2:
+            lon1, lat1 = start[:2]
+            lon2, lat2 = end[:2]
+            total_km += haversine_distance(lat1, lon1, lat2, lon2)
+
+    return total_km
+
+
+def calculate_geometry_length_miles(geometry: Optional[dict]) -> Optional[float]:
+    """Calculate an approximate geometry length in miles for preview purposes."""
+    if not geometry or 'type' not in geometry:
+        return None
+
+    geom_type = geometry.get('type')
+    coordinates = geometry.get('coordinates', [])
+    total_km = 0.0
+
+    if geom_type == 'LineString':
+        total_km = calculate_linestring_length_km(coordinates)
+    elif geom_type == 'MultiLineString':
+        for segment in coordinates:
+            total_km += calculate_linestring_length_km(segment)
+    elif geom_type == 'Polygon':
+        if coordinates:
+            total_km = calculate_linestring_length_km(coordinates[0])
+    elif geom_type == 'MultiPolygon':
+        for polygon in coordinates:
+            if polygon:
+                total_km += calculate_linestring_length_km(polygon[0])
+    else:
+        return None
+
+    if total_km == 0:
+        return None
+
+    return total_km * 0.621371
+
+
+def extract_feature_metadata(feature: dict) -> Dict[str, Any]:
+    """Extract enriched metadata for GeoJSON preview purposes."""
+    properties = feature.get('properties', {}) or {}
+    geometry = feature.get('geometry') or {}
+
+    owner = None
+    owner_field = None
+    for candidate in ['FULLNAME', 'Owner', 'OWNER', 'COMPANY', 'RAILROAD', 'NAME']:
+        value = properties.get(candidate)
+        if value:
+            owner = str(value).strip()
+            owner_field = candidate
+            break
+
+    line_id = None
+    line_id_field = None
+    for candidate in ['LINEARID', 'ID', 'OBJECTID', 'FID']:
+        value = properties.get(candidate)
+        if value not in (None, ''):
+            line_id = str(value).strip()
+            line_id_field = candidate
+            break
+
+    mtfcc = properties.get('MTFCC')
+    classification = describe_mtfcc(mtfcc)
+
+    length_miles = calculate_geometry_length_miles(geometry)
+    length_label = None
+    if length_miles is not None:
+        length_label = f"{length_miles:.2f} miles"
+
+    additional_details = []
+    for field in ['OBJECTID', 'ShapeSTLength', 'STATE', 'COUNTY']:
+        if field in properties and properties[field] not in (None, ''):
+            additional_details.append(f"{field}: {properties[field]}")
+
+    recommended_fields = {'owner', 'line_id'}
+    if classification:
+        recommended_fields.add('classification')
+    if length_label:
+        recommended_fields.add('approximate_length')
+
+    return {
+        'owner': owner or None,
+        'owner_field': owner_field,
+        'line_id': line_id,
+        'line_id_field': line_id_field,
+        'mtfcc': mtfcc,
+        'classification': classification,
+        'length_miles': length_miles,
+        'length_label': length_label,
+        'additional_details': additional_details,
+        'recommended_fields': recommended_fields,
+    }
 
 
 def ensure_multipolygon(geometry):
@@ -3176,6 +3318,96 @@ def ensure_boundary_geometry_column():
     except Exception as exc:
         logger.warning("Could not ensure boundaries.geom column configuration: %s", exc)
         db.session.rollback()
+
+
+@app.route('/admin/preview_geojson', methods=['POST'])
+def preview_geojson():
+    """Preview GeoJSON contents and extract useful metadata without persisting."""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+
+        file = request.files['file']
+        raw_boundary_type = request.form.get('boundary_type', 'unknown')
+        boundary_type = normalize_boundary_type(raw_boundary_type)
+        boundary_label = get_boundary_display_label(raw_boundary_type)
+
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+
+        if not file.filename.lower().endswith('.geojson'):
+            return jsonify({'error': 'File must be a GeoJSON file'}), 400
+
+        try:
+            file_contents = file.read().decode('utf-8')
+        except UnicodeDecodeError:
+            return jsonify({'error': 'Unable to decode file. Please ensure it is UTF-8 encoded.'}), 400
+
+        try:
+            geojson_data = json.loads(file_contents)
+        except json.JSONDecodeError:
+            return jsonify({'error': 'Invalid GeoJSON format'}), 400
+
+        features = geojson_data.get('features')
+        if not isinstance(features, list) or not features:
+            return jsonify({
+                'error': 'GeoJSON file does not contain any features.',
+                'boundary_type': boundary_label,
+                'total_features': 0
+            }), 400
+
+        preview_limit = 5
+        previews: List[Dict[str, Any]] = []
+        all_fields = set()
+        owner_fields = set()
+        line_id_fields = set()
+        recommended_fields = set()
+
+        for feature in features:
+            properties = feature.get('properties', {}) or {}
+            all_fields.update(properties.keys())
+
+        for feature in features[:preview_limit]:
+            properties = feature.get('properties', {}) or {}
+            name, description = extract_name_and_description(properties, boundary_type)
+            metadata = extract_feature_metadata(feature)
+
+            preview_entry = {
+                'name': name,
+                'description': description,
+                'owner': metadata.get('owner'),
+                'line_id': metadata.get('line_id'),
+                'mtfcc': metadata.get('mtfcc'),
+                'classification': metadata.get('classification'),
+                'length_label': metadata.get('length_label'),
+                'additional_details': metadata.get('additional_details'),
+            }
+            previews.append(preview_entry)
+
+            if metadata.get('owner_field'):
+                owner_fields.add(metadata['owner_field'])
+            if metadata.get('line_id_field'):
+                line_id_fields.add(metadata['line_id_field'])
+            recommended_fields.update(metadata.get('recommended_fields', set()))
+
+        response_data = {
+            'boundary_type': boundary_label,
+            'normalized_type': boundary_type,
+            'total_features': len(features),
+            'preview_count': len(previews),
+            'all_fields': sorted(all_fields),
+            'previews': previews,
+            'owner_fields': sorted(owner_fields),
+            'line_id_fields': sorted(line_id_fields),
+            'recommended_additional_fields': sorted(recommended_fields),
+            'field_mappings': get_field_mappings().get(boundary_type, {}),
+        }
+
+        return jsonify(response_data)
+
+    except Exception as exc:
+        logger.error("Error previewing GeoJSON: %s", exc)
+        return jsonify({'error': f'Failed to preview GeoJSON: {str(exc)}'}), 500
 
 
 @app.route('/admin/upload_boundaries', methods=['POST'])
