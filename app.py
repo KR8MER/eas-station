@@ -640,6 +640,30 @@ def stats():
         return f"<h1>Error loading statistics</h1><p>{str(e)}</p><p><a href='/'>← Back to Main</a></p>"
 
 
+@app.route('/about')
+def about_page():
+    """Present project background information within the web UI."""
+    try:
+        return render_template('about.html')
+    except Exception as exc:
+        logger.error(f"Error rendering about page: {exc}")
+        return (
+            "<h1>About</h1><p>Project documentation is available in ABOUT.md on the server.</p>"
+        )
+
+
+@app.route('/help')
+def help_page():
+    """Provide quick-start and troubleshooting guidance for operators."""
+    try:
+        return render_template('help.html')
+    except Exception as exc:
+        logger.error(f"Error rendering help page: {exc}")
+        return (
+            "<h1>Help</h1><p>Refer to HELP.md in the repository for the full operations guide.</p>"
+        )
+
+
 @app.route('/system_health')
 def system_health_page():
     """Dedicated system health monitoring page"""

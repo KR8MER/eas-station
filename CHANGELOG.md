@@ -20,6 +20,7 @@ tracks releases under the 2.1.x series.
 - Introduced optional Azure AI speech synthesis to append narrated voiceovers when the
   appropriate credentials and SDK are available.
 - Authored dedicated `ABOUT.md` and `HELP.md` documentation describing the system mission, software stack, and operational playbooks, with cross-links from the README for quick discovery.
+- Exposed in-app About and Help pages so operators can read the mission overview and operations guide directly from the dashboard navigation.
 ### Changed
 - Clarified in the README and dependency notes that PostgreSQL with PostGIS must run in a dedicated container separate from the application services.
 - Updated the GPIO relay control so it remains engaged for the full alert audio playback,

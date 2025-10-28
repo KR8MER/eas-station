@@ -43,6 +43,7 @@
 
 - [ℹ️ About the Project](ABOUT.md) – Overview of the mission, core services, and full software stack powering the system.
 - [🆘 Help Guide](HELP.md) – Day-to-day operations, troubleshooting workflows, and reference commands for operators.
+- In-app versions of both guides are reachable from the navigation bar via the new <strong>About</strong> and <strong>Help</strong> pages for quick operator reference.
 
 ---
 

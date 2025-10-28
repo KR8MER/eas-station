@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% block title %}About | KR8MER CAP Emergency Alerts{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-10 col-xl-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <h1 class="h3 mb-3"><i class="fas fa-info-circle me-2"></i>About the KR8MER CAP Emergency Alert System</h1>
+                    <p class="lead">This community-driven project distributes National Weather Service CAP alerts, SAME audio, and LED board messaging for regional emergency communications partners.</p>
+                    <p>The platform couples a Flask web application with scheduled ingest services, Azure-powered voice synthesis, and hardware integrations so local operators can monitor, validate, and relay critical weather and civil alerts.</p>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3"><i class="fas fa-layer-group me-2"></i>System Architecture Overview</h2>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item bg-transparent">
+                            <strong>Data Acquisition:</strong> NOAA CAP feeds are polled on a schedule, parsed, and persisted with full geometry metadata for downstream analysis.
+                        </li>
+                        <li class="list-group-item bg-transparent">
+                            <strong>Web Operations:</strong> Flask serves the operator dashboard, alert archives, statistics, LED control, and this public help content.
+                        </li>
+                        <li class="list-group-item bg-transparent">
+                            <strong>Broadcast Pipeline:</strong> The EAS encoder produces SAME headers, digital data bursts, and optional Azure AI Speech narration for broadcast-ready audio.
+                        </li>
+                        <li class="list-group-item bg-transparent">
+                            <strong>Hardware Integrations:</strong> Network LED signage and GPIO-triggered transmitters receive synchronized alert status updates.
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3"><i class="fas fa-toolbox me-2"></i>Software Stack</h2>
+                    <p class="mb-3">The project combines open source geospatial tooling, broadcast utilities, and optional cloud services:</p>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <h3 class="h6 text-uppercase text-muted">Core Platform</h3>
+                            <ul class="mb-0">
+                                <li>Python 3 with Flask &amp; SQLAlchemy</li>
+                                <li>GeoAlchemy2 &amp; PostGIS spatial extensions</li>
+                                <li>Celery-style pollers &amp; scheduler helpers</li>
+                                <li>Requests, Pydantic utilities, and PyTZ</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h3 class="h6 text-uppercase text-muted">Infrastructure</h3>
+                            <ul class="mb-0">
+                                <li>Docker &amp; Docker Compose orchestration</li>
+                                <li>PostgreSQL with PostGIS (dedicated container)</li>
+                                <li>Redis-backed task queues (optional)</li>
+                                <li>Raspberry Pi and networked LED controllers</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h3 class="h6 text-uppercase text-muted">Broadcast Chain</h3>
+                            <ul class="mb-0">
+                                <li>Custom SAME encoder &amp; audio pipeline</li>
+                                <li>SoX/FFmpeg utilities for waveform processing</li>
+                                <li>Azure AI Speech synthesis (optional voiceover)</li>
+                                <li>GPIO relay management scripts</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h3 class="h6 text-uppercase text-muted">Operator Tooling</h3>
+                            <ul class="mb-0">
+                                <li>Web dashboards &amp; health monitors</li>
+                                <li>CLI ingestion &amp; manual activation scripts</li>
+                                <li>Template repair utilities</li>
+                                <li>Extensive documentation in <code>ABOUT.md</code> &amp; <code>HELP.md</code></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3"><i class="fas fa-file-alt me-2"></i>Project Resources</h2>
+                    <p class="mb-3">Need more detail? Explore the reference material shipped with the repository:</p>
+                    <ul class="mb-0">
+                        <li><a href="https://github.com/KR8MER/noaa_alerts_systems" class="text-decoration-none" target="_blank" rel="noopener">Project on GitHub</a> for history, issues, and community coordination.</li>
+                        <li><a href="{{ url_for('help_page') }}" class="text-decoration-none">Help &amp; Operations Guide</a> for practical workflows.</li>
+                        <li>Repository copies of <code>ABOUT.md</code> and <code>HELP.md</code> ship with every deployment for offline reference.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
