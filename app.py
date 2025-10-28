@@ -14,16 +14,11 @@ Version: 2.1.7 - Removes legacy artifacts and unused assets from the repository
 
 import os
 import json
-import math
-import psutil
-import threading
-import hashlib
 import re
+import psutil
 from typing import Any, Dict, List, Optional, Tuple, Union
 from datetime import datetime, timedelta
 from collections import defaultdict
-from enum import Enum
-from contextlib import nullcontext
 from urllib.parse import quote, urljoin, urlparse
 
 from dotenv import load_dotenv
@@ -48,7 +43,6 @@ from app_utils import (
     utc_now,
 )
 from app_utils.eas import load_eas_config
-from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS, ensure_list, normalise_upper
 
 # Flask and extensions
 from flask import (
@@ -64,14 +58,6 @@ from flask import (
     session,
     g,
 )
-from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import (
-    check_password_hash as werkzeug_check_password_hash,
-    generate_password_hash as werkzeug_generate_password_hash,
-)
-
-# Database imports
-from geoalchemy2 import Geometry
 from geoalchemy2.functions import ST_GeomFromGeoJSON, ST_Intersects, ST_AsGeoJSON
 from sqlalchemy import text, func, or_, desc
 from sqlalchemy.exc import OperationalError
@@ -79,6 +65,58 @@ from sqlalchemy.exc import OperationalError
 # Logging
 import logging
 import click
+
+from app_core.alerts import (
+    assign_alert_geometry,
+    calculate_alert_intersections,
+    ensure_multipolygon,
+    get_active_alerts_query,
+    get_expired_alerts_query,
+    parse_noaa_cap_alert,
+)
+from app_core.boundaries import (
+    BOUNDARY_GROUP_LABELS,
+    BOUNDARY_TYPE_CONFIG,
+    calculate_geometry_length_miles,
+    describe_mtfcc,
+    extract_name_and_description,
+    get_boundary_color,
+    get_boundary_display_label,
+    get_boundary_group,
+    get_field_mappings,
+    normalize_boundary_type,
+)
+from app_core.extensions import db
+from app_core.led import (
+    Color,
+    Effect,
+    DisplayMode,
+    Font,
+    FontSize,
+    LED_AVAILABLE,
+    LED_SIGN_IP,
+    LED_SIGN_PORT,
+    MessagePriority,
+    SpecialFunction,
+    Speed,
+    ensure_led_tables,
+    initialise_led_controller,
+    led_controller,
+    led_module,
+)
+from app_core.location import get_location_settings, update_location_settings
+from app_core.models import (
+    AdminUser,
+    Boundary,
+    CAPAlert,
+    EASMessage,
+    Intersection,
+    LEDMessage,
+    LEDSignStatus,
+    LocationSettings,
+    PollHistory,
+    SystemLog,
+)
 
 # =============================================================================
 # CONFIGURATION AND SETUP
@@ -133,7 +171,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize database
-db = SQLAlchemy(app)
+db.init_app(app)
 
 # Configure EAS output integration
 EAS_CONFIG = load_eas_config(app.root_path)
@@ -144,11 +182,6 @@ app.config['EAS_OUTPUT_WEB_SUBDIR'] = EAS_CONFIG.get('web_subdir', 'eas_messages
 # Guard database schema preparation so we only attempt it once per process.
 _db_initialized = False
 _db_initialization_error = None
-_db_init_lock = threading.Lock()
-
-_location_settings_cache: Optional[Dict[str, Any]] = None
-_location_settings_lock = threading.Lock()
-
 logger.info("NOAA Alerts System startup")
 
 # =============================================================================
@@ -156,183 +189,6 @@ logger.info("NOAA Alerts System startup")
 # =============================================================================
 
 USERNAME_PATTERN = re.compile(r'^[A-Za-z0-9_.-]{3,64}$')
-
-BOUNDARY_GROUP_LABELS = {
-    'geographic': 'Geographic Boundaries',
-    'service': 'Service Boundaries',
-    'infrastructure': 'Infrastructure',
-    'hydrography': 'Water Features',
-    'custom': 'Custom Layers',
-    'unknown': 'Uncategorized Boundaries',
-}
-
-BOUNDARY_TYPE_CONFIG = {
-    'county': {
-        'label': 'Counties',
-        'group': 'geographic',
-        'color': '#6c757d',
-        'aliases': ['counties'],
-    },
-    'township': {
-        'label': 'Townships',
-        'group': 'geographic',
-        'color': '#28a745',
-        'aliases': ['townships'],
-    },
-    'villages': {
-        'label': 'Villages',
-        'group': 'geographic',
-        'color': '#17a2b8',
-        'aliases': ['village'],
-    },
-    'fire': {
-        'label': 'Fire Districts',
-        'group': 'service',
-        'color': '#dc3545',
-        'aliases': ['fire_districts'],
-    },
-    'ems': {
-        'label': 'EMS Districts',
-        'group': 'service',
-        'color': '#007bff',
-        'aliases': ['ems_districts'],
-    },
-    'school': {
-        'label': 'School Districts',
-        'group': 'service',
-        'color': '#ffc107',
-        'aliases': ['school_districts'],
-    },
-    'electric': {
-        'label': 'Electric Utilities',
-        'group': 'infrastructure',
-        'color': '#fd7e14',
-        'aliases': ['electric_utilities'],
-    },
-    'telephone': {
-        'label': 'Telephone Service',
-        'group': 'infrastructure',
-        'color': '#6f42c1',
-        'aliases': ['telephone_service'],
-    },
-    'railroads': {
-        'label': 'Railroads',
-        'group': 'infrastructure',
-        'color': '#b45309',
-        'aliases': ['railroad', 'rail', 'railway', 'railways', 'rails'],
-    },
-    'rivers': {
-        'label': 'Rivers & Streams',
-        'group': 'hydrography',
-        'color': '#0ea5e9',
-        'aliases': ['river', 'streams', 'stream', 'creeks', 'creek', 'waterways', 'waterway'],
-    },
-    'waterbodies': {
-        'label': 'Lakes & Ponds',
-        'group': 'hydrography',
-        'color': '#2563eb',
-        'aliases': ['lakes', 'lake', 'ponds', 'pond', 'reservoirs', 'reservoir'],
-    },
-}
-
-
-def normalize_boundary_type(value: Optional[str]) -> str:
-    """Normalize boundary type strings for consistent storage and lookup."""
-
-    if value is None:
-        return 'unknown'
-
-    sanitized = re.sub(r'[^a-z0-9]+', '_', value.strip().lower())
-    sanitized = re.sub(r'_+', '_', sanitized).strip('_')
-
-    if not sanitized:
-        return 'unknown'
-
-    for key, config in BOUNDARY_TYPE_CONFIG.items():
-        aliases = {key}
-        aliases.update(config.get('aliases', []))
-        if sanitized in aliases:
-            return key
-
-    return sanitized
-
-
-def get_boundary_display_label(boundary_type: Optional[str]) -> str:
-    """Return a human-friendly label for a boundary type."""
-
-    normalized = normalize_boundary_type(boundary_type)
-    if normalized in BOUNDARY_TYPE_CONFIG:
-        return BOUNDARY_TYPE_CONFIG[normalized]['label']
-
-    if normalized in {'unknown', ''}:
-        return 'Unknown Boundary'
-
-    return normalized.replace('_', ' ').title()
-
-
-def get_boundary_group(boundary_type: Optional[str]) -> str:
-    """Return the logical group for a boundary type."""
-
-    normalized = normalize_boundary_type(boundary_type)
-    return BOUNDARY_TYPE_CONFIG.get(normalized, {}).get('group', 'custom')
-
-
-def get_boundary_color(boundary_type: Optional[str]) -> Optional[str]:
-    """Return a suggested color for a boundary type if one is defined."""
-
-    normalized = normalize_boundary_type(boundary_type)
-    return BOUNDARY_TYPE_CONFIG.get(normalized, {}).get('color')
-
-# =============================================================================
-# LED SIGN CONFIGURATION AND INITIALIZATION
-# =============================================================================
-
-# LED Sign Configuration
-LED_SIGN_IP = os.getenv('LED_SIGN_IP', '192.168.1.100')
-LED_SIGN_PORT = int(os.getenv('LED_SIGN_PORT', '10001'))
-LED_AVAILABLE = False
-led_controller = None
-
-_led_tables_initialized = False
-_led_tables_error = None
-_led_tables_lock = threading.Lock()
-
-
-def _fallback_message_priority():
-    class _MessagePriority(Enum):
-        EMERGENCY = 0
-        URGENT = 1
-        NORMAL = 2
-        LOW = 3
-
-    return _MessagePriority
-try:
-    from led_sign_controller import (
-        LEDSignController,
-        Color,
-        FontSize,
-        Effect,
-        Speed,
-        MessagePriority,
-    )
-except ImportError as e:
-    logger.warning(f"LED controller module not found: {e}")
-    LED_AVAILABLE = False
-    MessagePriority = _fallback_message_priority()
-else:
-    try:
-        led_controller = LEDSignController(LED_SIGN_IP, LED_SIGN_PORT, location_settings=get_location_settings())
-        LED_AVAILABLE = True
-        logger.info(
-            "LED controller initialized successfully for %s:%s",
-            LED_SIGN_IP,
-            LED_SIGN_PORT,
-        )
-    except Exception as e:
-        logger.error(f"Failed to initialize LED controller: {e}")
-        LED_AVAILABLE = False
-        MessagePriority = _fallback_message_priority()
-
 
 # =============================================================================
 # TIMEZONE AND DATETIME UTILITIES
@@ -344,663 +200,6 @@ def parse_nws_datetime(dt_string):
 
     return _parse_nws_datetime(dt_string, logger=logger)
 
-
-# =============================================================================
-# DATABASE MODELS
-# =============================================================================
-
-class Boundary(db.Model):
-    __tablename__ = 'boundaries'
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(255), nullable=False)
-    type = db.Column(db.String(50), nullable=False)
-    description = db.Column(db.Text)
-    geom = db.Column(Geometry('GEOMETRY', srid=4326))
-    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
-    updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now)
-
-
-class CAPAlert(db.Model):
-    __tablename__ = 'cap_alerts'
-
-    id = db.Column(db.Integer, primary_key=True)
-    identifier = db.Column(db.String(255), unique=True, nullable=False)
-    sent = db.Column(db.DateTime(timezone=True), nullable=False)
-    expires = db.Column(db.DateTime(timezone=True))
-    status = db.Column(db.String(50), nullable=False)
-    message_type = db.Column(db.String(50), nullable=False)
-    scope = db.Column(db.String(50), nullable=False)
-    category = db.Column(db.String(50))
-    event = db.Column(db.String(255), nullable=False)
-    urgency = db.Column(db.String(50))
-    severity = db.Column(db.String(50))
-    certainty = db.Column(db.String(50))
-    area_desc = db.Column(db.Text)
-    headline = db.Column(db.Text)
-    description = db.Column(db.Text)
-    instruction = db.Column(db.Text)
-    raw_json = db.Column(db.JSON)
-    geom = db.Column(Geometry('POLYGON', srid=4326))
-    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
-    updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now)
-
-
-class SystemLog(db.Model):
-    __tablename__ = 'system_log'
-
-    id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime(timezone=True), default=utc_now)
-    level = db.Column(db.String(20), nullable=False)
-    message = db.Column(db.Text, nullable=False)
-    module = db.Column(db.String(100))
-    details = db.Column(db.JSON)
-
-
-class AdminUser(db.Model):
-    __tablename__ = 'admin_users'
-
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
-    salt = db.Column(db.String(64), nullable=False)
-    is_active = db.Column(db.Boolean, nullable=False, default=True)
-    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
-    last_login_at = db.Column(db.DateTime(timezone=True))
-
-    def set_password(self, password: str) -> None:
-        self.password_hash = werkzeug_generate_password_hash(password)
-        self.salt = 'pbkdf2'
-
-    def check_password(self, password: str) -> bool:
-        if not self.password_hash:
-            return False
-
-        if self.salt and self.salt != 'pbkdf2':
-            if len(self.salt) == 32 and len(self.password_hash) == 64:
-                try:
-                    salt_bytes = bytes.fromhex(self.salt)
-                except ValueError:
-                    return False
-                hashed = hashlib.sha256(salt_bytes + password.encode('utf-8')).hexdigest()
-                if hashed == self.password_hash:
-                    self.set_password(password)
-                    return True
-            return False
-
-        try:
-            return werkzeug_check_password_hash(self.password_hash, password)
-        except ValueError:
-            logger.warning('Stored admin password hash has an unexpected format.')
-            return False
-
-    def to_safe_dict(self) -> Dict[str, Any]:
-        return {
-            'id': self.id,
-            'username': self.username,
-            'is_active': self.is_active,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'last_login_at': self.last_login_at.isoformat() if self.last_login_at else None,
-        }
-
-
-class EASMessage(db.Model):
-    __tablename__ = 'eas_messages'
-
-    id = db.Column(db.Integer, primary_key=True)
-    cap_alert_id = db.Column(db.Integer, db.ForeignKey('cap_alerts.id'), index=True)
-    same_header = db.Column(db.String(255), nullable=False)
-    audio_filename = db.Column(db.String(255), nullable=False)
-    text_filename = db.Column(db.String(255), nullable=False)
-    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
-    metadata = db.Column(db.JSON, default=dict)
-
-    cap_alert = db.relationship('CAPAlert', backref=db.backref('eas_messages', lazy='dynamic'))
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            'id': self.id,
-            'cap_alert_id': self.cap_alert_id,
-            'same_header': self.same_header,
-            'audio_filename': self.audio_filename,
-            'text_filename': self.text_filename,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'metadata': self.metadata or {},
-        }
-
-
-class Intersection(db.Model):
-    __tablename__ = 'intersections'
-
-    id = db.Column(db.Integer, primary_key=True)
-    cap_alert_id = db.Column(db.Integer, db.ForeignKey('cap_alerts.id', ondelete='CASCADE'))
-    boundary_id = db.Column(db.Integer, db.ForeignKey('boundaries.id', ondelete='CASCADE'))
-    intersection_area = db.Column(db.Float)
-    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
-
-
-class PollHistory(db.Model):
-    __tablename__ = 'poll_history'
-
-    id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime(timezone=True), default=utc_now)
-    status = db.Column(db.String(20), nullable=False)
-    alerts_fetched = db.Column(db.Integer, default=0)
-    alerts_new = db.Column(db.Integer, default=0)
-    alerts_updated = db.Column(db.Integer, default=0)
-    execution_time_ms = db.Column(db.Integer)
-    error_message = db.Column(db.Text)
-
-
-class LocationSettings(db.Model):
-    __tablename__ = 'location_settings'
-
-    id = db.Column(db.Integer, primary_key=True)
-    county_name = db.Column(db.String(255), nullable=False, default=DEFAULT_LOCATION_SETTINGS['county_name'])
-    state_code = db.Column(db.String(2), nullable=False, default=DEFAULT_LOCATION_SETTINGS['state_code'])
-    timezone = db.Column(db.String(64), nullable=False, default=DEFAULT_LOCATION_SETTINGS['timezone'])
-    zone_codes = db.Column(db.JSON, nullable=False, default=lambda: list(DEFAULT_LOCATION_SETTINGS['zone_codes']))
-    area_terms = db.Column(db.JSON, nullable=False, default=lambda: list(DEFAULT_LOCATION_SETTINGS['area_terms']))
-    map_center_lat = db.Column(db.Float, nullable=False, default=DEFAULT_LOCATION_SETTINGS['map_center_lat'])
-    map_center_lng = db.Column(db.Float, nullable=False, default=DEFAULT_LOCATION_SETTINGS['map_center_lng'])
-    map_default_zoom = db.Column(db.Integer, nullable=False, default=DEFAULT_LOCATION_SETTINGS['map_default_zoom'])
-    led_default_lines = db.Column(db.JSON, nullable=False, default=lambda: list(DEFAULT_LOCATION_SETTINGS['led_default_lines']))
-    updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now)
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            'id': self.id,
-            'county_name': self.county_name,
-            'state_code': self.state_code,
-            'timezone': self.timezone,
-            'zone_codes': list(self.zone_codes or []),
-            'area_terms': list(self.area_terms or []),
-            'map_center_lat': self.map_center_lat,
-            'map_center_lng': self.map_center_lng,
-            'map_default_zoom': self.map_default_zoom,
-            'led_default_lines': list(self.led_default_lines or []),
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-        }
-
-
-# =============================================================================
-# LED SIGN DATABASE MODELS
-# =============================================================================
-
-class LEDMessage(db.Model):
-    __tablename__ = 'led_messages'
-
-    id = db.Column(db.Integer, primary_key=True)
-    message_type = db.Column(db.String(50), nullable=False)
-    content = db.Column(db.Text, nullable=False)
-    priority = db.Column(db.Integer, default=2)
-    color = db.Column(db.String(20))
-    font_size = db.Column(db.String(20))
-    effect = db.Column(db.String(20))
-    speed = db.Column(db.String(20))
-    display_time = db.Column(db.Integer)
-    scheduled_time = db.Column(db.DateTime(timezone=True))
-    sent_at = db.Column(db.DateTime(timezone=True))
-    is_active = db.Column(db.Boolean, default=True)
-    alert_id = db.Column(db.Integer, db.ForeignKey('cap_alerts.id'))
-    repeat_interval = db.Column(db.Integer)
-    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
-
-
-class LEDSignStatus(db.Model):
-    __tablename__ = 'led_sign_status'
-
-    id = db.Column(db.Integer, primary_key=True)
-    sign_ip = db.Column(db.String(15), nullable=False)
-    brightness_level = db.Column(db.Integer, default=10)
-    error_count = db.Column(db.Integer, default=0)
-    last_error = db.Column(db.Text)
-    last_update = db.Column(db.DateTime(timezone=True), default=utc_now)
-    is_connected = db.Column(db.Boolean, default=False)
-
-
-# =============================================================================
-# LED TABLE INITIALIZATION HELPERS
-# =============================================================================
-
-
-def _ensure_led_tables_impl():
-    global _led_tables_initialized, _led_tables_error
-
-    if _led_tables_initialized:
-        return True
-
-    base_ready = initialize_database()
-    if not base_ready:
-        return False
-
-    context = nullcontext() if has_app_context() else app.app_context()
-
-    with context:
-        try:
-            LEDMessage.__table__.create(db.engine, checkfirst=True)
-            LEDSignStatus.__table__.create(db.engine, checkfirst=True)
-        except OperationalError as led_error:
-            _led_tables_error = led_error
-            logger.error("LED table initialization failed: %s", led_error)
-            return False
-        except Exception as led_error:
-            _led_tables_error = led_error
-            logger.error("LED table initialization failed: %s", led_error)
-            raise
-        else:
-            _led_tables_initialized = True
-            _led_tables_error = None
-            logger.info("LED tables ensured")
-            return True
-
-
-def ensure_led_tables(force: bool = False):
-    global _led_tables_initialized, _led_tables_error
-
-    if force:
-        _led_tables_initialized = False
-        _led_tables_error = None
-
-    if _led_tables_initialized:
-        return True
-
-    if isinstance(_led_tables_error, OperationalError):
-        logger.debug("Skipping LED table initialization due to prior OperationalError")
-        return False
-
-    if _led_tables_error is not None:
-        raise _led_tables_error
-
-    with _led_tables_lock:
-        if _led_tables_initialized:
-            return True
-
-        if isinstance(_led_tables_error, OperationalError):
-            logger.debug("Skipping LED table initialization due to prior OperationalError")
-            return False
-
-        if _led_tables_error is not None:
-            raise _led_tables_error
-
-        return _ensure_led_tables_impl()
-
-
-# =============================================================================
-# LOCATION SETTINGS HELPERS
-# =============================================================================
-
-
-def _ensure_location_settings_record() -> LocationSettings:
-    settings = LocationSettings.query.first()
-    if not settings:
-        settings = LocationSettings()
-        db.session.add(settings)
-        db.session.commit()
-    return settings
-
-
-def _coerce_float(value: Any, fallback: float) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return fallback
-
-
-def _coerce_int(value: Any, fallback: int) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return fallback
-
-
-def get_location_settings(force_reload: bool = False) -> Dict[str, Any]:
-    global _location_settings_cache
-
-    if force_reload:
-        _location_settings_cache = None
-
-    with _location_settings_lock:
-        if _location_settings_cache is None:
-            record = _ensure_location_settings_record()
-            _location_settings_cache = record.to_dict()
-            set_location_timezone(_location_settings_cache['timezone'])
-        return dict(_location_settings_cache)
-
-
-def update_location_settings(data: Dict[str, Any]) -> Dict[str, Any]:
-    global _location_settings_cache
-
-    with _location_settings_lock:
-        record = _ensure_location_settings_record()
-
-        county_name = str(data.get('county_name') or record.county_name or DEFAULT_LOCATION_SETTINGS['county_name']).strip()
-        state_code = str(data.get('state_code') or record.state_code or DEFAULT_LOCATION_SETTINGS['state_code']).strip().upper()
-        timezone_name = str(data.get('timezone') or record.timezone or DEFAULT_LOCATION_SETTINGS['timezone']).strip()
-
-        zone_codes = normalise_upper(data.get('zone_codes') or record.zone_codes or DEFAULT_LOCATION_SETTINGS['zone_codes'])
-        if not zone_codes:
-            zone_codes = list(DEFAULT_LOCATION_SETTINGS['zone_codes'])
-
-        area_terms = normalise_upper(data.get('area_terms') or record.area_terms or DEFAULT_LOCATION_SETTINGS['area_terms'])
-        if not area_terms:
-            area_terms = list(DEFAULT_LOCATION_SETTINGS['area_terms'])
-
-        led_lines = ensure_list(data.get('led_default_lines') or record.led_default_lines or DEFAULT_LOCATION_SETTINGS['led_default_lines'])
-        if not led_lines:
-            led_lines = list(DEFAULT_LOCATION_SETTINGS['led_default_lines'])
-
-        map_center_lat = _coerce_float(data.get('map_center_lat'), record.map_center_lat or DEFAULT_LOCATION_SETTINGS['map_center_lat'])
-        map_center_lng = _coerce_float(data.get('map_center_lng'), record.map_center_lng or DEFAULT_LOCATION_SETTINGS['map_center_lng'])
-        map_default_zoom = _coerce_int(data.get('map_default_zoom'), record.map_default_zoom or DEFAULT_LOCATION_SETTINGS['map_default_zoom'])
-
-        try:
-            pytz.timezone(timezone_name)
-        except Exception as exc:
-            logger.warning("Invalid timezone provided (%s), keeping %s: %s", timezone_name, record.timezone, exc)
-            timezone_name = record.timezone or DEFAULT_LOCATION_SETTINGS['timezone']
-
-        record.county_name = county_name
-        record.state_code = state_code
-        record.timezone = timezone_name
-        record.zone_codes = zone_codes
-        record.area_terms = area_terms
-        record.led_default_lines = led_lines
-        record.map_center_lat = map_center_lat
-        record.map_center_lng = map_center_lng
-        record.map_default_zoom = map_default_zoom
-
-        db.session.add(record)
-        db.session.commit()
-
-        _location_settings_cache = record.to_dict()
-        set_location_timezone(_location_settings_cache['timezone'])
-
-        return dict(_location_settings_cache)
-
-
-# =============================================================================
-# DATABASE HELPER FUNCTIONS
-# =============================================================================
-
-def get_active_alerts_query():
-    """Get query for active (non-expired) alerts - preserves all data"""
-    now = utc_now()
-    return CAPAlert.query.filter(
-        or_(
-            CAPAlert.expires.is_(None),
-            CAPAlert.expires > now
-        )
-    ).filter(
-        CAPAlert.status != 'Expired'
-    )
-
-
-def get_expired_alerts_query():
-    """Get query for expired alerts"""
-    now = utc_now()
-    return CAPAlert.query.filter(CAPAlert.expires < now)
-
-
-# =============================================================================
-# GEOJSON AND BOUNDARY PROCESSING UTILITIES
-# =============================================================================
-
-def get_field_mappings():
-    """Define field mappings for different boundary types"""
-    return {
-        'electric': {
-            'name_fields': ['COMPNAME', 'Company', 'Provider', 'Utility'],
-            'description_fields': ['COMPCODE', 'COMPTYPE', 'Shape_Leng', 'SHAPE_STAr']
-        },
-        'villages': {
-            'name_fields': ['CORPORATIO', 'VILLAGE', 'NAME', 'Municipality'],
-            'description_fields': ['POP_2020', 'POP_2010', 'POP_2000', 'SQMI']
-        },
-        'school': {
-            'name_fields': ['District', 'DISTRICT', 'SCHOOL_DIS', 'NAME'],
-            'description_fields': ['STUDENTS', 'Shape_Area', 'ENROLLMENT']
-        },
-        'fire': {
-            'name_fields': ['DEPT', 'DEPARTMENT', 'STATION', 'FIRE_DEPT'],
-            'description_fields': ['STATION_NUM', 'TYPE', 'SERVICE_AREA']
-        },
-        'ems': {
-            'name_fields': ['DEPT', 'DEPARTMENT', 'SERVICE', 'PROVIDER'],
-            'description_fields': ['STATION', 'Area', 'Shape_Area', 'SERVICE_TYPE']
-        },
-        'township': {
-            'name_fields': ['TOWNSHIP_N', 'TOWNSHIP', 'TWP_NAME', 'NAME'],
-            'description_fields': ['POPULATION', 'AREA_SQMI', 'POP_2010', 'COUNTY_COD']
-        },
-        'telephone': {
-            'name_fields': ['TELNAME', 'PROVIDER', 'COMPANY', 'TELECOM', 'CARRIER'],
-            'description_fields': ['TELCO', 'NAME', 'LATA', 'SERVICE_TYPE']
-        },
-        'county': {
-            'name_fields': ['COUNTY', 'COUNTY_NAME', 'NAME'],
-            'description_fields': ['FIPS_CODE', 'POPULATION', 'AREA_SQMI']
-        },
-        'railroads': {
-            'name_fields': ['FULLNAME', 'RAILROAD', 'NAME'],
-            'description_fields': ['LINEARID', 'MTFCC', 'ShapeSTLength']
-        }
-    }
-
-
-def extract_name_and_description(properties, boundary_type):
-    """Extract name and description from feature properties"""
-    mappings = get_field_mappings()
-    type_mapping = mappings.get(boundary_type, {})
-
-    # Extract name
-    name = None
-    for field in type_mapping.get('name_fields', []):
-        if field in properties and properties[field]:
-            name = str(properties[field]).strip()
-            break
-
-    # Fallback name extraction
-    if not name:
-        for field in ['name', 'NAME', 'Name', 'FULLNAME', 'OBJECTID', 'ID', 'FID']:
-            if field in properties and properties[field]:
-                name = str(properties[field]).strip()
-                break
-
-    if not name:
-        name = "Unknown"
-
-    # Extract description
-    description_parts = []
-    for field in type_mapping.get('description_fields', []):
-        if field in properties and properties[field] is not None:
-            value = properties[field]
-            if isinstance(value, (int, float)):
-                if field.upper().startswith('POP'):
-                    description_parts.append(f"Population {field[-4:]}: {value:,}")
-                elif field == 'AREA_SQMI':
-                    description_parts.append(f"Area: {value:.2f} sq mi")
-                elif field == 'SQMI':
-                    description_parts.append(f"Area: {value:.2f} sq mi")
-                elif field == 'Area':
-                    description_parts.append(f"Area: {value:.2f} sq mi")
-                elif field in ['Shape_Area', 'SHAPE_STAr', 'ShapeSTArea']:
-                    if 'Area' in properties and properties['Area']:
-                        continue
-                    sq_miles = value / 2589988.11
-                    if sq_miles > 500:
-                        sq_feet_to_sq_miles = value / 27878400
-                        if sq_feet_to_sq_miles <= 500:
-                            description_parts.append(f"Area: {sq_feet_to_sq_miles:.2f} sq mi")
-                        else:
-                            continue
-                    else:
-                        description_parts.append(f"Area: {sq_miles:.2f} sq mi")
-                elif field == 'STATION' and boundary_type == 'ems':
-                    description_parts.append(f"Station: {value}")
-                elif field.upper() in ['SHAPE_LENG', 'PERIMETER', 'Shape_Length', 'ShapeSTLength']:
-                    miles = value * 0.000621371
-                    description_parts.append(f"Perimeter: {miles:.2f} miles")
-                else:
-                    description_parts.append(f"{field}: {value}")
-            else:
-                description_parts.append(f"{field}: {value}")
-
-    # Add common geographic info
-    for field in ['county_nam', 'COUNTY', 'County', 'COUNTY_COD']:
-        if field in properties and properties[field]:
-            description_parts.append(f"County: {properties[field]}")
-            break
-
-    description = "; ".join(description_parts) if description_parts else ""
-    return name, description
-
-
-def describe_mtfcc(code: Optional[str]) -> Optional[str]:
-    """Return a human-friendly description for common MTFCC codes."""
-    if not code:
-        return None
-
-    mtfcc_descriptions = {
-        'R1011': 'Primary railroad line',
-        'R1012': 'Secondary railroad line',
-        'R1051': 'Railroad siding or yard',
-    }
-
-    return mtfcc_descriptions.get(code.upper(), None)
-
-
-def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calculate the haversine distance between two points in kilometers."""
-    # Earth radius in kilometers (mean radius)
-    radius_km = 6371.0088
-
-    lat1_rad = math.radians(lat1)
-    lon1_rad = math.radians(lon1)
-    lat2_rad = math.radians(lat2)
-    lon2_rad = math.radians(lon2)
-
-    delta_lat = lat2_rad - lat1_rad
-    delta_lon = lon2_rad - lon1_rad
-
-    a = (
-        math.sin(delta_lat / 2) ** 2
-        + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon / 2) ** 2
-    )
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-    return radius_km * c
-
-
-def calculate_linestring_length_km(coordinates: List[List[float]]) -> float:
-    """Approximate the length of a LineString in kilometers using haversine distance."""
-    if not coordinates or len(coordinates) < 2:
-        return 0.0
-
-    total_km = 0.0
-    for start, end in zip(coordinates[:-1], coordinates[1:]):
-        if len(start) >= 2 and len(end) >= 2:
-            lon1, lat1 = start[:2]
-            lon2, lat2 = end[:2]
-            total_km += haversine_distance(lat1, lon1, lat2, lon2)
-
-    return total_km
-
-
-def calculate_geometry_length_miles(geometry: Optional[dict]) -> Optional[float]:
-    """Calculate an approximate geometry length in miles for preview purposes."""
-    if not geometry or 'type' not in geometry:
-        return None
-
-    geom_type = geometry.get('type')
-    coordinates = geometry.get('coordinates', [])
-    total_km = 0.0
-
-    if geom_type == 'LineString':
-        total_km = calculate_linestring_length_km(coordinates)
-    elif geom_type == 'MultiLineString':
-        for segment in coordinates:
-            total_km += calculate_linestring_length_km(segment)
-    elif geom_type == 'Polygon':
-        if coordinates:
-            total_km = calculate_linestring_length_km(coordinates[0])
-    elif geom_type == 'MultiPolygon':
-        for polygon in coordinates:
-            if polygon:
-                total_km += calculate_linestring_length_km(polygon[0])
-    else:
-        return None
-
-    if total_km == 0:
-        return None
-
-    return total_km * 0.621371
-
-
-def extract_feature_metadata(feature: dict) -> Dict[str, Any]:
-    """Extract enriched metadata for GeoJSON preview purposes."""
-    properties = feature.get('properties', {}) or {}
-    geometry = feature.get('geometry') or {}
-
-    owner = None
-    owner_field = None
-    for candidate in ['FULLNAME', 'Owner', 'OWNER', 'COMPANY', 'RAILROAD', 'NAME']:
-        value = properties.get(candidate)
-        if value:
-            owner = str(value).strip()
-            owner_field = candidate
-            break
-
-    line_id = None
-    line_id_field = None
-    for candidate in ['LINEARID', 'ID', 'OBJECTID', 'FID']:
-        value = properties.get(candidate)
-        if value not in (None, ''):
-            line_id = str(value).strip()
-            line_id_field = candidate
-            break
-
-    mtfcc = properties.get('MTFCC')
-    classification = describe_mtfcc(mtfcc)
-
-    length_miles = calculate_geometry_length_miles(geometry)
-    length_label = None
-    if length_miles is not None:
-        length_label = f"{length_miles:.2f} miles"
-
-    additional_details = []
-    for field in ['OBJECTID', 'ShapeSTLength', 'STATE', 'COUNTY']:
-        if field in properties and properties[field] not in (None, ''):
-            additional_details.append(f"{field}: {properties[field]}")
-
-    recommended_fields = {'owner', 'line_id'}
-    if classification:
-        recommended_fields.add('classification')
-    if length_label:
-        recommended_fields.add('approximate_length')
-
-    return {
-        'owner': owner or None,
-        'owner_field': owner_field,
-        'line_id': line_id,
-        'line_id_field': line_id_field,
-        'mtfcc': mtfcc,
-        'classification': classification,
-        'length_miles': length_miles,
-        'length_label': length_label,
-        'additional_details': additional_details,
-        'recommended_fields': recommended_fields,
-    }
-
-
-def ensure_multipolygon(geometry):
-    """Convert Polygon to MultiPolygon if needed"""
-    if geometry['type'] == 'Polygon':
-        return {
-            'type': 'MultiPolygon',
-            'coordinates': [geometry['coordinates']]
-        }
-    return geometry
 
 
 # =============================================================================
@@ -1014,132 +213,8 @@ def get_system_health():
     return build_system_health_snapshot(db, logger)
 
 
-# =============================================================================
-# INTERSECTION CALCULATION HELPER FUNCTIONS
-# =============================================================================
-
-def calculate_alert_intersections(alert):
-    """Calculate intersections between an alert and all boundaries"""
-    if not alert.geom:
-        return 0
-
-    intersections_created = 0
-
-    try:
-        boundaries = Boundary.query.all()
-
-        for boundary in boundaries:
-            if not boundary.geom:
-                continue
-
-            try:
-                intersection_result = db.session.execute(
-                    text("""
-                        SELECT ST_Intersects(:alert_geom, :boundary_geom) as intersects,
-                               ST_Area(ST_Intersection(:alert_geom, :boundary_geom)) as area
-                    """),
-                    {
-                        'alert_geom': alert.geom,
-                        'boundary_geom': boundary.geom
-                    }
-                ).fetchone()
-
-                if intersection_result and intersection_result.intersects:
-                    db.session.query(Intersection).filter_by(
-                        cap_alert_id=alert.id,
-                        boundary_id=boundary.id
-                    ).delete()
-
-                    intersection = Intersection(
-                        cap_alert_id=alert.id,
-                        boundary_id=boundary.id,
-                        intersection_area=float(intersection_result.area) if intersection_result.area else 0.0,
-                        created_at=utc_now()
-                    )
-                    db.session.add(intersection)
-                    intersections_created += 1
-
-                    logger.debug(f"Created intersection: Alert {alert.identifier} <-> Boundary {boundary.name}")
-
-            except Exception as e:
-                logger.error(f"Error calculating intersection for boundary {boundary.id}: {str(e)}")
-                continue
-
-    except Exception as e:
-        logger.error(f"Error in calculate_alert_intersections for alert {alert.identifier}: {str(e)}")
-        raise
-
-    return intersections_created
-
-
-def assign_alert_geometry(alert: CAPAlert, geometry_data: Optional[dict]) -> bool:
-    """Assign GeoJSON geometry to an alert record, returning True when data changed."""
-    previous_geom = alert.geom
-
-    try:
-        if geometry_data and isinstance(geometry_data, dict):
-            normalized = ensure_multipolygon(geometry_data) if geometry_data.get('type') == 'Polygon' else geometry_data
-            geom_json = json.dumps(normalized)
-            alert.geom = db.session.execute(
-                text("SELECT ST_SetSRID(ST_GeomFromGeoJSON(:geom), 4326)"),
-                {'geom': geom_json}
-            ).scalar()
-        else:
-            alert.geom = None
-    except Exception as exc:
-        logger.warning(
-            "Failed to assign geometry for alert %s: %s",
-            getattr(alert, 'identifier', '?'),
-            exc
-        )
-        alert.geom = None
-
-    return previous_geom != alert.geom
-
-
-def parse_noaa_cap_alert(alert_payload: dict) -> Optional[Tuple[dict, Optional[dict]]]:
-    """Parse a NOAA API alert payload into CAPAlert column values and geometry."""
-    try:
-        properties = alert_payload.get('properties', {}) or {}
-        geometry = alert_payload.get('geometry')
-
-        identifier = properties.get('identifier')
-        if not identifier:
-            event_name = properties.get('event', 'Unknown')
-            sent_value = properties.get('sent', '') or ''
-            hash_input = f"{event_name}:{sent_value}:{utc_now().isoformat()}"
-            identifier = f"manual_{hashlib.md5(hash_input.encode('utf-8')).hexdigest()[:16]}"
-
-        sent_dt = parse_nws_datetime(properties.get('sent')) if properties.get('sent') else None
-        expires_dt = parse_nws_datetime(properties.get('expires')) if properties.get('expires') else None
-
-        area_desc = properties.get('areaDesc', '')
-        if isinstance(area_desc, list):
-            area_desc = '; '.join([part for part in area_desc if part])
-
-        parsed = {
-            'identifier': identifier,
-            'sent': sent_dt or utc_now(),
-            'expires': expires_dt,
-            'status': properties.get('status', 'Unknown'),
-            'message_type': properties.get('messageType', 'Unknown'),
-            'scope': properties.get('scope', 'Unknown'),
-            'category': properties.get('category', 'Unknown'),
-            'event': properties.get('event', 'Unknown'),
-            'urgency': properties.get('urgency', 'Unknown'),
-            'severity': properties.get('severity', 'Unknown'),
-            'certainty': properties.get('certainty', 'Unknown'),
-            'area_desc': area_desc or '',
-            'headline': properties.get('headline', '') or '',
-            'description': properties.get('description', '') or '',
-            'instruction': properties.get('instruction', '') or '',
-            'raw_json': alert_payload,
-        }
-
-        return parsed, geometry
-    except Exception as exc:
-        logger.error("Failed to parse NOAA alert payload: %s", exc)
-        return None
+def _led_enums_available() -> bool:
+    return all(enum is not None for enum in (Color, Font, DisplayMode, Speed))
 
 
 # =============================================================================
@@ -3640,6 +2715,29 @@ def ensure_boundary_geometry_column():
         db.session.rollback()
 
 
+def ensure_postgis_extension() -> bool:
+    """Enable the PostGIS extension when running against PostgreSQL."""
+
+    engine = db.engine
+    if engine.dialect.name != 'postgresql':
+        return True
+
+    try:
+        db.session.execute(text('CREATE EXTENSION IF NOT EXISTS postgis'))
+        db.session.commit()
+    except OperationalError as exc:
+        logger.error('Failed to enable PostGIS extension: %s', exc)
+        db.session.rollback()
+        return False
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.error('Unexpected error enabling PostGIS extension: %s', exc)
+        db.session.rollback()
+        raise
+    else:
+        logger.info('PostGIS extension ensured for the active database')
+        return True
+
+
 @app.route('/admin/check_db_health', methods=['GET'])
 def check_db_health():
     """Provide a quick health check of the database connection and size."""
@@ -4164,6 +3262,9 @@ def api_led_send_message():
 
         if not led_controller:
             return jsonify({'success': False, 'error': 'LED controller not available'})
+
+        if not _led_enums_available():
+            return jsonify({'success': False, 'error': 'LED library enums unavailable'})
 
         lines = data.get('lines')
         if isinstance(lines, str):
@@ -4908,10 +4009,18 @@ def initialize_database():
         return
 
     try:
+        if not ensure_postgis_extension():
+            _db_initialization_error = RuntimeError("PostGIS extension could not be ensured")
+            return False
         db.create_all()
         ensure_boundary_geometry_column()
-        record = _ensure_location_settings_record()
-        set_location_timezone(record.timezone or DEFAULT_LOCATION_SETTINGS['timezone'])
+        settings = get_location_settings(force_reload=True)
+        timezone_name = settings.get('timezone')
+        if timezone_name:
+            set_location_timezone(timezone_name)
+        if not LED_AVAILABLE:
+            initialise_led_controller(logger)
+            ensure_led_tables()
     except OperationalError as db_error:
         _db_initialization_error = db_error
         logger.error("Database initialization failed: %s", db_error)
