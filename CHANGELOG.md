@@ -20,6 +20,9 @@ tracks releases under the 2.1.x series.
   using `EAS_GPIO_HOLD_SECONDS` as the minimum release delay once audio finishes.
 - Automatically generate and play an End-Of-Message (EOM) data burst sequence after each alert
   so receivers reliably return to normal programming when playback completes.
+- Refactored the monolithic `app.py` into cohesive `app_core` modules (alerts, boundaries,
+  database models, LED integration, and location settings) and slimmed the Flask entrypoint so
+  shared helpers can be reused by CLIs and tests without importing the entire web stack.
 - Manual CAP tooling now validates inputs against the registry, surfaces friendly area
   names in CLI output and audit logs, and warns when CAP payloads reference unknown codes.
 - Manual CAP broadcasts enforce configurable SAME event allow-lists and display the

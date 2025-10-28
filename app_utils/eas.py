@@ -202,13 +202,6 @@ def build_eom_header(config: Dict[str, object]) -> str:
     return f"ZCZC-{originator}-EOM-000000+0000-{julian}-{station}-"
 
 
-def build_eom_header(config: Dict[str, object]) -> str:
-    originator = str(config.get('originator', 'WXR'))[:3].upper()
-    station = str(config.get('station_id', 'EASNODES')).ljust(8)[:8]
-    julian = _julian_time(datetime.now(timezone.utc))
-    return f"ZCZC-{originator}-EOM-000000+0000-{julian}-{station}-"
-
-
 def _compose_message_text(alert: object) -> str:
     parts: List[str] = []
     for attr in ('headline', 'description', 'instruction'):
