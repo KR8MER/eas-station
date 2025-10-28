@@ -422,7 +422,7 @@ class CAPPoller:
             if geometry_data and isinstance(geometry_data, dict):
                 geom_json = json.dumps(geometry_data)
                 result = self.db_session.execute(
-                    text("SELECT ST_GeomFromGeoJSON(:g)"),
+                    text("SELECT ST_SetSRID(ST_GeomFromGeoJSON(:g), 4326)"),
                     {"g": geom_json}
                 ).scalar()
                 alert.geom = result

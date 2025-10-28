@@ -329,7 +329,7 @@ class Boundary(db.Model):
     name = db.Column(db.String(255), nullable=False)
     type = db.Column(db.String(50), nullable=False)
     description = db.Column(db.Text)
-    geom = db.Column(Geometry('MULTIPOLYGON', srid=4326))
+    geom = db.Column(Geometry('GEOMETRY', srid=4326))
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
     updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
@@ -3142,6 +3142,42 @@ def calculate_single_alert(alert_id):
 # BOUNDARY MANAGEMENT ROUTES
 # =============================================================================
 
+def ensure_boundary_geometry_column():
+    """Ensure the boundaries table accepts any geometry subtype with SRID 4326."""
+    try:
+        result = db.session.execute(
+            text(
+                """
+                SELECT type
+                FROM geometry_columns
+                WHERE f_table_name = :table
+                  AND f_geometry_column = :column
+                ORDER BY (f_table_schema = current_schema()) DESC
+                LIMIT 1
+                """
+            ),
+            {'table': 'boundaries', 'column': 'geom'}
+        ).scalar()
+
+        if result and result.upper() == 'MULTIPOLYGON':
+            logger.info("Updating boundaries.geom column to support multiple geometry types")
+            db.session.execute(
+                text(
+                    """
+                    ALTER TABLE boundaries
+                    ALTER COLUMN geom TYPE geometry(GEOMETRY, 4326)
+                    USING ST_SetSRID(geom, 4326)
+                    """
+                )
+            )
+            db.session.commit()
+        elif not result:
+            logger.debug("geometry_columns entry for boundaries.geom not found; skipping type verification")
+    except Exception as exc:
+        logger.warning("Could not ensure boundaries.geom column configuration: %s", exc)
+        db.session.rollback()
+
+
 @app.route('/admin/upload_boundaries', methods=['POST'])
 def upload_boundaries():
     """Upload GeoJSON boundary file with enhanced processing"""
@@ -3191,7 +3227,7 @@ def upload_boundaries():
                 )
 
                 boundary.geom = db.session.execute(
-                    text("SELECT ST_GeomFromGeoJSON(:geom)"),
+                    text("SELECT ST_SetSRID(ST_GeomFromGeoJSON(:geom), 4326)"),
                     {"geom": geometry_json}
                 ).scalar()
 
@@ -4254,6 +4290,7 @@ def initialize_database():
 
     try:
         db.create_all()
+        ensure_boundary_geometry_column()
         record = _ensure_location_settings_record()
         set_location_timezone(record.timezone or DEFAULT_LOCATION_SETTINGS['timezone'])
     except OperationalError as db_error:
@@ -4342,7 +4379,7 @@ def create_app(config=None):
         app.config.update(config)
 
     with app.app_context():
-        db.create_all()
+        initialize_database()
 
     return app
 
@@ -4353,6 +4390,6 @@ def create_app(config=None):
 
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()
+        initialize_database()
 
     app.run(debug=True, host='0.0.0.0', port=5000)
