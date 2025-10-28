@@ -23,6 +23,10 @@ tracks releases under the 2.1.x series.
 - Exposed in-app About and Help pages so operators can read the mission overview and operations guide directly from the dashboard navigation.
 ### Changed
 - Clarified in the README and dependency notes that PostgreSQL with PostGIS must run in a dedicated container separate from the application services.
+- Documented a single-line command for cloning the Experimental branch and launching the Docker Compose stack so operators can bootstrap quickly.
+- Clarified the update instructions to explicitly pull the Experimental branch when refreshing deployments.
+- Ship a populated `.env` file that mirrors the Portainer deployment defaults so fresh clones can launch without copying the
+  example template while still reminding operators to rotate credentials immediately.
 - Updated the GPIO relay control so it remains engaged for the full alert audio playback,
   using `EAS_GPIO_HOLD_SECONDS` as the minimum release delay once audio finishes.
 - Automatically generate and play an End-Of-Message (EOM) data burst sequence after each alert
@@ -36,6 +40,8 @@ tracks releases under the 2.1.x series.
   selected code names in CLI output and audit trails while the broadcaster consumes
   the resolved identifiers for header generation.
 ### Fixed
+- Restored the `.env.example` template and documented the startup error shown when the
+  file is missing so Docker Compose deployments no longer fail with "env file not found".
 - Skip PostGIS-specific geometry checks when running against SQLite and store geometry
   fields as plain text on non-PostgreSQL databases so local development can initialize
   without spatial extensions.
