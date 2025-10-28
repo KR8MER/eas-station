@@ -36,6 +36,8 @@ tracks releases under the 2.1.x series.
   selected code names in CLI output and audit trails while the broadcaster consumes
   the resolved identifiers for header generation.
 ### Fixed
+- Restored the `.env.example` template and documented the startup error shown when the
+  file is missing so Docker Compose deployments no longer fail with "env file not found".
 - Skip PostGIS-specific geometry checks when running against SQLite and store geometry
   fields as plain text on non-PostgreSQL databases so local development can initialize
   without spatial extensions.

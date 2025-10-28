@@ -77,6 +77,10 @@ docker compose up -d --build
    cp .env.example .env
    ```
 
+   > **Heads up:** Docker Compose will refuse to start if `.env` is missing and will
+   > print an error similar to `env file .../.env not found`. Always create this file
+   > before launching the stack.
+
 2. **Generate a secure SECRET_KEY:**
    ```bash
    python3 -c "import secrets; print(secrets.token_hex(32))"
