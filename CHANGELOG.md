@@ -17,6 +17,8 @@ tracks releases under the 2.1.x series.
   broadcasters and manual tools can resolve official names, presets, and headers.
 - Added a CLI helper (`tools/generate_sample_audio.py`) to create demonstration SAME audio
   clips without ingesting a live CAP product.
+- Unlocked an in-app first-run experience so the Admin panel exposes an
+  "First-Time Administrator Setup" wizard when no accounts exist.
 - Introduced optional Azure AI speech synthesis to append narrated voiceovers when the
   appropriate credentials and SDK are available.
 - Authored dedicated `ABOUT.md` and `HELP.md` documentation describing the system mission, software stack, and operational playbooks, with cross-links from the README for quick discovery.
@@ -27,6 +29,8 @@ tracks releases under the 2.1.x series.
 - Clarified in the README and dependency notes that PostgreSQL with PostGIS must run in a dedicated container separate from the application services.
 - Documented a single-line command for cloning the Experimental branch and launching the Docker Compose stack so operators can bootstrap quickly.
 - Clarified the update instructions to explicitly pull the Experimental branch when refreshing deployments.
+- Highlighted the manual broadcast tooling from the EAS Output tab with a
+  direct link to the documentation for generating practice audio clips.
 - Restored the `.env` template workflow, updated quick-start documentation to copy
   `.env.example`, and reiterated that operators must rotate the placeholder
   secrets immediately after bootstrapping the stack.

@@ -193,10 +193,12 @@ docker compose logs -f postgresql # Database
 The admin panel now requires an authenticated session backed by the database. Passwords are stored as salted SHA-256 hashes and never written in plain text.
 
 1. **Create the first administrator account** (only required once):
-   ```bash
-   docker compose run --rm app flask create-admin-user
-   ```
-   Follow the prompts to set a username (letters, numbers, `.`, `_`, `-`) and a password (minimum 8 characters).
+   - Open http://localhost:5000/admin and complete the **First-Time Administrator Setup** card to provision the initial user through the UI, **or**
+   - run the CLI helper if you prefer the terminal:
+     ```bash
+     docker compose run --rm app flask create-admin-user
+     ```
+   Both flows enforce the same username rules (letters, numbers, `.`, `_`, `-`) and require a password with at least 8 characters.
 
 2. **Sign in** at http://localhost:5000/login using the credentials created above. Successful login redirects to the admin dashboard.
 

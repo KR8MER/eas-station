@@ -1425,6 +1425,9 @@ def logout():
 def admin():
     """Admin interface"""
     try:
+        setup_mode = getattr(g, 'admin_setup_mode', None)
+        if setup_mode is None:
+            setup_mode = AdminUser.query.count() == 0
         total_boundaries = Boundary.query.count()
         total_alerts = CAPAlert.query.count()
         active_alerts = get_active_alerts_query().count()
@@ -1454,7 +1457,8 @@ def admin():
                                eas_enabled=eas_enabled,
                                eas_total_messages=total_eas_messages,
                                eas_recent_messages=recent_eas_messages,
-                               eas_web_subdir=app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages')
+                               eas_web_subdir=app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages'),
+                               setup_mode=setup_mode,
                                )
     except Exception as e:
         logger.error(f"Error rendering admin template: {str(e)}")
@@ -1470,6 +1474,10 @@ def admin_users():
     payload = request.get_json(silent=True) or {}
     username = (payload.get('username') or '').strip()
     password = payload.get('password') or ''
+
+    creating_first_user = AdminUser.query.count() == 0
+    if g.current_user is None and not creating_first_user:
+        return jsonify({'error': 'Authentication required.'}), 401
 
     if not username or not password:
         return jsonify({'error': 'Username and password are required.'}), 400
@@ -1493,7 +1501,7 @@ def admin_users():
         module='auth',
         details={
             'username': new_user.username,
-            'created_by': g.current_user.username if g.current_user else None,
+            'created_by': g.current_user.username if g.current_user else 'initial_setup',
         },
     ))
     db.session.commit()
@@ -3998,6 +4006,11 @@ def before_request():
         else:
             session.pop('user_id', None)
 
+    try:
+        g.admin_setup_mode = AdminUser.query.count() == 0
+    except Exception:
+        g.admin_setup_mode = False
+
     # Allow authentication endpoints without additional checks.
     if request.endpoint in {'login', 'static'}:
         return
@@ -4005,6 +4018,9 @@ def before_request():
     protected_prefixes = ('/admin', '/logs')
     if any(request.path.startswith(prefix) for prefix in protected_prefixes):
         if g.current_user is None:
+            if g.admin_setup_mode and request.endpoint in {'admin', 'admin_users'}:
+                if request.method == 'GET' or (request.method == 'POST' and request.endpoint == 'admin_users'):
+                    return
             accept_header = request.headers.get('Accept', '')
             next_url = request.full_path if request.query_string else request.path
             if request.method != 'GET' or 'application/json' in accept_header or request.is_json:
