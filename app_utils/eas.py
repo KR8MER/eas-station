@@ -10,7 +10,7 @@ import struct
 import subprocess
 import time
 import wave
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -165,6 +165,13 @@ def build_same_header(alert: object, payload: Dict[str, object], config: Dict[st
     return header, formatted_locations
 
 
+def build_eom_header(config: Dict[str, object]) -> str:
+    originator = str(config.get('originator', 'WXR'))[:3].upper()
+    station = str(config.get('station_id', 'EASNODES')).ljust(8)[:8]
+    julian = _julian_time(datetime.now(timezone.utc))
+    return f"ZCZC-{originator}-EOM-000000+0000-{julian}-{station}-"
+
+
 def _compose_message_text(alert: object) -> str:
     parts: List[str] = []
     for attr in ('headline', 'description', 'instruction'):
@@ -241,21 +248,36 @@ class GPIORelayController:
     pin: int
     active_high: bool
     hold_seconds: float
+    activated_at: Optional[float] = field(default=None, init=False)
 
     def __post_init__(self) -> None:  # pragma: no cover - hardware specific
         if RPiGPIO is None:
             raise RuntimeError('RPi.GPIO not available')
+        self._active_level = RPiGPIO.HIGH if self.active_high else RPiGPIO.LOW
+        self._resting_level = RPiGPIO.LOW if self.active_high else RPiGPIO.HIGH
         RPiGPIO.setmode(RPiGPIO.BCM)
-        RPiGPIO.setup(self.pin, RPiGPIO.OUT, initial=RPiGPIO.LOW if self.active_high else RPiGPIO.HIGH)
+        RPiGPIO.setup(self.pin, RPiGPIO.OUT, initial=self._resting_level)
 
     def activate(self, logger) -> None:  # pragma: no cover - hardware specific
         if RPiGPIO is None:
             return
-        try:
-            RPiGPIO.output(self.pin, RPiGPIO.HIGH if self.active_high else RPiGPIO.LOW)
-            time.sleep(self.hold_seconds)
-        finally:
-            RPiGPIO.output(self.pin, RPiGPIO.LOW if self.active_high else RPiGPIO.HIGH)
+        RPiGPIO.output(self.pin, self._active_level)
+        self.activated_at = time.monotonic()
+        if logger:
+            logger.debug('Activated GPIO relay on pin %s', self.pin)
+
+    def deactivate(self, logger) -> None:  # pragma: no cover - hardware specific
+        if RPiGPIO is None:
+            return
+        if self.activated_at is not None:
+            elapsed = time.monotonic() - self.activated_at
+            remaining = max(0.0, self.hold_seconds - elapsed)
+            if remaining > 0:
+                time.sleep(remaining)
+        RPiGPIO.output(self.pin, self._resting_level)
+        self.activated_at = None
+        if logger:
+            logger.debug('Released GPIO relay on pin %s', self.pin)
 
 
 class EASAudioGenerator:
@@ -322,6 +344,36 @@ class EASAudioGenerator:
 
         return audio_filename, text_filename, message_text
 
+    def build_eom_file(self) -> str:
+        header = build_eom_header(self.config)
+        timestamp = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
+        base_name = _clean_identifier(f"eom_{timestamp}")
+        audio_filename = f"{base_name}.wav"
+        audio_path = os.path.join(self.output_dir, audio_filename)
+
+        same_bits = _encode_same_bits(header)
+        amplitude = 0.7 * 32767
+        header_samples = _generate_fsk_samples(
+            same_bits,
+            sample_rate=self.sample_rate,
+            bit_rate=520.83,
+            mark_freq=2083.3,
+            space_freq=1562.5,
+            amplitude=amplitude,
+        )
+
+        samples: List[int] = []
+        for burst_index in range(3):
+            samples.extend(header_samples)
+            if burst_index < 2:
+                samples.extend(_generate_silence(1.0, self.sample_rate))
+
+        _write_wave_file(audio_path, samples, self.sample_rate)
+        if self.logger:
+            self.logger.debug('Generated EOM audio at %s', audio_path)
+
+        return audio_filename
+
 
 class EASBroadcaster:
     def __init__(self, db_session, model_cls, config: Dict[str, object], logger, location_settings: Optional[Dict[str, object]] = None) -> None:
@@ -376,15 +428,33 @@ class EASBroadcaster:
         header, location_codes = build_same_header(alert, payload, self.config, self.location_settings)
         audio_filename, text_filename, message_text = self.audio_generator.build_files(alert, payload, header, location_codes)
 
-        audio_path = os.path.join(self.audio_generator.output_dir, audio_filename)
+        try:
+            eom_filename = self.audio_generator.build_eom_file()
+        except Exception as exc:
+            self.logger.warning(f"Failed to generate EOM audio: {exc}")
+            eom_filename = None
 
-        if self.gpio_controller:
+        audio_path = os.path.join(self.audio_generator.output_dir, audio_filename)
+        eom_path = os.path.join(self.audio_generator.output_dir, eom_filename) if eom_filename else None
+
+        controller = self.gpio_controller
+        if controller:
             try:  # pragma: no cover - hardware specific
-                self.gpio_controller.activate(self.logger)
+                controller.activate(self.logger)
             except Exception as exc:
                 self.logger.warning(f"GPIO activation failed: {exc}")
+                controller = None
 
-        self._play_audio(audio_path)
+        try:
+            self._play_audio(audio_path)
+            if eom_path:
+                self._play_audio(eom_path)
+        finally:
+            if controller:
+                try:  # pragma: no cover - hardware specific
+                    controller.deactivate(self.logger)
+                except Exception as exc:
+                    self.logger.warning(f"GPIO release failed: {exc}")
 
         record = self.model_cls(
             cap_alert_id=getattr(alert, 'id', None),
@@ -398,6 +468,7 @@ class EASBroadcaster:
                 'status': getattr(alert, 'status', ''),
                 'message_type': getattr(alert, 'message_type', ''),
                 'locations': location_codes,
+                'eom_filename': eom_filename,
             },
         )
 

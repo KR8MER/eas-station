@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.1.x series.
 
+## [Unreleased]
+### Added
+- Added a `manual_eas_event.py` utility that ingests raw CAP XML (e.g., RWT/RMT tests),
+  validates the targeted SAME/FIPS codes, and drives the broadcaster so operators can
+  trigger manual transmissions with full auditing.
+- Introduced the `EAS_MANUAL_FIPS_CODES` configuration setting to control which
+  locations are eligible for manual CAP forwarding.
+- Bundled the full national county/parish FIPS registry for manual activations and
+  exposed helpers to authorize the entire dataset with a single configuration flag.
+### Changed
+- Updated the GPIO relay control so it remains engaged for the full alert audio playback,
+  using `EAS_GPIO_HOLD_SECONDS` as the minimum release delay once audio finishes.
+- Automatically generate and play an End-Of-Message (EOM) data burst sequence after each alert
+  so receivers reliably return to normal programming when playback completes.
+- Manual CAP tooling now validates inputs against the registry, surfaces friendly area
+  names in CLI output and audit logs, and warns when CAP payloads reference unknown codes.
+
 ## [2.1.7] - 2025-10-29
 ### Removed
 - Purged IDE metadata, historical log outputs, unused static assets, and legacy diagnostic scripts
