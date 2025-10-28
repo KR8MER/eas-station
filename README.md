@@ -52,18 +52,18 @@
 ### Prerequisites
 - **Docker Engine 24+** with Docker Compose V2
 - **Git** for cloning the repository
-- **Dedicated PostgreSQL/PostGIS container** – the spatial database must run in its own service separate from the Flask application container. The provided `docker-compose.yml` exposes an optional `embedded-db` profile that launches a multi-architecture `postgis/postgis:17-3.4` instance, but self-hosted deployments can omit that profile and point the app at an existing PostGIS service instead.
+- **Dedicated PostgreSQL/PostGIS container** – the spatial database must run in its own service separate from the Flask application container. The project ships with an optional `docker-compose.embedded-db.yml` overlay that launches a multi-architecture `postgis/postgis:17-3.4` instance. Include that file when you need the bundled database, or omit it to point the app at an existing PostGIS service instead.
 - **4GB RAM** recommended (2GB minimum)
 - **Network Access** for NOAA CAP API polling
 
 ### One-Command Installation
 
 ```bash
-bash -c "git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems.git && cd noaa_alerts_systems && cp .env.example .env && docker compose --profile embedded-db up -d --build"
+bash -c "git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems.git && cd noaa_alerts_systems && cp .env.example .env && docker compose -f docker-compose.yml -f docker-compose.embedded-db.yml up -d --build"
 ```
 
 > 💡 Already have a PostGIS instance? Edit `.env` to point at it and rerun `docker compose up -d --build`
-> without the `--profile embedded-db` flag so Compose skips the bundled database container.
+> (drop the `-f docker-compose.embedded-db.yml` overlay so Compose skips the bundled database container).
 
 > ⚠️ **Important:** The `.env.example` file only contains placeholder secrets so the
 > containers can boot. **Immediately after the first launch, open `.env` and change**
@@ -78,10 +78,10 @@ cd noaa_alerts_systems
 # Copy the template environment file and edit it before exposing services.
 cp .env.example .env
 # IMPORTANT: Edit .env and set SECRET_KEY and POSTGRES_PASSWORD!
-# Include the embedded-db profile to start the bundled PostGIS container.
-docker compose --profile embedded-db up -d --build
+# Launch everything, including the bundled PostGIS container.
+docker compose -f docker-compose.yml -f docker-compose.embedded-db.yml up -d --build
 # Pointing at an existing PostgreSQL/PostGIS host instead?
-# Omit the profile so Compose only launches the application services.
+# Skip the overlay so Compose only launches the application services.
 # docker compose up -d --build
 ```
 
@@ -103,13 +103,13 @@ docker compose --profile embedded-db up -d --build
 3. **Edit `.env` and update:**
    - `SECRET_KEY` - Use the generated value
    - `POSTGRES_PASSWORD` - Change from defaults (the application builds `DATABASE_URL` automatically from the `POSTGRES_*` values)
-   - `POSTGRES_HOST` - Point at your existing PostGIS host when not running the `embedded-db` profile
+  - `POSTGRES_HOST` - Point at your existing PostGIS host when you skip the embedded database overlay
    - `ALERTS_DB_IMAGE`, `TZ`, `WATCHTOWER_*`, or other infrastructure metadata as needed
 
 4. **Start the system:**
    - **Bundled PostGIS:**
      ```bash
-     docker compose --profile embedded-db up -d --build
+     docker compose -f docker-compose.yml -f docker-compose.embedded-db.yml up -d --build
      ```
 
    - **External PostGIS:**
@@ -119,11 +119,7 @@ docker compose --profile embedded-db up -d --build
 
    > Need to run a specific database image (for example `postgres:17-postgis-arm64`)?
    > Set `ALERTS_DB_IMAGE` in `.env` before launching and Compose will pull
-   > that tag when the `embedded-db` profile is enabled.
-
-   > Need to run a specific database image (for example `postgres:17-postgis-arm64`)?
-   > Set `ALERTS_DB_IMAGE` in `.env` before launching and Compose will pull
-   > that tag instead of the default `postgis/postgis:17-3.4` build.
+   > that tag whenever the embedded database overlay is included.
 
 ### Quick Update (Pull Latest Changes)
 
@@ -131,8 +127,9 @@ docker compose --profile embedded-db up -d --build
 git pull origin Experimental
 docker compose build --pull
 docker compose up -d --force-recreate
-# Include --profile embedded-db in the command above when you want Compose to
-# refresh the bundled PostGIS container at the same time.
+# Include the embedded database overlay when you want Compose to refresh the bundled
+# PostGIS container at the same time:
+# docker compose -f docker-compose.yml -f docker-compose.embedded-db.yml up -d --force-recreate
 ```
 
 ---
@@ -170,9 +167,9 @@ docker compose up -d --force-recreate
 |---------|---------|------------|
 | **app** | Web UI & REST API | Flask 2.3, Gunicorn, Bootstrap 5 |
 | **poller** | Background alert polling | Python 3.11, continuous daemon |
-| **alerts-db** *(profile: embedded-db)* | Optional spatial database | PostgreSQL/PostGIS (multi-arch) |
+| **alerts-db** *(via docker-compose.embedded-db.yml)* | Optional spatial database | PostgreSQL/PostGIS (multi-arch) |
 
-> **Deployment Note:** The PostgreSQL/PostGIS database must remain isolated from the application containers. Enable the `embedded-db` profile to let Compose provision one for you, or skip that profile and point the app at an existing PostGIS deployment by updating the connection variables in `.env`.
+> **Deployment Note:** The PostgreSQL/PostGIS database must remain isolated from the application containers. Include `docker-compose.embedded-db.yml` when you want Compose to provision one for you, or omit that overlay and point the app at an existing PostGIS deployment by updating the connection variables in `.env`.
 
 ---
 
@@ -181,8 +178,8 @@ docker compose up -d --force-recreate
 ### Starting and Stopping Services
 
 ```bash
-# Start everything, including the optional embedded database profile
-docker compose --profile embedded-db up -d
+# Start everything, including the optional embedded database overlay
+docker compose -f docker-compose.yml -f docker-compose.embedded-db.yml up -d
 
 # Start only the application services (use when pointing at an external PostGIS host)
 docker compose up -d
@@ -199,7 +196,7 @@ docker compose logs -f
 # View logs for specific service
 docker compose logs -f app       # Web application
 docker compose logs -f poller    # Alert poller
-docker compose logs -f alerts-db  # Database (when the embedded-db profile is active)
+docker compose logs -f alerts-db  # Database (when the embedded overlay is included)
 ```
 
 ### Accessing the Application
