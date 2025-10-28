@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import audioop
+import io
 import json
 import math
 import os
@@ -19,6 +21,11 @@ try:  # pragma: no cover - GPIO hardware is optional and platform specific
 except Exception:  # pragma: no cover - gracefully handle non-RPi environments
     RPiGPIO = None
 
+
+try:  # pragma: no cover - optional dependency for Azure TTS
+    import azure.cognitiveservices.speech as azure_speech  # type: ignore
+except Exception:  # pragma: no cover - keep optional
+    azure_speech = None
 
 from app_utils.event_codes import resolve_event_code
 
@@ -67,6 +74,11 @@ def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
         'gpio_active_state': os.getenv('EAS_GPIO_ACTIVE_STATE', 'HIGH').upper(),
         'gpio_hold_seconds': float(os.getenv('EAS_GPIO_HOLD_SECONDS', '5') or 5),
         'sample_rate': int(os.getenv('EAS_SAMPLE_RATE', '44100') or 44100),
+        'tts_provider': (os.getenv('EAS_TTS_PROVIDER') or '').strip().lower(),
+        'azure_speech_key': os.getenv('AZURE_SPEECH_KEY'),
+        'azure_speech_region': os.getenv('AZURE_SPEECH_REGION'),
+        'azure_speech_voice': os.getenv('AZURE_SPEECH_VOICE', 'en-US-AriaNeural'),
+        'azure_speech_sample_rate': int(os.getenv('AZURE_SPEECH_SAMPLE_RATE', '24000') or 24000),
     }
 
     if config['audio_player_cmd']:
@@ -349,6 +361,16 @@ class EASAudioGenerator:
         samples.extend(_generate_tone((853.0, 960.0), tone_duration, self.sample_rate, amplitude))
         samples.extend(_generate_silence(0.5, self.sample_rate))
 
+        message_text = _compose_message_text(alert)
+        if message_text:
+            preview = message_text.replace('\n', ' ')
+            self.logger.debug('Alert narration preview: %s', preview[:240])
+
+        voice_samples = self._maybe_generate_voiceover(message_text)
+        if voice_samples:
+            samples.extend(_generate_silence(0.5, self.sample_rate))
+            samples.extend(voice_samples)
+
         _write_wave_file(audio_path, samples, self.sample_rate)
         self.logger.info(f"Generated SAME audio at {audio_path}")
 
@@ -362,15 +384,13 @@ class EASAudioGenerator:
             'headline': getattr(alert, 'headline', ''),
             'description': getattr(alert, 'description', ''),
             'instruction': getattr(alert, 'instruction', ''),
+            'message_text': message_text,
         }
+        text_body['voiceover_provider'] = self.config.get('tts_provider') or None
+
         with open(text_path, 'w', encoding='utf-8') as handle:
             json.dump(text_body, handle, indent=2)
         self.logger.info(f"Wrote alert summary at {text_path}")
-
-        message_text = _compose_message_text(alert)
-        if message_text:
-            preview = message_text.replace('\n', ' ')
-            self.logger.debug('Alert narration preview: %s', preview[:240])
 
         return audio_filename, text_filename, message_text
 
@@ -403,6 +423,86 @@ class EASAudioGenerator:
             self.logger.debug('Generated EOM audio at %s', audio_path)
 
         return audio_filename
+
+    def _maybe_generate_voiceover(self, text: str) -> Optional[List[int]]:
+        provider = (self.config.get('tts_provider') or '').strip().lower()
+        if provider != 'azure':
+            return None
+
+        if not text.strip():
+            return None
+
+        if azure_speech is None:
+            if self.logger:
+                self.logger.warning('Azure Speech SDK not installed; skipping TTS voiceover.')
+            return None
+
+        key = (self.config.get('azure_speech_key') or '').strip()
+        region = (self.config.get('azure_speech_region') or '').strip()
+        if not key or not region:
+            if self.logger:
+                self.logger.warning('Azure Speech credentials not configured; skipping TTS voiceover.')
+            return None
+
+        voice = (self.config.get('azure_speech_voice') or 'en-US-AriaNeural').strip()
+        target_rate = int(self.config.get('sample_rate', 44100) or 44100)
+        desired_source_rate = int(self.config.get('azure_speech_sample_rate', target_rate) or target_rate)
+
+        try:
+            speech_config = azure_speech.SpeechConfig(subscription=key, region=region)
+            speech_config.speech_synthesis_voice_name = voice
+            format_map = {
+                16000: azure_speech.SpeechSynthesisOutputFormat.Riff16Khz16BitMonoPcm,
+                22050: azure_speech.SpeechSynthesisOutputFormat.Riff22050Hz16BitMonoPcm,
+                24000: azure_speech.SpeechSynthesisOutputFormat.Riff24Khz16BitMonoPcm,
+                44100: azure_speech.SpeechSynthesisOutputFormat.Riff44100Hz16BitMonoPcm,
+            }
+            selected_format = format_map.get(desired_source_rate, azure_speech.SpeechSynthesisOutputFormat.Riff24Khz16BitMonoPcm)
+            speech_config.set_speech_synthesis_output_format(selected_format)
+
+            audio_config = azure_speech.audio.AudioOutputConfig(use_default_speaker=False)
+            synthesizer = azure_speech.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
+            result = synthesizer.speak_text(text)
+        except Exception as exc:  # pragma: no cover - network/service specific
+            if self.logger:
+                self.logger.error(f"Azure speech synthesis failed: {exc}")
+            return None
+
+        reason = getattr(azure_speech, 'ResultReason', None)
+        if reason and result.reason != reason.SynthesizingAudioCompleted:
+            if self.logger:
+                self.logger.error('Azure speech synthesis did not complete successfully: %s', result.reason)
+            return None
+
+        audio_bytes = getattr(result, 'audio_data', None)
+        if not audio_bytes:
+            if self.logger:
+                self.logger.warning('Azure speech synthesis returned no audio data.')
+            return None
+
+        try:
+            with wave.open(io.BytesIO(audio_bytes), 'rb') as wav_data:
+                raw_frames = wav_data.readframes(wav_data.getnframes())
+                sample_width = wav_data.getsampwidth()
+                channels = wav_data.getnchannels()
+                source_rate = wav_data.getframerate()
+
+            if sample_width != 2:
+                raw_frames = audioop.lin2lin(raw_frames, sample_width, 2)
+            if channels != 1:
+                raw_frames = audioop.tomono(raw_frames, 2, 0.5, 0.5)
+            if source_rate != target_rate:
+                raw_frames, _ = audioop.ratecv(raw_frames, 2, 1, source_rate, target_rate, None)
+
+            sample_count = len(raw_frames) // 2
+            samples = struct.unpack('<' + 'h' * sample_count, raw_frames[: sample_count * 2])
+            if self.logger:
+                self.logger.info('Appended Azure voiceover using voice %s', voice)
+            return list(samples)
+        except Exception as exc:  # pragma: no cover - audio decoding errors
+            if self.logger:
+                self.logger.error(f"Failed to decode Azure speech audio: {exc}")
+            return None
 
 
 class EASBroadcaster:

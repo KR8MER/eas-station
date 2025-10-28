@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from typing import Any, Dict
 
 from flask import current_app, has_app_context
@@ -16,6 +17,34 @@ from app_utils import utc_now
 from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS
 
 from .extensions import db
+from sqlalchemy.engine.url import make_url
+
+
+def _spatial_backend_supports_geometry() -> bool:
+    database_url = os.getenv("SQLALCHEMY_DATABASE_URI") or os.getenv("DATABASE_URL")
+    if not database_url:
+        return True
+
+    try:
+        backend = make_url(database_url).get_backend_name()
+    except Exception:
+        return True
+
+    return backend == "postgresql"
+
+
+_GEOMETRY_SUPPORTED = _spatial_backend_supports_geometry()
+
+
+def _geometry_type(geometry_type: str):
+    if _GEOMETRY_SUPPORTED:
+        return Geometry(geometry_type, srid=4326)
+
+    if has_app_context():  # pragma: no cover - logging requires app context
+        current_app.logger.warning(
+            "Spatial functions unavailable; storing %s geometry as plain text", geometry_type
+        )
+    return db.Text
 
 
 def _log_warning(message: str) -> None:
@@ -32,7 +61,7 @@ class Boundary(db.Model):
     name = db.Column(db.String(255), nullable=False)
     type = db.Column(db.String(50), nullable=False)
     description = db.Column(db.Text)
-    geom = db.Column(Geometry("GEOMETRY", srid=4326))
+    geom = db.Column(_geometry_type("GEOMETRY"))
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
     updated_at = db.Column(
         db.DateTime(timezone=True),
@@ -61,7 +90,7 @@ class CAPAlert(db.Model):
     description = db.Column(db.Text)
     instruction = db.Column(db.Text)
     raw_json = db.Column(db.JSON)
-    geom = db.Column(Geometry("POLYGON", srid=4326))
+    geom = db.Column(_geometry_type("POLYGON"))
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
     updated_at = db.Column(
         db.DateTime(timezone=True),
