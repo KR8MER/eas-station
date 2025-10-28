@@ -263,6 +263,24 @@
                             <i class="fas fa-tv"></i> LED Control
                         </a>
                     </li>
+                    {% if current_user %}
+                    <li class="nav-item">
+                        <span class="nav-link disabled text-nowrap">
+                            <i class="fas fa-user-shield"></i> {{ current_user.username }}
+                        </span>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('logout') }}">
+                            <i class="fas fa-sign-out-alt"></i> Logout
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('login') }}">
+                            <i class="fas fa-sign-in-alt"></i> Login
+                        </a>
+                    </li>
+                    {% endif %}
                 </ul>
             </div>
         </div>
