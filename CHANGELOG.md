@@ -35,6 +35,14 @@ tracks releases under the 2.1.x series.
   load the EAS message model without raising declarative mapping errors.
 - Ensure the Flask application automatically enables the PostGIS extension before creating
   tables so startup succeeds on fresh PostgreSQL deployments.
+- Rebuilt the LED sign M-Protocol frame generation to include the SOH/type/address header,
+  compute the documented XOR checksum, and verify ACK/NAK responses so transmissions match the
+  Alpha manual.
+- Honored the Alpha M-Protocol handshake by draining stale responses, sending EOT after
+  acknowledgements, and clamping brightness commands to the single-hex-digit range required by
+  the manual.
+- Fixed the Alpha text write command to send the single-byte "A" opcode followed by the
+  file label so frames no longer begin with an invalid "AAA" sequence that the manual forbids.
 
 ## [2.1.7] - 2025-10-29
 ### Removed
