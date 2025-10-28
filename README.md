@@ -13,9 +13,10 @@ This command will:
 - Clone the repository from GitHub
 - Change into the project directory
 - Build the Docker images
-- Start PostgreSQL database with PostGIS
 - Launch the Flask web application on port 5000
 - Start the continuous CAP alert poller
+
+**Note:** PostgreSQL with PostGIS must be running separately. See [Database Setup](#database-setup) below.
 
 Access the application at **http://localhost:5000**
 
@@ -35,6 +36,7 @@ This command will:
 
 - **Docker Engine 24+** (with Docker Compose V2)
 - **Git** (for cloning and updates)
+- **PostgreSQL 15+ with PostGIS** (running in a separate container or host)
 
 ---
 
@@ -50,7 +52,7 @@ nano .env           # Edit with your preferred editor
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `POSTGRES_HOST` | `postgresql` | Database hostname (use service name for Docker) |
+| `POSTGRES_HOST` | `host.docker.internal` | Database hostname (use `host.docker.internal` to access host or another container) |
 | `POSTGRES_PORT` | `5432` | Database port |
 | `POSTGRES_DB` | `casaos` | Database name |
 | `POSTGRES_USER` | `casaos` | Database user |
@@ -61,18 +63,19 @@ nano .env           # Edit with your preferred editor
 | `UPLOAD_FOLDER` | `/app/uploads` | GeoJSON upload directory |
 | `SECRET_KEY` | (random) | Flask secret key (change in production!) |
 
-**Important:** Never use `localhost` or `127.0.0.1` for database connections when running in Docker. Use the service name `postgresql` instead.
+**Important:** PostgreSQL runs in a separate container (not managed by this docker-compose.yml). Use `host.docker.internal` to connect from Docker containers to a database on the host or in another container.
 
 ---
 
 ## Architecture
 
-The Docker Compose stack includes three services:
+The Docker Compose stack includes two services:
 
 ### 1. **app** - Web Application
 - Flask-based web UI and REST API
 - Served by Gunicorn on port 5000
 - Handles alert display, admin interface, and GIS boundary management
+- Connects to external PostgreSQL database
 
 ### 2. **poller** - Background Alert Poller
 - Continuously fetches CAP alerts from NOAA
@@ -80,10 +83,12 @@ The Docker Compose stack includes three services:
 - Auto-restarts on failure or system reboot
 - Stores alerts in PostgreSQL with PostGIS geometries
 
-### 3. **postgresql** - Database
-- PostgreSQL 15 with PostGIS support
-- Persistent data storage via Docker volume
-- Exposed on port 5432 for external tools (optional)
+### External Dependency: **PostgreSQL Database**
+- PostgreSQL 15+ with PostGIS support (managed separately)
+- Runs in its own container or on the host system
+- Provides persistent data storage independent of app/poller lifecycle
+- Allows rapid app redeployment without data loss
+- Accessed via `host.docker.internal` from Docker containers
 
 ---
 
@@ -100,7 +105,6 @@ docker compose down
 # View logs
 docker compose logs -f app       # Web app logs
 docker compose logs -f poller    # Poller logs
-docker compose logs -f postgresql # Database logs
 
 # Restart a specific service
 docker compose restart app
@@ -133,24 +137,62 @@ docker compose run --rm poller python poller/cap_poller.py --continuous --interv
 
 ---
 
-## Database Management
+## Database Setup
+
+### Setting Up PostgreSQL
+
+PostgreSQL must be running separately before starting the application. You can run it:
+
+**Option 1: Separate Docker Container**
+```bash
+docker run -d \
+  --name noaa-postgres \
+  -e POSTGRES_DB=casaos \
+  -e POSTGRES_USER=casaos \
+  -e POSTGRES_PASSWORD=casaos \
+  -p 5432:5432 \
+  -v postgres_data:/var/lib/postgresql/data \
+  postgis/postgis:15-3.3
+```
+
+**Option 2: Docker Compose (separate file)**
+Create a separate `docker-compose.postgres.yml`:
+```yaml
+version: "3.9"
+services:
+  postgresql:
+    image: postgis/postgis:15-3.3
+    environment:
+      POSTGRES_DB: casaos
+      POSTGRES_USER: casaos
+      POSTGRES_PASSWORD: casaos
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+```
+
+Run with: `docker compose -f docker-compose.postgres.yml up -d`
 
 ### Accessing PostgreSQL
 ```bash
-# Access psql inside the container
-docker compose exec postgresql psql -U casaos -d casaos
-
-# Or from your host (if you have psql installed)
+# Access PostgreSQL from your host
 psql -h localhost -p 5432 -U casaos -d casaos
+
+# Or from within the postgres container
+docker exec -it noaa-postgres psql -U casaos -d casaos
 ```
 
 ### Database Backups
 ```bash
 # Backup
-docker compose exec postgresql pg_dump -U casaos casaos > backup_$(date +%Y%m%d).sql
+docker exec noaa-postgres pg_dump -U casaos casaos > backup_$(date +%Y%m%d).sql
 
 # Restore
-cat backup_20241026.sql | docker compose exec -T postgresql psql -U casaos -d casaos
+cat backup_20241026.sql | docker exec -i noaa-postgres psql -U casaos -d casaos
 ```
 
 ### Enable PostGIS (if needed)
@@ -209,7 +251,7 @@ API_BASE_URL=http://localhost:5000 ./debug_apis.sh
 - [ ] Change `SECRET_KEY` to a strong random value
 - [ ] Update `POSTGRES_PASSWORD` to a secure password
 - [ ] Use a reverse proxy (nginx/Caddy) with SSL/TLS
-- [ ] Restrict PostgreSQL port (remove from `docker-compose.yml` or firewall it)
+- [ ] Restrict PostgreSQL port access (firewall or bind to localhost only)
 - [ ] Configure SMTP settings for email alerts (if used)
 - [ ] Enable Docker logging with rotation
 - [ ] Set up monitoring and alerting
@@ -270,8 +312,11 @@ docker compose logs -f --tail=100 app poller
 
 ### Common Issues
 
-**Problem:** Database connection refused  
-**Solution:** Ensure `POSTGRES_HOST=postgresql` (not `localhost`) in `.env`
+**Problem:** Database connection refused
+**Solution:**
+- Ensure PostgreSQL is running: `docker ps | grep postgres`
+- Verify `POSTGRES_HOST=host.docker.internal` in `.env`
+- Check PostgreSQL is accessible: `psql -h localhost -p 5432 -U casaos -d casaos`
 
 **Problem:** Poller not fetching alerts  
 **Solution:** Check logs with `docker compose logs -f poller` and verify network connectivity
