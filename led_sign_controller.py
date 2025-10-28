@@ -9,7 +9,7 @@ import socket
 import time
 import logging
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Dict, Optional, Union
 from enum import Enum
 import json
@@ -116,7 +116,22 @@ class TimeFormat(Enum):
 class Alpha9120CController:
     """Complete Alpha 9120C LED Sign Controller with full M-Protocol support"""
 
-    def __init__(self, host: str, port: int = 10001, sign_id: str = '01', timeout: int = 10, location_settings: Optional[Dict[str, Union[str, List[str]]]] = None):
+    SOH = "\x01"
+    STX = "\x02"
+    ETX = "\x03"
+    EOT = "\x04"
+    ACK = b"\x06"
+    NAK = b"\x15"
+
+    def __init__(
+        self,
+        host: str,
+        port: int = 10001,
+        sign_id: str = "01",
+        timeout: int = 10,
+        location_settings: Optional[Dict[str, Union[str, List[str]]]] = None,
+        type_code: str = "Z",
+    ):
         """
         Initialize Alpha 9120C controller with full M-Protocol support
 
@@ -128,8 +143,9 @@ class Alpha9120CController:
         """
         self.host = host
         self.port = port
-        self.sign_id = sign_id
+        self.sign_id = self._normalise_sign_id(sign_id)
         self.timeout = timeout
+        self.type_code = self._normalise_type_code(type_code)
         self.logger = logging.getLogger(__name__)
         self.location_settings = location_settings or DEFAULT_LOCATION_SETTINGS
         self.default_lines = self._normalise_lines(self.location_settings.get('led_default_lines'))
@@ -141,8 +157,6 @@ class Alpha9120CController:
         self.supports_graphics = True
 
         # M-Protocol control characters
-        self.STX = '\x02'  # Start of text
-        self.ETX = '\x03'  # End of text
         self.ESC = '\x1B'  # Escape
         self.CR = '\x0D'  # Carriage return
         self.LF = '\x0A'  # Line feed
@@ -254,6 +268,32 @@ class Alpha9120CController:
             }
         }
 
+    def _normalise_sign_id(self, raw_sign_id: str) -> str:
+        """Ensure the sign address is two ASCII characters as required by the manual."""
+
+        if not raw_sign_id:
+            return "00"
+
+        cleaned = re.sub(r"[^0-9A-Za-z]", "", str(raw_sign_id))
+        if not cleaned:
+            return "00"
+
+        if len(cleaned) == 1:
+            return cleaned.zfill(2).upper()
+
+        return cleaned[:2].upper()
+
+    def _normalise_type_code(self, raw_type: str) -> str:
+        """Type codes are a single printable character in the M-Protocol header."""
+
+        if not raw_type:
+            return "Z"
+
+        candidate = str(raw_type)[0].upper()
+        if not candidate.isalnum():
+            return "Z"
+        return candidate
+
     def connect(self) -> bool:
         """Establish connection to Alpha 9120C sign"""
         try:
@@ -307,15 +347,22 @@ class Alpha9120CController:
             self.logger.error(f"Initialization failed: {e}")
             return False
 
-    def _build_message(self, lines: List[str], color: Color = Color.GREEN,
-                       font: Font = Font.FONT_7x9, mode: DisplayMode = DisplayMode.HOLD,
-                       speed: Speed = Speed.SPEED_3, hold_time: int = 5,
-                       special_functions: List[SpecialFunction] = None,
-                       rgb_color: str = None, priority: MessagePriority = MessagePriority.NORMAL) -> str:
-        """
-        Build a complete M-Protocol message with all features
+    def _build_message(
+        self,
+        lines: List[str],
+        color: Color = Color.GREEN,
+        font: Font = Font.FONT_7x9,
+        mode: DisplayMode = DisplayMode.HOLD,
+        speed: Speed = Speed.SPEED_3,
+        hold_time: int = 5,
+        special_functions: List[SpecialFunction] = None,
+        rgb_color: str = None,
+        priority: MessagePriority = MessagePriority.NORMAL,
+        file_label: str = "A",
+    ) -> Optional[bytes]:
+        """Build a complete M-Protocol message with all features.
 
-        Format: <STX><ID><CMD><FILE><formatting><content><ETX><CHECKSUM>
+        Format: <SOH><TYPE><ADDR><STX><CMD><FILE><formatting><content><ETX><CHECKSUM>
         """
         try:
             # Ensure we have exactly 4 lines
@@ -327,9 +374,9 @@ class Alpha9120CController:
             display_lines = [line[:self.max_chars_per_line] for line in display_lines]
 
             # Message components
-            sign_id = self.sign_id
-            cmd = 'AA'  # Write text file command
-            file_label = 'A'  # File label
+            cmd = "AA"  # Write text file command
+            file_label = (file_label or "A").strip() or "A"
+            file_label = file_label[0].upper()
 
             # Build formatting sequence
             formatting = ''
@@ -364,19 +411,17 @@ class Alpha9120CController:
                     content += self.CR  # Line separator
 
             # Complete message body
-            message_body = f"{sign_id}{cmd}{file_label}{content}"
+            message_body = f"{cmd}{file_label}{content}"
 
-            # Calculate checksum
-            checksum = 0
-            for char in message_body:
-                checksum ^= ord(char)
-            checksum_str = f"{checksum:02X}"
+            # Complete frame with header and checksum (checksum is XOR of bytes between STX and ETX)
+            frame = self._build_frame_from_payload(message_body)
 
-            # Complete M-Protocol message
-            complete_message = f"{self.STX}{message_body}{self.ETX}{checksum_str}"
-
-            self.logger.debug(f"Built M-Protocol message: {repr(complete_message)}")
-            return complete_message
+            self.logger.debug(
+                "Built M-Protocol frame: repr=%s hex=%s",
+                repr(frame),
+                " ".join(f"{byte:02X}" for byte in frame),
+            )
+            return frame
 
         except Exception as e:
             self.logger.error(f"Error building M-Protocol message: {e}")
@@ -386,23 +431,50 @@ class Alpha9120CController:
         """Validate RGB color format (RRGGBB)"""
         return bool(re.match(r'^[0-9A-Fa-f]{6}$', rgb_color))
 
-    def _send_raw_message(self, message: str) -> bool:
+    def _calculate_checksum(self, payload: bytes) -> str:
+        """Checksum is calculated as an XOR of bytes between STX and ETX."""
+
+        checksum = 0
+        for byte in payload:
+            checksum ^= byte
+        return f"{checksum:02X}"
+
+    def _build_frame_from_payload(self, payload: str) -> bytes:
+        """Wrap a raw payload with the standard M-Protocol header, ETX, and checksum."""
+
+        payload_bytes = payload.encode("latin-1")
+        checksum = self._calculate_checksum(payload_bytes)
+        header = f"{self.SOH}{self.type_code}{self.sign_id}{self.STX}".encode("latin-1")
+        return header + payload_bytes + self.ETX.encode("latin-1") + checksum.encode("ascii")
+
+    def _send_raw_message(self, message: bytes) -> bool:
         """Send raw M-Protocol message to Alpha 9120C"""
         if not self.connected or not self.socket:
             if not self.connect():
                 return False
 
         try:
-            # Send message using latin-1 encoding
-            self.socket.send(message.encode('latin-1'))
+            # Drain any spurious bytes before starting a new transaction as
+            # documented in the Alpha M-Protocol handshake description.  The
+            # controller occasionally leaves ACK/NAK bytes in the buffer after
+            # sign power cycles, so clearing them avoids misinterpreting an
+            # old response as the acknowledgement for the current frame.
+            self._drain_input_buffer()
 
-            # Wait for acknowledgment
-            try:
-                self.socket.settimeout(2)
-                response = self.socket.recv(10)
-                self.logger.debug(f"Alpha 9120C response: {repr(response)}")
-            except socket.timeout:
-                self.logger.debug("No ACK from Alpha 9120C")
+            # Send message using latin-1 encoding
+            self.socket.sendall(message)
+
+            ack = self._read_acknowledgement()
+            if ack is None:
+                self.logger.debug("No ACK/NAK received from Alpha 9120C")
+            elif ack == self.ACK:
+                self.logger.debug("Received ACK from Alpha 9120C")
+                self._send_eot()
+            elif ack == self.NAK:
+                self.logger.error("Alpha 9120C responded with NAK")
+                return False
+            else:
+                self.logger.warning("Unexpected response byte from Alpha 9120C: %s", ack)
 
             self.last_message = message
             self.last_update = datetime.now()
@@ -414,6 +486,63 @@ class Alpha9120CController:
             self.logger.error(f"Error sending M-Protocol message: {e}")
             self.connected = False
             return False
+
+    def _read_acknowledgement(self) -> Optional[bytes]:
+        """Read an ACK (0x06) or NAK (0x15) response from the sign."""
+
+        if not self.socket:
+            return None
+
+        original_timeout = self.socket.gettimeout()
+        try:
+            self.socket.settimeout(2)
+            while True:
+                chunk = self.socket.recv(1)
+                if not chunk:
+                    return None
+                if chunk in (self.ACK, self.NAK):
+                    return chunk
+                # Ignore CR/LF or other whitespace that sometimes precedes ACK
+                if chunk not in (b"\r", b"\n"):
+                    return chunk
+        except socket.timeout:
+            return None
+        finally:
+            if self.socket:
+                self.socket.settimeout(original_timeout or self.timeout)
+
+    def _send_eot(self) -> None:
+        """Transmit the M-Protocol EOT byte once an ACK is received."""
+
+        if not self.socket:
+            return
+
+        try:
+            self.socket.sendall(self.EOT.encode("latin-1"))
+            self.logger.debug("Sent EOT to complete M-Protocol transaction")
+        except OSError as exc:  # pragma: no cover - defensive
+            self.logger.debug("Failed to send EOT: %s", exc)
+
+    def _drain_input_buffer(self) -> None:
+        """Clear pending bytes from the socket before sending a new frame."""
+
+        if not self.socket:
+            return
+
+        original_timeout = self.socket.gettimeout()
+        try:
+            self.socket.settimeout(0.1)
+            while True:
+                chunk = self.socket.recv(1024)
+                if not chunk:
+                    break
+        except socket.timeout:
+            pass
+        except OSError:
+            pass
+        finally:
+            if self.socket:
+                self.socket.settimeout(original_timeout or self.timeout)
 
     def send_message(self, lines: List[str], color: Color = Color.GREEN,
                      font: Font = Font.FONT_7x9, mode: DisplayMode = DisplayMode.HOLD,
@@ -523,14 +652,9 @@ class Alpha9120CController:
         """Set time display format"""
         try:
             # Build time format command
-            message_body = f"{self.sign_id}E*{self.TIME_CMD}{time_format.value}"
-            checksum = 0
-            for char in message_body:
-                checksum ^= ord(char)
-            checksum_str = f"{checksum:02X}"
-
-            message = f"{self.STX}{message_body}{self.ETX}{checksum_str}"
-            return self._send_raw_message(message)
+            payload = f"E*{self.TIME_CMD}{time_format.value}"
+            frame = self._build_frame_from_payload(payload)
+            return self._send_raw_message(frame)
 
         except Exception as e:
             self.logger.error(f"Error setting time format: {e}")
@@ -652,20 +776,25 @@ class Alpha9120CController:
             self.logger.error(f"Error clearing display: {e}")
             return False
 
-    def set_brightness(self, level: int) -> bool:
-        """Set display brightness (1-16)"""
+    def set_brightness(self, level: int, auto: bool = False) -> bool:
+        """Set display brightness.
+
+        The M-Protocol supports hexadecimal levels 0-F (16 discrete steps) and an
+        automatic photocell mode signalled with `E$A`.  The previous implementation
+        incorrectly allowed the value `16`, which produced a two-character code and
+        violated the single-hex-digit requirement described in the manual.
+        """
+
         try:
-            if not 1 <= level <= 16:
-                raise ValueError("Brightness level must be between 1 and 16")
+            if auto:
+                payload = "E$A"
+            else:
+                if not 0 <= level <= 15:
+                    raise ValueError("Brightness level must be between 0 and 15")
 
-            message_body = f"{self.sign_id}E${level:X}"
-            checksum = 0
-            for char in message_body:
-                checksum ^= ord(char)
-            checksum_str = f"{checksum:02X}"
-
-            message = f"{self.STX}{message_body}{self.ETX}{checksum_str}"
-            return self._send_raw_message(message)
+                payload = f"E${level:X}"
+            frame = self._build_frame_from_payload(payload)
+            return self._send_raw_message(frame)
 
         except Exception as e:
             self.logger.error(f"Error setting brightness: {e}")
