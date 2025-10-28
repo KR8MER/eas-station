@@ -8,3 +8,5 @@ venv/
 .git
 logs/
 *.log
+.env
+!.env.example
