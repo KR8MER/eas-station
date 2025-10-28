@@ -24,6 +24,9 @@ tracks releases under the 2.1.x series.
 ### Changed
 - Clarified in the README and dependency notes that PostgreSQL with PostGIS must run in a dedicated container separate from the application services.
 - Documented a single-line command for cloning the Experimental branch and launching the Docker Compose stack so operators can bootstrap quickly.
+- Clarified the update instructions to explicitly pull the Experimental branch when refreshing deployments.
+- Ship a populated `.env` file that mirrors the Portainer deployment defaults so fresh clones can launch without copying the
+  example template while still reminding operators to rotate credentials immediately.
 - Updated the GPIO relay control so it remains engaged for the full alert audio playback,
   using `EAS_GPIO_HOLD_SECONDS` as the minimum release delay once audio finishes.
 - Automatically generate and play an End-Of-Message (EOM) data burst sequence after each alert

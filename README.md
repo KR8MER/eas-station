@@ -59,20 +59,19 @@
 ### One-Command Installation
 
 ```bash
-bash -c "git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems.git && cd noaa_alerts_systems && cp .env.example .env && docker compose up -d --build"
+bash -c "git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems.git && cd noaa_alerts_systems && docker compose up -d --build"
 ```
 
-> ⚠️ **Important:** The command above copies the example configuration and launches the
-> containers with placeholder credentials. Immediately edit `.env` to set a strong
-> `SECRET_KEY`, update `POSTGRES_PASSWORD`, and restart the stack so your changes take
-> effect.
+> ⚠️ **Important:** A ready-to-use `.env` ships with the repository so the stack will
+> boot immediately. **Before exposing the services, open `.env` and change the**
+> `SECRET_KEY`, database password, and any other sensitive values to match your
+> environment, then restart the containers so those changes take effect.
 
 If you prefer to run each step manually, the equivalent sequence is:
 
 ```bash
 git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems.git
 cd noaa_alerts_systems
-cp .env.example .env
 # IMPORTANT: Edit .env and set SECRET_KEY and POSTGRES_PASSWORD!
 # The docker compose stack will launch both the app service and a
 # separate PostgreSQL/PostGIS database container.
@@ -83,10 +82,12 @@ docker compose up -d --build
 
 ### Configuration Before First Run
 
-1. **Copy the example environment file:**
-   ```bash
-   cp .env.example .env
-   ```
+1. **Review the shipped `.env` defaults:**
+   The repository now includes a populated `.env` that mirrors the Portainer
+   configuration shown above. Use it as a baseline, but make sure to change every
+   secret and environment-specific value before running in production. An
+   unmodified `.env.example` remains available if you need a clean template or want
+   to document alternative settings.
 
    > **Heads up:** Docker Compose will refuse to start if `.env` is missing and will
    > print an error similar to `env file .../.env not found`. Always create this file
@@ -99,8 +100,8 @@ docker compose up -d --build
 
 3. **Edit `.env` and update:**
    - `SECRET_KEY` - Use the generated value
-   - `POSTGRES_PASSWORD` - Change from default
-   - Other settings as needed
+   - `POSTGRES_PASSWORD` (and matching `DATABASE_URL`) - Change from defaults
+   - `ALERTS_DB_*`, `TZ`, `WATCHTOWER_*`, or other infrastructure metadata as needed
 
 4. **Start the system (provisions the separate Postgres/PostGIS container automatically):**
    ```bash
@@ -110,7 +111,7 @@ docker compose up -d --build
 ### Quick Update (Pull Latest Changes)
 
 ```bash
-git pull
+git pull origin Experimental
 docker compose build --pull
 docker compose up -d --force-recreate
 ```
