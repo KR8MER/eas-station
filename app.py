@@ -65,6 +65,10 @@ from flask import (
     g,
 )
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import (
+    check_password_hash as werkzeug_check_password_hash,
+    generate_password_hash as werkzeug_generate_password_hash,
+)
 
 # Database imports
 from geoalchemy2 import Geometry
@@ -398,26 +402,37 @@ class AdminUser(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(64), nullable=False)
-    salt = db.Column(db.String(32), nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    salt = db.Column(db.String(64), nullable=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
     last_login_at = db.Column(db.DateTime(timezone=True))
 
     def set_password(self, password: str) -> None:
-        salt_bytes = os.urandom(16)
-        self.salt = salt_bytes.hex()
-        self.password_hash = hashlib.sha256(salt_bytes + password.encode('utf-8')).hexdigest()
+        self.password_hash = werkzeug_generate_password_hash(password)
+        self.salt = 'pbkdf2'
 
     def check_password(self, password: str) -> bool:
-        if not self.salt:
+        if not self.password_hash:
             return False
+
+        if self.salt and self.salt != 'pbkdf2':
+            if len(self.salt) == 32 and len(self.password_hash) == 64:
+                try:
+                    salt_bytes = bytes.fromhex(self.salt)
+                except ValueError:
+                    return False
+                hashed = hashlib.sha256(salt_bytes + password.encode('utf-8')).hexdigest()
+                if hashed == self.password_hash:
+                    self.set_password(password)
+                    return True
+            return False
+
         try:
-            salt_bytes = bytes.fromhex(self.salt)
+            return werkzeug_check_password_hash(self.password_hash, password)
         except ValueError:
+            logger.warning('Stored admin password hash has an unexpected format.')
             return False
-        hashed = hashlib.sha256(salt_bytes + password.encode('utf-8')).hexdigest()
-        return hashed == self.password_hash
 
     def to_safe_dict(self) -> Dict[str, Any]:
         return {
