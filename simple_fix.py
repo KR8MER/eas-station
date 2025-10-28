@@ -99,14 +99,14 @@ def fix_corrupted_file(file_path):
         # The copyright character (0xa9) is common in corrupted files
         content = content.replace('\xa9', '(c)')  # Replace with (c)
         content = content.replace('\u00a9', '(c)')  # Another form
-        
+
         # Remove other problematic characters - keep only ASCII and common symbols
         cleaned_content = ''
         for char in content:
             if ord(char) < 128:  # ASCII characters
                 cleaned_content += char
-            elif char in ['©', '®', '™']:  # Common symbols
-                cleaned_content += '(c)' if char == '©' else char
+            elif char in ['\u00a9', '\u00ae', '\u2122']:  # Common symbols: Â©, Â®, â„¢
+                cleaned_content += '(c)' if char == '\u00a9' else char
             else:
                 # Replace other non-ASCII with space
                 cleaned_content += ' '

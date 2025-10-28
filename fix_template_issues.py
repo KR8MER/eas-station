@@ -95,12 +95,12 @@ def fix_corrupted_file(file_path):
             return False
         
         # Clean the content - remove problematic characters
-        # The © character (0xa9) is common in corrupted files
-        content = content.replace('\xa9', '©')  # Replace with proper copyright symbol
-        content = content.replace('\u00a9', '©')  # Another form
-        
-        # Remove other problematic characters
-        content = ''.join(char for char in content if ord(char) < 128 or char in '©®™')
+        # The copyright character (0xa9) is common in corrupted files
+        content = content.replace('\xa9', '\u00a9')  # Replace with proper copyright symbol
+        content = content.replace('\u00a9', '\u00a9')  # Another form (normalize)
+
+        # Remove other problematic characters - keep ASCII and common Unicode symbols
+        content = ''.join(char for char in content if ord(char) < 128 or char in '\u00a9\u00ae\u2122')
         
         # Create backup
         backup_path = file_path + '.backup'
