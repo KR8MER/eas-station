@@ -23,6 +23,7 @@ tracks releases under the 2.1.x series.
 - Exposed in-app About and Help pages so operators can read the mission overview and operations guide directly from the dashboard navigation.
 ### Changed
 - Clarified in the README and dependency notes that PostgreSQL with PostGIS must run in a dedicated container separate from the application services.
+- Documented a single-line command for cloning the Experimental branch and launching the Docker Compose stack so operators can bootstrap quickly.
 - Updated the GPIO relay control so it remains engaged for the full alert audio playback,
   using `EAS_GPIO_HOLD_SECONDS` as the minimum release delay once audio finishes.
 - Automatically generate and play an End-Of-Message (EOM) data burst sequence after each alert

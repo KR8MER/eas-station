@@ -59,7 +59,18 @@
 ### One-Command Installation
 
 ```bash
-git clone https://github.com/KR8MER/noaa_alerts_systems.git
+bash -c "git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems.git && cd noaa_alerts_systems && cp .env.example .env && docker compose up -d --build"
+```
+
+> ⚠️ **Important:** The command above copies the example configuration and launches the
+> containers with placeholder credentials. Immediately edit `.env` to set a strong
+> `SECRET_KEY`, update `POSTGRES_PASSWORD`, and restart the stack so your changes take
+> effect.
+
+If you prefer to run each step manually, the equivalent sequence is:
+
+```bash
+git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems.git
 cd noaa_alerts_systems
 cp .env.example .env
 # IMPORTANT: Edit .env and set SECRET_KEY and POSTGRES_PASSWORD!
