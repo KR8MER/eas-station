@@ -361,6 +361,61 @@
 
         <!-- Main Admin Interface -->
         <div class="admin-card">
+            {% if setup_mode %}
+            <div class="card-header-custom">
+                <h5 class="mb-0">
+                    <i class="fas fa-user-shield text-success"></i> First-Time Administrator Setup
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-xl-6">
+                        <div class="alert alert-info-custom mb-4">
+                            <h5 class="fw-bold mb-2"><i class="fas fa-rocket"></i> Welcome to the control panel</h5>
+                            <p class="mb-2">Create the first administrator account to unlock the full admin experience. Once the account is saved you will be redirected to the sign-in page.</p>
+                            <p class="mb-0 small">
+                                Prefer the command line? Run
+                                <code>flask create-admin-user</code>
+                                inside the app container to provision an account manually.
+                            </p>
+                        </div>
+                        <ul class="list-unstyled text-muted small mb-4">
+                            <li class="mb-2"><i class="fas fa-check-circle text-success"></i> Choose a strong password (8+ characters) — hashes are stored using salted SHA-256.</li>
+                            <li class="mb-2"><i class="fas fa-check-circle text-success"></i> After signing in you can invite additional administrators and configure boundaries, polling, and broadcasting.</li>
+                            <li><i class="fas fa-check-circle text-success"></i> Rotate the default credentials immediately if this instance will be exposed beyond the local network.</li>
+                        </ul>
+                    </div>
+                    <div class="col-xl-6">
+                        <div class="border rounded-4 p-4 h-100" style="background: var(--light-color);">
+                            <h5 class="fw-bold mb-3"><i class="fas fa-user-plus text-success"></i> Create Administrator</h5>
+                            <form id="createUserForm" class="needs-validation" novalidate>
+                                <div class="mb-3">
+                                    <label for="newUserUsername" class="form-label">Username</label>
+                                    <input type="text" class="form-control" id="newUserUsername" name="username" pattern="[A-Za-z0-9_.-]{3,64}" required autofocus>
+                                    <div class="form-text">3-64 characters: letters, numbers, dot, dash, and underscore only.</div>
+                                    <div class="invalid-feedback">Enter a valid username (letters, numbers, dot, dash, underscore).</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="newUserPassword" class="form-label">Password</label>
+                                    <input type="password" class="form-control" id="newUserPassword" name="password" minlength="8" required>
+                                    <div class="form-text">Passwords are stored using salted SHA-256 hashes.</div>
+                                    <div class="invalid-feedback">Password must be at least 8 characters long.</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="newUserPasswordConfirm" class="form-label">Confirm Password</label>
+                                    <input type="password" class="form-control" id="newUserPasswordConfirm" minlength="8" required>
+                                    <div class="invalid-feedback">Passwords must match.</div>
+                                </div>
+                                <button type="submit" class="btn btn-custom btn-success w-100">
+                                    <i class="fas fa-user-shield"></i> Create Administrator Account
+                                </button>
+                            </form>
+                            <small class="text-muted d-block mt-3">You'll be redirected to the sign-in page after the account is created.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
             <div class="tabs-container">
                 <ul class="nav nav-tabs nav-tabs-custom" id="adminTabs" role="tablist">
                     <li class="nav-item" role="presentation">
@@ -857,6 +912,17 @@
                     <h4><i class="fas fa-broadcast-tower text-danger"></i> SAME / EAS Broadcast Activity</h4>
                     <p class="text-muted">Monitor automatically generated SAME header audio, relay activations, and stored alert narratives.</p>
 
+                    <div class="alert alert-info-custom d-flex align-items-start gap-3">
+                        <div class="fs-4"><i class="fas fa-music"></i></div>
+                        <div>
+                            <strong>Need to generate test audio?</strong>
+                            Use the manual broadcast toolkit to create SAME practice clips, including the
+                            <code>tools/generate_sample_audio.py</code> utility.
+                            <a href="{{ url_for('help_page') }}#manualTools" class="alert-link">Open the documentation</a>
+                            for step-by-step instructions.
+                        </div>
+                    </div>
+
                     {% if eas_enabled %}
                         <div class="alert alert-success-custom">
                             <strong>EAS broadcasting is active.</strong>
@@ -942,12 +1008,14 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
         </div>
 
         <!-- Operation Status -->
-        <div id="operationStatus" class="mt-3"></div>
+        <div id="operationStatus" class="mt-3" style="display: none;"></div>
     </div>
 
+    {% if not setup_mode %}
     <!-- Confirmation Modal -->
     <div class="modal fade confirmation-modal" id="confirmationModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -1083,11 +1151,14 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
+    {% if not setup_mode %}
     <!-- Keyboard Shortcuts Info -->
     <div class="keyboard-shortcuts">
         <i class="fas fa-keyboard"></i> Alt+1-8: Switch Tabs | Alt+R: Refresh | Alt+H: Help
     </div>
+    {% endif %}
 </div>
 {% endblock %}
 
@@ -1095,6 +1166,7 @@
     <script>
         const BOUNDARY_TYPE_CONFIG = window.BOUNDARY_TYPE_CONFIG || {};
         const DEFAULT_BOUNDARY_TYPES = new Set(Object.keys(BOUNDARY_TYPE_CONFIG));
+        const ADMIN_SETUP_MODE = {{ 'true' if setup_mode else 'false' }};
 
         // Global variables
         let confirmationModal;
@@ -1247,17 +1319,27 @@
 
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
-            confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+            initializeUserManagement();
+
+            if (ADMIN_SETUP_MODE) {
+                return;
+            }
+
+            const confirmationModalElement = document.getElementById('confirmationModal');
+            if (confirmationModalElement) {
+                confirmationModal = new bootstrap.Modal(confirmationModalElement);
+            }
+
             const editAlertModalElement = document.getElementById('editAlertModal');
             if (editAlertModalElement) {
                 editAlertModal = new bootstrap.Modal(editAlertModalElement);
             }
+
             loadBoundaries();
             loadSystemHealth();
             setupKeyboardShortcuts();
             initializeAlertManagement();
             initializeLocationSettings();
-            initializeUserManagement();
             initializeEasPanel();
             initializeCustomTypeControls();
 
@@ -1432,8 +1514,15 @@
                     form.reset();
                     form.classList.remove('was-validated');
                     confirmInput.setCustomValidity('');
-                    showStatus(data.message || 'User created successfully.', 'success');
+                    const successMessage = data.message || 'User created successfully.';
+                    const finalMessage = ADMIN_SETUP_MODE ? `${successMessage} Redirecting to sign in…` : successMessage;
+                    showStatus(finalMessage, 'success', ADMIN_SETUP_MODE ? 0 : 5000);
                     loadUserAccounts();
+                    if (ADMIN_SETUP_MODE) {
+                        setTimeout(() => {
+                            window.location.href = '/login';
+                        }, 1800);
+                    }
                 } catch (error) {
                     console.error('Failed to create user', error);
                     showStatus('Unexpected error while creating user.', 'danger');
@@ -1726,6 +1815,9 @@
         // Status display functions
         function showStatus(message, type = 'info', duration = 5000) {
             const statusDiv = document.getElementById('operationStatus');
+            if (!statusDiv) {
+                return;
+            }
             statusDiv.className = `alert alert-${type}-custom`;
             statusDiv.innerHTML = `
                 <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-triangle' : 'info-circle'}"></i>
