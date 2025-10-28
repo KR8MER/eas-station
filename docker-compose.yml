@@ -4,6 +4,8 @@ services:
       context: .
       dockerfile: Dockerfile
     image: noaa-alerts:latest
+    depends_on:
+      - alerts-db
     ports:
       - "5000:5000"
     env_file:
@@ -15,7 +17,29 @@ services:
     image: noaa-alerts:latest
     command: ["python", "poller/cap_poller.py", "--continuous"]
     restart: unless-stopped
+    depends_on:
+      - alerts-db
     env_file:
       - .env
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+  alerts-db:
+    image: ${ALERTS_DB_IMAGE:-postgis/postgis:17-3.4}
+    profiles:
+      - embedded-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-alerts}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - alerts-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-alerts}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  alerts-db-data:
