@@ -25,7 +25,7 @@ services:
       - "host.docker.internal:host-gateway"
 
   alerts-db:
-    image: postgis/postgis:16-3.3
+    image: postgis/postgis:17-3.4
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-alerts}

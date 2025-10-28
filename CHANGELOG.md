@@ -49,6 +49,8 @@ tracks releases under the 2.1.x series.
 ### Fixed
 - Restored the `.env.example` template and documented the startup error shown when the
   file is missing so Docker Compose deployments no longer fail with "env file not found".
+- Updated the Docker Compose PostGIS service to use the published `postgis/postgis:17-3.4`
+  image so pulls succeed on both AMD64 and ARM64 hosts.
 - Skip PostGIS-specific geometry checks when running against SQLite and store geometry
   fields as plain text on non-PostgreSQL databases so local development can initialize
   without spatial extensions.

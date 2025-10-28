@@ -52,7 +52,7 @@
 ### Prerequisites
 - **Docker Engine 24+** with Docker Compose V2
 - **Git** for cloning the repository
-- **Dedicated PostgreSQL/PostGIS container** – the spatial database must run in its own service separate from the Flask application container. The provided `docker-compose.yml` spins up a compatible instance automatically, but self-hosted deployments must provision an equivalent database service before the app will start.
+- **Dedicated PostgreSQL/PostGIS container** – the spatial database must run in its own service separate from the Flask application container. The provided `docker-compose.yml` spins up a compatible instance automatically using the multi-architecture `postgis/postgis:17-3.4` image (works on AMD64 and ARM64), but self-hosted deployments must provision an equivalent database service before the app will start.
 - **4GB RAM** recommended (2GB minimum)
 - **Network Access** for NOAA CAP API polling
 
@@ -76,7 +76,9 @@ cd noaa_alerts_systems
 cp .env.example .env
 # IMPORTANT: Edit .env and set SECRET_KEY and POSTGRES_PASSWORD!
 # The docker compose stack will launch both the app service and a
-# separate PostgreSQL/PostGIS database container.
+# separate PostgreSQL/PostGIS database container based on the
+# postgis/postgis:17-3.4 image. Adjust the tag if you need to
+# align with an existing database deployment.
 docker compose up -d --build
 ```
 
