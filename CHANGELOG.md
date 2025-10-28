@@ -43,6 +43,8 @@ tracks releases under the 2.1.x series.
   the manual.
 - Fixed the Alpha text write command to send the single-byte "A" opcode followed by the
   file label so frames no longer begin with an invalid "AAA" sequence that the manual forbids.
+- Prevented the LED fallback initializer from raising a `NameError` when the optional
+  controller module is missing so deployments without sign hardware continue to boot.
 
 ## [2.1.7] - 2025-10-29
 ### Removed

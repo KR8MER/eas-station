@@ -45,8 +45,8 @@ except ImportError as exc:  # pragma: no cover - optional dependency
     MessagePriority = _fallback_message_priority()  # type: ignore
     led_module = None
 
-    def initialise_led_controller(logger):
-        logger.warning("LED controller module not found: %s", exc)
+    def initialise_led_controller(logger, import_error=exc):
+        logger.warning("LED controller module not found: %s", import_error)
         return None
 else:
     led_module = _led_module
