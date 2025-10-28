@@ -374,7 +374,16 @@ class Alpha9120CController:
             display_lines = [line[:self.max_chars_per_line] for line in display_lines]
 
             # Message components
-            cmd = "AA"  # Write text file command
+            # The manual specifies that the "Write Text File" command is a single
+            # byte (`A`) followed by the one-character file label.  The previous
+            # revision prefixed the payload with the string ``"AA"`` and then
+            # added the label again which produced frames that began with
+            # ``AAA``.  Alpha signs interpret the first two bytes as the command
+            # and file label, so the redundant "A" resulted in the file name
+            # being shifted and the payload rejected.  Build the command exactly
+            # as documented: the single command byte and a single label
+            # character.
+            cmd = "A"  # Write text file command
             file_label = (file_label or "A").strip() or "A"
             file_label = file_label[0].upper()
 

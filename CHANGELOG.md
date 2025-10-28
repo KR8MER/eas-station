@@ -41,6 +41,8 @@ tracks releases under the 2.1.x series.
 - Honored the Alpha M-Protocol handshake by draining stale responses, sending EOT after
   acknowledgements, and clamping brightness commands to the single-hex-digit range required by
   the manual.
+- Fixed the Alpha text write command to send the single-byte "A" opcode followed by the
+  file label so frames no longer begin with an invalid "AAA" sequence that the manual forbids.
 
 ## [2.1.7] - 2025-10-29
 ### Removed
