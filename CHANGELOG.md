@@ -20,6 +20,9 @@ tracks releases under the 2.1.x series.
   so receivers reliably return to normal programming when playback completes.
 - Manual CAP tooling now validates inputs against the registry, surfaces friendly area
   names in CLI output and audit logs, and warns when CAP payloads reference unknown codes.
+### Fixed
+- Corrected manual CAP allow-all FIPS logic to use 6-digit SAME identifiers so alerts configured
+  for every county pass validation and display proper area labels.
 
 ## [2.1.7] - 2025-10-29
 ### Removed

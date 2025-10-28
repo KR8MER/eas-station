@@ -3150,11 +3150,23 @@ US_FIPS_COUNTY_TABLE = """
 """
 
 
+def _to_same_county_code(code: str) -> str:
+    """Convert a county FIPS code into a 6-digit SAME identifier."""
+
+    digits = ''.join(ch for ch in code if ch.isdigit())
+    if not digits:
+        raise ValueError(f'Invalid county code: {code!r}')
+    if len(digits) == 5:
+        return f'0{digits}'
+    return digits.zfill(6)
+
+
 def _build_county_index() -> Dict[str, str]:
     mapping: Dict[str, str] = {}
     for line in US_FIPS_COUNTY_TABLE.strip().splitlines():
         code, state_abbr, county_name = line.split('|')
-        mapping[code] = f"{county_name}, {state_abbr}"
+        same_code = _to_same_county_code(code)
+        mapping[same_code] = f"{county_name}, {state_abbr}"
     return mapping
 
 
