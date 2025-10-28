@@ -59,19 +59,21 @@
 ### One-Command Installation
 
 ```bash
-bash -c "git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems.git && cd noaa_alerts_systems && docker compose up -d --build"
+bash -c "git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems.git && cd noaa_alerts_systems && cp .env.example .env && docker compose up -d --build"
 ```
 
-> ⚠️ **Important:** A ready-to-use `.env` ships with the repository so the stack will
-> boot immediately. **Before exposing the services, open `.env` and change the**
-> `SECRET_KEY`, database password, and any other sensitive values to match your
-> environment, then restart the containers so those changes take effect.
+> ⚠️ **Important:** The `.env.example` file only contains placeholder secrets so the
+> containers can boot. **Immediately after the first launch, open `.env` and change**
+> the `SECRET_KEY`, database password, and any other sensitive values, then restart
+> the stack so the new credentials are applied.
 
 If you prefer to run each step manually, the equivalent sequence is:
 
 ```bash
 git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems.git
 cd noaa_alerts_systems
+# Copy the template environment file and edit it before exposing services.
+cp .env.example .env
 # IMPORTANT: Edit .env and set SECRET_KEY and POSTGRES_PASSWORD!
 # The docker compose stack will launch both the app service and a
 # separate PostgreSQL/PostGIS database container.
@@ -82,16 +84,11 @@ docker compose up -d --build
 
 ### Configuration Before First Run
 
-1. **Review the shipped `.env` defaults:**
-   The repository now includes a populated `.env` that mirrors the Portainer
-   configuration shown above. Use it as a baseline, but make sure to change every
-   secret and environment-specific value before running in production. An
-   unmodified `.env.example` remains available if you need a clean template or want
-   to document alternative settings.
-
-   > **Heads up:** Docker Compose will refuse to start if `.env` is missing and will
-   > print an error similar to `env file .../.env not found`. Always create this file
-   > before launching the stack.
+1. **Copy and review the environment template:**
+   Run `cp .env.example .env` (already done in the quick start commands above)
+   and treat the result as your local configuration. The defaults mirror the
+   sample Portainer stack, but every secret and environment-specific value must
+   be replaced before production use.
 
 2. **Generate a secure SECRET_KEY:**
    ```bash
