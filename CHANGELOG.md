@@ -15,7 +15,14 @@ tracks releases under the 2.1.x series.
   exposed helpers to authorize the entire dataset with a single configuration flag.
 - Cataloged the nationwide SAME event code registry together with helper utilities so
   broadcasters and manual tools can resolve official names, presets, and headers.
+- Added a CLI helper (`tools/generate_sample_audio.py`) to create demonstration SAME audio
+  clips without ingesting a live CAP product.
+- Introduced optional Azure AI speech synthesis to append narrated voiceovers when the
+  appropriate credentials and SDK are available.
+- Authored dedicated `ABOUT.md` and `HELP.md` documentation describing the system mission, software stack, and operational playbooks, with cross-links from the README for quick discovery.
+- Exposed in-app About and Help pages so operators can read the mission overview and operations guide directly from the dashboard navigation.
 ### Changed
+- Clarified in the README and dependency notes that PostgreSQL with PostGIS must run in a dedicated container separate from the application services.
 - Updated the GPIO relay control so it remains engaged for the full alert audio playback,
   using `EAS_GPIO_HOLD_SECONDS` as the minimum release delay once audio finishes.
 - Automatically generate and play an End-Of-Message (EOM) data burst sequence after each alert
@@ -29,6 +36,9 @@ tracks releases under the 2.1.x series.
   selected code names in CLI output and audit trails while the broadcaster consumes
   the resolved identifiers for header generation.
 ### Fixed
+- Skip PostGIS-specific geometry checks when running against SQLite and store geometry
+  fields as plain text on non-PostgreSQL databases so local development can initialize
+  without spatial extensions.
 - Corrected manual CAP allow-all FIPS logic to use 6-digit SAME identifiers so alerts configured
   for every county pass validation and display proper area labels.
 - Resolved an SQLAlchemy metadata attribute conflict so the Flask app and polling services can
