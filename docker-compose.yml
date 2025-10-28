@@ -15,8 +15,6 @@ services:
     image: noaa-alerts:latest
     command: ["python", "poller/cap_poller.py", "--continuous"]
     restart: unless-stopped
-    depends_on:
-      - alerts-db
     env_file:
       - .env
     extra_hosts:
