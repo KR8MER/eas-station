@@ -162,6 +162,54 @@ docker compose logs -f postgresql # Database
 | http://localhost:5000/admin | Admin panel for boundary management |
 | http://localhost:5000/led_control | LED sign control interface (if enabled) |
 
+### Authentication & User Management
+
+The admin panel now requires an authenticated session backed by the database. Passwords are stored as salted SHA-256 hashes and never written in plain text.
+
+1. **Create the first administrator account** (only required once):
+   ```bash
+   docker compose run --rm app flask create-admin-user
+   ```
+   Follow the prompts to set a username (letters, numbers, `.`, `_`, `-`) and a password (minimum 8 characters).
+
+2. **Sign in** at http://localhost:5000/login using the credentials created above. Successful login redirects to the admin dashboard.
+
+3. **Manage additional accounts** from the **User Accounts** tab inside the admin panel:
+   - Create new users with individual credentials
+   - Reset passwords when rotating access
+   - Remove users (at least one administrator must remain active)
+
+If you forget all credentials, run the CLI command again to create another administrator account.
+
+### SAME / EAS Broadcast Integration
+
+When enabled, the poller generates full SAME header bursts, raises an optional GPIO-controlled relay, and stores the alert audio alongside a JSON summary that can be downloaded from the **EAS Output** tab in the admin console.
+
+1. **Enable the broadcaster** by adding the following to your `.env` file (a sample configuration is provided in `.env.example`):
+   ```ini
+   EAS_BROADCAST_ENABLED=true
+   # Optional overrides:
+   # EAS_OUTPUT_DIR=static/eas_messages        # Files must remain within the Flask static directory for web access
+   # EAS_OUTPUT_WEB_SUBDIR=eas_messages        # Subdirectory under /static used for download links
+   # EAS_OUTPUT_WEB_PATH=eas_messages          # Legacy variable name still recognised
+   # EAS_ORIGINATOR=WXR                        # SAME originator code (3 characters)
+   # EAS_STATION_ID=EASNODES                   # Call sign or station identifier (up to 8 characters)
+   # EAS_AUDIO_PLAYER="aplay"                  # Command used to play generated WAV files
+   # EAS_ATTENTION_TONE_SECONDS=8              # Duration of the two-tone attention signal
+   # EAS_GPIO_PIN=17                           # BCM pin number controlling a relay (optional)
+   # EAS_GPIO_ACTIVE_STATE=HIGH                # HIGH or LOW depending on your relay hardware
+   # EAS_GPIO_HOLD_SECONDS=5                   # How long the relay remains active when an alert fires
+   ```
+
+2. **Install audio / GPIO dependencies** on the device that runs the poller container (e.g., `alsa-utils` for `aplay`, `RPi.GPIO` for Raspberry Pi hardware). The broadcaster automatically detects when `RPi.GPIO` is unavailable and will log a warning instead of raising an exception.
+
+3. **Review generated assets**:
+   - Each alert produces a `*.wav` file that contains three SAME bursts followed by the attention tone.
+   - A matching `*.txt` file stores the JSON metadata (identifier, timestamps, SAME header, and narrative).
+   - The admin console lists the most recent transmissions, allowing operators to play audio or download the summary directly from the browser.
+
+> **Tip:** Keep the output directory inside Flask's `static/` tree so the files can be served via `url_for('static', ...)`. If you relocate the directory, update both `EAS_OUTPUT_DIR` and `EAS_OUTPUT_WEB_SUBDIR` to maintain access from the UI.
+
 ### Uploading GIS Boundaries
 
 1. **Prepare GeoJSON File:**
