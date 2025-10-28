@@ -49,6 +49,7 @@ from app_utils import (
     utc_now as util_utc_now,
 )
 from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS, ensure_list, normalise_upper
+from app_utils.eas import EASBroadcaster, load_eas_config
 
 UTC_TZ = pytz.UTC
 
@@ -95,7 +96,7 @@ try:
     if project_root.endswith('/poller'):
         project_root = os.path.dirname(project_root)
     sys.path.insert(0, project_root)
-    from app import db, CAPAlert, SystemLog, Boundary, Intersection, LocationSettings  # type: ignore
+    from app import db, CAPAlert, SystemLog, Boundary, Intersection, LocationSettings, EASMessage  # type: ignore
     from sqlalchemy import Column, Integer, String, DateTime, Text, JSON  # noqa: F401
 
     class PollHistory(db.Model):  # type: ignore
@@ -202,6 +203,17 @@ except Exception as e:
         led_default_lines = Column(JSON)
         updated_at = Column(DateTime, default=utc_now)
 
+    class EASMessage(Base):
+        __tablename__ = 'eas_messages'
+        __table_args__ = {'extend_existing': True}
+        id = Column(Integer, primary_key=True)
+        cap_alert_id = Column(Integer, ForeignKey('cap_alerts.id'))
+        same_header = Column(String(255))
+        audio_filename = Column(String(255))
+        text_filename = Column(String(255))
+        created_at = Column(DateTime, default=utc_now)
+        metadata = Column(JSON)
+
 # =======================================================================================
 # Poller
 # =======================================================================================
@@ -232,6 +244,17 @@ class CAPPoller:
         self.location_name = f"{self.location_settings['county_name']}, {self.location_settings['state_code']}".strip(', ')
         self.county_upper = self.location_settings['county_name'].upper()
         self.state_code = self.location_settings['state_code']
+
+        # EAS broadcaster
+        self.eas_broadcaster = None
+        try:
+            eas_config = load_eas_config(PROJECT_ROOT)
+            self.eas_broadcaster = EASBroadcaster(
+                self.db_session, EASMessage, eas_config, self.logger, self.location_settings
+            )
+        except Exception as exc:
+            self.logger.warning(f"EAS broadcaster unavailable: {exc}")
+            self.eas_broadcaster = None
 
         # HTTP Session
         self.session = requests.Session()
@@ -479,13 +502,14 @@ class CAPPoller:
 
     def save_cap_alert(self, alert_data: Dict) -> Tuple[bool, Optional[CAPAlert]]:
         try:
-            geometry_data = alert_data.pop('_geometry_data', None)
+            payload = dict(alert_data)
+            geometry_data = payload.pop('_geometry_data', None)
             existing = self.db_session.query(CAPAlert).filter_by(
-                identifier=alert_data['identifier']
+                identifier=payload['identifier']
             ).first()
 
             if existing:
-                for k, v in alert_data.items():
+                for k, v in payload.items():
                     if k != 'raw_json' and hasattr(existing, k):
                         setattr(existing, k, v)
                 old_geom = existing.geom
@@ -499,7 +523,7 @@ class CAPPoller:
                 self.logger.info(f"Updated alert: {existing.event}")
                 return False, existing
 
-            new_alert = CAPAlert(**alert_data)
+            new_alert = CAPAlert(**payload)
             new_alert.created_at = utc_now()
             new_alert.updated_at = utc_now()
             self._set_alert_geometry(new_alert, geometry_data)
@@ -511,6 +535,12 @@ class CAPPoller:
                 self.process_intersections(new_alert)
             if self.led_controller and not self.is_alert_expired(new_alert):
                 self.update_led_display()
+
+            if self.eas_broadcaster:
+                try:
+                    self.eas_broadcaster.handle_alert(new_alert, payload)
+                except Exception as exc:
+                    self.logger.error(f"EAS broadcast failed for {new_alert.identifier}: {exc}")
 
             self.logger.info(f"Saved new alert: {new_alert.identifier} - {new_alert.event}")
             return True, new_alert

@@ -398,6 +398,16 @@
                             <i class="fas fa-map-marker-alt"></i> Location Settings
                         </button>
                     </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="eas-tab" data-bs-toggle="tab" data-bs-target="#eas-output" type="button" role="tab">
+                            <i class="fas fa-broadcast-tower"></i> EAS Output
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="users-tab" data-bs-toggle="tab" data-bs-target="#user-management" type="button" role="tab">
+                            <i class="fas fa-users-cog"></i> User Accounts
+                        </button>
+                    </li>
                 </ul>
             </div>
 
@@ -710,6 +720,78 @@
                     </div>
                 </div>
 
+                <!-- User Management Tab -->
+                <div class="tab-pane fade" id="user-management" role="tabpanel">
+                    <h4><i class="fas fa-users-cog text-primary"></i> Administrator Accounts</h4>
+                    <p class="text-muted">Create, reset, and revoke access for control panel users.</p>
+
+                    <div class="row g-4 mt-2">
+                        <div class="col-lg-5">
+                            <div class="border rounded-4 p-4 h-100" style="background: var(--light-color);">
+                                <h5 class="fw-bold mb-3"><i class="fas fa-user-plus text-success"></i> Create User</h5>
+                                <form id="createUserForm" class="needs-validation" novalidate>
+                                    <div class="mb-3">
+                                        <label for="newUserUsername" class="form-label">Username</label>
+                                        <input type="text" class="form-control" id="newUserUsername" name="username" pattern="[A-Za-z0-9_.-]{3,64}" required>
+                                        <div class="form-text">3-64 characters: letters, numbers, dot, dash, and underscore only.</div>
+                                        <div class="invalid-feedback">Enter a valid username (letters, numbers, dot, dash, underscore).</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="newUserPassword" class="form-label">Password</label>
+                                        <input type="password" class="form-control" id="newUserPassword" name="password" minlength="8" required>
+                                        <div class="form-text">Passwords are stored using salted SHA-256 hashes.</div>
+                                        <div class="invalid-feedback">Password must be at least 8 characters long.</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="newUserPasswordConfirm" class="form-label">Confirm Password</label>
+                                        <input type="password" class="form-control" id="newUserPasswordConfirm" minlength="8" required>
+                                        <div class="invalid-feedback">Passwords must match.</div>
+                                    </div>
+                                    <button type="submit" class="btn btn-custom btn-success w-100">
+                                        <i class="fas fa-user-shield"></i> Create Administrator
+                                    </button>
+                                </form>
+                                <small class="text-muted d-block mt-3">
+                                    Tip: Use the "Reset Password" action to rotate credentials without deleting an account.
+                                </small>
+                            </div>
+                        </div>
+                        <div class="col-lg-7">
+                            <div class="border rounded-4 p-4 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h5 class="fw-bold mb-0"><i class="fas fa-address-book"></i> Existing Users</h5>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="refreshUserList">
+                                        <i class="fas fa-sync-alt"></i> Refresh
+                                    </button>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">Username</th>
+                                                <th scope="col" class="text-nowrap">Created</th>
+                                                <th scope="col" class="text-nowrap">Last Login</th>
+                                                <th scope="col" class="text-end">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="userTableBody">
+                                            <tr>
+                                                <td colspan="4" class="text-center text-muted py-4">
+                                                    <div class="loading-spinner"></div>
+                                                    <span class="ms-2">Loading users...</span>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <small class="text-muted d-block mt-3">
+                                    At least one active administrator is required at all times. Accounts can only be deleted by another signed-in administrator.
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Location Settings Tab -->
                 <div class="tab-pane fade" id="location-settings" role="tabpanel">
                     <h4><i class="fas fa-map-marker-alt text-primary"></i> Location Configuration</h4>
@@ -768,6 +850,96 @@
                             </div>
                         </div>
                     </form>
+                </div>
+
+                <!-- EAS Output Tab -->
+                <div class="tab-pane fade" id="eas-output" role="tabpanel">
+                    <h4><i class="fas fa-broadcast-tower text-danger"></i> SAME / EAS Broadcast Activity</h4>
+                    <p class="text-muted">Monitor automatically generated SAME header audio, relay activations, and stored alert narratives.</p>
+
+                    {% if eas_enabled %}
+                        <div class="alert alert-success-custom">
+                            <strong>EAS broadcasting is active.</strong>
+                            Generated WAV and JSON summaries are stored in <code>{{ eas_web_subdir }}</code> under the static directory.
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning-custom">
+                            <strong>EAS broadcasting is currently disabled.</strong>
+                            Set <code>EAS_BROADCAST_ENABLED=true</code> in your environment to enable audio generation and relay control.
+                        </div>
+                    {% endif %}
+
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h5 class="fw-bold mb-0"><i class="fas fa-headphones"></i> Recent Transmissions</h5>
+                            <small class="text-muted" id="easMessageStatus">
+                                {% if eas_enabled and eas_recent_messages %}
+                                    Showing the most recent {{ eas_recent_messages|length }} of {{ eas_total_messages }} stored alerts.
+                                {% elif eas_enabled %}
+                                    No SAME audio has been generated yet.
+                                {% else %}
+                                    Enable broadcasting to capture SAME headers and audio files.
+                                {% endif %}
+                            </small>
+                        </div>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-outline-secondary" id="refreshEasMessages">
+                                <i class="fas fa-sync-alt"></i> Refresh
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-striped align-middle">
+                            <thead>
+                                <tr>
+                                    <th scope="col" class="text-nowrap">Generated</th>
+                                    <th scope="col">Event</th>
+                                    <th scope="col" class="text-nowrap">SAME Header</th>
+                                    <th scope="col" class="text-nowrap text-center">Audio</th>
+                                    <th scope="col" class="text-nowrap text-center">Details</th>
+                                </tr>
+                            </thead>
+                            <tbody id="easMessagesTableBody">
+                                {% if eas_enabled and eas_recent_messages %}
+                                    {% for message in eas_recent_messages %}
+                                        {% set audio_url = url_for('static', filename=eas_web_subdir ~ '/' ~ message.audio_filename) %}
+                                        {% set text_url = url_for('static', filename=eas_web_subdir ~ '/' ~ message.text_filename) %}
+                                        <tr>
+                                            <td class="text-nowrap">{{ message.created_at|default('') }}</td>
+                                            <td>
+                                                <strong>{{ message.metadata.event | default('Unknown Event') }}</strong>
+                                                {% if message.metadata.severity %}
+                                                    <span class="badge bg-danger ms-2">{{ message.metadata.severity }}</span>
+                                                {% endif %}
+                                                {% if message.metadata.status %}
+                                                    <span class="badge bg-secondary ms-1">{{ message.metadata.status }}</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="text-break"><code>{{ message.same_header }}</code></td>
+                                            <td class="text-center">
+                                                <a class="btn btn-sm btn-outline-primary" href="{{ audio_url }}" target="_blank" rel="noopener">
+                                                    <i class="fas fa-play"></i> Play
+                                                </a>
+                                            </td>
+                                            <td class="text-center">
+                                                <a class="btn btn-sm btn-outline-info" href="{{ text_url }}" target="_blank" rel="noopener">
+                                                    <i class="fas fa-file-alt"></i> Summary
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted py-4">
+                                            <div class="loading-spinner"></div>
+                                            <span class="ms-2">No transmissions recorded yet.</span>
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -914,7 +1086,7 @@
 
     <!-- Keyboard Shortcuts Info -->
     <div class="keyboard-shortcuts">
-        <i class="fas fa-keyboard"></i> Alt+1-7: Switch Tabs | Alt+R: Refresh | Alt+H: Help
+        <i class="fas fa-keyboard"></i> Alt+1-8: Switch Tabs | Alt+R: Refresh | Alt+H: Help
     </div>
 </div>
 {% endblock %}
@@ -1085,6 +1257,8 @@
             setupKeyboardShortcuts();
             initializeAlertManagement();
             initializeLocationSettings();
+            initializeUserManagement();
+            initializeEasPanel();
             initializeCustomTypeControls();
 
             // Auto-refresh every 30 seconds
@@ -1105,6 +1279,8 @@
                         case '5': switchTab('alerts-tab'); break;
                         case '6': switchTab('health-tab'); break;
                         case '7': switchTab('location-tab'); break;
+                        case '8': switchTab('eas-tab'); break;
+                        case '9': switchTab('users-tab'); break;
                         case 'r': e.preventDefault(); location.reload(); break;
                     }
                 }
@@ -1192,6 +1368,359 @@
 
             showStep();
             confirmationModal.show();
+        }
+
+        function initializeUserManagement() {
+            const form = document.getElementById('createUserForm');
+            const passwordInput = document.getElementById('newUserPassword');
+            const confirmInput = document.getElementById('newUserPasswordConfirm');
+            if (!form || !passwordInput || !confirmInput) {
+                return;
+            }
+
+            const refreshButton = document.getElementById('refreshUserList');
+            if (refreshButton) {
+                refreshButton.addEventListener('click', () => loadUserAccounts());
+            }
+
+            const validatePasswordMatch = () => {
+                if (confirmInput.value !== passwordInput.value) {
+                    confirmInput.setCustomValidity('Passwords must match.');
+                } else {
+                    confirmInput.setCustomValidity('');
+                }
+            };
+
+            passwordInput.addEventListener('input', validatePasswordMatch);
+            confirmInput.addEventListener('input', validatePasswordMatch);
+
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                validatePasswordMatch();
+
+                if (!form.checkValidity()) {
+                    form.classList.add('was-validated');
+                    return;
+                }
+
+                const username = form.username.value.trim();
+                const password = passwordInput.value;
+
+                try {
+                    const response = await fetch('/admin/users', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({ username, password })
+                    });
+
+                    if (response.status === 401) {
+                        window.location.href = '/login';
+                        return;
+                    }
+
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        showStatus(data.error || 'Failed to create user.', 'danger');
+                        return;
+                    }
+
+                    form.reset();
+                    form.classList.remove('was-validated');
+                    confirmInput.setCustomValidity('');
+                    showStatus(data.message || 'User created successfully.', 'success');
+                    loadUserAccounts();
+                } catch (error) {
+                    console.error('Failed to create user', error);
+                    showStatus('Unexpected error while creating user.', 'danger');
+                }
+            });
+
+            const tableBody = document.getElementById('userTableBody');
+            if (tableBody) {
+                tableBody.addEventListener('click', (event) => {
+                    const button = event.target.closest('button[data-action]');
+                    if (!button) {
+                        return;
+                    }
+
+                    const userId = button.dataset.userId;
+                    const username = button.dataset.username;
+
+                    if (button.dataset.action === 'reset-password') {
+                        handleUserPasswordReset(userId, username);
+                    } else if (button.dataset.action === 'delete-user') {
+                        handleUserDeletion(userId, username);
+                    }
+                });
+            }
+
+            loadUserAccounts();
+        }
+
+        async function loadUserAccounts() {
+            const tableBody = document.getElementById('userTableBody');
+            if (!tableBody) {
+                return;
+            }
+
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="4" class="text-center text-muted py-4">
+                        <div class="loading-spinner"></div>
+                        <span class="ms-2">Loading users...</span>
+                    </td>
+                </tr>
+            `;
+
+            try {
+                const response = await fetch('/admin/users', {
+                    headers: { 'Accept': 'application/json' }
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    showStatus(data.error || 'Unable to load users.', 'danger');
+                    return;
+                }
+
+                const users = data.users || [];
+                if (!users.length) {
+                    tableBody.innerHTML = `
+                        <tr>
+                            <td colspan="4" class="text-center text-muted py-4">
+                                No administrator accounts found.
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                tableBody.innerHTML = '';
+                users.forEach(user => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <th scope="row" class="text-nowrap">${user.username}</th>
+                        <td class="text-nowrap">${formatUserTimestamp(user.created_at)}</td>
+                        <td class="text-nowrap">${formatUserTimestamp(user.last_login_at)}</td>
+                        <td class="text-end">
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-sm btn-outline-primary" data-action="reset-password" data-user-id="${user.id}" data-username="${user.username}">
+                                    <i class="fas fa-key"></i> Reset
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" data-action="delete-user" data-user-id="${user.id}" data-username="${user.username}">
+                                    <i class="fas fa-user-times"></i> Delete
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Failed to load users', error);
+                showStatus('Unexpected error while loading users.', 'danger');
+            }
+        }
+
+        function initializeEasPanel() {
+            loadEasMessages();
+            const refreshButton = document.getElementById('refreshEasMessages');
+            if (refreshButton) {
+                refreshButton.addEventListener('click', () => loadEasMessages());
+            }
+        }
+
+        async function loadEasMessages() {
+            const tableBody = document.getElementById('easMessagesTableBody');
+            const status = document.getElementById('easMessageStatus');
+            if (!tableBody) {
+                return;
+            }
+
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="text-center text-muted py-4">
+                        <div class="loading-spinner"></div>
+                        <span class="ms-2">Loading transmissions...</span>
+                    </td>
+                </tr>
+            `;
+
+            try {
+                const response = await fetch('/admin/eas_messages?limit=100', {
+                    headers: { 'Accept': 'application/json' }
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    showStatus(data.error || 'Unable to load EAS transmissions.', 'danger');
+                    return;
+                }
+
+                const messages = data.messages || [];
+                if (!messages.length) {
+                    tableBody.innerHTML = `
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">
+                                No transmissions recorded yet.
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    tableBody.innerHTML = '';
+                    messages.forEach((message) => {
+                        const metadata = message.metadata || {};
+                        const created = message.created_at ? new Date(message.created_at) : null;
+                        const createdLabel = created && !Number.isNaN(created.getTime())
+                            ? created.toLocaleString()
+                            : 'Unknown';
+
+                        const severityBadge = metadata.severity
+                            ? `<span class="badge bg-danger ms-2">${escapeHtml(metadata.severity)}</span>`
+                            : '';
+                        const statusBadge = metadata.status
+                            ? `<span class="badge bg-secondary ms-1">${escapeHtml(metadata.status)}</span>`
+                            : '';
+
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td class="text-nowrap">${escapeHtml(createdLabel)}</td>
+                            <td>
+                                <strong>${escapeHtml(metadata.event || 'Unknown Event')}</strong>
+                                ${severityBadge}${statusBadge}
+                            </td>
+                            <td class="text-break"><code>${escapeHtml(message.same_header || '')}</code></td>
+                            <td class="text-center">
+                                ${message.audio_url ? `<a class="btn btn-sm btn-outline-primary" href="${escapeHtml(message.audio_url)}" target="_blank" rel="noopener"><i class="fas fa-play"></i> Play</a>` : '<span class="text-muted">N/A</span>'}
+                            </td>
+                            <td class="text-center">
+                                ${message.text_url ? `<a class="btn btn-sm btn-outline-info" href="${escapeHtml(message.text_url)}" target="_blank" rel="noopener"><i class="fas fa-file-alt"></i> Summary</a>` : '<span class="text-muted">N/A</span>'}
+                            </td>
+                        `;
+                        tableBody.appendChild(row);
+                    });
+                }
+
+                if (status) {
+                    const total = typeof data.total === 'number' ? data.total : messages.length;
+                    if (messages.length || total > 0) {
+                        status.textContent = `Showing ${messages.length} of ${total} stored alerts.`;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load EAS messages', error);
+                showStatus('Unexpected error while loading EAS transmissions.', 'danger');
+            }
+        }
+
+        async function handleUserPasswordReset(userId, username) {
+            if (!userId) {
+                return;
+            }
+
+            const newPassword = prompt(`Enter a new password for ${username} (minimum 8 characters):`);
+            if (newPassword === null) {
+                return;
+            }
+
+            if (newPassword.trim().length < 8) {
+                showStatus('Password must be at least 8 characters long.', 'warning');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/admin/users/${userId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ password: newPassword })
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    showStatus(data.error || 'Failed to reset password.', 'danger');
+                    return;
+                }
+
+                showStatus(data.message || 'Password reset successfully.', 'success');
+                loadUserAccounts();
+            } catch (error) {
+                console.error('Failed to reset password', error);
+                showStatus('Unexpected error while resetting password.', 'danger');
+            }
+        }
+
+        function handleUserDeletion(userId, username) {
+            if (!userId) {
+                return;
+            }
+
+            showConfirmation({
+                title: 'Delete Administrator',
+                message: `Remove administrator ${username}?`,
+                warning: 'This user will immediately lose access to the admin console.',
+                type: 'danger',
+                confirmText: 'Delete User',
+                onConfirm: async () => {
+                    try {
+                        const response = await fetch(`/admin/users/${userId}`, {
+                            method: 'DELETE',
+                            headers: { 'Accept': 'application/json' }
+                        });
+
+                        if (response.status === 401) {
+                            window.location.href = '/login';
+                            return;
+                        }
+
+                        const data = await response.json().catch(() => ({}));
+                        if (!response.ok) {
+                            showStatus(data.error || 'Failed to delete user.', 'danger');
+                            return;
+                        }
+
+                        showStatus(data.message || 'User deleted successfully.', 'success');
+                        loadUserAccounts();
+                    } catch (error) {
+                        console.error('Failed to delete user', error);
+                        showStatus('Unexpected error while deleting user.', 'danger');
+                    }
+                }
+            });
+        }
+
+        function formatUserTimestamp(timestamp) {
+            if (!timestamp) {
+                return '—';
+            }
+
+            const date = new Date(timestamp);
+            if (Number.isNaN(date.getTime())) {
+                return '—';
+            }
+
+            return date.toLocaleString();
         }
 
         // Status display functions
