@@ -919,6 +919,17 @@
                         </a>
                     </div>
 
+                    <div class="alert alert-info-custom d-flex align-items-start gap-3">
+                        <div class="fs-4"><i class="fas fa-music"></i></div>
+                        <div>
+                            <strong>Need to generate test audio?</strong>
+                            Use the manual broadcast toolkit to create SAME practice clips, including the
+                            <code>tools/generate_sample_audio.py</code> utility.
+                            <a href="{{ url_for('help_page') }}#manualTools" class="alert-link">Open the documentation</a>
+                            for step-by-step instructions.
+                        </div>
+                    </div>
+
                     {% if eas_enabled %}
                         <div class="alert alert-success-custom">
                             <strong>EAS broadcasting is active.</strong>
