@@ -121,6 +121,10 @@ docker compose --profile embedded-db up -d --build
    > Set `ALERTS_DB_IMAGE` in `.env` before launching and Compose will pull
    > that tag when the `embedded-db` profile is enabled.
 
+   > Need to run a specific database image (for example `postgres:17-postgis-arm64`)?
+   > Set `ALERTS_DB_IMAGE` in `.env` before launching and Compose will pull
+   > that tag instead of the default `postgis/postgis:17-3.4` build.
+
 ### Quick Update (Pull Latest Changes)
 
 ```bash
