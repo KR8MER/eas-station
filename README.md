@@ -185,12 +185,13 @@ If you forget all credentials, run the CLI command again to create another admin
 
 When enabled, the poller generates full SAME header bursts, raises an optional GPIO-controlled relay, and stores the alert audio alongside a JSON summary that can be downloaded from the **EAS Output** tab in the admin console.
 
-1. **Enable the broadcaster** by adding the following to your `.env` file:
+1. **Enable the broadcaster** by adding the following to your `.env` file (a sample configuration is provided in `.env.example`):
    ```ini
    EAS_BROADCAST_ENABLED=true
    # Optional overrides:
    # EAS_OUTPUT_DIR=static/eas_messages        # Files must remain within the Flask static directory for web access
    # EAS_OUTPUT_WEB_SUBDIR=eas_messages        # Subdirectory under /static used for download links
+   # EAS_OUTPUT_WEB_PATH=eas_messages          # Legacy variable name still recognised
    # EAS_ORIGINATOR=WXR                        # SAME originator code (3 characters)
    # EAS_STATION_ID=EASNODES                   # Call sign or station identifier (up to 8 characters)
    # EAS_AUDIO_PLAYER="aplay"                  # Command used to play generated WAV files

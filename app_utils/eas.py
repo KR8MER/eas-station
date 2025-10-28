@@ -72,13 +72,19 @@ def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
     if not os.path.isabs(output_dir):
         output_dir = os.path.join(base_path, output_dir)
 
+    web_subdir = os.getenv('EAS_OUTPUT_WEB_PATH') or os.getenv('EAS_OUTPUT_WEB_SUBDIR')
+    if web_subdir:
+        web_subdir = web_subdir.strip('/')
+    else:
+        web_subdir = 'eas_messages'
+
     config: Dict[str, object] = {
         'enabled': os.getenv('EAS_BROADCAST_ENABLED', 'false').lower() == 'true',
         'originator': (os.getenv('EAS_ORIGINATOR') or 'WXR')[:3].upper(),
         'station_id': (os.getenv('EAS_STATION_ID') or 'EASNODES')[:8].ljust(8),
         'call_sign': os.getenv('EAS_CALL_SIGN', 'EASNODES'),
         'output_dir': _ensure_directory(output_dir),
-        'web_subdir': os.getenv('EAS_OUTPUT_WEB_PATH', 'eas_messages'),
+        'web_subdir': web_subdir,
         'audio_player_cmd': os.getenv('EAS_AUDIO_PLAYER', '').strip(),
         'attention_tone_seconds': float(os.getenv('EAS_ATTENTION_TONE_SECONDS', '8') or 8),
         'gpio_pin': os.getenv('EAS_GPIO_PIN'),
