@@ -6,7 +6,9 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 1. **Review the About document:** The [About page](ABOUT.md) covers system goals, core services, and the complete software stack.
 2. **Provision infrastructure:** Deploy Docker Engine 24+ with Docker Compose V2 and ensure a dedicated PostgreSQL 15 + PostGIS database container is available before starting the app stack.
 3. **Configure environment variables:** Copy `.env.example` to `.env`, set secure secrets, and update database connection details. Optional Azure AI speech settings can remain blank until credentials are available.
-4. **Launch the stack:** Run `docker compose up -d --build` to start the web application, background poller, and supporting services.
+4. **Launch the stack:**
+   - Use `docker compose -f docker-compose.yml -f docker-compose.embedded-db.yml up -d --build` to include the optional bundled PostGIS container.
+   - Use `docker compose up -d --build` when connecting to an existing PostgreSQL/PostGIS deployment.
 
 ## Routine Operations
 ### Accessing the Dashboard
@@ -24,12 +26,13 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 - Trigger manual broadcasts with `manual_eas_event.py` for drills or locally authored messages.
 
 ### Generating Sample Audio
-- Run `python tools/generate_sample_audio.py` to create demonstration SAME audio clips.
-- Include the `--azure-voice` flag after configuring Azure credentials to synthesize AI narration.
+- Use **Admin → EAS Output → Manual Broadcast Builder** to craft practice activations entirely in the browser. The tool outputs individual WAV files for the SAME header bursts, attention tone (EAS or 1050 Hz), optional narration, and the EOM burst.
+- The legacy helper remains available for automation: `docker compose exec app python tools/generate_sample_audio.py`.
 
 ## Troubleshooting
 ### Application Will Not Start
 - Confirm the PostgreSQL/PostGIS database container is running and reachable.
+- If you rely on the bundled service, ensure `docker-compose.embedded-db.yml` is included in the command or `COMPOSE_FILE` environment variable.
 - Verify environment variables in `.env` match the external database credentials and host.
 - Inspect logs using `docker compose logs -f app` and `docker compose logs -f poller` for detailed error messages.
 
@@ -49,11 +52,12 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 ## Reference Commands
 | Task | Command |
 |------|---------|
-| Build and start services | `docker compose up -d --build` |
+| Build and start services (embedded database) | `docker compose -f docker-compose.yml -f docker-compose.embedded-db.yml up -d --build` |
+| Build and start services (external database) | `docker compose up -d --build` |
 | View aggregate logs | `docker compose logs -f` |
 | Restart the web app | `docker compose restart app` |
 | Run database migrations (if applicable) | `flask db upgrade` |
-| Generate sample audio | `python tools/generate_sample_audio.py` |
+| Legacy sample audio helper | `docker compose exec app python tools/generate_sample_audio.py` |
 | Manual CAP injection | `python manual_eas_event.py --help` |
 
 ## Getting Help
