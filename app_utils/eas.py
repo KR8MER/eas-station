@@ -277,6 +277,18 @@ def _write_wave_file(path: str, samples: Sequence[int], sample_rate: int) -> Non
         wav.writeframes(frames)
 
 
+def samples_to_wav_bytes(samples: Sequence[int], sample_rate: int) -> bytes:
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'w') as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        frames = struct.pack('<' + 'h' * len(samples), *samples)
+        wav.writeframes(frames)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
 def _run_command(command: Sequence[str], logger) -> None:
     try:
         subprocess.run(list(command), check=False)
@@ -423,6 +435,109 @@ class EASAudioGenerator:
             self.logger.debug('Generated EOM audio at %s', audio_path)
 
         return audio_filename
+
+    def build_manual_components(
+        self,
+        alert: object,
+        header: str,
+        *,
+        repeats: int = 3,
+        tone_profile: str = 'attention',
+        tone_duration: Optional[float] = None,
+        include_tts: bool = True,
+        silence_between_headers: float = 1.0,
+        silence_after_header: float = 0.5,
+    ) -> Dict[str, object]:
+        amplitude = 0.7 * 32767
+        same_bits = _encode_same_bits(header)
+        header_samples = _generate_fsk_samples(
+            same_bits,
+            sample_rate=self.sample_rate,
+            bit_rate=520.83,
+            mark_freq=2083.3,
+            space_freq=1562.5,
+            amplitude=amplitude,
+        )
+
+        repeats = max(1, int(repeats))
+        same_samples: List[int] = []
+        for burst_index in range(repeats):
+            same_samples.extend(header_samples)
+            if burst_index < repeats - 1:
+                same_samples.extend(_generate_silence(silence_between_headers, self.sample_rate))
+
+        tone_seconds = tone_duration
+        if tone_seconds is None:
+            tone_seconds = float(self.config.get('attention_tone_seconds', 8) or 8)
+        tone_seconds = max(0.25, float(tone_seconds))
+
+        profile = (tone_profile or 'attention').strip().lower()
+        if profile in {'1050', '1050hz', 'single'}:
+            tone_freqs: Iterable[float] = (1050.0,)
+            profile_label = '1050hz'
+        else:
+            tone_freqs = (853.0, 960.0)
+            profile_label = 'attention'
+
+        attention_samples = _generate_tone(tone_freqs, tone_seconds, self.sample_rate, amplitude)
+
+        message_text = _compose_message_text(alert)
+        tts_samples: List[int] = []
+        tts_warning: Optional[str] = None
+        provider = (self.config.get('tts_provider') or '').strip().lower()
+        if include_tts:
+            voiceover = self._maybe_generate_voiceover(message_text)
+            if voiceover:
+                tts_samples.extend(voiceover)
+            else:
+                if provider == 'azure':
+                    tts_warning = 'Azure Speech is configured but synthesis failed.'
+                else:
+                    tts_warning = 'No TTS provider configured; supply narration manually.'
+
+        eom_header = build_eom_header(self.config)
+        eom_bits = _encode_same_bits(eom_header)
+        eom_header_samples = _generate_fsk_samples(
+            eom_bits,
+            sample_rate=self.sample_rate,
+            bit_rate=520.83,
+            mark_freq=2083.3,
+            space_freq=1562.5,
+            amplitude=amplitude,
+        )
+
+        eom_samples: List[int] = []
+        for burst_index in range(3):
+            eom_samples.extend(eom_header_samples)
+            if burst_index < 2:
+                eom_samples.extend(_generate_silence(1.0, self.sample_rate))
+
+        trailing_silence = _generate_silence(silence_after_header, self.sample_rate)
+        composite_samples: List[int] = []
+        composite_samples.extend(same_samples)
+        composite_samples.extend(trailing_silence)
+        composite_samples.extend(attention_samples)
+        if tts_samples:
+            composite_samples.extend(trailing_silence)
+            composite_samples.extend(tts_samples)
+        composite_samples.extend(trailing_silence)
+        composite_samples.extend(eom_samples)
+
+        return {
+            'header': header,
+            'message_text': message_text,
+            'tone_profile': profile_label,
+            'tone_seconds': tone_seconds,
+            'same_samples': same_samples,
+            'attention_samples': attention_samples,
+            'tts_samples': tts_samples,
+            'tts_warning': tts_warning,
+            'tts_provider': provider or None,
+            'eom_header': eom_header,
+            'eom_samples': eom_samples,
+            'composite_samples': composite_samples,
+            'sample_rate': self.sample_rate,
+        }
 
     def _maybe_generate_voiceover(self, text: str) -> Optional[List[int]]:
         provider = (self.config.get('tts_provider') or '').strip().lower()
@@ -612,5 +727,12 @@ class EASBroadcaster:
             self.db_session.rollback()
 
 
-__all__ = ['load_eas_config', 'EASBroadcaster', 'build_same_header']
+__all__ = [
+    'load_eas_config',
+    'EASBroadcaster',
+    'EASAudioGenerator',
+    'build_same_header',
+    'build_eom_header',
+    'samples_to_wav_bytes',
+]
 
