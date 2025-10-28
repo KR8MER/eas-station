@@ -17,12 +17,23 @@ tracks releases under the 2.1.x series.
   broadcasters and manual tools can resolve official names, presets, and headers.
 - Added a CLI helper (`tools/generate_sample_audio.py`) to create demonstration SAME audio
   clips without ingesting a live CAP product.
+- Unlocked an in-app first-run experience so the Admin panel exposes an
+  "First-Time Administrator Setup" wizard when no accounts exist.
 - Introduced optional Azure AI speech synthesis to append narrated voiceovers when the
   appropriate credentials and SDK are available.
 - Authored dedicated `ABOUT.md` and `HELP.md` documentation describing the system mission, software stack, and operational playbooks, with cross-links from the README for quick discovery.
 - Exposed in-app About and Help pages so operators can read the mission overview and operations guide directly from the dashboard navigation.
+- Docker Compose now provisions an `alerts-db` PostGIS container so application
+  services have a reachable database as soon as the stack starts.
 ### Changed
 - Clarified in the README and dependency notes that PostgreSQL with PostGIS must run in a dedicated container separate from the application services.
+- Documented a single-line command for cloning the Experimental branch and launching the Docker Compose stack so operators can bootstrap quickly.
+- Clarified the update instructions to explicitly pull the Experimental branch when refreshing deployments.
+- Highlighted the manual broadcast tooling from the EAS Output tab with a
+  direct link to the documentation for generating practice audio clips.
+- Restored the `.env` template workflow, updated quick-start documentation to copy
+  `.env.example`, and reiterated that operators must rotate the placeholder
+  secrets immediately after bootstrapping the stack.
 - Updated the GPIO relay control so it remains engaged for the full alert audio playback,
   using `EAS_GPIO_HOLD_SECONDS` as the minimum release delay once audio finishes.
 - Automatically generate and play an End-Of-Message (EOM) data burst sequence after each alert
@@ -36,6 +47,10 @@ tracks releases under the 2.1.x series.
   selected code names in CLI output and audit trails while the broadcaster consumes
   the resolved identifiers for header generation.
 ### Fixed
+- Restored the `.env.example` template and documented the startup error shown when the
+  file is missing so Docker Compose deployments no longer fail with "env file not found".
+- Updated the Docker Compose PostGIS service to use the published `postgis/postgis:17-3.4`
+  image so pulls succeed on both AMD64 and ARM64 hosts.
 - Skip PostGIS-specific geometry checks when running against SQLite and store geometry
   fields as plain text on non-PostgreSQL databases so local development can initialize
   without spatial extensions.
