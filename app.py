@@ -3320,6 +3320,47 @@ def ensure_boundary_geometry_column():
         db.session.rollback()
 
 
+@app.route('/admin/check_db_health', methods=['GET'])
+def check_db_health():
+    """Provide a quick health check of the database connection and size."""
+    try:
+        db.session.execute(text('SELECT 1'))
+        connectivity_status = 'Connected'
+    except OperationalError as exc:
+        logger.error("Database connectivity check failed: %s", exc)
+        return jsonify({'error': 'Database connectivity check failed.'}), 500
+    except Exception as exc:
+        logger.error("Unexpected error during database health check: %s", exc)
+        return jsonify({'error': 'Database health check encountered an unexpected error.'}), 500
+
+    database_size = 'Unavailable'
+    try:
+        size_bytes = db.session.execute(
+            text('SELECT pg_database_size(current_database())')
+        ).scalar()
+        if size_bytes is not None:
+            database_size = format_bytes(size_bytes)
+    except Exception as exc:
+        logger.warning("Could not determine database size: %s", exc)
+
+    active_connections: Union[str, int] = 'Unavailable'
+    try:
+        connection_count = db.session.execute(
+            text('SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()')
+        ).scalar()
+        if connection_count is not None:
+            active_connections = int(connection_count)
+    except Exception as exc:
+        logger.warning("Could not determine active connection count: %s", exc)
+
+    return jsonify({
+        'connectivity': connectivity_status,
+        'database_size': database_size,
+        'active_connections': active_connections,
+        'checked_at': utc_now().isoformat()
+    })
+
+
 @app.route('/admin/preview_geojson', methods=['POST'])
 def preview_geojson():
     """Preview GeoJSON contents and extract useful metadata without persisting."""
