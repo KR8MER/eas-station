@@ -198,15 +198,42 @@ When enabled, the poller generates full SAME header bursts, raises an optional G
    # EAS_ATTENTION_TONE_SECONDS=8              # Duration of the two-tone attention signal
    # EAS_GPIO_PIN=17                           # BCM pin number controlling a relay (optional)
    # EAS_GPIO_ACTIVE_STATE=HIGH                # HIGH or LOW depending on your relay hardware
-   # EAS_GPIO_HOLD_SECONDS=5                   # How long the relay remains active when an alert fires
+   # EAS_GPIO_HOLD_SECONDS=5                   # Minimum seconds to hold relay after playback completes
    ```
 
 2. **Install audio / GPIO dependencies** on the device that runs the poller container (e.g., `alsa-utils` for `aplay`, `RPi.GPIO` for Raspberry Pi hardware). The broadcaster automatically detects when `RPi.GPIO` is unavailable and will log a warning instead of raising an exception.
 
 3. **Review generated assets**:
-   - Each alert produces a `*.wav` file that contains three SAME bursts followed by the attention tone.
+   - Each alert produces a `*.wav` file that contains three SAME bursts, the attention tone, and an automatically generated EOM data burst sequence.
    - A matching `*.txt` file stores the JSON metadata (identifier, timestamps, SAME header, and narrative).
    - The admin console lists the most recent transmissions, allowing operators to play audio or download the summary directly from the browser.
+
+#### Manual CAP / RWT / RMT Broadcasts
+
+Use the `manual_eas_event.py` helper to ingest a raw CAP XML document (for example, a Required Weekly or Monthly Test) and play it through the SAME encoder while recording an audit trail:
+
+```bash
+./manual_eas_event.py path/to/manual_test.xml
+```
+
+The script validates that at least one FIPS/SAME code in the CAP payload matches the configured allow-list before forwarding the message. Configure the allow-list with `EAS_MANUAL_FIPS_CODES` in your environment (comma-separated, defaults to `039137`). You can also provide extra codes per run:
+
+```bash
+./manual_eas_event.py manual_rwt.xml --fips 039135 --fips 039137
+```
+
+Add `--dry-run` to verify the CAP file and confirm matching FIPS codes without storing records or playing audio.
+
+Manual broadcasts also enforce SAME event code filtering so the encoder only fires for authorized products. Use the `EAS_MANUAL_EVENT_CODES` environment variable (comma-separated, `ALL`, or the `TESTS` preset) or the `--event` CLI flag to extend the allow-list for a single run:
+
+```bash
+export EAS_MANUAL_EVENT_CODES=TESTS  # RWT/RMT/DMO/NPT/NAT/NST
+./manual_eas_event.py manual_rwt.xml --event TOR
+```
+
+The repository now ships with the complete nationwide FIPS/SAME registry in `app_utils/fips_codes.py`. Set `EAS_MANUAL_FIPS_CODES=ALL` (or `US`/`USA`) to authorize every code, or keep a smaller allow-list for tighter control. CLI output and audit logs include the friendly county/parish names so operators can double-check the targeted areas.
+
+Similarly, the full SAME event registry in `app_utils/event_codes.py` keeps headers, logs, and CLI summaries aligned with official code descriptions.
 
 > **Tip:** Keep the output directory inside Flask's `static/` tree so the files can be served via `url_for('static', ...)`. If you relocate the directory, update both `EAS_OUTPUT_DIR` and `EAS_OUTPUT_WEB_SUBDIR` to maintain access from the UI.
 

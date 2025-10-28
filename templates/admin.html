@@ -908,12 +908,12 @@
                                         <tr>
                                             <td class="text-nowrap">{{ message.created_at|default('') }}</td>
                                             <td>
-                                                <strong>{{ message.metadata.event | default('Unknown Event') }}</strong>
-                                                {% if message.metadata.severity %}
-                                                    <span class="badge bg-danger ms-2">{{ message.metadata.severity }}</span>
+                                                <strong>{{ message.metadata_payload.event | default('Unknown Event') }}</strong>
+                                                {% if message.metadata_payload.severity %}
+                                                    <span class="badge bg-danger ms-2">{{ message.metadata_payload.severity }}</span>
                                                 {% endif %}
-                                                {% if message.metadata.status %}
-                                                    <span class="badge bg-secondary ms-1">{{ message.metadata.status }}</span>
+                                                {% if message.metadata_payload.status %}
+                                                    <span class="badge bg-secondary ms-1">{{ message.metadata_payload.status }}</span>
                                                 {% endif %}
                                             </td>
                                             <td class="text-break"><code>{{ message.same_header }}</code></td>
