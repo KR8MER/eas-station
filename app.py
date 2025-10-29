@@ -310,6 +310,31 @@ else:
     logger.error("Database connectivity check failed; application may not operate correctly.")
 
 
+def ensure_postgis_extension() -> bool:
+    """Ensure the PostGIS extension exists for PostgreSQL databases."""
+
+    database_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '') or ''
+    if not database_uri.startswith('postgresql'):
+        logger.debug(
+            "Skipping PostGIS extension check for non-PostgreSQL database URI: %s",
+            database_uri,
+        )
+        return True
+
+    try:
+        with db.engine.begin() as connection:
+            connection.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
+    except OperationalError as exc:
+        logger.error("Failed to ensure PostGIS extension: %s", exc)
+        return False
+    except Exception as exc:  # noqa: BLE001 - capture unexpected errors for logging
+        logger.exception("Unexpected error ensuring PostGIS extension: %s", exc)
+        return False
+
+    logger.debug("PostGIS extension ensured for current database.")
+    return True
+
+
 # Configure EAS output integration
 EAS_CONFIG = load_eas_config(app.root_path)
 app.config['EAS_BROADCAST_ENABLED'] = bool(EAS_CONFIG.get('enabled'))
