@@ -361,35 +361,72 @@ class CAPPoller:
         elif led_sign_ip:
             self.logger.warning("LED sign IP provided but controller not available")
 
-        # Endpoints
+        # Endpoint configuration & defaults
+        self.poller_mode = (os.getenv('CAP_POLLER_MODE', 'NOAA') or 'NOAA').strip().upper()
+
         configured_endpoints: List[str] = []
-        env_cap_endpoints = os.getenv('CAP_ENDPOINTS')
-        if env_cap_endpoints:
-            configured_endpoints.extend([
-                endpoint.strip()
-                for endpoint in env_cap_endpoints.split(',')
-                if endpoint.strip()
-            ])
+
+        def _extend_from_csv(csv_value: Optional[str]) -> None:
+            if not csv_value:
+                return
+            for endpoint in csv_value.split(','):
+                cleaned = endpoint.strip()
+                if cleaned:
+                    configured_endpoints.append(cleaned)
+
+        _extend_from_csv(os.getenv('CAP_ENDPOINTS'))
+        _extend_from_csv(os.getenv('IPAWS_CAP_FEED_URLS'))
+
         if cap_endpoints:
             configured_endpoints.extend([endpoint for endpoint in cap_endpoints if endpoint])
 
         if configured_endpoints:
             # Preserve order but remove duplicates
-            seen = set()
-            unique_endpoints = []
+            seen: Set[str] = set()
+            unique_endpoints: List[str] = []
             for endpoint in configured_endpoints:
                 if endpoint not in seen:
                     unique_endpoints.append(endpoint)
                     seen.add(endpoint)
             self.cap_endpoints = unique_endpoints
         else:
-            self.cap_endpoints = [
-                f"https://api.weather.gov/alerts/active?zone={code}"
-                for code in self.location_settings['zone_codes']
-            ] or [
-                f"https://api.weather.gov/alerts/active?zone={code}"
-                for code in DEFAULT_LOCATION_SETTINGS['zone_codes']
-            ]
+            if self.poller_mode == 'IPAWS':
+                lookback_hours = os.getenv('IPAWS_DEFAULT_LOOKBACK_HOURS', '12')
+                try:
+                    lookback_hours_int = max(1, int(lookback_hours))
+                except ValueError:
+                    lookback_hours_int = 12
+
+                default_start = (utc_now() - timedelta(hours=lookback_hours_int)).strftime('%Y-%m-%dT%H:%M:%SZ')
+                override_start = (os.getenv('IPAWS_DEFAULT_START') or '').strip()
+                if override_start:
+                    default_start = override_start
+
+                endpoint_template = (
+                    os.getenv(
+                        'IPAWS_DEFAULT_ENDPOINT_TEMPLATE',
+                        'https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}',
+                    )
+                    or 'https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}'
+                )
+                try:
+                    default_endpoint = endpoint_template.format(timestamp=default_start)
+                except Exception:
+                    default_endpoint = endpoint_template
+
+                self.cap_endpoints = [default_endpoint]
+                self.logger.info(
+                    "No CAP endpoints configured; defaulting to FEMA IPAWS public feed starting %s",
+                    default_start,
+                )
+            else:
+                self.cap_endpoints = [
+                    f"https://api.weather.gov/alerts/active?zone={code}"
+                    for code in self.location_settings['zone_codes']
+                ] or [
+                    f"https://api.weather.gov/alerts/active?zone={code}"
+                    for code in DEFAULT_LOCATION_SETTINGS['zone_codes']
+                ]
 
         # Strict location terms
         base_identifiers = self.location_settings['area_terms'] or list(DEFAULT_LOCATION_SETTINGS['area_terms'])

@@ -119,8 +119,10 @@ from app_core.led import (
 from app_core.location import get_location_settings, update_location_settings
 from app_core.models import (
     AdminUser,
+    Boundary,
     CAPAlert,
     EASMessage,
+    Intersection,
     ManualEASActivation,
     LEDMessage,
     LEDSignStatus,
