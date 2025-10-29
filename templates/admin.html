@@ -2107,6 +2107,22 @@
                 }
 
                 const messages = data.messages || [];
+                const easEnabled = data.eas_enabled !== undefined ? Boolean(data.eas_enabled) : true;
+                if (status) {
+                    const total = Number.isFinite(data.total) ? Number(data.total) : messages.length;
+                    status.classList.toggle('text-warning', !easEnabled);
+                    status.classList.toggle('text-muted', easEnabled);
+
+                    if (!easEnabled) {
+                        status.textContent = 'Automatic capture is disabled; stored transmissions remain available below.';
+                    } else if (total > 0) {
+                        const countLabel = total === 1 ? 'transmission' : 'transmissions';
+                        status.textContent = `Showing ${Math.min(messages.length, total)} of ${total} stored ${countLabel}.`;
+                    } else {
+                        status.textContent = 'No SAME audio has been generated yet.';
+                    }
+                }
+
                 if (!messages.length) {
                     tableBody.innerHTML = `
                         <tr>
