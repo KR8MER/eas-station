@@ -416,6 +416,7 @@ class CAPPoller:
 
             parsed = {
                 'identifier': identifier,
+                'source': 'noaa',  # Tag NOAA alerts with source
                 'sent': sent or utc_now(),
                 'expires': expires,
                 'status': properties.get('status', 'Unknown'),
