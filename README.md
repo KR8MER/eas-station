@@ -243,9 +243,11 @@ When enabled, the poller generates full SAME header bursts, raises an optional G
 
 The **Manual Broadcast Builder** on the EAS Output tab mirrors the workflow of a commercial encoder:
 
-1. Open **Admin → EAS Output** and supply the event code, SAME/FIPS targets, and narration copy.
-2. Click **Generate Package** to produce discrete WAV files for the SAME bursts, attention tone (dual-tone or 1050 Hz), optional narration, and the EOM burst.
-3. Preview each element directly in the browser or download the files for playout testing. A composite file is also produced so you can audition the full activation end-to-end.
+1. Open **Admin → EAS Output** and build your SAME target list with the new hierarchical picker: choose a state or territory, select the county or statewide PSSCCC entry, and click **Add Location**. The textarea still accepts pasted codes for bulk entry, and the running list is de-duplicated automatically.
+2. Confirm the ORG, EEE, purge time (TTTT), and station identifier (LLLLLLLL). The live header preview renders the complete `ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-` sequence and breaks out each field so you can verify the preamble, originator, event, location set, purge code, issue time, and station ID before you transmit.
+3. Click **Generate Package** to produce discrete WAV files for the SAME bursts, attention signal (dual-tone or 1050 Hz), optional narration, and the EOM burst. A composite file is also produced so you can audition the full activation end-to-end.
+
+The header breakdown card reiterates the commercial nomenclature (preamble, ORG, EEE, PSSCCC, +TTTT, -JJJHHMM, -LLLLLLLL-, and the trailing NNNN) and includes the FCC/FEMA guidance for each field so operators and trainees can cross-check the encoding rules.
 
 Prefer scripts or automated testing? The legacy helper at `tools/generate_sample_audio.py` is still shipped with the project for command-line use.
 

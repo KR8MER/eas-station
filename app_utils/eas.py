@@ -13,7 +13,7 @@ import subprocess
 import time
 import wave
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 try:  # pragma: no cover - GPIO hardware is optional and platform specific
@@ -85,6 +85,226 @@ def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
         config['audio_player_cmd'] = config['audio_player_cmd'].split()
 
     return config
+
+
+P_DIGIT_MEANINGS = {
+    '0': 'Entire area',
+    '1': 'North portion',
+    '2': 'East portion',
+    '3': 'South portion',
+    '4': 'West portion',
+    '5': 'Central portion',
+    '6': 'Northeast portion',
+    '7': 'Southeast portion',
+    '8': 'Southwest portion',
+    '9': 'Northwest portion',
+}
+
+ORIGINATOR_DESCRIPTIONS = {
+    'PEP': 'National Public Warning System (PEP)',
+    'CIV': 'Civil authorities',
+    'WXR': 'National Weather Service',
+    'EAS': 'EAS participant / broadcaster',
+    'EAN': 'Emergency Action Notification (legacy)',
+}
+
+
+SAME_HEADER_FIELD_DESCRIPTIONS = [
+    {
+        'segment': 'Preamble',
+        'label': '16 × 0xAB',
+        'description': (
+            'Binary 10101011 bytes transmitted sixteen times to calibrate and synchronise '
+            'receivers before the ASCII header.'
+        ),
+    },
+    {
+        'segment': 'ZCZC',
+        'label': 'Start code',
+        'description': (
+            'Marks the start of the SAME header, inherited from NAVTEX to trigger decoders.'
+        ),
+    },
+    {
+        'segment': 'ORG',
+        'label': 'Originator code',
+        'description': (
+            'Three-character identifier for the sender such as PEP, WXR, CIV, or EAS.'
+        ),
+    },
+    {
+        'segment': 'EEE',
+        'label': 'Event code',
+        'description': 'Three-character SAME event describing the hazard (for example TOR or RWT).',
+    },
+    {
+        'segment': 'PSSCCC',
+        'label': 'Location codes',
+        'description': (
+            'One to thirty-one SAME/FIPS identifiers. P denotes the portion of the area, '
+            'SS is the state FIPS, and CCC is the county (000 represents the entire state).'
+        ),
+    },
+    {
+        'segment': '+TTTT',
+        'label': 'Purge time',
+        'description': (
+            'Duration code expressed in minutes using SAME rounding rules (15-minute increments '
+            'up to an hour, 30-minute increments to six hours, then hourly).'
+        ),
+    },
+    {
+        'segment': '-JJJHHMM',
+        'label': 'Issue time',
+        'description': (
+            'Julian day-of-year with UTC hour and minute indicating when the alert was issued.'
+        ),
+    },
+    {
+        'segment': '-LLLLLLLL-',
+        'label': 'Station identifier',
+        'description': (
+            'Eight-character station, system, or call-sign identifier using “/” instead of “-”.'
+        ),
+    },
+    {
+        'segment': 'NNNN',
+        'label': 'End of message',
+        'description': 'Transmitted three times after audio content to terminate the activation.',
+    },
+]
+
+
+def describe_same_header(
+    header: str,
+    lookup: Optional[Dict[str, str]] = None,
+    state_index: Optional[Dict[str, Dict[str, object]]] = None,
+) -> Dict[str, object]:
+    """Break a SAME header into its constituent fields for display."""
+
+    if not header:
+        return {}
+
+    header = header.strip()
+    if not header:
+        return {}
+
+    parts = header.split('-')
+    if not parts or parts[0] != 'ZCZC':
+        return {}
+
+    originator = parts[1] if len(parts) > 1 else ''
+    event_code = parts[2] if len(parts) > 2 else ''
+
+    locations: List[str] = []
+    duration_fragment = ''
+    index = 3
+
+    while index < len(parts):
+        fragment = parts[index]
+        if '+' in fragment:
+            loc_part, duration_fragment = fragment.split('+', 1)
+            if loc_part:
+                locations.append(loc_part)
+            index += 1
+            break
+        if fragment:
+            locations.append(fragment)
+        index += 1
+
+    julian_fragment = parts[index] if index < len(parts) else ''
+    station_identifier = parts[index + 1] if index + 1 < len(parts) else ''
+
+    duration_digits = ''.join(ch for ch in duration_fragment if ch.isdigit())[:4]
+    purge_minutes = int(duration_digits) if duration_digits.isdigit() else None
+
+    def _format_duration(value: Optional[int]) -> Optional[str]:
+        if value is None:
+            return None
+        if value == 0:
+            return '0 minutes (immediate purge)'
+        if value % 60 == 0:
+            hours = value // 60
+            return f"{hours} hour{'s' if hours != 1 else ''}"
+        return f"{value} minute{'s' if value != 1 else ''}"
+
+    julian_digits = ''.join(ch for ch in julian_fragment if ch.isdigit())[:7]
+    issue_time_iso: Optional[str] = None
+    issue_time_label: Optional[str] = None
+    issue_components: Optional[Dict[str, int]] = None
+
+    if len(julian_digits) == 7:
+        try:
+            ordinal = int(julian_digits[:3])
+            hour = int(julian_digits[3:5])
+            minute = int(julian_digits[5:7])
+            base_year = datetime.now(timezone.utc).year
+            issue_dt = datetime(base_year, 1, 1, tzinfo=timezone.utc) + timedelta(
+                days=ordinal - 1,
+                hours=hour,
+                minutes=minute,
+            )
+            issue_time_iso = issue_dt.isoformat()
+            issue_time_label = f"Day {ordinal:03d} at {hour:02d}:{minute:02d} UTC"
+            issue_components = {'day_of_year': ordinal, 'hour': hour, 'minute': minute}
+        except ValueError:
+            issue_time_iso = None
+            issue_time_label = None
+            issue_components = None
+
+    detailed_locations: List[Dict[str, object]] = []
+    lookup = lookup or {}
+    state_index = state_index or {}
+
+    for entry in locations:
+        digits = ''.join(ch for ch in entry if ch.isdigit()).zfill(6)[:6]
+        if not digits:
+            continue
+        p_digit = digits[0]
+        state_digits = digits[1:3]
+        county_digits = digits[3:]
+        state_info = state_index.get(state_digits) or {}
+        state_name = state_info.get('name') or ''
+        state_abbr = state_info.get('abbr') or state_digits
+        description = lookup.get(digits)
+        is_statewide = county_digits == '000'
+        if is_statewide and not description:
+            description = f"All Areas, {state_abbr}"
+
+        detailed_locations.append({
+            'code': digits,
+            'p_digit': p_digit,
+            'p_meaning': P_DIGIT_MEANINGS.get(p_digit),
+            'state_fips': state_digits,
+            'state_name': state_name or state_abbr,
+            'state_abbr': state_abbr,
+            'county_fips': county_digits,
+            'is_statewide': is_statewide,
+            'description': description or digits,
+        })
+
+    return {
+        'preamble': parts[0] if parts else 'ZCZC',
+        'preamble_description': (
+            'SAME headers begin with a sixteen-byte 0xAB preamble for receiver synchronisation.'
+        ),
+        'start_code': parts[0] if parts else 'ZCZC',
+        'originator': originator,
+        'originator_description': ORIGINATOR_DESCRIPTIONS.get(originator),
+        'event_code': event_code,
+        'location_count': len(detailed_locations),
+        'locations': detailed_locations,
+        'purge_code': duration_digits or None,
+        'purge_minutes': purge_minutes,
+        'purge_label': _format_duration(purge_minutes),
+        'issue_code': julian_digits or None,
+        'issue_time_label': issue_time_label,
+        'issue_time_iso': issue_time_iso,
+        'issue_components': issue_components,
+        'station_identifier': station_identifier,
+        'raw_locations': locations,
+        'header_parts': parts,
+    }
 
 
 def _julian_time(dt: datetime) -> str:

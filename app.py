@@ -45,12 +45,17 @@ from app_utils import (
     utc_now,
 )
 from app_utils.eas import (
+    P_DIGIT_MEANINGS,
     EASAudioGenerator,
+    ORIGINATOR_DESCRIPTIONS,
+    SAME_HEADER_FIELD_DESCRIPTIONS,
     build_same_header,
+    describe_same_header,
     load_eas_config,
     samples_to_wav_bytes,
 )
 from app_utils.event_codes import EVENT_CODE_REGISTRY
+from app_utils.fips_codes import get_same_lookup, get_us_state_county_tree
 
 # Flask and extensions
 from flask import (
@@ -1480,6 +1485,9 @@ def admin():
         ]
         eas_event_options.sort(key=lambda item: item['code'])
 
+        eas_state_tree = get_us_state_county_tree()
+        eas_lookup = get_same_lookup()
+
         return render_template('admin.html',
                                total_boundaries=total_boundaries,
                                total_alerts=total_alerts,
@@ -1498,6 +1506,11 @@ def admin():
                                eas_attention_seconds=EAS_CONFIG.get('attention_tone_seconds', 8),
                                eas_sample_rate=EAS_CONFIG.get('sample_rate', 44100),
                                eas_tts_provider=(EAS_CONFIG.get('tts_provider') or '').strip().lower(),
+                               eas_fips_states=eas_state_tree,
+                               eas_fips_lookup=eas_lookup,
+                               eas_originator_descriptions=ORIGINATOR_DESCRIPTIONS,
+                               eas_header_fields=SAME_HEADER_FIELD_DESCRIPTIONS,
+                               eas_p_digit_meanings=P_DIGIT_MEANINGS,
                                setup_mode=setup_mode,
                                )
     except Exception as e:
@@ -1784,6 +1797,15 @@ def admin_manual_eas_generate():
             'size_bytes': len(wav_bytes),
         }
 
+    state_tree = get_us_state_county_tree()
+    state_index = {
+        state.get('state_fips'): {'abbr': state.get('abbr'), 'name': state.get('name')}
+        for state in state_tree
+        if state.get('state_fips')
+    }
+    same_lookup = get_same_lookup()
+    header_detail = describe_same_header(header, lookup=same_lookup, state_index=state_index)
+
     response_payload: Dict[str, Any] = {
         'identifier': identifier,
         'event_code': resolved_event_code,
@@ -1807,6 +1829,7 @@ def admin_manual_eas_generate():
             'composite': _package_audio(components.get('composite_samples') or [], 'full'),
         },
         'sample_rate': sample_rate,
+        'same_header_detail': header_detail,
     }
 
     try:

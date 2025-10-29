@@ -33,10 +33,12 @@ tracks releases under the 2.1.x series.
 - Clarified the update instructions to explicitly pull the Experimental branch when refreshing deployments.
 - Documented the expectation that deployments supply their own PostgreSQL/PostGIS host and simplified Compose instructions to run only the application services.
 - Reworked the EAS Output tab with an interactive Manual Broadcast Builder and refreshed the README/HELP documentation to cover the browser-based workflow.
+- Enhanced the Manual Broadcast Builder with a hierarchical state→county SAME picker, a deduplicated PSSCCC list manager, a live `ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-` preview with field-by-field guidance, and refreshed docs that align with commercial encoder terminology.
 - Simplified database configuration by deriving `DATABASE_URL` from the `POSTGRES_*` variables when it is not explicitly set, eliminating duplicate secrets in `.env`.
 - Restored the `.env` template workflow, updated quick-start documentation to copy
   `.env.example`, and reiterated that operators must rotate the placeholder
   secrets immediately after bootstrapping the stack.
+- Streamlined `.env.example` by removing unused settings and documenting optional location defaults leveraged by the admin UI.
 - Updated the GPIO relay control so it remains engaged for the full alert audio playback,
   using `EAS_GPIO_HOLD_SECONDS` as the minimum release delay once audio finishes.
 - Automatically generate and play an End-Of-Message (EOM) data burst sequence after each alert
@@ -53,6 +55,8 @@ tracks releases under the 2.1.x series.
 - Eliminated `service "app" depends on undefined service "alerts-db"` errors by removing the optional compose overlay, deleting the unused service definition, and updating documentation to assume an external database.
 - Ensured the Manual Broadcast Builder always renders the SAME event code list so operators can
   pick the desired code even when client-side scripts are blocked or fail to load.
+- Fixed the Manual Broadcast Builder narration preview so newline escaping no longer triggers a
+  browser-side "Invalid regular expression" error when rendering generated messages.
 - Restored the `.env.example` template and documented the startup error shown when the
   file is missing so Docker Compose deployments no longer fail with "env file not found".
 - Skip PostGIS-specific geometry checks when running against SQLite and store geometry
