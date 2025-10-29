@@ -7,6 +7,7 @@ import os
 from typing import Any, Dict, Optional
 
 from flask import current_app
+from sqlalchemy import text
 
 from app_core.extensions import db
 
@@ -136,4 +137,56 @@ def remove_eas_files(message) -> None:
             os.remove(disk_path)
         except OSError:
             continue
+
+
+def ensure_eas_audio_columns(logger) -> bool:
+    """Ensure blob columns exist for caching generated audio payloads."""
+
+    engine = db.engine
+    if engine.dialect.name != "postgresql":
+        return True
+
+    column_check_sql = text(
+        """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'eas_messages'
+          AND column_name = :column
+          AND table_schema = current_schema()
+        LIMIT 1
+        """
+    )
+
+    try:
+        changed = False
+        column_definitions = {
+            "audio_data": "BYTEA",
+            "eom_audio_data": "BYTEA",
+            "text_payload": "JSONB DEFAULT '{}'::jsonb",
+        }
+
+        for column, definition in column_definitions.items():
+            exists = db.session.execute(column_check_sql, {"column": column}).scalar()
+            if exists:
+                continue
+
+            logger.info(
+                "Adding eas_messages.%s column for cached message payloads", column
+            )
+            db.session.execute(
+                text(f"ALTER TABLE eas_messages ADD COLUMN {column} {definition}")
+            )
+            changed = True
+
+        if changed:
+            db.session.commit()
+
+        return True
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        logger.warning("Could not ensure EAS audio columns: %s", exc)
+        try:
+            db.session.rollback()
+        except Exception:  # pragma: no cover - defensive fallback
+            pass
+        return False
 
