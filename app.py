@@ -194,6 +194,123 @@ def _build_database_url() -> str:
     return f"postgresql+psycopg2://{auth_part}@{host}:{port}/{database}"
 
 
+def _get_eas_output_root() -> Optional[str]:
+    output_root = str(app.config.get('EAS_OUTPUT_DIR') or '').strip()
+    return output_root or None
+
+
+def _get_eas_static_prefix() -> str:
+    return app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+
+
+def _resolve_eas_disk_path(filename: Optional[str]) -> Optional[str]:
+    output_root = _get_eas_output_root()
+    if not output_root or not filename:
+        return None
+
+    safe_fragment = str(filename).strip().lstrip('/\\')
+    if not safe_fragment:
+        return None
+
+    candidate = os.path.abspath(os.path.join(output_root, safe_fragment))
+    root = os.path.abspath(output_root)
+
+    try:
+        common = os.path.commonpath([candidate, root])
+    except ValueError:
+        return None
+
+    if common != root:
+        return None
+
+    if os.path.exists(candidate):
+        return candidate
+
+    return None
+
+
+def _load_or_cache_audio_data(message: EASMessage, *, variant: str = 'primary') -> Optional[bytes]:
+    if variant == 'eom':
+        data = message.eom_audio_data
+        filename = (message.metadata_payload or {}).get('eom_filename') if message.metadata_payload else None
+    else:
+        data = message.audio_data
+        filename = message.audio_filename
+
+    if data:
+        return data
+
+    disk_path = _resolve_eas_disk_path(filename)
+    if not disk_path:
+        return None
+
+    try:
+        with open(disk_path, 'rb') as handle:
+            data = handle.read()
+    except OSError:
+        return None
+
+    if not data:
+        return None
+
+    if variant == 'eom':
+        message.eom_audio_data = data
+    else:
+        message.audio_data = data
+
+    try:
+        db.session.add(message)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    return data
+
+
+def _load_or_cache_summary_payload(message: EASMessage) -> Optional[Dict[str, Any]]:
+    if message.text_payload:
+        return dict(message.text_payload)
+
+    disk_path = _resolve_eas_disk_path(message.text_filename)
+    if not disk_path:
+        return None
+
+    try:
+        with open(disk_path, 'r', encoding='utf-8') as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.debug('Unable to load summary payload from %s: %s', disk_path, exc)
+        return None
+
+    message.text_payload = payload
+    try:
+        db.session.add(message)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    return dict(payload)
+
+
+def _remove_eas_files(message: EASMessage) -> None:
+    filenames = {
+        message.audio_filename,
+        message.text_filename,
+    }
+    metadata = message.metadata_payload or {}
+    eom_filename = metadata.get('eom_filename') if isinstance(metadata, dict) else None
+    filenames.add(eom_filename)
+
+    for filename in filenames:
+        disk_path = _resolve_eas_disk_path(filename)
+        if not disk_path:
+            continue
+        try:
+            os.remove(disk_path)
+        except OSError:
+            continue
+
+
 # Database configuration
 DATABASE_URL = _build_database_url()
 os.environ.setdefault('DATABASE_URL', DATABASE_URL)
