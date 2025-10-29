@@ -9,9 +9,11 @@ import socket
 import time
 import logging
 import threading
+from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Dict, Optional, Union
 from enum import Enum
+from typing import Dict, List, Optional, Sequence, Tuple, TypedDict, Type, TypeVar, Union
+
 import json
 import re
 
@@ -113,8 +115,44 @@ class TimeFormat(Enum):
     TIME_24H = '8'  # 24 hour format
 
 
+class LineSegmentSpec(TypedDict, total=False):
+    text: str
+    color: Color
+    rgb_color: str
+    font: Font
+    mode: DisplayMode
+    speed: Speed
+    special_functions: List[SpecialFunction]
+
+
+class LineSpec(TypedDict, total=False):
+    display_position: str
+    font: Font
+    color: Color
+    rgb_color: str
+    mode: DisplayMode
+    speed: Speed
+    special_functions: List[SpecialFunction]
+    segments: List[LineSegmentSpec]
+
+
+@dataclass
+class FormatState:
+    font: Optional[Font] = None
+    color: Optional[Color] = None
+    rgb_color: Optional[str] = None
+    mode: Optional[DisplayMode] = None
+    position: Optional[str] = None
+    speed: Optional[Speed] = None
+
+
+EnumType = TypeVar("EnumType", bound=Enum)
+
+
 class Alpha9120CController:
     """Complete Alpha 9120C LED Sign Controller with full M-Protocol support"""
+
+    LINE_POSITION_MAP: Tuple[str, ...] = tuple(chr(code) for code in range(0x20, 0x28))
 
     SOH = "\x01"
     STX = "\x02"
@@ -283,6 +321,226 @@ class Alpha9120CController:
 
         return cleaned[:2].upper()
 
+    def _coerce_enum(
+        self,
+        enum_cls: Type[EnumType],
+        value: Optional[Union[EnumType, str]],
+    ) -> Optional[EnumType]:
+        if value is None:
+            return None
+
+        if isinstance(value, enum_cls):
+            return value
+
+        if isinstance(value, str):
+            key = value.strip()
+            if not key:
+                return None
+            try:
+                return enum_cls[key.upper()]
+            except KeyError:
+                self.logger.warning("Ignoring unknown %s value: %s", enum_cls.__name__, value)
+                return None
+
+        self.logger.warning("Ignoring unsupported %s value: %s", enum_cls.__name__, value)
+        return None
+
+    def _coerce_special_functions(
+        self,
+        values: Optional[Sequence[Union[SpecialFunction, str]]],
+    ) -> List[SpecialFunction]:
+        if not values:
+            return []
+
+        special_functions: List[SpecialFunction] = []
+        for item in values:
+            if isinstance(item, SpecialFunction):
+                if item not in special_functions:
+                    special_functions.append(item)
+                continue
+
+            if isinstance(item, str):
+                key = item.strip()
+                if not key:
+                    continue
+                try:
+                    enum_value = SpecialFunction[key.upper()]
+                except KeyError:
+                    self.logger.warning("Ignoring unknown special function: %s", item)
+                    continue
+                if enum_value not in special_functions:
+                    special_functions.append(enum_value)
+
+        return special_functions
+
+    def _coerce_rgb(self, rgb_color: Optional[str]) -> Optional[str]:
+        if not rgb_color:
+            return None
+
+        candidate = str(rgb_color).strip().upper()
+        if self._is_valid_rgb(candidate):
+            return candidate
+
+        self.logger.warning("Ignoring invalid RGB color: %s", rgb_color)
+        return None
+
+    def _resolve_position(self, explicit: Optional[str], index: int) -> str:
+        if explicit:
+            char = str(explicit)[:1]
+            if char:
+                return char
+
+        if 0 <= index < len(self.LINE_POSITION_MAP):
+            return self.LINE_POSITION_MAP[index]
+
+        return " "
+
+    def _normalise_segment(self, segment: Union[str, LineSegmentSpec, Dict]) -> LineSegmentSpec:
+        if isinstance(segment, str) or segment is None:
+            return {'text': str(segment or '')}
+
+        if not isinstance(segment, dict):
+            self.logger.warning("Ignoring unsupported segment payload: %s", segment)
+            return {'text': ''}
+
+        text = str(segment.get('text', ''))
+        normalised: LineSegmentSpec = {'text': text}
+
+        font = self._coerce_enum(Font, segment.get('font'))
+        if font:
+            normalised['font'] = font
+
+        color = self._coerce_enum(Color, segment.get('color'))
+        if color:
+            normalised['color'] = color
+
+        rgb_value = self._coerce_rgb(segment.get('rgb_color'))
+        if rgb_value:
+            normalised['rgb_color'] = rgb_value
+
+        mode = self._coerce_enum(DisplayMode, segment.get('mode'))
+        if mode:
+            normalised['mode'] = mode
+
+        speed = self._coerce_enum(Speed, segment.get('speed'))
+        if speed:
+            normalised['speed'] = speed
+
+        specials = self._coerce_special_functions(segment.get('special_functions'))
+        if specials:
+            normalised['special_functions'] = specials
+
+        return normalised
+
+    def _trim_segments(self, segments: List[LineSegmentSpec]) -> List[LineSegmentSpec]:
+        remaining = self.max_chars_per_line
+        trimmed: List[LineSegmentSpec] = []
+
+        for segment in segments:
+            text = segment.get('text', '') or ''
+            if remaining <= 0:
+                break
+
+            allowed_text = text[:remaining]
+            trimmed_segment = dict(segment)
+            trimmed_segment['text'] = allowed_text
+            trimmed.append(trimmed_segment)
+            remaining -= len(allowed_text)
+
+        if not trimmed:
+            trimmed.append({'text': ''})
+
+        return trimmed
+
+    def _normalise_line_spec(
+        self,
+        raw_line: Union[str, LineSpec, Dict, None],
+        index: int,
+        default_display_position: Optional[str],
+    ) -> LineSpec:
+        if isinstance(raw_line, str) or raw_line is None:
+            segments = [{'text': str(raw_line or '')}]
+            return {
+                'display_position': self._resolve_position(default_display_position if index == 0 else None, index),
+                'segments': self._trim_segments(segments),
+            }
+
+        if not isinstance(raw_line, dict):
+            self.logger.warning("Ignoring unsupported line payload: %s", raw_line)
+            segments = [{'text': str(raw_line)}]
+            return {
+                'display_position': self._resolve_position(default_display_position if index == 0 else None, index),
+                'segments': self._trim_segments(segments),
+            }
+
+        line_spec: LineSpec = {}
+
+        explicit_position = raw_line.get('display_position')
+        if explicit_position is None and index == 0:
+            explicit_position = default_display_position
+        line_spec['display_position'] = self._resolve_position(explicit_position, index)
+
+        font = self._coerce_enum(Font, raw_line.get('font'))
+        if font:
+            line_spec['font'] = font
+
+        color = self._coerce_enum(Color, raw_line.get('color'))
+        if color:
+            line_spec['color'] = color
+
+        rgb_value = self._coerce_rgb(raw_line.get('rgb_color'))
+        if rgb_value:
+            line_spec['rgb_color'] = rgb_value
+
+        mode = self._coerce_enum(DisplayMode, raw_line.get('mode'))
+        if mode:
+            line_spec['mode'] = mode
+
+        speed = self._coerce_enum(Speed, raw_line.get('speed'))
+        if speed:
+            line_spec['speed'] = speed
+
+        specials = self._coerce_special_functions(raw_line.get('special_functions'))
+        if specials:
+            line_spec['special_functions'] = specials
+
+        raw_segments = raw_line.get('segments')
+        segments: List[LineSegmentSpec] = []
+        if isinstance(raw_segments, list):
+            for raw_segment in raw_segments:
+                segments.append(self._normalise_segment(raw_segment))
+        else:
+            segments.append(self._normalise_segment({
+                'text': raw_line.get('text', ''),
+                'font': raw_line.get('font'),
+                'color': raw_line.get('color'),
+                'rgb_color': raw_line.get('rgb_color'),
+                'mode': raw_line.get('mode'),
+                'speed': raw_line.get('speed'),
+                'special_functions': raw_line.get('special_functions'),
+            }))
+
+        line_spec['segments'] = self._trim_segments(segments)
+        return line_spec
+
+    def _normalise_line_definitions(
+        self,
+        lines: Sequence[Union[str, LineSpec, Dict, None]],
+        default_display_position: Optional[str],
+    ) -> List[LineSpec]:
+        normalised: List[LineSpec] = []
+        for index, raw_line in enumerate(list(lines)[:self.max_lines]):
+            normalised.append(self._normalise_line_spec(raw_line, index, default_display_position))
+
+        while len(normalised) < self.max_lines:
+            index = len(normalised)
+            normalised.append({
+                'display_position': self._resolve_position(None, index),
+                'segments': [{'text': ''}],
+            })
+
+        return normalised
+
     def _normalise_type_code(self, raw_type: str) -> str:
         """Type codes are a single printable character in the M-Protocol header."""
 
@@ -349,13 +607,13 @@ class Alpha9120CController:
 
     def _build_message(
         self,
-        lines: List[str],
+        lines: Sequence[Union[str, LineSpec, Dict, None]],
         color: Color = Color.GREEN,
         font: Font = Font.FONT_7x9,
         mode: DisplayMode = DisplayMode.HOLD,
         speed: Speed = Speed.SPEED_3,
         hold_time: int = 5,
-        special_functions: List[SpecialFunction] = None,
+        special_functions: Optional[Sequence[Union[SpecialFunction, str]]] = None,
         rgb_color: str = None,
         priority: MessagePriority = MessagePriority.NORMAL,
         file_label: str = "A",
@@ -366,13 +624,12 @@ class Alpha9120CController:
         Format: <SOH><TYPE><ADDR><STX><CMD><FILE><formatting><content><ETX><CHECKSUM>
         """
         try:
-            # Ensure we have exactly 4 lines
-            display_lines = lines[:4]
-            while len(display_lines) < 4:
-                display_lines.append('')
-
-            # Truncate lines to display width
-            display_lines = [line[:self.max_chars_per_line] for line in display_lines]
+            # Normalise line definitions so each entry includes trimmed segments and
+            # a resolved display-position byte.  The controller accepts plain
+            # strings for backwards compatibility but operators can now provide a
+            # structure that specifies colours, effects, and special functions on
+            # a per-line or per-segment basis.
+            normalised_lines = self._normalise_line_definitions(lines, display_position)
 
             # Message components
             # The manual specifies that the "Write Text File" command is a single
@@ -388,40 +645,81 @@ class Alpha9120CController:
             file_label = (file_label or "A").strip() or "A"
             file_label = file_label[0].upper()
 
-            # Build formatting sequence
-            formatting = ''
+            base_specials = self._coerce_special_functions(special_functions)
+            default_rgb = self._coerce_rgb(rgb_color)
+            state = FormatState()
 
-            # Font selection
-            formatting += self.FONT_CMD + font.value
+            content_parts: List[str] = []
 
-            # Color selection (RGB takes precedence over standard colors)
-            if rgb_color and self._is_valid_rgb(rgb_color):
-                # Alpha 3.0 protocol RGB color
-                formatting += self.COLOR_CMD + 'Z' + rgb_color.upper()
-            else:
-                # Standard color
-                formatting += self.COLOR_CMD + color.value
+            for line_index, line_spec in enumerate(normalised_lines):
+                line_segments = list(line_spec.get('segments', [])) or [{'text': ''}]
+                line_specials = line_spec.get('special_functions', [])
+                position_char = line_spec.get('display_position') or self._resolve_position(None, line_index)
 
-            # Display mode (requires a position byte according to the M-Protocol spec)
-            position_char = (display_position or " ")[:1]
-            if not position_char:
-                position_char = " "
-            formatting += self.MODE_CMD + position_char + mode.value
+                for segment in line_segments:
+                    segment_text = segment.get('text', '') or ''
 
-            # Speed setting
-            formatting += self.SPEED_CMD + speed.value
+                    effective_font = segment.get('font') or line_spec.get('font') or font
+                    effective_rgb = segment.get('rgb_color') or line_spec.get('rgb_color') or default_rgb
+                    effective_color: Optional[Color]
+                    if effective_rgb:
+                        effective_color = None
+                    else:
+                        effective_color = segment.get('color') or line_spec.get('color') or color
+                    effective_mode = segment.get('mode') or line_spec.get('mode') or mode
+                    effective_speed = segment.get('speed') or line_spec.get('speed') or speed
 
-            # Special functions
-            if special_functions:
-                for func in special_functions:
-                    formatting += self.SPECIAL_CMD + func.value
+                    combined_specials: List[SpecialFunction] = []
+                    if base_specials:
+                        combined_specials.extend(base_specials)
+                    if line_specials:
+                        for func in line_specials:
+                            if func not in combined_specials:
+                                combined_specials.append(func)
+                    segment_specials = segment.get('special_functions', [])
+                    if segment_specials:
+                        for func in segment_specials:
+                            if func not in combined_specials:
+                                combined_specials.append(func)
 
-            # Build message content with line separators
-            content = formatting
-            for i, line in enumerate(display_lines):
-                content += line
-                if i < len(display_lines) - 1:
-                    content += self.CR  # Line separator
+                    segment_builder = ''
+
+                    if effective_font and effective_font != state.font:
+                        segment_builder += self.FONT_CMD + effective_font.value
+                        state.font = effective_font
+
+                    if effective_rgb:
+                        if (state.rgb_color != effective_rgb) or state.color is not None:
+                            segment_builder += self.COLOR_CMD + 'Z' + effective_rgb
+                            state.rgb_color = effective_rgb
+                            state.color = None
+                    elif effective_color and (state.color != effective_color or state.rgb_color is not None):
+                        segment_builder += self.COLOR_CMD + effective_color.value
+                        state.color = effective_color
+                        state.rgb_color = None
+
+                    if effective_mode and (
+                        state.mode != effective_mode or state.position != position_char
+                    ):
+                        segment_builder += self.MODE_CMD + position_char + effective_mode.value
+                        state.mode = effective_mode
+                        state.position = position_char
+
+                    if effective_speed and state.speed != effective_speed:
+                        segment_builder += self.SPEED_CMD + effective_speed.value
+                        state.speed = effective_speed
+
+                    if combined_specials:
+                        for func in combined_specials:
+                            segment_builder += self.SPECIAL_CMD + func.value
+
+                    segment_builder += segment_text
+                    content_parts.append(segment_builder)
+
+                if line_index < len(normalised_lines) - 1:
+                    content_parts.append(self.CR)
+
+            content = ''.join(content_parts)
 
             # Complete message body
             message_body = f"{cmd}{file_label}{content}"
@@ -557,11 +855,18 @@ class Alpha9120CController:
             if self.socket:
                 self.socket.settimeout(original_timeout or self.timeout)
 
-    def send_message(self, lines: List[str], color: Color = Color.GREEN,
-                     font: Font = Font.FONT_7x9, mode: DisplayMode = DisplayMode.HOLD,
-                     speed: Speed = Speed.SPEED_3, hold_time: int = 5,
-                     special_functions: List[SpecialFunction] = None,
-                     rgb_color: str = None, priority: MessagePriority = MessagePriority.NORMAL) -> bool:
+    def send_message(
+        self,
+        lines: Sequence[Union[str, LineSpec, Dict, None]],
+        color: Color = Color.GREEN,
+        font: Font = Font.FONT_7x9,
+        mode: DisplayMode = DisplayMode.HOLD,
+        speed: Speed = Speed.SPEED_3,
+        hold_time: int = 5,
+        special_functions: Optional[Sequence[Union[SpecialFunction, str]]] = None,
+        rgb_color: str = None,
+        priority: MessagePriority = MessagePriority.NORMAL,
+    ) -> bool:
         """Send a fully-featured message to the Alpha 9120C"""
         try:
             # Check priority
@@ -573,16 +878,28 @@ class Alpha9120CController:
 
             # Build and send message
             message = self._build_message(
-                lines, color, font, mode, speed, hold_time,
-                special_functions, rgb_color, priority
+                lines=lines,
+                color=color,
+                font=font,
+                mode=mode,
+                speed=speed,
+                hold_time=hold_time,
+                special_functions=special_functions,
+                rgb_color=rgb_color,
+                priority=priority,
             )
 
             if message:
                 success = self._send_raw_message(message)
                 if success:
+                    normalised = self._normalise_line_definitions(lines, " ")
+                    flattened_lines = [
+                        ''.join(segment.get('text', '') or '' for segment in spec.get('segments', []))
+                        for spec in normalised
+                    ]
                     # Store message info
                     self.current_messages[priority] = {
-                        'lines': lines,
+                        'lines': flattened_lines,
                         'color': color.name,
                         'font': font.name,
                         'mode': mode.name,
@@ -597,17 +914,26 @@ class Alpha9120CController:
             self.logger.error(f"Error in send_message: {e}")
             return False
 
-    def send_rgb_message(self, lines: List[str], rgb_color: str,
-                         font: Font = Font.FONT_7x9, mode: DisplayMode = DisplayMode.HOLD,
-                         speed: Speed = Speed.SPEED_3, special_functions: List[SpecialFunction] = None,
-                         priority: MessagePriority = MessagePriority.NORMAL) -> bool:
+    def send_rgb_message(
+        self,
+        lines: Sequence[Union[str, LineSpec, Dict, None]],
+        rgb_color: str,
+        font: Font = Font.FONT_7x9,
+        mode: DisplayMode = DisplayMode.HOLD,
+        speed: Speed = Speed.SPEED_3,
+        special_functions: Optional[Sequence[Union[SpecialFunction, str]]] = None,
+        priority: MessagePriority = MessagePriority.NORMAL,
+    ) -> bool:
         """Send a message with RGB color (Alpha 3.0 protocol)"""
         return self.send_message(
             lines=lines, rgb_color=rgb_color, font=font, mode=mode,
             speed=speed, special_functions=special_functions, priority=priority
         )
 
-    def send_flashing_message(self, lines: List[str], color: Color = Color.RED,
+    def send_flashing_message(
+        self,
+        lines: Sequence[Union[str, LineSpec, Dict, None]],
+        color: Color = Color.RED,
                               font: Font = Font.FONT_7x13, priority: MessagePriority = MessagePriority.URGENT) -> bool:
         """Send a flashing message (useful for alerts)"""
         return self.send_message(
@@ -616,7 +942,10 @@ class Alpha9120CController:
             priority=priority
         )
 
-    def send_scrolling_message(self, lines: List[str], color: Color = Color.GREEN,
+    def send_scrolling_message(
+        self,
+        lines: Sequence[Union[str, LineSpec, Dict, None]],
+        color: Color = Color.GREEN,
                                direction: str = 'left', speed: Speed = Speed.SPEED_3) -> bool:
         """Send a scrolling message"""
         mode_map = {

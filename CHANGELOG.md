@@ -132,6 +132,17 @@ tracks releases under the 2.1.x series.
 - Prevented the LED fallback initializer from raising a `NameError` when the optional
   controller module is missing so deployments without sign hardware continue to boot.
 
+## [2.1.9] - 2025-10-31
+### Added
+- Delivered a WYSIWYG LED message designer with content-editable line cards, live colour/effect previews,
+  and per-line special function toggles so operators can see the final layout before transmitting.
+
+### Changed
+- Refactored the LED controller to accept structured line payloads, allowing nested colours, display modes,
+  speeds, and special functions per segment while keeping backwards compatibility with plain text arrays.
+- Enhanced the LED send API to normalise structured payloads, summarise mixed-format messages for history
+  records, and persist the flattened preview text for operator review.
+
 ## [2.1.8] - 2025-10-30
 ### Fixed
 - Inserted the mandatory display-position byte in LED sign mode fields so M-Protocol

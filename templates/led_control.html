@@ -125,6 +125,60 @@
     font-weight: 600;
 }
 
+.line-editor.card {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    transition: box-shadow 0.2s ease;
+}
+
+.line-editor.card:hover {
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+.line-preview {
+    min-height: 3.5rem;
+    border: 1px dashed rgba(0, 255, 0, 0.4);
+    border-radius: 6px;
+    padding: 0.75rem;
+    background: rgba(0, 0, 0, 0.75);
+    color: #00ff00;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 1px;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.line-preview:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    background: rgba(0, 0, 0, 0.85);
+}
+
+.line-preview:empty:before {
+    content: attr(data-placeholder);
+    color: rgba(255, 255, 255, 0.35);
+    pointer-events: none;
+}
+
+.line-controls .form-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--primary-color);
+}
+
+.line-specials .form-check {
+    margin-right: 0.75rem;
+}
+
+.line-clear {
+    margin-top: 0.25rem;
+}
+
+.char-count {
+    font-size: 0.85rem;
+    color: var(--secondary-color);
+}
+
 .nav-tabs .nav-link {
     border: none;
     border-radius: 8px 8px 0 0;
@@ -278,31 +332,105 @@
                 <div class="row">
                     <div class="col-lg-8">
                         <!-- Message Text -->
+                        {% set positions = [' ', '!', '"', '#'] %}
                         <div class="feature-group">
-                            <h6><i class="fas fa-keyboard"></i> Message Text (4 Lines, 20 chars each)</h6>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <label for="line1" class="form-label">Line 1</label>
-                                    <input type="text" class="form-control" id="line1" maxlength="20" placeholder="Line 1 (20 chars max)" oninput="updatePreview()">
+                            <h6><i class="fas fa-keyboard"></i> Message Designer</h6>
+                            <p class="text-muted small mb-3">Click the line cards to edit text, choose colours and effects, and preview exactly how the sign will render each line.</p>
+                            <div class="row g-3">
+                                {% for idx in range(4) %}
+                                <div class="col-xl-6">
+                                    <div class="line-editor card shadow-sm" data-line-index="{{ idx }}" data-position="{{ positions[idx] }}">
+                                        <div class="card-header d-flex justify-content-between align-items-center">
+                                            <span class="fw-semibold">Line {{ idx + 1 }}</span>
+                                            <span class="char-count" id="line{{ idx + 1 }}-count">0 / 20</span>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="line-preview" id="line{{ idx + 1 }}-editor" contenteditable="true" data-line-index="{{ idx }}" data-placeholder="Line {{ idx + 1 }} text"></div>
+                                            <div class="row g-2 mt-3 line-controls">
+                                                <div class="col-md-4">
+                                                    <label class="form-label">Colour</label>
+                                                    <select class="form-select line-color" data-line-index="{{ idx }}">
+                                                        <option value="DEFAULT" selected>Use default</option>
+                                                        <option value="RED">🔴 Red</option>
+                                                        <option value="GREEN">🟢 Green</option>
+                                                        <option value="AMBER">🟠 Amber</option>
+                                                        <option value="DIM_RED">🔴 Dim Red</option>
+                                                        <option value="DIM_GREEN">🟢 Dim Green</option>
+                                                        <option value="BROWN">🤎 Brown</option>
+                                                        <option value="ORANGE">🟠 Orange</option>
+                                                        <option value="YELLOW">🟡 Yellow</option>
+                                                        <option value="RAINBOW_1">🌈 Rainbow 1</option>
+                                                        <option value="RAINBOW_2">🌈 Rainbow 2</option>
+                                                        <option value="COLOR_MIX">🎨 Color Mix</option>
+                                                        <option value="AUTO_COLOR">🔄 Auto Color</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">Effect</label>
+                                                    <select class="form-select line-mode" data-line-index="{{ idx }}">
+                                                        <option value="DEFAULT" selected>Use default</option>
+                                                        <option value="HOLD">📌 Hold (Static)</option>
+                                                        <option value="FLASH">⚡ Flash</option>
+                                                        <option value="SCROLL">📜 Scroll</option>
+                                                        <option value="ROTATE">🔄 Rotate</option>
+                                                        <option value="ROLL_LEFT">⬅️ Roll Left</option>
+                                                        <option value="ROLL_RIGHT">➡️ Roll Right</option>
+                                                        <option value="ROLL_UP">⬆️ Roll Up</option>
+                                                        <option value="ROLL_DOWN">⬇️ Roll Down</option>
+                                                        <option value="WIPE_LEFT">🧽 Wipe Left</option>
+                                                        <option value="WIPE_RIGHT">🧽 Wipe Right</option>
+                                                        <option value="WIPE_UP">🧽 Wipe Up</option>
+                                                        <option value="WIPE_DOWN">🧽 Wipe Down</option>
+                                                        <option value="AUTO_MODE">🎲 Auto Mode</option>
+                                                        <option value="ROLL_IN">🌪️ Roll In</option>
+                                                        <option value="ROLL_OUT">🌪️ Roll Out</option>
+                                                        <option value="WIPE_IN">🧽 Wipe In</option>
+                                                        <option value="WIPE_OUT">🧽 Wipe Out</option>
+                                                        <option value="COMPRESSED_ROTATE">🔄 Compressed Rotate</option>
+                                                        <option value="EXPLODE">💥 Explode</option>
+                                                        <option value="CLOCK">⏰ Clock</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">Speed</label>
+                                                    <select class="form-select line-speed" data-line-index="{{ idx }}">
+                                                        <option value="DEFAULT" selected>Use default</option>
+                                                        <option value="SPEED_1">🐌 Slowest</option>
+                                                        <option value="SPEED_2">🚶 Slow</option>
+                                                        <option value="SPEED_3">🚴 Medium</option>
+                                                        <option value="SPEED_4">🏃 Fast</option>
+                                                        <option value="SPEED_5">🏎️ Fastest</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="line-specials mt-3">
+                                                <div class="form-check form-check-inline">
+                                                    <input class="form-check-input line-special" type="checkbox" id="line{{ idx + 1 }}-flash" value="CHAR_FLASH_ON" data-line-index="{{ idx }}">
+                                                    <label class="form-check-label" for="line{{ idx + 1 }}-flash">Character Flash</label>
+                                                </div>
+                                                <div class="form-check form-check-inline">
+                                                    <input class="form-check-input line-special" type="checkbox" id="line{{ idx + 1 }}-wide" value="WIDE_CHAR_ON" data-line-index="{{ idx }}">
+                                                    <label class="form-check-label" for="line{{ idx + 1 }}-wide">Wide Characters</label>
+                                                </div>
+                                                <div class="form-check form-check-inline">
+                                                    <input class="form-check-input line-special" type="checkbox" id="line{{ idx + 1 }}-desc" value="TRUE_DESC_ON" data-line-index="{{ idx }}">
+                                                    <label class="form-check-label" for="line{{ idx + 1 }}-desc">True Descenders</label>
+                                                </div>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary line-clear" data-line-index="{{ idx }}">
+                                                    <i class="fas fa-backspace"></i> Clear line
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="col-md-6">
-                                    <label for="line2" class="form-label">Line 2</label>
-                                    <input type="text" class="form-control" id="line2" maxlength="20" placeholder="Line 2 (20 chars max)" oninput="updatePreview()">
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="line3" class="form-label">Line 3</label>
-                                    <input type="text" class="form-control" id="line3" maxlength="20" placeholder="Line 3 (20 chars max)" oninput="updatePreview()">
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="line4" class="form-label">Line 4</label>
-                                    <input type="text" class="form-control" id="line4" maxlength="20" placeholder="Line 4 (20 chars max)" oninput="updatePreview()">
-                                </div>
+                                {% endfor %}
                             </div>
                         </div>
 
                         <!-- Color & Font Selection -->
                         <div class="feature-group">
-                            <h6><i class="fas fa-paint-brush"></i> Color & Font</h6>
+                            <h6><i class="fas fa-paint-brush"></i> Default Colour &amp; Font</h6>
+                            <p class="text-muted small">Applied whenever a line card is set to "Use default" for colour or font.</p>
                             <div class="row">
                                 <div class="col-md-6">
                                     <label for="custom-color" class="form-label">Color</label>
@@ -341,7 +469,8 @@
 
                         <!-- Display Effects -->
                         <div class="feature-group">
-                            <h6><i class="fas fa-magic"></i> Display Effects</h6>
+                            <h6><i class="fas fa-magic"></i> Default Display Effects</h6>
+                            <p class="text-muted small">Line-specific settings override these defaults; otherwise they control the animation applied on the sign.</p>
                             <div class="row">
                                 <div class="col-md-6">
                                     <label for="custom-mode" class="form-label">Display Mode</label>
@@ -403,28 +532,12 @@
 
                         <!-- Special Functions -->
                         <div class="feature-group">
-                            <h6><i class="fas fa-star"></i> Special Functions</h6>
+                            <h6><i class="fas fa-star"></i> Typography Options</h6>
+                            <p class="text-muted small">Line-specific flash, wide, and descender toggles are available on each editor card. Use these controls to set the default font width for the entire message.</p>
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="special-function-group">
-                                        <h6>Character Effects</h6>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" id="char-flash">
-                                            <label class="form-check-label" for="char-flash">Character Flash</label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" id="wide-char">
-                                            <label class="form-check-label" for="wide-char">Wide Characters</label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" id="true-desc">
-                                            <label class="form-check-label" for="true-desc">True Descender</label>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="special-function-group">
-                                        <h6>Font Style</h6>
+                                        <h6 class="mb-2">Font Width</h6>
                                         <div class="form-check">
                                             <input class="form-check-input" type="radio" name="font-style" id="fixed-width" value="FIXED_WIDTH">
                                             <label class="form-check-label" for="fixed-width">Fixed Width Font</label>
@@ -1024,19 +1137,167 @@ const modeDescriptions = {
     'EXPLODE': 'Exploding text effect', 'CLOCK': 'Clock display mode'
 };
 
+const MAX_LINE_LENGTH = 20;
+
+function getLineEditors() {
+    return Array.from(document.querySelectorAll('.line-editor'));
+}
+
+function enforceCharacterLimit(element) {
+    const text = element.innerText.replace(/\s+/g, ' ');
+    if (text.length > MAX_LINE_LENGTH) {
+        element.innerText = text.slice(0, MAX_LINE_LENGTH);
+        placeCaretAtEnd(element);
+    } else if (text !== element.innerText) {
+        element.innerText = text;
+        placeCaretAtEnd(element);
+    }
+}
+
+function placeCaretAtEnd(element) {
+    if (!element || !element.childNodes) return;
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+}
+
+function resolveLineColor(value) {
+    return value && value !== 'DEFAULT' ? value : document.getElementById('custom-color').value;
+}
+
+function resolveLineMode(value) {
+    return value && value !== 'DEFAULT' ? value : document.getElementById('custom-mode').value;
+}
+
+function resolveLineSpeed(value) {
+    return value && value !== 'DEFAULT' ? value : document.getElementById('custom-speed').value;
+}
+
+function buildLinePayload() {
+    return getLineEditors().map(editor => {
+        const index = editor.dataset.lineIndex;
+        const preview = editor.querySelector('.line-preview');
+        const text = (preview.innerText || '').trim();
+        const colorSelect = editor.querySelector('.line-color').value;
+        const modeSelect = editor.querySelector('.line-mode').value;
+        const speedSelect = editor.querySelector('.line-speed').value;
+        const specials = Array.from(editor.querySelectorAll('.line-special:checked')).map(cb => cb.value);
+
+        const segment = { text: text.slice(0, MAX_LINE_LENGTH) };
+        if (colorSelect !== 'DEFAULT') segment.color = colorSelect;
+        if (modeSelect !== 'DEFAULT') segment.mode = modeSelect;
+        if (speedSelect !== 'DEFAULT') segment.speed = speedSelect;
+        if (specials.length) segment.special_functions = specials;
+
+        return {
+            display_position: editor.dataset.position,
+            segments: [segment]
+        };
+    });
+}
+
+function applyLineStyle(editor) {
+    const preview = editor.querySelector('.line-preview');
+    const colorValue = resolveLineColor(editor.querySelector('.line-color').value);
+    const modeValue = resolveLineMode(editor.querySelector('.line-mode').value);
+
+    preview.style.color = colorMap[colorValue] || '#00ff00';
+    preview.classList.remove('flash-preview', 'rainbow-text');
+    if (colorValue.includes('RAINBOW') || colorValue === 'COLOR_MIX') {
+        preview.classList.add('rainbow-text');
+    }
+    if (modeValue === 'FLASH') {
+        preview.classList.add('flash-preview');
+    }
+}
+
+function refreshMainPreview() {
+    const payload = buildLinePayload();
+    payload.forEach((line, idx) => {
+        const previewLine = document.getElementById(`preview-line${idx + 1}`);
+        if (!previewLine) return;
+        const segment = line.segments[0] || { text: '' };
+        const text = segment.text || '';
+        previewLine.textContent = text || (idx <= 1 ? ['Enter message', 'to see preview'][idx] : '');
+        const colorValue = resolveLineColor(segment.color || line.color);
+        const modeValue = resolveLineMode(segment.mode || line.mode);
+        previewLine.style.color = colorMap[colorValue] || '#00ff00';
+        previewLine.style.fontSize = fontSizeMap[document.getElementById('custom-font').value] || '1.0em';
+        previewLine.className = 'preview-line';
+        if (colorValue && (colorValue.includes('RAINBOW') || colorValue === 'COLOR_MIX')) {
+            previewLine.classList.add('rainbow-text');
+        }
+        if (modeValue === 'FLASH') {
+            previewLine.classList.add('flash-preview');
+        }
+    });
+
+    const activeMode = document.getElementById('custom-mode').value;
+    document.getElementById('effect-description').textContent = `Effect: ${modeDescriptions[activeMode] || activeMode}`;
+}
+
+function updateLineState(index) {
+    const editor = document.querySelector(`.line-editor[data-line-index="${index}"]`);
+    if (!editor) return;
+    const preview = editor.querySelector('.line-preview');
+    enforceCharacterLimit(preview);
+    const count = preview.innerText.trim().length;
+    const countElement = editor.querySelector('.char-count');
+    if (countElement) {
+        countElement.textContent = `${count} / ${MAX_LINE_LENGTH}`;
+    }
+    applyLineStyle(editor);
+    refreshMainPreview();
+}
+
+function clearLine(index) {
+    const editor = document.querySelector(`.line-editor[data-line-index="${index}"]`);
+    if (!editor) return;
+    editor.querySelector('.line-preview').innerText = '';
+    editor.querySelector('.line-color').value = 'DEFAULT';
+    editor.querySelector('.line-mode').value = 'DEFAULT';
+    editor.querySelector('.line-speed').value = 'DEFAULT';
+    editor.querySelectorAll('.line-special').forEach(cb => { cb.checked = false; });
+    updateLineState(index);
+}
+
+function initLineEditors() {
+    getLineEditors().forEach(editor => {
+        const index = editor.dataset.lineIndex;
+        const preview = editor.querySelector('.line-preview');
+        preview.addEventListener('input', () => updateLineState(index));
+        preview.addEventListener('blur', () => updateLineState(index));
+        editor.querySelectorAll('.line-color, .line-mode, .line-speed').forEach(select => {
+            select.addEventListener('change', () => updateLineState(index));
+        });
+        editor.querySelectorAll('.line-special').forEach(checkbox => {
+            checkbox.addEventListener('change', () => updateLineState(index));
+        });
+        const clearButton = editor.querySelector('.line-clear');
+        if (clearButton) {
+            clearButton.addEventListener('click', () => clearLine(index));
+        }
+        updateLineState(index);
+    });
+}
+
 // Initialize LED control
 function initLEDControl() {
     loadLEDStatus();
     loadCannedMessages();
     loadMessageHistory();
     setupFormHandlers();
+    initLineEditors();
     updateTimePreview();
     setInterval(loadLEDStatus, 30000);
     setInterval(updateTimePreview, 1000);
 
     // Initialize RGB preview
     updateRGBPreview();
-    updatePreview();
+    refreshMainPreview();
 }
 
 function setupFormHandlers() {
@@ -1058,33 +1319,8 @@ function setupFormHandlers() {
 
 // Preview update functions
 function updatePreview() {
-    const lines = [
-        document.getElementById('line1').value || '',
-        document.getElementById('line2').value || '',
-        document.getElementById('line3').value || '',
-        document.getElementById('line4').value || ''
-    ];
-
-    const color = document.getElementById('custom-color').value;
-    const font = document.getElementById('custom-font').value;
-    const mode = document.getElementById('custom-mode').value;
-
-    // Update preview lines
-    for (let i = 1; i <= 4; i++) {
-        const element = document.getElementById(`preview-line${i}`);
-        element.textContent = lines[i-1] || (i <= 2 ? ['Enter message', 'to see preview'][i-1] : '');
-        element.style.color = colorMap[color] || '#00ff00';
-        element.style.fontSize = fontSizeMap[font] || '1.0em';
-
-        // Apply special effects
-        element.className = 'preview-line';
-        if (mode === 'FLASH') element.className += ' flash-preview';
-        if (color.includes('RAINBOW')) element.className += ' rainbow-text';
-    }
-
-    // Update effect description
-    document.getElementById('effect-description').textContent =
-        `Effect: ${modeDescriptions[mode] || mode}`;
+    getLineEditors().forEach(editor => applyLineStyle(editor));
+    refreshMainPreview();
 }
 
 function updateRGBPreview() {
@@ -1221,10 +1457,20 @@ function updateBrightnessValue(value) {
 }
 
 function clearPreview() {
-    ['line1', 'line2', 'line3', 'line4'].forEach(id => {
-        document.getElementById(id).value = '';
+    getLineEditors().forEach((editor, index) => {
+        editor.querySelector('.line-preview').innerText = '';
+        editor.querySelector('.line-color').value = 'DEFAULT';
+        editor.querySelector('.line-mode').value = 'DEFAULT';
+        editor.querySelector('.line-speed').value = 'DEFAULT';
+        editor.querySelectorAll('.line-special').forEach(cb => { cb.checked = false; });
+        updateLineState(index);
     });
-    updatePreview();
+    document.getElementById('custom-color').value = 'GREEN';
+    document.getElementById('custom-font').value = 'FONT_7x9';
+    document.getElementById('custom-mode').value = 'HOLD';
+    document.getElementById('custom-speed').value = 'SPEED_3';
+    document.getElementById('prop-width').checked = true;
+    refreshMainPreview();
 }
 
 function clearRGBMessage() {
@@ -1235,11 +1481,29 @@ function clearRGBMessage() {
 }
 
 function fillSampleMessage() {
-    document.getElementById('line1').value = 'PUTNAM COUNTY';
-    document.getElementById('line2').value = 'EMERGENCY MGMT';
-    document.getElementById('line3').value = 'SYSTEM TEST';
-    document.getElementById('line4').value = 'MESSAGE OK';
-    updatePreview();
+    const examples = [
+        { text: 'PUTNAM COUNTY', color: 'RED', mode: 'HOLD' },
+        { text: 'EMERGENCY MGMT', color: 'GREEN', mode: 'ROLL_LEFT' },
+        { text: 'SYSTEM TEST', color: 'AMBER', mode: 'SCROLL' },
+        { text: 'MESSAGE OK', color: 'AUTO_COLOR', mode: 'FLASH' }
+    ];
+
+    getLineEditors().forEach((editor, index) => {
+        const sample = examples[index] || { text: '' };
+        editor.querySelector('.line-preview').innerText = sample.text;
+        editor.querySelector('.line-color').value = sample.color ? sample.color : 'DEFAULT';
+        editor.querySelector('.line-mode').value = sample.mode ? sample.mode : 'DEFAULT';
+        editor.querySelector('.line-speed').value = sample.speed ? sample.speed : 'DEFAULT';
+        editor.querySelectorAll('.line-special').forEach(cb => { cb.checked = false; });
+        updateLineState(index);
+    });
+
+    document.getElementById('custom-color').value = 'GREEN';
+    document.getElementById('custom-font').value = 'FONT_7x9';
+    document.getElementById('custom-mode').value = 'HOLD';
+    document.getElementById('custom-speed').value = 'SPEED_3';
+    document.getElementById('prop-width').checked = true;
+    refreshMainPreview();
 }
 
 function setEmergencyTemplate(template) {
@@ -1249,37 +1513,35 @@ function setEmergencyTemplate(template) {
 
 // Message sending functions
 function sendCustomMessage() {
-    const lines = [
-        document.getElementById('line1').value,
-        document.getElementById('line2').value,
-        document.getElementById('line3').value,
-        document.getElementById('line4').value
-    ].filter(line => line.trim() !== '');
+    const linePayload = buildLinePayload();
+    const hasContent = linePayload.some(line =>
+        (line.segments || []).some(segment => (segment.text || '').trim().length > 0)
+    );
 
-    if (lines.length === 0) {
+    if (!hasContent) {
         showToast('Please enter at least one line of text', 'error');
         return;
     }
 
-    // Collect special functions
     const specialFunctions = [];
-    if (document.getElementById('char-flash').checked) specialFunctions.push('CHAR_FLASH_ON');
-    if (document.getElementById('wide-char').checked) specialFunctions.push('WIDE_CHAR_ON');
-    if (document.getElementById('true-desc').checked) specialFunctions.push('TRUE_DESC_ON');
-
-    const fontStyle = document.querySelector('input[name="font-style"]:checked').value;
-    if (fontStyle) specialFunctions.push(fontStyle);
+    const fontStyle = document.querySelector('input[name="font-style"]:checked');
+    if (fontStyle && fontStyle.value) {
+        specialFunctions.push(fontStyle.value);
+    }
 
     const message = {
-        lines: lines,
+        lines: linePayload,
         color: document.getElementById('custom-color').value,
         font: document.getElementById('custom-font').value,
         mode: document.getElementById('custom-mode').value,
         speed: document.getElementById('custom-speed').value,
         priority: parseInt(document.getElementById('custom-priority').value),
-        hold_time: parseInt(document.getElementById('custom-hold').value),
-        special_functions: specialFunctions
+        hold_time: parseInt(document.getElementById('custom-hold').value)
     };
+
+    if (specialFunctions.length) {
+        message.special_functions = specialFunctions;
+    }
 
     fetch('/api/led/send_message', {
         method: 'POST',
