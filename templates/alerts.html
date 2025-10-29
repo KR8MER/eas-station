@@ -4,6 +4,7 @@
 
 {% block content %}
 <div class="container-fluid">
+    {% set audio_map = audio_map or {} %}
     <div class="row">
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center mb-4">
@@ -160,6 +161,7 @@
                                     <th>Expires</th>
                                     <th>Headline</th>
                                     <th>Area</th>
+                                    <th>Audio</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -212,6 +214,34 @@
                                         </div>
                                         {% else %}
                                         <span class="text-muted">No area description</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% set audio_entries = audio_map.get(alert.id, []) %}
+                                        {% if audio_entries %}
+                                        <div class="d-flex flex-column gap-1">
+                                            {% set primary_audio = audio_entries[0] %}
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                {% if primary_audio.audio_url %}
+                                                <a class="btn btn-outline-primary" href="{{ primary_audio.audio_url }}" target="_blank" rel="noopener">
+                                                    <i class="fas fa-play"></i> Play
+                                                </a>
+                                                {% endif %}
+                                                <a class="btn btn-outline-info" href="{{ primary_audio.detail_url }}">
+                                                    <i class="fas fa-headphones"></i> Details
+                                                </a>
+                                            </div>
+                                            {% if primary_audio.text_url %}
+                                            <a class="small" href="{{ primary_audio.text_url }}" target="_blank" rel="noopener">
+                                                <i class="fas fa-file-alt"></i> Summary file
+                                            </a>
+                                            {% endif %}
+                                            {% if audio_entries|length > 1 %}
+                                            <small class="text-muted">{{ audio_entries|length }} recordings archived</small>
+                                            {% endif %}
+                                        </div>
+                                        {% else %}
+                                        <span class="text-muted">None</span>
                                         {% endif %}
                                     </td>
                                     <td>

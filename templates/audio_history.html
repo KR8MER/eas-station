@@ -1,0 +1,304 @@
+{% extends "base.html" %}
+
+{% block title %}Audio Archive - NOAA CAP Alerts{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 text-primary mb-0">
+                    <i class="fas fa-headphones"></i> Audio Archive
+                </h1>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button type="button" class="btn btn-success" onclick="exportAudioArchive()" title="Export visible audio records">
+                        <i class="fas fa-file-export"></i> Export
+                    </button>
+                    <button type="button" class="btn btn-info" onclick="window.print()" title="Print this page">
+                        <i class="fas fa-print"></i> Print
+                    </button>
+                    <a href="/" class="btn btn-outline-secondary">
+                        <i class="fas fa-map"></i> Back to Map
+                    </a>
+                    <a href="/admin" class="btn btn-outline-primary">
+                        <i class="fas fa-cog"></i> Admin
+                    </a>
+                </div>
+            </div>
+
+            {% if not eas_enabled %}
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle"></i>
+                Automatic EAS audio generation is currently disabled. Historical records remain available below.
+            </div>
+            {% endif %}
+
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="card bg-dark text-white">
+                        <div class="card-body text-center">
+                            <h3 class="mb-0">{{ total_messages }}</h3>
+                            <small>Archived Recordings</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <div class="card bg-light h-100">
+                        <div class="card-body d-flex align-items-center justify-content-center text-muted">
+                            <div class="text-center">
+                                <i class="fas fa-wave-square fa-2x mb-2"></i>
+                                <div>Audio records include SAME headers, attention tones, and narration packages.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-filter"></i> Filters
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="GET" class="row g-3 align-items-end">
+                        <div class="col-md-3">
+                            <label for="search" class="form-label">Search</label>
+                            <input type="text" class="form-control" id="search" name="search" value="{{ current_filters.search or '' }}" placeholder="Search event, header, or identifier">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="event" class="form-label">Event Type</label>
+                            <select class="form-select" id="event" name="event">
+                                <option value="">All Events</option>
+                                {% for event in events %}
+                                <option value="{{ event }}" {% if current_filters.event == event %}selected{% endif %}>{{ event }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="severity" class="form-label">Severity</label>
+                            <select class="form-select" id="severity" name="severity">
+                                <option value="">All Severities</option>
+                                {% for severity in severities %}
+                                <option value="{{ severity }}" {% if current_filters.severity == severity %}selected{% endif %}>{{ severity }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="status" class="form-label">Status</label>
+                            <select class="form-select" id="status" name="status">
+                                <option value="">All Statuses</option>
+                                {% for status in statuses %}
+                                <option value="{{ status }}" {% if current_filters.status == status %}selected{% endif %}>{{ status }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-1">
+                            <label for="per_page" class="form-label">Per Page</label>
+                            <select class="form-select" id="per_page" name="per_page">
+                                <option value="25" {% if current_filters.per_page == 25 %}selected{% endif %}>25</option>
+                                <option value="50" {% if current_filters.per_page == 50 %}selected{% endif %}>50</option>
+                                <option value="100" {% if current_filters.per_page == 100 %}selected{% endif %}>100</option>
+                            </select>
+                        </div>
+                        <div class="col-md-1">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-wave-square"></i> Archived Audio
+                        {% if pagination.total %}
+                        <span class="badge bg-secondary">{{ pagination.total }} total</span>
+                        {% endif %}
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" id="audioArchiveTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th scope="col" class="text-nowrap">Generated</th>
+                                    <th scope="col">Event</th>
+                                    <th scope="col" class="text-nowrap">Severity</th>
+                                    <th scope="col" class="text-nowrap">Status</th>
+                                    <th scope="col" class="text-nowrap">SAME Header</th>
+                                    <th scope="col">Alert</th>
+                                    <th scope="col" class="text-center text-nowrap">Audio</th>
+                                    <th scope="col" class="text-center text-nowrap">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if messages %}
+                                {% for message in messages %}
+                                <tr>
+                                    <td class="text-nowrap">
+                                        {{ message.created_at | format_local_datetime(false) if message.created_at else 'Unknown' }}<br>
+                                        <small class="text-muted">{{ message.created_at | format_local_time if message.created_at else '' }}</small>
+                                    </td>
+                                    <td>
+                                        <strong>{{ message.event }}</strong>
+                                        {% if message.alert_identifier %}
+                                        <div class="small text-muted">{{ message.alert_identifier }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if message.severity %}
+                                            {% set severity = message.severity %}
+                                            {% set severity_class = 'bg-secondary' %}
+                                            {% if severity == 'Extreme' %}
+                                                {% set severity_class = 'bg-danger' %}
+                                            {% elif severity == 'Severe' %}
+                                                {% set severity_class = 'bg-warning text-dark' %}
+                                            {% elif severity == 'Moderate' %}
+                                                {% set severity_class = 'bg-info text-dark' %}
+                                            {% endif %}
+                                            <span class="badge {{ severity_class }}">{{ severity }}</span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if message.status %}
+                                        <span class="badge bg-secondary">{{ message.status }}</span>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-break">
+                                        <code>{{ message.same_header }}</code>
+                                    </td>
+                                    <td>
+                                        {% if message.alert_url %}
+                                        <a href="{{ message.alert_url }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye"></i> View Alert
+                                        </a>
+                                        {% else %}
+                                        <span class="text-muted">Manual or unknown source</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if message.audio_url %}
+                                        <a class="btn btn-sm btn-outline-primary" href="{{ message.audio_url }}" target="_blank" rel="noopener">
+                                            <i class="fas fa-play"></i> Play
+                                        </a>
+                                        {% else %}
+                                        <span class="text-muted">Unavailable</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            {% if message.text_url %}
+                                            <a class="btn btn-outline-info" href="{{ message.text_url }}" target="_blank" rel="noopener" title="Download summary">
+                                                <i class="fas fa-file-alt"></i>
+                                            </a>
+                                            {% endif %}
+                                            <a class="btn btn-outline-secondary" href="{{ message.detail_url }}" title="View details">
+                                                <i class="fas fa-headphones"></i>
+                                            </a>
+                                            {% if message.eom_url %}
+                                            <a class="btn btn-outline-warning" href="{{ message.eom_url }}" target="_blank" rel="noopener" title="EOM Burst">
+                                                <i class="fas fa-broadcast-tower"></i>
+                                            </a>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% else %}
+                                <tr data-empty="true">
+                                    <td colspan="8" class="text-center text-muted py-4">
+                                        <i class="fas fa-headphones-slash fa-2x mb-2"></i>
+                                        <div>No audio records found. Adjust your filters or check back later.</div>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            {% if pagination.pages > 1 %}
+            <nav aria-label="Audio archive pagination" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if pagination.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('audio_history', page=pagination.prev_num, **current_filters) }}">
+                            <i class="fas fa-chevron-left"></i> Previous
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% for page_num in pagination.iter_pages() %}
+                        {% if page_num %}
+                            {% if page_num == pagination.page %}
+                            <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                            {% else %}
+                            <li class="page-item"><a class="page-link" href="{{ url_for('audio_history', page=page_num, **current_filters) }}">{{ page_num }}</a></li>
+                            {% endif %}
+                        {% else %}
+                        <li class="page-item disabled"><span class="page-link">…</span></li>
+                        {% endif %}
+                    {% endfor %}
+                    {% if pagination.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('audio_history', page=pagination.next_num, **current_filters) }}">
+                            Next <i class="fas fa-chevron-right"></i>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function exportAudioArchive() {
+    try {
+        const table = document.getElementById('audioArchiveTable');
+        if (!table) {
+            showToast('Audio table not available', 'warning');
+            return;
+        }
+        const rows = table.querySelectorAll('tbody tr');
+        const dataset = [];
+        rows.forEach(row => {
+            if (row.dataset.empty === 'true') {
+                return;
+            }
+            const cells = row.querySelectorAll('td');
+            if (cells.length < 6) {
+                return;
+            }
+            dataset.push({
+                'Generated': cells[0].innerText.trim(),
+                'Event': cells[1].innerText.trim(),
+                'Severity': cells[2].innerText.trim(),
+                'Status': cells[3].innerText.trim(),
+                'SAME Header': cells[4].innerText.trim(),
+                'Alert': cells[5].innerText.trim(),
+            });
+        });
+
+        if (!dataset.length) {
+            showToast('No audio records to export', 'warning');
+            return;
+        }
+
+        exportToExcel(dataset, 'Audio_Archive');
+        showToast(`Exported ${dataset.length} audio records`, 'success');
+    } catch (error) {
+        console.error('Audio export failed:', error);
+        showToast('Failed to export audio history', 'danger');
+    }
+}
+</script>
+{% endblock %}
