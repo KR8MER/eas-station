@@ -32,6 +32,8 @@ tracks releases under the 2.1.x series.
   "First-Time Administrator Setup" wizard when no accounts exist.
 - Introduced optional Azure AI speech synthesis to append narrated voiceovers when the
   appropriate credentials and SDK are available.
+- Added an offline pyttsx3 text-to-speech provider so narration can be generated without
+  external network services when the engine is installed locally.
 - Authored dedicated `ABOUT.md` and `HELP.md` documentation describing the system mission, software stack, and operational playbooks, with cross-links from the README for quick discovery.
 - Exposed in-app About and Help pages so operators can read the mission overview and operations guide directly from the dashboard navigation.
 - Distributed a `docker-compose.embedded-db.yml` overlay so application services
