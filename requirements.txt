@@ -42,3 +42,4 @@ gunicorn==21.2.0
 
 # Optional speech synthesis support
 # azure-cognitiveservices-speech==1.38.0  # Required when enabling Azure AI voiceovers
+pyttsx3==2.90  # Offline text-to-speech engine for the pyttsx3 provider

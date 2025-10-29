@@ -10,6 +10,7 @@ import os
 import re
 import struct
 import subprocess
+import tempfile
 import time
 import wave
 from dataclasses import dataclass, field
@@ -27,6 +28,11 @@ try:  # pragma: no cover - optional dependency for Azure TTS
     import azure.cognitiveservices.speech as azure_speech  # type: ignore
 except Exception:  # pragma: no cover - keep optional
     azure_speech = None
+
+try:  # pragma: no cover - optional dependency for offline TTS
+    import pyttsx3  # type: ignore
+except Exception:  # pragma: no cover - keep optional
+    pyttsx3 = None
 
 from app_utils.event_codes import resolve_event_code
 
@@ -48,6 +54,29 @@ def _clean_identifier(value: str) -> str:
 def _ensure_directory(path: str) -> str:
     os.makedirs(path, exist_ok=True)
     return path
+
+
+def _normalize_pcm_samples(
+    raw_frames: bytes,
+    sample_width: int,
+    channels: int,
+    source_rate: int,
+    target_rate: int,
+) -> List[int]:
+    """Convert raw PCM frames into 16-bit mono samples at the desired rate."""
+
+    if sample_width != 2:
+        raw_frames = audioop.lin2lin(raw_frames, sample_width, 2)
+    if channels != 1:
+        raw_frames = audioop.tomono(raw_frames, 2, 0.5, 0.5)
+    if source_rate != target_rate:
+        raw_frames, _ = audioop.ratecv(raw_frames, 2, 1, source_rate, target_rate, None)
+
+    sample_count = len(raw_frames) // 2
+    if sample_count <= 0:
+        return []
+
+    return list(struct.unpack('<' + 'h' * sample_count, raw_frames[: sample_count * 2]))
 
 
 def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
@@ -87,6 +116,9 @@ def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
         'azure_speech_region': os.getenv('AZURE_SPEECH_REGION'),
         'azure_speech_voice': os.getenv('AZURE_SPEECH_VOICE', 'en-US-AriaNeural'),
         'azure_speech_sample_rate': int(os.getenv('AZURE_SPEECH_SAMPLE_RATE', '24000') or 24000),
+        'pyttsx3_voice': os.getenv('PYTTSX3_VOICE'),
+        'pyttsx3_rate': os.getenv('PYTTSX3_RATE'),
+        'pyttsx3_volume': os.getenv('PYTTSX3_VOLUME'),
     }
 
     if config['audio_player_cmd']:
@@ -806,6 +838,10 @@ class EASAudioGenerator:
             else:
                 if provider == 'azure':
                     tts_warning = 'Azure Speech is configured but synthesis failed.'
+                elif provider == 'pyttsx3':
+                    tts_warning = 'pyttsx3 is configured but synthesis failed.'
+                elif provider:
+                    tts_warning = f'TTS provider "{provider}" is configured but synthesis failed.'
                 else:
                     tts_warning = 'No TTS provider configured; supply narration manually.'
 
@@ -857,12 +893,20 @@ class EASAudioGenerator:
 
     def _maybe_generate_voiceover(self, text: str) -> Optional[List[int]]:
         provider = (self.config.get('tts_provider') or '').strip().lower()
-        if provider != 'azure':
-            return None
-
         if not text.strip():
             return None
 
+        if provider == 'azure':
+            return self._generate_azure_voiceover(text)
+        if provider == 'pyttsx3':
+            return self._generate_pyttsx3_voiceover(text)
+
+        if provider and self.logger:
+            self.logger.warning('Unknown TTS provider "%s"; skipping voiceover.', provider)
+
+        return None
+
+    def _generate_azure_voiceover(self, text: str) -> Optional[List[int]]:
         if azure_speech is None:
             if self.logger:
                 self.logger.warning('Azure Speech SDK not installed; skipping TTS voiceover.')
@@ -888,11 +932,17 @@ class EASAudioGenerator:
                 24000: azure_speech.SpeechSynthesisOutputFormat.Riff24Khz16BitMonoPcm,
                 44100: azure_speech.SpeechSynthesisOutputFormat.Riff44100Hz16BitMonoPcm,
             }
-            selected_format = format_map.get(desired_source_rate, azure_speech.SpeechSynthesisOutputFormat.Riff24Khz16BitMonoPcm)
+            selected_format = format_map.get(
+                desired_source_rate,
+                azure_speech.SpeechSynthesisOutputFormat.Riff24Khz16BitMonoPcm,
+            )
             speech_config.set_speech_synthesis_output_format(selected_format)
 
             audio_config = azure_speech.audio.AudioOutputConfig(use_default_speaker=False)
-            synthesizer = azure_speech.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
+            synthesizer = azure_speech.SpeechSynthesizer(
+                speech_config=speech_config,
+                audio_config=audio_config,
+            )
             result = synthesizer.speak_text(text)
         except Exception as exc:  # pragma: no cover - network/service specific
             if self.logger:
@@ -918,22 +968,134 @@ class EASAudioGenerator:
                 channels = wav_data.getnchannels()
                 source_rate = wav_data.getframerate()
 
-            if sample_width != 2:
-                raw_frames = audioop.lin2lin(raw_frames, sample_width, 2)
-            if channels != 1:
-                raw_frames = audioop.tomono(raw_frames, 2, 0.5, 0.5)
-            if source_rate != target_rate:
-                raw_frames, _ = audioop.ratecv(raw_frames, 2, 1, source_rate, target_rate, None)
-
-            sample_count = len(raw_frames) // 2
-            samples = struct.unpack('<' + 'h' * sample_count, raw_frames[: sample_count * 2])
+            samples = _normalize_pcm_samples(
+                raw_frames,
+                sample_width,
+                channels,
+                source_rate,
+                target_rate,
+            )
             if self.logger:
                 self.logger.info('Appended Azure voiceover using voice %s', voice)
-            return list(samples)
+            return samples
         except Exception as exc:  # pragma: no cover - audio decoding errors
             if self.logger:
                 self.logger.error(f"Failed to decode Azure speech audio: {exc}")
             return None
+
+    def _generate_pyttsx3_voiceover(self, text: str) -> Optional[List[int]]:
+        if pyttsx3 is None:
+            if self.logger:
+                self.logger.warning('pyttsx3 not installed; skipping TTS voiceover.')
+            return None
+
+        try:
+            engine = pyttsx3.init()
+        except Exception as exc:  # pragma: no cover - platform specific
+            if self.logger:
+                self.logger.error(f"Failed to initialise pyttsx3: {exc}")
+            return None
+
+        target_rate = int(self.config.get('sample_rate', 44100) or 44100)
+        voice_preference = (self.config.get('pyttsx3_voice') or '').strip()
+        configured_voice_id: Optional[str] = None
+        if voice_preference:
+            try:
+                voices = engine.getProperty('voices') or []
+            except Exception:  # pragma: no cover - driver specific failures
+                voices = []
+            for voice in voices:
+                voice_id = getattr(voice, 'id', '') or ''
+                voice_name = getattr(voice, 'name', '') or ''
+                if voice_preference.lower() in voice_id.lower() or voice_preference.lower() in voice_name.lower():
+                    configured_voice_id = voice_id
+                    break
+            if configured_voice_id:
+                try:
+                    engine.setProperty('voice', configured_voice_id)
+                except Exception as exc:  # pragma: no cover - driver specific
+                    if self.logger:
+                        self.logger.warning('Unable to apply pyttsx3 voice %s: %s', configured_voice_id, exc)
+                    configured_voice_id = None
+            else:
+                if self.logger:
+                    self.logger.warning('pyttsx3 voice "%s" not found; using default voice.', voice_preference)
+
+        rate_preference = (self.config.get('pyttsx3_rate') or '').strip()
+        if rate_preference:
+            try:
+                engine.setProperty('rate', int(rate_preference))
+            except Exception as exc:  # pragma: no cover - driver specific
+                if self.logger:
+                    self.logger.warning('Unable to apply pyttsx3 rate %s: %s', rate_preference, exc)
+
+        volume_preference = (self.config.get('pyttsx3_volume') or '').strip()
+        if volume_preference:
+            try:
+                engine.setProperty('volume', float(volume_preference))
+            except Exception as exc:  # pragma: no cover - driver specific
+                if self.logger:
+                    self.logger.warning('Unable to apply pyttsx3 volume %s: %s', volume_preference, exc)
+
+        tmp_path: Optional[str] = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
+                tmp_path = tmp_file.name
+
+            engine.save_to_file(text, tmp_path)
+            engine.runAndWait()
+            try:
+                configured_voice_id = engine.getProperty('voice') or configured_voice_id
+            except Exception:
+                pass
+        except Exception as exc:  # pragma: no cover - platform specific
+            if self.logger:
+                self.logger.error(f"pyttsx3 synthesis failed: {exc}")
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+            return None
+        finally:
+            try:
+                engine.stop()
+            except Exception:
+                pass
+
+        if not tmp_path or not os.path.exists(tmp_path):
+            if self.logger:
+                self.logger.warning('pyttsx3 did not produce an audio file; skipping voiceover.')
+            return None
+
+        try:
+            with wave.open(tmp_path, 'rb') as wav_data:
+                raw_frames = wav_data.readframes(wav_data.getnframes())
+                sample_width = wav_data.getsampwidth()
+                channels = wav_data.getnchannels()
+                source_rate = wav_data.getframerate()
+
+            samples = _normalize_pcm_samples(
+                raw_frames,
+                sample_width,
+                channels,
+                source_rate,
+                target_rate,
+            )
+            if self.logger:
+                voice_label = configured_voice_id or 'default'
+                self.logger.info('Appended pyttsx3 voiceover using voice %s', voice_label)
+            return samples
+        except Exception as exc:  # pragma: no cover - audio decoding errors
+            if self.logger:
+                self.logger.error(f"Failed to decode pyttsx3 audio: {exc}")
+            return None
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
 
 
 class EASBroadcaster:
