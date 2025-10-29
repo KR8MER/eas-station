@@ -1177,7 +1177,11 @@ class EASAudioGenerator:
             self._remember_tts_error(None)
             return samples
         except Exception as exc:  # pragma: no cover - audio decoding errors
-            self._remember_tts_error(f'Failed to decode pyttsx3 audio: {exc}')
+            hint = _pyttsx3_error_hint(exc)
+            if hint:
+                self._remember_tts_error(hint)
+            else:
+                self._remember_tts_error(f'Failed to decode pyttsx3 audio: {exc}')
             if self.logger:
                 self.logger.error(f"Failed to decode pyttsx3 audio: {exc}")
             return None

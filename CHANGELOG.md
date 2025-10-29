@@ -51,6 +51,7 @@ tracks releases under the 2.1.x series.
 - Updated the Quick Weekly Test preset to omit the attention signal by default and added a
   “No attention signal (omit)” option so manual packages can exclude the dual-tone or 1050 Hz
   alert when regulations allow.
+- Bundled `ffmpeg` and `libespeak` system packages in the Docker image so offline narration dependencies work out of the box during container builds.
 ### Fixed
 - Surface offline pyttsx3 narration failures in the Manual Broadcast Builder with
   the underlying error details so operators can troubleshoot configuration
@@ -60,6 +61,9 @@ tracks releases under the 2.1.x series.
 - Detect missing ffmpeg dependencies and empty audio output from pyttsx3 so the
   Manual Broadcast Builder can steer operators toward the required system
   packages when narration silently fails.
+- Surface actionable pyttsx3 dependency hints when audio decoding fails so
+  the Manual Broadcast Builder points operators to missing libespeak/ffmpeg
+  packages instead of opaque errors.
 - Count manual EAS activations when calculating Audio Archive totals and show them
   alongside automated captures so archived transmissions are visible in the history
   table.
