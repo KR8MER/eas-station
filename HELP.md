@@ -6,7 +6,8 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 1. **Review the About document:** The [About page](ABOUT.md) covers system goals, core services, and the complete software stack.
 2. **Provision infrastructure:** Deploy Docker Engine 24+ with Docker Compose V2 and ensure a dedicated PostgreSQL 15 + PostGIS database container is available before starting the app stack.
 3. **Configure environment variables:** Copy `.env.example` to `.env`, set secure secrets, and update database connection details. Optional Azure AI speech settings can remain blank until credentials are available.
-4. **Launch the stack:** Run `docker compose up -d --build` to start the web application, background poller, and supporting services.
+4. **Launch the stack:**
+   - Run `docker compose up -d --build` after `.env` points at your PostgreSQL/PostGIS deployment.
 
 ## Routine Operations
 ### Accessing the Dashboard
@@ -24,8 +25,8 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 - Trigger manual broadcasts with `manual_eas_event.py` for drills or locally authored messages.
 
 ### Generating Sample Audio
-- Run `python tools/generate_sample_audio.py` to create demonstration SAME audio clips.
-- Include the `--azure-voice` flag after configuring Azure credentials to synthesize AI narration.
+- Use **Admin → EAS Output → Manual Broadcast Builder** to craft practice activations entirely in the browser. Pick a state or territory, choose the county/parish (or statewide) SAME code, and click **Add Location** to build the PSSCCC list—manual pasting is still supported for bulk entry and the picker enforces the 31-code SAME limit. The originator dropdown now exposes only PEP, WXR, and CIV, the event selector hides the legacy `??*` placeholders, and the live preview assembles the `ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-` header while explaining each field (including the 0xAB preamble and trailing NNNN). Tap **Quick Weekly Test** to preload your configured counties and sample script before hitting **Generate Package**, which emits the three SAME bursts, attention tone (EAS or 1050 Hz), optional narration, and EOM WAV assets.
+- The legacy helper remains available for automation: `docker compose exec app python tools/generate_sample_audio.py`.
 
 ## Troubleshooting
 ### Application Will Not Start
@@ -53,7 +54,7 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 | View aggregate logs | `docker compose logs -f` |
 | Restart the web app | `docker compose restart app` |
 | Run database migrations (if applicable) | `flask db upgrade` |
-| Generate sample audio | `python tools/generate_sample_audio.py` |
+| Legacy sample audio helper | `docker compose exec app python tools/generate_sample_audio.py` |
 | Manual CAP injection | `python manual_eas_event.py --help` |
 
 ## Getting Help

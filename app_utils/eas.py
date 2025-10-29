@@ -13,7 +13,8 @@ import subprocess
 import time
 import wave
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from fractions import Fraction
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 try:  # pragma: no cover - GPIO hardware is optional and platform specific
@@ -28,6 +29,12 @@ except Exception:  # pragma: no cover - keep optional
     azure_speech = None
 
 from app_utils.event_codes import resolve_event_code
+
+MANUAL_FIPS_ENV_TOKENS = {'ALL', 'ANY', 'US', 'USA', '*'}
+
+SAME_BAUD = Fraction(3125, 6)  # 520 + 5/6 baud
+SAME_MARK_FREQ = float(SAME_BAUD * 4)  # 2083 1/3 Hz
+SAME_SPACE_FREQ = float(SAME_BAUD * 3)  # 1562.5 Hz
 
 
 def _clean_identifier(value: str) -> str:
@@ -65,7 +72,6 @@ def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
         'enabled': os.getenv('EAS_BROADCAST_ENABLED', 'false').lower() == 'true',
         'originator': (os.getenv('EAS_ORIGINATOR') or 'WXR')[:3].upper(),
         'station_id': (os.getenv('EAS_STATION_ID') or 'EASNODES')[:8].ljust(8),
-        'call_sign': os.getenv('EAS_CALL_SIGN', 'EASNODES'),
         'output_dir': _ensure_directory(output_dir),
         'web_subdir': web_subdir,
         'audio_player_cmd': os.getenv('EAS_AUDIO_PLAYER', '').strip(),
@@ -85,6 +91,228 @@ def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
         config['audio_player_cmd'] = config['audio_player_cmd'].split()
 
     return config
+
+
+P_DIGIT_MEANINGS = {
+    '0': 'Entire area',
+    '1': 'North portion',
+    '2': 'East portion',
+    '3': 'South portion',
+    '4': 'West portion',
+    '5': 'Central portion',
+    '6': 'Northeast portion',
+    '7': 'Southeast portion',
+    '8': 'Southwest portion',
+    '9': 'Northwest portion',
+}
+
+ORIGINATOR_DESCRIPTIONS = {
+    'PEP': 'National Public Warning System (PEP)',
+    'CIV': 'Civil authorities',
+    'WXR': 'National Weather Service',
+    'EAS': 'EAS participant / broadcaster',
+    'EAN': 'Emergency Action Notification (legacy)',
+}
+
+PRIMARY_ORIGINATORS: Tuple[str, ...] = ('WXR', 'CIV', 'PEP')
+
+
+SAME_HEADER_FIELD_DESCRIPTIONS = [
+    {
+        'segment': 'Preamble',
+        'label': '16 × 0xAB',
+        'description': (
+            'Binary 10101011 bytes transmitted sixteen times to calibrate and synchronise '
+            'receivers before the ASCII header.'
+        ),
+    },
+    {
+        'segment': 'ZCZC',
+        'label': 'Start code',
+        'description': (
+            'Marks the start of the SAME header, inherited from NAVTEX to trigger decoders.'
+        ),
+    },
+    {
+        'segment': 'ORG',
+        'label': 'Originator code',
+        'description': (
+            'Three-character identifier for the sender such as PEP, WXR, CIV, or EAS.'
+        ),
+    },
+    {
+        'segment': 'EEE',
+        'label': 'Event code',
+        'description': 'Three-character SAME event describing the hazard (for example TOR or RWT).',
+    },
+    {
+        'segment': 'PSSCCC',
+        'label': 'Location codes',
+        'description': (
+            'One to thirty-one SAME/FIPS identifiers. P denotes the portion of the area, '
+            'SS is the state FIPS, and CCC is the county (000 represents the entire state).'
+        ),
+    },
+    {
+        'segment': '+TTTT',
+        'label': 'Purge time',
+        'description': (
+            'Duration code expressed in minutes using SAME rounding rules (15-minute increments '
+            'up to an hour, 30-minute increments to six hours, then hourly).'
+        ),
+    },
+    {
+        'segment': '-JJJHHMM',
+        'label': 'Issue time',
+        'description': (
+            'Julian day-of-year with UTC hour and minute indicating when the alert was issued.'
+        ),
+    },
+    {
+        'segment': '-LLLLLLLL-',
+        'label': 'Station identifier',
+        'description': (
+            'Eight-character station, system, or call-sign identifier using “/” instead of “-”.'
+        ),
+    },
+    {
+        'segment': 'NNNN',
+        'label': 'End of message',
+        'description': 'Transmitted three times after audio content to terminate the activation.',
+    },
+]
+
+
+def describe_same_header(
+    header: str,
+    lookup: Optional[Dict[str, str]] = None,
+    state_index: Optional[Dict[str, Dict[str, object]]] = None,
+) -> Dict[str, object]:
+    """Break a SAME header into its constituent fields for display."""
+
+    if not header:
+        return {}
+
+    header = header.strip()
+    if not header:
+        return {}
+
+    parts = header.split('-')
+    if not parts or parts[0] != 'ZCZC':
+        return {}
+
+    originator = parts[1] if len(parts) > 1 else ''
+    event_code = parts[2] if len(parts) > 2 else ''
+
+    locations: List[str] = []
+    duration_fragment = ''
+    index = 3
+
+    while index < len(parts):
+        fragment = parts[index]
+        if '+' in fragment:
+            loc_part, duration_fragment = fragment.split('+', 1)
+            if loc_part:
+                locations.append(loc_part)
+            index += 1
+            break
+        if fragment:
+            locations.append(fragment)
+        index += 1
+
+    julian_fragment = parts[index] if index < len(parts) else ''
+    station_identifier = parts[index + 1] if index + 1 < len(parts) else ''
+
+    duration_digits = ''.join(ch for ch in duration_fragment if ch.isdigit())[:4]
+    purge_minutes = int(duration_digits) if duration_digits.isdigit() else None
+
+    def _format_duration(value: Optional[int]) -> Optional[str]:
+        if value is None:
+            return None
+        if value == 0:
+            return '0 minutes (immediate purge)'
+        if value % 60 == 0:
+            hours = value // 60
+            return f"{hours} hour{'s' if hours != 1 else ''}"
+        return f"{value} minute{'s' if value != 1 else ''}"
+
+    julian_digits = ''.join(ch for ch in julian_fragment if ch.isdigit())[:7]
+    issue_time_iso: Optional[str] = None
+    issue_time_label: Optional[str] = None
+    issue_components: Optional[Dict[str, int]] = None
+
+    if len(julian_digits) == 7:
+        try:
+            ordinal = int(julian_digits[:3])
+            hour = int(julian_digits[3:5])
+            minute = int(julian_digits[5:7])
+            base_year = datetime.now(timezone.utc).year
+            issue_dt = datetime(base_year, 1, 1, tzinfo=timezone.utc) + timedelta(
+                days=ordinal - 1,
+                hours=hour,
+                minutes=minute,
+            )
+            issue_time_iso = issue_dt.isoformat()
+            issue_time_label = f"Day {ordinal:03d} at {hour:02d}:{minute:02d} UTC"
+            issue_components = {'day_of_year': ordinal, 'hour': hour, 'minute': minute}
+        except ValueError:
+            issue_time_iso = None
+            issue_time_label = None
+            issue_components = None
+
+    detailed_locations: List[Dict[str, object]] = []
+    lookup = lookup or {}
+    state_index = state_index or {}
+
+    for entry in locations:
+        digits = ''.join(ch for ch in entry if ch.isdigit()).zfill(6)[:6]
+        if not digits:
+            continue
+        p_digit = digits[0]
+        state_digits = digits[1:3]
+        county_digits = digits[3:]
+        state_info = state_index.get(state_digits) or {}
+        state_name = state_info.get('name') or ''
+        state_abbr = state_info.get('abbr') or state_digits
+        description = lookup.get(digits)
+        is_statewide = county_digits == '000'
+        if is_statewide and not description:
+            description = f"All Areas, {state_abbr}"
+
+        detailed_locations.append({
+            'code': digits,
+            'p_digit': p_digit,
+            'p_meaning': P_DIGIT_MEANINGS.get(p_digit),
+            'state_fips': state_digits,
+            'state_name': state_name or state_abbr,
+            'state_abbr': state_abbr,
+            'county_fips': county_digits,
+            'is_statewide': is_statewide,
+            'description': description or digits,
+        })
+
+    return {
+        'preamble': parts[0] if parts else 'ZCZC',
+        'preamble_description': (
+            'SAME headers begin with a sixteen-byte 0xAB preamble for receiver synchronisation.'
+        ),
+        'start_code': parts[0] if parts else 'ZCZC',
+        'originator': originator,
+        'originator_description': ORIGINATOR_DESCRIPTIONS.get(originator),
+        'event_code': event_code,
+        'location_count': len(detailed_locations),
+        'locations': detailed_locations,
+        'purge_code': duration_digits or None,
+        'purge_minutes': purge_minutes,
+        'purge_label': _format_duration(purge_minutes),
+        'issue_code': julian_digits or None,
+        'issue_time_label': issue_time_label,
+        'issue_time_iso': issue_time_iso,
+        'issue_components': issue_components,
+        'station_identifier': station_identifier,
+        'raw_locations': locations,
+        'header_parts': parts,
+    }
 
 
 def _julian_time(dt: datetime) -> str:
@@ -225,31 +453,86 @@ def _compose_message_text(alert: object) -> str:
 
 
 def _encode_same_bits(message: str) -> List[int]:
+    """Encode an ASCII SAME header using NRZ AFSK framing.
+
+    SAME packets are transmitted at 520 5/6 baud with one start bit (0), eight
+    ASCII data bits (least significant bit first, MSB forced low), an even
+    parity bit, and a single stop bit (1). The payload is terminated with a
+    carriage return as defined by the specification.
+    """
+
     bits: List[int] = []
     for char in message + '\r':
-        ascii_code = ord(char)
-        char_bits = [0]
+        ascii_code = ord(char) & 0x7F
+
+        char_bits: List[int] = [0]
+        data_bits: List[int] = []
         for i in range(8):
-            char_bits.append((ascii_code >> i) & 1)
-        char_bits.extend([1, 1])
+            bit = (ascii_code >> i) & 1
+            data_bits.append(bit)
+            char_bits.append(bit)
+
+        parity_bit = 0 if sum(data_bits) % 2 == 0 else 1
+        char_bits.append(parity_bit)
+
+        # Stop bit
+        char_bits.append(1)
+
         bits.extend(char_bits)
+
     return bits
 
 
-def _generate_fsk_samples(bits: Sequence[int], sample_rate: int, bit_rate: float,
-                          mark_freq: float, space_freq: float, amplitude: float) -> List[int]:
+def _generate_fsk_samples(
+    bits: Sequence[int],
+    sample_rate: int,
+    bit_rate: float,
+    mark_freq: float,
+    space_freq: float,
+    amplitude: float,
+) -> List[int]:
+    """Render NRZ AFSK samples while preserving the fractional bit timing."""
+
     samples: List[int] = []
     phase = 0.0
     delta = math.tau / sample_rate
-    samples_per_bit = max(1, int(round(sample_rate / bit_rate)))
+    samples_per_bit = sample_rate / bit_rate
+    carry = 0.0
 
     for bit in bits:
         freq = mark_freq if bit else space_freq
         step = freq * delta
-        for _ in range(samples_per_bit):
+        total = samples_per_bit + carry
+        sample_count = int(total)
+        if sample_count <= 0:
+            sample_count = 1
+        carry = total - sample_count
+
+        for _ in range(sample_count):
             samples.append(int(math.sin(phase) * amplitude))
             phase = (phase + step) % math.tau
+
     return samples
+
+
+def manual_default_same_codes() -> List[str]:
+    """Return the default SAME/FIPS codes for manual generation templates."""
+
+    raw = os.getenv('EAS_MANUAL_FIPS_CODES', '')
+    codes: List[str] = []
+    if raw:
+        for token in re.split(r'[\s,]+', raw.upper()):
+            token = token.strip()
+            if not token or token in MANUAL_FIPS_ENV_TOKENS:
+                continue
+            digits = re.sub(r'[^0-9]', '', token)
+            if digits:
+                codes.append(digits.zfill(6)[:6])
+
+    if not codes:
+        codes = ['039137']
+
+    return codes[:31]
 
 
 def _generate_tone(freqs: Iterable[float], duration: float, sample_rate: int, amplitude: float) -> List[int]:
@@ -275,6 +558,18 @@ def _write_wave_file(path: str, samples: Sequence[int], sample_rate: int) -> Non
         wav.setframerate(sample_rate)
         frames = struct.pack('<' + 'h' * len(samples), *samples)
         wav.writeframes(frames)
+
+
+def samples_to_wav_bytes(samples: Sequence[int], sample_rate: int) -> bytes:
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'w') as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        frames = struct.pack('<' + 'h' * len(samples), *samples)
+        wav.writeframes(frames)
+    buffer.seek(0)
+    return buffer.getvalue()
 
 
 def _run_command(command: Sequence[str], logger) -> None:
@@ -346,9 +641,9 @@ class EASAudioGenerator:
         header_samples = _generate_fsk_samples(
             same_bits,
             sample_rate=self.sample_rate,
-            bit_rate=520.83,
-            mark_freq=2083.3,
-            space_freq=1562.5,
+            bit_rate=float(SAME_BAUD),
+            mark_freq=SAME_MARK_FREQ,
+            space_freq=SAME_SPACE_FREQ,
             amplitude=amplitude,
         )
 
@@ -406,9 +701,9 @@ class EASAudioGenerator:
         header_samples = _generate_fsk_samples(
             same_bits,
             sample_rate=self.sample_rate,
-            bit_rate=520.83,
-            mark_freq=2083.3,
-            space_freq=1562.5,
+            bit_rate=float(SAME_BAUD),
+            mark_freq=SAME_MARK_FREQ,
+            space_freq=SAME_SPACE_FREQ,
             amplitude=amplitude,
         )
 
@@ -423,6 +718,109 @@ class EASAudioGenerator:
             self.logger.debug('Generated EOM audio at %s', audio_path)
 
         return audio_filename
+
+    def build_manual_components(
+        self,
+        alert: object,
+        header: str,
+        *,
+        repeats: int = 3,
+        tone_profile: str = 'attention',
+        tone_duration: Optional[float] = None,
+        include_tts: bool = True,
+        silence_between_headers: float = 1.0,
+        silence_after_header: float = 0.5,
+    ) -> Dict[str, object]:
+        amplitude = 0.7 * 32767
+        same_bits = _encode_same_bits(header)
+        header_samples = _generate_fsk_samples(
+            same_bits,
+            sample_rate=self.sample_rate,
+            bit_rate=float(SAME_BAUD),
+            mark_freq=SAME_MARK_FREQ,
+            space_freq=SAME_SPACE_FREQ,
+            amplitude=amplitude,
+        )
+
+        repeats = max(1, int(repeats))
+        same_samples: List[int] = []
+        for burst_index in range(repeats):
+            same_samples.extend(header_samples)
+            if burst_index < repeats - 1:
+                same_samples.extend(_generate_silence(silence_between_headers, self.sample_rate))
+
+        tone_seconds = tone_duration
+        if tone_seconds is None:
+            tone_seconds = float(self.config.get('attention_tone_seconds', 8) or 8)
+        tone_seconds = max(0.25, float(tone_seconds))
+
+        profile = (tone_profile or 'attention').strip().lower()
+        if profile in {'1050', '1050hz', 'single'}:
+            tone_freqs: Iterable[float] = (1050.0,)
+            profile_label = '1050hz'
+        else:
+            tone_freqs = (853.0, 960.0)
+            profile_label = 'attention'
+
+        attention_samples = _generate_tone(tone_freqs, tone_seconds, self.sample_rate, amplitude)
+
+        message_text = _compose_message_text(alert)
+        tts_samples: List[int] = []
+        tts_warning: Optional[str] = None
+        provider = (self.config.get('tts_provider') or '').strip().lower()
+        if include_tts:
+            voiceover = self._maybe_generate_voiceover(message_text)
+            if voiceover:
+                tts_samples.extend(voiceover)
+            else:
+                if provider == 'azure':
+                    tts_warning = 'Azure Speech is configured but synthesis failed.'
+                else:
+                    tts_warning = 'No TTS provider configured; supply narration manually.'
+
+        eom_header = build_eom_header(self.config)
+        eom_bits = _encode_same_bits(eom_header)
+        eom_header_samples = _generate_fsk_samples(
+            eom_bits,
+            sample_rate=self.sample_rate,
+            bit_rate=float(SAME_BAUD),
+            mark_freq=SAME_MARK_FREQ,
+            space_freq=SAME_SPACE_FREQ,
+            amplitude=amplitude,
+        )
+
+        eom_samples: List[int] = []
+        for burst_index in range(3):
+            eom_samples.extend(eom_header_samples)
+            if burst_index < 2:
+                eom_samples.extend(_generate_silence(1.0, self.sample_rate))
+
+        trailing_silence = _generate_silence(silence_after_header, self.sample_rate)
+        composite_samples: List[int] = []
+        composite_samples.extend(same_samples)
+        composite_samples.extend(trailing_silence)
+        composite_samples.extend(attention_samples)
+        if tts_samples:
+            composite_samples.extend(trailing_silence)
+            composite_samples.extend(tts_samples)
+        composite_samples.extend(trailing_silence)
+        composite_samples.extend(eom_samples)
+
+        return {
+            'header': header,
+            'message_text': message_text,
+            'tone_profile': profile_label,
+            'tone_seconds': tone_seconds,
+            'same_samples': same_samples,
+            'attention_samples': attention_samples,
+            'tts_samples': tts_samples,
+            'tts_warning': tts_warning,
+            'tts_provider': provider or None,
+            'eom_header': eom_header,
+            'eom_samples': eom_samples,
+            'composite_samples': composite_samples,
+            'sample_rate': self.sample_rate,
+        }
 
     def _maybe_generate_voiceover(self, text: str) -> Optional[List[int]]:
         provider = (self.config.get('tts_provider') or '').strip().lower()
@@ -612,5 +1010,14 @@ class EASBroadcaster:
             self.db_session.rollback()
 
 
-__all__ = ['load_eas_config', 'EASBroadcaster', 'build_same_header']
+__all__ = [
+    'load_eas_config',
+    'EASBroadcaster',
+    'EASAudioGenerator',
+    'build_same_header',
+    'build_eom_header',
+    'samples_to_wav_bytes',
+    'manual_default_same_codes',
+    'PRIMARY_ORIGINATORS',
+]
 
