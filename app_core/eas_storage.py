@@ -7,9 +7,10 @@ import os
 from typing import Any, Dict, Optional
 
 from flask import current_app
-from sqlalchemy import text
+from sqlalchemy import or_, text
 
 from app_core.extensions import db
+from app_core.models import EASMessage
 
 
 def _get_eas_output_root() -> Optional[str]:
@@ -206,4 +207,106 @@ def ensure_eas_audio_columns(logger) -> bool:
         except Exception:  # pragma: no cover - defensive fallback
             pass
         return False
+
+
+def backfill_eas_message_payloads(logger) -> None:
+    """Populate missing cached payload columns from on-disk artifacts."""
+
+    try:
+        candidates = (
+            EASMessage.query.filter(
+                or_(
+                    EASMessage.audio_data.is_(None),
+                    EASMessage.eom_audio_data.is_(None),
+                    EASMessage.text_payload.is_(None),
+                )
+            )
+            .order_by(EASMessage.id.asc())
+            .all()
+        )
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        logger.warning("Unable to inspect cached EAS payloads: %s", exc)
+        try:
+            db.session.rollback()
+        except Exception:  # pragma: no cover - defensive fallback
+            pass
+        return
+
+    if not candidates:
+        return
+
+    updated = 0
+
+    for message in candidates:
+        changed = False
+
+        if message.audio_data is None and message.audio_filename:
+            disk_path = resolve_eas_disk_path(message.audio_filename)
+            if disk_path:
+                try:
+                    with open(disk_path, "rb") as handle:
+                        audio_bytes = handle.read()
+                except OSError as exc:
+                    logger.debug(
+                        "Unable to backfill primary audio for message %s: %s",
+                        message.id,
+                        exc,
+                    )
+                else:
+                    if audio_bytes:
+                        message.audio_data = audio_bytes
+                        changed = True
+
+        metadata = message.metadata_payload or {}
+        eom_filename = metadata.get("eom_filename") if isinstance(metadata, dict) else None
+        if message.eom_audio_data is None and eom_filename:
+            disk_path = resolve_eas_disk_path(eom_filename)
+            if disk_path:
+                try:
+                    with open(disk_path, "rb") as handle:
+                        eom_bytes = handle.read()
+                except OSError as exc:
+                    logger.debug(
+                        "Unable to backfill EOM audio for message %s: %s",
+                        message.id,
+                        exc,
+                    )
+                else:
+                    if eom_bytes:
+                        message.eom_audio_data = eom_bytes
+                        changed = True
+
+        if (message.text_payload is None or message.text_payload == {}) and message.text_filename:
+            disk_path = resolve_eas_disk_path(message.text_filename)
+            if disk_path:
+                try:
+                    with open(disk_path, "r", encoding="utf-8") as handle:
+                        payload = json.load(handle)
+                except (OSError, json.JSONDecodeError) as exc:
+                    logger.debug(
+                        "Unable to backfill summary payload for message %s: %s",
+                        message.id,
+                        exc,
+                    )
+                else:
+                    message.text_payload = payload
+                    changed = True
+
+        if changed:
+            db.session.add(message)
+            updated += 1
+
+    if not updated:
+        return
+
+    try:
+        db.session.commit()
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        logger.warning("Failed to persist cached EAS payload backfill: %s", exc)
+        try:
+            db.session.rollback()
+        except Exception:  # pragma: no cover - defensive fallback
+            pass
+    else:
+        logger.info("Backfilled cached payloads for %s EAS messages", updated)
 
