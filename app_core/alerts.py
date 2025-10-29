@@ -13,7 +13,7 @@ from sqlalchemy import or_, text
 from app_utils import ALERT_SOURCE_NOAA, normalize_alert_source, utc_now
 
 from .extensions import db
-from .models import Boundary, CAPAlert, Intersection
+from .models import CAPAlert, Intersection
 
 
 _fallback_logger = logging.getLogger("noaa_alerts_systems")
@@ -58,54 +58,18 @@ def calculate_alert_intersections(alert: CAPAlert) -> int:
     intersections_created = 0
 
     try:
-        boundaries = Boundary.query.all()
-
-        for boundary in boundaries:
-            if not boundary.geom:
-                continue
-
-            try:
-                intersection_result = db.session.execute(
-                    text(
-                        """
-                        SELECT ST_Intersects(:alert_geom, :boundary_geom) as intersects,
-                               ST_Area(ST_Intersection(:alert_geom, :boundary_geom)) as area
-                        """
-                    ),
-                    {"alert_geom": alert.geom, "boundary_geom": boundary.geom},
-                ).fetchone()
-
-                if intersection_result and intersection_result.intersects:
-                    db.session.query(Intersection).filter_by(
-                        cap_alert_id=alert.id,
-                        boundary_id=boundary.id,
-                    ).delete()
-
-                    intersection = Intersection(
-                        cap_alert_id=alert.id,
-                        boundary_id=boundary.id,
-                        intersection_area=float(intersection_result.area)
-                        if intersection_result.area
-                        else 0.0,
-                        created_at=utc_now(),
-                    )
-                    db.session.add(intersection)
-                    intersections_created += 1
-
-                    _logger().debug(
-                        "Created intersection: Alert %s <-> Boundary %s",
-                        alert.identifier,
-                        boundary.name,
-                    )
-
-            except Exception as exc:  # pragma: no cover - defensive
-                _logger().error(
-                    "Error calculating intersection for boundary %s: %s",
-                    boundary.id,
-                    exc,
-                )
-                continue
-
+        intersecting_boundaries = db.session.execute(
+            text(
+                """
+                SELECT id, name,
+                       ST_Area(ST_Intersection(:alert_geom, geom)) AS intersection_area
+                FROM boundaries
+                WHERE geom IS NOT NULL
+                  AND ST_Intersects(:alert_geom, geom)
+                """
+            ),
+            {"alert_geom": alert.geom},
+        ).all()
     except Exception as exc:  # pragma: no cover - defensive
         _logger().error(
             "Error in calculate_alert_intersections for alert %s: %s",
@@ -113,6 +77,42 @@ def calculate_alert_intersections(alert: CAPAlert) -> int:
             exc,
         )
         raise
+
+    for boundary in intersecting_boundaries:
+        boundary_id = boundary.id
+        boundary_name = boundary.name
+        intersection_area = (
+            float(boundary.intersection_area)
+            if boundary.intersection_area is not None
+            else 0.0
+        )
+
+        try:
+            db.session.query(Intersection).filter_by(
+                cap_alert_id=alert.id,
+                boundary_id=boundary_id,
+            ).delete(synchronize_session=False)
+
+            intersection = Intersection(
+                cap_alert_id=alert.id,
+                boundary_id=boundary_id,
+                intersection_area=intersection_area,
+                created_at=utc_now(),
+            )
+            db.session.add(intersection)
+            intersections_created += 1
+
+            _logger().debug(
+                "Created intersection: Alert %s <-> Boundary %s",
+                alert.identifier,
+                boundary_name,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            _logger().error(
+                "Error calculating intersection for boundary %s: %s",
+                boundary_id,
+                exc,
+            )
 
     return intersections_created
 
