@@ -359,6 +359,7 @@ class Alpha9120CController:
         rgb_color: str = None,
         priority: MessagePriority = MessagePriority.NORMAL,
         file_label: str = "A",
+        display_position: str = " ",
     ) -> Optional[bytes]:
         """Build a complete M-Protocol message with all features.
 
@@ -401,8 +402,11 @@ class Alpha9120CController:
                 # Standard color
                 formatting += self.COLOR_CMD + color.value
 
-            # Display mode
-            formatting += self.MODE_CMD + mode.value
+            # Display mode (requires a position byte according to the M-Protocol spec)
+            position_char = (display_position or " ")[:1]
+            if not position_char:
+                position_char = " "
+            formatting += self.MODE_CMD + position_char + mode.value
 
             # Speed setting
             formatting += self.SPEED_CMD + speed.value
