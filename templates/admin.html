@@ -1171,6 +1171,37 @@
                                     <p class="text-muted mb-0">Fill out the form to generate SAME/EAS audio assets.</p>
                                 </div>
                             </div>
+                            <div class="admin-card mt-4">
+                                <div class="card-header-custom d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <h5 class="mb-1"><i class="fas fa-archive me-2"></i>Manual Broadcast Archive</h5>
+                                        <small class="text-muted">Saved activations are archived for printing and export.</small>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshManualEasEvents">
+                                        <i class="fas fa-sync-alt"></i> Refresh
+                                    </button>
+                                </div>
+                                <div class="p-3">
+                                    <div id="manualEasStatus" class="text-muted small mb-2"></div>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm align-middle mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th scope="col" class="text-nowrap">Created</th>
+                                                    <th scope="col">Event</th>
+                                                    <th scope="col" class="text-nowrap">SAME Header</th>
+                                                    <th scope="col" class="text-nowrap text-center">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="manualEasEventsBody">
+                                                <tr>
+                                                    <td colspan="4" class="text-center text-muted py-3">No manual activations recorded yet.</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -1891,9 +1922,122 @@
         function initializeEasPanel() {
             initializeEasGenerator();
             loadEasMessages();
+            loadManualEasEvents();
             const refreshButton = document.getElementById('refreshEasMessages');
             if (refreshButton) {
                 refreshButton.addEventListener('click', () => loadEasMessages());
+            }
+            const manualRefresh = document.getElementById('refreshManualEasEvents');
+            if (manualRefresh) {
+                manualRefresh.addEventListener('click', () => loadManualEasEvents());
+            }
+        }
+
+        async function loadManualEasEvents() {
+            const tableBody = document.getElementById('manualEasEventsBody');
+            const status = document.getElementById('manualEasStatus');
+            if (!tableBody) {
+                return;
+            }
+
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="4" class="text-center text-muted py-3">
+                        <div class="loading-spinner"></div>
+                        <span class="ms-2">Loading manual activations…</span>
+                    </td>
+                </tr>
+            `;
+
+            try {
+                const response = await fetch('/admin/eas/manual_events?limit=50', {
+                    headers: { 'Accept': 'application/json' }
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    tableBody.innerHTML = `
+                        <tr>
+                            <td colspan="4" class="text-center text-danger py-3">
+                                ${escapeHtml(data.error || 'Unable to load manual activations.')}
+                            </td>
+                        </tr>
+                    `;
+                    if (status) {
+                        status.textContent = data.error || 'Unable to load manual activations.';
+                    }
+                    return;
+                }
+
+                const events = Array.isArray(data.events) ? data.events : [];
+                const total = typeof data.total === 'number' ? data.total : events.length;
+
+                if (!events.length) {
+                    tableBody.innerHTML = `
+                        <tr>
+                            <td colspan="4" class="text-center text-muted py-3">
+                                No manual activations recorded yet.
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    tableBody.innerHTML = '';
+                    events.forEach((item) => {
+                        const createdLabel = item.created_at ? new Date(item.created_at).toLocaleString() : 'Unknown';
+                        const eventLabel = item.event_code
+                            ? `<strong>${escapeHtml(item.event_code)}</strong>${item.event_name ? ` — ${escapeHtml(item.event_name)}` : ''}`
+                            : escapeHtml(item.event_name || 'Manual Activation');
+                        const sameHeader = item.same_header
+                            ? `<code>${escapeHtml(item.same_header)}</code>`
+                            : '<span class="text-muted">—</span>';
+                        const actions = [];
+                        const composite = item.components && item.components.composite;
+                        if (composite && composite.download_url) {
+                            actions.push(`<a class="btn btn-sm btn-outline-primary" href="${escapeHtml(composite.download_url)}" target="_blank" rel="noopener"><i class="fas fa-play"></i> Composite</a>`);
+                        }
+                        if (item.print_url) {
+                            actions.push(`<a class="btn btn-sm btn-outline-secondary" href="${escapeHtml(item.print_url)}" target="_blank" rel="noopener"><i class="fas fa-print"></i> Print</a>`);
+                        }
+                        if (item.export_url) {
+                            actions.push(`<a class="btn btn-sm btn-outline-info" href="${escapeHtml(item.export_url)}" target="_blank" rel="noopener"><i class="fas fa-file-export"></i> Export</a>`);
+                        }
+                        const actionGroup = actions.length
+                            ? actions.join(' ')
+                            : '<span class="text-muted">No files</span>';
+
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td class="text-nowrap">${escapeHtml(createdLabel)}</td>
+                            <td>${eventLabel}</td>
+                            <td class="text-break">${sameHeader}</td>
+                            <td class="text-center">${actionGroup}</td>
+                        `;
+                        tableBody.appendChild(row);
+                    });
+                }
+
+                if (status) {
+                    status.textContent = events.length
+                        ? `Showing ${events.length} of ${total} archived manual activations.`
+                        : 'No manual activations have been archived yet.';
+                }
+            } catch (error) {
+                console.error('Failed to load manual EAS activations', error);
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-center text-danger py-3">
+                            Unexpected error while loading manual activations.
+                        </td>
+                    </tr>
+                `;
+                if (status) {
+                    status.textContent = 'Unexpected error while loading manual activations.';
+                }
             }
         }
 
@@ -2236,7 +2380,7 @@
                 headlineInput.value = 'This is a Required Weekly Test.';
             }
 
-            const messageInput = document.getElementById('easMessage');
+            const messageInput = document.getElementById('easMessageBody');
             if (messageInput) {
                 messageInput.value = 'This is a test of the Emergency Alert System. No action is required.';
             }
@@ -2977,7 +3121,8 @@
 
                 easLastResponse = data;
                 renderEasGeneratorResults(data);
-                setEasGeneratorStatus('Manual EAS package generated. Review each component below.', 'success');
+                setEasGeneratorStatus('Manual EAS package generated and archived. Review each component below.', 'success');
+                loadManualEasEvents();
             } catch (error) {
                 console.error('Failed to generate manual EAS package', error);
                 setEasGeneratorStatus('Unexpected error while generating EAS audio.', 'danger');
@@ -3102,6 +3247,34 @@
             html += buildEasAudioCard('End of Message (EOM)', components.eom, 'Completes the activation with three end-of-message bursts.');
             html += buildEasAudioCard('Composite Package', components.composite, 'Full playback including header, tone, narration, and EOM.');
 
+            if (data.activation) {
+                const activation = data.activation;
+                const actions = [];
+                const archivedAt = activation.created_at
+                    ? new Date(activation.created_at).toLocaleString()
+                    : 'just now';
+                if (activation.print_url) {
+                    actions.push(`<a class="btn btn-sm btn-outline-primary" href="${escapeHtml(activation.print_url)}" target="_blank" rel="noopener"><i class="fas fa-print"></i> Print Sheet</a>`);
+                }
+                if (activation.export_url) {
+                    actions.push(`<a class="btn btn-sm btn-outline-secondary" href="${escapeHtml(activation.export_url)}" target="_blank" rel="noopener"><i class="fas fa-file-export"></i> Export JSON</a>`);
+                }
+                const actionButtons = actions.length
+                    ? actions.join('\n')
+                    : '<span class="text-muted small">Archive links unavailable.</span>';
+                html += `
+                    <div class="alert alert-info-custom d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div>
+                            <strong>Archived activation #${escapeHtml(String(activation.id || ''))}</strong>
+                            <span class="small text-muted ms-2">Saved at ${escapeHtml(archivedAt)}.</span>
+                        </div>
+                        <div class="btn-group d-print-none">
+                            ${actionButtons}
+                        </div>
+                    </div>
+                `;
+            }
+
             container.innerHTML = html;
             if (copyButton) {
                 copyButton.disabled = !sameHeader;
@@ -3126,13 +3299,20 @@
         }
 
         function buildEasAudioCard(title, component, description) {
-            if (!component || !component.data_url) {
+            if (!component) {
                 return '';
             }
             const duration = Number(component.duration_seconds || 0);
             const durationLabel = duration ? `${duration.toFixed(duration >= 10 ? 0 : 2)} seconds` : '—';
             const sizeLabel = component.size_bytes ? formatBytes(Number(component.size_bytes)) : null;
             const filename = component.filename || `${title.replace(/\s+/g, '_').toLowerCase()}.wav`;
+            const downloadUrl = component.download_url || component.data_url || '';
+            const audioSource = component.data_url || component.download_url || '';
+            const downloadButton = downloadUrl
+                ? `<a class="btn btn-sm btn-outline-primary" href="${escapeHtml(downloadUrl)}" download="${escapeHtml(filename)}" target="_blank" rel="noopener">
+                        <i class="fas fa-download"></i> Download
+                   </a>`
+                : '<span class="btn btn-sm btn-outline-secondary disabled"><i class="fas fa-download"></i></span>';
 
             return `
                 <div class="border rounded-3 p-3 mb-3">
@@ -3141,11 +3321,9 @@
                             <h6 class="mb-1">${escapeHtml(title)}</h6>
                             <small class="text-muted">${escapeHtml(description || '')}${sizeLabel ? ` · ${escapeHtml(sizeLabel)}` : ''} · ${escapeHtml(durationLabel)}</small>
                         </div>
-                        <a class="btn btn-sm btn-outline-primary" href="${escapeHtml(component.data_url)}" download="${escapeHtml(filename)}">
-                            <i class="fas fa-download"></i> Download
-                        </a>
+                        ${downloadButton}
                     </div>
-                    <audio controls class="w-100 mt-3" src="${escapeHtml(component.data_url)}"></audio>
+                    ${audioSource ? `<audio controls class="w-100 mt-3" src="${escapeHtml(audioSource)}"></audio>` : '<p class="text-muted small mb-0 mt-3">Audio preview unavailable for this component.</p>'}
                 </div>
             `;
         }

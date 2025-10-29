@@ -72,6 +72,8 @@ from flask import (
     has_app_context,
     session,
     g,
+    send_file,
+    abort,
 )
 from geoalchemy2.functions import ST_GeomFromGeoJSON, ST_Intersects, ST_AsGeoJSON
 from sqlalchemy import text, func, or_, desc
@@ -125,6 +127,7 @@ from app_core.models import (
     Boundary,
     CAPAlert,
     EASMessage,
+    ManualEASActivation,
     Intersection,
     LEDMessage,
     LEDSignStatus,
@@ -1811,15 +1814,41 @@ def admin_manual_eas_generate():
     base_name = _safe_base(identifier)
     sample_rate = components.get('sample_rate', sample_rate)
 
+    output_root = str(manual_config.get('output_dir') or app.config.get('EAS_OUTPUT_DIR') or '').strip()
+    if not output_root:
+        logger.error('Manual EAS output directory is not configured.')
+        return jsonify({'error': 'Manual EAS output directory is not configured.'}), 500
+
+    manual_root = os.path.join(output_root, 'manual')
+    os.makedirs(manual_root, exist_ok=True)
+
+    timestamp_tag = datetime.utcnow().strftime('%Y%m%d%H%M%S')
+    slug = f"{base_name}_{timestamp_tag}"
+    event_dir = os.path.join(manual_root, slug)
+    os.makedirs(event_dir, exist_ok=True)
+    storage_root = '/'.join(part for part in ['manual', slug] if part)
+    web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+
     def _package_audio(samples: List[int], suffix: str) -> Optional[Dict[str, Any]]:
         if not samples:
             return None
         wav_bytes = samples_to_wav_bytes(samples, sample_rate)
-        data_url = f"data:audio/wav;base64,{base64.b64encode(wav_bytes).decode('ascii')}"
         duration = round(len(samples) / sample_rate, 3)
+        filename = f"{slug}_{suffix}.wav"
+        file_path = os.path.join(event_dir, filename)
+        with open(file_path, 'wb') as handle:
+            handle.write(wav_bytes)
+
+        storage_subpath = '/'.join(part for part in [storage_root, filename] if part)
+        web_parts = [web_prefix, storage_subpath] if web_prefix else [storage_subpath]
+        web_path = '/'.join(part for part in web_parts if part)
+        download_url = url_for('static', filename=web_path)
+        data_url = f"data:audio/wav;base64,{base64.b64encode(wav_bytes).decode('ascii')}"
         return {
-            'filename': f"{base_name}_{suffix}.wav",
+            'filename': filename,
             'data_url': data_url,
+            'download_url': download_url,
+            'storage_subpath': storage_subpath,
             'duration_seconds': duration,
             'size_bytes': len(wav_bytes),
         }
@@ -1832,6 +1861,20 @@ def admin_manual_eas_generate():
     }
     same_lookup = get_same_lookup()
     header_detail = describe_same_header(header, lookup=same_lookup, state_index=state_index)
+
+    same_component = _package_audio(components.get('same_samples') or [], 'same')
+    attention_component = _package_audio(components.get('attention_samples') or [], 'attention')
+    tts_component = _package_audio(components.get('tts_samples') or [], 'tts')
+    eom_component = _package_audio(components.get('eom_samples') or [], 'eom')
+    composite_component = _package_audio(components.get('composite_samples') or [], 'full')
+
+    stored_components = {
+        'same': same_component,
+        'attention': attention_component,
+        'tts': tts_component,
+        'eom': eom_component,
+        'composite': composite_component,
+    }
 
     response_payload: Dict[str, Any] = {
         'identifier': identifier,
@@ -1848,18 +1891,104 @@ def admin_manual_eas_generate():
         'duration_minutes': duration_minutes,
         'sent_at': sent_dt.isoformat(),
         'expires_at': expires_dt.isoformat(),
-        'components': {
-            'same': _package_audio(components.get('same_samples') or [], 'same'),
-            'attention': _package_audio(components.get('attention_samples') or [], 'attention'),
-            'tts': _package_audio(components.get('tts_samples') or [], 'tts'),
-            'eom': _package_audio(components.get('eom_samples') or [], 'eom'),
-            'composite': _package_audio(components.get('composite_samples') or [], 'full'),
-        },
+        'components': stored_components,
         'sample_rate': sample_rate,
         'same_header_detail': header_detail,
+        'storage_path': storage_root,
     }
 
+    summary_filename = f"{slug}_summary.json"
+    summary_path = os.path.join(event_dir, summary_filename)
+
+    summary_components = {
+        key: {
+            'filename': value['filename'],
+            'duration_seconds': value['duration_seconds'],
+            'size_bytes': value['size_bytes'],
+            'storage_subpath': value['storage_subpath'],
+        }
+        for key, value in stored_components.items()
+        if value
+    }
+
+    summary_payload = {
+        'identifier': identifier,
+        'event_code': resolved_event_code,
+        'event_name': event_name,
+        'same_header': header,
+        'same_locations': formatted_locations,
+        'tone_profile': components.get('tone_profile'),
+        'tone_seconds': components.get('tone_seconds'),
+        'duration_minutes': duration_minutes,
+        'sample_rate': sample_rate,
+        'status': status,
+        'message_type': message_type,
+        'sent_at': sent_dt.isoformat(),
+        'expires_at': expires_dt.isoformat(),
+        'headline': alert_object.headline,
+        'message_text': components.get('message_text'),
+        'instruction_text': alert_object.instruction,
+        'components': summary_components,
+    }
+
+    with open(summary_path, 'w', encoding='utf-8') as handle:
+        json.dump(summary_payload, handle, indent=2)
+
+    summary_subpath = '/'.join(part for part in [storage_root, summary_filename] if part)
+    summary_parts = [web_prefix, summary_subpath] if web_prefix else [summary_subpath]
+    summary_web_path = '/'.join(part for part in summary_parts if part)
+    summary_url = url_for('static', filename=summary_web_path)
+
+    response_payload['export_url'] = summary_url
+
+    archive_time = datetime.now(timezone.utc)
+    ManualEASActivation.query.filter(ManualEASActivation.archived_at.is_(None)).update(
+        {'archived_at': archive_time}, synchronize_session=False
+    )
+
+    db_components = {
+        key: {
+            'filename': value['filename'],
+            'duration_seconds': value['duration_seconds'],
+            'size_bytes': value['size_bytes'],
+            'storage_subpath': value['storage_subpath'],
+        }
+        for key, value in stored_components.items()
+        if value
+    }
+
+    activation_record = ManualEASActivation(
+        identifier=identifier,
+        event_code=resolved_event_code,
+        event_name=event_name or resolved_event_code,
+        status=status,
+        message_type=message_type,
+        same_header=header,
+        same_locations=formatted_locations,
+        tone_profile=components.get('tone_profile') or 'attention',
+        tone_seconds=components.get('tone_seconds'),
+        sample_rate=sample_rate,
+        includes_tts=bool(tts_component),
+        tts_warning=components.get('tts_warning'),
+        sent_at=sent_dt,
+        expires_at=expires_dt,
+        headline=alert_object.headline,
+        message_text=components.get('message_text'),
+        instruction_text=alert_object.instruction,
+        duration_minutes=duration_minutes,
+        storage_path=storage_root,
+        summary_filename=summary_filename,
+        components_payload=db_components,
+        metadata_payload={
+            'summary_subpath': summary_subpath,
+            'web_prefix': web_prefix,
+            'includes_tts': bool(tts_component),
+        },
+    )
+
     try:
+        db.session.add(activation_record)
+        db.session.flush()
         db.session.add(SystemLog(
             level='INFO',
             message='Manual EAS package generated',
@@ -1869,15 +1998,180 @@ def admin_manual_eas_generate():
                 'event_code': resolved_event_code,
                 'location_count': len(formatted_locations),
                 'tone_profile': response_payload['tone_profile'],
-                'tts_included': bool(response_payload['components']['tts']),
+                'tts_included': bool(tts_component),
+                'manual_activation_id': activation_record.id,
             },
         ))
         db.session.commit()
-    except Exception as exc:  # pragma: no cover - logging failures should not break response
+    except Exception as exc:
         db.session.rollback()
-        logger.warning(f"Failed to persist manual EAS generation log: {exc}")
+        logger.error('Failed to persist manual EAS activation: %s', exc)
+        return jsonify({'error': 'Unable to persist manual activation details.'}), 500
+
+    response_payload['activation'] = {
+        'id': activation_record.id,
+        'created_at': activation_record.created_at.isoformat() if activation_record.created_at else None,
+        'print_url': url_for('manual_eas_print', event_id=activation_record.id),
+        'export_url': summary_url,
+        'components': {
+            key: {
+                'download_url': value['download_url'],
+                'filename': value['filename'],
+            }
+            for key, value in stored_components.items()
+            if value
+        },
+    }
 
     return jsonify(response_payload)
+
+
+@app.route('/admin/eas/manual_events', methods=['GET'])
+def admin_manual_eas_events():
+    creating_first_user = AdminUser.query.count() == 0
+    if g.current_user is None and not creating_first_user:
+        return jsonify({'error': 'Authentication required.'}), 401
+
+    try:
+        limit = request.args.get('limit', type=int) or 100
+        limit = min(max(limit, 1), 500)
+        total = ManualEASActivation.query.count()
+        events = (
+            ManualEASActivation.query.order_by(ManualEASActivation.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+        web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+        items = []
+
+        for event in events:
+            components_payload = event.components_payload or {}
+
+            def _component_with_url(meta: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+                if not meta:
+                    return None
+                storage_subpath = meta.get('storage_subpath')
+                web_parts = [web_prefix, storage_subpath] if storage_subpath else []
+                web_path = '/'.join(part for part in web_parts if part)
+                download_url = url_for('static', filename=web_path) if storage_subpath else None
+                return {
+                    'filename': meta.get('filename'),
+                    'duration_seconds': meta.get('duration_seconds'),
+                    'size_bytes': meta.get('size_bytes'),
+                    'storage_subpath': storage_subpath,
+                    'download_url': download_url,
+                }
+
+            summary_subpath = None
+            if event.summary_filename:
+                summary_subpath = '/'.join(
+                    part for part in [event.storage_path, event.summary_filename] if part
+                )
+            export_url = (
+                url_for('manual_eas_export', event_id=event.id)
+                if summary_subpath
+                else None
+            )
+
+            items.append({
+                'id': event.id,
+                'identifier': event.identifier,
+                'event_code': event.event_code,
+                'event_name': event.event_name,
+                'status': event.status,
+                'message_type': event.message_type,
+                'same_header': event.same_header,
+                'created_at': event.created_at.isoformat() if event.created_at else None,
+                'archived_at': event.archived_at.isoformat() if event.archived_at else None,
+                'print_url': url_for('manual_eas_print', event_id=event.id),
+                'export_url': export_url,
+                'components': {
+                    key: _component_with_url(meta)
+                    for key, meta in components_payload.items()
+                },
+            })
+
+        return jsonify({'events': items, 'total': total})
+    except Exception as exc:
+        logger.error('Failed to list manual EAS activations: %s', exc)
+        return jsonify({'error': 'Unable to load manual activations.'}), 500
+
+
+@app.route('/admin/eas/manual_events/<int:event_id>/print')
+def manual_eas_print(event_id: int):
+    creating_first_user = AdminUser.query.count() == 0
+    if g.current_user is None and not creating_first_user:
+        return redirect(url_for('login'))
+
+    event = ManualEASActivation.query.get_or_404(event_id)
+    components_payload = event.components_payload or {}
+    web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+
+    def _component_with_url(meta: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if not meta:
+            return None
+        storage_subpath = meta.get('storage_subpath')
+        web_parts = [web_prefix, storage_subpath] if storage_subpath else []
+        web_path = '/'.join(part for part in web_parts if part)
+        download_url = url_for('static', filename=web_path) if storage_subpath else None
+        return {
+            'filename': meta.get('filename'),
+            'duration_seconds': meta.get('duration_seconds'),
+            'size_bytes': meta.get('size_bytes'),
+            'download_url': download_url,
+        }
+
+    components: Dict[str, Dict[str, Any]] = {}
+    for key, meta in components_payload.items():
+        component_value = _component_with_url(meta)
+        if component_value:
+            components[key] = component_value
+
+    state_tree = get_us_state_county_tree()
+    state_index = {
+        state.get('state_fips'): {'abbr': state.get('abbr'), 'name': state.get('name')}
+        for state in state_tree
+        if state.get('state_fips')
+    }
+    same_lookup = get_same_lookup()
+    header_detail = describe_same_header(event.same_header, lookup=same_lookup, state_index=state_index)
+
+    return render_template(
+        'manual_eas_print.html',
+        event=event,
+        components=components,
+        header_detail=header_detail,
+        summary_url=url_for('manual_eas_export', event_id=event.id)
+        if event.summary_filename
+        else None,
+    )
+
+
+@app.route('/admin/eas/manual_events/<int:event_id>/export')
+def manual_eas_export(event_id: int):
+    creating_first_user = AdminUser.query.count() == 0
+    if g.current_user is None and not creating_first_user:
+        return abort(401)
+
+    event = ManualEASActivation.query.get_or_404(event_id)
+    if not event.summary_filename:
+        return abort(404)
+
+    output_root = str(app.config.get('EAS_OUTPUT_DIR') or '').strip()
+    if not output_root:
+        return abort(404)
+
+    file_path = os.path.join(output_root, event.storage_path or '', event.summary_filename)
+    if not os.path.exists(file_path):
+        return abort(404)
+
+    return send_file(
+        file_path,
+        as_attachment=True,
+        download_name=event.summary_filename,
+        mimetype='application/json',
+    )
 
 
 @app.route('/logs')

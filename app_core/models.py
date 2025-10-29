@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from flask import current_app, has_app_context
 from geoalchemy2 import Geometry
@@ -182,6 +182,65 @@ class EASMessage(db.Model):
             "text_filename": self.text_filename,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "metadata": dict(self.metadata_payload or {}),
+        }
+
+
+class ManualEASActivation(db.Model):
+    __tablename__ = "manual_eas_activations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    identifier = db.Column(db.String(120), nullable=False)
+    event_code = db.Column(db.String(8), nullable=False)
+    event_name = db.Column(db.String(255), nullable=False)
+    status = db.Column(db.String(32), nullable=False)
+    message_type = db.Column(db.String(32), nullable=False)
+    same_header = db.Column(db.String(255), nullable=False)
+    same_locations = db.Column(db.JSON, nullable=False, default=list)
+    tone_profile = db.Column(db.String(32), nullable=False)
+    tone_seconds = db.Column(db.Float)
+    sample_rate = db.Column(db.Integer)
+    includes_tts = db.Column(db.Boolean, default=False)
+    tts_warning = db.Column(db.String(255))
+    sent_at = db.Column(db.DateTime(timezone=True))
+    expires_at = db.Column(db.DateTime(timezone=True))
+    headline = db.Column(db.String(240))
+    message_text = db.Column(db.Text)
+    instruction_text = db.Column(db.Text)
+    duration_minutes = db.Column(db.Float)
+    storage_path = db.Column(db.String(255), nullable=False)
+    summary_filename = db.Column(db.String(255))
+    components_payload = db.Column(db.JSON, nullable=False, default=dict)
+    metadata_payload = db.Column(db.JSON, nullable=False, default=dict)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
+    archived_at = db.Column(db.DateTime(timezone=True))
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "identifier": self.identifier,
+            "event_code": self.event_code,
+            "event_name": self.event_name,
+            "status": self.status,
+            "message_type": self.message_type,
+            "same_header": self.same_header,
+            "same_locations": list(self.same_locations or []),
+            "tone_profile": self.tone_profile,
+            "tone_seconds": self.tone_seconds,
+            "sample_rate": self.sample_rate,
+            "includes_tts": bool(self.includes_tts),
+            "tts_warning": self.tts_warning,
+            "sent_at": self.sent_at.isoformat() if self.sent_at else None,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
+            "headline": self.headline,
+            "message_text": self.message_text,
+            "instruction_text": self.instruction_text,
+            "duration_minutes": self.duration_minutes,
+            "storage_path": self.storage_path,
+            "summary_filename": self.summary_filename,
+            "components": dict(self.components_payload or {}),
+            "metadata": dict(self.metadata_payload or {}),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "archived_at": self.archived_at.isoformat() if self.archived_at else None,
         }
 
 
