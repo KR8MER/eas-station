@@ -47,6 +47,12 @@ tracks releases under the 2.1.x series.
   “No attention signal (omit)” option so manual packages can exclude the dual-tone or 1050 Hz
   alert when regulations allow.
 ### Fixed
+- Count manual EAS activations when calculating Audio Archive totals and show them
+  alongside automated captures so archived transmissions are visible in the history
+  table.
+- Moved the Manual Broadcast Archive card to span the full EAS console width,
+  matching the builder/output layout and preventing it from being tucked under the
+  preview panel on large displays.
 - Corrected the Quick Weekly Test preset so the sample Required Weekly Test script
   populates the message body as expected.
 - Standardised the manual and automated encoder timing so each SAME section includes a one-second
