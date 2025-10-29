@@ -52,10 +52,13 @@ def ensure_multipolygon(geometry: Dict[str, object]) -> Dict[str, object]:
 def calculate_alert_intersections(alert: CAPAlert) -> int:
     """Calculate intersections between an alert polygon and loaded boundaries."""
 
-    if not alert.geom:
+    alert_geom = alert.geom
+    if not alert_geom:
         return 0
 
-    intersections_created = 0
+    db.session.query(Intersection).filter_by(
+        cap_alert_id=alert.id
+    ).delete(synchronize_session=False)
 
     try:
         intersecting_boundaries = db.session.execute(
@@ -68,7 +71,7 @@ def calculate_alert_intersections(alert: CAPAlert) -> int:
                   AND ST_Intersects(:alert_geom, geom)
                 """
             ),
-            {"alert_geom": alert.geom},
+            {"alert_geom": alert_geom},
         ).all()
     except Exception as exc:  # pragma: no cover - defensive
         _logger().error(
@@ -78,41 +81,52 @@ def calculate_alert_intersections(alert: CAPAlert) -> int:
         )
         raise
 
+    created_at = utc_now()
+    intersections_created = 0
+    new_intersections = []
+    created_boundary_names = []
+
     for boundary in intersecting_boundaries:
-        boundary_id = boundary.id
-        boundary_name = boundary.name
         intersection_area = (
             float(boundary.intersection_area)
             if boundary.intersection_area is not None
             else 0.0
         )
 
-        try:
-            db.session.query(Intersection).filter_by(
-                cap_alert_id=alert.id,
-                boundary_id=boundary_id,
-            ).delete(synchronize_session=False)
+        if intersection_area <= 0:
+            continue
 
-            intersection = Intersection(
+        new_intersections.append(
+            Intersection(
                 cap_alert_id=alert.id,
-                boundary_id=boundary_id,
+                boundary_id=boundary.id,
                 intersection_area=intersection_area,
-                created_at=utc_now(),
+                created_at=created_at,
             )
-            db.session.add(intersection)
-            intersections_created += 1
+        )
 
-            _logger().debug(
-                "Created intersection: Alert %s <-> Boundary %s",
-                alert.identifier,
-                boundary_name,
-            )
-        except Exception as exc:  # pragma: no cover - defensive
-            _logger().error(
-                "Error calculating intersection for boundary %s: %s",
-                boundary_id,
-                exc,
-            )
+        intersections_created += 1
+        created_boundary_names.append(boundary.name)
+
+    if not new_intersections:
+        return 0
+
+    try:
+        db.session.bulk_save_objects(new_intersections)
+    except Exception as exc:  # pragma: no cover - defensive
+        _logger().error(
+            "Error bulk inserting intersections for alert %s: %s",
+            alert.identifier,
+            exc,
+        )
+        raise
+
+    for boundary_name in created_boundary_names:
+        _logger().debug(
+            "Created intersection: Alert %s <-> Boundary %s",
+            alert.identifier,
+            boundary_name,
+        )
 
     return intersections_created
 
