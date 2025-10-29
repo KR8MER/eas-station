@@ -57,6 +57,7 @@ from app_core.eas_storage import (
     get_eas_static_prefix,
 )
 from app_core.system_health import get_system_health
+from app_core.poller_debug import ensure_poll_debug_table
 from webapp import register_routes
 from webapp.admin.boundaries import (
     ensure_alert_source_columns,
@@ -118,12 +119,15 @@ from app_core.led import (
 from app_core.location import get_location_settings, update_location_settings
 from app_core.models import (
     AdminUser,
+    Boundary,
     CAPAlert,
     EASMessage,
+    Intersection,
     ManualEASActivation,
     LEDMessage,
     LEDSignStatus,
     LocationSettings,
+    PollDebugRecord,
     PollHistory,
     SystemLog,
 )
@@ -554,6 +558,11 @@ def initialize_database():
         if not ensure_manual_eas_audio_columns(logger):
             _db_initialization_error = RuntimeError(
                 "Manual EAS audio columns could not be ensured"
+            )
+            return False
+        if not ensure_poll_debug_table(logger):
+            _db_initialization_error = RuntimeError(
+                "Poll debug table could not be ensured"
             )
             return False
         backfill_eas_message_payloads(logger)

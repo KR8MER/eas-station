@@ -17,6 +17,7 @@ import os
 import sys
 import time
 import json
+import uuid
 import requests
 import logging
 import hashlib
@@ -105,7 +106,16 @@ try:
     if project_root.endswith('/poller'):
         project_root = os.path.dirname(project_root)
     sys.path.insert(0, project_root)
-    from app import db, CAPAlert, SystemLog, Boundary, Intersection, LocationSettings, EASMessage  # type: ignore
+    from app import (
+        db,
+        CAPAlert,
+        SystemLog,
+        Boundary,
+        Intersection,
+        LocationSettings,
+        EASMessage,
+        PollDebugRecord,
+    )  # type: ignore
     from sqlalchemy import Column, Integer, String, DateTime, Text, JSON  # noqa: F401
 
     class PollHistory(db.Model):  # type: ignore
@@ -215,6 +225,37 @@ except Exception as e:
         error_message = Column(Text)
         data_source = Column(String(64))
 
+    class PollDebugRecord(Base):
+        __tablename__ = 'poll_debug_records'
+        __table_args__ = {'extend_existing': True}
+        id = Column(Integer, primary_key=True)
+        created_at = Column(DateTime, default=utc_now)
+        poll_run_id = Column(String(64), index=True)
+        poll_started_at = Column(DateTime, nullable=False)
+        poll_status = Column(String(20), default='UNKNOWN')
+        data_source = Column(String(64))
+        alert_identifier = Column(String(255))
+        alert_event = Column(String(255))
+        alert_sent = Column(DateTime)
+        source = Column(String(64))
+        is_relevant = Column(Boolean, default=False)
+        relevance_reason = Column(String(255))
+        relevance_matches = Column(JSON)
+        ugc_codes = Column(JSON)
+        area_desc = Column(Text)
+        was_saved = Column(Boolean, default=False)
+        was_new = Column(Boolean, default=False)
+        alert_db_id = Column(Integer)
+        parse_success = Column(Boolean, default=False)
+        parse_error = Column(Text)
+        polygon_count = Column(Integer)
+        geometry_type = Column(String(64))
+        geometry_geojson = Column(JSON)
+        geometry_preview = Column(JSON)
+        raw_properties = Column(JSON)
+        raw_xml_present = Column(Boolean, default=False)
+        notes = Column(Text)
+
     class LocationSettings(Base):
         __tablename__ = 'location_settings'
         __table_args__ = {'extend_existing': True}
@@ -280,6 +321,8 @@ class CAPPoller:
             self.logger.warning(f"Database table verification failed: {e}")
 
         self._ensure_source_columns()
+        self._debug_table_checked = False
+        self._ensure_debug_records_table()
 
         self.location_settings = self._load_location_settings()
         self.location_name = f"{self.location_settings['county_name']}, {self.location_settings['state_code']}".strip(', ')
@@ -318,35 +361,72 @@ class CAPPoller:
         elif led_sign_ip:
             self.logger.warning("LED sign IP provided but controller not available")
 
-        # Endpoints
+        # Endpoint configuration & defaults
+        self.poller_mode = (os.getenv('CAP_POLLER_MODE', 'NOAA') or 'NOAA').strip().upper()
+
         configured_endpoints: List[str] = []
-        env_cap_endpoints = os.getenv('CAP_ENDPOINTS')
-        if env_cap_endpoints:
-            configured_endpoints.extend([
-                endpoint.strip()
-                for endpoint in env_cap_endpoints.split(',')
-                if endpoint.strip()
-            ])
+
+        def _extend_from_csv(csv_value: Optional[str]) -> None:
+            if not csv_value:
+                return
+            for endpoint in csv_value.split(','):
+                cleaned = endpoint.strip()
+                if cleaned:
+                    configured_endpoints.append(cleaned)
+
+        _extend_from_csv(os.getenv('CAP_ENDPOINTS'))
+        _extend_from_csv(os.getenv('IPAWS_CAP_FEED_URLS'))
+
         if cap_endpoints:
             configured_endpoints.extend([endpoint for endpoint in cap_endpoints if endpoint])
 
         if configured_endpoints:
             # Preserve order but remove duplicates
-            seen = set()
-            unique_endpoints = []
+            seen: Set[str] = set()
+            unique_endpoints: List[str] = []
             for endpoint in configured_endpoints:
                 if endpoint not in seen:
                     unique_endpoints.append(endpoint)
                     seen.add(endpoint)
             self.cap_endpoints = unique_endpoints
         else:
-            self.cap_endpoints = [
-                f"https://api.weather.gov/alerts/active?zone={code}"
-                for code in self.location_settings['zone_codes']
-            ] or [
-                f"https://api.weather.gov/alerts/active?zone={code}"
-                for code in DEFAULT_LOCATION_SETTINGS['zone_codes']
-            ]
+            if self.poller_mode == 'IPAWS':
+                lookback_hours = os.getenv('IPAWS_DEFAULT_LOOKBACK_HOURS', '12')
+                try:
+                    lookback_hours_int = max(1, int(lookback_hours))
+                except ValueError:
+                    lookback_hours_int = 12
+
+                default_start = (utc_now() - timedelta(hours=lookback_hours_int)).strftime('%Y-%m-%dT%H:%M:%SZ')
+                override_start = (os.getenv('IPAWS_DEFAULT_START') or '').strip()
+                if override_start:
+                    default_start = override_start
+
+                endpoint_template = (
+                    os.getenv(
+                        'IPAWS_DEFAULT_ENDPOINT_TEMPLATE',
+                        'https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}',
+                    )
+                    or 'https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}'
+                )
+                try:
+                    default_endpoint = endpoint_template.format(timestamp=default_start)
+                except Exception:
+                    default_endpoint = endpoint_template
+
+                self.cap_endpoints = [default_endpoint]
+                self.logger.info(
+                    "No CAP endpoints configured; defaulting to FEMA IPAWS public feed starting %s",
+                    default_start,
+                )
+            else:
+                self.cap_endpoints = [
+                    f"https://api.weather.gov/alerts/active?zone={code}"
+                    for code in self.location_settings['zone_codes']
+                ] or [
+                    f"https://api.weather.gov/alerts/active?zone={code}"
+                    for code in DEFAULT_LOCATION_SETTINGS['zone_codes']
+                ]
 
         # Strict location terms
         base_identifiers = self.location_settings['area_terms'] or list(DEFAULT_LOCATION_SETTINGS['area_terms'])
@@ -413,6 +493,17 @@ class CAPPoller:
                 self.db_session.rollback()
             except Exception:
                 pass
+
+    def _ensure_debug_records_table(self) -> bool:
+        if getattr(self, "_debug_table_checked", False):
+            return self._debug_table_checked
+        try:
+            PollDebugRecord.__table__.create(bind=self.engine, checkfirst=True)
+            self._debug_table_checked = True
+        except Exception as exc:
+            self.logger.debug("Could not ensure poll_debug_records table: %s", exc)
+            self._debug_table_checked = False
+        return self._debug_table_checked
 
     # ---------- Engine with retry ----------
     def _load_location_settings(self) -> Dict[str, Any]:
@@ -841,30 +932,119 @@ class CAPPoller:
 
         return unique_alerts
 
+    def _safe_json_copy(self, value: Any) -> Any:
+        try:
+            return json.loads(json.dumps(value, default=str))
+        except Exception:
+            return value
+
+    def _summarise_geometry(self, geometry: Optional[Dict]) -> Tuple[Optional[str], Optional[int], Optional[List[List[float]]]]:
+        if not geometry or not isinstance(geometry, dict):
+            return None, None, None
+
+        geom_type = geometry.get('type')
+        coordinates = geometry.get('coordinates')
+        polygon_count: Optional[int] = None
+        preview: Optional[List[List[float]]] = None
+
+        if geom_type == 'Polygon':
+            polygon_count = 1
+            rings = coordinates or []
+            if rings and isinstance(rings, list) and rings[0]:
+                preview = [list(point) for point in rings[0][: min(len(rings[0]), 12)]]
+        elif geom_type == 'MultiPolygon':
+            polygon_count = len(coordinates or []) if isinstance(coordinates, list) else 0
+            if coordinates and isinstance(coordinates, list):
+                first_polygon = coordinates[0] or []
+                if first_polygon and isinstance(first_polygon, list) and first_polygon[0]:
+                    preview = [list(point) for point in first_polygon[0][: min(len(first_polygon[0]), 12)]]
+        else:
+            if isinstance(coordinates, list):
+                polygon_count = len(coordinates)
+                preview = [list(point) for point in coordinates[: min(len(coordinates), 12)]]
+
+        return geom_type, polygon_count, preview
+
     # ---------- Relevance ----------
-    def is_relevant_alert(self, alert_data: Dict) -> bool:
+    def get_alert_relevance_details(self, alert_data: Dict) -> Dict[str, Any]:
+        result: Dict[str, Any] = {
+            'is_relevant': False,
+            'reason': 'NO_MATCH',
+            'matched_ugc': None,
+            'matched_terms': [],
+            'relevance_matches': [],
+            'ugc_codes': [],
+            'area_desc': '',
+            'log': None,
+        }
+
         try:
             properties = alert_data.get('properties', {})
             event = properties.get('event', 'Unknown')
-            geocode = properties.get('geocode', {})
+            geocode = properties.get('geocode', {}) or {}
             ugc_codes = geocode.get('UGC', []) or []
+            normalized_ugc = [str(ugc).upper() for ugc in ugc_codes if ugc]
+            result['ugc_codes'] = normalized_ugc
 
-            for ugc in ugc_codes:
-                if str(ugc).upper() in self.zone_codes:
-                    self.logger.info(f"✓ Alert ACCEPTED by UGC: {event} ({ugc})")
-                    return True
+            area_desc_raw = properties.get('areaDesc') or ''
+            if isinstance(area_desc_raw, list):
+                area_desc_raw = '; '.join(area_desc_raw)
+            area_desc_upper = area_desc_raw.upper()
+            result['area_desc'] = area_desc_raw
 
-            area_desc = (properties.get('areaDesc') or '').upper()
-            matched_terms = [term for term in self.putnam_county_identifiers if term and term in area_desc]
+            for ugc in normalized_ugc:
+                if ugc in self.zone_codes:
+                    message = f"✓ Alert ACCEPTED by UGC: {event} ({ugc})"
+                    result.update(
+                        {
+                            'is_relevant': True,
+                            'reason': 'UGC_MATCH',
+                            'matched_ugc': ugc,
+                            'relevance_matches': [ugc],
+                            'log': {'level': 'info', 'message': message},
+                        }
+                    )
+                    return result
+
+            matched_terms = [
+                term for term in self.putnam_county_identifiers if term and term in area_desc_upper
+            ]
+            result['matched_terms'] = matched_terms
             if matched_terms:
-                self.logger.info(f"✓ Alert ACCEPTED by area match: {event} ({matched_terms[0]})")
-                return True
+                message = f"✓ Alert ACCEPTED by area match: {event} ({matched_terms[0]})"
+                result.update(
+                    {
+                        'is_relevant': True,
+                        'reason': 'AREA_MATCH',
+                        'relevance_matches': matched_terms,
+                        'log': {'level': 'info', 'message': message},
+                    }
+                )
+                return result
 
-            self.logger.info(f"✗ REJECT (not specific enough for {self.county_upper}): {event} - {area_desc}")
-            return False
-        except Exception as e:
-            self.logger.error(f"Error checking relevance: {e}")
-            return False
+            message = (
+                f"✗ REJECT (not specific enough for {self.county_upper}): {event} - {area_desc_upper}"
+            )
+            result['log'] = {'level': 'info', 'message': message}
+            return result
+        except Exception as exc:
+            result['log'] = {'level': 'error', 'message': f"Error checking relevance: {exc}"}
+            result['error'] = str(exc)
+            return result
+
+    def is_relevant_alert(self, alert_data: Dict) -> bool:
+        details = self.get_alert_relevance_details(alert_data)
+        log_entry = details.get('log') or {}
+        message = log_entry.get('message')
+        if message:
+            level = (log_entry.get('level') or 'info').lower()
+            if level == 'error':
+                self.logger.error(message)
+            elif level == 'warning':
+                self.logger.warning(message)
+            else:
+                self.logger.info(message)
+        return bool(details.get('is_relevant'))
 
     # ---------- Parse ----------
     def parse_cap_alert(self, alert_data: Dict) -> Optional[Dict]:
@@ -1086,6 +1266,104 @@ class CAPPoller:
             stats['errors'] += 1
         return stats
 
+    def _initialise_debug_entry(
+        self,
+        alert_data: Dict,
+        relevance: Dict[str, Any],
+        poll_run_id: str,
+        poll_started_at: datetime,
+    ) -> Dict[str, Any]:
+        properties = alert_data.get('properties', {})
+        identifier = (properties.get('identifier') or '').strip() or 'No ID'
+        sent_raw = properties.get('sent')
+        sent_dt = parse_nws_datetime(sent_raw) if sent_raw else None
+        geometry = alert_data.get('geometry') if isinstance(alert_data.get('geometry'), dict) else None
+        geom_type, polygon_count, preview = self._summarise_geometry(geometry)
+
+        log_entry = relevance.get('log') if isinstance(relevance, dict) else None
+        notes: List[str] = []
+        if log_entry and log_entry.get('message'):
+            notes.append(str(log_entry['message']))
+
+        entry = {
+            'poll_run_id': poll_run_id,
+            'poll_started_at': poll_started_at,
+            'identifier': identifier,
+            'event': properties.get('event', 'Unknown'),
+            'alert_sent': sent_dt,
+            'source': properties.get('source'),
+            'raw_properties': self._safe_json_copy(properties),
+            'geometry_geojson': self._safe_json_copy(geometry) if geometry else None,
+            'geometry_preview': preview,
+            'geometry_type': geom_type,
+            'polygon_count': polygon_count,
+            'is_relevant': relevance.get('is_relevant', False),
+            'relevance_reason': relevance.get('reason'),
+            'relevance_matches': relevance.get('relevance_matches', []),
+            'ugc_codes': relevance.get('ugc_codes', []),
+            'area_desc': relevance.get('area_desc'),
+            'raw_xml_present': bool(alert_data.get('raw_xml')),
+            'parse_success': False,
+            'parse_error': None,
+            'was_saved': False,
+            'was_new': False,
+            'alert_db_id': None,
+            'notes': notes,
+        }
+
+        return entry
+
+    def persist_debug_records(
+        self,
+        poll_run_id: str,
+        poll_started_at: datetime,
+        stats: Dict[str, Any],
+        debug_records: List[Dict[str, Any]],
+    ) -> None:
+        if not debug_records:
+            return
+        if not self._ensure_debug_records_table():
+            return
+
+        try:
+            data_source = summarise_sources(stats.get('sources', []))
+            for entry in debug_records:
+                record = PollDebugRecord(
+                    poll_run_id=poll_run_id,
+                    poll_started_at=poll_started_at,
+                    poll_status=stats.get('status', 'UNKNOWN'),
+                    data_source=data_source,
+                    alert_identifier=entry.get('identifier'),
+                    alert_event=entry.get('event'),
+                    alert_sent=entry.get('alert_sent'),
+                    source=entry.get('source'),
+                    is_relevant=entry.get('is_relevant', False),
+                    relevance_reason=entry.get('relevance_reason'),
+                    relevance_matches=self._safe_json_copy(entry.get('relevance_matches')),
+                    ugc_codes=self._safe_json_copy(entry.get('ugc_codes')),
+                    area_desc=entry.get('area_desc'),
+                    was_saved=entry.get('was_saved', False),
+                    was_new=entry.get('was_new', False),
+                    alert_db_id=entry.get('alert_db_id'),
+                    parse_success=entry.get('parse_success', False),
+                    parse_error=entry.get('parse_error'),
+                    polygon_count=entry.get('polygon_count'),
+                    geometry_type=entry.get('geometry_type'),
+                    geometry_geojson=self._safe_json_copy(entry.get('geometry_geojson')),
+                    geometry_preview=self._safe_json_copy(entry.get('geometry_preview')),
+                    raw_properties=self._safe_json_copy(entry.get('raw_properties')),
+                    raw_xml_present=entry.get('raw_xml_present', False),
+                    notes="\n".join(filter(None, entry.get('notes', []))) or None,
+                )
+                self.db_session.add(record)
+            self.db_session.commit()
+        except Exception as exc:
+            self.logger.error(f"Failed to persist poll debug records: {exc}")
+            try:
+                self.db_session.rollback()
+            except Exception:
+                pass
+
     def cleanup_old_poll_history(self):
         try:
             # Ensure table exists
@@ -1108,6 +1386,36 @@ class CAPPoller:
             self.logger.error(f"cleanup_old_poll_history error: {e}")
             try: self.db_session.rollback()
             except: pass
+
+    def cleanup_old_debug_records(self):
+        if not self._ensure_debug_records_table():
+            return
+
+        try:
+            cutoff = utc_now() - timedelta(days=7)
+            old_count = (
+                self.db_session.query(PollDebugRecord)
+                .filter(PollDebugRecord.created_at < cutoff)
+                .count()
+            )
+            if old_count > 500:
+                subq = (
+                    self.db_session.query(PollDebugRecord.id)
+                    .order_by(PollDebugRecord.created_at.desc())
+                    .limit(500)
+                    .subquery()
+                )
+                self.db_session.query(PollDebugRecord).filter(
+                    PollDebugRecord.created_at < cutoff,
+                    ~PollDebugRecord.id.in_(subq),
+                ).delete(synchronize_session=False)
+                self.db_session.commit()
+        except Exception as exc:
+            self.logger.error(f"cleanup_old_debug_records error: {exc}")
+            try:
+                self.db_session.rollback()
+            except Exception:
+                pass
 
     def log_poll_history(self, stats):
         try:
@@ -1160,6 +1468,7 @@ class CAPPoller:
         start = time.time()
         poll_start_utc = utc_now()
         poll_start_local = local_now()
+        poll_run_id = uuid.uuid4().hex
 
         stats = {
             'alerts_fetched': 0, 'alerts_new': 0, 'alerts_updated': 0,
@@ -1170,7 +1479,10 @@ class CAPPoller:
             'poll_time_local': poll_start_local.isoformat(),
             'timezone': self.location_settings['timezone'], 'led_updated': False,
             'sources': [], 'duplicates_filtered': 0,
+            'poll_run_id': poll_run_id,
         }
+
+        debug_records: List[Dict[str, Any]] = []
 
         try:
             self.logger.info(
@@ -1189,16 +1501,46 @@ class CAPPoller:
 
                 self.logger.info(f"Processing alert: {event} (ID: {alert_id[:20] if alert_id!='No ID' else 'No ID'}...)")
 
-                if not self.is_relevant_alert(alert_data):
+                relevance = self.get_alert_relevance_details(alert_data)
+                log_entry = relevance.get('log') or {}
+                message = log_entry.get('message')
+                if message:
+                    level = (log_entry.get('level') or 'info').lower()
+                    if level == 'error':
+                        self.logger.error(message)
+                    elif level == 'warning':
+                        self.logger.warning(message)
+                    else:
+                        self.logger.info(message)
+
+                debug_entry = self._initialise_debug_entry(alert_data, relevance, poll_run_id, poll_start_utc)
+                debug_records.append(debug_entry)
+
+                if not relevance.get('is_relevant'):
                     self.logger.info(f"• Filtered out (not specific to {self.county_upper})")
                     stats['alerts_filtered'] += 1
+                    debug_entry.setdefault('notes', []).append('Filtered out by strict location rules')
                     continue
 
                 stats['alerts_accepted'] += 1
                 parsed = self.parse_cap_alert(alert_data)
                 if not parsed:
                     self.logger.warning(f"Failed to parse: {event}")
+                    debug_entry['parse_error'] = 'parse_cap_alert returned None'
+                    debug_entry.setdefault('notes', []).append('Parsing failed')
                     continue
+
+                debug_entry['parse_success'] = True
+                debug_entry['identifier'] = parsed.get('identifier', debug_entry['identifier'])
+                debug_entry['source'] = parsed.get('source', debug_entry.get('source'))
+                debug_entry['alert_sent'] = parsed.get('sent', debug_entry.get('alert_sent'))
+                geometry_data = parsed.get('_geometry_data')
+                if geometry_data:
+                    debug_entry['geometry_geojson'] = self._safe_json_copy(geometry_data)
+                    geom_type, polygon_count, preview = self._summarise_geometry(geometry_data)
+                    debug_entry['geometry_type'] = geom_type
+                    debug_entry['polygon_count'] = polygon_count
+                    debug_entry['geometry_preview'] = preview
 
                 is_new, alert = self.save_cap_alert(parsed)
                 if is_new:
@@ -1213,8 +1555,16 @@ class CAPPoller:
                         f"Updated {self.location_name} alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
                     )
 
+                debug_entry['was_saved'] = bool(alert)
+                debug_entry['was_new'] = bool(is_new and alert is not None)
+                debug_entry['alert_db_id'] = getattr(alert, 'id', None) if alert else None
+                if not alert:
+                    debug_entry.setdefault('notes', []).append('Database save failed')
+
             self.cleanup_old_poll_history()
             self.log_poll_history(stats)
+            self.persist_debug_records(poll_run_id, poll_start_utc, stats, debug_records)
+            self.cleanup_old_debug_records()
 
             if self.led_controller:
                 self.update_led_display()
@@ -1236,6 +1586,9 @@ class CAPPoller:
             stats['execution_time_ms'] = int((time.time() - start) * 1000)
             self.logger.error(f"Error in polling cycle: {e}")
             self.log_system_event('ERROR', f"CAP polling failed: {e}", stats)
+
+            self.persist_debug_records(poll_run_id, poll_start_utc, stats, debug_records)
+            self.cleanup_old_debug_records()
 
         return stats
 

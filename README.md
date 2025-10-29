@@ -130,6 +130,10 @@ docker compose up -d --force-recreate
   continues to work without code changes.
 - Alerts fetched across NOAA and IPAWS feeds are deduplicated by CAP identifier and stamped with
   their source so the dashboard, statistics, and exports reflect the originating system.
+- The dedicated container advertises `CAP_POLLER_MODE=IPAWS`, so if you do not provide
+  `IPAWS_CAP_FEED_URLS` the poller automatically falls back to the FEMA staging public feed
+  (12-hour lookback by default). Override the fallback window or template with
+  `IPAWS_DEFAULT_LOOKBACK_HOURS`, `IPAWS_DEFAULT_START`, or `IPAWS_DEFAULT_ENDPOINT_TEMPLATE`.
 - You can supply alternative feed URLs at runtime by passing `--cap-endpoint` arguments or a
   `CAP_ENDPOINTS` environment variable to any poller service. When unset, the original NOAA
   poller continues targeting the Weather Service zone feeds derived from your location settings.
