@@ -124,7 +124,18 @@ try:
 
 except Exception as e:
     print(f"Warning: Could not import app models: {e}")
-    from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Boolean, Float, ForeignKey
+    from sqlalchemy import (
+        Column,
+        Integer,
+        String,
+        DateTime,
+        Text,
+        JSON,
+        Boolean,
+        Float,
+        ForeignKey,
+        LargeBinary,
+    )
     from sqlalchemy.ext.declarative import declarative_base
     from sqlalchemy.orm import relationship  # noqa: F401
     from geoalchemy2 import Geometry
@@ -227,6 +238,9 @@ except Exception as e:
         same_header = Column(String(255))
         audio_filename = Column(String(255))
         text_filename = Column(String(255))
+        audio_data = Column(LargeBinary)
+        eom_audio_data = Column(LargeBinary)
+        text_payload = Column(JSON)
         created_at = Column(DateTime, default=utc_now)
         metadata_payload = Column('metadata', JSON)
 

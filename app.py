@@ -13,6 +13,7 @@ Version: 2.1.9 - Adds per-line LED formatting support and WYSIWYG message editin
 # =============================================================================
 
 import base64
+import io
 import os
 import json
 import math
@@ -207,6 +208,123 @@ def _build_database_url() -> str:
         auth_part = user_part
 
     return f"postgresql+psycopg2://{auth_part}@{host}:{port}/{database}"
+
+
+def _get_eas_output_root() -> Optional[str]:
+    output_root = str(app.config.get('EAS_OUTPUT_DIR') or '').strip()
+    return output_root or None
+
+
+def _get_eas_static_prefix() -> str:
+    return app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+
+
+def _resolve_eas_disk_path(filename: Optional[str]) -> Optional[str]:
+    output_root = _get_eas_output_root()
+    if not output_root or not filename:
+        return None
+
+    safe_fragment = str(filename).strip().lstrip('/\\')
+    if not safe_fragment:
+        return None
+
+    candidate = os.path.abspath(os.path.join(output_root, safe_fragment))
+    root = os.path.abspath(output_root)
+
+    try:
+        common = os.path.commonpath([candidate, root])
+    except ValueError:
+        return None
+
+    if common != root:
+        return None
+
+    if os.path.exists(candidate):
+        return candidate
+
+    return None
+
+
+def _load_or_cache_audio_data(message: EASMessage, *, variant: str = 'primary') -> Optional[bytes]:
+    if variant == 'eom':
+        data = message.eom_audio_data
+        filename = (message.metadata_payload or {}).get('eom_filename') if message.metadata_payload else None
+    else:
+        data = message.audio_data
+        filename = message.audio_filename
+
+    if data:
+        return data
+
+    disk_path = _resolve_eas_disk_path(filename)
+    if not disk_path:
+        return None
+
+    try:
+        with open(disk_path, 'rb') as handle:
+            data = handle.read()
+    except OSError:
+        return None
+
+    if not data:
+        return None
+
+    if variant == 'eom':
+        message.eom_audio_data = data
+    else:
+        message.audio_data = data
+
+    try:
+        db.session.add(message)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    return data
+
+
+def _load_or_cache_summary_payload(message: EASMessage) -> Optional[Dict[str, Any]]:
+    if message.text_payload:
+        return dict(message.text_payload)
+
+    disk_path = _resolve_eas_disk_path(message.text_filename)
+    if not disk_path:
+        return None
+
+    try:
+        with open(disk_path, 'r', encoding='utf-8') as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.debug('Unable to load summary payload from %s: %s', disk_path, exc)
+        return None
+
+    message.text_payload = payload
+    try:
+        db.session.add(message)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    return dict(payload)
+
+
+def _remove_eas_files(message: EASMessage) -> None:
+    filenames = {
+        message.audio_filename,
+        message.text_filename,
+    }
+    metadata = message.metadata_payload or {}
+    eom_filename = metadata.get('eom_filename') if isinstance(metadata, dict) else None
+    filenames.add(eom_filename)
+
+    for filename in filenames:
+        disk_path = _resolve_eas_disk_path(filename)
+        if not disk_path:
+            continue
+        try:
+            os.remove(disk_path)
+        except OSError:
+            continue
 
 
 # Database configuration
@@ -835,7 +953,6 @@ def alerts():
             alert_ids = [alert.id for alert in alerts_list if getattr(alert, 'id', None)]
             if alert_ids:
                 try:
-                    web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
                     eas_messages = (
                         EASMessage.query
                         .filter(EASMessage.cap_alert_id.in_(alert_ids))
@@ -843,23 +960,30 @@ def alerts():
                         .all()
                     )
 
+                    static_prefix = _get_eas_static_prefix()
+
                     def _static_path(filename: Optional[str]) -> Optional[str]:
                         if not filename:
                             return None
-                        parts = [web_prefix, filename] if web_prefix else [filename]
+                        parts = [static_prefix, filename] if static_prefix else [filename]
                         return '/'.join(part for part in parts if part)
 
                     for message in eas_messages:
                         if not message.cap_alert_id:
                             continue
-                        audio_path = _static_path(message.audio_filename)
-                        text_path = _static_path(message.text_filename)
+                        audio_url = url_for('eas_message_audio', message_id=message.id) if message.id else None
+                        text_url: Optional[str]
+                        if message.text_payload:
+                            text_url = url_for('eas_message_summary', message_id=message.id)
+                        else:
+                            text_path = _static_path(message.text_filename)
+                            text_url = url_for('static', filename=text_path) if text_path else None
                         metadata = dict(message.metadata_payload or {})
                         audio_map.setdefault(message.cap_alert_id, []).append({
                             'id': message.id,
                             'created_at': message.created_at,
-                            'audio_url': url_for('static', filename=audio_path) if audio_path else None,
-                            'text_url': url_for('static', filename=text_path) if text_path else None,
+                            'audio_url': audio_url,
+                            'text_url': text_url,
                             'detail_url': url_for('audio_detail', message_id=message.id),
                             'event': metadata.get('event'),
                             'severity': metadata.get('severity'),
@@ -1021,7 +1145,7 @@ def audio_history():
         if include_manual and fetch_limit:
             manual_records = manual_query.limit(fetch_limit).all()
 
-        web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+        web_prefix = _get_eas_static_prefix()
 
         def _static_path(filename: Optional[str]) -> Optional[str]:
             if not filename:
@@ -1047,10 +1171,21 @@ def audio_history():
             event_name = (alert.event if alert and alert.event else metadata.get('event')) or 'Unknown Event'
             severity = alert.severity if alert and alert.severity else metadata.get('severity')
             status = alert.status if alert and alert.status else metadata.get('status')
-            audio_path = _static_path(message.audio_filename)
-            text_path = _static_path(message.text_filename)
             eom_filename = metadata.get('eom_filename')
-            eom_path = _static_path(eom_filename) if eom_filename else None
+            has_eom_data = bool(message.eom_audio_data) or bool(eom_filename)
+
+            audio_url = url_for('eas_message_audio', message_id=message.id) if message.id else None
+            if message.text_payload:
+                text_url = url_for('eas_message_summary', message_id=message.id)
+            else:
+                text_path = _static_path(message.text_filename)
+                text_url = url_for('static', filename=text_path) if text_path else None
+
+            if has_eom_data:
+                eom_url = url_for('eas_message_audio', message_id=message.id, variant='eom')
+            else:
+                eom_path = _static_path(eom_filename) if eom_filename else None
+                eom_url = url_for('static', filename=eom_path) if eom_path else None
 
             messages.append({
                 'id': message.id,
@@ -1059,12 +1194,12 @@ def audio_history():
                 'status': status,
                 'created_at': message.created_at,
                 'same_header': message.same_header,
-                'audio_url': url_for('static', filename=audio_path) if audio_path else None,
-                'text_url': url_for('static', filename=text_path) if text_path else None,
+                'audio_url': audio_url,
+                'text_url': text_url,
                 'detail_url': url_for('audio_detail', message_id=message.id),
                 'alert_url': url_for('alert_detail', alert_id=alert.id) if alert else None,
                 'alert_identifier': alert.identifier if alert else None,
-                'eom_url': url_for('static', filename=eom_path) if eom_path else None,
+                'eom_url': eom_url,
                 'source': 'automated',
                 'alert_label': 'View Alert',
             })
@@ -1281,33 +1416,28 @@ def audio_detail(message_id: int):
         else:
             locations = [str(same_locations)]
 
-        web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
-
-        def _static_path(filename: Optional[str]) -> Optional[str]:
-            if not filename:
-                return None
-            parts = [web_prefix, filename] if web_prefix else [filename]
-            return '/'.join(part for part in parts if part)
-
-        audio_path = _static_path(message.audio_filename)
-        text_path = _static_path(message.text_filename)
         eom_filename = metadata.get('eom_filename')
-        eom_path = _static_path(eom_filename) if eom_filename else None
+        has_eom_data = bool(message.eom_audio_data) or bool(eom_filename)
 
-        audio_url = url_for('static', filename=audio_path) if audio_path else None
-        text_url = url_for('static', filename=text_path) if text_path else None
-        eom_url = url_for('static', filename=eom_path) if eom_path else None
+        audio_url = url_for('eas_message_audio', message_id=message.id)
+        if message.text_payload:
+            text_url = url_for('eas_message_summary', message_id=message.id)
+        else:
+            static_prefix = _get_eas_static_prefix()
+            text_url = None
+            if message.text_filename:
+                static_path = '/'.join(part for part in [static_prefix, message.text_filename] if part)
+                text_url = url_for('static', filename=static_path) if static_path else None
 
-        summary_data: Optional[Dict[str, Any]] = None
-        output_root = str(app.config.get('EAS_OUTPUT_DIR') or '').strip()
-        if output_root and message.text_filename:
-            summary_path = os.path.join(output_root, message.text_filename)
-            if os.path.exists(summary_path):
-                try:
-                    with open(summary_path, 'r', encoding='utf-8') as handle:
-                        summary_data = json.load(handle)
-                except Exception as summary_error:
-                    logger.debug('Unable to read audio summary %s: %s', summary_path, summary_error)
+        if has_eom_data:
+            eom_url = url_for('eas_message_audio', message_id=message.id, variant='eom')
+        elif eom_filename:
+            eom_path = '/'.join(part for part in [_get_eas_static_prefix(), eom_filename] if part)
+            eom_url = url_for('static', filename=eom_path) if eom_path else None
+        else:
+            eom_url = None
+
+        summary_data = _load_or_cache_summary_payload(message)
 
         return render_template(
             'audio_detail.html',
@@ -1475,12 +1605,12 @@ def alert_detail(alert_id):
         is_actually_county_wide = county_coverage >= 95.0  # Consider 95%+ as county-wide
 
         audio_entries: List[Dict[str, Any]] = []
-        web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+        static_prefix = _get_eas_static_prefix()
 
         def _static_path(filename: Optional[str]) -> Optional[str]:
             if not filename:
                 return None
-            parts = [web_prefix, filename] if web_prefix else [filename]
+            parts = [static_prefix, filename] if static_prefix else [filename]
             return '/'.join(part for part in parts if part)
 
         try:
@@ -1493,19 +1623,31 @@ def alert_detail(alert_id):
 
             for message in messages:
                 metadata = dict(message.metadata_payload or {})
-                audio_path = _static_path(message.audio_filename)
-                text_path = _static_path(message.text_filename)
                 eom_filename = metadata.get('eom_filename')
-                eom_path = _static_path(eom_filename) if eom_filename else None
+                has_eom = bool(message.eom_audio_data) or bool(eom_filename)
+
+                audio_url = url_for('eas_message_audio', message_id=message.id)
+                if message.text_payload:
+                    text_url = url_for('eas_message_summary', message_id=message.id)
+                else:
+                    text_path = _static_path(message.text_filename)
+                    text_url = url_for('static', filename=text_path) if text_path else None
+
+                if has_eom:
+                    eom_url = url_for('eas_message_audio', message_id=message.id, variant='eom')
+                else:
+                    eom_path = _static_path(eom_filename) if eom_filename else None
+                    eom_url = url_for('static', filename=eom_path) if eom_path else None
+
                 audio_entries.append({
                     'id': message.id,
                     'created_at': message.created_at,
                     'same_header': message.same_header,
-                    'audio_url': url_for('static', filename=audio_path) if audio_path else None,
-                    'text_url': url_for('static', filename=text_path) if text_path else None,
+                    'audio_url': audio_url,
+                    'text_url': text_url,
                     'detail_url': url_for('audio_detail', message_id=message.id),
                     'metadata': metadata,
-                    'eom_url': url_for('static', filename=eom_path) if eom_path else None,
+                    'eom_url': eom_url,
                 })
         except Exception as audio_error:
             logger.warning('Unable to load audio archive for alert %s: %s', alert.identifier, audio_error)
@@ -2121,6 +2263,61 @@ def admin_user_detail(user_id: int):
     return jsonify({'message': 'User deleted successfully.'})
 
 
+@app.route('/eas_messages/<int:message_id>/audio', methods=['GET'])
+def eas_message_audio(message_id: int):
+    variant = (request.args.get('variant') or 'primary').strip().lower()
+    if variant not in {'primary', 'eom'}:
+        abort(400, description='Unsupported audio variant.')
+
+    message = EASMessage.query.get_or_404(message_id)
+    data = _load_or_cache_audio_data(message, variant=variant)
+    if not data:
+        abort(404, description='Audio not available.')
+
+    download = request.args.get('download', '').strip().lower()
+    as_attachment = download in {'1', 'true', 'yes', 'download'}
+
+    if variant == 'eom':
+        filename = (message.metadata_payload or {}).get('eom_filename') if message.metadata_payload else None
+        if not filename:
+            filename = f'eas_message_{message.id}_eom.wav'
+    else:
+        filename = message.audio_filename or f'eas_message_{message.id}.wav'
+
+    file_obj = io.BytesIO(data)
+    file_obj.seek(0)
+    response = send_file(
+        file_obj,
+        mimetype='audio/wav',
+        as_attachment=as_attachment,
+        download_name=filename,
+        max_age=0,
+        conditional=False,
+    )
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    response.headers['X-Accel-Buffering'] = 'no'
+    return response
+
+
+@app.route('/eas_messages/<int:message_id>/summary', methods=['GET'])
+def eas_message_summary(message_id: int):
+    message = EASMessage.query.get_or_404(message_id)
+    payload = _load_or_cache_summary_payload(message)
+    if payload is None:
+        abort(404, description='Summary not available.')
+
+    body = json.dumps(payload, indent=2, ensure_ascii=False)
+    response = app.response_class(body, mimetype='application/json')
+    filename = message.text_filename or f'eas_message_{message.id}_summary.json'
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
+
 @app.route('/admin/eas_messages', methods=['GET'])
 def admin_eas_messages():
     if not app.config.get('EAS_BROADCAST_ENABLED', False):
@@ -2133,22 +2330,119 @@ def admin_eas_messages():
         messages = base_query.limit(limit).all()
         total = base_query.count()
 
-        static_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
         items = []
         for message in messages:
             data = message.to_dict()
-            audio_path = '/'.join(part for part in [static_prefix, message.audio_filename] if part)
-            text_path = '/'.join(part for part in [static_prefix, message.text_filename] if part)
+            audio_url = url_for('eas_message_audio', message_id=message.id)
+            if message.text_payload:
+                text_url = url_for('eas_message_summary', message_id=message.id)
+            else:
+                static_prefix = _get_eas_static_prefix()
+                text_path = '/'.join(part for part in [static_prefix, message.text_filename] if part)
+                text_url = url_for('static', filename=text_path) if text_path else None
             items.append({
                 **data,
-                'audio_url': url_for('static', filename=audio_path),
-                'text_url': url_for('static', filename=text_path),
+                'audio_url': audio_url,
+                'text_url': text_url,
+                'detail_url': url_for('audio_detail', message_id=message.id),
             })
 
         return jsonify({'messages': items, 'total': total})
     except Exception as exc:
         logger.error(f"Failed to list EAS messages: {exc}")
         return jsonify({'error': 'Unable to load EAS messages'}), 500
+
+
+@app.route('/admin/eas_messages/<int:message_id>', methods=['DELETE'])
+def admin_delete_eas_message(message_id: int):
+    message = EASMessage.query.get_or_404(message_id)
+
+    try:
+        _remove_eas_files(message)
+        db.session.delete(message)
+        db.session.add(SystemLog(
+            level='WARNING',
+            message='EAS message deleted',
+            module='eas',
+            details={
+                'message_id': message_id,
+                'deleted_by': getattr(g.current_user, 'username', None),
+            },
+        ))
+        db.session.commit()
+    except Exception as exc:
+        logger.error(f"Failed to delete EAS message {message_id}: {exc}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to delete EAS message.'}), 500
+
+    return jsonify({'message': 'EAS message deleted.', 'id': message_id})
+
+
+@app.route('/admin/eas_messages/purge', methods=['POST'])
+def admin_purge_eas_messages():
+    payload = request.get_json(silent=True) or {}
+
+    ids = payload.get('ids')
+    cutoff: Optional[datetime] = None
+
+    if ids:
+        try:
+            id_list = [int(item) for item in ids if item is not None]
+        except (TypeError, ValueError):
+            return jsonify({'error': 'ids must be a list of integers.'}), 400
+        query = EASMessage.query.filter(EASMessage.id.in_(id_list))
+    else:
+        before_text = payload.get('before')
+        older_than_days = payload.get('older_than_days')
+
+        if before_text:
+            normalised = before_text.strip().replace('Z', '+00:00')
+            try:
+                cutoff = datetime.fromisoformat(normalised)
+            except ValueError:
+                return jsonify({'error': 'Unable to parse the provided cutoff timestamp.'}), 400
+        elif older_than_days is not None:
+            try:
+                days = int(older_than_days)
+            except (TypeError, ValueError):
+                return jsonify({'error': 'older_than_days must be an integer.'}), 400
+            if days < 0:
+                return jsonify({'error': 'older_than_days must be non-negative.'}), 400
+            cutoff = utc_now() - timedelta(days=days)
+        else:
+            return jsonify({'error': 'Provide ids, before, or older_than_days to select messages to purge.'}), 400
+
+        if cutoff.tzinfo is None:
+            cutoff = cutoff.replace(tzinfo=timezone.utc)
+        query = EASMessage.query.filter(EASMessage.created_at < cutoff)
+
+    messages = query.all()
+    if not messages:
+        return jsonify({'message': 'No EAS messages matched the purge criteria.', 'deleted': 0})
+
+    deleted_ids: List[int] = []
+    for message in messages:
+        deleted_ids.append(message.id)
+        _remove_eas_files(message)
+        db.session.delete(message)
+
+    try:
+        db.session.add(SystemLog(
+            level='WARNING',
+            message='EAS messages purged',
+            module='eas',
+            details={
+                'deleted_ids': deleted_ids,
+                'deleted_by': getattr(g.current_user, 'username', None),
+            },
+        ))
+        db.session.commit()
+    except Exception as exc:
+        logger.error(f"Failed to purge EAS messages: {exc}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to purge EAS messages.'}), 500
+
+    return jsonify({'message': f'Deleted {len(deleted_ids)} EAS messages.', 'deleted': len(deleted_ids), 'ids': deleted_ids})
 
 
 @app.route('/admin/eas/manual_generate', methods=['POST'])

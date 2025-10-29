@@ -787,7 +787,9 @@ class EASAudioGenerator:
 
         samples.extend(_generate_silence(1.0, self.sample_rate))
 
-        _write_wave_file(audio_path, samples, self.sample_rate)
+        wav_bytes = samples_to_wav_bytes(samples, self.sample_rate)
+        with open(audio_path, 'wb') as handle:
+            handle.write(wav_bytes)
         self.logger.info(f"Generated SAME audio at {audio_path}")
 
         text_body = {
@@ -808,9 +810,9 @@ class EASAudioGenerator:
             json.dump(text_body, handle, indent=2)
         self.logger.info(f"Wrote alert summary at {text_path}")
 
-        return audio_filename, text_filename, message_text
+        return audio_filename, text_filename, message_text, wav_bytes, text_body
 
-    def build_eom_file(self) -> str:
+    def build_eom_file(self) -> Tuple[str, bytes]:
         header = build_eom_header(self.config)
         timestamp = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
         base_name = _clean_identifier(f"eom_{timestamp}")
@@ -836,11 +838,13 @@ class EASAudioGenerator:
 
         samples.extend(_generate_silence(1.0, self.sample_rate))
 
-        _write_wave_file(audio_path, samples, self.sample_rate)
+        wav_bytes = samples_to_wav_bytes(samples, self.sample_rate)
+        with open(audio_path, 'wb') as handle:
+            handle.write(wav_bytes)
         if self.logger:
             self.logger.debug('Generated EOM audio at %s', audio_path)
 
-        return audio_filename
+        return audio_filename, wav_bytes
 
     def build_manual_components(
         self,
@@ -1436,13 +1440,20 @@ class EASBroadcaster:
             self.logger.info('Skipping EAS generation: %s', exc)
             return
 
-        audio_filename, text_filename, message_text = self.audio_generator.build_files(alert, payload, header, location_codes)
+        (
+            audio_filename,
+            text_filename,
+            message_text,
+            audio_bytes,
+            text_payload,
+        ) = self.audio_generator.build_files(alert, payload, header, location_codes)
 
         try:
-            eom_filename = self.audio_generator.build_eom_file()
+            eom_filename, eom_bytes = self.audio_generator.build_eom_file()
         except Exception as exc:
             self.logger.warning(f"Failed to generate EOM audio: {exc}")
             eom_filename = None
+            eom_bytes = None
 
         audio_path = os.path.join(self.audio_generator.output_dir, audio_filename)
         eom_path = os.path.join(self.audio_generator.output_dir, eom_filename) if eom_filename else None
@@ -1471,6 +1482,9 @@ class EASBroadcaster:
             same_header=header,
             audio_filename=audio_filename,
             text_filename=text_filename,
+            audio_data=audio_bytes,
+            eom_audio_data=eom_bytes,
+            text_payload=text_payload,
             created_at=datetime.now(timezone.utc),
             metadata_payload={
                 'event': getattr(alert, 'event', ''),
