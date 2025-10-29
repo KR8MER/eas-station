@@ -6,6 +6,9 @@ tracks releases under the 2.1.x series.
 
 ## [Unreleased]
 ### Added
+- Enabled the manual broadcast builder to target county subdivisions and the
+  nationwide 000000 SAME code by exposing P-digit selection alongside the
+  existing state and county pickers.
 - Introduced a dedicated Audio Archive history view with filtering, playback,
   printing, and Excel export support for every generated SAME package.
 - Surfaced archived audio links throughout the alert history and detail pages so
