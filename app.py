@@ -521,7 +521,12 @@ def initialize_database():
         return
 
     try:
-        if not ensure_postgis_extension():
+        postgis_helper = globals().get("ensure_postgis_extension")
+        if postgis_helper is None:
+            logger.warning(
+                "PostGIS helper unavailable during initialization; skipping extension check.",
+            )
+        elif not postgis_helper():
             _db_initialization_error = RuntimeError("PostGIS extension could not be ensured")
             return False
         db.create_all()
