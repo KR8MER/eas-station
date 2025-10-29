@@ -225,6 +225,12 @@ class ManualEASActivation(db.Model):
     metadata_payload = db.Column(db.JSON, nullable=False, default=dict)
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
     archived_at = db.Column(db.DateTime(timezone=True))
+    # Binary audio data cached in database
+    composite_audio_data = db.Column(db.LargeBinary)
+    same_audio_data = db.Column(db.LargeBinary)
+    attention_audio_data = db.Column(db.LargeBinary)
+    tts_audio_data = db.Column(db.LargeBinary)
+    eom_audio_data = db.Column(db.LargeBinary)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
