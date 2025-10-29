@@ -167,10 +167,6 @@ def calculate_alert_intersections(alert: CAPAlert) -> int:
     if not alert_geom:
         return 0
 
-    db.session.query(Intersection).filter_by(
-        cap_alert_id=alert.id
-    ).delete(synchronize_session=False)
-
     try:
         intersecting_boundaries = _fetch_bulk_intersections(alert_geom)
     except Exception as exc:  # pragma: no cover - defensive
@@ -182,6 +178,19 @@ def calculate_alert_intersections(alert: CAPAlert) -> int:
         intersecting_boundaries = _fetch_intersections_per_boundary(alert, alert_geom)
 
     if not intersecting_boundaries:
+        try:
+            db.session.query(Intersection).filter_by(
+                cap_alert_id=alert.id
+            ).delete(synchronize_session=False)
+        except Exception as exc:  # pragma: no cover - defensive
+            db.session.rollback()
+            _logger().error(
+                "Error clearing intersections for alert %s: %s",
+                alert.identifier,
+                exc,
+            )
+            raise
+
         return 0
 
     created_at = utc_now()
@@ -203,10 +212,14 @@ def calculate_alert_intersections(alert: CAPAlert) -> int:
         created_boundary_names.append(boundary["name"])
 
     try:
+        db.session.query(Intersection).filter_by(
+            cap_alert_id=alert.id
+        ).delete(synchronize_session=False)
         db.session.bulk_save_objects(new_intersections)
     except Exception as exc:  # pragma: no cover - defensive
+        db.session.rollback()
         _logger().error(
-            "Error bulk inserting intersections for alert %s: %s",
+            "Error updating intersections for alert %s: %s",
             alert.identifier,
             exc,
         )
