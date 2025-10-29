@@ -51,6 +51,7 @@ from app_utils.eas import (
 from app_core.eas_storage import (
     backfill_eas_message_payloads,
     ensure_eas_audio_columns,
+    ensure_eas_message_foreign_key,
     get_eas_static_prefix,
 )
 from app_core.system_health import get_system_health
@@ -541,6 +542,11 @@ def initialize_database():
         if not ensure_eas_audio_columns(logger):
             _db_initialization_error = RuntimeError(
                 "EAS audio columns could not be ensured"
+            )
+            return False
+        if not ensure_eas_message_foreign_key(logger):
+            _db_initialization_error = RuntimeError(
+                "EAS message foreign key constraint could not be ensured"
             )
             return False
         backfill_eas_message_payloads(logger)

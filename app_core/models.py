@@ -167,7 +167,7 @@ class EASMessage(db.Model):
     __tablename__ = "eas_messages"
 
     id = db.Column(db.Integer, primary_key=True)
-    cap_alert_id = db.Column(db.Integer, db.ForeignKey("cap_alerts.id"), index=True)
+    cap_alert_id = db.Column(db.Integer, db.ForeignKey("cap_alerts.id", ondelete="SET NULL"), index=True)
     same_header = db.Column(db.String(255), nullable=False)
     audio_filename = db.Column(db.String(255), nullable=False)
     text_filename = db.Column(db.String(255), nullable=False)

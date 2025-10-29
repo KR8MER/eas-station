@@ -209,6 +209,65 @@ def ensure_eas_audio_columns(logger) -> bool:
         return False
 
 
+def ensure_eas_message_foreign_key(logger) -> bool:
+    """Ensure the cap_alert_id foreign key has proper ON DELETE SET NULL behavior."""
+
+    engine = db.engine
+    if engine.dialect.name != "postgresql":
+        return True
+
+    # Check if the foreign key constraint exists and what its delete rule is
+    constraint_check_sql = text(
+        """
+        SELECT con.conname, pg_get_constraintdef(con.oid) as constraint_def
+        FROM pg_constraint con
+        JOIN pg_class rel ON rel.oid = con.conrelid
+        JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+        WHERE rel.relname = 'eas_messages'
+          AND con.contype = 'f'
+          AND nsp.nspname = current_schema()
+          AND pg_get_constraintdef(con.oid) LIKE '%cap_alerts%'
+        """
+    )
+
+    try:
+        with engine.begin() as connection:
+            result = connection.execute(constraint_check_sql).fetchone()
+
+            if result:
+                constraint_name = result[0]
+                constraint_def = result[1]
+
+                # Check if it already has ON DELETE SET NULL
+                if "ON DELETE SET NULL" in constraint_def.upper():
+                    logger.debug("EAS message foreign key constraint already has proper ON DELETE behavior")
+                    return True
+
+                # Drop the old constraint
+                logger.info("Updating eas_messages.cap_alert_id foreign key constraint to SET NULL on delete")
+                connection.execute(
+                    text(f"ALTER TABLE eas_messages DROP CONSTRAINT {constraint_name}")
+                )
+
+                # Add the new constraint with ON DELETE SET NULL
+                connection.execute(
+                    text(
+                        "ALTER TABLE eas_messages ADD CONSTRAINT eas_messages_cap_alert_id_fkey "
+                        "FOREIGN KEY (cap_alert_id) REFERENCES cap_alerts(id) ON DELETE SET NULL"
+                    )
+                )
+                logger.info("Successfully updated foreign key constraint on eas_messages.cap_alert_id")
+
+        return True
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        logger.warning("Could not ensure EAS message foreign key constraint: %s", exc)
+        try:
+            db.session.rollback()
+        except Exception:  # pragma: no cover - defensive fallback
+            pass
+        return False
+
+
 def backfill_eas_message_payloads(logger) -> None:
     """Populate missing cached payload columns from on-disk artifacts."""
 
