@@ -270,33 +270,55 @@ def _build_manual_message_entries(
 
     for event in manual_records:
         metadata = dict(event.metadata_payload or {})
+        components_payload = dict(event.components_payload or {})
 
-        def _manual_path(subpath: Optional[str], *, fallback_prefix: Optional[str] = None) -> Optional[str]:
+        web_prefix_clean = web_prefix.strip('/') if web_prefix else ''
+        manual_prefix_clean = (manual_prefix or web_prefix_clean).strip('/') if (manual_prefix or web_prefix_clean) else ''
+        storage_path_clean = event.storage_path.strip('/') if event.storage_path else ''
+
+        def _manual_path(subpath: Optional[str]) -> Optional[str]:
             if not subpath:
                 return None
-            effective_prefix = fallback_prefix if fallback_prefix is not None else web_prefix
-            parts = [effective_prefix, subpath] if effective_prefix else [subpath]
+            normalized = str(subpath).strip('/')
+            if storage_path_clean and not normalized.startswith(storage_path_clean):
+                normalized = '/'.join(part for part in [storage_path_clean, normalized] if part)
+            parts = [manual_prefix_clean, normalized] if manual_prefix_clean else [normalized]
             return '/'.join(part for part in parts if part)
 
-        manual_prefix_parts = [manual_prefix, event.storage_path] if event.storage_path else [manual_prefix]
-        manual_prefix_value = '/'.join(part.strip('/') for part in manual_prefix_parts if part)
+        def _component_subpath(*keys: str) -> Optional[str]:
+            for key in keys:
+                payload = components_payload.get(key) or {}
+                storage_subpath = payload.get('storage_subpath')
+                if storage_subpath:
+                    return storage_subpath
+                filename = payload.get('filename')
+                if filename:
+                    return filename
+            return None
 
-        audio_subpath = metadata.get('audio_subpath') or event.audio_filename
-        summary_subpath = metadata.get('summary_subpath') or event.summary_filename
-        eom_subpath = metadata.get('eom_subpath')
+        audio_subpath = metadata.get('audio_subpath') or _component_subpath(
+            'composite',
+            'tts',
+            'attention',
+            'same',
+        )
+        summary_subpath = metadata.get('summary_subpath') or (
+            event.summary_filename if event.summary_filename else None
+        )
+        eom_subpath = metadata.get('eom_subpath') or _component_subpath('eom')
 
         audio_url = (
-            url_for('static', filename=_manual_path(audio_subpath, fallback_prefix=manual_prefix_value))
+            url_for('static', filename=_manual_path(audio_subpath))
             if audio_subpath
             else None
         )
         summary_url = (
-            url_for('static', filename=_manual_path(summary_subpath, fallback_prefix=manual_prefix_value))
+            url_for('static', filename=_manual_path(summary_subpath))
             if summary_subpath
             else None
         )
         eom_url = (
-            url_for('static', filename=_manual_path(eom_subpath, fallback_prefix=manual_prefix_value))
+            url_for('static', filename=_manual_path(eom_subpath))
             if eom_subpath
             else None
         )
