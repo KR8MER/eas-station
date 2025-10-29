@@ -94,16 +94,26 @@ def _fetch_intersections_per_boundary(alert: CAPAlert, alert_geom) -> List[Dict[
         if boundary_geom is None:
             continue
 
+        if isinstance(boundary_geom, memoryview):
+            boundary_geom_param = boundary_geom.tobytes()
+        elif isinstance(boundary_geom, (bytes, bytearray)):
+            boundary_geom_param = bytes(boundary_geom)
+        else:
+            boundary_geom_param = boundary_geom
+
         try:
             result = db.session.execute(
                 text(
                     """
+                    WITH boundary AS (
+                        SELECT ST_GeomFromEWKB(:boundary_geom) AS geom
+                    )
                     SELECT
-                        ST_Intersects(:alert_geom, :boundary_geom) AS intersects,
-                        ST_Area(ST_Intersection(:alert_geom, :boundary_geom)) AS intersection_area
+                        ST_Intersects(:alert_geom, boundary.geom) AS intersects,
+                        ST_Area(ST_Intersection(:alert_geom, boundary.geom)) AS intersection_area
                     """
                 ),
-                {"alert_geom": alert_geom, "boundary_geom": boundary_geom},
+                {"alert_geom": alert_geom, "boundary_geom": boundary_geom_param},
             ).one()
         except Exception as exc:  # pragma: no cover - defensive
             _logger().error(
