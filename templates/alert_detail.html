@@ -993,7 +993,10 @@
                             {% if alert.raw_json %}
                             <div class="mt-3">
                                 <small class="text-muted">
-                                    <strong>Data Source:</strong> {{ alert.raw_json.get('properties', {}).get('@id', 'Unknown') if alert.raw_json.get('properties') else 'Unknown' }}<br>
+                                    <strong>Source:</strong> {{ (alert.source or 'UNKNOWN')|upper }}<br>
+                                    {% if alert.raw_json.get('properties', {}).get('@id') %}
+                                    <strong>Origin URI:</strong> {{ alert.raw_json.get('properties', {}).get('@id') }}<br>
+                                    {% endif %}
                                     <strong>Last Updated:</strong> {{ alert.updated_at | format_local_datetime if alert.updated_at else 'Unknown' }}
                                 </small>
                             </div>

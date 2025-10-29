@@ -20,6 +20,22 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  ipaws-poller:
+    image: noaa-alerts:latest
+    command:
+      - python
+      - poller/cap_poller.py
+      - --continuous
+      - --interval
+      - "120"
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      CAP_ENDPOINTS: ${IPAWS_CAP_FEED_URLS:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
   alerts-db:
     image: ${ALERTS_DB_IMAGE:-postgis/postgis:17-3.4}
     profiles:

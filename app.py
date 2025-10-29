@@ -30,6 +30,10 @@ import pytz
 
 # Application utilities
 from app_utils import (
+    ALERT_SOURCE_IPAWS,
+    ALERT_SOURCE_MANUAL,
+    ALERT_SOURCE_NOAA,
+    ALERT_SOURCE_UNKNOWN,
     UTC_TZ,
     build_system_health_snapshot,
     format_bytes,
@@ -41,8 +45,11 @@ from app_utils import (
     get_location_timezone_name,
     is_alert_expired,
     local_now,
+    normalize_alert_source,
     parse_nws_datetime as _parse_nws_datetime,
     set_location_timezone,
+    summarise_sources,
+    expand_source_summary,
     utc_now,
 )
 from app_utils.eas import (
@@ -153,7 +160,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
 # Application versioning (exposed via templates for quick deployment verification)
-SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.9')
+SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.2.0')
 
 # NOAA API configuration for manual alert import workflows
 NOAA_API_BASE_URL = 'https://api.weather.gov/alerts'
@@ -178,7 +185,7 @@ NOAA_ALLOWED_QUERY_PARAMS = frozenset({
 })
 NOAA_USER_AGENT = os.environ.get(
     'NOAA_USER_AGENT',
-    'KR8MER CAP Alert System/2.1 (+https://github.com/KR8MER/noaa_alerts_systems)'
+    'KR8MER Emergency Alert Hub/2.1 (+https://github.com/KR8MER/noaa_alerts_systems; NOAA+IPAWS)'
 )
 
 
@@ -475,6 +482,7 @@ def stats():
             stats_data.update({'recent_alerts': 0, 'recent_by_day': []})
 
         # Polling statistics
+        last_poll_sources: List[str] = []
         try:
             poll_stats_query = db.session.query(
                 func.count(PollHistory.id).label('total_polls'),
@@ -486,6 +494,10 @@ def stats():
             successful_polls = PollHistory.query.filter(PollHistory.status == 'SUCCESS').count()
             failed_polls = PollHistory.query.filter(PollHistory.status == 'ERROR').count()
             total_polls_from_history = poll_stats_query.total_polls or 0
+
+            last_poll_entry = PollHistory.query.order_by(PollHistory.timestamp.desc()).first()
+            if last_poll_entry and last_poll_entry.data_source:
+                last_poll_sources = sorted(expand_source_summary(last_poll_entry.data_source))
 
             if total_polls_from_history == 0:
                 cap_poller_logs = SystemLog.query.filter(
@@ -507,9 +519,10 @@ def stats():
                     'avg_time_ms': 0,
                     'successful_polls': cap_poller_logs,
                     'failed_polls': 0,
-                    'success_rate': round((cap_poller_logs / total_polls_from_logs * 100),
-                                          1) if total_polls_from_logs > 0 else 0,
-                    'data_source': 'system_logs'
+                    'success_rate': round((cap_poller_logs / total_polls_from_logs * 100), 1)
+                    if total_polls_from_logs > 0 else 0,
+                    'data_source': 'system_logs',
+                    'sources': last_poll_sources,
                 }
             else:
                 stats_data['polling'] = {
@@ -519,9 +532,11 @@ def stats():
                     'avg_time_ms': round(poll_stats_query.avg_time_ms or 0, 1),
                     'successful_polls': successful_polls,
                     'failed_polls': failed_polls,
-                    'success_rate': round((successful_polls / (successful_polls + failed_polls) * 100), 1) if (
-                                                                                                                      successful_polls + failed_polls) > 0 else 0,
-                    'data_source': 'poll_history'
+                    'success_rate': round(
+                        (successful_polls / (successful_polls + failed_polls) * 100), 1
+                    ) if (successful_polls + failed_polls) > 0 else 0,
+                    'data_source': 'poll_history',
+                    'sources': last_poll_sources,
                 }
 
         except Exception as e:
@@ -536,14 +551,22 @@ def stats():
                     'successful_polls': emergency_count,
                     'failed_polls': 0,
                     'success_rate': 100 if emergency_count > 0 else 0,
-                    'data_source': 'emergency_fallback'
+                    'data_source': 'emergency_fallback',
+                    'sources': last_poll_sources,
                 }
-            except:
+            except Exception:
                 stats_data['polling'] = {
-                    'total_polls': 0, 'avg_fetched': 0, 'max_fetched': 0,
-                    'avg_time_ms': 0, 'successful_polls': 0, 'failed_polls': 0, 'success_rate': 0,
-                    'data_source': 'error'
+                    'total_polls': 0,
+                    'avg_fetched': 0,
+                    'max_fetched': 0,
+                    'avg_time_ms': 0,
+                    'successful_polls': 0,
+                    'failed_polls': 0,
+                    'success_rate': 0,
+                    'data_source': 'error',
+                    'sources': last_poll_sources,
                 }
+
 
         # Fun statistics
         try:
@@ -733,6 +756,7 @@ def alerts():
         status_filter = request.args.get('status', '').strip()
         severity_filter = request.args.get('severity', '').strip()
         event_filter = request.args.get('event', '').strip()
+        source_filter = request.args.get('source', '').strip()
         show_expired = request.args.get('show_expired') == 'true'
 
         query = CAPAlert.query
@@ -754,6 +778,8 @@ def alerts():
             query = query.filter(CAPAlert.severity == severity_filter)
         if event_filter:
             query = query.filter(CAPAlert.event == event_filter)
+        if source_filter:
+            query = query.filter(CAPAlert.source == source_filter)
 
         if not show_expired:
             query = query.filter(
@@ -863,11 +889,15 @@ def alerts():
             events = db.session.query(CAPAlert.event).distinct().order_by(CAPAlert.event).limit(50).all()
             events = [e[0] for e in events if e[0]]
 
+            sources = db.session.query(CAPAlert.source).distinct().order_by(CAPAlert.source).all()
+            sources = [normalize_alert_source(s[0]) for s in sources if s[0]]
+
         except Exception as filter_error:
             logger.warning(f"Error getting filter options: {str(filter_error)}")
             statuses = []
             severities = []
             events = []
+            sources = []
 
         current_filters = {
             'search': search,
@@ -875,7 +905,8 @@ def alerts():
             'severity': severity_filter,
             'event': event_filter,
             'per_page': per_page,
-            'show_expired': show_expired
+            'show_expired': show_expired,
+            'source': source_filter,
         }
 
         return render_template('alerts.html',
@@ -887,6 +918,7 @@ def alerts():
                                statuses=statuses,
                                severities=severities,
                                events=events,
+                               sources=sources,
                                current_filters=current_filters,
                                audio_map=audio_map)
 
@@ -2809,6 +2841,7 @@ def serialize_admin_alert(alert: CAPAlert) -> Dict[str, Any]:
         'id': alert.id,
         'identifier': alert.identifier,
         'event': alert.event,
+        'source': alert.source,
         'headline': alert.headline,
         'description': alert.description,
         'instruction': alert.instruction,
@@ -3765,6 +3798,71 @@ def calculate_single_alert(alert_id):
 # =============================================================================
 # BOUNDARY MANAGEMENT ROUTES
 # =============================================================================
+
+def ensure_alert_source_columns() -> bool:
+    """Ensure provenance columns exist for CAP alerts and poll history."""
+
+    engine = db.engine
+    if engine.dialect.name != 'postgresql':
+        return True
+
+    try:
+        changed = False
+
+        cap_alerts_has_source = db.session.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'cap_alerts'
+                  AND column_name = 'source'
+                  AND table_schema = current_schema()
+                """
+            )
+        ).scalar()
+
+        if not cap_alerts_has_source:
+            logger.info("Adding cap_alerts.source column for alert provenance tracking")
+            db.session.execute(text("ALTER TABLE cap_alerts ADD COLUMN source VARCHAR(32)"))
+            db.session.execute(
+                text("UPDATE cap_alerts SET source = :default WHERE source IS NULL"),
+                {"default": ALERT_SOURCE_NOAA},
+            )
+            db.session.execute(
+                text("ALTER TABLE cap_alerts ALTER COLUMN source SET DEFAULT :default"),
+                {"default": ALERT_SOURCE_UNKNOWN},
+            )
+            db.session.execute(text("ALTER TABLE cap_alerts ALTER COLUMN source SET NOT NULL"))
+            changed = True
+
+        poll_history_has_source = db.session.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'poll_history'
+                  AND column_name = 'data_source'
+                  AND table_schema = current_schema()
+                """
+            )
+        ).scalar()
+
+        if not poll_history_has_source:
+            logger.info("Adding poll_history.data_source column for polling metadata")
+            db.session.execute(text("ALTER TABLE poll_history ADD COLUMN data_source VARCHAR(64)"))
+            changed = True
+
+        if changed:
+            db.session.commit()
+        return True
+    except Exception as exc:
+        logger.warning("Could not ensure alert source columns: %s", exc)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return False
+
 
 def ensure_boundary_geometry_column():
     """Ensure the boundaries table accepts any geometry subtype with SRID 4326."""
@@ -4810,6 +4908,7 @@ def export_alerts():
             alerts_data.append({
                 'ID': alert.id,
                 'Identifier': alert.identifier,
+                'Source': alert.source,
                 'Event': alert.event,
                 'Status': alert.status,
                 'Severity': alert.severity or '',
@@ -5202,6 +5301,9 @@ def initialize_database():
             _db_initialization_error = RuntimeError("PostGIS extension could not be ensured")
             return False
         db.create_all()
+        if not ensure_alert_source_columns():
+            _db_initialization_error = RuntimeError("CAP alert source columns could not be ensured")
+            return False
         ensure_boundary_geometry_column()
         settings = get_location_settings(force_reload=True)
         timezone_name = settings.get('timezone')

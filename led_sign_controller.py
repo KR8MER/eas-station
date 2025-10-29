@@ -18,6 +18,7 @@ import json
 import re
 
 from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS, ensure_list
+from app_utils.alert_sources import normalize_alert_source
 
 
 class MessagePriority(Enum):
@@ -1071,10 +1072,19 @@ class Alpha9120CController:
         lines = ['', '', '', '']
 
         # Line 1: Alert count or severity
+        source_label = normalize_alert_source(getattr(alert, 'source', None))
+        if source_label == 'UNKNOWN':
+            source_label = ''
+        header_parts = []
+        if source_label:
+            header_parts.append(source_label)
+        header_parts.append(alert.severity)
+        header_text = ' '.join(part for part in header_parts if part)
         if total_alerts > 1:
-            lines[0] = f"{alert.severity} ({total_alerts})"
+            header_text = f"{header_text} ({total_alerts})"
         else:
-            lines[0] = f"{alert.severity} ALERT"
+            header_text = f"{header_text} ALERT"
+        lines[0] = header_text[:self.max_chars_per_line]
 
         # Line 2: Event type
         lines[1] = alert.event[:self.max_chars_per_line]

@@ -24,6 +24,7 @@ from app import (
     normalize_manual_import_datetime,
     format_noaa_timestamp,
 )
+from app_utils import ALERT_SOURCE_NOAA
 
 
 def parse_cli_datetime(raw_value: str, description: str) -> datetime:
@@ -133,6 +134,7 @@ def execute_import(args: argparse.Namespace) -> int:
             continue
 
         parsed, geometry = parsed_result
+        parsed.setdefault('source', ALERT_SOURCE_NOAA)
         alert_identifier = parsed['identifier']
 
         if alert_identifier not in identifiers:

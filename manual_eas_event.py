@@ -22,6 +22,7 @@ from app import (
     parse_nws_datetime,
     utc_now,
 )
+from app_utils import ALERT_SOURCE_MANUAL
 from app_utils.eas import EASBroadcaster, load_eas_config
 from app_utils.event_codes import (
     ALL_EVENT_CODES,
@@ -435,6 +436,7 @@ def broadcast_manual_cap(
         payload.pop('_geometry_data', None)
         payload['event_code'] = broadcast_event_code
         payload['event_codes'] = event_codes
+        payload['source'] = ALERT_SOURCE_MANUAL
 
         existing = CAPAlert.query.filter_by(identifier=payload['identifier']).first()
         action = 'created'

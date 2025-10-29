@@ -209,3 +209,16 @@ tracks releases under the 2.1.x series.
 - Added containerized deployment assets (Dockerfile, docker-compose) and operational
   scripts for managing services.
 
+## [2.2.0] - 2025-10-29
+### Added
+- Recorded the originating feed for each CAP alert and poll cycle, exposing the source in the
+  alerts dashboard, detail view, exports, and LED signage.
+- Normalised IPAWS XML payloads with explicit source tagging and circle-to-polygon conversion
+  while tracking duplicate identifiers filtered during multi-feed polling.
+
+### Changed
+- Automatically migrate existing databases to include `cap_alerts.source` and
+  `poll_history.data_source` columns during application or poller start-up.
+- Surfaced poll provenance in the statistics dashboard, including the observed feed sources
+  for the most recent runs.
+

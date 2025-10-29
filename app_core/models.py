@@ -13,7 +13,7 @@ from werkzeug.security import (
     generate_password_hash as werkzeug_generate_password_hash,
 )
 
-from app_utils import utc_now
+from app_utils import ALERT_SOURCE_UNKNOWN, normalize_alert_source, utc_now
 from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS
 
 from .extensions import db
@@ -91,12 +91,18 @@ class CAPAlert(db.Model):
     instruction = db.Column(db.Text)
     raw_json = db.Column(db.JSON)
     geom = db.Column(_geometry_type("POLYGON"))
+    source = db.Column(db.String(32), nullable=False, default=ALERT_SOURCE_UNKNOWN)
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
     updated_at = db.Column(
         db.DateTime(timezone=True),
         default=utc_now,
         onupdate=utc_now,
     )
+
+    def __setattr__(self, name, value):  # pragma: no cover - passthrough
+        if name == "source":
+            value = normalize_alert_source(value) if value else ALERT_SOURCE_UNKNOWN
+        super().__setattr__(name, value)
 
 
 class SystemLog(db.Model):
@@ -271,6 +277,7 @@ class PollHistory(db.Model):
     alerts_updated = db.Column(db.Integer, default=0)
     execution_time_ms = db.Column(db.Integer)
     error_message = db.Column(db.Text)
+    data_source = db.Column(db.String(64))
 
 
 class LocationSettings(db.Model):

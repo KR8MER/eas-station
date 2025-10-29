@@ -468,7 +468,11 @@ function updateKpiCards(aggregates) {
     }
     const reliabilityDelta = document.getElementById('reliabilityDelta');
     if (reliabilityDelta && statsData.polling) {
-        reliabilityDelta.textContent = `Source: ${statsData.polling.data_source || 'poll_history'}`;
+        const provenance = statsData.polling.data_source || 'poll_history';
+        const sources = (statsData.polling.sources && statsData.polling.sources.length)
+            ? statsData.polling.sources.join(', ')
+            : 'Unknown';
+        reliabilityDelta.textContent = `Source: ${sources} (${provenance})`;
     }
 }
 
