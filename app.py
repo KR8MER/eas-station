@@ -50,8 +50,10 @@ from app_utils.eas import (
 )
 from app_core.eas_storage import (
     backfill_eas_message_payloads,
+    backfill_manual_eas_audio,
     ensure_eas_audio_columns,
     ensure_eas_message_foreign_key,
+    ensure_manual_eas_audio_columns,
     get_eas_static_prefix,
 )
 from app_core.system_health import get_system_health
@@ -549,7 +551,13 @@ def initialize_database():
                 "EAS message foreign key constraint could not be ensured"
             )
             return False
+        if not ensure_manual_eas_audio_columns(logger):
+            _db_initialization_error = RuntimeError(
+                "Manual EAS audio columns could not be ensured"
+            )
+            return False
         backfill_eas_message_payloads(logger)
+        backfill_manual_eas_audio(logger)
         settings = get_location_settings(force_reload=True)
         timezone_name = settings.get('timezone')
         if timezone_name:

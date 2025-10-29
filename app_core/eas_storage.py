@@ -10,7 +10,7 @@ from flask import current_app
 from sqlalchemy import or_, text
 
 from app_core.extensions import db
-from app_core.models import EASMessage
+from app_core.models import EASMessage, ManualEASActivation
 
 
 def _get_eas_output_root() -> Optional[str]:
@@ -368,4 +368,154 @@ def backfill_eas_message_payloads(logger) -> None:
             pass
     else:
         logger.info("Backfilled cached payloads for %s EAS messages", updated)
+
+
+def ensure_manual_eas_audio_columns(logger) -> bool:
+    """Ensure blob columns exist for caching manual EAS audio payloads."""
+
+    engine = db.engine
+    if engine.dialect.name != "postgresql":
+        return True
+
+    column_check_sql = text(
+        """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'manual_eas_activations'
+          AND column_name = :column
+          AND table_schema = current_schema()
+        LIMIT 1
+        """
+    )
+
+    column_definitions = {
+        "composite_audio_data": "BYTEA",
+        "same_audio_data": "BYTEA",
+        "attention_audio_data": "BYTEA",
+        "tts_audio_data": "BYTEA",
+        "eom_audio_data": "BYTEA",
+    }
+
+    try:
+        with engine.begin() as connection:
+            for column, definition in column_definitions.items():
+                exists = connection.execute(column_check_sql, {"column": column}).scalar()
+                if exists:
+                    continue
+
+                logger.info(
+                    "Adding manual_eas_activations.%s column for cached audio payloads", column
+                )
+                connection.execute(
+                    text(f"ALTER TABLE manual_eas_activations ADD COLUMN {column} {definition}")
+                )
+
+        return True
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        logger.warning("Could not ensure manual EAS audio columns: %s", exc)
+        try:
+            db.session.rollback()
+        except Exception:  # pragma: no cover - defensive fallback
+            pass
+        return False
+
+
+def backfill_manual_eas_audio(logger) -> None:
+    """Populate missing cached audio columns from on-disk artifacts for manual EAS."""
+
+    output_root = _get_eas_output_root()
+    if not output_root:
+        return
+
+    try:
+        candidates = (
+            ManualEASActivation.query.filter(
+                or_(
+                    ManualEASActivation.composite_audio_data.is_(None),
+                    ManualEASActivation.same_audio_data.is_(None),
+                    ManualEASActivation.attention_audio_data.is_(None),
+                    ManualEASActivation.tts_audio_data.is_(None),
+                    ManualEASActivation.eom_audio_data.is_(None),
+                )
+            )
+            .order_by(ManualEASActivation.id.asc())
+            .all()
+        )
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        logger.warning("Unable to inspect cached manual EAS audio: %s", exc)
+        try:
+            db.session.rollback()
+        except Exception:  # pragma: no cover - defensive fallback
+            pass
+        return
+
+    if not candidates:
+        return
+
+    updated = 0
+
+    for activation in candidates:
+        changed = False
+        components = activation.components_payload or {}
+
+        # Map component keys to column names and filenames
+        audio_mapping = {
+            'composite': 'composite_audio_data',
+            'same': 'same_audio_data',
+            'attention': 'attention_audio_data',
+            'tts': 'tts_audio_data',
+            'eom': 'eom_audio_data',
+        }
+
+        for component_key, column_name in audio_mapping.items():
+            # Skip if already cached
+            if getattr(activation, column_name) is not None:
+                continue
+
+            # Get filename from components_payload
+            component_meta = components.get(component_key)
+            if not component_meta or not isinstance(component_meta, dict):
+                continue
+
+            storage_subpath = component_meta.get('storage_subpath')
+            if not storage_subpath:
+                continue
+
+            disk_path = os.path.join(output_root, storage_subpath)
+            if not os.path.exists(disk_path):
+                continue
+
+            try:
+                with open(disk_path, "rb") as handle:
+                    audio_bytes = handle.read()
+            except OSError as exc:
+                logger.debug(
+                    "Unable to backfill %s audio for manual activation %s: %s",
+                    component_key,
+                    activation.id,
+                    exc,
+                )
+                continue
+
+            if audio_bytes:
+                setattr(activation, column_name, audio_bytes)
+                changed = True
+
+        if changed:
+            db.session.add(activation)
+            updated += 1
+
+    if not updated:
+        return
+
+    try:
+        db.session.commit()
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        logger.warning("Failed to persist cached manual EAS audio backfill: %s", exc)
+        try:
+            db.session.rollback()
+        except Exception:  # pragma: no cover - defensive fallback
+            pass
+    else:
+        logger.info("Backfilled cached audio for %s manual EAS activations", updated)
 

@@ -242,6 +242,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
                 'storage_subpath': storage_subpath,
                 'duration_seconds': duration,
                 'size_bytes': len(wav_bytes),
+                'wav_bytes': wav_bytes,  # Include raw bytes for database storage
             }
 
         state_tree = get_us_state_county_tree()
@@ -375,6 +376,12 @@ def register_manual_routes(app, logger, eas_config) -> None:
                 'web_prefix': web_prefix,
                 'includes_tts': bool(tts_component),
             },
+            # Store audio binary data in database
+            composite_audio_data=composite_component.get('wav_bytes') if composite_component else None,
+            same_audio_data=same_component.get('wav_bytes') if same_component else None,
+            attention_audio_data=attention_component.get('wav_bytes') if attention_component else None,
+            tts_audio_data=tts_component.get('wav_bytes') if tts_component else None,
+            eom_audio_data=eom_component.get('wav_bytes') if eom_component else None,
         )
 
         try:
