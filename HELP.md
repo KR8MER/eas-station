@@ -31,6 +31,7 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 ## Troubleshooting
 ### Application Will Not Start
 - Confirm the PostgreSQL/PostGIS database container is running and reachable.
+- If you rely on the bundled service, ensure `docker-compose.embedded-db.yml` is included in the command or `COMPOSE_FILE` environment variable.
 - Verify environment variables in `.env` match the external database credentials and host.
 - Inspect logs using `docker compose logs -f app` and `docker compose logs -f poller` for detailed error messages.
 
@@ -50,7 +51,8 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 ## Reference Commands
 | Task | Command |
 |------|---------|
-| Build and start services | `docker compose up -d --build` |
+| Build and start services (embedded database) | `docker compose -f docker-compose.yml -f docker-compose.embedded-db.yml up -d --build` |
+| Build and start services (external database) | `docker compose up -d --build` |
 | View aggregate logs | `docker compose logs -f` |
 | Restart the web app | `docker compose restart app` |
 | Run database migrations (if applicable) | `flask db upgrade` |
