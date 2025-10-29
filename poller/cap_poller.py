@@ -712,11 +712,54 @@ class CAPPoller:
 
         return coords
 
+    MESSAGE_TYPE_PRIORITIES = {
+        'CANCEL': 4,
+        'UPDATE': 3,
+        'ALERT': 2,
+        'ACK': 1,
+    }
+
+    def _message_type_priority(self, message_type: Optional[str]) -> int:
+        if not message_type:
+            return 0
+        return self.MESSAGE_TYPE_PRIORITIES.get(str(message_type).strip().upper(), 0)
+
+    def _alert_sort_key(self, alert: Dict) -> Tuple[datetime, int]:
+        properties = alert.get('properties', {})
+        sent_raw = properties.get('sent')
+        sent_dt = parse_nws_datetime(sent_raw) if sent_raw else None
+        if not sent_dt:
+            sent_dt = datetime.min.replace(tzinfo=UTC_TZ)
+        message_type_priority = self._message_type_priority(properties.get('messageType'))
+        return sent_dt, message_type_priority
+
+    def _should_replace_alert(self, existing_alert: Dict, candidate_alert: Dict) -> bool:
+        existing_sent, existing_priority = self._alert_sort_key(existing_alert)
+        candidate_sent, candidate_priority = self._alert_sort_key(candidate_alert)
+
+        if candidate_sent > existing_sent:
+            return True
+        if candidate_sent < existing_sent:
+            return False
+        if candidate_priority > existing_priority:
+            return True
+        if candidate_priority < existing_priority:
+            return False
+
+        existing_geometry = existing_alert.get('geometry')
+        candidate_geometry = candidate_alert.get('geometry')
+        if candidate_geometry and not existing_geometry:
+            return True
+
+        return False
+
     def fetch_cap_alerts(self, timeout: int = 30) -> List[Dict]:
         unique_alerts: List[Dict] = []
-        seen_identifiers: Set[str] = set()
         sources_seen: Set[str] = set()
         duplicates_filtered = 0
+        duplicates_replaced = 0
+        alerts_by_identifier: Dict[str, Dict] = {}
+        alerts_without_identifier: List[Dict] = []
 
         for endpoint in self.cap_endpoints:
             try:
@@ -745,24 +788,53 @@ class CAPPoller:
                     if canonical_source != ALERT_SOURCE_UNKNOWN:
                         sources_seen.add(canonical_source)
 
-                    if identifier and identifier not in seen_identifiers:
-                        seen_identifiers.add(identifier)
-                        unique_alerts.append(alert)
-                    elif not identifier:
-                        self.logger.warning("Alert has no identifier, including anyway")
-                        unique_alerts.append(alert)
+                    if identifier:
+                        existing_alert = alerts_by_identifier.get(identifier)
+                        if not existing_alert:
+                            alerts_by_identifier[identifier] = alert
+                        else:
+                            duplicates_filtered += 1
+                            if self._should_replace_alert(existing_alert, alert):
+                                alerts_by_identifier[identifier] = alert
+                                duplicates_replaced += 1
+                                self.logger.debug(
+                                    "Replacing alert %s with newer payload (sent=%s, type=%s)",
+                                    identifier,
+                                    props.get('sent'),
+                                    props.get('messageType'),
+                                )
+                            else:
+                                self.logger.debug(
+                                    "Skipping older duplicate for %s (sent=%s, type=%s)",
+                                    identifier,
+                                    props.get('sent'),
+                                    props.get('messageType'),
+                                )
                     else:
-                        duplicates_filtered += 1
+                        self.logger.warning("Alert has no identifier, including anyway")
+                        alerts_without_identifier.append(alert)
             except requests.exceptions.RequestException as exc:
                 self.logger.error(f"Error fetching from {endpoint}: {str(exc)}")
             except Exception as exc:
                 self.logger.error(f"Unexpected error fetching from {endpoint}: {str(exc)}")
 
+        unique_alerts.extend(alerts_by_identifier.values())
+        unique_alerts.extend(alerts_without_identifier)
+
         self.last_poll_sources = sorted(sources_seen)
         self.last_duplicates_filtered = duplicates_filtered
 
         if duplicates_filtered:
-            self.logger.info("Filtered %d duplicate identifiers during fetch", duplicates_filtered)
+            if duplicates_replaced:
+                self.logger.info(
+                    "Filtered %d duplicate identifiers (%d replaced with newer versions)",
+                    duplicates_filtered,
+                    duplicates_replaced,
+                )
+            else:
+                self.logger.info(
+                    "Filtered %d duplicate identifiers during fetch", duplicates_filtered
+                )
         self.logger.info("Total unique alerts collected: %d", len(unique_alerts))
         if self.last_poll_sources:
             self.logger.info("Alert sources observed: %s", ", ".join(self.last_poll_sources))
