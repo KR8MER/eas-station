@@ -2,7 +2,67 @@
 
 from __future__ import annotations
 
-from typing import Dict
+from typing import Dict, List
+
+
+STATE_ABBR_NAMES: Dict[str, str] = {
+    'AL': 'Alabama',
+    'AK': 'Alaska',
+    'AZ': 'Arizona',
+    'AR': 'Arkansas',
+    'CA': 'California',
+    'CO': 'Colorado',
+    'CT': 'Connecticut',
+    'DE': 'Delaware',
+    'DC': 'District of Columbia',
+    'FL': 'Florida',
+    'GA': 'Georgia',
+    'HI': 'Hawaii',
+    'ID': 'Idaho',
+    'IL': 'Illinois',
+    'IN': 'Indiana',
+    'IA': 'Iowa',
+    'KS': 'Kansas',
+    'KY': 'Kentucky',
+    'LA': 'Louisiana',
+    'ME': 'Maine',
+    'MD': 'Maryland',
+    'MA': 'Massachusetts',
+    'MI': 'Michigan',
+    'MN': 'Minnesota',
+    'MS': 'Mississippi',
+    'MO': 'Missouri',
+    'MT': 'Montana',
+    'NE': 'Nebraska',
+    'NV': 'Nevada',
+    'NH': 'New Hampshire',
+    'NJ': 'New Jersey',
+    'NM': 'New Mexico',
+    'NY': 'New York',
+    'NC': 'North Carolina',
+    'ND': 'North Dakota',
+    'OH': 'Ohio',
+    'OK': 'Oklahoma',
+    'OR': 'Oregon',
+    'PA': 'Pennsylvania',
+    'RI': 'Rhode Island',
+    'SC': 'South Carolina',
+    'SD': 'South Dakota',
+    'TN': 'Tennessee',
+    'TX': 'Texas',
+    'UT': 'Utah',
+    'VT': 'Vermont',
+    'VA': 'Virginia',
+    'WA': 'Washington',
+    'WV': 'West Virginia',
+    'WI': 'Wisconsin',
+    'WY': 'Wyoming',
+    'AS': 'American Samoa',
+    'GU': 'Guam',
+    'MP': 'Northern Mariana Islands',
+    'PR': 'Puerto Rico',
+    'VI': 'U.S. Virgin Islands',
+}
 
 # Data sourced from FCC / US Census FIPS code list (national_county.txt).
 # Format: STATEFP + COUNTYFP -> "County Name, ST"
@@ -3172,3 +3232,64 @@ def _build_county_index() -> Dict[str, str]:
 
 US_FIPS_COUNTIES: Dict[str, str] = _build_county_index()
 ALL_US_FIPS_CODES = frozenset(US_FIPS_COUNTIES.keys())
+
+
+def _build_state_tree() -> List[Dict[str, object]]:
+    states: Dict[str, Dict[str, object]] = {}
+    for line in US_FIPS_COUNTY_TABLE.strip().splitlines():
+        code, state_abbr, county_name = line.split('|')
+        state_fips = code[:2]
+        same_code = _to_same_county_code(code)
+        state_entry = states.setdefault(
+            state_abbr,
+            {
+                'abbr': state_abbr,
+                'name': STATE_ABBR_NAMES.get(state_abbr, state_abbr),
+                'state_fips': state_fips,
+                'statewide_code': f"0{state_fips}000",
+                'counties': [],
+            },
+        )
+        state_entry['counties'].append({
+            'code': same_code,
+            'name': county_name,
+        })
+
+    ordered_states: List[Dict[str, object]] = []
+    for state in states.values():
+        state['counties'].sort(key=lambda item: item['name'])
+        ordered_states.append(state)
+
+    ordered_states.sort(key=lambda item: item['name'])
+    return ordered_states
+
+
+def _build_same_lookup(states: List[Dict[str, object]]) -> Dict[str, str]:
+    mapping = dict(US_FIPS_COUNTIES)
+    for state in states:
+        statewide_code = state.get('statewide_code')
+        if statewide_code:
+            mapping.setdefault(statewide_code, f"All Areas, {state['abbr']}")
+    return mapping
+
+
+US_STATE_COUNTY_TREE: List[Dict[str, object]] = _build_state_tree()
+US_FIPS_LOOKUP: Dict[str, str] = _build_same_lookup(US_STATE_COUNTY_TREE)
+
+
+def get_us_state_county_tree() -> List[Dict[str, object]]:
+    """Return a copy of the state → county SAME mapping."""
+
+    return [
+        {
+            **state,
+            'counties': [dict(county) for county in state.get('counties', [])],
+        }
+        for state in US_STATE_COUNTY_TREE
+    ]
+
+
+def get_same_lookup() -> Dict[str, str]:
+    """Return a mapping of SAME codes to friendly labels."""
+
+    return dict(US_FIPS_LOOKUP)
