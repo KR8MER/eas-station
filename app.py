@@ -5,7 +5,7 @@ Flask Web Application with Enhanced Boundary Management and Alerts History
 
 Author: KR8MER Amateur Radio Emergency Communications
 Description: Emergency alert system with configurable U.S. jurisdiction support and proper timezone handling
-Version: 2.1.7 - Removes legacy artifacts and unused assets from the repository
+Version: 2.1.9 - Adds per-line LED formatting support and WYSIWYG message editing
 """
 
 # =============================================================================
@@ -153,7 +153,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
 # Application versioning (exposed via templates for quick deployment verification)
-SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.7')
+SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.9')
 
 # NOAA API configuration for manual alert import workflows
 NOAA_API_BASE_URL = 'https://api.weather.gov/alerts'
@@ -4363,25 +4363,75 @@ def api_led_send_message():
         if not _led_enums_available():
             return jsonify({'success': False, 'error': 'LED library enums unavailable'})
 
-        lines = data.get('lines')
-        if isinstance(lines, str):
-            lines = [line for line in lines.splitlines() if line.strip()]
-
-        if not lines:
+        raw_lines = data.get('lines')
+        if raw_lines is None:
             return jsonify({'success': False, 'error': 'At least one line of text is required'})
 
-        color_name = data.get('color', 'GREEN')
-        font_name = data.get('font', 'FONT_7x9')
-        mode_name = data.get('mode', 'HOLD')
-        speed_name = data.get('speed', 'SPEED_3')
+        if isinstance(raw_lines, str):
+            raw_lines = raw_lines.splitlines()
+
+        if not isinstance(raw_lines, list):
+            return jsonify({'success': False, 'error': 'Lines must be provided as a list'})
+
+        sanitised_lines = []
+        flattened_lines = []
+
+        for entry in raw_lines:
+            if isinstance(entry, dict):
+                cleaned_line = {}
+                for key in ('display_position', 'font', 'color', 'rgb_color', 'mode', 'speed'):
+                    value = entry.get(key)
+                    if value not in (None, '', []):
+                        cleaned_line[key] = value
+
+                specials = entry.get('special_functions')
+                if specials:
+                    cleaned_line['special_functions'] = specials
+
+                segments_payload = []
+                raw_segments = entry.get('segments')
+                if isinstance(raw_segments, list) and raw_segments:
+                    for raw_segment in raw_segments:
+                        if isinstance(raw_segment, dict):
+                            segment_text = str(raw_segment.get('text', ''))
+                            cleaned_segment = {'text': segment_text}
+                            for seg_key in ('font', 'color', 'rgb_color', 'mode', 'speed'):
+                                seg_value = raw_segment.get(seg_key)
+                                if seg_value not in (None, '', []):
+                                    cleaned_segment[seg_key] = seg_value
+                            seg_specials = raw_segment.get('special_functions')
+                            if seg_specials:
+                                cleaned_segment['special_functions'] = seg_specials
+                        else:
+                            cleaned_segment = {'text': str(raw_segment or '')}
+                        segments_payload.append(cleaned_segment)
+                else:
+                    segment_text = str(entry.get('text', ''))
+                    segments_payload.append({'text': segment_text})
+
+                cleaned_line['segments'] = segments_payload
+                sanitised_lines.append(cleaned_line)
+                flattened_lines.append(''.join(segment.get('text', '') for segment in segments_payload))
+            else:
+                text_value = str(entry or '')
+                sanitised_lines.append(text_value)
+                flattened_lines.append(text_value)
+
+        if not any(text.strip() for text in flattened_lines):
+            return jsonify({'success': False, 'error': 'At least one line of text is required'})
+
+        color_name = (data.get('color') or 'GREEN').upper()
+        font_name = (data.get('font') or 'FONT_7x9').upper()
+        mode_name = (data.get('mode') or 'HOLD').upper()
+        speed_name = (data.get('speed') or 'SPEED_3').upper()
         hold_time = int(data.get('hold_time', 5))
         priority_value = int(data.get('priority', MessagePriority.NORMAL.value))
 
         try:
-            color = Color[color_name.upper()]
-            font = Font[font_name.upper()]
-            mode = DisplayMode[mode_name.upper()]
-            speed = Speed[speed_name.upper()]
+            color = Color[color_name]
+            font = Font[font_name]
+            mode = DisplayMode[mode_name]
+            speed = Speed[speed_name]
             priority = MessagePriority(priority_value)
         except (KeyError, ValueError) as e:
             return jsonify({'success': False, 'error': f'Invalid parameter: {str(e)}'})
@@ -4396,14 +4446,48 @@ def api_led_send_message():
                 except KeyError:
                     logger.warning("Ignoring unknown special function: %s", func_name)
 
+        def _gather_values(field_name: str) -> set:
+            values = set()
+            for line in sanitised_lines:
+                if isinstance(line, dict):
+                    value = line.get(field_name)
+                    if value:
+                        values.add(str(value).upper())
+                    for segment in line.get('segments', []):
+                        seg_value = segment.get(field_name)
+                        if seg_value:
+                            values.add(str(seg_value).upper())
+            return values
+
+        color_values = _gather_values('color')
+        rgb_values = _gather_values('rgb_color')
+        mode_values = _gather_values('mode')
+        speed_values = _gather_values('speed')
+
+        if color_values and rgb_values:
+            color_summary = 'MIXED'
+        elif color_values:
+            color_summary = next(iter(color_values)) if len(color_values) == 1 else 'MIXED'
+        elif rgb_values:
+            color_summary = f"RGB-{next(iter(rgb_values))}" if len(rgb_values) == 1 else 'RGB-MULTI'
+        else:
+            color_summary = color.name
+
+        mode_summary = next(iter(mode_values)) if len(mode_values) == 1 else (
+            'MIXED' if mode_values else mode.name
+        )
+        speed_summary = next(iter(speed_values)) if len(speed_values) == 1 else (
+            'MIXED' if speed_values else speed.name
+        )
+
         led_message = LEDMessage(
             message_type='custom',
-            content='\n'.join(lines),
+            content='\n'.join(flattened_lines),
             priority=priority.value,
-            color=color.name,
+            color=color_summary,
             font_size=font.name,
-            effect=mode.name,
-            speed=speed.name,
+            effect=mode_summary,
+            speed=speed_summary,
             display_time=hold_time,
             scheduled_time=utc_now()
         )
@@ -4411,7 +4495,7 @@ def api_led_send_message():
         db.session.commit()
 
         result = led_controller.send_message(
-            lines=lines,
+            lines=sanitised_lines,
             color=color,
             font=font,
             mode=mode,
