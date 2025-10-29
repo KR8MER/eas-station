@@ -53,6 +53,8 @@ tracks releases under the 2.1.x series.
   alert when regulations allow.
 - Bundled `ffmpeg`, `espeak`, and `libespeak-ng1` system packages in the Docker image so offline narration dependencies work out of the box during container builds.
 ### Fixed
+- Inserted the mandatory display-position byte in LED sign mode fields so M-Protocol
+  frames comply with Alpha controller requirements.
 - Surface offline pyttsx3 narration failures in the Manual Broadcast Builder with
   the underlying error details so operators can troubleshoot configuration
   issues without digging through logs.
