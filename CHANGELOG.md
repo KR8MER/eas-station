@@ -52,6 +52,11 @@ tracks releases under the 2.1.x series.
   “No attention signal (omit)” option so manual packages can exclude the dual-tone or 1050 Hz
   alert when regulations allow.
 ### Fixed
+- Surface offline pyttsx3 narration failures in the Manual Broadcast Builder with
+  the underlying error details so operators can troubleshoot configuration
+  issues without digging through logs.
+- Detect missing libespeak dependencies when pyttsx3 fails and surface
+  installation guidance so offline narration can be restored quickly.
 - Count manual EAS activations when calculating Audio Archive totals and show them
   alongside automated captures so archived transmissions are visible in the history
   table.
