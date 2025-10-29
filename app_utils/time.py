@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from datetime import datetime
 from typing import Optional
 
@@ -14,12 +15,13 @@ logger = logging.getLogger(__name__)
 DEFAULT_TIMEZONE_NAME = os.getenv("DEFAULT_TIMEZONE", "America/New_York")
 UTC_TZ = pytz.UTC
 _location_timezone = pytz.timezone(DEFAULT_TIMEZONE_NAME)
+_timezone_lock = threading.Lock()
 
 
 def get_location_timezone():
     """Return the configured location timezone object."""
-
-    return _location_timezone
+    with _timezone_lock:
+        return _location_timezone
 
 
 def get_location_timezone_name() -> str:
@@ -37,16 +39,17 @@ def set_location_timezone(tz_name: Optional[str]) -> None:
     if not tz_name:
         return
 
-    try:
-        _location_timezone = pytz.timezone(tz_name)
-        logger.info("Updated location timezone to %s", tz_name)
-    except Exception as exc:  # pragma: no cover - safety fallback
-        logger.warning(
-            "Invalid timezone '%s', keeping %s: %s",
-            tz_name,
-            get_location_timezone_name(),
-            exc,
-        )
+    with _timezone_lock:
+        try:
+            _location_timezone = pytz.timezone(tz_name)
+            logger.info("Updated location timezone to %s", tz_name)
+        except Exception as exc:  # pragma: no cover - safety fallback
+            logger.warning(
+                "Invalid timezone '%s', keeping %s: %s",
+                tz_name,
+                get_location_timezone_name(),
+                exc,
+            )
 
 
 def utc_now() -> datetime:

@@ -150,7 +150,39 @@ logger = logging.getLogger(__name__)
 
 # Create Flask app
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
+
+# Security: Validate SECRET_KEY is properly configured
+SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
+FLASK_ENV = os.environ.get('FLASK_ENV', 'production')
+
+# Fail fast if running in production without a secure SECRET_KEY
+INSECURE_SECRET_KEYS = {
+    'dev-key-change-in-production',
+    'dev',
+    'development',
+    'changeme',
+    'change-me',
+    'replace-with-a-long-random-string',
+}
+
+if FLASK_ENV == 'production' and (not SECRET_KEY or SECRET_KEY in INSECURE_SECRET_KEYS):
+    raise RuntimeError(
+        "CRITICAL SECURITY ERROR: SECRET_KEY is not properly configured!\n"
+        "Set a strong SECRET_KEY in your .env file before running in production.\n"
+        "Generate one with: python -c 'import secrets; print(secrets.token_hex(32))'"
+    )
+
+if SECRET_KEY in INSECURE_SECRET_KEYS:
+    logger.warning(
+        "WARNING: Using insecure SECRET_KEY! This is only acceptable for development.\n"
+        "Generate a secure key with: python -c 'import secrets; print(secrets.token_hex(32))'"
+    )
+
+app.secret_key = SECRET_KEY
+
+# Security: File upload limits (50 MB max for GeoJSON boundary files)
+MAX_UPLOAD_SIZE_MB = int(os.environ.get('MAX_UPLOAD_SIZE_MB', '50'))
+app.config['MAX_CONTENT_LENGTH'] = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 # Application versioning (exposed via templates for quick deployment verification)
 SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.7')
@@ -207,6 +239,20 @@ DATABASE_URL = _build_database_url()
 os.environ.setdefault('DATABASE_URL', DATABASE_URL)
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Database connection pooling for production stability
+# Pool size: number of permanent connections to maintain
+# Max overflow: additional connections allowed beyond pool size
+# Pool timeout: seconds to wait for connection from pool
+# Pool recycle: recycle connections after N seconds (prevents stale connections)
+# Pool pre-ping: verify connections are alive before using them
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_size': int(os.environ.get('DB_POOL_SIZE', '10')),  # 10 permanent connections
+    'max_overflow': int(os.environ.get('DB_MAX_OVERFLOW', '20')),  # +20 temporary connections
+    'pool_timeout': int(os.environ.get('DB_POOL_TIMEOUT', '30')),  # 30 second timeout
+    'pool_recycle': int(os.environ.get('DB_POOL_RECYCLE', '3600')),  # Recycle after 1 hour
+    'pool_pre_ping': True,  # Test connections before using (handles DB restarts)
+}
 
 # Initialize database
 db.init_app(app)
@@ -3984,10 +4030,43 @@ def upload_boundaries():
         if not file.filename.lower().endswith('.geojson'):
             return jsonify({'error': 'File must be a GeoJSON file'}), 400
 
+        # Validate file content type
+        content_type = file.content_type or ''
+        allowed_types = {'application/json', 'application/geo+json', 'text/plain', ''}
+        if content_type and content_type not in allowed_types:
+            return jsonify({'error': f'Invalid content type: {content_type}. Expected GeoJSON.'}), 400
+
+        # Read file with explicit size check
         try:
-            geojson_data = json.loads(file.read().decode('utf-8'))
-        except json.JSONDecodeError:
-            return jsonify({'error': 'Invalid GeoJSON format'}), 400
+            file_content = file.read()
+            file_size_mb = len(file_content) / (1024 * 1024)
+
+            # Double-check size (Flask should catch this, but be defensive)
+            if len(file_content) > app.config['MAX_CONTENT_LENGTH']:
+                return jsonify({
+                    'error': f'File too large ({file_size_mb:.1f} MB). Maximum size: {MAX_UPLOAD_SIZE_MB} MB'
+                }), 413
+
+        except Exception as e:
+            return jsonify({'error': f'Failed to read file: {str(e)}'}), 400
+
+        # Decode and parse JSON
+        try:
+            geojson_data = json.loads(file_content.decode('utf-8'))
+        except UnicodeDecodeError:
+            return jsonify({'error': 'File must be UTF-8 encoded'}), 400
+        except json.JSONDecodeError as e:
+            return jsonify({'error': f'Invalid JSON format: {str(e)}'}), 400
+
+        # Validate GeoJSON structure
+        if not isinstance(geojson_data, dict):
+            return jsonify({'error': 'Invalid GeoJSON: must be a JSON object'}), 400
+
+        if 'features' not in geojson_data:
+            return jsonify({'error': 'Invalid GeoJSON: missing "features" array'}), 400
+
+        if not isinstance(geojson_data.get('features'), list):
+            return jsonify({'error': 'Invalid GeoJSON: "features" must be an array'}), 400
 
         features = geojson_data.get('features', [])
         boundaries_added = 0
@@ -4937,6 +5016,14 @@ def bad_request_error(error):
     <p>The request was malformed or invalid.</p>
     <p><a href='/'>← Back to Main</a></p>
     """), 400
+
+
+@app.errorhandler(413)
+def request_entity_too_large(error):
+    """413 Request Entity Too Large - file upload size exceeded"""
+    return jsonify({
+        'error': f'File too large. Maximum upload size is {MAX_UPLOAD_SIZE_MB} MB.'
+    }), 413
 
 
 # =============================================================================
