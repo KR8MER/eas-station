@@ -261,6 +261,28 @@ def register(app: Flask, logger) -> None:
                 route_logger.error("Error calculating duration stats: %s", exc)
                 stats_data["duration_stats"] = []
 
+            stats_data.setdefault("boundary_stats", [])
+            stats_data.setdefault("alert_by_status", [])
+            stats_data.setdefault("alert_by_severity", [])
+            stats_data.setdefault("alert_by_event", [])
+            stats_data.setdefault("alert_by_hour", [0] * 24)
+            stats_data.setdefault("alert_by_dow", [0] * 7)
+            stats_data.setdefault("alert_by_month", [0] * 12)
+            stats_data.setdefault("alert_by_year", [])
+            stats_data.setdefault("most_affected_boundaries", [])
+            stats_data.setdefault("duration_stats", [])
+            stats_data.setdefault("avg_durations", stats_data.get("duration_stats", []))
+            stats_data.setdefault("recent_by_day", [])
+            stats_data.setdefault("alert_events", [])
+            stats_data.setdefault("daily_alerts", [])
+            stats_data.setdefault("dow_hour_matrix", [[0] * 24 for _ in range(7)])
+            stats_data.setdefault("lifecycle_timeline", [])
+            stats_data.setdefault(
+                "filter_options",
+                {"severities": [], "statuses": [], "events": []},
+            )
+            stats_data.setdefault("polling", {})
+
             return render_template("stats.html", **stats_data)
         except Exception as exc:  # pragma: no cover - fallback content
             route_logger.error("Error loading statistics: %s", exc)
@@ -317,7 +339,14 @@ def register(app: Flask, logger) -> None:
             severity_filter = request.args.get("severity", "").strip()
             event_filter = request.args.get("event", "").strip()
             source_filter = request.args.get("source", "").strip()
-            show_expired = request.args.get("show_expired") == "true"
+            show_expired_raw = request.args.get("show_expired", "")
+            show_expired = str(show_expired_raw).lower() in {
+                "true",
+                "1",
+                "t",
+                "yes",
+                "on",
+            }
 
             query = CAPAlert.query
 
@@ -448,12 +477,23 @@ def register(app: Flask, logger) -> None:
             except Exception as exc:
                 route_logger.warning("Error loading manual activations: %s", exc)
 
+            current_filters = {
+                "search": search,
+                "status": status_filter,
+                "severity": severity_filter,
+                "event": event_filter,
+                "source": source_filter,
+                "per_page": per_page,
+                "show_expired": show_expired,
+            }
+
             return render_template(
                 "alerts.html",
                 alerts=alerts_list,
                 pagination=pagination,
                 audio_map=audio_map,
                 manual_messages=manual_messages,
+                current_filters=current_filters,
             )
         except Exception as exc:  # pragma: no cover - fallback content
             route_logger.error("Error loading alerts: %s", exc)
