@@ -20,8 +20,10 @@ import json
 import requests
 import logging
 import hashlib
+import math
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 import argparse
 
 import pytz
@@ -47,6 +49,13 @@ from app_utils import (
     parse_nws_datetime as util_parse_nws_datetime,
     set_location_timezone,
     utc_now as util_utc_now,
+)
+from app_utils.alert_sources import (
+    ALERT_SOURCE_IPAWS,
+    ALERT_SOURCE_NOAA,
+    ALERT_SOURCE_UNKNOWN,
+    normalize_alert_source,
+    summarise_sources,
 )
 from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS, ensure_list, normalise_upper
 from app_utils.eas import EASBroadcaster, load_eas_config
@@ -143,8 +152,14 @@ except Exception as e:
         instruction = Column(Text)
         raw_json = Column(JSON)
         geom = Column(Geometry('POLYGON', srid=4326))
+        source = Column(String(32), nullable=False, default=ALERT_SOURCE_UNKNOWN)
         created_at = Column(DateTime, default=utc_now)
         updated_at = Column(DateTime, default=utc_now)
+
+        def __setattr__(self, name, value):  # pragma: no cover
+            if name == 'source':
+                value = normalize_alert_source(value)
+            super().__setattr__(name, value)
 
     class Boundary(Base):
         __tablename__ = 'boundaries'
@@ -187,6 +202,7 @@ except Exception as e:
         execution_time_ms = Column(Integer)
         status = Column(String(20))
         error_message = Column(Text)
+        data_source = Column(String(64))
 
     class LocationSettings(Base):
         __tablename__ = 'location_settings'
@@ -221,7 +237,13 @@ except Exception as e:
 class CAPPoller:
     """CAP alert poller with strict location filtering, PostGIS, optional LED."""
 
-    def __init__(self, database_url: str, led_sign_ip: str = None, led_sign_port: int = 10001):
+    def __init__(
+        self,
+        database_url: str,
+        led_sign_ip: str = None,
+        led_sign_port: int = 10001,
+        cap_endpoints: Optional[List[str]] = None,
+    ):
         self.database_url = database_url
         self.led_sign_ip = led_sign_ip
         self.led_sign_port = led_sign_port
@@ -233,12 +255,17 @@ class CAPPoller:
         Session = sessionmaker(bind=self.engine)
         self.db_session = Session()
 
+        self.last_poll_sources: List[str] = []
+        self.last_duplicates_filtered: int = 0
+
         # Verify tables exist (don’t crash if missing)
         try:
             self.db_session.execute(text("SELECT 1 FROM cap_alerts LIMIT 1"))
             self.logger.info("Database tables verified successfully")
         except Exception as e:
             self.logger.warning(f"Database table verification failed: {e}")
+
+        self._ensure_source_columns()
 
         self.location_settings = self._load_location_settings()
         self.location_name = f"{self.location_settings['county_name']}, {self.location_settings['state_code']}".strip(', ')
@@ -258,8 +285,12 @@ class CAPPoller:
 
         # HTTP Session
         self.session = requests.Session()
+        default_user_agent = os.getenv(
+            'NOAA_USER_AGENT',
+            'KR8MER Emergency Alert Hub/2.1 (+https://github.com/KR8MER/noaa_alerts_systems; NOAA+IPAWS)',
+        )
         self.session.headers.update({
-            'User-Agent': f"NOAA CAP Alert System/1.0 ({self.location_name})"
+            'User-Agent': default_user_agent,
         })
 
         # LED
@@ -274,13 +305,34 @@ class CAPPoller:
             self.logger.warning("LED sign IP provided but controller not available")
 
         # Endpoints
-        self.cap_endpoints = [
-            f"https://api.weather.gov/alerts/active?zone={code}"
-            for code in self.location_settings['zone_codes']
-        ] or [
-            f"https://api.weather.gov/alerts/active?zone={code}"
-            for code in DEFAULT_LOCATION_SETTINGS['zone_codes']
-        ]
+        configured_endpoints: List[str] = []
+        env_cap_endpoints = os.getenv('CAP_ENDPOINTS')
+        if env_cap_endpoints:
+            configured_endpoints.extend([
+                endpoint.strip()
+                for endpoint in env_cap_endpoints.split(',')
+                if endpoint.strip()
+            ])
+        if cap_endpoints:
+            configured_endpoints.extend([endpoint for endpoint in cap_endpoints if endpoint])
+
+        if configured_endpoints:
+            # Preserve order but remove duplicates
+            seen = set()
+            unique_endpoints = []
+            for endpoint in configured_endpoints:
+                if endpoint not in seen:
+                    unique_endpoints.append(endpoint)
+                    seen.add(endpoint)
+            self.cap_endpoints = unique_endpoints
+        else:
+            self.cap_endpoints = [
+                f"https://api.weather.gov/alerts/active?zone={code}"
+                for code in self.location_settings['zone_codes']
+            ] or [
+                f"https://api.weather.gov/alerts/active?zone={code}"
+                for code in DEFAULT_LOCATION_SETTINGS['zone_codes']
+            ]
 
         # Strict location terms
         base_identifiers = self.location_settings['area_terms'] or list(DEFAULT_LOCATION_SETTINGS['area_terms'])
@@ -290,6 +342,63 @@ class CAPPoller:
         derived_identifiers.add(self.county_upper.replace(' COUNTY', ''))
         self.putnam_county_identifiers = list({term for term in base_identifiers if term} | derived_identifiers)
         self.zone_codes = set(self.location_settings['zone_codes'])
+
+    # ---------- Engine with retry ----------
+    def _ensure_source_columns(self):
+        try:
+            changed = False
+
+            cap_alerts_has_source = self.db_session.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'cap_alerts'
+                      AND column_name = 'source'
+                      AND table_schema = current_schema()
+                    """
+                )
+            ).scalar()
+
+            if not cap_alerts_has_source:
+                self.logger.info("Adding cap_alerts.source column for alert provenance tracking")
+                self.db_session.execute(text("ALTER TABLE cap_alerts ADD COLUMN source VARCHAR(32)"))
+                self.db_session.execute(
+                    text("UPDATE cap_alerts SET source = :default WHERE source IS NULL"),
+                    {"default": ALERT_SOURCE_NOAA},
+                )
+                self.db_session.execute(
+                    text("ALTER TABLE cap_alerts ALTER COLUMN source SET DEFAULT :default"),
+                    {"default": ALERT_SOURCE_UNKNOWN},
+                )
+                self.db_session.execute(text("ALTER TABLE cap_alerts ALTER COLUMN source SET NOT NULL"))
+                changed = True
+
+            poll_history_has_source = self.db_session.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'poll_history'
+                      AND column_name = 'data_source'
+                      AND table_schema = current_schema()
+                    """
+                )
+            ).scalar()
+
+            if not poll_history_has_source:
+                self.logger.info("Adding poll_history.data_source column for polling metadata")
+                self.db_session.execute(text("ALTER TABLE poll_history ADD COLUMN data_source VARCHAR(64)"))
+                changed = True
+
+            if changed:
+                self.db_session.commit()
+        except Exception as exc:
+            self.logger.warning("Could not ensure source columns exist: %s", exc)
+            try:
+                self.db_session.rollback()
+            except Exception:
+                pass
 
     # ---------- Engine with retry ----------
     def _load_location_settings(self) -> Dict[str, Any]:
@@ -340,35 +449,310 @@ class CAPPoller:
         raise last_err
 
     # ---------- Fetch ----------
+    def _parse_feed_payload(self, response: requests.Response) -> List[Dict]:
+        try:
+            data = response.json()
+        except ValueError:
+            alerts = self._parse_ipaws_xml_feed(response.text)
+            if alerts:
+                self.logger.debug("Parsed %d CAP alerts from XML feed", len(alerts))
+            return alerts
+
+        features = data.get('features', [])
+        if isinstance(features, list):
+            return features
+
+        self.logger.warning("CAP feed JSON response missing 'features' array")
+        return []
+
+    def _parse_ipaws_xml_feed(self, xml_text: str) -> List[Dict]:
+        alerts: List[Dict] = []
+        if not xml_text:
+            return alerts
+
+        try:
+            root = ET.fromstring(xml_text)
+        except ET.ParseError as exc:
+            self.logger.error(f"XML parse error in CAP feed: {exc}")
+            return alerts
+
+        ns = {
+            'feed': 'http://gov.fema.ipaws.services/feed',
+            'cap': 'urn:oasis:names:tc:emergency:cap:1.2',
+        }
+
+        for alert_elem in root.findall('.//cap:alert', ns):
+            feature = self._convert_cap_alert(alert_elem, ns)
+            if feature:
+                alerts.append(feature)
+
+        return alerts
+
+    def _convert_cap_alert(self, alert_elem: ET.Element, ns: Dict[str, str]) -> Optional[Dict]:
+        def get_text(element: Optional[ET.Element], path: str, default: str = '') -> str:
+            if element is None:
+                return default
+            value = element.findtext(path, default=default, namespaces=ns)
+            return value.strip() if isinstance(value, str) else default
+
+        identifier = get_text(alert_elem, 'cap:identifier')
+        sent = get_text(alert_elem, 'cap:sent')
+        info_elems = alert_elem.findall('cap:info', ns)
+        info_elem = self._select_cap_info(info_elems, ns)
+
+        parameters = self._extract_cap_parameters(info_elem, ns)
+        geometry, area_desc, geocodes = self._extract_area_details(info_elem, ns)
+
+        properties = {
+            'identifier': identifier,
+            'sender': get_text(alert_elem, 'cap:sender'),
+            'sent': sent,
+            'status': get_text(alert_elem, 'cap:status', 'Unknown') or 'Unknown',
+            'messageType': get_text(alert_elem, 'cap:msgType', 'Unknown') or 'Unknown',
+            'scope': get_text(alert_elem, 'cap:scope', 'Unknown') or 'Unknown',
+            'category': get_text(info_elem, 'cap:category', 'Unknown') or 'Unknown',
+            'event': get_text(info_elem, 'cap:event', 'Unknown') or 'Unknown',
+            'responseType': get_text(info_elem, 'cap:responseType'),
+            'urgency': get_text(info_elem, 'cap:urgency', 'Unknown') or 'Unknown',
+            'severity': get_text(info_elem, 'cap:severity', 'Unknown') or 'Unknown',
+            'certainty': get_text(info_elem, 'cap:certainty', 'Unknown') or 'Unknown',
+            'effective': get_text(info_elem, 'cap:effective'),
+            'expires': get_text(info_elem, 'cap:expires'),
+            'senderName': get_text(info_elem, 'cap:senderName'),
+            'headline': get_text(info_elem, 'cap:headline'),
+            'description': get_text(info_elem, 'cap:description'),
+            'instruction': get_text(info_elem, 'cap:instruction'),
+            'web': get_text(info_elem, 'cap:web'),
+            'areaDesc': area_desc,
+            'geocode': geocodes,
+            'parameters': parameters,
+            'source': ALERT_SOURCE_IPAWS,
+        }
+
+        if not properties['identifier']:
+            fallback = f"{properties.get('event', 'Unknown')}|{properties.get('sent', '')}"
+            properties['identifier'] = f"ipaws_{hashlib.md5(fallback.encode()).hexdigest()[:16]}"
+
+        feature = {
+            'type': 'Feature',
+            'properties': properties,
+            'geometry': geometry,
+            'raw_xml': ET.tostring(alert_elem, encoding='unicode'),
+        }
+
+        return feature
+
+    def _select_cap_info(self, info_elements: List[ET.Element], ns: Dict[str, str]) -> Optional[ET.Element]:
+        if not info_elements:
+            return None
+
+        preferred_langs = ['en-US', 'en-us', 'en']
+        for preferred in preferred_langs:
+            for info_elem in info_elements:
+                language = info_elem.findtext('cap:language', default='', namespaces=ns)
+                if language and language.lower().startswith(preferred.lower()):
+                    return info_elem
+
+        return info_elements[0]
+
+    def _extract_cap_parameters(self, info_elem: Optional[ET.Element], ns: Dict[str, str]) -> Dict[str, List[str]]:
+        parameters: Dict[str, List[str]] = {}
+        if info_elem is None:
+            return parameters
+
+        for param in info_elem.findall('cap:parameter', ns):
+            name = param.findtext('cap:valueName', default='', namespaces=ns)
+            value = param.findtext('cap:value', default='', namespaces=ns)
+            if not name:
+                continue
+            name = name.strip()
+            if not name:
+                continue
+            value = (value or '').strip()
+            parameters.setdefault(name, []).append(value)
+
+        return parameters
+
+    def _extract_area_details(self, info_elem: Optional[ET.Element], ns: Dict[str, str]) -> Tuple[Optional[Dict], str, Dict[str, List[str]]]:
+        if info_elem is None:
+            return None, '', {}
+
+        polygons: List[List[List[float]]] = []
+        area_descs: List[str] = []
+        geocodes: Dict[str, List[str]] = {}
+
+        for area in info_elem.findall('cap:area', ns):
+            desc = area.findtext('cap:areaDesc', default='', namespaces=ns)
+            if desc:
+                desc = desc.strip()
+                if desc and desc not in area_descs:
+                    area_descs.append(desc)
+
+            for polygon in area.findall('cap:polygon', ns):
+                coords = self._parse_cap_polygon(polygon.text)
+                if coords:
+                    polygons.append(coords)
+
+            for circle in area.findall('cap:circle', ns):
+                coords = self._parse_cap_circle(circle.text)
+                if coords:
+                    polygons.append(coords)
+
+            for geocode in area.findall('cap:geocode', ns):
+                name = geocode.findtext('cap:valueName', default='', namespaces=ns)
+                value = geocode.findtext('cap:value', default='', namespaces=ns)
+                if not name or not value:
+                    continue
+                name = name.strip().upper()
+                value = value.strip()
+                if not name or not value:
+                    continue
+                geocodes.setdefault(name, []).append(value)
+
+        geometry: Optional[Dict] = None
+        if polygons:
+            if len(polygons) == 1:
+                geometry = {'type': 'Polygon', 'coordinates': [polygons[0]]}
+            else:
+                geometry = {'type': 'MultiPolygon', 'coordinates': [[coords] for coords in polygons]}
+
+        area_desc = '; '.join(area_descs)
+        return geometry, area_desc, geocodes
+
+    def _parse_cap_polygon(self, polygon_text: Optional[str]) -> Optional[List[List[float]]]:
+        if not polygon_text:
+            return None
+
+        coords: List[List[float]] = []
+        for pair in polygon_text.strip().split():
+            if ',' not in pair:
+                continue
+            try:
+                lat_str, lon_str = pair.split(',', 1)
+                lat = float(lat_str)
+                lon = float(lon_str)
+                coords.append([lon, lat])
+            except ValueError:
+                continue
+
+        if len(coords) < 3:
+            return None
+
+        if coords[0] != coords[-1]:
+            coords.append(coords[0])
+
+        return coords
+
+    def _parse_cap_circle(self, circle_text: Optional[str], points: int = 36) -> Optional[List[List[float]]]:
+        if not circle_text:
+            return None
+
+        parts = circle_text.strip().split()
+        if not parts:
+            return None
+
+        try:
+            lat_str, lon_str = parts[0].split(',', 1)
+            lat = float(lat_str)
+            lon = float(lon_str)
+        except ValueError:
+            return None
+
+        radius_km = 0.0
+        if len(parts) > 1:
+            try:
+                radius_km = float(parts[1])
+            except ValueError:
+                radius_km = 0.0
+
+        if radius_km <= 0:
+            return None
+
+        return self._approximate_circle_polygon(lat, lon, radius_km, points)
+
+    def _approximate_circle_polygon(self, lat: float, lon: float, radius_km: float, points: int) -> List[List[float]]:
+        coords: List[List[float]] = []
+        radius_ratio = radius_km / 6371.0  # Earth radius in km
+        center_lat = math.radians(lat)
+        center_lon = math.radians(lon)
+
+        for step in range(points):
+            bearing = 2 * math.pi * (step / points)
+            sin_lat = math.sin(center_lat)
+            cos_lat = math.cos(center_lat)
+            sin_radius = math.sin(radius_ratio)
+            cos_radius = math.cos(radius_ratio)
+
+            lat_rad = math.asin(
+                sin_lat * cos_radius + cos_lat * sin_radius * math.cos(bearing)
+            )
+            lon_rad = center_lon + math.atan2(
+                math.sin(bearing) * sin_radius * cos_lat,
+                cos_radius - sin_lat * math.sin(lat_rad)
+            )
+
+            coords.append([math.degrees(lon_rad), math.degrees(lat_rad)])
+
+        if coords and coords[0] != coords[-1]:
+            coords.append(coords[0])
+
+        return coords
+
     def fetch_cap_alerts(self, timeout: int = 30) -> List[Dict]:
-        unique_alerts = []
-        seen_identifiers = set()
+        unique_alerts: List[Dict] = []
+        seen_identifiers: Set[str] = set()
+        sources_seen: Set[str] = set()
+        duplicates_filtered = 0
 
         for endpoint in self.cap_endpoints:
             try:
                 self.logger.info(f"Fetching alerts from: {endpoint}")
-                r = self.session.get(endpoint, timeout=timeout)
-                r.raise_for_status()
-                data = r.json()
-                features = data.get('features', [])
+                response = self.session.get(endpoint, timeout=timeout)
+                response.raise_for_status()
+                features = self._parse_feed_payload(response)
                 self.logger.info(f"Retrieved {len(features)} alerts from {endpoint}")
                 for alert in features:
                     props = alert.get('properties', {})
-                    identifier = props.get('identifier')
+
+                    identifier = (props.get('identifier') or '').strip()
+                    if identifier:
+                        props['identifier'] = identifier
+
+                    source_value = props.get('source')
+                    if not source_value:
+                        if alert.get('raw_xml') is not None or 'ipaws' in endpoint.lower():
+                            source_value = ALERT_SOURCE_IPAWS
+                        elif 'weather.gov' in endpoint.lower():
+                            source_value = ALERT_SOURCE_NOAA
+                        else:
+                            source_value = ALERT_SOURCE_UNKNOWN
+                    canonical_source = normalize_alert_source(source_value)
+                    props['source'] = canonical_source
+                    if canonical_source != ALERT_SOURCE_UNKNOWN:
+                        sources_seen.add(canonical_source)
+
                     if identifier and identifier not in seen_identifiers:
                         seen_identifiers.add(identifier)
                         unique_alerts.append(alert)
                     elif not identifier:
                         self.logger.warning("Alert has no identifier, including anyway")
                         unique_alerts.append(alert)
-            except requests.exceptions.RequestException as e:
-                self.logger.error(f"Error fetching from {endpoint}: {str(e)}")
-            except json.JSONDecodeError as e:
-                self.logger.error(f"JSON decode error from {endpoint}: {str(e)}")
-            except Exception as e:
-                self.logger.error(f"Unexpected error fetching from {endpoint}: {str(e)}")
+                    else:
+                        duplicates_filtered += 1
+            except requests.exceptions.RequestException as exc:
+                self.logger.error(f"Error fetching from {endpoint}: {str(exc)}")
+            except Exception as exc:
+                self.logger.error(f"Unexpected error fetching from {endpoint}: {str(exc)}")
 
-        self.logger.info(f"Total unique alerts collected: {len(unique_alerts)}")
+        self.last_poll_sources = sorted(sources_seen)
+        self.last_duplicates_filtered = duplicates_filtered
+
+        if duplicates_filtered:
+            self.logger.info("Filtered %d duplicate identifiers during fetch", duplicates_filtered)
+        self.logger.info("Total unique alerts collected: %d", len(unique_alerts))
+        if self.last_poll_sources:
+            self.logger.info("Alert sources observed: %s", ", ".join(self.last_poll_sources))
+
         return unique_alerts
 
     # ---------- Relevance ----------
@@ -414,6 +798,13 @@ class CAPPoller:
             if isinstance(area_desc, list):
                 area_desc = '; '.join(area_desc)
 
+            source_value = properties.get('source')
+            if not source_value and alert_data.get('raw_xml') is not None:
+                source_value = ALERT_SOURCE_IPAWS
+            elif not source_value:
+                source_value = ALERT_SOURCE_NOAA
+            source_value = normalize_alert_source(source_value)
+
             parsed = {
                 'identifier': identifier,
                 'sent': sent or utc_now(),
@@ -431,6 +822,7 @@ class CAPPoller:
                 'description': properties.get('description', ''),
                 'instruction': properties.get('instruction', ''),
                 'raw_json': alert_data,
+                'source': source_value,
                 '_geometry_data': geometry,
             }
             self.logger.info(f"Parsed alert: {identifier} - {parsed['event']}")
@@ -646,6 +1038,7 @@ class CAPPoller:
                 execution_time_ms=stats.get('execution_time_ms', 0),
                 status=stats.get('status', 'UNKNOWN'),
                 error_message=stats.get('error_message'),
+                data_source=summarise_sources(stats.get('sources', [])),
             )
             self.db_session.add(rec)
             self.db_session.commit()
@@ -689,7 +1082,8 @@ class CAPPoller:
             'zone': f"{'/'.join(self.location_settings['zone_codes'])} ({self.location_name}) - STRICT FILTERING",
             'poll_time_utc': poll_start_utc.isoformat(),
             'poll_time_local': poll_start_local.isoformat(),
-            'timezone': self.location_settings['timezone'], 'led_updated': False
+            'timezone': self.location_settings['timezone'], 'led_updated': False,
+            'sources': [], 'duplicates_filtered': 0,
         }
 
         try:
@@ -699,6 +1093,8 @@ class CAPPoller:
 
             alerts_data = self.fetch_cap_alerts()
             stats['alerts_fetched'] = len(alerts_data)
+            stats['sources'] = list(self.last_poll_sources)
+            stats['duplicates_filtered'] = self.last_duplicates_filtered
 
             for alert_data in alerts_data:
                 props = alert_data.get('properties', {})
@@ -740,8 +1136,12 @@ class CAPPoller:
 
             stats['execution_time_ms'] = int((time.time() - start) * 1000)
             self.logger.info(
-                f"Polling cycle completed: {stats['alerts_accepted']} accepted, {stats['alerts_new']} new, {stats['alerts_updated']} updated, {stats['alerts_filtered']} filtered"
+                f"Polling cycle completed: {stats['alerts_accepted']} accepted, {stats['alerts_new']} new, "
+                f"{stats['alerts_updated']} updated, {stats['alerts_filtered']} filtered, "
+                f"{stats['duplicates_filtered']} duplicates skipped"
             )
+            if stats['sources']:
+                self.logger.info("Polling sources: %s", ", ".join(stats['sources']))
             self.log_system_event('INFO', f"CAP polling successful: {stats['alerts_new']} new alerts", stats)
 
         except Exception as e:
@@ -783,7 +1183,7 @@ def build_database_url_from_env() -> str:
     return f"postgresql+psycopg2://{user}:{pw}@{host}:{port}/{db}"
 
 def main():
-    parser = argparse.ArgumentParser(description='NOAA CAP Alert Poller (configurable location)')
+    parser = argparse.ArgumentParser(description='Emergency CAP Alert Poller (configurable feeds)')
     parser.add_argument('--database-url',
                         default=build_database_url_from_env(),
                         help='SQLAlchemy DB URL (defaults from env POSTGRES_* or DATABASE_URL)')
@@ -794,6 +1194,10 @@ def main():
     parser.add_argument('--continuous', action='store_true', help='Run continuously')
     parser.add_argument('--interval', type=int, default=int(os.getenv('POLL_INTERVAL_SEC', '300')),
                         help='Polling interval seconds (default: 300)')
+    parser.add_argument('--cap-endpoint', dest='cap_endpoints', action='append', default=[],
+                        help='Custom CAP feed endpoint (repeatable)')
+    parser.add_argument('--cap-endpoints', dest='cap_endpoints_csv',
+                        help='Comma-separated CAP feed endpoints to poll')
     parser.add_argument('--fix-geometry', action='store_true', help='Fix geometry for existing alerts and exit')
     args = parser.parse_args()
 
@@ -806,12 +1210,20 @@ def main():
     logger = logging.getLogger(__name__)
 
     startup_utc = utc_now()
-    logger.info("Starting NOAA CAP Alert Poller with LED Integration - PUTNAM COUNTY STRICT MODE")
+    logger.info("Starting CAP Alert Poller with LED Integration - PUTNAM COUNTY STRICT MODE")
     logger.info(f"Startup time: {format_local_datetime(startup_utc)}")
     if args.led_ip:
         logger.info(f"LED Sign: {args.led_ip}:{args.led_port}")
 
-    poller = CAPPoller(args.database_url, args.led_ip, args.led_port)
+    cli_endpoints = list(args.cap_endpoints or [])
+    if args.cap_endpoints_csv:
+        cli_endpoints.extend([
+            endpoint.strip()
+            for endpoint in args.cap_endpoints_csv.split(',')
+            if endpoint.strip()
+        ])
+
+    poller = CAPPoller(args.database_url, args.led_ip, args.led_port, cap_endpoints=cli_endpoints or None)
 
     try:
         if args.fix_geometry:

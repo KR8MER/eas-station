@@ -17,7 +17,7 @@
 ### Core Capabilities
 - 🗺️ **Interactive Map Dashboard** - Real-time visualization of active alerts with geographic boundaries
 - 📊 **Advanced Statistics** - Comprehensive analytics with charts showing alert trends, severity distribution, and geographic impact
-- 🔄 **Automatic Alert Polling** - Continuous background monitoring of NOAA CAP feeds (configurable interval)
+- 🔄 **Automatic Alert Polling** - Continuous background monitoring of NOAA and IPAWS CAP feeds (configurable intervals)
 - 🗄️ **PostGIS Integration** - Spatial database queries for precise alert-boundary intersections
 - 📍 **GIS Boundary Management** - Upload and manage county, district, and custom geographic boundaries
 - 🌓 **Dark/Light Theme** - Consistent theme support across all pages with persistent user preferences
@@ -30,6 +30,7 @@
 - 📜 **Alert History** - Searchable archive with filtering by status, severity, and date
 - 🔍 **Detailed Alert Views** - Complete CAP alert information including instructions and affected areas
 - 🔐 **Secure by Default** - Environment-based secrets, proper session handling, security headers
+- 🧭 **Alert Provenance** - Displays the originating feed (NOAA, IPAWS, manual) across dashboards, exports, and LED signage while deduplicating overlapping identifiers
 
 ### Technical Highlights
 - 🐳 **Docker-First Architecture** - Single-command deployment with Docker Compose
@@ -118,33 +119,50 @@ docker compose up -d --force-recreate
 # docker compose -f docker-compose.yml -f docker-compose.embedded-db.yml up -d --force-recreate
 ```
 
+### IPAWS Poller Configuration
+
+- The dedicated **ipaws-poller** service is enabled by default and runs the shared CAP poller
+  every **120 seconds** against the URLs listed in `IPAWS_CAP_FEED_URLS`.
+- Edit `.env` to point `IPAWS_CAP_FEED_URLS` at your preferred staging or production IPAWS
+  feeds. Provide multiple endpoints by separating them with commas.
+- IPAWS feeds return CAP XML; the poller now converts those payloads (including polygons and
+  circles) into the same GeoJSON-like structure used for NOAA alerts so downstream processing
+  continues to work without code changes.
+- Alerts fetched across NOAA and IPAWS feeds are deduplicated by CAP identifier and stamped with
+  their source so the dashboard, statistics, and exports reflect the originating system.
+- You can supply alternative feed URLs at runtime by passing `--cap-endpoint` arguments or a
+  `CAP_ENDPOINTS` environment variable to any poller service. When unset, the original NOAA
+  poller continues targeting the Weather Service zone feeds derived from your location settings.
+- Remove or comment out the `ipaws-poller` section in `docker-compose.yml` if you do not need the
+  additional feed in a given deployment.
+
 ---
 
 ## 🏗️ System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    NOAA CAP Alert System                     │
-├─────────────────────────────────────────────────────────────┤
-│                                                               │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
-│  │   Flask App  │    │  CAP Poller  │    │  PostgreSQL  │  │
-│  │  (Gunicorn)  │◄───┤ (Background) │───►│   + PostGIS  │  │
-│  │   Port 5000  │    │   Continuous │    │   Port 5432  │  │
-│  └──────────────┘    └──────────────┘    └──────────────┘  │
-│         │                    │                    │          │
-│         │                    │                    │          │
-│         ▼                    ▼                    ▼          │
-│  ┌────────────────────────────────────────────────────┐     │
-│  │         Docker Volumes (Persistent Data)           │     │
-│  │  • Database storage  • Logs  • Uploads             │     │
-│  └────────────────────────────────────────────────────┘     │
-│                                                               │
-└─────────────────────────────────────────────────────────────┘
-         │                                        │
-         ▼                                        ▼
-  External Users                           NOAA CAP API
-   (Web Browser)                         (Alert Polling)
+┌────────────────────────────────────────────────────────────────────┐
+│                 NOAA + IPAWS CAP Alert System Stack                 │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐         │
+│  │   Flask App  │    │  NOAA Poller │    │ IPAWS Poller │         │
+│  │  (Gunicorn)  │◄───┤ (Background) │    │ (Background) │─────┐   │
+│  │   Port 5000  │    │   Continuous │    │   120 sec    │     │   │
+│  └──────────────┘    └──────────────┘    └──────────────┘     │   │
+│         │                    │                    │          │   │
+│         │                    └──────────────┬──────┘          │   │
+│         ▼                                   ▼                 ▼   │
+│  ┌──────────────────────────────────────────────────────────────┐ │
+│  │                   PostgreSQL + PostGIS                       │ │
+│  │                 (Persistent alert storage)                   │ │
+│  └──────────────────────────────────────────────────────────────┘ │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
+         │                          │
+         ▼                          ▼
+  External Users             NOAA & IPAWS Feeds
+   (Web Browser)              (Alert Polling)
 ```
 
 ### Service Components
@@ -152,7 +170,8 @@ docker compose up -d --force-recreate
 | Service | Purpose | Technology |
 |---------|---------|------------|
 | **app** | Web UI & REST API | Flask 2.3, Gunicorn, Bootstrap 5 |
-| **poller** | Background alert polling | Python 3.11, continuous daemon |
+| **poller** | Background NOAA alert polling | Python 3.11, continuous daemon |
+| **ipaws-poller** | Dedicated IPAWS CAP feed polling | Python 3.11, continuous daemon |
 | *(external service)* | Spatial database | PostgreSQL/PostGIS |
 
 > **Deployment Note:** Host the PostgreSQL/PostGIS database outside of these containers (managed service, dedicated VM, or standalone container). Update the connection variables in `.env` so the application can reach it.

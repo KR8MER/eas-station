@@ -104,6 +104,17 @@
                                 </select>
                             </div>
                             <div class="col-md-2">
+                                <label for="source" class="form-label">Source</label>
+                                <select class="form-select" id="source" name="source">
+                                    <option value="">All Sources</option>
+                                    {% for source in sources %}
+                                    <option value="{{ source }}" {% if source == current_filters.source %}selected{% endif %}>
+                                        {{ source }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-2">
                                 <label for="per_page" class="form-label">Per Page</label>
                                 <select class="form-select" id="per_page" name="per_page">
                                     <option value="25" {% if current_filters.per_page == 25 %}selected{% endif %}>25</option>
@@ -157,6 +168,7 @@
                                     <th>Event</th>
                                     <th>Severity</th>
                                     <th>Status</th>
+                                    <th>Source</th>
                                     <th>Sent</th>
                                     <th>Expires</th>
                                     <th>Headline</th>
@@ -183,6 +195,13 @@
                                     </td>
                                     <td>
                                         <span class="badge bg-outline-secondary">{{ alert.status }}</span>
+                                    </td>
+                                    <td>
+                                        {% if alert.source %}
+                                        <span class="badge bg-dark text-uppercase">{{ alert.source }}</span>
+                                        {% else %}
+                                        <span class="text-muted">Unknown</span>
+                                        {% endif %}
                                     </td>
                                     <td>
                                         <small class="text-muted">

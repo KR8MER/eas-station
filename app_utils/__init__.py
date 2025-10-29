@@ -16,6 +16,15 @@ from .time import (
 )
 from .formatting import format_bytes, format_uptime
 from .system import build_system_health_snapshot
+from .alert_sources import (
+    ALERT_SOURCE_IPAWS,
+    ALERT_SOURCE_MANUAL,
+    ALERT_SOURCE_NOAA,
+    ALERT_SOURCE_UNKNOWN,
+    expand_source_summary,
+    normalize_alert_source,
+    summarise_sources,
+)
 
 __all__ = [
     "PUTNAM_COUNTY_TZ",
@@ -33,4 +42,11 @@ __all__ = [
     "get_location_timezone",
     "get_location_timezone_name",
     "set_location_timezone",
+    "ALERT_SOURCE_NOAA",
+    "ALERT_SOURCE_IPAWS",
+    "ALERT_SOURCE_MANUAL",
+    "ALERT_SOURCE_UNKNOWN",
+    "normalize_alert_source",
+    "summarise_sources",
+    "expand_source_summary",
 ]

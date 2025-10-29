@@ -9,6 +9,11 @@ services:
       alerts-db:
         condition: service_healthy
 
+  ipaws-poller:
+    depends_on:
+      alerts-db:
+        condition: service_healthy
+
   alerts-db:
     image: ${ALERTS_DB_IMAGE:-postgis/postgis:17-3.4}
     restart: unless-stopped

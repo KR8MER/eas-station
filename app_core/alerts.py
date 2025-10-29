@@ -10,7 +10,7 @@ from typing import Dict, Optional, Tuple
 from flask import current_app, has_app_context
 from sqlalchemy import or_, text
 
-from app_utils import utc_now
+from app_utils import ALERT_SOURCE_NOAA, normalize_alert_source, utc_now
 
 from .extensions import db
 from .models import Boundary, CAPAlert, Intersection
@@ -190,6 +190,7 @@ def parse_noaa_cap_alert(alert_payload: dict) -> Optional[Tuple[dict, Optional[d
             "description": properties.get("description", "") or "",
             "instruction": properties.get("instruction", "") or "",
             "raw_json": alert_payload,
+            "source": normalize_alert_source(properties.get("source") or ALERT_SOURCE_NOAA),
         }
 
         return parsed, geometry
