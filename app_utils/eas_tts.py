@@ -14,6 +14,11 @@ import tempfile
 import wave
 from typing import Dict, List, Optional
 
+try:  # pragma: no cover - optional dependency for HTTP requests
+    import requests  # type: ignore
+except Exception:  # pragma: no cover - keep optional
+    requests = None
+
 try:  # pragma: no cover - optional dependency for Azure TTS
     import azure.cognitiveservices.speech as azure_speech  # type: ignore
 except Exception:  # pragma: no cover - keep optional
@@ -135,6 +140,8 @@ class TTSEngine:
 
         if provider == "azure":
             return self._generate_azure_voiceover(text)
+        if provider == "azure_openai":
+            return self._generate_azure_openai_voiceover(text)
         if provider == "pyttsx3":
             return self._generate_pyttsx3_voiceover(text)
 
@@ -146,6 +153,106 @@ class TTSEngine:
 
     def _remember_error(self, message: Optional[str]) -> None:
         self._last_error = message or None
+
+    def _generate_azure_openai_voiceover(self, text: str) -> Optional[List[int]]:
+        """Generate voiceover using Azure OpenAI TTS (OpenAI API format)."""
+        if requests is None:
+            self._remember_error("requests library not installed.")
+            if self.logger:
+                self.logger.warning("requests library not installed; skipping TTS voiceover.")
+            return None
+
+        endpoint = (self.config.get("azure_openai_endpoint") or "").strip()
+        api_key = (self.config.get("azure_openai_key") or "").strip()
+
+        if not endpoint or not api_key:
+            self._remember_error("Azure OpenAI TTS credentials are missing.")
+            if self.logger:
+                self.logger.warning("Azure OpenAI TTS credentials not configured; skipping TTS voiceover.")
+            return None
+
+        voice = (self.config.get("azure_openai_voice") or "alloy").strip()
+        model = (self.config.get("azure_openai_model") or "tts-1-hd").strip()
+        speed = float(self.config.get("azure_openai_speed", 1.0) or 1.0)
+
+        target_rate = self.sample_rate
+
+        try:
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            }
+            payload = {
+                "model": model,
+                "input": text,
+                "voice": voice,
+                "speed": speed,
+                "response_format": "wav",  # Request WAV format
+            }
+
+            response = requests.post(
+                endpoint,
+                headers=headers,
+                json=payload,
+                timeout=30,
+            )
+
+            if response.status_code != 200:
+                error_msg = f"Azure OpenAI TTS API returned status {response.status_code}"
+                try:
+                    error_detail = response.json()
+                    error_msg += f": {error_detail}"
+                except Exception:
+                    error_msg += f": {response.text[:200]}"
+
+                self._remember_error(error_msg)
+                if self.logger:
+                    self.logger.error(error_msg)
+                return None
+
+            audio_bytes = response.content
+
+            if not audio_bytes:
+                self._remember_error("Azure OpenAI TTS returned no audio data.")
+                if self.logger:
+                    self.logger.warning("Azure OpenAI TTS returned no audio data.")
+                return None
+
+        except requests.exceptions.RequestException as exc:
+            self._remember_error(f"Azure OpenAI TTS request failed: {exc}")
+            if self.logger:
+                self.logger.error(f"Azure OpenAI TTS request failed: {exc}")
+            return None
+        except Exception as exc:
+            self._remember_error(f"Azure OpenAI TTS synthesis failed: {exc}")
+            if self.logger:
+                self.logger.error(f"Azure OpenAI TTS synthesis failed: {exc}")
+            return None
+
+        try:
+            # Parse the WAV audio
+            with wave.open(io.BytesIO(audio_bytes), "rb") as wav_data:
+                raw_frames = wav_data.readframes(wav_data.getnframes())
+                sample_width = wav_data.getsampwidth()
+                channels = wav_data.getnchannels()
+                source_rate = wav_data.getframerate()
+
+            samples = _normalize_pcm_samples(
+                raw_frames,
+                sample_width,
+                channels,
+                source_rate,
+                target_rate,
+            )
+            if self.logger:
+                self.logger.info("Appended Azure OpenAI TTS voiceover using voice %s", voice)
+            self._remember_error(None)
+            return samples
+        except Exception as exc:
+            self._remember_error(f"Failed to decode Azure OpenAI TTS audio: {exc}")
+            if self.logger:
+                self.logger.error(f"Failed to decode Azure OpenAI TTS audio: {exc}")
+            return None
 
     def _generate_azure_voiceover(self, text: str) -> Optional[List[int]]:
         if azure_speech is None:
