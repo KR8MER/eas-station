@@ -7,6 +7,7 @@ import os
 from typing import Any, Dict, Optional
 
 from flask import current_app
+from sqlalchemy import text
 
 from app_core.extensions import db
 
@@ -136,4 +137,73 @@ def remove_eas_files(message) -> None:
             os.remove(disk_path)
         except OSError:
             continue
+
+
+def ensure_eas_audio_columns(logger) -> bool:
+    """Ensure blob columns exist for caching generated audio payloads."""
+
+    engine = db.engine
+    if engine.dialect.name != "postgresql":
+        return True
+
+    column_check_sql = text(
+        """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'eas_messages'
+          AND column_name = :column
+          AND table_schema = current_schema()
+        LIMIT 1
+        """
+    )
+
+    column_definitions = {
+        "audio_data": "BYTEA",
+        "eom_audio_data": "BYTEA",
+        "text_payload": "JSONB",
+    }
+
+    try:
+        added_columns = []
+        with engine.begin() as connection:
+            for column, definition in column_definitions.items():
+                exists = connection.execute(column_check_sql, {"column": column}).scalar()
+                if exists:
+                    continue
+
+                logger.info(
+                    "Adding eas_messages.%s column for cached message payloads", column
+                )
+                connection.execute(
+                    text(f"ALTER TABLE eas_messages ADD COLUMN {column} {definition}")
+                )
+                added_columns.append(column)
+
+        if "text_payload" in added_columns:
+            try:
+                with engine.begin() as connection:
+                    connection.execute(
+                        text(
+                            "ALTER TABLE eas_messages ALTER COLUMN text_payload SET DEFAULT '{}'::jsonb"
+                        )
+                    )
+                    connection.execute(
+                        text(
+                            "UPDATE eas_messages SET text_payload = '{}'::jsonb WHERE text_payload IS NULL"
+                        )
+                    )
+            except Exception as exc:  # pragma: no cover - defensive fallback
+                logger.warning(
+                    "Could not initialize default data for eas_messages.text_payload: %s",
+                    exc,
+                )
+
+        return True
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        logger.warning("Could not ensure EAS audio columns: %s", exc)
+        try:
+            db.session.rollback()
+        except Exception:  # pragma: no cover - defensive fallback
+            pass
+        return False
 

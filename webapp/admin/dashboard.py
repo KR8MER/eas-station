@@ -102,6 +102,10 @@ def register_dashboard_routes(app, logger, eas_config):
                 setup_mode=setup_mode,
             )
         except Exception as exc:  # pragma: no cover - defensive logging
+            try:
+                db.session.rollback()
+            except Exception:  # pragma: no cover - defensive fallback
+                pass
             logger.error('Error rendering admin template: %s', exc)
             return "<h1>Admin Interface</h1><p>Admin panel loading...</p><p><a href='/'>← Back to Main</a></p>"
 
