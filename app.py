@@ -55,6 +55,7 @@ from webapp.admin.boundaries import (
     ensure_alert_source_columns,
     ensure_boundary_geometry_column,
 )
+from app_core.database import ensure_postgis_extension
 # Re-export manual import utilities for CLI scripts that import from ``app``.
 from webapp.admin.maintenance import (
     NOAAImportError,
@@ -543,7 +544,7 @@ def initialize_database():
         return
 
     try:
-        if not ensure_postgis_extension():
+        if not ensure_postgis_extension(logger):
             _db_initialization_error = RuntimeError("PostGIS extension could not be ensured")
             return False
         db.create_all()
