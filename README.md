@@ -243,11 +243,14 @@ When enabled, the poller generates full SAME header bursts, raises an optional G
 
 The **Manual Broadcast Builder** on the EAS Output tab mirrors the workflow of a commercial encoder:
 
-1. Open **Admin → EAS Output** and build your SAME target list with the new hierarchical picker: choose a state or territory, select the county or statewide PSSCCC entry, and click **Add Location**. The textarea still accepts pasted codes for bulk entry, and the running list is de-duplicated automatically.
-2. Confirm the ORG, EEE, purge time (TTTT), and station identifier (LLLLLLLL). The live header preview renders the complete `ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-` sequence and breaks out each field so you can verify the preamble, originator, event, location set, purge code, issue time, and station ID before you transmit.
-3. Click **Generate Package** to produce discrete WAV files for the SAME bursts, attention signal (dual-tone or 1050 Hz), optional narration, and the EOM burst. A composite file is also produced so you can audition the full activation end-to-end.
+1. Open **Admin → EAS Output** and build your SAME target list with the hierarchical picker: choose a state or territory, select the county or statewide PSSCCC entry, and click **Add Location**. The textarea still accepts pasted codes for bulk entry, and the running list is de-duplicated automatically with a hard stop at the 31-code SAME limit.
+2. Confirm the ORG, EEE, purge time (TTTT), and station identifier (LLLLLLLL). The originator selector now reflects the three production codes (PEP, WXR, CIV), the event dropdown hides the legacy `??*` placeholders, and the live header preview renders the complete `ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-` sequence so you can verify every field before you transmit.
+3. Need a test in a hurry? Tap **Quick Weekly Test** to preload the Required Weekly Test template: the tool drops in the configured SAME counties, forces the alert into `Test` status, and seeds the headline/message so you only have to review before going live.
+4. Click **Generate Package** to produce discrete WAV files for the SAME bursts, attention signal (dual-tone or 1050 Hz), optional narration, and the EOM burst. A composite file is also produced so you can audition the full activation end-to-end. SAME headers always transmit in three bursts automatically per the FCC specification.
 
 The header breakdown card reiterates the commercial nomenclature (preamble, ORG, EEE, PSSCCC, +TTTT, -JJJHHMM, -LLLLLLLL-, and the trailing NNNN) and includes the FCC/FEMA guidance for each field so operators and trainees can cross-check the encoding rules.
+
+> 📻 Under the hood the digital bursts now honour the full SAME framing: 520 5⁄6 baud, eight LSB-first data bits with the MSB forced low, even parity, and fractional-bit timing that keeps the 2083⅓ Hz/1562.5 Hz AFSK tones locked on spec.
 
 Prefer scripts or automated testing? The legacy helper at `tools/generate_sample_audio.py` is still shipped with the project for command-line use.
 

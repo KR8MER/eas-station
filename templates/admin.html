@@ -969,6 +969,13 @@
                                             </div>
                                         </div>
 
+                                        <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                                            <button type="button" class="btn btn-outline-primary btn-sm" id="quickRwtButton">
+                                                <i class="fas fa-broadcast-tower me-1"></i> Quick Weekly Test
+                                            </button>
+                                            <span class="text-muted small">Loads a Required Weekly Test with your default SAME counties.</span>
+                                        </div>
+
                                         <div class="mb-3 mt-3">
                                             <label class="form-label fw-bold">Location Codes (PSSCCC)</label>
                                             <div class="row g-2 align-items-end">
@@ -1045,8 +1052,10 @@
                                                 <input type="number" class="form-control" id="easDuration" name="duration_minutes" min="1" max="720" value="30">
                                             </div>
                                             <div class="col-md-6">
-                                                <label for="easRepeats" class="form-label fw-bold">Header Repetitions</label>
-                                                <input type="number" class="form-control" id="easRepeats" name="header_repeats" min="1" max="6" value="3">
+                                                <label class="form-label fw-bold">Header Repetition</label>
+                                                <div class="form-control-plaintext border rounded px-3 py-2 bg-dark bg-opacity-10">
+                                                    SAME headers transmit in three bursts as required by the specification.
+                                                </div>
                                             </div>
                                         </div>
 
@@ -1081,17 +1090,20 @@
                                         <hr class="my-3">
 
                                         <div class="row g-3">
-                                            <div class="col-md-4">
+                                            <div class="col-md-4 col-lg-3">
                                                 <label for="easOriginator" class="form-label fw-bold">Originator (ORG)</label>
-                                                <input type="text" class="form-control" id="easOriginator" name="originator" maxlength="3" required>
+                                                <select class="form-select" id="easOriginator" name="originator" required>
+                                                    {% for option in eas_originator_choices %}
+                                                        <option value="{{ option.code }}"{% if option.code == eas_originator %} selected{% endif %}>
+                                                            {{ option.code }}{% if option.description %} — {{ option.description }}{% endif %}
+                                                        </option>
+                                                    {% endfor %}
+                                                </select>
                                             </div>
-                                            <div class="col-md-4">
+                                            <div class="col-md-8 col-lg-9">
                                                 <label for="easStationId" class="form-label fw-bold">Station Identifier (LLLLLLLL)</label>
                                                 <input type="text" class="form-control" id="easStationId" name="station_id" maxlength="8" required>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <label for="easCallSign" class="form-label fw-bold">Station Call Sign</label>
-                                                <input type="text" class="form-control" id="easCallSign" name="call_sign">
+                                                <div class="form-text">Eight uppercase characters, using “/” instead of dashes.</div>
                                             </div>
                                         </div>
 
@@ -1395,15 +1407,16 @@
         const EAS_DEFAULTS = {
             originator: {{ eas_originator|tojson }},
             stationId: {{ eas_station_id|tojson }},
-            callSign: {{ eas_call_sign|tojson }},
             attentionSeconds: {{ eas_attention_seconds|default(8)|tojson }},
             sampleRate: {{ eas_sample_rate|default(44100)|tojson }},
             ttsProvider: {{ eas_tts_provider|tojson }},
+            defaultSameCodes: {{ eas_default_same_codes|tojson }},
         };
         const EAS_FIPS_TREE = {{ eas_fips_states|tojson }};
         const EAS_FIPS_LOOKUP = {{ eas_fips_lookup|tojson }};
         const EAS_ORIGINATOR_DESCRIPTIONS = {{ eas_originator_descriptions|tojson }};
         const EAS_P_DIGIT_MEANINGS = {{ eas_p_digit_meanings|tojson }};
+        const MAX_SAME_CODES = 31;
         const EAS_STATE_BY_ABBR = {};
         const EAS_STATE_BY_FIPS = {};
         (Array.isArray(EAS_FIPS_TREE) ? EAS_FIPS_TREE : []).forEach((state) => {
@@ -1984,6 +1997,11 @@
                 });
             }
 
+            const quickRwtButton = document.getElementById('quickRwtButton');
+            if (quickRwtButton) {
+                quickRwtButton.addEventListener('click', () => applyQuickRwtTemplate());
+            }
+
             const eventSelect = document.getElementById('easEventCode');
             if (eventSelect) {
                 eventSelect.addEventListener('change', () => {
@@ -2110,6 +2128,16 @@
             }
         }
 
+        function getConfiguredDefaultSameCodes() {
+            if (Array.isArray(window.APP_LOCATION?.same_codes) && window.APP_LOCATION.same_codes.length) {
+                return window.APP_LOCATION.same_codes;
+            }
+            if (Array.isArray(EAS_DEFAULTS.defaultSameCodes) && EAS_DEFAULTS.defaultSameCodes.length) {
+                return EAS_DEFAULTS.defaultSameCodes;
+            }
+            return [];
+        }
+
         function resetEasGeneratorForm(skipEventPopulation = false) {
             const form = document.getElementById('easGeneratorForm');
             if (!form) {
@@ -2125,8 +2153,8 @@
             }
 
             setEasDefaultValue('easOriginator', EAS_DEFAULTS.originator);
-            setEasDefaultValue('easStationId', EAS_DEFAULTS.stationId);
-            setEasDefaultValue('easCallSign', EAS_DEFAULTS.callSign);
+            const defaultStation = (EAS_DEFAULTS.stationId || '').toString().toUpperCase();
+            setEasDefaultValue('easStationId', defaultStation);
             setEasDefaultValue('easToneSeconds', EAS_DEFAULTS.attentionSeconds);
             setEasDefaultValue('easSampleRate', EAS_DEFAULTS.sampleRate);
 
@@ -2136,12 +2164,73 @@
             }
 
             assignNewIdentifier(false);
-            const defaultSameCodes = Array.isArray(window.APP_LOCATION?.same_codes)
-                ? window.APP_LOCATION.same_codes
-                : [];
-            setSelectedSameCodes(defaultSameCodes);
+            setSelectedSameCodes(getConfiguredDefaultSameCodes());
             setEasGeneratorStatus('');
             renderEasGeneratorResults(null);
+            updateSameHeaderPreview();
+        }
+
+        function applyQuickRwtTemplate() {
+            const eventSelect = document.getElementById('easEventCode');
+            if (eventSelect) {
+                let desired = 'RWT';
+                const hasDesired = Array.from(eventSelect.options || []).some((option) => option.value === desired);
+                if (!hasDesired && eventSelect.options.length) {
+                    desired = eventSelect.options[0].value;
+                }
+                eventSelect.value = desired;
+                eventSelect.dispatchEvent(new Event('change'));
+            }
+            syncEasEventName(true);
+
+            const originatorSelect = document.getElementById('easOriginator');
+            const defaultOriginator = (EAS_DEFAULTS.originator || 'WXR').toString().toUpperCase();
+            if (originatorSelect && originatorSelect.options.length) {
+                const hasDefault = Array.from(originatorSelect.options).some((option) => option.value === defaultOriginator);
+                originatorSelect.value = hasDefault ? defaultOriginator : originatorSelect.options[0].value;
+            }
+
+            setEasDefaultValue('easStationId', (EAS_DEFAULTS.stationId || '').toString().toUpperCase());
+
+            const durationInput = document.getElementById('easDuration');
+            if (durationInput) {
+                durationInput.value = '15';
+            }
+
+            const statusSelect = document.getElementById('easStatus');
+            if (statusSelect) {
+                statusSelect.value = 'Test';
+            }
+
+            const toneProfileSelect = document.getElementById('easToneProfile');
+            if (toneProfileSelect) {
+                toneProfileSelect.value = 'attention';
+            }
+
+            const toneSecondsInput = document.getElementById('easToneSeconds');
+            if (toneSecondsInput) {
+                toneSecondsInput.value = EAS_DEFAULTS.attentionSeconds || 8;
+            }
+
+            assignNewIdentifier(true);
+            setSelectedSameCodes(getConfiguredDefaultSameCodes());
+
+            const headlineInput = document.getElementById('easHeadline');
+            if (headlineInput) {
+                headlineInput.value = 'This is a Required Weekly Test.';
+            }
+
+            const messageInput = document.getElementById('easMessage');
+            if (messageInput) {
+                messageInput.value = 'This is a test of the Emergency Alert System. No action is required.';
+            }
+
+            const instructionInput = document.getElementById('easInstruction');
+            if (instructionInput) {
+                instructionInput.value = '';
+            }
+
+            setEasGeneratorStatus('Loaded the Required Weekly Test preset. Review the narration before transmitting.', 'info');
             updateSameHeaderPreview();
         }
 
@@ -2168,7 +2257,11 @@
             if (!force && input.value.trim()) {
                 return;
             }
-            const station = (EAS_DEFAULTS.stationId || 'EASNODES').replace(/[^A-Za-z0-9]/g, '').slice(0, 8) || 'EASNODES';
+            const station = (EAS_DEFAULTS.stationId || 'EASNODES')
+                .toString()
+                .toUpperCase()
+                .replace(/[^A-Za-z0-9]/g, '')
+                .slice(0, 8) || 'EASNODES';
             const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
             input.value = `${station}-${timestamp}`;
         }
@@ -2316,12 +2409,19 @@
 
         function setSelectedSameCodes(codes) {
             const normalized = Array.isArray(codes) ? codes.map(normalizeSameCode).filter(Boolean) : [];
-            selectedSameCodes = [];
+            const unique = [];
             normalized.forEach((code) => {
-                if (!selectedSameCodes.includes(code)) {
-                    selectedSameCodes.push(code);
+                if (!code) {
+                    return;
+                }
+                if (!unique.includes(code)) {
+                    unique.push(code);
                 }
             });
+            if (unique.length > MAX_SAME_CODES) {
+                setEasGeneratorStatus('SAME headers support a maximum of 31 locations. Extra entries were ignored.', 'warning');
+            }
+            selectedSameCodes = unique.slice(0, MAX_SAME_CODES);
             updateSelectedSameCodesDisplay();
 
             const stateSelect = document.getElementById('easStateSelect');
@@ -2350,14 +2450,22 @@
             const stateSelect = document.getElementById('easStateSelect');
             const countySelect = document.getElementById('easCountySelect');
             let lastDetail = null;
+            let limitReached = false;
             (Array.isArray(codes) ? codes : []).forEach((code) => {
                 const normalized = normalizeSameCode(code);
                 if (!normalized || selectedSameCodes.includes(normalized)) {
                     return;
                 }
+                if (selectedSameCodes.length >= MAX_SAME_CODES) {
+                    limitReached = true;
+                    return;
+                }
                 selectedSameCodes.push(normalized);
                 lastDetail = getSameCodeDetails(normalized) || lastDetail;
             });
+            if (limitReached) {
+                setEasGeneratorStatus('Maximum of 31 SAME locations reached; additional entries were ignored.', 'warning');
+            }
             updateSelectedSameCodesDisplay();
             if (lastDetail && stateSelect && countySelect) {
                 const state = EAS_STATE_BY_FIPS[lastDetail.stateFips];
@@ -2489,12 +2597,21 @@
 
         function gatherAllSameCodes() {
             const combined = Array.from(selectedSameCodes);
+            let limitReached = combined.length >= MAX_SAME_CODES;
             gatherManualSameCodes().forEach((code) => {
-                if (!combined.includes(code)) {
-                    combined.push(code);
+                if (!code || combined.includes(code) || limitReached) {
+                    return;
                 }
+                if (combined.length >= MAX_SAME_CODES) {
+                    limitReached = true;
+                    return;
+                }
+                combined.push(code);
             });
-            return combined;
+            if (limitReached) {
+                setEasGeneratorStatus('Only the first 31 SAME locations are encoded per the specification.', 'warning');
+            }
+            return combined.slice(0, MAX_SAME_CODES);
         }
 
         function roundDurationMinutes(value) {

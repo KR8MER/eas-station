@@ -48,10 +48,12 @@ from app_utils.eas import (
     P_DIGIT_MEANINGS,
     EASAudioGenerator,
     ORIGINATOR_DESCRIPTIONS,
+    PRIMARY_ORIGINATORS,
     SAME_HEADER_FIELD_DESCRIPTIONS,
     build_same_header,
     describe_same_header,
     load_eas_config,
+    manual_default_same_codes,
     samples_to_wav_bytes,
 )
 from app_utils.event_codes import EVENT_CODE_REGISTRY
@@ -1470,6 +1472,9 @@ def admin():
         ).group_by(Boundary.type).all()
 
         location_settings = get_location_settings()
+        manual_same_defaults = manual_default_same_codes()
+        location_settings_view = dict(location_settings)
+        location_settings_view.setdefault('same_codes', manual_same_defaults)
 
         eas_enabled = app.config.get('EAS_BROADCAST_ENABLED', False)
         total_eas_messages = EASMessage.query.count() if eas_enabled else 0
@@ -1482,11 +1487,19 @@ def admin():
         eas_event_options = [
             {'code': code, 'name': entry.get('name', code)}
             for code, entry in EVENT_CODE_REGISTRY.items()
+            if '?' not in code
         ]
         eas_event_options.sort(key=lambda item: item['code'])
 
         eas_state_tree = get_us_state_county_tree()
         eas_lookup = get_same_lookup()
+        originator_choices = [
+            {
+                'code': code,
+                'description': ORIGINATOR_DESCRIPTIONS.get(code, ''),
+            }
+            for code in PRIMARY_ORIGINATORS
+        ]
 
         return render_template('admin.html',
                                total_boundaries=total_boundaries,
@@ -1494,7 +1507,7 @@ def admin():
                                active_alerts=active_alerts,
                                expired_alerts=expired_alerts,
                                boundary_stats=boundary_stats,
-                               location_settings=location_settings,
+                               location_settings=location_settings_view,
                                eas_enabled=eas_enabled,
                                eas_total_messages=total_eas_messages,
                                eas_recent_messages=recent_eas_messages,
@@ -1502,15 +1515,16 @@ def admin():
                                eas_event_codes=eas_event_options,
                                eas_originator=EAS_CONFIG.get('originator', 'WXR'),
                                eas_station_id=EAS_CONFIG.get('station_id', 'EASNODES'),
-                               eas_call_sign=EAS_CONFIG.get('call_sign', 'EASNODES'),
                                eas_attention_seconds=EAS_CONFIG.get('attention_tone_seconds', 8),
                                eas_sample_rate=EAS_CONFIG.get('sample_rate', 44100),
                                eas_tts_provider=(EAS_CONFIG.get('tts_provider') or '').strip().lower(),
                                eas_fips_states=eas_state_tree,
                                eas_fips_lookup=eas_lookup,
                                eas_originator_descriptions=ORIGINATOR_DESCRIPTIONS,
+                               eas_originator_choices=originator_choices,
                                eas_header_fields=SAME_HEADER_FIELD_DESCRIPTIONS,
                                eas_p_digit_meanings=P_DIGIT_MEANINGS,
+                               eas_default_same_codes=manual_same_defaults,
                                setup_mode=setup_mode,
                                )
     except Exception as e:
@@ -1653,8 +1667,10 @@ def admin_manual_eas_generate():
         identifier = f"MANUAL-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
 
     event_code = (payload.get('event_code') or '').strip().upper()
-    if not event_code or len(event_code) != 3 or not all(ch.isalnum() or ch == '?' for ch in event_code):
+    if not event_code or len(event_code) != 3 or not event_code.isalnum():
         return _validation_error('Event code must be a three-character SAME identifier.')
+    if event_code not in EVENT_CODE_REGISTRY or '?' in event_code:
+        return _validation_error('Select a recognised SAME event code.')
 
     event_name = (payload.get('event_name') or '').strip()
     if not event_name:
@@ -1696,18 +1712,15 @@ def admin_manual_eas_generate():
     except (TypeError, ValueError):
         return _validation_error('Tone duration must be numeric.')
 
-    header_repeats = payload.get('header_repeats', 3)
-    try:
-        header_repeats = max(1, int(header_repeats))
-    except (TypeError, ValueError):
-        return _validation_error('Header repeat count must be an integer.')
-
     tone_profile = (payload.get('tone_profile') or 'attention').strip().lower()
     include_tts = bool(payload.get('include_tts', True))
 
-    originator = (payload.get('originator') or EAS_CONFIG.get('originator', 'WXR')).strip() or 'WXR'
+    allowed_originators = set(PRIMARY_ORIGINATORS)
+    originator = (payload.get('originator') or EAS_CONFIG.get('originator', 'WXR')).strip().upper() or 'WXR'
+    if originator not in allowed_originators:
+        return _validation_error('Originator must be one of the authorised SAME senders.')
+
     station_id = (payload.get('station_id') or EAS_CONFIG.get('station_id', 'EASNODES')).strip() or 'EASNODES'
-    call_sign = (payload.get('call_sign') or EAS_CONFIG.get('call_sign', station_id)).strip() or station_id
 
     status = (payload.get('status') or 'Actual').strip() or 'Actual'
     message_type = (payload.get('message_type') or 'Alert').strip() or 'Alert'
@@ -1725,8 +1738,7 @@ def admin_manual_eas_generate():
     manual_config = dict(EAS_CONFIG)
     manual_config['enabled'] = True
     manual_config['originator'] = originator[:3].upper()
-    manual_config['station_id'] = station_id[:8]
-    manual_config['call_sign'] = call_sign
+    manual_config['station_id'] = station_id.upper().ljust(8)[:8]
     manual_config['attention_tone_seconds'] = tone_seconds if tone_seconds is not None else manual_config.get('attention_tone_seconds', 8)
     manual_config['sample_rate'] = sample_rate
 
@@ -1768,7 +1780,7 @@ def admin_manual_eas_generate():
         components = generator.build_manual_components(
             alert_object,
             header,
-            repeats=header_repeats,
+            repeats=3,
             tone_profile=tone_profile,
             tone_duration=tone_seconds,
             include_tts=include_tts,

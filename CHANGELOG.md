@@ -34,6 +34,8 @@ tracks releases under the 2.1.x series.
 - Documented the expectation that deployments supply their own PostgreSQL/PostGIS host and simplified Compose instructions to run only the application services.
 - Reworked the EAS Output tab with an interactive Manual Broadcast Builder and refreshed the README/HELP documentation to cover the browser-based workflow.
 - Enhanced the Manual Broadcast Builder with a hierarchical state→county SAME picker, a deduplicated PSSCCC list manager, a live `ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-` preview with field-by-field guidance, and refreshed docs that align with commercial encoder terminology.
+- Added a one-touch **Quick Weekly Test** preset to the Manual Broadcast Builder so operators can load the configured SAME counties, test status, and sample script before generating audio.
+- Replaced the free-form originator/call-sign fields with a guarded originator dropdown and station identifier input, filtered the event selector to remove placeholder `??*` codes, and enforced the 31-location SAME limit in the UI.
 - Simplified database configuration by deriving `DATABASE_URL` from the `POSTGRES_*` variables when it is not explicitly set, eliminating duplicate secrets in `.env`.
 - Restored the `.env` template workflow, updated quick-start documentation to copy
   `.env.example`, and reiterated that operators must rotate the placeholder
@@ -52,8 +54,7 @@ tracks releases under the 2.1.x series.
   selected code names in CLI output and audit trails while the broadcaster consumes
   the resolved identifiers for header generation.
 ### Fixed
-- Corrected SAME/RTTY generation to use 7-bit even-parity framing and precise
-  520.83 baud timing so the AFSK bursts decode at the proper pitch and speed.
+- Corrected SAME/RTTY generation to use eight LSB-first data bits with the MSB forced low, even parity, and precise 520 5⁄6 baud timing so the AFSK bursts decode at the proper pitch and speed.
 - Eliminated `service "app" depends on undefined service "alerts-db"` errors by removing the optional compose overlay, deleting the unused service definition, and updating documentation to assume an external database.
 - Ensured the Manual Broadcast Builder always renders the SAME event code list so operators can
   pick the desired code even when client-side scripts are blocked or fail to load.

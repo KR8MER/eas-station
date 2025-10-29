@@ -14,6 +14,7 @@ import time
 import wave
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from fractions import Fraction
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 try:  # pragma: no cover - GPIO hardware is optional and platform specific
@@ -28,6 +29,12 @@ except Exception:  # pragma: no cover - keep optional
     azure_speech = None
 
 from app_utils.event_codes import resolve_event_code
+
+MANUAL_FIPS_ENV_TOKENS = {'ALL', 'ANY', 'US', 'USA', '*'}
+
+SAME_BAUD = Fraction(3125, 6)  # 520 + 5/6 baud
+SAME_MARK_FREQ = float(SAME_BAUD * 4)  # 2083 1/3 Hz
+SAME_SPACE_FREQ = float(SAME_BAUD * 3)  # 1562.5 Hz
 
 
 def _clean_identifier(value: str) -> str:
@@ -65,7 +72,6 @@ def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
         'enabled': os.getenv('EAS_BROADCAST_ENABLED', 'false').lower() == 'true',
         'originator': (os.getenv('EAS_ORIGINATOR') or 'WXR')[:3].upper(),
         'station_id': (os.getenv('EAS_STATION_ID') or 'EASNODES')[:8].ljust(8),
-        'call_sign': os.getenv('EAS_CALL_SIGN', 'EASNODES'),
         'output_dir': _ensure_directory(output_dir),
         'web_subdir': web_subdir,
         'audio_player_cmd': os.getenv('EAS_AUDIO_PLAYER', '').strip(),
@@ -107,6 +113,8 @@ ORIGINATOR_DESCRIPTIONS = {
     'EAS': 'EAS participant / broadcaster',
     'EAN': 'Emergency Action Notification (legacy)',
 }
+
+PRIMARY_ORIGINATORS: Tuple[str, ...] = ('WXR', 'CIV', 'PEP')
 
 
 SAME_HEADER_FIELD_DESCRIPTIONS = [
@@ -447,10 +455,10 @@ def _compose_message_text(alert: object) -> str:
 def _encode_same_bits(message: str) -> List[int]:
     """Encode an ASCII SAME header using NRZ AFSK framing.
 
-    SAME packets are transmitted at 520.83 baud with 1 start bit (0), seven
-    ASCII data bits (least significant bit first), an even parity bit, and a
-    single stop bit (1).  The payload is terminated with a carriage return as
-    defined by the specification.
+    SAME packets are transmitted at 520 5/6 baud with one start bit (0), eight
+    ASCII data bits (least significant bit first, MSB forced low), an even
+    parity bit, and a single stop bit (1). The payload is terminated with a
+    carriage return as defined by the specification.
     """
 
     bits: List[int] = []
@@ -459,7 +467,7 @@ def _encode_same_bits(message: str) -> List[int]:
 
         char_bits: List[int] = [0]
         data_bits: List[int] = []
-        for i in range(7):
+        for i in range(8):
             bit = (ascii_code >> i) & 1
             data_bits.append(bit)
             char_bits.append(bit)
@@ -495,7 +503,9 @@ def _generate_fsk_samples(
         freq = mark_freq if bit else space_freq
         step = freq * delta
         total = samples_per_bit + carry
-        sample_count = max(1, int(round(total)))
+        sample_count = int(total)
+        if sample_count <= 0:
+            sample_count = 1
         carry = total - sample_count
 
         for _ in range(sample_count):
@@ -503,6 +513,26 @@ def _generate_fsk_samples(
             phase = (phase + step) % math.tau
 
     return samples
+
+
+def manual_default_same_codes() -> List[str]:
+    """Return the default SAME/FIPS codes for manual generation templates."""
+
+    raw = os.getenv('EAS_MANUAL_FIPS_CODES', '')
+    codes: List[str] = []
+    if raw:
+        for token in re.split(r'[\s,]+', raw.upper()):
+            token = token.strip()
+            if not token or token in MANUAL_FIPS_ENV_TOKENS:
+                continue
+            digits = re.sub(r'[^0-9]', '', token)
+            if digits:
+                codes.append(digits.zfill(6)[:6])
+
+    if not codes:
+        codes = ['039137']
+
+    return codes[:31]
 
 
 def _generate_tone(freqs: Iterable[float], duration: float, sample_rate: int, amplitude: float) -> List[int]:
@@ -611,9 +641,9 @@ class EASAudioGenerator:
         header_samples = _generate_fsk_samples(
             same_bits,
             sample_rate=self.sample_rate,
-            bit_rate=520.83,
-            mark_freq=2083.3,
-            space_freq=1562.5,
+            bit_rate=float(SAME_BAUD),
+            mark_freq=SAME_MARK_FREQ,
+            space_freq=SAME_SPACE_FREQ,
             amplitude=amplitude,
         )
 
@@ -671,9 +701,9 @@ class EASAudioGenerator:
         header_samples = _generate_fsk_samples(
             same_bits,
             sample_rate=self.sample_rate,
-            bit_rate=520.83,
-            mark_freq=2083.3,
-            space_freq=1562.5,
+            bit_rate=float(SAME_BAUD),
+            mark_freq=SAME_MARK_FREQ,
+            space_freq=SAME_SPACE_FREQ,
             amplitude=amplitude,
         )
 
@@ -706,9 +736,9 @@ class EASAudioGenerator:
         header_samples = _generate_fsk_samples(
             same_bits,
             sample_rate=self.sample_rate,
-            bit_rate=520.83,
-            mark_freq=2083.3,
-            space_freq=1562.5,
+            bit_rate=float(SAME_BAUD),
+            mark_freq=SAME_MARK_FREQ,
+            space_freq=SAME_SPACE_FREQ,
             amplitude=amplitude,
         )
 
@@ -753,9 +783,9 @@ class EASAudioGenerator:
         eom_header_samples = _generate_fsk_samples(
             eom_bits,
             sample_rate=self.sample_rate,
-            bit_rate=520.83,
-            mark_freq=2083.3,
-            space_freq=1562.5,
+            bit_rate=float(SAME_BAUD),
+            mark_freq=SAME_MARK_FREQ,
+            space_freq=SAME_SPACE_FREQ,
             amplitude=amplitude,
         )
 
@@ -987,5 +1017,7 @@ __all__ = [
     'build_same_header',
     'build_eom_header',
     'samples_to_wav_bytes',
+    'manual_default_same_codes',
+    'PRIMARY_ORIGINATORS',
 ]
 
