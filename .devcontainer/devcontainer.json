@@ -1,0 +1,26 @@
+{
+  "name": "NOAA Alerts Codespace",
+  "dockerComposeFile": [
+    "../docker-compose.yml",
+    "docker-compose.codespaces.yml"
+  ],
+  "service": "app",
+  "workspaceFolder": "/app",
+  "overrideCommand": true,
+  "runServices": ["postgresql"],
+  "forwardPorts": [5000],
+  "portsAttributes": {
+    "5000": {
+      "label": "NOAA Alerts Web UI",
+      "onAutoForward": "notify"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ]
+    }
+  }
+}
