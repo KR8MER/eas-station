@@ -372,23 +372,6 @@ def bad_request_error(error):
 # ADDITIONAL UTILITY ROUTES
 # =============================================================================
 
-@app.route('/favicon.ico')
-def favicon():
-    """Serve favicon"""
-    return '', 204
-
-
-@app.route('/robots.txt')
-def robots():
-    """Robots.txt for web crawlers"""
-    return """User-agent: *
-Disallow: /admin/
-Disallow: /api/
-Disallow: /debug/
-Allow: /
-""", 200, {'Content-Type': 'text/plain'}
-
-
 # =============================================================================
 # CONTEXT PROCESSORS FOR TEMPLATES
 # =============================================================================
