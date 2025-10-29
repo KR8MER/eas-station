@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  app:
+    volumes:
+      - ..:/app:cached
+    environment:
+      FLASK_ENV: development
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
+  poller:
+    volumes:
+      - ..:/app:cached
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
+  postgresql:
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:
+    driver: local
