@@ -5,7 +5,7 @@ Flask Web Application with Enhanced Boundary Management and Alerts History
 
 Author: KR8MER Amateur Radio Emergency Communications
 Description: Emergency alert system with configurable U.S. jurisdiction support and proper timezone handling
-Version: 2.1.7 - Removes legacy artifacts and unused assets from the repository
+Version: 2.1.8 - Adds Alpha LED display-position compliance for M-Protocol messages
 """
 
 # =============================================================================
@@ -153,7 +153,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
 # Application versioning (exposed via templates for quick deployment verification)
-SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.7')
+SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.8')
 
 # NOAA API configuration for manual alert import workflows
 NOAA_API_BASE_URL = 'https://api.weather.gov/alerts'
