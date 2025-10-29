@@ -107,13 +107,13 @@ P_DIGIT_MEANINGS = {
 }
 
 ORIGINATOR_DESCRIPTIONS = {
-    'PEP': 'National Public Warning System (PEP)',
+    'EAS': 'EAS Participant / broadcaster',
     'CIV': 'Civil authorities',
     'WXR': 'National Weather Service',
-    'EAS': 'EAS Participant / broadcaster',
+    'PEP': 'National Public Warning System (PEP)',
 }
 
-PRIMARY_ORIGINATORS: Tuple[str, ...] = ('WXR', 'CIV', 'PEP')
+PRIMARY_ORIGINATORS: Tuple[str, ...] = ('EAS', 'CIV', 'WXR', 'PEP')
 
 
 SAME_HEADER_FIELD_DESCRIPTIONS = [
