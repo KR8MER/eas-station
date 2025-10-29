@@ -286,6 +286,30 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Initialize database
 db.init_app(app)
 
+
+def _check_database_connectivity() -> bool:
+    """Attempt to connect to the database and return True on success."""
+
+    try:
+        with app.app_context():
+            with db.engine.connect() as connection:
+                connection.execute(text("SELECT 1"))
+        return True
+    except OperationalError as exc:
+        logger.error("Database connection failed during startup: %s", exc)
+    except Exception as exc:  # noqa: BLE001 - broad catch to log unexpected failures
+        logger.exception("Unexpected error during database connectivity check: %s", exc)
+
+    return False
+
+
+logger.info("Checking database connectivity at startup...")
+if _check_database_connectivity():
+    logger.info("Database connectivity check succeeded.")
+else:
+    logger.error("Database connectivity check failed; application may not operate correctly.")
+
+
 # Configure EAS output integration
 EAS_CONFIG = load_eas_config(app.root_path)
 app.config['EAS_BROADCAST_ENABLED'] = bool(EAS_CONFIG.get('enabled'))
@@ -369,79 +393,8 @@ def bad_request_error(error):
 
 
 # =============================================================================
-# HEALTH CHECK AND MONITORING ROUTES
-# =============================================================================
-
-@app.route('/health')
-def health_check():
-    """Simple health check endpoint"""
-    try:
-        # Test database connection
-        db.session.execute(text('SELECT 1')).fetchone()
-
-        return jsonify({
-            'status': 'healthy',
-            'timestamp': utc_now().isoformat(),
-            'local_timestamp': local_now().isoformat(),
-            'version': SYSTEM_VERSION,
-            'database': 'connected',
-            'led_available': LED_AVAILABLE
-        })
-    except Exception as e:
-        return jsonify({
-            'status': 'unhealthy',
-            'error': str(e),
-            'timestamp': utc_now().isoformat(),
-            'local_timestamp': local_now().isoformat()
-        }), 500
-
-
-@app.route('/ping')
-def ping():
-    """Simple ping endpoint"""
-    return jsonify({
-        'pong': True,
-        'timestamp': utc_now().isoformat(),
-        'local_timestamp': local_now().isoformat()
-    })
-
-
-@app.route('/version')
-def version():
-    """Version information endpoint"""
-    location = get_location_settings()
-    return jsonify({
-        'version': SYSTEM_VERSION,
-        'name': 'NOAA CAP Alerts System',
-        'author': 'KR8MER Amateur Radio Emergency Communications',
-        'description': f"Emergency alert system for {location['county_name']}, {location['state_code']}",
-        'timezone': get_location_timezone_name(),
-        'led_available': LED_AVAILABLE,
-        'timestamp': utc_now().isoformat(),
-        'local_timestamp': local_now().isoformat()
-    })
-
-
-# =============================================================================
 # ADDITIONAL UTILITY ROUTES
 # =============================================================================
-
-@app.route('/favicon.ico')
-def favicon():
-    """Serve favicon"""
-    return '', 204
-
-
-@app.route('/robots.txt')
-def robots():
-    """Robots.txt for web crawlers"""
-    return """User-agent: *
-Disallow: /admin/
-Disallow: /api/
-Disallow: /debug/
-Allow: /
-""", 200, {'Content-Type': 'text/plain'}
-
 
 # =============================================================================
 # CONTEXT PROCESSORS FOR TEMPLATES
