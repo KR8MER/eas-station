@@ -1184,9 +1184,14 @@
                                 <h5 class="mb-1"><i class="fas fa-archive me-2"></i>Manual Broadcast Archive</h5>
                                 <small class="text-muted">Saved activations are archived for printing and export.</small>
                             </div>
-                            <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshManualEasEvents">
-                                <i class="fas fa-sync-alt"></i> Refresh
-                            </button>
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshManualEasEvents">
+                                    <i class="fas fa-sync-alt"></i> Refresh
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" id="purgeManualEasEvents">
+                                    <i class="fas fa-trash-alt"></i> Purge…
+                                </button>
+                            </div>
                         </div>
                         <div class="p-3">
                             <div id="manualEasStatus" class="text-muted small mb-2"></div>
@@ -1964,6 +1969,10 @@
             if (manualRefresh) {
                 manualRefresh.addEventListener('click', () => loadManualEasEvents());
             }
+            const manualPurge = document.getElementById('purgeManualEasEvents');
+            if (manualPurge) {
+                manualPurge.addEventListener('click', () => handleManualPurgePrompt());
+            }
         }
 
         async function loadManualEasEvents() {
@@ -2039,6 +2048,7 @@
                         if (item.export_url) {
                             actions.push(`<a class="btn btn-sm btn-outline-info" href="${escapeHtml(item.export_url)}" target="_blank" rel="noopener"><i class="fas fa-file-export"></i> Export</a>`);
                         }
+                        actions.push(`<button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteManualEasEvent(${item.id})" title="Delete this activation"><i class="fas fa-trash"></i></button>`);
                         const actionGroup = actions.length
                             ? actions.join(' ')
                             : '<span class="text-muted">No files</span>';
@@ -2283,6 +2293,75 @@
                 return;
             }
             purgeEasMessages(days);
+        }
+
+        async function deleteManualEasEvent(eventId) {
+            if (!confirm('Delete this manual EAS activation? This action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/admin/eas/manual_events/${eventId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                    },
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    showStatus(data.error || 'Failed to delete manual EAS activation.', 'danger');
+                    return;
+                }
+                showStatus(data.message || 'Manual EAS activation deleted.', 'success');
+                await loadManualEasEvents();
+            } catch (error) {
+                console.error('Delete manual EAS activation failed', error);
+                showStatus('Unexpected error while deleting manual EAS activation.', 'danger');
+            }
+        }
+
+        async function purgeManualEasEvents(olderThanDays) {
+            try {
+                const response = await fetch('/admin/eas/manual_events/purge', {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ older_than_days: olderThanDays }),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    showStatus(data.error || 'Failed to purge manual EAS activations.', 'danger');
+                    return;
+                }
+                const deletedCount = typeof data.deleted === 'number' ? data.deleted : (Array.isArray(data.ids) ? data.ids.length : 0);
+                const message = data.message || `Deleted ${deletedCount} manual EAS activations.`;
+                showStatus(message, 'success');
+                await loadManualEasEvents();
+            } catch (error) {
+                console.error('Purge manual EAS activations failed', error);
+                showStatus('Unexpected error while purging manual EAS activations.', 'danger');
+            }
+        }
+
+        function handleManualPurgePrompt() {
+            const input = prompt('Delete manual EAS activations older than how many days? Enter 0 to purge all manual activations.', '30');
+            if (input === null) {
+                return;
+            }
+            const trimmed = input.trim();
+            if (!trimmed) {
+                showStatus('Purge cancelled.', 'info');
+                return;
+            }
+            const days = Number.parseInt(trimmed, 10);
+            if (!Number.isFinite(days) || Number.isNaN(days) || days < 0) {
+                showStatus('Enter a valid non-negative number of days.', 'warning');
+                return;
+            }
+            purgeManualEasEvents(days);
         }
 
         function initializeEasGenerator() {

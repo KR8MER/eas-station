@@ -6,6 +6,7 @@ import base64
 import json
 import os
 import re
+import shutil
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
@@ -23,6 +24,20 @@ from app_utils.eas import (
 )
 from app_utils.event_codes import EVENT_CODE_REGISTRY
 from app_utils.fips_codes import get_same_lookup, get_us_state_county_tree
+
+
+def _remove_manual_eas_files(activation: ManualEASActivation, output_root: str, logger) -> None:
+    """Delete manual EAS directory and all contained files."""
+    if not activation.storage_path:
+        return
+
+    try:
+        full_path = os.path.join(output_root, activation.storage_path)
+        if os.path.exists(full_path) and os.path.isdir(full_path):
+            shutil.rmtree(full_path)
+            logger.debug(f"Deleted manual EAS directory: {full_path}")
+    except OSError as exc:
+        logger.warning(f"Failed to delete manual EAS directory {full_path}: {exc}")
 
 
 def register_manual_routes(app, logger, eas_config) -> None:
@@ -546,4 +561,119 @@ def register_manual_routes(app, logger, eas_config) -> None:
             as_attachment=True,
             download_name=event.summary_filename,
             mimetype='application/json',
+        )
+
+    @app.route('/admin/eas/manual_events/<int:event_id>', methods=['DELETE'])
+    def admin_delete_manual_eas(event_id: int):
+        if g.current_user is None:
+            return jsonify({'error': 'Authentication required.'}), 401
+
+        activation = ManualEASActivation.query.get_or_404(event_id)
+        output_root = str(app.config.get('EAS_OUTPUT_DIR') or '').strip()
+
+        try:
+            if output_root:
+                _remove_manual_eas_files(activation, output_root, logger)
+
+            db.session.delete(activation)
+            db.session.add(
+                SystemLog(
+                    level='WARNING',
+                    message='Manual EAS activation deleted',
+                    module='eas',
+                    details={
+                        'event_id': event_id,
+                        'identifier': activation.identifier,
+                        'deleted_by': getattr(g.current_user, 'username', None),
+                    },
+                )
+            )
+            db.session.commit()
+        except Exception as exc:
+            logger.error('Failed to delete manual EAS activation %s: %s', event_id, exc)
+            db.session.rollback()
+            return jsonify({'error': 'Failed to delete manual EAS activation.'}), 500
+
+        return jsonify({'message': 'Manual EAS activation deleted.', 'id': event_id})
+
+    @app.route('/admin/eas/manual_events/purge', methods=['POST'])
+    def admin_purge_manual_eas():
+        if g.current_user is None:
+            return jsonify({'error': 'Authentication required.'}), 401
+
+        payload = request.get_json(silent=True) or {}
+        ids = payload.get('ids')
+        cutoff: Optional[datetime] = None
+
+        if ids:
+            try:
+                id_list = [int(item) for item in ids if item is not None]
+            except (TypeError, ValueError):
+                return jsonify({'error': 'ids must be a list of integers.'}), 400
+            query = ManualEASActivation.query.filter(ManualEASActivation.id.in_(id_list))
+        else:
+            before_text = payload.get('before')
+            older_than_days = payload.get('older_than_days')
+
+            if before_text:
+                normalised = before_text.strip().replace('Z', '+00:00')
+                try:
+                    cutoff = datetime.fromisoformat(normalised)
+                except ValueError:
+                    return jsonify({'error': 'Unable to parse the provided cutoff timestamp.'}), 400
+            elif older_than_days is not None:
+                try:
+                    days = int(older_than_days)
+                except (TypeError, ValueError):
+                    return jsonify({'error': 'older_than_days must be an integer.'}), 400
+                if days < 0:
+                    return jsonify({'error': 'older_than_days must be non-negative.'}), 400
+                cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+            else:
+                return jsonify(
+                    {'error': 'Provide ids, before, or older_than_days to select activations to purge.'},
+                    400,
+                )
+
+            if cutoff.tzinfo is None:
+                cutoff = cutoff.replace(tzinfo=timezone.utc)
+            query = ManualEASActivation.query.filter(ManualEASActivation.created_at < cutoff)
+
+        activations = query.all()
+        if not activations:
+            return jsonify({'message': 'No manual EAS activations matched the purge criteria.', 'deleted': 0})
+
+        output_root = str(app.config.get('EAS_OUTPUT_DIR') or '').strip()
+        deleted_ids: List[int] = []
+
+        for activation in activations:
+            deleted_ids.append(activation.id)
+            if output_root:
+                _remove_manual_eas_files(activation, output_root, logger)
+            db.session.delete(activation)
+
+        try:
+            db.session.add(
+                SystemLog(
+                    level='WARNING',
+                    message='Manual EAS activations purged',
+                    module='eas',
+                    details={
+                        'deleted_ids': deleted_ids,
+                        'deleted_by': getattr(g.current_user, 'username', None),
+                    },
+                )
+            )
+            db.session.commit()
+        except Exception as exc:
+            logger.error('Failed to purge manual EAS activations: %s', exc)
+            db.session.rollback()
+            return jsonify({'error': 'Failed to purge manual EAS activations.'}), 500
+
+        return jsonify(
+            {
+                'message': f'Deleted {len(deleted_ids)} manual EAS activations.',
+                'deleted': len(deleted_ids),
+                'ids': deleted_ids,
+            }
         )
