@@ -113,6 +113,9 @@ docker compose up -d --build
 git pull origin Experimental
 docker compose build --pull
 docker compose up -d --force-recreate
+# Include the embedded database overlay when you want Compose to refresh the bundled
+# PostGIS container at the same time:
+# docker compose -f docker-compose.yml -f docker-compose.embedded-db.yml up -d --force-recreate
 ```
 
 ---

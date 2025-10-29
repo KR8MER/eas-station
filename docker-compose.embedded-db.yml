@@ -1,29 +1,16 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: noaa-alerts:latest
-    ports:
-      - "5000:5000"
-    env_file:
-      - .env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    depends_on:
+      alerts-db:
+        condition: service_healthy
 
   poller:
-    image: noaa-alerts:latest
-    command: ["python", "poller/cap_poller.py", "--continuous"]
-    restart: unless-stopped
-    env_file:
-      - .env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    depends_on:
+      alerts-db:
+        condition: service_healthy
 
   alerts-db:
     image: ${ALERTS_DB_IMAGE:-postgis/postgis:17-3.4}
-    profiles:
-      - embedded-db
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
