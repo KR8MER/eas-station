@@ -17,6 +17,11 @@
                     <button type="button" class="btn btn-info" onclick="window.print()" title="Print this page">
                         <i class="fas fa-print"></i> Print
                     </button>
+                    {% if current_user %}
+                    <button type="button" class="btn btn-danger" onclick="showPurgeModal()" title="Purge old audio messages">
+                        <i class="fas fa-trash-alt"></i> Purge Old Messages
+                    </button>
+                    {% endif %}
                     <a href="/" class="btn btn-outline-secondary">
                         <i class="fas fa-map"></i> Back to Map
                     </a>
@@ -261,6 +266,53 @@
             {% endif %}
         </div>
     </div>
+
+    <!-- Purge Modal -->
+    <div class="modal fade" id="purgeModal" tabindex="-1" aria-labelledby="purgeModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="purgeModalLabel">
+                        <i class="fas fa-trash-alt"></i> Purge Audio Messages
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Warning:</strong> This action cannot be undone. Audio files and database records will be permanently deleted.
+                    </div>
+
+                    <form id="purgeForm">
+                        <div class="mb-3">
+                            <label class="form-label">Purge messages older than:</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="olderThanDays" min="1" value="30" required>
+                                <span class="input-group-text">days</span>
+                            </div>
+                            <small class="form-text text-muted">
+                                Messages created before this many days ago will be deleted.
+                            </small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Or specify a cutoff date:</label>
+                            <input type="datetime-local" class="form-control" id="beforeDate">
+                            <small class="form-text text-muted">
+                                Leave blank to use days option above.
+                            </small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="executePurge()">
+                        <i class="fas fa-trash-alt"></i> Purge Messages
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -301,6 +353,67 @@ function exportAudioArchive() {
     } catch (error) {
         console.error('Audio export failed:', error);
         showToast('Failed to export audio history', 'danger');
+    }
+}
+
+function showPurgeModal() {
+    const modal = new bootstrap.Modal(document.getElementById('purgeModal'));
+    modal.show();
+}
+
+async function executePurge() {
+    const olderThanDays = document.getElementById('olderThanDays').value;
+    const beforeDate = document.getElementById('beforeDate').value;
+
+    // Build the request payload
+    const payload = {};
+
+    if (beforeDate) {
+        // Use the specific date if provided
+        payload.before = new Date(beforeDate).toISOString();
+    } else if (olderThanDays) {
+        // Use days if no specific date
+        payload.older_than_days = parseInt(olderThanDays);
+    } else {
+        showToast('Please specify either days or a cutoff date', 'warning');
+        return;
+    }
+
+    // Confirm the action
+    const confirmMessage = beforeDate
+        ? `Delete all audio messages created before ${beforeDate}?`
+        : `Delete all audio messages older than ${olderThanDays} days?`;
+
+    if (!confirm(confirmMessage + '\n\nThis action cannot be undone!')) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/admin/eas_messages/purge', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showToast(`Successfully deleted ${result.deleted} audio messages`, 'success');
+            // Hide modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('purgeModal'));
+            modal.hide();
+            // Reload page after a short delay
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+        } else {
+            showToast(result.error || 'Failed to purge audio messages', 'error');
+        }
+    } catch (error) {
+        console.error('Purge failed:', error);
+        showToast('Failed to purge audio messages', 'error');
     }
 }
 </script>
