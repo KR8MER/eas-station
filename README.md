@@ -250,7 +250,7 @@ The **Manual Broadcast Builder** on the EAS Output tab mirrors the workflow of a
 
 The header breakdown card reiterates the commercial nomenclature (preamble, ORG, EEE, PSSCCC, +TTTT, -JJJHHMM, -LLLLLLLL-, and the trailing NNNN) and includes the FCC/FEMA guidance for each field so operators and trainees can cross-check the encoding rules.
 
-> 📻 Under the hood the digital bursts now honour the full SAME framing: 520 5⁄6 baud, eight LSB-first data bits with the MSB forced low, even parity, and fractional-bit timing that keeps the 2083⅓ Hz/1562.5 Hz AFSK tones locked on spec.
+> 📻 Under the hood the digital bursts now honour the FCC SAME framing: 520 5⁄6 baud, seven LSB-first ASCII bits with a trailing null bit, and fractional-bit timing that keeps the 2083⅓ Hz/1562.5 Hz AFSK tones locked on spec.
 
 Prefer scripts or automated testing? The legacy helper at `tools/generate_sample_audio.py` is still shipped with the project for command-line use.
 
@@ -293,13 +293,13 @@ Add `--dry-run` to verify the CAP file and confirm matching FIPS codes without s
 Manual broadcasts also enforce SAME event code filtering so the encoder only fires for authorized products. Use the `EAS_MANUAL_EVENT_CODES` environment variable (comma-separated, `ALL`, or the `TESTS` preset) or the `--event` CLI flag to extend the allow-list for a single run:
 
 ```bash
-export EAS_MANUAL_EVENT_CODES=TESTS  # RWT/RMT/DMO/NPT/NAT/NST
+export EAS_MANUAL_EVENT_CODES=TESTS  # RWT/RMT/DMO/NPT
 ./manual_eas_event.py manual_rwt.xml --event TOR
 ```
 
 The repository now ships with the complete nationwide FIPS/SAME registry in `app_utils/fips_codes.py`. Set `EAS_MANUAL_FIPS_CODES=ALL` (or `US`/`USA`) to authorize every code, or keep a smaller allow-list for tighter control. CLI output and audit logs include the friendly county/parish names so operators can double-check the targeted areas.
 
-Similarly, the full SAME event registry in `app_utils/event_codes.py` keeps headers, logs, and CLI summaries aligned with official code descriptions.
+Similarly, the full SAME event registry in `app_utils/event_codes.py` mirrors the 47 CFR §11.31(d–e) tables so headers, logs, and CLI summaries stay aligned with the authorised originator and event nomenclature.
 
 > **Tip:** Keep the output directory inside Flask's `static/` tree so the files can be served via `url_for('static', ...)`. If you relocate the directory, update both `EAS_OUTPUT_DIR` and `EAS_OUTPUT_WEB_SUBDIR` to maintain access from the UI.
 

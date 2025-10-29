@@ -32,7 +32,7 @@ from app_utils.event_codes import resolve_event_code
 
 MANUAL_FIPS_ENV_TOKENS = {'ALL', 'ANY', 'US', 'USA', '*'}
 
-SAME_BAUD = Fraction(3125, 6)  # 520 + 5/6 baud
+SAME_BAUD = Fraction(3125, 6)  # 520.83… baud (520 5/6 per §11.31)
 SAME_MARK_FREQ = float(SAME_BAUD * 4)  # 2083 1/3 Hz
 SAME_SPACE_FREQ = float(SAME_BAUD * 3)  # 1562.5 Hz
 
@@ -110,8 +110,7 @@ ORIGINATOR_DESCRIPTIONS = {
     'PEP': 'National Public Warning System (PEP)',
     'CIV': 'Civil authorities',
     'WXR': 'National Weather Service',
-    'EAS': 'EAS participant / broadcaster',
-    'EAN': 'Emergency Action Notification (legacy)',
+    'EAS': 'EAS Participant / broadcaster',
 }
 
 PRIMARY_ORIGINATORS: Tuple[str, ...] = ('WXR', 'CIV', 'PEP')
@@ -455,10 +454,9 @@ def _compose_message_text(alert: object) -> str:
 def _encode_same_bits(message: str) -> List[int]:
     """Encode an ASCII SAME header using NRZ AFSK framing.
 
-    SAME packets are transmitted at 520 5/6 baud with one start bit (0), eight
-    ASCII data bits (least significant bit first, MSB forced low), an even
-    parity bit, and a single stop bit (1). The payload is terminated with a
-    carriage return as defined by the specification.
+    Section 11.31 specifies 520 5/6 baud transmission with one start bit (0),
+    seven data bits sent least-significant-bit first, a null eighth bit, and a
+    single stop bit (1). The payload terminates with a carriage return.
     """
 
     bits: List[int] = []
@@ -466,14 +464,11 @@ def _encode_same_bits(message: str) -> List[int]:
         ascii_code = ord(char) & 0x7F
 
         char_bits: List[int] = [0]
-        data_bits: List[int] = []
-        for i in range(8):
-            bit = (ascii_code >> i) & 1
-            data_bits.append(bit)
-            char_bits.append(bit)
+        for i in range(7):
+            char_bits.append((ascii_code >> i) & 1)
 
-        parity_bit = 0 if sum(data_bits) % 2 == 0 else 1
-        char_bits.append(parity_bit)
+        # Null eighth bit per §11.31(a)(1)
+        char_bits.append(0)
 
         # Stop bit
         char_bits.append(1)

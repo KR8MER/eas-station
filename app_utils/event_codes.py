@@ -19,7 +19,6 @@ EVENT_CODE_REGISTRY: Dict[str, Dict[str, object]] = {
     'ADR': _entry('Administrative Message', default_product='ADV'),
     'AVA': _entry('Avalanche Watch', default_product='WCH'),
     'AVW': _entry('Avalanche Warning', default_product='WRN'),
-    'BLU': _entry('Blue Alert', default_product='WRN'),
     'BZW': _entry('Blizzard Warning', default_product='WRN'),
     'CAE': _entry('Child Abduction Emergency', default_product='ADV', aliases=['Amber Alert']),
     'CDW': _entry('Civil Danger Warning', default_product='WRN'),
@@ -28,11 +27,10 @@ EVENT_CODE_REGISTRY: Dict[str, Dict[str, object]] = {
     'CFW': _entry('Coastal Flood Warning', default_product='WRN'),
     'DMO': _entry('Practice/Demo Warning', default_product='TEST', aliases=['Demo Warning']),
     'DSW': _entry('Dust Storm Warning', default_product='WRN'),
-    'EAN': _entry('National Emergency Message', default_product='WRN'),
+    'EAN': _entry('Emergency Action Notification', default_product='WRN'),
     'EAT': _entry('Emergency Action Termination', default_product='ADV'),
     'EQW': _entry('Earthquake Warning', default_product='WRN'),
     'EVI': _entry('Evacuation Immediate', default_product='WRN'),
-    'EWW': _entry('Extreme Wind Warning', default_product='WRN'),
     'FFA': _entry('Flash Flood Watch', default_product='WCH'),
     'FFS': _entry('Flash Flood Statement', default_product='ADV'),
     'FFW': _entry('Flash Flood Warning', default_product='WRN'),
@@ -40,39 +38,30 @@ EVENT_CODE_REGISTRY: Dict[str, Dict[str, object]] = {
     'FLS': _entry('Flood Statement', default_product='ADV'),
     'FLW': _entry('Flood Warning', default_product='WRN'),
     'FRW': _entry('Fire Warning', default_product='WRN'),
-    'FSW': _entry('Flash Freeze Warning', default_product='WRN'),
-    'FZW': _entry('Freeze Warning', default_product='WRN', aliases=['Frost Warning']),
     'HLS': _entry('Hurricane Local Statement', default_product='ADV'),
     'HMW': _entry('Hazardous Materials Warning', default_product='WRN'),
     'HUA': _entry('Hurricane Watch', default_product='WCH'),
     'HUW': _entry('Hurricane Warning', default_product='WRN'),
     'HWA': _entry('High Wind Watch', default_product='WCH'),
     'HWW': _entry('High Wind Warning', default_product='WRN'),
-    'ISW': _entry('Ice Storm Warning', default_product='WRN'),
     'LAE': _entry('Local Area Emergency', default_product='ADV'),
     'LEW': _entry('Law Enforcement Warning', default_product='WRN'),
-    'MEP': _entry('Missing and Endangered Persons', default_product='ADV'),
-    'NAT': _entry('National Audible Test', default_product='TEST'),
     'NIC': _entry('National Information Center', default_product='ADV'),
-    'NMN': _entry('Network Notification Message', default_product='ADV'),
-    'NPT': _entry('Nationwide Test of the Emergency Alert System', default_product='TEST', aliases=['National Periodic Test']),
-    'NST': _entry('National Silent Test', default_product='TEST'),
+    'NMN': _entry('Network Message Notification', default_product='ADV'),
+    'NPT': _entry('National Periodic Test', default_product='TEST'),
     'NUW': _entry('Nuclear Power Plant Warning', default_product='WRN'),
     'RHW': _entry('Radiological Hazard Warning', default_product='WRN'),
     'RMT': _entry('Required Monthly Test', default_product='TEST'),
     'RWT': _entry('Required Weekly Test', default_product='TEST'),
     'SMW': _entry('Special Marine Warning', default_product='WRN'),
     'SPS': _entry('Special Weather Statement', default_product='ADV'),
-    'SPW': _entry('Shelter In-Place Warning', default_product='WRN'),
-    'SQW': _entry('Snow Squall Warning', default_product='WRN'),
-    'SSA': _entry('Storm Surge Watch', default_product='WCH'),
-    'SSW': _entry('Storm Surge Warning', default_product='WRN'),
+    'SPW': _entry('Shelter in Place Warning', default_product='WRN'),
     'SVA': _entry('Severe Thunderstorm Watch', default_product='WCH'),
     'SVR': _entry('Severe Thunderstorm Warning', default_product='WRN'),
     'SVS': _entry('Severe Weather Statement', default_product='ADV'),
     'TOA': _entry('Tornado Watch', default_product='WCH'),
     'TOE': _entry('911 Telephone Outage Emergency', default_product='ADV'),
-    'TOR': _entry('Tornado Warning/Emergency', default_product='WRN', aliases=['Tornado Warning', 'Tornado Emergency']),
+    'TOR': _entry('Tornado Warning', default_product='WRN', aliases=['Tornado Emergency']),
     'TRA': _entry('Tropical Storm Watch', default_product='WCH'),
     'TRW': _entry('Tropical Storm Warning', default_product='WRN'),
     'TSA': _entry('Tsunami Watch', default_product='WCH'),
@@ -80,11 +69,6 @@ EVENT_CODE_REGISTRY: Dict[str, Dict[str, object]] = {
     'VOW': _entry('Volcano Warning', default_product='WRN'),
     'WSA': _entry('Winter Storm Watch', default_product='WCH'),
     'WSW': _entry('Winter Storm Warning', default_product='WRN'),
-    '??A': _entry('Unrecognized Watch', default_product='WCH'),
-    '??E': _entry('Unrecognized Emergency', default_product='ADV'),
-    '??S': _entry('Unrecognized Statement', default_product='ADV'),
-    '??W': _entry('Unrecognized Warning', default_product='WRN'),
-    'EAS': _entry('Generic Emergency Alert', default_product='WRN'),
 }
 
 
@@ -93,8 +77,8 @@ ALL_EVENT_CODES: Sequence[str] = tuple(sorted(EVENT_CODE_REGISTRY))
 EVENT_CODE_ALLOW_ALL_TOKENS: Set[str] = {'ALL', 'ANY', '*'}
 
 EVENT_CODE_PRESET_TOKENS: Mapping[str, Set[str]] = {
-    'TEST': {'RWT', 'RMT', 'DMO', 'NAT', 'NST', 'NPT'},
-    'TESTS': {'RWT', 'RMT', 'DMO', 'NAT', 'NST', 'NPT'},
+    'TEST': {'RWT', 'RMT', 'DMO', 'NPT'},
+    'TESTS': {'RWT', 'RMT', 'DMO', 'NPT'},
 }
 
 DEFAULT_EVENT_CODES: Set[str] = set(ALL_EVENT_CODES)
@@ -136,7 +120,7 @@ def resolve_event_code(event_name: str, candidates: Sequence[str]) -> str:
     if by_name:
         return by_name
 
-    return 'EAS'
+    return 'CEM'
 
 
 def describe_event_code(code: str) -> str:
