@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import audioop
+import ctypes.util
 import io
 import json
 import math
 import os
 import re
+import shutil
 import struct
 import subprocess
 import tempfile
@@ -79,6 +81,27 @@ def _normalize_pcm_samples(
     return list(struct.unpack('<' + 'h' * sample_count, raw_frames[: sample_count * 2]))
 
 
+def _pyttsx3_dependency_hint() -> Optional[str]:
+    """Suggest installation guidance for common pyttsx3 system dependencies."""
+
+    missing: List[str] = []
+
+    if not ctypes.util.find_library('espeak') and not ctypes.util.find_library('espeak-ng'):
+        missing.append('libespeak1 (e.g., "sudo apt-get install libespeak1")')
+
+    if shutil.which('ffmpeg') is None:
+        missing.append('ffmpeg (e.g., "sudo apt-get install ffmpeg")')
+
+    if not missing:
+        return None
+
+    if len(missing) == 1:
+        return f'pyttsx3 requires {missing[0]}.'
+
+    dependency_list = ', '.join(missing[:-1]) + f', and {missing[-1]}'
+    return f'pyttsx3 requires {dependency_list}.'
+
+
 def _pyttsx3_error_hint(exc: Exception) -> Optional[str]:
     """Return a friendly remediation hint for common pyttsx3 failures."""
 
@@ -89,7 +112,12 @@ def _pyttsx3_error_hint(exc: Exception) -> Optional[str]:
             'Install libespeak1 (e.g., "sudo apt-get install libespeak1").'
         )
 
-    return None
+    if 'ffmpeg' in detail or 'weakly-referenced object' in detail:
+        dependency_hint = _pyttsx3_dependency_hint()
+        if dependency_hint:
+            return dependency_hint
+
+    return _pyttsx3_dependency_hint()
 
 
 def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
@@ -1111,8 +1139,20 @@ class EASAudioGenerator:
             except Exception:
                 pass
 
-        if not tmp_path or not os.path.exists(tmp_path):
-            self._remember_tts_error('pyttsx3 did not produce an audio file.')
+        file_missing = not tmp_path or not os.path.exists(tmp_path)
+        file_empty = False
+        if not file_missing and tmp_path:
+            try:
+                file_empty = os.path.getsize(tmp_path) == 0
+            except OSError:
+                file_empty = True
+
+        if file_missing or file_empty:
+            dependency_hint = _pyttsx3_dependency_hint()
+            if dependency_hint:
+                self._remember_tts_error(dependency_hint)
+            else:
+                self._remember_tts_error('pyttsx3 did not produce an audio file.')
             if self.logger:
                 self.logger.warning('pyttsx3 did not produce an audio file; skipping voiceover.')
             return None
