@@ -79,6 +79,19 @@ def _normalize_pcm_samples(
     return list(struct.unpack('<' + 'h' * sample_count, raw_frames[: sample_count * 2]))
 
 
+def _pyttsx3_error_hint(exc: Exception) -> Optional[str]:
+    """Return a friendly remediation hint for common pyttsx3 failures."""
+
+    detail = str(exc).lower()
+    if 'libespeak' in detail:
+        return (
+            'pyttsx3 requires the libespeak shared library. '
+            'Install libespeak1 (e.g., "sudo apt-get install libespeak1").'
+        )
+
+    return None
+
+
 def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
     """Build a runtime configuration dictionary for EAS broadcasting."""
 
@@ -675,6 +688,12 @@ class EASAudioGenerator:
         self.sample_rate = int(config.get('sample_rate', 44100))
         self.output_dir = str(config.get('output_dir'))
         _ensure_directory(self.output_dir)
+        self._last_tts_error: Optional[str] = None
+
+    def _remember_tts_error(self, message: Optional[str]) -> None:
+        """Store the most recent TTS failure detail for downstream messaging."""
+
+        self._last_tts_error = message or None
 
     def build_files(self, alert: object, payload: Dict[str, object], header: str,
                     location_codes: List[str]) -> Tuple[str, str, str]:
@@ -836,10 +855,19 @@ class EASAudioGenerator:
             if voiceover:
                 tts_samples.extend(voiceover)
             else:
+                error_detail = self._last_tts_error
                 if provider == 'azure':
-                    tts_warning = 'Azure Speech is configured but synthesis failed.'
+                    base_message = 'Azure Speech is configured but synthesis failed.'
+                    if error_detail:
+                        tts_warning = f"{base_message} {error_detail}"
+                    else:
+                        tts_warning = base_message
                 elif provider == 'pyttsx3':
-                    tts_warning = 'pyttsx3 is configured but synthesis failed.'
+                    base_message = 'pyttsx3 is configured but synthesis failed.'
+                    if error_detail:
+                        tts_warning = f"{base_message} {error_detail}"
+                    else:
+                        tts_warning = base_message
                 elif provider:
                     tts_warning = f'TTS provider "{provider}" is configured but synthesis failed.'
                 else:
@@ -893,6 +921,7 @@ class EASAudioGenerator:
 
     def _maybe_generate_voiceover(self, text: str) -> Optional[List[int]]:
         provider = (self.config.get('tts_provider') or '').strip().lower()
+        self._remember_tts_error(None)
         if not text.strip():
             return None
 
@@ -903,11 +932,13 @@ class EASAudioGenerator:
 
         if provider and self.logger:
             self.logger.warning('Unknown TTS provider "%s"; skipping voiceover.', provider)
+            self._remember_tts_error(f'Unknown TTS provider "{provider}".')
 
         return None
 
     def _generate_azure_voiceover(self, text: str) -> Optional[List[int]]:
         if azure_speech is None:
+            self._remember_tts_error('Azure Speech SDK not installed.')
             if self.logger:
                 self.logger.warning('Azure Speech SDK not installed; skipping TTS voiceover.')
             return None
@@ -915,6 +946,7 @@ class EASAudioGenerator:
         key = (self.config.get('azure_speech_key') or '').strip()
         region = (self.config.get('azure_speech_region') or '').strip()
         if not key or not region:
+            self._remember_tts_error('Azure Speech credentials are missing.')
             if self.logger:
                 self.logger.warning('Azure Speech credentials not configured; skipping TTS voiceover.')
             return None
@@ -945,18 +977,21 @@ class EASAudioGenerator:
             )
             result = synthesizer.speak_text(text)
         except Exception as exc:  # pragma: no cover - network/service specific
+            self._remember_tts_error(f'Azure speech synthesis failed: {exc}')
             if self.logger:
                 self.logger.error(f"Azure speech synthesis failed: {exc}")
             return None
 
         reason = getattr(azure_speech, 'ResultReason', None)
         if reason and result.reason != reason.SynthesizingAudioCompleted:
+            self._remember_tts_error(f'Azure speech synthesis did not complete: {result.reason}')
             if self.logger:
                 self.logger.error('Azure speech synthesis did not complete successfully: %s', result.reason)
             return None
 
         audio_bytes = getattr(result, 'audio_data', None)
         if not audio_bytes:
+            self._remember_tts_error('Azure speech synthesis returned no audio data.')
             if self.logger:
                 self.logger.warning('Azure speech synthesis returned no audio data.')
             return None
@@ -977,14 +1012,17 @@ class EASAudioGenerator:
             )
             if self.logger:
                 self.logger.info('Appended Azure voiceover using voice %s', voice)
+            self._remember_tts_error(None)
             return samples
         except Exception as exc:  # pragma: no cover - audio decoding errors
+            self._remember_tts_error(f'Failed to decode Azure speech audio: {exc}')
             if self.logger:
                 self.logger.error(f"Failed to decode Azure speech audio: {exc}")
             return None
 
     def _generate_pyttsx3_voiceover(self, text: str) -> Optional[List[int]]:
         if pyttsx3 is None:
+            self._remember_tts_error('pyttsx3 package is not installed.')
             if self.logger:
                 self.logger.warning('pyttsx3 not installed; skipping TTS voiceover.')
             return None
@@ -992,6 +1030,11 @@ class EASAudioGenerator:
         try:
             engine = pyttsx3.init()
         except Exception as exc:  # pragma: no cover - platform specific
+            hint = _pyttsx3_error_hint(exc)
+            if hint:
+                self._remember_tts_error(hint)
+            else:
+                self._remember_tts_error(f'Failed to initialise pyttsx3: {exc}')
             if self.logger:
                 self.logger.error(f"Failed to initialise pyttsx3: {exc}")
             return None
@@ -1049,6 +1092,11 @@ class EASAudioGenerator:
             except Exception:
                 pass
         except Exception as exc:  # pragma: no cover - platform specific
+            hint = _pyttsx3_error_hint(exc)
+            if hint:
+                self._remember_tts_error(hint)
+            else:
+                self._remember_tts_error(f'pyttsx3 synthesis failed: {exc}')
             if self.logger:
                 self.logger.error(f"pyttsx3 synthesis failed: {exc}")
             if tmp_path and os.path.exists(tmp_path):
@@ -1064,6 +1112,7 @@ class EASAudioGenerator:
                 pass
 
         if not tmp_path or not os.path.exists(tmp_path):
+            self._remember_tts_error('pyttsx3 did not produce an audio file.')
             if self.logger:
                 self.logger.warning('pyttsx3 did not produce an audio file; skipping voiceover.')
             return None
@@ -1085,8 +1134,10 @@ class EASAudioGenerator:
             if self.logger:
                 voice_label = configured_voice_id or 'default'
                 self.logger.info('Appended pyttsx3 voiceover using voice %s', voice_label)
+            self._remember_tts_error(None)
             return samples
         except Exception as exc:  # pragma: no cover - audio decoding errors
+            self._remember_tts_error(f'Failed to decode pyttsx3 audio: {exc}')
             if self.logger:
                 self.logger.error(f"Failed to decode pyttsx3 audio: {exc}")
             return None
