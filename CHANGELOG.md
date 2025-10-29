@@ -130,6 +130,11 @@ tracks releases under the 2.1.x series.
 - Prevented the LED fallback initializer from raising a `NameError` when the optional
   controller module is missing so deployments without sign hardware continue to boot.
 
+## [2.1.8] - 2025-10-30
+### Fixed
+- Inserted the mandatory display-position byte in LED sign mode fields so M-Protocol
+  frames comply with Alpha controller requirements.
+
 ## [2.1.7] - 2025-10-29
 ### Removed
 - Purged IDE metadata, historical log outputs, unused static assets, and legacy diagnostic scripts
