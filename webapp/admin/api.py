@@ -173,11 +173,10 @@ def register_api_routes(app, logger):
             is_actually_county_wide = county_coverage >= 95.0
 
             if not coverage_data and is_county_wide:
-                boundary_totals = (
-                    db.session.query(Boundary.type, func.count(Boundary.id))
-                    .group_by(Boundary.type)
-                    .all()
-                )
+                boundary_totals = db.session.query(
+                    Boundary.type,
+                    func.count(Boundary.id),
+                ).group_by(Boundary.type).all()
 
                 if boundary_totals:
                     coverage_data = {}
