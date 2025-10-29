@@ -144,6 +144,9 @@
                                     </td>
                                     <td>
                                         <strong>{{ message.event }}</strong>
+                                        {% if message.source == 'manual' %}
+                                        <span class="badge bg-info text-dark ms-2">Manual</span>
+                                        {% endif %}
                                         {% if message.alert_identifier %}
                                         <div class="small text-muted">{{ message.alert_identifier }}</div>
                                         {% endif %}
@@ -177,10 +180,10 @@
                                     <td>
                                         {% if message.alert_url %}
                                         <a href="{{ message.alert_url }}" class="btn btn-sm btn-outline-primary">
-                                            <i class="fas fa-eye"></i> View Alert
+                                            <i class="fas fa-eye"></i> {{ message.alert_label or 'View Alert' }}
                                         </a>
                                         {% else %}
-                                        <span class="text-muted">Manual or unknown source</span>
+                                        <span class="text-muted">No linked alert</span>
                                         {% endif %}
                                     </td>
                                     <td class="text-center">

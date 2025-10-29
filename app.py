@@ -15,6 +15,7 @@ Version: 2.1.7 - Removes legacy artifacts and unused assets from the repository
 import base64
 import os
 import json
+import math
 import re
 import psutil
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -946,42 +947,47 @@ def audio_history():
 
         query = base_query.order_by(EASMessage.created_at.desc())
 
-        try:
-            pagination = query.paginate(
-                page=page,
-                per_page=per_page,
-                error_out=False,
+        manual_query = ManualEASActivation.query
+        include_manual = True
+
+        if search:
+            search_term = f'%{search}%'
+            manual_query = manual_query.filter(
+                or_(
+                    ManualEASActivation.event_name.ilike(search_term),
+                    ManualEASActivation.event_code.ilike(search_term),
+                    ManualEASActivation.identifier.ilike(search_term),
+                    ManualEASActivation.same_header.ilike(search_term),
+                )
             )
-            records = pagination.items
-        except Exception as paginate_error:
-            logger.warning('Pagination error on audio archive: %s', paginate_error)
-            total_count = query.count()
-            offset = (page - 1) * per_page
-            records = query.offset(offset).limit(per_page).all()
+        if event_filter:
+            manual_query = manual_query.filter(
+                or_(
+                    ManualEASActivation.event_name == event_filter,
+                    ManualEASActivation.event_code == event_filter,
+                )
+            )
+        if status_filter:
+            manual_query = manual_query.filter(ManualEASActivation.status == status_filter)
+        if severity_filter:
+            include_manual = False
 
-            class MockPagination:
-                def __init__(self, page, per_page, total, items):
-                    self.page = page
-                    self.per_page = per_page
-                    self.total = total
-                    self.items = items
-                    self.pages = (total + per_page - 1) // per_page if per_page > 0 else 1
-                    self.has_prev = page > 1
-                    self.has_next = page < self.pages
-                    self.prev_num = page - 1 if self.has_prev else None
-                    self.next_num = page + 1 if self.has_next else None
+        if include_manual:
+            manual_query = manual_query.order_by(ManualEASActivation.created_at.desc())
 
-                def iter_pages(self, left_edge=2, left_current=2, right_current=3, right_edge=2):
-                    last = self.pages
-                    for num in range(1, last + 1):
-                        if num <= left_edge or \
-                                (self.page - left_current - 1 < num < self.page + right_current) or \
-                                num > last - right_edge:
-                            yield num
-                        elif num == left_edge + 1 or num == self.page + right_current:
-                            yield None
+        automated_total = query.order_by(None).count()
+        manual_total = manual_query.order_by(None).count() if include_manual else 0
+        total_count = automated_total + manual_total
 
-            pagination = MockPagination(page, per_page, total_count, records)
+        total_pages = max(1, math.ceil(total_count / per_page)) if per_page else 1
+        page = max(1, min(page, total_pages))
+        offset = (page - 1) * per_page
+        fetch_limit = offset + per_page
+
+        automated_records = query.limit(fetch_limit).all() if fetch_limit else []
+        manual_records: List[ManualEASActivation] = []
+        if include_manual and fetch_limit:
+            manual_records = manual_query.limit(fetch_limit).all()
 
         web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
 
@@ -991,8 +997,20 @@ def audio_history():
             parts = [web_prefix, filename] if web_prefix else [filename]
             return '/'.join(part for part in parts if part)
 
+        def _manual_web_path(subpath: Optional[str], *, fallback_prefix: Optional[str] = None) -> Optional[str]:
+            if not subpath:
+                return None
+            effective_prefix = fallback_prefix if fallback_prefix is not None else web_prefix
+            parts = [effective_prefix, subpath] if effective_prefix else [subpath]
+            return '/'.join(part for part in parts if part)
+
+        def _sort_key(value: Optional[datetime]) -> datetime:
+            if value is None:
+                return datetime.min.replace(tzinfo=timezone.utc)
+            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
         messages: List[Dict[str, Any]] = []
-        for message, alert in records:
+        for message, alert in automated_records:
             metadata = dict(message.metadata_payload or {})
             event_name = (alert.event if alert and alert.event else metadata.get('event')) or 'Unknown Event'
             severity = alert.severity if alert and alert.severity else metadata.get('severity')
@@ -1015,10 +1033,115 @@ def audio_history():
                 'alert_url': url_for('alert_detail', alert_id=alert.id) if alert else None,
                 'alert_identifier': alert.identifier if alert else None,
                 'eom_url': url_for('static', filename=eom_path) if eom_path else None,
+                'source': 'automated',
+                'alert_label': 'View Alert',
             })
 
+        if include_manual and manual_records:
+            for event in manual_records:
+                metadata = dict(event.metadata_payload or {})
+                components_payload = event.components_payload or {}
+                manual_prefix = metadata.get('web_prefix', web_prefix)
+
+                composite_component = components_payload.get('composite')
+                audio_component = (
+                    composite_component
+                    or components_payload.get('tts')
+                    or components_payload.get('attention')
+                    or components_payload.get('same')
+                )
+                eom_component = components_payload.get('eom')
+
+                audio_subpath = audio_component.get('storage_subpath') if audio_component else None
+                audio_url = (
+                    url_for(
+                        'static',
+                        filename=_manual_web_path(
+                            audio_subpath,
+                            fallback_prefix=manual_prefix,
+                        ),
+                    )
+                    if audio_subpath
+                    else None
+                )
+
+                summary_subpath = metadata.get('summary_subpath') or (
+                    '/'.join(part for part in [event.storage_path, event.summary_filename] if part)
+                    if event.summary_filename
+                    else None
+                )
+                summary_url = (
+                    url_for(
+                        'static',
+                        filename=_manual_web_path(
+                            summary_subpath,
+                            fallback_prefix=manual_prefix,
+                        ),
+                    )
+                    if summary_subpath
+                    else None
+                )
+
+                eom_subpath = eom_component.get('storage_subpath') if eom_component else None
+                eom_url = (
+                    url_for(
+                        'static',
+                        filename=_manual_web_path(
+                            eom_subpath,
+                            fallback_prefix=manual_prefix,
+                        ),
+                    )
+                    if eom_subpath
+                    else None
+                )
+
+                messages.append({
+                    'id': event.id,
+                    'event': event.event_name or event.event_code or 'Manual Activation',
+                    'severity': metadata.get('severity'),
+                    'status': event.status,
+                    'created_at': event.created_at,
+                    'same_header': event.same_header,
+                    'audio_url': audio_url,
+                    'text_url': summary_url,
+                    'detail_url': url_for('manual_eas_print', event_id=event.id),
+                    'alert_url': url_for('manual_eas_print', event_id=event.id),
+                    'alert_identifier': event.identifier,
+                    'eom_url': eom_url,
+                    'source': 'manual',
+                    'alert_label': 'View Activation',
+                })
+
+        messages.sort(key=lambda item: _sort_key(item.get('created_at')), reverse=True)
+        page_start = offset
+        page_end = offset + per_page
+        messages = messages[page_start:page_end]
+
+        class CombinedPagination:
+            def __init__(self, page_number: int, page_size: int, total_items: int):
+                self.page = page_number
+                self.per_page = page_size
+                self.total = total_items
+                self.pages = max(1, math.ceil(total_items / page_size)) if page_size else 1
+                self.has_prev = self.page > 1
+                self.has_next = self.page < self.pages
+                self.prev_num = self.page - 1 if self.has_prev else None
+                self.next_num = self.page + 1 if self.has_next else None
+
+            def iter_pages(self, left_edge: int = 2, left_current: int = 2, right_current: int = 3, right_edge: int = 2):
+                last = self.pages
+                for num in range(1, last + 1):
+                    if num <= left_edge or (
+                        self.page - left_current - 1 < num < self.page + right_current
+                    ) or num > last - right_edge:
+                        yield num
+                    elif num == left_edge + 1 or num == self.page + right_current:
+                        yield None
+
+        pagination = CombinedPagination(page, per_page, total_count)
+
         try:
-            events = [
+            cap_events = [
                 row[0]
                 for row in db.session.query(CAPAlert.event)
                 .join(EASMessage, EASMessage.cap_alert_id == CAPAlert.id)
@@ -1028,7 +1151,7 @@ def audio_history():
                 .all()
             ]
 
-            severities = [
+            cap_severities = [
                 row[0]
                 for row in db.session.query(CAPAlert.severity)
                 .join(EASMessage, EASMessage.cap_alert_id == CAPAlert.id)
@@ -1038,7 +1161,7 @@ def audio_history():
                 .all()
             ]
 
-            statuses = [
+            cap_statuses = [
                 row[0]
                 for row in db.session.query(CAPAlert.status)
                 .join(EASMessage, EASMessage.cap_alert_id == CAPAlert.id)
@@ -1047,6 +1170,28 @@ def audio_history():
                 .order_by(CAPAlert.status)
                 .all()
             ]
+
+            manual_event_names = [
+                row[0]
+                for row in db.session.query(ManualEASActivation.event_name)
+                .filter(ManualEASActivation.event_name.isnot(None))
+                .distinct()
+                .order_by(ManualEASActivation.event_name)
+                .all()
+            ]
+
+            manual_statuses = [
+                row[0]
+                for row in db.session.query(ManualEASActivation.status)
+                .filter(ManualEASActivation.status.isnot(None))
+                .distinct()
+                .order_by(ManualEASActivation.status)
+                .all()
+            ]
+
+            events = sorted({value for value in cap_events + manual_event_names if value})
+            severities = sorted({value for value in cap_severities if value})
+            statuses = sorted({value for value in cap_statuses + manual_statuses if value})
         except Exception as filter_error:
             logger.warning('Unable to load audio filter metadata: %s', filter_error)
             events = []
@@ -1061,7 +1206,7 @@ def audio_history():
             'per_page': per_page,
         }
 
-        total_messages = EASMessage.query.count()
+        total_messages = EASMessage.query.count() + ManualEASActivation.query.count()
 
         return render_template(
             'audio_history.html',
