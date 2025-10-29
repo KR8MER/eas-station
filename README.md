@@ -19,24 +19,6 @@ This command will:
 
 Access the application at **http://localhost:5000**
 
-### GitHub Codespaces
-
-This repository ships with a GitHub Codespaces dev container that mirrors the Docker setup used in production.
-
-1. Open the repository in GitHub, click **Code → Codespaces → Create codespace on main**.
-2. Wait for the container build to complete. The PostgreSQL service starts automatically and the workspace is mounted at `/app`.
-3. In the integrated terminal, launch the web app:
-   ```bash
-   gunicorn --bind 0.0.0.0:5000 app:app
-   ```
-4. (Optional) Start the continuous poller in a second terminal:
-   ```bash
-   docker compose up -d poller
-   ```
-5. When GitHub prompts you, open the forwarded **5000** port to access the UI.
-
-The Codespaces environment uses the same `.env` file as local Docker Compose runs. Update values there if you need to override defaults (for example, LED sign settings).
-
 ### Single-Line Update
 ```bash
 git pull && docker compose build --pull && docker compose up -d --force-recreate
