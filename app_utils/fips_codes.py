@@ -62,7 +62,11 @@ STATE_ABBR_NAMES: Dict[str, str] = {
     'MP': 'Northern Mariana Islands',
     'PR': 'Puerto Rico',
     'VI': 'U.S. Virgin Islands',
+    'US': 'United States',
 }
+
+NATIONWIDE_SAME_CODE = '000000'
+NATIONWIDE_LABEL = 'Entire United States'
 
 # Data sourced from FCC / US Census FIPS code list (national_county.txt).
 # Format: STATEFP + COUNTYFP -> "County Name, ST"
@@ -3227,6 +3231,7 @@ def _build_county_index() -> Dict[str, str]:
         code, state_abbr, county_name = line.split('|')
         same_code = _to_same_county_code(code)
         mapping[same_code] = f"{county_name}, {state_abbr}"
+    mapping.setdefault(NATIONWIDE_SAME_CODE, NATIONWIDE_LABEL)
     return mapping
 
 
@@ -3260,6 +3265,15 @@ def _build_state_tree() -> List[Dict[str, object]]:
         state['counties'].sort(key=lambda item: item['name'])
         ordered_states.append(state)
 
+    if 'US' not in states:
+        states['US'] = {
+            'abbr': 'US',
+            'name': STATE_ABBR_NAMES.get('US', 'United States'),
+            'state_fips': '00',
+            'statewide_code': NATIONWIDE_SAME_CODE,
+            'counties': [],
+        }
+        ordered_states.append(states['US'])
     ordered_states.sort(key=lambda item: item['name'])
     return ordered_states
 
@@ -3268,8 +3282,13 @@ def _build_same_lookup(states: List[Dict[str, object]]) -> Dict[str, str]:
     mapping = dict(US_FIPS_COUNTIES)
     for state in states:
         statewide_code = state.get('statewide_code')
-        if statewide_code:
+        if not statewide_code:
+            continue
+        if statewide_code == NATIONWIDE_SAME_CODE:
+            mapping[statewide_code] = NATIONWIDE_LABEL
+        else:
             mapping.setdefault(statewide_code, f"All Areas, {state['abbr']}")
+    mapping[NATIONWIDE_SAME_CODE] = NATIONWIDE_LABEL
     return mapping
 
 

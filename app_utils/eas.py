@@ -97,15 +97,15 @@ def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
 
 P_DIGIT_MEANINGS = {
     '0': 'Entire area',
-    '1': 'North portion',
-    '2': 'East portion',
-    '3': 'South portion',
-    '4': 'West portion',
+    '1': 'Northwest portion',
+    '2': 'North central portion',
+    '3': 'Northeast portion',
+    '4': 'West central portion',
     '5': 'Central portion',
-    '6': 'Northeast portion',
-    '7': 'Southeast portion',
-    '8': 'Southwest portion',
-    '9': 'Northwest portion',
+    '6': 'East central portion',
+    '7': 'Southwest portion',
+    '8': 'South central portion',
+    '9': 'Southeast portion',
 }
 
 ORIGINATOR_DESCRIPTIONS = {

@@ -979,17 +979,21 @@
                                         <div class="mb-3 mt-3">
                                             <label class="form-label fw-bold">Location Codes (PSSCCC)</label>
                                             <div class="row g-2 align-items-end">
-                                                <div class="col-md-6">
+                                                <div class="col-md-5 col-lg-4">
                                                     <label for="easStateSelect" class="form-label text-uppercase small fw-bold text-muted mb-1">State / Territory</label>
                                                     <select class="form-select" id="easStateSelect">
                                                         <option value="">Select state or territory…</option>
                                                     </select>
                                                 </div>
-                                                <div class="col-md-6">
+                                                <div class="col-md-4 col-lg-5">
                                                     <label for="easCountySelect" class="form-label text-uppercase small fw-bold text-muted mb-1">County / Parish</label>
                                                     <select class="form-select" id="easCountySelect" disabled>
                                                         <option value="">Select a state first…</option>
                                                     </select>
+                                                </div>
+                                                <div class="col-md-3 col-lg-3">
+                                                    <label for="easPortionSelect" class="form-label text-uppercase small fw-bold text-muted mb-1">Portion (P digit)</label>
+                                                    <select class="form-select" id="easPortionSelect"></select>
                                                 </div>
                                             </div>
                                             <div class="d-flex flex-wrap gap-2 mt-2">
@@ -1020,7 +1024,7 @@
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div class="form-text">Select PSSCCC entries by state and county or parish. The leading P digit marks the portion of the area (0 = entire jurisdiction).</div>
+                                            <div class="form-text">Select PSSCCC entries by state and county or parish. Choose a portion with the P digit (0 = entire jurisdiction).</div>
                                         </div>
 
                                         <div class="mb-3">
@@ -2490,6 +2494,28 @@
             };
         }
 
+        function populatePortionOptions() {
+            const portionSelect = document.getElementById('easPortionSelect');
+            if (!portionSelect) {
+                return;
+            }
+            portionSelect.innerHTML = '';
+
+            const digits = Object.keys(EAS_P_DIGIT_MEANINGS || {}).sort((a, b) => Number(a) - Number(b));
+            digits.forEach((digit) => {
+                const option = document.createElement('option');
+                option.value = digit;
+                const meaning = EAS_P_DIGIT_MEANINGS?.[digit];
+                option.textContent = meaning ? `${digit} — ${meaning}` : digit;
+                portionSelect.appendChild(option);
+            });
+
+            if (!portionSelect.value) {
+                portionSelect.value = '0';
+            }
+            portionSelect.disabled = true;
+        }
+
         function populateStateOptions() {
             const stateSelect = document.getElementById('easStateSelect');
             if (!stateSelect) {
@@ -2503,7 +2529,11 @@
                 }
                 const option = document.createElement('option');
                 option.value = state.abbr;
-                option.textContent = `${state.name || state.abbr} (${state.abbr})`;
+                if (state.abbr === 'US') {
+                    option.textContent = `${state.name || state.abbr} (Nationwide)`;
+                } else {
+                    option.textContent = `${state.name || state.abbr} (${state.abbr})`;
+                }
                 fragment.appendChild(option);
             });
             stateSelect.appendChild(fragment);
@@ -2511,11 +2541,16 @@
 
         function populateCountyOptions(stateAbbr, selectedCode = '') {
             const countySelect = document.getElementById('easCountySelect');
+            const portionSelect = document.getElementById('easPortionSelect');
             if (!countySelect) {
                 return;
             }
             countySelect.innerHTML = '';
             countySelect.disabled = true;
+            if (portionSelect) {
+                portionSelect.value = '0';
+                portionSelect.disabled = true;
+            }
 
             const placeholder = document.createElement('option');
             placeholder.value = '';
@@ -2549,8 +2584,18 @@
             });
 
             countySelect.disabled = false;
+            if (portionSelect) {
+                portionSelect.disabled = false;
+            }
             if (selectedCode) {
-                countySelect.value = selectedCode;
+                const normalized = normalizeSameCode(selectedCode);
+                if (normalized) {
+                    const baseCode = `0${normalized.slice(1)}`;
+                    countySelect.value = baseCode;
+                    if (portionSelect) {
+                        portionSelect.value = normalized[0] || '0';
+                    }
+                }
             }
         }
 
@@ -2573,10 +2618,11 @@
                     code,
                     description: code,
                     pMeaning: null,
+                    pDigit: code ? code[0] : '0',
                     isStatewide: false,
                 };
                 const portion = detail.pMeaning ? detail.pMeaning : `P=${escapeHtml(detail.code[0])}`;
-                const portionLabel = detail.isStatewide ? 'Entire jurisdiction' : portion;
+                const portionLabel = detail.isStatewide && detail.pDigit === '0' ? 'Entire jurisdiction' : portion;
                 return `
                     <div class="border rounded-3 p-2 bg-dark bg-opacity-10 d-flex align-items-center justify-content-between mb-2 gap-3">
                         <div class="flex-grow-1">
@@ -2674,6 +2720,7 @@
         function handleAddSameCode() {
             const stateSelect = document.getElementById('easStateSelect');
             const countySelect = document.getElementById('easCountySelect');
+            const portionSelect = document.getElementById('easPortionSelect');
             if (!stateSelect || !countySelect) {
                 return;
             }
@@ -2683,10 +2730,19 @@
                 setEasGeneratorStatus('Select a state and county before adding a location code.', 'warning');
                 return;
             }
-            addSameCodes([countyCode]);
+            const normalizedCounty = normalizeSameCode(countyCode);
+            if (!normalizedCounty) {
+                setEasGeneratorStatus('Unable to determine the SAME code for the selected area.', 'danger');
+                return;
+            }
+            const portionValue = portionSelect ? portionSelect.value : '0';
+            const normalizedPortion = /^[0-9]$/.test(portionValue) ? portionValue : '0';
+            const combinedCode = `${normalizedPortion}${normalizedCounty.slice(1)}`;
+            addSameCodes([combinedCode]);
         }
 
         function initializeSameCodeSelector() {
+            populatePortionOptions();
             populateStateOptions();
             populateCountyOptions('');
             updateSelectedSameCodesDisplay();
