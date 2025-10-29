@@ -111,6 +111,7 @@ def _fetch_intersections_per_boundary(alert: CAPAlert, alert_geom) -> List[Dict[
                     SELECT
                         ST_Intersects(:alert_geom, boundary.geom) AS intersects,
                         ST_Area(ST_Intersection(:alert_geom, boundary.geom)) AS intersection_area
+                    FROM boundary
                     """
                 ),
                 {"alert_geom": alert_geom, "boundary_geom": boundary_geom_param},
@@ -180,6 +181,7 @@ def calculate_alert_intersections(alert: CAPAlert) -> int:
     try:
         intersecting_boundaries = _fetch_bulk_intersections(alert_geom)
     except Exception as exc:  # pragma: no cover - defensive
+        db.session.rollback()
         _logger().warning(
             "Bulk intersection query failed for alert %s, falling back to per-boundary processing: %s",
             alert.identifier,
