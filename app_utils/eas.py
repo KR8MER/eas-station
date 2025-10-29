@@ -35,6 +35,8 @@ MANUAL_FIPS_ENV_TOKENS = {'ALL', 'ANY', 'US', 'USA', '*'}
 SAME_BAUD = Fraction(3125, 6)  # 520.83… baud (520 5/6 per §11.31)
 SAME_MARK_FREQ = float(SAME_BAUD * 4)  # 2083 1/3 Hz
 SAME_SPACE_FREQ = float(SAME_BAUD * 3)  # 1562.5 Hz
+SAME_PREAMBLE_BYTE = 0xAB
+SAME_PREAMBLE_REPETITIONS = 16
 
 
 def _clean_identifier(value: str) -> str:
@@ -454,7 +456,21 @@ def _compose_message_text(alert: object) -> str:
     return text or "A new emergency alert has been received."
 
 
-def _encode_same_bits(message: str) -> List[int]:
+def _same_preamble_bits(repeats: int = SAME_PREAMBLE_REPETITIONS) -> List[int]:
+    """Encode the SAME preamble (0xAB) bytes with start/stop framing."""
+
+    bits: List[int] = []
+    repeats = max(1, int(repeats))
+    for _ in range(repeats):
+        bits.append(0)
+        for i in range(8):
+            bits.append((SAME_PREAMBLE_BYTE >> i) & 1)
+        bits.append(1)
+
+    return bits
+
+
+def _encode_same_bits(message: str, *, include_preamble: bool = False) -> List[int]:
     """Encode an ASCII SAME header using NRZ AFSK framing.
 
     Section 11.31 specifies 520 5/6 baud transmission with one start bit (0),
@@ -463,6 +479,8 @@ def _encode_same_bits(message: str) -> List[int]:
     """
 
     bits: List[int] = []
+    if include_preamble:
+        bits.extend(_same_preamble_bits())
     for char in message + '\r':
         ascii_code = ord(char) & 0x7F
 
@@ -696,7 +714,7 @@ class EASAudioGenerator:
         audio_filename = f"{base_name}.wav"
         audio_path = os.path.join(self.output_dir, audio_filename)
 
-        same_bits = _encode_same_bits(header)
+        same_bits = _encode_same_bits(header, include_preamble=True)
         amplitude = 0.7 * 32767
         header_samples = _generate_fsk_samples(
             same_bits,
@@ -789,7 +807,7 @@ class EASAudioGenerator:
                     tts_warning = 'No TTS provider configured; supply narration manually.'
 
         eom_header = build_eom_header(self.config)
-        eom_bits = _encode_same_bits(eom_header)
+        eom_bits = _encode_same_bits(eom_header, include_preamble=True)
         eom_header_samples = _generate_fsk_samples(
             eom_bits,
             sample_rate=self.sample_rate,
