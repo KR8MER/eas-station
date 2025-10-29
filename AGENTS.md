@@ -12,6 +12,14 @@ This document provides coding standards and guidelines for AI agents (including 
 4. **Focused Changes**: Keep fixes targeted to the specific issue
 5. **Document Changes**: Update relevant documentation when adding features
 
+### Modularity & File Size
+
+- **Prefer small, focused modules** – Aim to keep Python modules under ~400 lines and HTML templates under ~300 lines.
+- **Refactor before things get unwieldy** – When adding more than one new class or multiple functions to a module already above 350 lines, create or use a sibling module/package instead of expanding the existing file.
+- **Extract repeated markup** – Move duplicated template fragments into `templates/partials/` and use Flask blueprints or helper modules to share behavior.
+- **Stay consistent with existing structure** – Place new Python packages within `app_core/` or `app_utils/` as appropriate, and keep front-end assets organized under `static/` and `templates/` using the same layout patterns as current files.
+- **Pre-commit self-check** – Confirm any touched file still meets these size expectations or has been split appropriately before finalizing changes.
+
 ---
 
 ## 📝 Code Style Standards
@@ -520,6 +528,7 @@ Before committing code, verify:
 - [ ] Follows Python PEP 8 style (4-space indentation)
 - [ ] Uses existing logger, not new logger instance
 - [ ] Includes proper error handling with specific exceptions
+- [ ] Touched files remain within recommended size guidelines or were refactored into smaller units
 - [ ] No secrets or credentials in code
 - [ ] No `.env` file committed (check git status)
 - [ ] Templates extend `base.html` with theme support
