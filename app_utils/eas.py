@@ -976,11 +976,22 @@ class EASBroadcaster:
 
         status = (getattr(alert, 'status', '') or '').lower()
         message_type = (payload.get('message_type') or getattr(alert, 'message_type', '') or '').lower()
+        event_name = (getattr(alert, 'event', '') or payload.get('event') or '').strip().lower()
+
+        suppressed_events = {
+            'special weather statement',
+            'dense fog advisory',
+        }
+
         if status not in {'actual', 'test'}:
             self.logger.debug('Skipping EAS generation for status %s', status)
             return
         if message_type not in {'alert', 'update', 'test'}:
             self.logger.debug('Skipping EAS generation for message type %s', message_type)
+            return
+        if event_name in suppressed_events:
+            pretty_event = getattr(alert, 'event', '') or payload.get('event') or event_name
+            self.logger.info('Skipping EAS generation for event %s', pretty_event)
             return
 
         header, location_codes, event_code = build_same_header(alert, payload, self.config, self.location_settings)

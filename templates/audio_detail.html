@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Audio Detail - {{ event_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h1 class="h3 text-primary mb-0">
+                <i class="fas fa-headphones"></i> Broadcast Audio Detail
+            </h1>
+            <div class="d-flex gap-2 flex-wrap">
+                <button type="button" class="btn btn-info" onclick="window.print()">
+                    <i class="fas fa-print"></i> Print
+                </button>
+                {% if audio_url %}
+                <a class="btn btn-primary" href="{{ audio_url }}" target="_blank" rel="noopener">
+                    <i class="fas fa-download"></i> Download Audio
+                </a>
+                {% endif %}
+                {% if text_url %}
+                <a class="btn btn-outline-info" href="{{ text_url }}" target="_blank" rel="noopener">
+                    <i class="fas fa-file-alt"></i> Download Summary
+                </a>
+                {% endif %}
+                {% if eom_url %}
+                <a class="btn btn-outline-warning" href="{{ eom_url }}" target="_blank" rel="noopener">
+                    <i class="fas fa-broadcast-tower"></i> Download EOM
+                </a>
+                {% endif %}
+                <a class="btn btn-outline-secondary" href="{{ url_for('audio_history') }}">
+                    <i class="fas fa-list"></i> Back to Archive
+                </a>
+                {% if alert %}
+                <a class="btn btn-outline-primary" href="{{ url_for('alert_detail', alert_id=alert.id) }}">
+                    <i class="fas fa-bullhorn"></i> View Alert
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-0">
+                            <i class="fas fa-wave-square"></i> Audio Playback
+                        </h5>
+                        <small class="text-muted">Generated {{ message.created_at | format_local_datetime(false) if message.created_at else 'Unknown time' }}</small>
+                    </div>
+                    {% if message.same_header %}
+                    <span class="badge bg-secondary">SAME</span>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if audio_url %}
+                    <audio controls class="w-100 mb-3">
+                        <source src="{{ audio_url }}" type="audio/wav">
+                        Your browser does not support the audio element.
+                    </audio>
+                    {% else %}
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-circle"></i> Audio file is not available for download.
+                    </div>
+                    {% endif %}
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">Event</dt>
+                        <dd class="col-sm-8">{{ event_name }}</dd>
+                        <dt class="col-sm-4">SAME Header</dt>
+                        <dd class="col-sm-8"><code>{{ message.same_header }}</code></dd>
+                        {% if severity %}
+                        <dt class="col-sm-4">Severity</dt>
+                        <dd class="col-sm-8">{{ severity }}</dd>
+                        {% endif %}
+                        {% if status %}
+                        <dt class="col-sm-4">Status</dt>
+                        <dd class="col-sm-8">{{ status }}</dd>
+                        {% endif %}
+                        {% if metadata.get('event_code') %}
+                        <dt class="col-sm-4">Event Code</dt>
+                        <dd class="col-sm-8">{{ metadata.get('event_code') }}</dd>
+                        {% endif %}
+                        {% if locations %}
+                        <dt class="col-sm-4">Locations</dt>
+                        <dd class="col-sm-8">{{ locations | join(', ') }}</dd>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+
+            {% if summary_data %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-file-alt"></i> Narration Summary
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if summary_data.message_text %}
+                    <h6>Message Text</h6>
+                    <p class="alert-content">{{ summary_data.message_text | replace('\n', '<br>') | safe }}</p>
+                    {% endif %}
+                    <dl class="row mb-0">
+                        {% if summary_data.headline %}
+                        <dt class="col-sm-4">Headline</dt>
+                        <dd class="col-sm-8">{{ summary_data.headline }}</dd>
+                        {% endif %}
+                        {% if summary_data.instruction %}
+                        <dt class="col-sm-4">Instruction</dt>
+                        <dd class="col-sm-8">{{ summary_data.instruction }}</dd>
+                        {% endif %}
+                        {% if summary_data.location_codes %}
+                        <dt class="col-sm-4">Location Codes</dt>
+                        <dd class="col-sm-8">{{ summary_data.location_codes | join(', ') }}</dd>
+                        {% endif %}
+                        {% if summary_data.voiceover_provider %}
+                        <dt class="col-sm-4">Voice Provider</dt>
+                        <dd class="col-sm-8">{{ summary_data.voiceover_provider }}</dd>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-database"></i> Raw Metadata
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <pre class="bg-light p-3 rounded small">{{ metadata | tojson(indent=2) }}</pre>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-info-circle"></i> Transmission Info
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Message ID</dt>
+                        <dd class="col-sm-7">#{{ message.id }}</dd>
+                        <dt class="col-sm-5">Created</dt>
+                        <dd class="col-sm-7">{{ message.created_at | format_local_datetime(false) if message.created_at else 'Unknown' }}</dd>
+                        {% if metadata.get('eom_filename') %}
+                        <dt class="col-sm-5">EOM File</dt>
+                        <dd class="col-sm-7">{{ metadata.get('eom_filename') }}</dd>
+                        {% endif %}
+                        {% if message.text_filename %}
+                        <dt class="col-sm-5">Summary File</dt>
+                        <dd class="col-sm-7">{{ message.text_filename }}</dd>
+                        {% endif %}
+                        {% if message.audio_filename %}
+                        <dt class="col-sm-5">Audio File</dt>
+                        <dd class="col-sm-7">{{ message.audio_filename }}</dd>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+
+            {% if alert %}
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-bullhorn"></i> Source Alert
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-1"><strong>{{ alert.event }}</strong></p>
+                    <p class="text-muted small mb-3">Identifier: {{ alert.identifier }}</p>
+                    {% if alert.headline %}
+                    <p class="mb-2">{{ alert.headline }}</p>
+                    {% endif %}
+                    {% if alert.expires %}
+                    <p class="small text-muted mb-0">Expires {{ alert.expires | format_local_datetime(false) }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

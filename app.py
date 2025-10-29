@@ -803,6 +803,43 @@ def alerts():
 
             pagination = MockPagination(page, per_page, total_count, alerts_list)
 
+        audio_map: Dict[int, List[Dict[str, Any]]] = {}
+        if alerts_list:
+            alert_ids = [alert.id for alert in alerts_list if getattr(alert, 'id', None)]
+            if alert_ids:
+                try:
+                    web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+                    eas_messages = (
+                        EASMessage.query
+                        .filter(EASMessage.cap_alert_id.in_(alert_ids))
+                        .order_by(EASMessage.created_at.desc())
+                        .all()
+                    )
+
+                    def _static_path(filename: Optional[str]) -> Optional[str]:
+                        if not filename:
+                            return None
+                        parts = [web_prefix, filename] if web_prefix else [filename]
+                        return '/'.join(part for part in parts if part)
+
+                    for message in eas_messages:
+                        if not message.cap_alert_id:
+                            continue
+                        audio_path = _static_path(message.audio_filename)
+                        text_path = _static_path(message.text_filename)
+                        metadata = dict(message.metadata_payload or {})
+                        audio_map.setdefault(message.cap_alert_id, []).append({
+                            'id': message.id,
+                            'created_at': message.created_at,
+                            'audio_url': url_for('static', filename=audio_path) if audio_path else None,
+                            'text_url': url_for('static', filename=text_path) if text_path else None,
+                            'detail_url': url_for('audio_detail', message_id=message.id),
+                            'event': metadata.get('event'),
+                            'severity': metadata.get('severity'),
+                        })
+                except Exception as audio_error:
+                    logger.warning('Unable to attach EAS audio metadata: %s', audio_error)
+
         try:
             total_alerts = CAPAlert.query.count()
             active_alerts = get_active_alerts_query().count()
@@ -849,7 +886,8 @@ def alerts():
                                statuses=statuses,
                                severities=severities,
                                events=events,
-                               current_filters=current_filters)
+                               current_filters=current_filters,
+                               audio_map=audio_map)
 
     except Exception as e:
         logger.error(f"Error loading alerts page: {str(e)}")
@@ -869,6 +907,251 @@ def alerts():
         </details>
         {% endif %}
         """, error=str(e), debug=traceback.format_exc() if app.debug else None)
+
+
+@app.route('/audio')
+def audio_history():
+    try:
+        eas_enabled = app.config.get('EAS_BROADCAST_ENABLED', False)
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 25, type=int)
+        per_page = min(max(per_page, 10), 100)
+
+        search = request.args.get('search', '').strip()
+        event_filter = request.args.get('event', '').strip()
+        severity_filter = request.args.get('severity', '').strip()
+        status_filter = request.args.get('status', '').strip()
+
+        base_query = db.session.query(EASMessage, CAPAlert).outerjoin(
+            CAPAlert, EASMessage.cap_alert_id == CAPAlert.id
+        )
+
+        if search:
+            search_term = f'%{search}%'
+            base_query = base_query.filter(
+                or_(
+                    CAPAlert.event.ilike(search_term),
+                    CAPAlert.headline.ilike(search_term),
+                    CAPAlert.identifier.ilike(search_term),
+                    EASMessage.same_header.ilike(search_term),
+                )
+            )
+
+        if event_filter:
+            base_query = base_query.filter(CAPAlert.event == event_filter)
+        if severity_filter:
+            base_query = base_query.filter(CAPAlert.severity == severity_filter)
+        if status_filter:
+            base_query = base_query.filter(CAPAlert.status == status_filter)
+
+        query = base_query.order_by(EASMessage.created_at.desc())
+
+        try:
+            pagination = query.paginate(
+                page=page,
+                per_page=per_page,
+                error_out=False,
+            )
+            records = pagination.items
+        except Exception as paginate_error:
+            logger.warning('Pagination error on audio archive: %s', paginate_error)
+            total_count = query.count()
+            offset = (page - 1) * per_page
+            records = query.offset(offset).limit(per_page).all()
+
+            class MockPagination:
+                def __init__(self, page, per_page, total, items):
+                    self.page = page
+                    self.per_page = per_page
+                    self.total = total
+                    self.items = items
+                    self.pages = (total + per_page - 1) // per_page if per_page > 0 else 1
+                    self.has_prev = page > 1
+                    self.has_next = page < self.pages
+                    self.prev_num = page - 1 if self.has_prev else None
+                    self.next_num = page + 1 if self.has_next else None
+
+                def iter_pages(self, left_edge=2, left_current=2, right_current=3, right_edge=2):
+                    last = self.pages
+                    for num in range(1, last + 1):
+                        if num <= left_edge or \
+                                (self.page - left_current - 1 < num < self.page + right_current) or \
+                                num > last - right_edge:
+                            yield num
+                        elif num == left_edge + 1 or num == self.page + right_current:
+                            yield None
+
+            pagination = MockPagination(page, per_page, total_count, records)
+
+        web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+
+        def _static_path(filename: Optional[str]) -> Optional[str]:
+            if not filename:
+                return None
+            parts = [web_prefix, filename] if web_prefix else [filename]
+            return '/'.join(part for part in parts if part)
+
+        messages: List[Dict[str, Any]] = []
+        for message, alert in records:
+            metadata = dict(message.metadata_payload or {})
+            event_name = (alert.event if alert and alert.event else metadata.get('event')) or 'Unknown Event'
+            severity = alert.severity if alert and alert.severity else metadata.get('severity')
+            status = alert.status if alert and alert.status else metadata.get('status')
+            audio_path = _static_path(message.audio_filename)
+            text_path = _static_path(message.text_filename)
+            eom_filename = metadata.get('eom_filename')
+            eom_path = _static_path(eom_filename) if eom_filename else None
+
+            messages.append({
+                'id': message.id,
+                'event': event_name,
+                'severity': severity,
+                'status': status,
+                'created_at': message.created_at,
+                'same_header': message.same_header,
+                'audio_url': url_for('static', filename=audio_path) if audio_path else None,
+                'text_url': url_for('static', filename=text_path) if text_path else None,
+                'detail_url': url_for('audio_detail', message_id=message.id),
+                'alert_url': url_for('alert_detail', alert_id=alert.id) if alert else None,
+                'alert_identifier': alert.identifier if alert else None,
+                'eom_url': url_for('static', filename=eom_path) if eom_path else None,
+            })
+
+        try:
+            events = [
+                row[0]
+                for row in db.session.query(CAPAlert.event)
+                .join(EASMessage, EASMessage.cap_alert_id == CAPAlert.id)
+                .filter(CAPAlert.event.isnot(None))
+                .distinct()
+                .order_by(CAPAlert.event)
+                .all()
+            ]
+
+            severities = [
+                row[0]
+                for row in db.session.query(CAPAlert.severity)
+                .join(EASMessage, EASMessage.cap_alert_id == CAPAlert.id)
+                .filter(CAPAlert.severity.isnot(None))
+                .distinct()
+                .order_by(CAPAlert.severity)
+                .all()
+            ]
+
+            statuses = [
+                row[0]
+                for row in db.session.query(CAPAlert.status)
+                .join(EASMessage, EASMessage.cap_alert_id == CAPAlert.id)
+                .filter(CAPAlert.status.isnot(None))
+                .distinct()
+                .order_by(CAPAlert.status)
+                .all()
+            ]
+        except Exception as filter_error:
+            logger.warning('Unable to load audio filter metadata: %s', filter_error)
+            events = []
+            severities = []
+            statuses = []
+
+        current_filters = {
+            'search': search,
+            'event': event_filter,
+            'severity': severity_filter,
+            'status': status_filter,
+            'per_page': per_page,
+        }
+
+        total_messages = EASMessage.query.count()
+
+        return render_template(
+            'audio_history.html',
+            messages=messages,
+            pagination=pagination,
+            events=events,
+            severities=severities,
+            statuses=statuses,
+            current_filters=current_filters,
+            total_messages=total_messages,
+            eas_enabled=eas_enabled,
+        )
+
+    except Exception as exc:
+        logger.error('Error loading audio archive: %s', exc)
+        return render_template_string(
+            """
+            <h1>Error Loading Audio Archive</h1>
+            <div class=\"alert alert-danger\">{{ error }}</div>
+            <p><a href='/' class='btn btn-primary'>← Back to Main</a></p>
+            """,
+            error=str(exc),
+        )
+
+
+@app.route('/audio/<int:message_id>')
+def audio_detail(message_id: int):
+    try:
+        message = EASMessage.query.get_or_404(message_id)
+        alert = CAPAlert.query.get(message.cap_alert_id) if message.cap_alert_id else None
+        metadata = dict(message.metadata_payload or {})
+        event_name = (alert.event if alert and alert.event else metadata.get('event')) or 'Unknown Event'
+        severity = alert.severity if alert and alert.severity else metadata.get('severity')
+        status = alert.status if alert and alert.status else metadata.get('status')
+        same_locations = metadata.get('locations')
+        if isinstance(same_locations, list):
+            locations = same_locations
+        elif same_locations is None:
+            locations = []
+        else:
+            locations = [str(same_locations)]
+
+        web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+
+        def _static_path(filename: Optional[str]) -> Optional[str]:
+            if not filename:
+                return None
+            parts = [web_prefix, filename] if web_prefix else [filename]
+            return '/'.join(part for part in parts if part)
+
+        audio_path = _static_path(message.audio_filename)
+        text_path = _static_path(message.text_filename)
+        eom_filename = metadata.get('eom_filename')
+        eom_path = _static_path(eom_filename) if eom_filename else None
+
+        audio_url = url_for('static', filename=audio_path) if audio_path else None
+        text_url = url_for('static', filename=text_path) if text_path else None
+        eom_url = url_for('static', filename=eom_path) if eom_path else None
+
+        summary_data: Optional[Dict[str, Any]] = None
+        output_root = str(app.config.get('EAS_OUTPUT_DIR') or '').strip()
+        if output_root and message.text_filename:
+            summary_path = os.path.join(output_root, message.text_filename)
+            if os.path.exists(summary_path):
+                try:
+                    with open(summary_path, 'r', encoding='utf-8') as handle:
+                        summary_data = json.load(handle)
+                except Exception as summary_error:
+                    logger.debug('Unable to read audio summary %s: %s', summary_path, summary_error)
+
+        return render_template(
+            'audio_detail.html',
+            message=message,
+            alert=alert,
+            metadata=metadata,
+            summary_data=summary_data,
+            audio_url=audio_url,
+            text_url=text_url,
+            eom_url=eom_url,
+            event_name=event_name,
+            severity=severity,
+            status=status,
+            locations=locations,
+        )
+
+    except Exception as exc:
+        logger.error('Error loading audio detail %s: %s', message_id, exc)
+        flash('Unable to load audio detail at this time.', 'error')
+        return redirect(url_for('audio_history'))
+
 
 @app.route('/api/alerts/<int:alert_id>/geometry')
 def get_alert_geometry(alert_id):
@@ -1014,12 +1297,49 @@ def alert_detail(alert_id):
         county_coverage = coverage_data.get('county', {}).get('coverage_percentage', 0)
         is_actually_county_wide = county_coverage >= 95.0  # Consider 95%+ as county-wide
 
+        audio_entries: List[Dict[str, Any]] = []
+        web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+
+        def _static_path(filename: Optional[str]) -> Optional[str]:
+            if not filename:
+                return None
+            parts = [web_prefix, filename] if web_prefix else [filename]
+            return '/'.join(part for part in parts if part)
+
+        try:
+            messages = (
+                EASMessage.query
+                .filter(EASMessage.cap_alert_id == alert_id)
+                .order_by(EASMessage.created_at.desc())
+                .all()
+            )
+
+            for message in messages:
+                metadata = dict(message.metadata_payload or {})
+                audio_path = _static_path(message.audio_filename)
+                text_path = _static_path(message.text_filename)
+                eom_filename = metadata.get('eom_filename')
+                eom_path = _static_path(eom_filename) if eom_filename else None
+                audio_entries.append({
+                    'id': message.id,
+                    'created_at': message.created_at,
+                    'same_header': message.same_header,
+                    'audio_url': url_for('static', filename=audio_path) if audio_path else None,
+                    'text_url': url_for('static', filename=text_path) if text_path else None,
+                    'detail_url': url_for('audio_detail', message_id=message.id),
+                    'metadata': metadata,
+                    'eom_url': url_for('static', filename=eom_path) if eom_path else None,
+                })
+        except Exception as audio_error:
+            logger.warning('Unable to load audio archive for alert %s: %s', alert.identifier, audio_error)
+
         return render_template('alert_detail.html',
                              alert=alert,
                              intersections=intersections,
                              is_county_wide=is_county_wide,
                              is_actually_county_wide=is_actually_county_wide,
-                             coverage_data=coverage_data)
+                             coverage_data=coverage_data,
+                             audio_entries=audio_entries)
 
     except Exception as e:
         logger.error(f"Error in alert_detail route: {str(e)}")

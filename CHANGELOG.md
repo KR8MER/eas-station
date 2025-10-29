@@ -6,6 +6,10 @@ tracks releases under the 2.1.x series.
 
 ## [Unreleased]
 ### Added
+- Introduced a dedicated Audio Archive history view with filtering, playback,
+  printing, and Excel export support for every generated SAME package.
+- Surfaced archived audio links throughout the alert history and detail pages so
+  operators can quickly review transmissions tied to a CAP product.
 - Added a `manual_eas_event.py` utility that ingests raw CAP XML (e.g., RWT/RMT tests),
   validates the targeted SAME/FIPS codes, and drives the broadcaster so operators can
   trigger manual transmissions with full auditing.
@@ -31,6 +35,7 @@ tracks releases under the 2.1.x series.
   can either rely on the bundled `alerts-db` PostGIS container or connect to an
   existing deployment without editing the primary compose file.
 ### Changed
+- Suppressed automatic EAS generation for Special Weather Statements and Dense Fog Advisories to align with standard activation practices.
 - Clarified in the README and dependency notes that PostgreSQL with PostGIS must run in a dedicated container separate from the application services.
 - Documented a single-line command for cloning the Experimental branch and launching the Docker Compose stack so operators can bootstrap quickly.
 - Clarified the update instructions to explicitly pull the Experimental branch when refreshing deployments.
