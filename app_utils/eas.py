@@ -387,6 +387,9 @@ def build_same_header(alert: object, payload: Dict[str, object], config: Dict[st
     event_name = (getattr(alert, 'event', '') or '').strip()
     event_candidates = _collect_event_code_candidates(alert, payload)
     event_code = resolve_event_code(event_name, event_candidates)
+    if not event_code:
+        pretty_event = event_name or (payload.get('event') or '').strip() or 'unknown event'
+        raise ValueError(f'No authorised SAME event code available for {pretty_event}.')
     if 'resolved_event_code' not in payload:
         payload['resolved_event_code'] = event_code
 
@@ -652,7 +655,7 @@ class EASAudioGenerator:
         audio_path = os.path.join(self.output_dir, audio_filename)
         text_path = os.path.join(self.output_dir, text_filename)
 
-        same_bits = _encode_same_bits(header)
+        same_bits = _encode_same_bits(header, include_preamble=True)
         amplitude = 0.7 * 32767
         header_samples = _generate_fsk_samples(
             same_bits,
@@ -752,7 +755,7 @@ class EASAudioGenerator:
         silence_after_header: float = 1.0,
     ) -> Dict[str, object]:
         amplitude = 0.7 * 32767
-        same_bits = _encode_same_bits(header)
+        same_bits = _encode_same_bits(header, include_preamble=True)
         header_samples = _generate_fsk_samples(
             same_bits,
             sample_rate=self.sample_rate,
@@ -994,7 +997,17 @@ class EASBroadcaster:
             self.logger.info('Skipping EAS generation for event %s', pretty_event)
             return
 
-        header, location_codes, event_code = build_same_header(alert, payload, self.config, self.location_settings)
+        try:
+            header, location_codes, event_code = build_same_header(
+                alert,
+                payload,
+                self.config,
+                self.location_settings,
+            )
+        except ValueError as exc:
+            self.logger.info('Skipping EAS generation: %s', exc)
+            return
+
         audio_filename, text_filename, message_text = self.audio_generator.build_files(alert, payload, header, location_codes)
 
         try:

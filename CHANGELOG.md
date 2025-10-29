@@ -69,6 +69,11 @@ tracks releases under the 2.1.x series.
 - Manual CAP broadcasts enforce configurable SAME event allow-lists and display the
   selected code names in CLI output and audit trails while the broadcaster consumes
   the resolved identifiers for header generation.
+- Ensured automated and manual SAME headers include the sixteen 0xAB preamble bytes
+  before each burst so the transmitted RTTY data fully complies with 47 CFR §11.31.
+- Restricted automatic EAS activations to CAP products whose SAME event codes match
+  the authorised 47 CFR §11.31(d–f) tables, preventing unintended broadcasts for
+  unclassified alerts.
 ### Fixed
 - Corrected SAME/RTTY generation to follow 47 CFR §11.31 framing (seven LSB-first ASCII bits, trailing null bit, and precise 520 5⁄6 baud timing) so the AFSK bursts decode at the proper pitch and speed.
 - Corrected the generated End Of Message burst to prepend the sixteen 0xAB preamble bytes so decoders reliably synchronise with the termination header.

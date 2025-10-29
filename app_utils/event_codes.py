@@ -110,7 +110,7 @@ def resolve_event_code_from_name(name: str) -> Optional[str]:
     return EVENT_NAME_LOOKUP.get(_normalise_name(name))
 
 
-def resolve_event_code(event_name: str, candidates: Sequence[str]) -> str:
+def resolve_event_code(event_name: str, candidates: Sequence[str]) -> Optional[str]:
     for candidate in candidates:
         normalised = normalise_event_code(candidate)
         if normalised and normalised in EVENT_CODE_REGISTRY:
@@ -120,7 +120,7 @@ def resolve_event_code(event_name: str, candidates: Sequence[str]) -> str:
     if by_name:
         return by_name
 
-    return 'CEM'
+    return None
 
 
 def describe_event_code(code: str) -> str:
