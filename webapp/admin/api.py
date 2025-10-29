@@ -172,6 +172,73 @@ def register_api_routes(app, logger):
             county_coverage = coverage_data.get('county', {}).get('coverage_percentage', 0)
             is_actually_county_wide = county_coverage >= 95.0
 
+            if not coverage_data and is_county_wide:
+                boundary_totals = (
+                    db.session.query(Boundary.type, func.count(Boundary.id))
+                    .group_by(Boundary.type)
+                    .all()
+                )
+
+                if boundary_totals:
+                    coverage_data = {}
+                    for boundary_type, boundary_count in boundary_totals:
+                        entry = {
+                            'total_boundaries': boundary_count,
+                            'affected_boundaries': boundary_count,
+                            'coverage_percentage': 100.0,
+                            'total_area_sqm': None,
+                            'intersected_area_sqm': None,
+                            'is_estimated': True,
+                        }
+
+                        if boundary_type == 'county':
+                            coverage_data['county'] = entry
+                        else:
+                            coverage_data[boundary_type] = entry
+
+                    if 'county' not in coverage_data:
+                        coverage_data['county'] = {
+                            'total_boundaries': 1,
+                            'affected_boundaries': 1,
+                            'coverage_percentage': 100.0,
+                            'total_area_sqm': None,
+                            'intersected_area_sqm': None,
+                            'is_estimated': True,
+                        }
+
+                    county_coverage = coverage_data['county']['coverage_percentage']
+                    is_actually_county_wide = True
+
+            suppress_boundary_details = is_actually_county_wide
+
+            boundary_summary: List[Dict[str, Any]] = []
+            for boundary_type, data in coverage_data.items() if coverage_data else []:
+                if boundary_type == 'county':
+                    continue
+
+                total_boundaries = data.get('total_boundaries')
+                affected_boundaries = data.get('affected_boundaries')
+                coverage_percentage = data.get('coverage_percentage', 0.0)
+
+                is_full_coverage = False
+                if total_boundaries is not None and affected_boundaries is not None:
+                    is_full_coverage = affected_boundaries >= total_boundaries > 0
+                else:
+                    is_full_coverage = coverage_percentage >= 95.0
+
+                boundary_summary.append(
+                    {
+                        'type': boundary_type,
+                        'total_boundaries': total_boundaries,
+                        'affected_boundaries': affected_boundaries,
+                        'coverage_percentage': coverage_percentage,
+                        'is_full_coverage': is_full_coverage,
+                        'is_estimated': data.get('is_estimated', False),
+                    }
+                )
+
+            boundary_summary.sort(key=lambda item: item['type'])
+
             audio_entries: List[Dict[str, Any]] = []
             static_prefix = get_eas_static_prefix()
 
@@ -234,6 +301,8 @@ def register_api_routes(app, logger):
                 is_actually_county_wide=is_actually_county_wide,
                 coverage_data=coverage_data,
                 audio_entries=audio_entries,
+                boundary_summary=boundary_summary,
+                suppress_boundary_details=suppress_boundary_details,
             )
 
         except Exception as exc:

@@ -508,70 +508,87 @@
 
                 <!-- Sidebar -->
                 <div class="col-lg-4">
-                    <!-- Affected Boundaries -->
-                    {% if intersections %}
                     <div class="card mb-4">
                         <div class="card-header">
+                            {% set show_county_summary = suppress_boundary_details if suppress_boundary_details is defined else False %}
                             <h5 class="mb-0">
                                 <i class="fas fa-map-marked-alt"></i>
-                                {% if coverage_data and coverage_data.get('county') and coverage_data['county']['coverage_percentage'] >= 95 %}
-                                Emergency Service Coverage - All County Boundaries
+                                {% if show_county_summary %}
+                                    County-Wide Coverage
+                                {% elif coverage_data and coverage_data.get('county') and coverage_data['county']['coverage_percentage'] >= 95 %}
+                                    Emergency Service Coverage - All County Boundaries
                                 {% else %}
-                                Affected Boundaries
+                                    Affected Boundaries
                                 {% endif %}
-                                <span class="badge bg-secondary">{{ intersections|length }}</span>
+                                {% if intersections and not show_county_summary %}
+                                    <span class="badge bg-secondary">{{ intersections|length }}</span>
+                                {% endif %}
                             </h5>
                         </div>
                         <div class="card-body">
-                            <!-- County Coverage Summary -->
-                            {% if coverage_data and coverage_data.get('county') %}
-                                {% set county_coverage = coverage_data['county']['coverage_percentage'] %}
+                            {% set county_data = coverage_data.get('county') if coverage_data else None %}
+                            {% if county_data %}
+                                {% set county_coverage = county_data.get('coverage_percentage', 0) %}
                                 <div class="affected-summary">
-                                    <h6>
-                                        <i class="fas fa-{% if county_coverage >= 95 %}globe-americas text-success{% elif county_coverage >= 75 %}map text-warning{% else %}map-marker-alt text-info{% endif %}"></i>
-                                        {% if county_coverage >= 95 %}
+                                    {% if show_county_summary %}
+                                        <h6>
+                                            <i class="fas fa-globe-americas text-success"></i>
                                             County-Wide Impact
-                                        {% elif county_coverage >= 75 %}
-                                            Major County Impact
-                                        {% elif county_coverage >= 50 %}
-                                            Significant County Impact
-                                        {% else %}
-                                            Localized County Impact
+                                        </h6>
+                                        <p class="mb-2">
+                                            This alert covers all configured emergency service boundaries across
+                                            {{ location_settings.county_name }}.
+                                        </p>
+                                        {% if county_data.get('is_estimated') %}
+                                        <p class="mb-0 text-muted">
+                                            Coverage is estimated because the alert did not include explicit geometry.
+                                        </p>
                                         {% endif %}
-                                    </h6>
-                                    <p class="mb-2">
-                                        This alert covers <strong>{{ county_coverage }}%</strong> of {{ location_settings.county_name }}
-                                        {% if county_coverage >= 95 %}
-                                            , affecting virtually all emergency service boundaries.
-                                        {% elif county_coverage >= 75 %}
-                                            , affecting most emergency service boundaries.
-                                        {% elif county_coverage >= 50 %}
-                                            , affecting many emergency service boundaries.
-                                        {% else %}
-                                            , affecting some emergency service boundaries.
-                                        {% endif %}
-                                    </p>
+                                    {% else %}
+                                        <h6>
+                                            <i class="fas fa-{% if county_coverage >= 95 %}globe-americas text-success{% elif county_coverage >= 75 %}map text-warning{% else %}map-marker-alt text-info{% endif %}"></i>
+                                            {% if county_coverage >= 95 %}
+                                                County-Wide Impact
+                                            {% elif county_coverage >= 75 %}
+                                                Major County Impact
+                                            {% elif county_coverage >= 50 %}
+                                                Significant County Impact
+                                            {% else %}
+                                                Localized County Impact
+                                            {% endif %}
+                                        </h6>
+                                        <p class="mb-2">
+                                            This alert covers <strong>{{ county_coverage }}%</strong> of {{ location_settings.county_name }}
+                                            {% if county_coverage >= 95 %}
+                                                , affecting virtually all emergency service boundaries.
+                                            {% elif county_coverage >= 75 %}
+                                                , affecting most emergency service boundaries.
+                                            {% elif county_coverage >= 50 %}
+                                                , affecting many emergency service boundaries.
+                                            {% else %}
+                                                , affecting some emergency service boundaries.
+                                            {% endif %}
+                                        </p>
 
-                                    <!-- Coverage breakdown -->
-                                    {% if coverage_data %}
-                                    <div class="coverage-breakdown">
-                                        <small class="text-muted">Coverage by Service Type:</small>
-                                        <div class="row mt-2">
-                                            {% for service_type, data in coverage_data.items() %}
-                                                {% if service_type != 'county' and data.coverage_percentage > 0 %}
-                                                <div class="col-auto">
-                                                    <span class="badge bg-{% if data.coverage_percentage >= 95 %}success{% elif data.coverage_percentage >= 75 %}warning{% elif data.coverage_percentage >= 50 %}info{% else %}secondary{% endif %} me-1">
-                                                        {{ service_type.title() }}: {{ data.coverage_percentage }}%
-                                                    </span>
-                                                </div>
-                                                {% endif %}
-                                            {% endfor %}
+                                        {% if coverage_data %}
+                                        <div class="coverage-breakdown">
+                                            <small class="text-muted">Coverage by Service Type:</small>
+                                            <div class="row mt-2">
+                                                {% for service_type, data in coverage_data.items() %}
+                                                    {% if service_type != 'county' and data.coverage_percentage > 0 %}
+                                                    <div class="col-auto">
+                                                        <span class="badge bg-{% if data.coverage_percentage >= 95 %}success{% elif data.coverage_percentage >= 75 %}warning{% elif data.coverage_percentage >= 50 %}info{% else %}secondary{% endif %} me-1">
+                                                            {{ service_type.title() }}: {{ data.coverage_percentage }}%
+                                                        </span>
+                                                    </div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </div>
                                         </div>
-                                    </div>
+                                        {% endif %}
                                     {% endif %}
                                 </div>
                             {% else %}
-                                <!-- Fallback for when detailed coverage isn't calculated yet -->
                                 {% set area_lower = alert.area_desc.lower() if alert.area_desc else '' %}
                                 {% set is_county_wide_fallback = (
                                     area_lower and (
@@ -592,119 +609,142 @@
                                 {% endif %}
                             {% endif %}
 
-                            <!-- Group boundaries by type with dynamic coverage -->
-                            {% set boundary_groups = intersections | groupby('1.type') %}
-                            {% for boundary_type, boundaries in boundary_groups %}
-                            <div class="boundary-type-group">
-
-                                <!-- Create deduplicated list by name -->
-                                {% set unique_names = [] %}
-                                {% for intersection, boundary in boundaries %}
-                                    {% if boundary.name not in unique_names %}
-                                        {% set _ = unique_names.append(boundary.name) %}
-                                    {% endif %}
-                                {% endfor %}
-
-                                <div class="boundary-type-header">
-                                    <i class="fas fa-{% if boundary_type == 'fire' %}fire{% elif boundary_type == 'ems' %}ambulance{% elif boundary_type == 'electric' %}bolt{% elif boundary_type == 'township' %}home{% elif boundary_type == 'village' %}building{% elif boundary_type == 'telephone' %}phone{% elif boundary_type == 'school' %}school{% else %}map{% endif %}"></i>
-                                    {{ boundary_type.title() }}{% if boundary_type.endswith('s') %}{% else %}s{% endif %}
-                                    <span class="badge bg-primary">{{ unique_names|length }}</span>
-
-                                    <!-- Dynamic Coverage Badge -->
-                                    {% if coverage_data and coverage_data.get(boundary_type) %}
-                                        {% set coverage_pct = coverage_data[boundary_type]['coverage_percentage'] %}
-                                        {% if coverage_pct >= 95 %}
-                                            <span class="coverage-badge bg-success">{{ coverage_pct }}% Coverage</span>
-                                        {% elif coverage_pct >= 75 %}
-                                            <span class="coverage-badge bg-warning">{{ coverage_pct }}% Coverage</span>
-                                        {% elif coverage_pct >= 50 %}
-                                            <span class="coverage-badge bg-info">{{ coverage_pct }}% Coverage</span>
-                                        {% else %}
-                                            <span class="coverage-badge bg-secondary">{{ coverage_pct }}% Coverage</span>
-                                        {% endif %}
-
-                                        <!-- Additional coverage details -->
-                                        <small class="text-muted ms-2">
-                                            ({{ coverage_data[boundary_type]['affected_boundaries'] }} of {{ coverage_data[boundary_type]['total_boundaries'] }} {{ boundary_type }}s)
-                                        </small>
-                                    {% else %}
-                                        <!-- Fallback for when coverage data isn't available -->
-                                        {% set area_lower = alert.area_desc.lower() if alert.area_desc else '' %}
-                                        {% set is_county_wide_fallback = (
-                                            area_lower and (
-                                                'county' in area_lower or
-                                                'putnam county' in area_lower or
-                                                'entire county' in area_lower or
-                                                ('putnam' in area_lower and (area_lower.count(';') >= 2 or area_lower.count(',') >= 2))
-                                            )
-                                        ) %}
-                                        {% if is_county_wide_fallback %}
-                                            <span class="coverage-badge bg-warning">Coverage Calculating...</span>
-                                            <button type="button" class="btn btn-sm btn-outline-secondary ms-1" onclick="triggerIntersectionFix()" title="Calculate exact coverage">
-                                                <i class="fas fa-calculator"></i>
-                                            </button>
-                                        {% else %}
-                                            <span class="coverage-badge bg-secondary">Partial Coverage</span>
-                                        {% endif %}
-                                    {% endif %}
+                            {% if show_county_summary %}
+                                {% if boundary_summary %}
+                                <div class="boundary-type-group">
+                                    <div class="boundary-type-header">
+                                        <i class="fas fa-clipboard-check"></i> Services Covered
+                                    </div>
+                                    <ul class="boundary-list">
+                                        {% for summary in boundary_summary %}
+                                        <li class="boundary-item-simple">
+                                            <div class="boundary-name">
+                                                {% if summary.is_full_coverage %}
+                                                    <i class="fas fa-check-circle text-success me-1"></i>
+                                                {% endif %}
+                                                {{ summary.type.title() }}{% if summary.type.endswith('s') %}{% else %}s{% endif %}:
+                                                {% if summary.total_boundaries %}
+                                                    All {{ summary.total_boundaries }}
+                                                {% elif summary.affected_boundaries %}
+                                                    {{ summary.affected_boundaries }} affected
+                                                {% else %}
+                                                    Coverage confirmed
+                                                {% endif %}
+                                                {% if summary.coverage_percentage %}
+                                                    ({{ summary.coverage_percentage }}%)
+                                                {% endif %}
+                                                {% if summary.is_estimated %}
+                                                    <span class="badge bg-warning text-dark ms-1">Estimated</span>
+                                                {% endif %}
+                                            </div>
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
                                 </div>
-
-                                <ul class="boundary-list">
-                                    {% for name in unique_names|sort %}
-                                    <li class="boundary-item-simple">
-                                        <div class="boundary-name">{{ name }}</div>
-                                    </li>
+                                {% endif %}
+                            {% elif intersections %}
+                                {% set boundary_groups = intersections | groupby('1.type') %}
+                                {% for boundary_type, boundaries in boundary_groups %}
+                                <div class="boundary-type-group">
+                                    {% set unique_names = [] %}
+                                    {% for intersection, boundary in boundaries %}
+                                        {% if boundary.name not in unique_names %}
+                                            {% set _ = unique_names.append(boundary.name) %}
+                                        {% endif %}
                                     {% endfor %}
-                                </ul>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    {% else %}
-                    <!-- No intersections found -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h5 class="mb-0">
-                                <i class="fas fa-map-marked-alt"></i> Affected Boundaries
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            {% set area_lower = alert.area_desc.lower() if alert.area_desc else '' %}
-                            {% set is_county_wide_fallback = (
-                                area_lower and (
-                                    'county' in area_lower or
-                                    'putnam county' in area_lower or
-                                    'entire county' in area_lower or
-                                    ('putnam' in area_lower and (area_lower.count(';') >= 2 or area_lower.count(',') >= 2))
-                                )
-                            ) %}
-                            {% if is_county_wide_fallback %}
-                            <div class="text-center py-4">
-                                <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
-                                <h5>Alert - Boundary Analysis Pending</h5>
-                                <p class="text-muted">This alert affects county areas, but intersection analysis is still processing.</p>
-                                <button type="button" class="btn btn-warning" onclick="triggerIntersectionFix()">
-                                    <i class="fas fa-wrench"></i> Calculate Affected Boundaries
-                                </button>
-                            </div>
+
+                                    <div class="boundary-type-header">
+                                        <i class="fas fa-{% if boundary_type == 'fire' %}fire{% elif boundary_type == 'ems' %}ambulance{% elif boundary_type == 'electric' %}bolt{% elif boundary_type == 'township' %}home{% elif boundary_type == 'village' %}building{% elif boundary_type == 'telephone' %}phone{% elif boundary_type == 'school' %}school{% else %}map{% endif %}"></i>
+                                        {{ boundary_type.title() }}{% if boundary_type.endswith('s') %}{% else %}s{% endif %}
+                                        <span class="badge bg-primary">{{ unique_names|length }}</span>
+
+                                        {% if coverage_data and coverage_data.get(boundary_type) %}
+                                            {% set coverage = coverage_data[boundary_type]['coverage_percentage'] %}
+                                            {% if coverage >= 95 %}
+                                                <span class="coverage-badge bg-success">Full Coverage</span>
+                                            {% elif coverage >= 75 %}
+                                                <span class="coverage-badge bg-warning text-dark">High Coverage</span>
+                                            {% elif coverage >= 50 %}
+                                                <span class="coverage-badge bg-info">Moderate Coverage</span>
+                                            {% elif coverage > 0 %}
+                                                <span class="coverage-badge bg-secondary">Partial Coverage</span>
+                                            {% else %}
+                                                <span class="coverage-badge bg-secondary">No Coverage Data</span>
+                                            {% endif %}
+                                            <small class="text-muted ms-2">
+                                                ({{ coverage_data[boundary_type]['affected_boundaries'] }} of {{ coverage_data[boundary_type]['total_boundaries'] }} {{ boundary_type }}s)
+                                            </small>
+                                        {% else %}
+                                            {% set area_lower = alert.area_desc.lower() if alert.area_desc else '' %}
+                                            {% set is_county_wide_fallback = (
+                                                area_lower and (
+                                                    'county' in area_lower or
+                                                    'putnam county' in area_lower or
+                                                    'entire county' in area_lower or
+                                                    ('putnam' in area_lower and (area_lower.count(';') >= 2 or area_lower.count(',') >= 2))
+                                                )
+                                            ) %}
+                                            {% if is_county_wide_fallback %}
+                                                <span class="coverage-badge bg-warning">Coverage Calculating...</span>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary ms-1" onclick="triggerIntersectionFix()" title="Calculate exact coverage">
+                                                    <i class="fas fa-calculator"></i>
+                                                </button>
+                                            {% else %}
+                                                <span class="coverage-badge bg-secondary">Partial Coverage</span>
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
+
+                                    <ul class="boundary-list">
+                                        {% for name in unique_names|sort %}
+                                        <li class="boundary-item-simple">
+                                            <div class="boundary-name">{{ name }}</div>
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                                {% endfor %}
                             {% else %}
-                            <div class="text-center py-4">
-                                <i class="fas fa-map fa-3x text-muted mb-3"></i>
-                                <h5 class="text-muted">No Boundary Intersections Found</h5>
-                                <p class="text-muted">This alert may not intersect with any configured emergency service boundaries.</p>
-                            </div>
+                                {% set area_lower = alert.area_desc.lower() if alert.area_desc else '' %}
+                                {% set is_county_wide_fallback = (
+                                    area_lower and (
+                                        'county' in area_lower or
+                                        'putnam county' in area_lower or
+                                        'entire county' in area_lower or
+                                        ('putnam' in area_lower and (area_lower.count(';') >= 2 or area_lower.count(',') >= 2))
+                                    )
+                                ) %}
+                                {% if is_county_wide_fallback %}
+                                <div class="text-center py-4">
+                                    <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
+                                    <h5>Alert - Boundary Analysis Pending</h5>
+                                    <p class="text-muted">This alert affects county areas, but intersection analysis is still processing.</p>
+                                    <button type="button" class="btn btn-warning" onclick="triggerIntersectionFix()">
+                                        <i class="fas fa-wrench"></i> Calculate Affected Boundaries
+                                    </button>
+                                </div>
+                                {% else %}
+                                <div class="text-center py-4">
+                                    <i class="fas fa-map fa-3x text-muted mb-3"></i>
+                                    <h5 class="text-muted">No Boundary Intersections Found</h5>
+                                    <p class="text-muted">This alert may not intersect with any configured emergency service boundaries.</p>
+                                </div>
+                                {% endif %}
                             {% endif %}
                         </div>
                     </div>
-                    {% endif %}
 
                     <!-- Emergency Service Coverage Summary -->
+                    {% set show_county_summary = suppress_boundary_details if suppress_boundary_details is defined else False %}
                     {% if coverage_data and coverage_data.get('county') %}
-                        {% set county_coverage = coverage_data['county']['coverage_percentage'] %}
+                        {% set county_data = coverage_data['county'] %}
+                        {% set county_coverage = county_data.get('coverage_percentage', 0) %}
                         <div class="coverage-summary">
                             <div class="coverage-number">{{ county_coverage }}%</div>
                             <div class="coverage-label">
-                                {% if county_coverage >= 95 %}
+                                {% if show_county_summary %}
+                                    County-Wide Coverage
+                                {% elif county_coverage >= 95 %}
                                     Complete County Coverage
                                 {% elif county_coverage >= 75 %}
                                     Major County Coverage
@@ -715,10 +755,24 @@
                                 {% endif %}
                             </div>
                             <div class="coverage-sublabel">
-                                {{ intersections|length }} Affected Boundaries<br>
-                                {% set boundary_types = intersections | groupby('1.type') %}
-                                {{ boundary_types|length }} Service Types
+                                {% if show_county_summary %}
+                                    {% if boundary_summary %}
+                                        Includes
+                                        {% for summary in boundary_summary %}
+                                            {{ summary.type.title() }}{% if summary.type.endswith('s') %}{% else %}s{% endif %}{% if not loop.last %}, {% endif %}
+                                        {% endfor %}
+                                    {% else %}
+                                        All configured services
+                                    {% endif %}
+                                {% elif intersections %}
+                                    {{ intersections|length }} Affected Boundaries<br>
+                                    {% set boundary_types = intersections | groupby('1.type') %}
+                                    {{ boundary_types|length }} Service Types
+                                {% endif %}
                             </div>
+                            {% if county_data.get('is_estimated') %}
+                            <small class="text-muted d-block mt-2">Coverage estimated from alert scope text.</small>
+                            {% endif %}
                         </div>
                     {% else %}
                         {% set area_lower = alert.area_desc.lower() if alert.area_desc else '' %}
