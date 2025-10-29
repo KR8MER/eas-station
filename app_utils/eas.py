@@ -445,30 +445,63 @@ def _compose_message_text(alert: object) -> str:
 
 
 def _encode_same_bits(message: str) -> List[int]:
+    """Encode an ASCII SAME header using NRZ AFSK framing.
+
+    SAME packets are transmitted at 520.83 baud with 1 start bit (0), seven
+    ASCII data bits (least significant bit first), an even parity bit, and a
+    single stop bit (1).  The payload is terminated with a carriage return as
+    defined by the specification.
+    """
+
     bits: List[int] = []
     for char in message + '\r':
-        ascii_code = ord(char)
-        char_bits = [0]
-        for i in range(8):
-            char_bits.append((ascii_code >> i) & 1)
-        char_bits.extend([1, 1])
+        ascii_code = ord(char) & 0x7F
+
+        char_bits: List[int] = [0]
+        data_bits: List[int] = []
+        for i in range(7):
+            bit = (ascii_code >> i) & 1
+            data_bits.append(bit)
+            char_bits.append(bit)
+
+        parity_bit = 0 if sum(data_bits) % 2 == 0 else 1
+        char_bits.append(parity_bit)
+
+        # Stop bit
+        char_bits.append(1)
+
         bits.extend(char_bits)
+
     return bits
 
 
-def _generate_fsk_samples(bits: Sequence[int], sample_rate: int, bit_rate: float,
-                          mark_freq: float, space_freq: float, amplitude: float) -> List[int]:
+def _generate_fsk_samples(
+    bits: Sequence[int],
+    sample_rate: int,
+    bit_rate: float,
+    mark_freq: float,
+    space_freq: float,
+    amplitude: float,
+) -> List[int]:
+    """Render NRZ AFSK samples while preserving the fractional bit timing."""
+
     samples: List[int] = []
     phase = 0.0
     delta = math.tau / sample_rate
-    samples_per_bit = max(1, int(round(sample_rate / bit_rate)))
+    samples_per_bit = sample_rate / bit_rate
+    carry = 0.0
 
     for bit in bits:
         freq = mark_freq if bit else space_freq
         step = freq * delta
-        for _ in range(samples_per_bit):
+        total = samples_per_bit + carry
+        sample_count = max(1, int(round(total)))
+        carry = total - sample_count
+
+        for _ in range(sample_count):
             samples.append(int(math.sin(phase) * amplitude))
             phase = (phase + step) % math.tau
+
     return samples
 
 

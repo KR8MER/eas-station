@@ -52,6 +52,8 @@ tracks releases under the 2.1.x series.
   selected code names in CLI output and audit trails while the broadcaster consumes
   the resolved identifiers for header generation.
 ### Fixed
+- Corrected SAME/RTTY generation to use 7-bit even-parity framing and precise
+  520.83 baud timing so the AFSK bursts decode at the proper pitch and speed.
 - Eliminated `service "app" depends on undefined service "alerts-db"` errors by removing the optional compose overlay, deleting the unused service definition, and updating documentation to assume an external database.
 - Ensured the Manual Broadcast Builder always renders the SAME event code list so operators can
   pick the desired code even when client-side scripts are blocked or fail to load.
