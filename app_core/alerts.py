@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from flask import current_app, has_app_context
 from sqlalchemy import or_, text
@@ -14,6 +14,117 @@ from app_utils import ALERT_SOURCE_NOAA, normalize_alert_source, utc_now
 
 from .extensions import db
 from .models import CAPAlert, Intersection
+
+
+_INVALID_BOUNDARY_IDS_LOGGED: Set[object] = set()
+
+
+def _log_invalid_boundary_geometries():
+    """Log boundaries with invalid geometries so they can be corrected."""
+
+    invalid_boundaries = db.session.execute(
+        text(
+            """
+            SELECT id, name
+            FROM boundaries
+            WHERE geom IS NOT NULL
+              AND NOT ST_IsValid(geom)
+            """
+        )
+    ).all()
+
+    for boundary in invalid_boundaries:
+        if boundary.id in _INVALID_BOUNDARY_IDS_LOGGED:
+            continue
+
+        _INVALID_BOUNDARY_IDS_LOGGED.add(boundary.id)
+        _logger().warning(
+            "Skipping invalid boundary geometry %s (%s)",
+            boundary.id,
+            boundary.name,
+        )
+
+
+def _fetch_bulk_intersections(alert_geom) -> List[Dict[str, object]]:
+    """Return intersecting boundaries using a single SQL query."""
+
+    _log_invalid_boundary_geometries()
+
+    rows = db.session.execute(
+        text(
+            """
+            SELECT id, name,
+                   ST_Area(ST_Intersection(:alert_geom, geom)) AS intersection_area
+            FROM boundaries
+            WHERE geom IS NOT NULL
+              AND ST_IsValid(geom)
+              AND ST_Intersects(:alert_geom, geom)
+            """
+        ),
+        {"alert_geom": alert_geom},
+    ).all()
+
+    intersections: List[Dict[str, object]] = []
+    for row in rows:
+        area = float(row.intersection_area) if row.intersection_area is not None else 0.0
+        if area <= 0:
+            continue
+        intersections.append({"id": row.id, "name": row.name, "intersection_area": area})
+
+    return intersections
+
+
+def _fetch_intersections_per_boundary(alert: CAPAlert, alert_geom) -> List[Dict[str, object]]:
+    """Fallback path that processes each boundary individually."""
+
+    boundaries = db.session.execute(
+        text(
+            """
+            SELECT id, name, geom
+            FROM boundaries
+            WHERE geom IS NOT NULL
+            """
+        )
+    ).all()
+
+    intersections: List[Dict[str, object]] = []
+
+    for boundary in boundaries:
+        boundary_geom = getattr(boundary, "geom", None)
+        if boundary_geom is None:
+            continue
+
+        try:
+            result = db.session.execute(
+                text(
+                    """
+                    SELECT
+                        ST_Intersects(:alert_geom, :boundary_geom) AS intersects,
+                        ST_Area(ST_Intersection(:alert_geom, :boundary_geom)) AS intersection_area
+                    """
+                ),
+                {"alert_geom": alert_geom, "boundary_geom": boundary_geom},
+            ).one()
+        except Exception as exc:  # pragma: no cover - defensive
+            _logger().error(
+                "Error calculating intersection for boundary %s: %s",
+                boundary.id,
+                exc,
+            )
+            continue
+
+        if not result.intersects:
+            continue
+
+        area = float(result.intersection_area) if result.intersection_area is not None else 0.0
+        if area <= 0:
+            continue
+
+        intersections.append(
+            {"id": boundary.id, "name": boundary.name, "intersection_area": area}
+        )
+
+    return intersections
 
 
 _fallback_logger = logging.getLogger("noaa_alerts_systems")
@@ -56,30 +167,31 @@ def calculate_alert_intersections(alert: CAPAlert) -> int:
     if not alert_geom:
         return 0
 
-    db.session.query(Intersection).filter_by(
-        cap_alert_id=alert.id
-    ).delete(synchronize_session=False)
-
     try:
-        intersecting_boundaries = db.session.execute(
-            text(
-                """
-                SELECT id, name,
-                       ST_Area(ST_Intersection(:alert_geom, geom)) AS intersection_area
-                FROM boundaries
-                WHERE geom IS NOT NULL
-                  AND ST_Intersects(:alert_geom, geom)
-                """
-            ),
-            {"alert_geom": alert_geom},
-        ).all()
+        intersecting_boundaries = _fetch_bulk_intersections(alert_geom)
     except Exception as exc:  # pragma: no cover - defensive
-        _logger().error(
-            "Error in calculate_alert_intersections for alert %s: %s",
+        _logger().warning(
+            "Bulk intersection query failed for alert %s, falling back to per-boundary processing: %s",
             alert.identifier,
             exc,
         )
-        raise
+        intersecting_boundaries = _fetch_intersections_per_boundary(alert, alert_geom)
+
+    if not intersecting_boundaries:
+        try:
+            db.session.query(Intersection).filter_by(
+                cap_alert_id=alert.id
+            ).delete(synchronize_session=False)
+        except Exception as exc:  # pragma: no cover - defensive
+            db.session.rollback()
+            _logger().error(
+                "Error clearing intersections for alert %s: %s",
+                alert.identifier,
+                exc,
+            )
+            raise
+
+        return 0
 
     created_at = utc_now()
     intersections_created = 0
@@ -87,35 +199,27 @@ def calculate_alert_intersections(alert: CAPAlert) -> int:
     created_boundary_names = []
 
     for boundary in intersecting_boundaries:
-        intersection_area = (
-            float(boundary.intersection_area)
-            if boundary.intersection_area is not None
-            else 0.0
-        )
-
-        if intersection_area <= 0:
-            continue
-
         new_intersections.append(
             Intersection(
                 cap_alert_id=alert.id,
-                boundary_id=boundary.id,
-                intersection_area=intersection_area,
+                boundary_id=boundary["id"],
+                intersection_area=float(boundary["intersection_area"]),
                 created_at=created_at,
             )
         )
 
         intersections_created += 1
-        created_boundary_names.append(boundary.name)
-
-    if not new_intersections:
-        return 0
+        created_boundary_names.append(boundary["name"])
 
     try:
+        db.session.query(Intersection).filter_by(
+            cap_alert_id=alert.id
+        ).delete(synchronize_session=False)
         db.session.bulk_save_objects(new_intersections)
     except Exception as exc:  # pragma: no cover - defensive
+        db.session.rollback()
         _logger().error(
-            "Error bulk inserting intersections for alert %s: %s",
+            "Error updating intersections for alert %s: %s",
             alert.identifier,
             exc,
         )
