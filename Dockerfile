@@ -12,7 +12,7 @@ RUN apt-get update \
         libpq-dev \
         ffmpeg \
         espeak \
-        libespeak1 \
+        libespeak-ng1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create and set working directory

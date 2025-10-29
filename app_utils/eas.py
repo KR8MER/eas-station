@@ -46,6 +46,11 @@ SAME_SPACE_FREQ = float(SAME_BAUD * 3)  # 1562.5 Hz
 SAME_PREAMBLE_BYTE = 0xAB
 SAME_PREAMBLE_REPETITIONS = 16
 
+LIBESPEAK_DEPENDENCY_TEXT = (
+    'libespeak-ng1 (or libespeak1 on older distros; '
+    'e.g., "sudo apt-get install libespeak-ng1")'
+)
+
 
 def _clean_identifier(value: str) -> str:
     value = value.strip().replace(' ', '_')
@@ -87,7 +92,7 @@ def _pyttsx3_dependency_hint() -> Optional[str]:
     missing: List[str] = []
 
     if not ctypes.util.find_library('espeak') and not ctypes.util.find_library('espeak-ng'):
-        missing.append('libespeak1 (e.g., "sudo apt-get install libespeak1")')
+        missing.append(LIBESPEAK_DEPENDENCY_TEXT)
 
     if shutil.which('ffmpeg') is None:
         missing.append('ffmpeg (e.g., "sudo apt-get install ffmpeg")')
@@ -109,7 +114,7 @@ def _pyttsx3_error_hint(exc: Exception) -> Optional[str]:
     if 'libespeak' in detail:
         return (
             'pyttsx3 requires the libespeak shared library. '
-            'Install libespeak1 (e.g., "sudo apt-get install libespeak1").'
+            f'Install {LIBESPEAK_DEPENDENCY_TEXT}.'
         )
 
     if 'ffmpeg' in detail or 'weakly-referenced object' in detail:

@@ -51,7 +51,7 @@ tracks releases under the 2.1.x series.
 - Updated the Quick Weekly Test preset to omit the attention signal by default and added a
   “No attention signal (omit)” option so manual packages can exclude the dual-tone or 1050 Hz
   alert when regulations allow.
-- Bundled `ffmpeg` and `libespeak` system packages in the Docker image so offline narration dependencies work out of the box during container builds.
+- Bundled `ffmpeg`, `espeak`, and `libespeak-ng1` system packages in the Docker image so offline narration dependencies work out of the box during container builds.
 ### Fixed
 - Surface offline pyttsx3 narration failures in the Manual Broadcast Builder with
   the underlying error details so operators can troubleshoot configuration
