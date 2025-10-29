@@ -286,6 +286,30 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Initialize database
 db.init_app(app)
 
+
+def _check_database_connectivity() -> bool:
+    """Attempt to connect to the database and return True on success."""
+
+    try:
+        with app.app_context():
+            with db.engine.connect() as connection:
+                connection.execute(text("SELECT 1"))
+        return True
+    except OperationalError as exc:
+        logger.error("Database connection failed during startup: %s", exc)
+    except Exception as exc:  # noqa: BLE001 - broad catch to log unexpected failures
+        logger.exception("Unexpected error during database connectivity check: %s", exc)
+
+    return False
+
+
+logger.info("Checking database connectivity at startup...")
+if _check_database_connectivity():
+    logger.info("Database connectivity check succeeded.")
+else:
+    logger.error("Database connectivity check failed; application may not operate correctly.")
+
+
 # Configure EAS output integration
 EAS_CONFIG = load_eas_config(app.root_path)
 app.config['EAS_BROADCAST_ENABLED'] = bool(EAS_CONFIG.get('enabled'))
