@@ -122,9 +122,16 @@ CREATE TABLE IF NOT EXISTS eas_messages (
     same_header VARCHAR(255) NOT NULL,
     audio_filename VARCHAR(255) NOT NULL,
     text_filename VARCHAR(255) NOT NULL,
+    audio_data BYTEA,
+    eom_audio_data BYTEA,
+    text_payload JSONB DEFAULT '{}'::jsonb,
     metadata JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE eas_messages ADD COLUMN IF NOT EXISTS audio_data BYTEA;
+ALTER TABLE eas_messages ADD COLUMN IF NOT EXISTS eom_audio_data BYTEA;
+ALTER TABLE eas_messages ADD COLUMN IF NOT EXISTS text_payload JSONB DEFAULT '{}'::jsonb;
 
 CREATE INDEX IF NOT EXISTS idx_eas_messages_created_at ON eas_messages(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_eas_messages_cap_alert ON eas_messages(cap_alert_id);

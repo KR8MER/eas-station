@@ -171,6 +171,9 @@ class EASMessage(db.Model):
     same_header = db.Column(db.String(255), nullable=False)
     audio_filename = db.Column(db.String(255), nullable=False)
     text_filename = db.Column(db.String(255), nullable=False)
+    audio_data = db.Column(db.LargeBinary)
+    eom_audio_data = db.Column(db.LargeBinary)
+    text_payload = db.Column(db.JSON, default=dict)
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
     metadata_payload = db.Column("metadata", db.JSON, default=dict)
 
@@ -186,6 +189,9 @@ class EASMessage(db.Model):
             "same_header": self.same_header,
             "audio_filename": self.audio_filename,
             "text_filename": self.text_filename,
+            "has_audio_blob": self.audio_data is not None,
+            "has_eom_blob": self.eom_audio_data is not None,
+            "has_text_payload": bool(self.text_payload),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "metadata": dict(self.metadata_payload or {}),
         }

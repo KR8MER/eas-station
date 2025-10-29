@@ -1227,6 +1227,9 @@
                             <button type="button" class="btn btn-outline-secondary" id="refreshEasMessages">
                                 <i class="fas fa-sync-alt"></i> Refresh
                             </button>
+                            <button type="button" class="btn btn-outline-danger" id="purgeEasMessages">
+                                <i class="fas fa-trash-alt"></i> Purge…
+                            </button>
                         </div>
                     </div>
 
@@ -1238,14 +1241,20 @@
                                     <th scope="col">Event</th>
                                     <th scope="col" class="text-nowrap">SAME Header</th>
                                     <th scope="col" class="text-nowrap text-center">Audio</th>
-                                    <th scope="col" class="text-nowrap text-center">Details</th>
+                                    <th scope="col" class="text-nowrap text-center">Summary</th>
+                                    <th scope="col" class="text-nowrap text-center">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="easMessagesTableBody">
                                 {% if eas_enabled and eas_recent_messages %}
                                     {% for message in eas_recent_messages %}
-                                        {% set audio_url = url_for('static', filename=eas_web_subdir ~ '/' ~ message.audio_filename) %}
-                                        {% set text_url = url_for('static', filename=eas_web_subdir ~ '/' ~ message.text_filename) %}
+                                        {% set audio_url = url_for('eas_message_audio', message_id=message.id) %}
+                                        {% if message.text_payload %}
+                                            {% set text_url = url_for('eas_message_summary', message_id=message.id) %}
+                                        {% else %}
+                                            {% set text_url = url_for('static', filename=eas_web_subdir ~ '/' ~ message.text_filename) %}
+                                        {% endif %}
+                                        {% set detail_url = url_for('audio_detail', message_id=message.id) %}
                                         <tr>
                                             <td class="text-nowrap">{{ message.created_at|default('') }}</td>
                                             <td>
@@ -1264,15 +1273,29 @@
                                                 </a>
                                             </td>
                                             <td class="text-center">
+                                                {% if text_url %}
                                                 <a class="btn btn-sm btn-outline-info" href="{{ text_url }}" target="_blank" rel="noopener">
                                                     <i class="fas fa-file-alt"></i> Summary
                                                 </a>
+                                                {% else %}
+                                                <span class="text-muted">N/A</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="text-center">
+                                                <div class="btn-group btn-group-sm" role="group">
+                                                    <a class="btn btn-outline-secondary" href="{{ detail_url }}" target="_blank" rel="noopener">
+                                                        <i class="fas fa-headphones"></i> Details
+                                                    </a>
+                                                    <button type="button" class="btn btn-outline-danger btn-delete-eas" data-message-id="{{ message.id }}">
+                                                        <i class="fas fa-trash-alt"></i>
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="5" class="text-center text-muted py-4">
+                                        <td colspan="6" class="text-center text-muted py-4">
                                             <div class="loading-spinner"></div>
                                             <span class="ms-2">No transmissions recorded yet.</span>
                                         </td>
@@ -1928,9 +1951,14 @@
             initializeEasGenerator();
             loadEasMessages();
             loadManualEasEvents();
+            bindEasMessageActions();
             const refreshButton = document.getElementById('refreshEasMessages');
             if (refreshButton) {
                 refreshButton.addEventListener('click', () => loadEasMessages());
+            }
+            const purgeButton = document.getElementById('purgeEasMessages');
+            if (purgeButton) {
+                purgeButton.addEventListener('click', () => handlePurgePrompt());
             }
             const manualRefresh = document.getElementById('refreshManualEasEvents');
             if (manualRefresh) {
@@ -2055,7 +2083,7 @@
 
             tableBody.innerHTML = `
                 <tr>
-                    <td colspan="5" class="text-center text-muted py-4">
+                    <td colspan="6" class="text-center text-muted py-4">
                         <div class="loading-spinner"></div>
                         <span class="ms-2">Loading transmissions...</span>
                     </td>
@@ -2082,7 +2110,7 @@
                 if (!messages.length) {
                     tableBody.innerHTML = `
                         <tr>
-                            <td colspan="5" class="text-center text-muted py-4">
+                            <td colspan="6" class="text-center text-muted py-4">
                                 No transmissions recorded yet.
                             </td>
                         </tr>
@@ -2104,6 +2132,20 @@
                             : '';
 
                         const row = document.createElement('tr');
+                        const messageId = Number.parseInt(message.id, 10);
+                        const summaryButton = message.text_url
+                            ? `<a class="btn btn-sm btn-outline-info" href="${escapeHtml(message.text_url)}" target="_blank" rel="noopener"><i class="fas fa-file-alt"></i> Summary</a>`
+                            : '<span class="text-muted">N/A</span>';
+                        const detailButton = message.detail_url
+                            ? `<a class="btn btn-sm btn-outline-secondary" href="${escapeHtml(message.detail_url)}" target="_blank" rel="noopener"><i class="fas fa-headphones"></i> Details</a>`
+                            : '';
+                        const deleteButton = Number.isFinite(messageId)
+                            ? `<button type="button" class="btn btn-sm btn-outline-danger btn-delete-eas" data-message-id="${messageId}"><i class="fas fa-trash-alt"></i></button>`
+                            : '';
+                        const actionButtons = [detailButton, deleteButton].filter(Boolean).join(' ');
+                        const audioButton = message.audio_url
+                            ? `<a class="btn btn-sm btn-outline-primary" href="${escapeHtml(message.audio_url)}" target="_blank" rel="noopener"><i class="fas fa-play"></i> Play</a>`
+                            : '<span class="text-muted">N/A</span>';
                         row.innerHTML = `
                             <td class="text-nowrap">${escapeHtml(createdLabel)}</td>
                             <td>
@@ -2111,12 +2153,9 @@
                                 ${severityBadge}${statusBadge}
                             </td>
                             <td class="text-break"><code>${escapeHtml(message.same_header || '')}</code></td>
-                            <td class="text-center">
-                                ${message.audio_url ? `<a class="btn btn-sm btn-outline-primary" href="${escapeHtml(message.audio_url)}" target="_blank" rel="noopener"><i class="fas fa-play"></i> Play</a>` : '<span class="text-muted">N/A</span>'}
-                            </td>
-                            <td class="text-center">
-                                ${message.text_url ? `<a class="btn btn-sm btn-outline-info" href="${escapeHtml(message.text_url)}" target="_blank" rel="noopener"><i class="fas fa-file-alt"></i> Summary</a>` : '<span class="text-muted">N/A</span>'}
-                            </td>
+                            <td class="text-center">${audioButton}</td>
+                            <td class="text-center">${summaryButton}</td>
+                            <td class="text-center">${actionButtons || '<span class="text-muted">N/A</span>'}</td>
                         `;
                         tableBody.appendChild(row);
                     });
@@ -2128,10 +2167,106 @@
                         status.textContent = `Showing ${messages.length} of ${total} stored alerts.`;
                     }
                 }
+
+                bindEasMessageActions();
             } catch (error) {
                 console.error('Failed to load EAS messages', error);
                 showStatus('Unexpected error while loading EAS transmissions.', 'danger');
             }
+        }
+
+        function bindEasMessageActions() {
+            const buttons = document.querySelectorAll('.btn-delete-eas');
+            buttons.forEach((button) => {
+                if (button.dataset.boundDelete === 'true') {
+                    return;
+                }
+                button.dataset.boundDelete = 'true';
+                button.addEventListener('click', async (event) => {
+                    const target = event.currentTarget;
+                    const messageId = Number.parseInt(target.dataset.messageId || '', 10);
+                    if (!messageId) {
+                        return;
+                    }
+                    if (!confirm('Delete this EAS transmission? This cannot be undone.')) {
+                        return;
+                    }
+                    if (target.dataset.deleting === 'true') {
+                        return;
+                    }
+                    target.dataset.deleting = 'true';
+                    target.disabled = true;
+                    const deleted = await deleteEasMessage(messageId);
+                    if (!deleted) {
+                        target.disabled = false;
+                        target.dataset.deleting = 'false';
+                    }
+                });
+            });
+        }
+
+        async function deleteEasMessage(messageId) {
+            try {
+                const response = await fetch(`/admin/eas_messages/${messageId}`, {
+                    method: 'DELETE',
+                    headers: { 'Accept': 'application/json' },
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    showStatus(data.error || 'Failed to delete EAS transmission.', 'danger');
+                    return false;
+                }
+                showStatus(data.message || 'EAS transmission deleted.', 'success');
+                await loadEasMessages();
+                return true;
+            } catch (error) {
+                console.error('Delete EAS transmission failed', error);
+                showStatus('Unexpected error while deleting EAS transmission.', 'danger');
+                return false;
+            }
+        }
+
+        async function purgeEasMessages(olderThanDays) {
+            try {
+                const response = await fetch('/admin/eas_messages/purge', {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ older_than_days: olderThanDays }),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    showStatus(data.error || 'Failed to purge EAS transmissions.', 'danger');
+                    return;
+                }
+                const deletedCount = typeof data.deleted === 'number' ? data.deleted : (Array.isArray(data.ids) ? data.ids.length : 0);
+                const message = data.message || `Deleted ${deletedCount} EAS transmissions.`;
+                showStatus(message, 'success');
+                await loadEasMessages();
+            } catch (error) {
+                console.error('Purge EAS transmissions failed', error);
+                showStatus('Unexpected error while purging EAS transmissions.', 'danger');
+            }
+        }
+
+        function handlePurgePrompt() {
+            const input = prompt('Delete transmissions older than how many days? Enter 0 to purge all stored transmissions.', '30');
+            if (input === null) {
+                return;
+            }
+            const trimmed = input.trim();
+            if (!trimmed) {
+                showStatus('Purge cancelled.', 'info');
+                return;
+            }
+            const days = Number.parseInt(trimmed, 10);
+            if (!Number.isFinite(days) || Number.isNaN(days) || days < 0) {
+                showStatus('Enter a valid non-negative number of days.', 'warning');
+                return;
+            }
+            purgeEasMessages(days);
         }
 
         function initializeEasGenerator() {
