@@ -64,6 +64,8 @@ tracks releases under the 2.1.x series.
 - Surface actionable pyttsx3 dependency hints when audio decoding fails so
   the Manual Broadcast Builder points operators to missing libespeak/ffmpeg
   packages instead of opaque errors.
+- Added an espeak CLI fallback when pyttsx3 fails to emit audio so offline
+  narration still succeeds even if the engine encounters driver issues.
 - Count manual EAS activations when calculating Audio Archive totals and show them
   alongside automated captures so archived transmissions are visible in the history
   table.

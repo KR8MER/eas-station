@@ -52,6 +52,22 @@ LIBESPEAK_DEPENDENCY_TEXT = (
 )
 
 
+_ESPEAK_VOICE_TOKEN_PATTERN = re.compile(r'^[A-Za-z0-9_.+-]+$')
+
+
+def _espeak_voice_from_preference(preference: str) -> Optional[str]:
+    """Return an espeak-compatible voice token if the preference looks valid."""
+
+    preference = preference.strip()
+    if not preference:
+        return None
+
+    if _ESPEAK_VOICE_TOKEN_PATTERN.fullmatch(preference):
+        return preference
+
+    return None
+
+
 def _clean_identifier(value: str) -> str:
     value = value.strip().replace(' ', '_')
     value = re.sub(r'[^A-Za-z0-9_.-]+', '_', value)
@@ -1054,7 +1070,46 @@ class EASAudioGenerator:
             return None
 
     def _generate_pyttsx3_voiceover(self, text: str) -> Optional[List[int]]:
+        target_rate = int(self.config.get('sample_rate', 44100) or 44100)
+        voice_preference = (self.config.get('pyttsx3_voice') or '').strip()
+        espeak_voice = _espeak_voice_from_preference(voice_preference)
+
+        rate_preference_raw = (self.config.get('pyttsx3_rate') or '').strip()
+        rate_preference_value: Optional[int] = None
+        if rate_preference_raw:
+            try:
+                rate_preference_value = int(rate_preference_raw)
+            except ValueError:
+                if self.logger:
+                    self.logger.warning('Invalid pyttsx3 rate "%s"; ignoring.', rate_preference_raw)
+
+        volume_preference_raw = (self.config.get('pyttsx3_volume') or '').strip()
+        volume_preference_value: Optional[float] = None
+        if volume_preference_raw:
+            try:
+                volume_preference_value = float(volume_preference_raw)
+            except ValueError:
+                if self.logger:
+                    self.logger.warning('Invalid pyttsx3 volume "%s"; ignoring.', volume_preference_raw)
+
+        def fallback(reason: str) -> Optional[List[int]]:
+            samples = self._generate_espeak_cli_fallback(
+                text,
+                target_rate,
+                voice_token=espeak_voice,
+                rate_value=rate_preference_value,
+                volume_value=volume_preference_value,
+                reason=reason,
+            )
+            if samples is not None and self.logger:
+                self.logger.warning('pyttsx3 fallback activated (%s).', reason)
+            return samples
+
         if pyttsx3 is None:
+            fallback_samples = fallback('pyttsx3 package missing')
+            if fallback_samples is not None:
+                return fallback_samples
+
             self._remember_tts_error('pyttsx3 package is not installed.')
             if self.logger:
                 self.logger.warning('pyttsx3 not installed; skipping TTS voiceover.')
@@ -1064,6 +1119,10 @@ class EASAudioGenerator:
             engine = pyttsx3.init()
         except Exception as exc:  # pragma: no cover - platform specific
             hint = _pyttsx3_error_hint(exc)
+            fallback_samples = fallback('pyttsx3 initialisation failed')
+            if fallback_samples is not None:
+                return fallback_samples
+
             if hint:
                 self._remember_tts_error(hint)
             else:
@@ -1072,8 +1131,6 @@ class EASAudioGenerator:
                 self.logger.error(f"Failed to initialise pyttsx3: {exc}")
             return None
 
-        target_rate = int(self.config.get('sample_rate', 44100) or 44100)
-        voice_preference = (self.config.get('pyttsx3_voice') or '').strip()
         configured_voice_id: Optional[str] = None
         if voice_preference:
             try:
@@ -1097,21 +1154,19 @@ class EASAudioGenerator:
                 if self.logger:
                     self.logger.warning('pyttsx3 voice "%s" not found; using default voice.', voice_preference)
 
-        rate_preference = (self.config.get('pyttsx3_rate') or '').strip()
-        if rate_preference:
+        if rate_preference_value is not None:
             try:
-                engine.setProperty('rate', int(rate_preference))
+                engine.setProperty('rate', rate_preference_value)
             except Exception as exc:  # pragma: no cover - driver specific
                 if self.logger:
-                    self.logger.warning('Unable to apply pyttsx3 rate %s: %s', rate_preference, exc)
+                    self.logger.warning('Unable to apply pyttsx3 rate %s: %s', rate_preference_raw, exc)
 
-        volume_preference = (self.config.get('pyttsx3_volume') or '').strip()
-        if volume_preference:
+        if volume_preference_value is not None:
             try:
-                engine.setProperty('volume', float(volume_preference))
+                engine.setProperty('volume', volume_preference_value)
             except Exception as exc:  # pragma: no cover - driver specific
                 if self.logger:
-                    self.logger.warning('Unable to apply pyttsx3 volume %s: %s', volume_preference, exc)
+                    self.logger.warning('Unable to apply pyttsx3 volume %s: %s', volume_preference_raw, exc)
 
         tmp_path: Optional[str] = None
         try:
@@ -1126,6 +1181,10 @@ class EASAudioGenerator:
                 pass
         except Exception as exc:  # pragma: no cover - platform specific
             hint = _pyttsx3_error_hint(exc)
+            fallback_samples = fallback('pyttsx3 synthesis failed')
+            if fallback_samples is not None:
+                return fallback_samples
+
             if hint:
                 self._remember_tts_error(hint)
             else:
@@ -1153,6 +1212,15 @@ class EASAudioGenerator:
                 file_empty = True
 
         if file_missing or file_empty:
+            fallback_samples = fallback('pyttsx3 produced no audio file')
+            if fallback_samples is not None:
+                if tmp_path and os.path.exists(tmp_path):
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:
+                        pass
+                return fallback_samples
+
             dependency_hint = _pyttsx3_dependency_hint()
             if dependency_hint:
                 self._remember_tts_error(dependency_hint)
@@ -1160,6 +1228,11 @@ class EASAudioGenerator:
                 self._remember_tts_error('pyttsx3 did not produce an audio file.')
             if self.logger:
                 self.logger.warning('pyttsx3 did not produce an audio file; skipping voiceover.')
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
             return None
 
         try:
@@ -1183,12 +1256,105 @@ class EASAudioGenerator:
             return samples
         except Exception as exc:  # pragma: no cover - audio decoding errors
             hint = _pyttsx3_error_hint(exc)
+            fallback_samples = fallback('pyttsx3 audio decode failed')
+            if fallback_samples is not None:
+                if tmp_path and os.path.exists(tmp_path):
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:
+                        pass
+                return fallback_samples
+
             if hint:
                 self._remember_tts_error(hint)
             else:
                 self._remember_tts_error(f'Failed to decode pyttsx3 audio: {exc}')
             if self.logger:
                 self.logger.error(f"Failed to decode pyttsx3 audio: {exc}")
+            return None
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+
+    def _generate_espeak_cli_fallback(
+        self,
+        text: str,
+        target_rate: int,
+        *,
+        voice_token: Optional[str],
+        rate_value: Optional[int],
+        volume_value: Optional[float],
+        reason: str,
+    ) -> Optional[List[int]]:
+        """Use the espeak/espeak-ng CLI as a last-resort narration fallback."""
+
+        espeak_cmd = shutil.which('espeak-ng') or shutil.which('espeak')
+        if espeak_cmd is None:
+            return None
+
+        tmp_path: Optional[str] = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
+                tmp_path = tmp_file.name
+
+            command: List[str] = [espeak_cmd, '-w', tmp_path]
+            if voice_token:
+                command.extend(['-v', voice_token])
+            if rate_value is not None:
+                espeak_rate = max(80, min(450, rate_value))
+                command.extend(['-s', str(espeak_rate)])
+            if volume_value is not None:
+                normalized_volume = max(0.0, min(1.0, volume_value))
+                espeak_volume = max(0, min(200, int(round(normalized_volume * 200))))
+                command.extend(['-a', str(espeak_volume)])
+
+            command.append('--stdin')
+            completed = subprocess.run(
+                command,
+                input=text,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            if completed.returncode != 0:
+                if self.logger:
+                    stderr = (completed.stderr or '').strip()
+                    self.logger.error(
+                        'espeak fallback failed (%s): %s',
+                        reason,
+                        stderr or completed.returncode,
+                    )
+                return None
+
+            with wave.open(tmp_path, 'rb') as wav_data:
+                raw_frames = wav_data.readframes(wav_data.getnframes())
+                sample_width = wav_data.getsampwidth()
+                channels = wav_data.getnchannels()
+                source_rate = wav_data.getframerate()
+
+            samples = _normalize_pcm_samples(
+                raw_frames,
+                sample_width,
+                channels,
+                source_rate,
+                target_rate,
+            )
+            if self.logger:
+                voice_label = voice_token or 'default'
+                self.logger.info(
+                    'Appended espeak CLI fallback voiceover using voice %s',
+                    voice_label,
+                )
+            self._remember_tts_error(None)
+            return samples
+        except FileNotFoundError:
+            return None
+        except Exception as exc:  # pragma: no cover - CLI fallback errors
+            if self.logger:
+                self.logger.error('espeak fallback crashed (%s): %s', reason, exc)
             return None
         finally:
             if tmp_path and os.path.exists(tmp_path):
