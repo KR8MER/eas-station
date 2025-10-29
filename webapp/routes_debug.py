@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-from flask import Flask, jsonify
+from collections import OrderedDict
+
+import pytz
+from flask import Flask, jsonify, render_template
 from sqlalchemy import func
 
 from app_core.extensions import db
-from app_core.models import Boundary, CAPAlert, Intersection
+from app_core.location import get_location_settings
+from app_core.models import Boundary, CAPAlert, Intersection, PollDebugRecord
+from app_core.poller_debug import ensure_poll_debug_table, serialise_debug_record, summarise_run
 
 
 def register(app: Flask, logger) -> None:
@@ -99,6 +104,121 @@ def register(app: Flask, logger) -> None:
         except Exception as exc:  # pragma: no cover - defensive
             route_logger.error("Error debugging alert %s: %s", alert_id, exc)
             return jsonify({"error": f"Debug failed: {exc}"}), 500
+
+    @app.route("/debug/ipaws")
+    def debug_ipaws():
+        """Render a diagnostics dashboard for the IPAWS poller output."""
+
+        try:
+            ensure_poll_debug_table(route_logger)
+            location_settings = get_location_settings()
+            timezone_name = (location_settings or {}).get("timezone") or "UTC"
+            try:
+                tz = pytz.timezone(timezone_name)
+            except Exception:
+                tz = pytz.UTC
+
+            recent_records = (
+                PollDebugRecord.query.order_by(
+                    PollDebugRecord.poll_started_at.desc(),
+                    PollDebugRecord.id.desc(),
+                )
+                .limit(600)
+                .all()
+            )
+
+            grouped: "OrderedDict[str, list[PollDebugRecord]]" = OrderedDict()
+            for record in recent_records:
+                run_records = grouped.get(record.poll_run_id)
+                if run_records is None:
+                    if len(grouped) >= 10:
+                        continue
+                    run_records = []
+                    grouped[record.poll_run_id] = run_records
+                run_records.append(record)
+
+            debug_runs = []
+            for run_records in grouped.values():
+                summary = summarise_run(run_records)
+                poll_started_at = summary.get("poll_started_at")
+                summary["poll_started_at_iso"] = (
+                    poll_started_at.isoformat() if poll_started_at else None
+                )
+                try:
+                    summary["poll_started_local"] = (
+                        poll_started_at.astimezone(tz).strftime("%Y-%m-%d %H:%M:%S %Z")
+                        if poll_started_at
+                        else None
+                    )
+                except Exception:
+                    summary["poll_started_local"] = summary["poll_started_at_iso"]
+                summary["poll_started_display"] = (
+                    summary["poll_started_local"] or summary["poll_started_at_iso"]
+                )
+
+                alerts = []
+                for record in run_records:
+                    alert_dict = serialise_debug_record(record)
+                    alert_dict["created_at_iso"] = (
+                        record.created_at.isoformat() if record.created_at else None
+                    )
+                    try:
+                        alert_dict["created_at_local"] = (
+                            record.created_at.astimezone(tz).strftime("%Y-%m-%d %H:%M:%S %Z")
+                            if record.created_at
+                            else None
+                        )
+                    except Exception:
+                        alert_dict["created_at_local"] = alert_dict["created_at_iso"]
+                    alert_dict["created_at"] = alert_dict["created_at_iso"]
+
+                    sent_dt = alert_dict.get("alert_sent")
+                    if sent_dt:
+                        alert_dict["alert_sent_iso"] = sent_dt.isoformat()
+                        try:
+                            alert_dict["alert_sent_local"] = sent_dt.astimezone(tz).strftime(
+                                "%Y-%m-%d %H:%M:%S %Z"
+                            )
+                        except Exception:
+                            alert_dict["alert_sent_local"] = alert_dict["alert_sent_iso"]
+                    else:
+                        alert_dict["alert_sent_iso"] = None
+                        alert_dict["alert_sent_local"] = None
+                    alert_dict["alert_sent"] = alert_dict["alert_sent_iso"]
+
+                    alert_dict["alert_sent_display"] = (
+                        alert_dict["alert_sent_local"] or alert_dict["alert_sent_iso"]
+                    )
+                    alert_dict["created_at_display"] = (
+                        alert_dict["created_at_local"] or alert_dict["created_at_iso"]
+                    )
+                    alerts.append(alert_dict)
+
+                summary["alerts"] = alerts
+                summary.setdefault("totals", {})["alerts"] = len(alerts)
+                summary["totals"]["accepted"] = sum(
+                    1 for alert in alerts if alert.get("is_relevant")
+                )
+                summary["totals"]["saved"] = sum(
+                    1 for alert in alerts if alert.get("was_saved")
+                )
+                summary["totals"]["new_saved"] = sum(
+                    1 for alert in alerts if alert.get("was_new")
+                )
+                summary["totals"]["parse_failures"] = sum(
+                    1 for alert in alerts if not alert.get("parse_success")
+                )
+                debug_runs.append(summary)
+
+            return render_template(
+                "ipaws_debug.html",
+                debug_runs=debug_runs,
+                location_settings=location_settings,
+                timezone_name=timezone_name,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            route_logger.error("Error rendering IPAWS debug page: %s", exc)
+            return jsonify({"error": str(exc)}), 500
 
     @app.route("/debug/boundaries/<int:alert_id>")
     def debug_boundaries(alert_id: int):

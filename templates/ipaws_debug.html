@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}IPAWS Poller Debug{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-4">
+        <div>
+            <h1 class="h3 mb-1">IPAWS Poller Debug Console</h1>
+            <p class="text-muted mb-0">
+                Review captured IPAWS poll cycles, including filtered alerts, polygon geometry, and raw CAP properties.
+            </p>
+        </div>
+        <div class="text-muted small">
+            Displaying most recent debug runs (timezone: {{ timezone_name }}).
+        </div>
+    </div>
+
+    {% if not debug_runs %}
+        <div class="alert alert-info shadow-sm">
+            No IPAWS poller debug entries have been captured yet. Trigger the poller to populate this view.
+        </div>
+    {% endif %}
+
+    {% for run in debug_runs %}
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header bg-light">
+                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+                    <div>
+                        <div class="fw-semibold">Poll started: {{ run.poll_started_display or 'Unknown' }}</div>
+                        <div class="text-muted small">
+                            Status: {{ run.poll_status }} | Sources: {{ run.data_source or 'n/a' }} | Run ID: {{ run.poll_run_id }}
+                        </div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="badge bg-primary">Alerts {{ run.totals.alerts }}</span>
+                        <span class="badge bg-success">Accepted {{ run.totals.accepted }}</span>
+                        <span class="badge bg-info text-dark">Saved {{ run.totals.saved }}</span>
+                        <span class="badge bg-warning text-dark">Parse issues {{ run.totals.parse_failures }}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">Event</th>
+                                <th scope="col">Identifier</th>
+                                <th scope="col">Relevance</th>
+                                <th scope="col">Database</th>
+                                <th scope="col">Geometry</th>
+                                <th scope="col">Timing</th>
+                                <th scope="col">Notes &amp; Payloads</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for alert in run.alerts %}
+                                {% set row_class = '' %}
+                                {% if not alert.parse_success %}
+                                    {% set row_class = 'table-danger' %}
+                                {% elif not alert.is_relevant %}
+                                    {% set row_class = 'table-warning' %}
+                                {% elif alert.was_new %}
+                                    {% set row_class = 'table-success' %}
+                                {% elif alert.was_saved %}
+                                    {% set row_class = 'table-info' %}
+                                {% endif %}
+                                <tr class="{{ row_class }}">
+                                    <td>
+                                        <div class="fw-semibold">{{ alert.alert_event or 'Unknown event' }}</div>
+                                        <div class="text-muted small">{{ alert.source or 'Unknown source' }}</div>
+                                        {% if alert.area_desc %}
+                                            <div class="small">{{ alert.area_desc }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="font-monospace small">{{ alert.alert_identifier or alert.identifier or 'n/a' }}</div>
+                                        {% if alert.raw_xml_present %}
+                                            <span class="badge bg-secondary mt-1">Raw XML</span>
+                                        {% endif %}
+                                        {% if alert.ugc_codes %}
+                                            <div class="small text-muted">UGC: {{ alert.ugc_codes|join(', ') }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if alert.is_relevant %}
+                                            <span class="badge bg-success">Accepted</span>
+                                        {% else %}
+                                            <span class="badge bg-warning text-dark">Filtered</span>
+                                        {% endif %}
+                                        <div class="small text-muted">{{ alert.relevance_reason or 'n/a' }}</div>
+                                        {% if alert.relevance_matches %}
+                                            <div class="small">{{ alert.relevance_matches|join(', ') }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if alert.was_saved %}
+                                            <span class="badge bg-info text-dark">Saved</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Not saved</span>
+                                        {% endif %}
+                                        {% if alert.was_new %}
+                                            <span class="badge bg-success ms-1">New</span>
+                                        {% endif %}
+                                        {% if alert.alert_db_id %}
+                                            <div class="small text-muted">DB ID {{ alert.alert_db_id }}</div>
+                                        {% endif %}
+                                        {% if alert.parse_error %}
+                                            <div class="text-danger small">{{ alert.parse_error }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="small">{{ alert.geometry_type or 'None' }}{% if alert.polygon_count %} ({{ alert.polygon_count }}){% endif %}</div>
+                                        {% if alert.geometry_preview %}
+                                            <details class="small mt-1">
+                                                <summary>Preview</summary>
+                                                <pre class="small bg-dark text-light p-2 rounded">{{ alert.geometry_preview | tojson(indent=2) }}</pre>
+                                            </details>
+                                        {% endif %}
+                                        {% if alert.geometry_geojson %}
+                                            <details class="small mt-2">
+                                                <summary>GeoJSON</summary>
+                                                <pre class="small bg-dark text-light p-2 rounded">{{ alert.geometry_geojson | tojson(indent=2) }}</pre>
+                                            </details>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="small">Sent: {{ alert.alert_sent_display or 'Unknown' }}</div>
+                                        <div class="text-muted small">Captured: {{ alert.created_at_display or 'Unknown' }}</div>
+                                    </td>
+                                    <td>
+                                        {% set note_text = alert.notes or '' %}
+                                        {% if note_text %}
+                                            {% for line in note_text.split('\n') %}
+                                                <div class="small text-muted">{{ line }}</div>
+                                            {% endfor %}
+                                        {% endif %}
+                                        <details class="small mt-2">
+                                            <summary>Raw properties</summary>
+                                            <pre class="small bg-light border rounded p-2">{{ alert.raw_properties | tojson(indent=2) }}</pre>
+                                        </details>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+</div>
+{% endblock %}

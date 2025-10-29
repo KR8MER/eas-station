@@ -292,6 +292,38 @@ class PollHistory(db.Model):
     data_source = db.Column(db.String(64))
 
 
+class PollDebugRecord(db.Model):
+    __tablename__ = "poll_debug_records"
+
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+    poll_run_id = db.Column(db.String(64), nullable=False, index=True)
+    poll_started_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    poll_status = db.Column(db.String(20), nullable=False, default="UNKNOWN")
+    data_source = db.Column(db.String(64))
+    alert_identifier = db.Column(db.String(255))
+    alert_event = db.Column(db.String(255))
+    alert_sent = db.Column(db.DateTime(timezone=True))
+    source = db.Column(db.String(64))
+    is_relevant = db.Column(db.Boolean, default=False, nullable=False)
+    relevance_reason = db.Column(db.String(255))
+    relevance_matches = db.Column(db.JSON, default=list)
+    ugc_codes = db.Column(db.JSON, default=list)
+    area_desc = db.Column(db.Text)
+    was_saved = db.Column(db.Boolean, default=False, nullable=False)
+    was_new = db.Column(db.Boolean, default=False, nullable=False)
+    alert_db_id = db.Column(db.Integer)
+    parse_success = db.Column(db.Boolean, default=False, nullable=False)
+    parse_error = db.Column(db.Text)
+    polygon_count = db.Column(db.Integer)
+    geometry_type = db.Column(db.String(64))
+    geometry_geojson = db.Column(db.JSON)
+    geometry_preview = db.Column(db.JSON)
+    raw_properties = db.Column(db.JSON)
+    raw_xml_present = db.Column(db.Boolean, default=False, nullable=False)
+    notes = db.Column(db.Text)
+
+
 class LocationSettings(db.Model):
     __tablename__ = "location_settings"
 
