@@ -268,6 +268,13 @@ def register_manual_routes(app, logger, eas_config) -> None:
             'composite': composite_component,
         }
 
+        # Create response-safe components without wav_bytes (not JSON serializable)
+        response_components = {
+            key: {k: v for k, v in value.items() if k != 'wav_bytes'}
+            for key, value in stored_components.items()
+            if value
+        }
+
         response_payload: Dict[str, Any] = {
             'identifier': identifier,
             'event_code': resolved_event_code,
@@ -283,7 +290,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
             'duration_minutes': duration_minutes,
             'sent_at': sent_dt.isoformat(),
             'expires_at': expires_dt.isoformat(),
-            'components': stored_components,
+            'components': response_components,
             'sample_rate': sample_rate,
             'same_header_detail': header_detail,
             'storage_path': storage_root,
