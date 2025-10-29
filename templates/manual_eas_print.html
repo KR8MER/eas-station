@@ -19,6 +19,11 @@
             <button type="button" class="btn btn-primary btn-sm ms-2" onclick="window.print();">
                 <i class="fas fa-print"></i> Print
             </button>
+            {% if current_user %}
+            <button type="button" class="btn btn-danger btn-sm ms-2" onclick="deleteManualActivation()" title="Delete this activation">
+                <i class="fas fa-trash"></i> Delete
+            </button>
+            {% endif %}
         </div>
     </div>
 
@@ -144,4 +149,39 @@
         </div>
     </div>
 </div>
+
+{% block scripts %}
+<script>
+async function deleteManualActivation() {
+    const eventId = {{ event.id }};
+
+    if (!confirm('Are you sure you want to delete this manual EAS activation? This action cannot be undone.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/admin/eas/manual_events/${eventId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showToast('Manual EAS activation deleted successfully', 'success');
+            // Redirect to admin page after a short delay
+            setTimeout(() => {
+                window.location.href = '/admin';
+            }, 1500);
+        } else {
+            showToast(result.error || 'Failed to delete manual EAS activation', 'error');
+        }
+    } catch (error) {
+        console.error('Delete failed:', error);
+        showToast('Failed to delete manual EAS activation', 'error');
+    }
+}
+</script>
 {% endblock %}
