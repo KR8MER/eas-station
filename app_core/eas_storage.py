@@ -157,29 +157,46 @@ def ensure_eas_audio_columns(logger) -> bool:
         """
     )
 
+    column_definitions = {
+        "audio_data": "BYTEA",
+        "eom_audio_data": "BYTEA",
+        "text_payload": "JSONB",
+    }
+
     try:
-        changed = False
-        column_definitions = {
-            "audio_data": "BYTEA",
-            "eom_audio_data": "BYTEA",
-            "text_payload": "JSONB DEFAULT '{}'::jsonb",
-        }
+        added_columns = []
+        with engine.begin() as connection:
+            for column, definition in column_definitions.items():
+                exists = connection.execute(column_check_sql, {"column": column}).scalar()
+                if exists:
+                    continue
 
-        for column, definition in column_definitions.items():
-            exists = db.session.execute(column_check_sql, {"column": column}).scalar()
-            if exists:
-                continue
+                logger.info(
+                    "Adding eas_messages.%s column for cached message payloads", column
+                )
+                connection.execute(
+                    text(f"ALTER TABLE eas_messages ADD COLUMN {column} {definition}")
+                )
+                added_columns.append(column)
 
-            logger.info(
-                "Adding eas_messages.%s column for cached message payloads", column
-            )
-            db.session.execute(
-                text(f"ALTER TABLE eas_messages ADD COLUMN {column} {definition}")
-            )
-            changed = True
-
-        if changed:
-            db.session.commit()
+        if "text_payload" in added_columns:
+            try:
+                with engine.begin() as connection:
+                    connection.execute(
+                        text(
+                            "ALTER TABLE eas_messages ALTER COLUMN text_payload SET DEFAULT '{}'::jsonb"
+                        )
+                    )
+                    connection.execute(
+                        text(
+                            "UPDATE eas_messages SET text_payload = '{}'::jsonb WHERE text_payload IS NULL"
+                        )
+                    )
+            except Exception as exc:  # pragma: no cover - defensive fallback
+                logger.warning(
+                    "Could not initialize default data for eas_messages.text_payload: %s",
+                    exc,
+                )
 
         return True
     except Exception as exc:  # pragma: no cover - defensive fallback
