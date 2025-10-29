@@ -52,19 +52,32 @@
 ### Prerequisites
 - **Docker Engine 24+** with Docker Compose V2
 - **Git** for cloning the repository
-- **Dedicated PostgreSQL/PostGIS container** – the spatial database must run in its own service separate from the Flask application container. The provided `docker-compose.yml` spins up a compatible instance automatically, but self-hosted deployments must provision an equivalent database service before the app will start.
+- **Dedicated PostgreSQL/PostGIS database** – provision the spatial database separately (managed service, bare container, or on-prem host) and point the application at it via `.env`.
 - **4GB RAM** recommended (2GB minimum)
 - **Network Access** for NOAA CAP API polling
 
 ### One-Command Installation
 
 ```bash
-git clone https://github.com/KR8MER/noaa_alerts_systems.git
+bash -c "git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems.git && cd noaa_alerts_systems && cp .env.example .env && docker compose up -d --build"
+```
+
+> 💡 Update `.env` before or immediately after the first launch so `POSTGRES_HOST`, `POSTGRES_PASSWORD`, and related settings point at your database deployment.
+
+> ⚠️ **Important:** The `.env.example` file only contains placeholder secrets so the
+> containers can boot. **Immediately after the first launch, open `.env` and change**
+> the `SECRET_KEY`, database password, and any other sensitive values, then restart
+> the stack so the new credentials are applied.
+
+If you prefer to run each step manually, the equivalent sequence is:
+
+```bash
+git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems.git
 cd noaa_alerts_systems
+# Copy the template environment file and edit it before exposing services.
 cp .env.example .env
 # IMPORTANT: Edit .env and set SECRET_KEY and POSTGRES_PASSWORD!
-# The docker compose stack will launch both the app service and a
-# separate PostgreSQL/PostGIS database container.
+# Launch the application services once your database connection details are in place.
 docker compose up -d --build
 ```
 
@@ -72,10 +85,11 @@ docker compose up -d --build
 
 ### Configuration Before First Run
 
-1. **Copy the example environment file:**
-   ```bash
-   cp .env.example .env
-   ```
+1. **Copy and review the environment template:**
+   Run `cp .env.example .env` (already done in the quick start commands above)
+   and treat the result as your local configuration. The defaults mirror the
+   sample Portainer stack, but every secret and environment-specific value must
+   be replaced before production use.
 
 2. **Generate a secure SECRET_KEY:**
    ```bash
@@ -84,18 +98,19 @@ docker compose up -d --build
 
 3. **Edit `.env` and update:**
    - `SECRET_KEY` - Use the generated value
-   - `POSTGRES_PASSWORD` - Change from default
-   - Other settings as needed
+   - `POSTGRES_PASSWORD` - Change from defaults (the application builds `DATABASE_URL` automatically from the `POSTGRES_*` values)
+  - `POSTGRES_HOST` - Point at your existing PostGIS host (hostname or IP)
+  - `TZ`, `WATCHTOWER_*`, or other infrastructure metadata as needed
 
-4. **Start the system (provisions the separate Postgres/PostGIS container automatically):**
-   ```bash
-   docker compose up -d --build
-   ```
+4. **Start the system:**
+  ```bash
+  docker compose up -d --build
+  ```
 
 ### Quick Update (Pull Latest Changes)
 
 ```bash
-git pull
+git pull origin Experimental
 docker compose build --pull
 docker compose up -d --force-recreate
 ```
@@ -135,9 +150,9 @@ docker compose up -d --force-recreate
 |---------|---------|------------|
 | **app** | Web UI & REST API | Flask 2.3, Gunicorn, Bootstrap 5 |
 | **poller** | Background alert polling | Python 3.11, continuous daemon |
-| **postgresql** | Spatial database | PostgreSQL 15, PostGIS extension |
+| *(external service)* | Spatial database | PostgreSQL/PostGIS |
 
-> **Deployment Note:** The PostgreSQL/PostGIS database must remain isolated from the application containers. If you are not using the provided Docker Compose stack, provision a dedicated database container (or managed service) with the PostGIS extension enabled and update the app configuration to point to that external host.
+> **Deployment Note:** Host the PostgreSQL/PostGIS database outside of these containers (managed service, dedicated VM, or standalone container). Update the connection variables in `.env` so the application can reach it.
 
 ---
 
@@ -146,7 +161,7 @@ docker compose up -d --force-recreate
 ### Starting and Stopping Services
 
 ```bash
-# Start all services in background
+# Start the application services (requires an external PostGIS host)
 docker compose up -d
 
 # Stop all services
@@ -161,7 +176,6 @@ docker compose logs -f
 # View logs for specific service
 docker compose logs -f app       # Web application
 docker compose logs -f poller    # Alert poller
-docker compose logs -f postgresql # Database
 ```
 
 ### Accessing the Application
@@ -180,10 +194,12 @@ docker compose logs -f postgresql # Database
 The admin panel now requires an authenticated session backed by the database. Passwords are stored as salted SHA-256 hashes and never written in plain text.
 
 1. **Create the first administrator account** (only required once):
-   ```bash
-   docker compose run --rm app flask create-admin-user
-   ```
-   Follow the prompts to set a username (letters, numbers, `.`, `_`, `-`) and a password (minimum 8 characters).
+   - Open http://localhost:5000/admin and complete the **First-Time Administrator Setup** card to provision the initial user through the UI, **or**
+   - run the CLI helper if you prefer the terminal:
+     ```bash
+     docker compose run --rm app flask create-admin-user
+     ```
+   Both flows enforce the same username rules (letters, numbers, `.`, `_`, `-`) and require a password with at least 8 characters.
 
 2. **Sign in** at http://localhost:5000/login using the credentials created above. Successful login redirects to the admin dashboard.
 
@@ -204,7 +220,6 @@ When enabled, the poller generates full SAME header bursts, raises an optional G
    # Optional overrides:
    # EAS_OUTPUT_DIR=static/eas_messages        # Files must remain within the Flask static directory for web access
    # EAS_OUTPUT_WEB_SUBDIR=eas_messages        # Subdirectory under /static used for download links
-   # EAS_OUTPUT_WEB_PATH=eas_messages          # Legacy variable name still recognised
    # EAS_ORIGINATOR=WXR                        # SAME originator code (3 characters)
    # EAS_STATION_ID=EASNODES                   # Call sign or station identifier (up to 8 characters)
    # EAS_AUDIO_PLAYER="aplay"                  # Command used to play generated WAV files
@@ -217,19 +232,24 @@ When enabled, the poller generates full SAME header bursts, raises an optional G
 2. **Install audio / GPIO dependencies** on the device that runs the poller container (e.g., `alsa-utils` for `aplay`, `RPi.GPIO` for Raspberry Pi hardware). The broadcaster automatically detects when `RPi.GPIO` is unavailable and will log a warning instead of raising an exception.
 
 3. **Review generated assets**:
-   - Each alert produces a `*.wav` file that contains three SAME bursts, the attention tone, and an automatically generated EOM data burst sequence.
+   - Each alert produces a `*.wav` file that contains three SAME bursts, the selected attention tone (or no tone when omitted), and an automatically generated EOM data burst sequence.
    - A matching `*.txt` file stores the JSON metadata (identifier, timestamps, SAME header, and narrative).
    - The admin console lists the most recent transmissions, allowing operators to play audio or download the summary directly from the browser.
 
-#### Generate a sample audio file
+#### Build practice activations from the admin console
 
-You can produce a demonstration clip (without ingesting a live CAP product) using the bundled helper. The script reuses the SAME encoder and writes the files to the configured output directory:
+The **Manual Broadcast Builder** on the EAS Output tab mirrors the workflow of a commercial encoder:
 
-```bash
-python tools/generate_sample_audio.py
-```
+1. Open **Admin → EAS Output** and build your SAME target list with the hierarchical picker: choose a state or territory, select the county or statewide PSSCCC entry, and click **Add Location**. The textarea still accepts pasted codes for bulk entry, and the running list is de-duplicated automatically with a hard stop at the 31-code SAME limit.
+2. Confirm the ORG, EEE, purge time (TTTT), and station identifier (LLLLLLLL). The originator selector now reflects the four production codes (EAS, CIV, WXR, PEP), the event dropdown hides the legacy `??*` placeholders, and the live header preview renders the complete `ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-` sequence so you can verify every field before you transmit.
+3. Need a test in a hurry? Tap **Quick Weekly Test** to preload the Required Weekly Test template: the tool drops in the configured SAME counties, forces the alert into `Test` status, seeds the headline/message, and omits the attention signal (FCC does not require tones for RWTs). Switch the attention selector if you need to add it back in.
+4. Click **Generate Package** to produce discrete WAV files for the SAME bursts, attention signal (dual-tone, 1050 Hz, or omit entirely), optional narration, and the EOM burst. A composite file is also produced so you can audition the full activation end-to-end. SAME headers always transmit in three bursts automatically per the FCC specification, with one-second guard intervals between each section.
 
-Pass `--output-dir` if you want the artifacts written somewhere other than the default `static/eas_messages/` folder.
+The header breakdown card reiterates the commercial nomenclature (preamble, ORG, EEE, PSSCCC, +TTTT, -JJJHHMM, -LLLLLLLL-, and the trailing `NNNN` EOM burst) and includes the FCC/FEMA guidance for each field so operators and trainees can cross-check the encoding rules.
+
+> 📻 Under the hood the digital bursts now honour the FCC SAME framing: 520 5⁄6 baud, seven LSB-first ASCII bits with a trailing null bit, and fractional-bit timing that keeps the 2083⅓ Hz/1562.5 Hz AFSK tones locked on spec. Each section carries a full one-second pause, and the End Of Message burst transmits the canonical `NNNN` payload exactly three times.
+
+Prefer scripts or automated testing? The legacy helper at `tools/generate_sample_audio.py` is still shipped with the project for command-line use.
 
 #### Optional Azure AI voiceover
 
@@ -270,13 +290,13 @@ Add `--dry-run` to verify the CAP file and confirm matching FIPS codes without s
 Manual broadcasts also enforce SAME event code filtering so the encoder only fires for authorized products. Use the `EAS_MANUAL_EVENT_CODES` environment variable (comma-separated, `ALL`, or the `TESTS` preset) or the `--event` CLI flag to extend the allow-list for a single run:
 
 ```bash
-export EAS_MANUAL_EVENT_CODES=TESTS  # RWT/RMT/DMO/NPT/NAT/NST
+export EAS_MANUAL_EVENT_CODES=TESTS  # RWT/RMT/DMO/NPT
 ./manual_eas_event.py manual_rwt.xml --event TOR
 ```
 
 The repository now ships with the complete nationwide FIPS/SAME registry in `app_utils/fips_codes.py`. Set `EAS_MANUAL_FIPS_CODES=ALL` (or `US`/`USA`) to authorize every code, or keep a smaller allow-list for tighter control. CLI output and audit logs include the friendly county/parish names so operators can double-check the targeted areas.
 
-Similarly, the full SAME event registry in `app_utils/event_codes.py` keeps headers, logs, and CLI summaries aligned with official code descriptions.
+Similarly, the full SAME event registry in `app_utils/event_codes.py` mirrors the 47 CFR §11.31(d–e) tables so headers, logs, and CLI summaries stay aligned with the authorised originator and event nomenclature.
 
 > **Tip:** Keep the output directory inside Flask's `static/` tree so the files can be served via `url_for('static', ...)`. If you relocate the directory, update both `EAS_OUTPUT_DIR` and `EAS_OUTPUT_WEB_SUBDIR` to maintain access from the UI.
 

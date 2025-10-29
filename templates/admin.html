@@ -361,6 +361,61 @@
 
         <!-- Main Admin Interface -->
         <div class="admin-card">
+            {% if setup_mode %}
+            <div class="card-header-custom">
+                <h5 class="mb-0">
+                    <i class="fas fa-user-shield text-success"></i> First-Time Administrator Setup
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-xl-6">
+                        <div class="alert alert-info-custom mb-4">
+                            <h5 class="fw-bold mb-2"><i class="fas fa-rocket"></i> Welcome to the control panel</h5>
+                            <p class="mb-2">Create the first administrator account to unlock the full admin experience. Once the account is saved you will be redirected to the sign-in page.</p>
+                            <p class="mb-0 small">
+                                Prefer the command line? Run
+                                <code>flask create-admin-user</code>
+                                inside the app container to provision an account manually.
+                            </p>
+                        </div>
+                        <ul class="list-unstyled text-muted small mb-4">
+                            <li class="mb-2"><i class="fas fa-check-circle text-success"></i> Choose a strong password (8+ characters) — hashes are stored using salted SHA-256.</li>
+                            <li class="mb-2"><i class="fas fa-check-circle text-success"></i> After signing in you can invite additional administrators and configure boundaries, polling, and broadcasting.</li>
+                            <li><i class="fas fa-check-circle text-success"></i> Rotate the default credentials immediately if this instance will be exposed beyond the local network.</li>
+                        </ul>
+                    </div>
+                    <div class="col-xl-6">
+                        <div class="border rounded-4 p-4 h-100" style="background: var(--light-color);">
+                            <h5 class="fw-bold mb-3"><i class="fas fa-user-plus text-success"></i> Create Administrator</h5>
+                            <form id="createUserForm" class="needs-validation" novalidate>
+                                <div class="mb-3">
+                                    <label for="newUserUsername" class="form-label">Username</label>
+                                    <input type="text" class="form-control" id="newUserUsername" name="username" pattern="[A-Za-z0-9_.-]{3,64}" required autofocus>
+                                    <div class="form-text">3-64 characters: letters, numbers, dot, dash, and underscore only.</div>
+                                    <div class="invalid-feedback">Enter a valid username (letters, numbers, dot, dash, underscore).</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="newUserPassword" class="form-label">Password</label>
+                                    <input type="password" class="form-control" id="newUserPassword" name="password" minlength="8" required>
+                                    <div class="form-text">Passwords are stored using salted SHA-256 hashes.</div>
+                                    <div class="invalid-feedback">Password must be at least 8 characters long.</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="newUserPasswordConfirm" class="form-label">Confirm Password</label>
+                                    <input type="password" class="form-control" id="newUserPasswordConfirm" minlength="8" required>
+                                    <div class="invalid-feedback">Passwords must match.</div>
+                                </div>
+                                <button type="submit" class="btn btn-custom btn-success w-100">
+                                    <i class="fas fa-user-shield"></i> Create Administrator Account
+                                </button>
+                            </form>
+                            <small class="text-muted d-block mt-3">You'll be redirected to the sign-in page after the account is created.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
             <div class="tabs-container">
                 <ul class="nav nav-tabs nav-tabs-custom" id="adminTabs" role="tablist">
                     <li class="nav-item" role="presentation">
@@ -854,8 +909,15 @@
 
                 <!-- EAS Output Tab -->
                 <div class="tab-pane fade" id="eas-output" role="tabpanel">
-                    <h4><i class="fas fa-broadcast-tower text-danger"></i> SAME / EAS Broadcast Activity</h4>
-                    <p class="text-muted">Monitor automatically generated SAME header audio, relay activations, and stored alert narratives.</p>
+                    <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+                        <div>
+                            <h4 class="mb-1"><i class="fas fa-broadcast-tower text-danger"></i> SAME / EAS Broadcast Console</h4>
+                            <p class="text-muted mb-0">Craft headers, tones, narration, and EOM bursts from the admin console—no CLI required.</p>
+                        </div>
+                        <a href="{{ url_for('help_page') }}#manualTools" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-book-open me-1"></i> Operator quick guide
+                        </a>
+                    </div>
 
                     {% if eas_enabled %}
                         <div class="alert alert-success-custom">
@@ -865,9 +927,252 @@
                     {% else %}
                         <div class="alert alert-warning-custom">
                             <strong>EAS broadcasting is currently disabled.</strong>
-                            Set <code>EAS_BROADCAST_ENABLED=true</code> in your environment to enable audio generation and relay control.
+                            Set <code>EAS_BROADCAST_ENABLED=true</code> in your environment to enable automatic message capture.
                         </div>
                     {% endif %}
+
+                    <div id="easGeneratorStatus" style="display: none;"></div>
+
+                    <div class="row g-4 mb-4">
+                        <div class="col-xl-5">
+                            <div class="admin-card h-100">
+                                <div class="card-header-custom">
+                                    <h5 class="mb-1"><i class="fas fa-tools me-2"></i>Manual Broadcast Builder</h5>
+                                    <small class="text-muted">Enter alert metadata to generate the SAME burst, attention tone, narration, and EOM.</small>
+                                </div>
+                                <div class="p-3">
+                                    <form id="easGeneratorForm" class="eas-generator-form" novalidate>
+                                        <div class="mb-3">
+                                            <label for="easIdentifier" class="form-label fw-bold">Message Identifier</label>
+                                            <div class="input-group">
+                                                <input type="text" class="form-control" id="easIdentifier" name="identifier" maxlength="120" required>
+                                                <button class="btn btn-outline-secondary" type="button" id="generateIdentifierBtn" title="Generate timestamp-based ID">
+                                                    <i class="fas fa-random"></i>
+                                                </button>
+                                            </div>
+                                            <div class="form-text">Used for filenames and metadata in the generated package.</div>
+                                        </div>
+
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <label for="easEventCode" class="form-label fw-bold">Event Code (EEE)</label>
+                                                <select class="form-select" id="easEventCode" name="event_code" required>
+                                                    {% for option in eas_event_codes %}
+                                                        <option value="{{ option.code }}"{% if option.code == 'RWT' or (option.code != 'RWT' and loop.first) %} selected{% endif %}>{{ option.code }} — {{ option.name }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                                <div class="form-text">Three-character SAME code from 47&nbsp;CFR&nbsp;§11.31(e).</div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="easEventName" class="form-label fw-bold">Event Name</label>
+                                                <input type="text" class="form-control" id="easEventName" name="event_name" required>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                                            <button type="button" class="btn btn-outline-primary btn-sm" id="quickRwtButton">
+                                                <i class="fas fa-broadcast-tower me-1"></i> Quick Weekly Test
+                                            </button>
+                                            <span class="text-muted small">Loads a Required Weekly Test with your default SAME counties.</span>
+                                        </div>
+
+                                        <div class="mb-3 mt-3">
+                                            <label class="form-label fw-bold">Location Codes (PSSCCC)</label>
+                                            <div class="row g-2 align-items-end">
+                                                <div class="col-md-6">
+                                                    <label for="easStateSelect" class="form-label text-uppercase small fw-bold text-muted mb-1">State / Territory</label>
+                                                    <select class="form-select" id="easStateSelect">
+                                                        <option value="">Select state or territory…</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label for="easCountySelect" class="form-label text-uppercase small fw-bold text-muted mb-1">County / Parish</label>
+                                                    <select class="form-select" id="easCountySelect" disabled>
+                                                        <option value="">Select a state first…</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex flex-wrap gap-2 mt-2">
+                                                <button type="button" class="btn btn-outline-primary btn-sm" id="addSameCodeBtn">
+                                                    <i class="fas fa-plus-circle"></i> Add Location
+                                                </button>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" id="clearSameCodeBtn">
+                                                    <i class="fas fa-trash-alt"></i> Clear List
+                                                </button>
+                                            </div>
+                                            <div class="mt-3 border rounded-3 p-3 bg-dark bg-opacity-10" id="easSelectedLocations">
+                                                <p class="text-muted small mb-0">No SAME / FIPS locations selected yet.</p>
+                                            </div>
+                                            <input type="hidden" id="easSameCodes" name="same_codes">
+                                            <div class="mt-2">
+                                                <button class="btn btn-link btn-sm px-0" type="button" data-bs-toggle="collapse" data-bs-target="#manualSameEntry" aria-expanded="false" aria-controls="manualSameEntry">
+                                                    <i class="fas fa-keyboard me-1"></i> Paste location codes manually
+                                                </button>
+                                                <div class="collapse mt-2" id="manualSameEntry">
+                                                    <textarea class="form-control" id="manualSameCodesInput" rows="2" placeholder="039137, 039069"></textarea>
+                                                    <div class="d-flex gap-2 mt-2">
+                                                        <button type="button" class="btn btn-outline-primary btn-sm" id="applyManualSameCodes">
+                                                            <i class="fas fa-plus"></i> Add Codes
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline-secondary btn-sm" id="clearManualSameCodes">
+                                                            <i class="fas fa-eraser"></i> Clear
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="form-text">Select PSSCCC entries by state and county or parish. The leading P digit marks the portion of the area (0 = entire jurisdiction).</div>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label class="text-uppercase small fw-bold text-muted">SAME Header Preview</label>
+                                            <div class="border rounded-3 p-3 bg-dark bg-opacity-10">
+                                                <code class="d-block text-break" id="sameHeaderPreview">ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-</code>
+                                                <div class="small text-muted mt-2" id="sameHeaderPreviewNote">Sixteen 0xAB bytes precede the ASCII header for receiver synchronisation.</div>
+                                            </div>
+                                            <div class="mt-3 small" id="sameHeaderPreviewBreakdown">
+                                                <p class="text-muted mb-0">Adjust originator, event, locations, and purge time to see the formatted header.</p>
+                                            </div>
+                                            <div class="mt-3">
+                                                <label class="text-uppercase small fw-bold text-muted">Header Field Reference</label>
+                                                <ul class="list-group list-group-flush small">
+                                                    {% for field in eas_header_fields %}
+                                                        <li class="list-group-item bg-transparent px-0">
+                                                            <strong>{{ field.segment }}</strong>
+                                                            {% if field.label %}<span class="text-muted">({{ field.label }})</span>{% endif %}
+                                                            — {{ field.description }}
+                                                        </li>
+                                                    {% endfor %}
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <label for="easDuration" class="form-label fw-bold">Purge Time (TTTT · minutes)</label>
+                                                <input type="number" class="form-control" id="easDuration" name="duration_minutes" min="1" max="720" value="30">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-bold">Header Repetition</label>
+                                                <div class="form-control-plaintext border rounded px-3 py-2 bg-dark bg-opacity-10">
+                                                    SAME headers transmit in three bursts as required by the specification.
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="row g-3 mt-1">
+                                            <div class="col-md-6">
+                                                <label for="easToneProfile" class="form-label fw-bold">Attention Signal</label>
+                                                <select class="form-select" id="easToneProfile" name="tone_profile">
+                                                    <option value="attention">EAS Attention (853/960 Hz)</option>
+                                                    <option value="1050">Legacy 1050 Hz Tone</option>
+                                                    <option value="none">No attention signal (omit)</option>
+                                                </select>
+                                                <div class="form-text">Skip the tone when only data bursts are required.</div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="easToneSeconds" class="form-label fw-bold">Attention Signal Duration (seconds)</label>
+                                                <input type="number" class="form-control" id="easToneSeconds" name="tone_seconds" step="0.5" min="0">
+                                                <div class="form-text">Set to 0 to omit the tone entirely.</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="row g-3 mt-1">
+                                            <div class="col-md-6">
+                                                <label for="easSampleRate" class="form-label fw-bold">Sample Rate (Hz)</label>
+                                                <input type="number" class="form-control" id="easSampleRate" name="sample_rate" min="8000" max="48000" step="1">
+                                                <div class="form-text">Defaults to the broadcaster setting.</div>
+                                            </div>
+                                            <div class="col-md-6 d-flex align-items-end">
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="easIncludeTts" name="include_tts" checked>
+                                                    <label class="form-check-label" for="easIncludeTts">Include narration (TTS) when available</label>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <hr class="my-3">
+
+                                        <div class="row g-3">
+                                            <div class="col-md-4 col-lg-3">
+                                                <label for="easOriginator" class="form-label fw-bold">Originator (ORG)</label>
+                                                <select class="form-select" id="easOriginator" name="originator" required>
+                                                    {% for option in eas_originator_choices %}
+                                                        <option value="{{ option.code }}"{% if option.code == eas_originator %} selected{% endif %}>
+                                                            {{ option.code }}{% if option.description %} — {{ option.description }}{% endif %}
+                                                        </option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                            <div class="col-md-8 col-lg-9">
+                                                <label for="easStationId" class="form-label fw-bold">Station Identifier (LLLLLLLL)</label>
+                                                <input type="text" class="form-control" id="easStationId" name="station_id" maxlength="8" required>
+                                                <div class="form-text">Eight uppercase characters, using “/” instead of dashes.</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="row g-3 mt-1">
+                                            <div class="col-md-6">
+                                                <label for="easStatus" class="form-label fw-bold">Status</label>
+                                                <select class="form-select" id="easStatus" name="status">
+                                                    <option value="Actual">Actual</option>
+                                                    <option value="Test">Test</option>
+                                                    <option value="Exercise">Exercise</option>
+                                                    <option value="System">System</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="easMessageType" class="form-label fw-bold">Message Type</label>
+                                                <select class="form-select" id="easMessageType" name="message_type">
+                                                    <option value="Alert">Alert</option>
+                                                    <option value="Update">Update</option>
+                                                    <option value="Cancel">Cancel</option>
+                                                    <option value="Ack">Ack</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div class="mb-3 mt-3">
+                                            <label for="easHeadline" class="form-label fw-bold">Headline</label>
+                                            <input type="text" class="form-control" id="easHeadline" name="headline" maxlength="240">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="easMessageBody" class="form-label fw-bold">Message Body</label>
+                                            <textarea class="form-control" id="easMessageBody" name="message" rows="3" placeholder="Narration text to read to the public."></textarea>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="easInstruction" class="form-label fw-bold">Public Instructions</label>
+                                            <textarea class="form-control" id="easInstruction" name="instruction" rows="2" placeholder="Protective actions or follow-up guidance."></textarea>
+                                        </div>
+
+                                        <div class="d-flex gap-2">
+                                            <button type="submit" class="btn btn-custom btn-primary flex-grow-1">
+                                                <i class="fas fa-broadcast-tower"></i> Generate Package
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary" id="resetEasGenerator">
+                                                <i class="fas fa-undo"></i>
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-xl-7">
+                            <div class="admin-card h-100">
+                                <div class="card-header-custom d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <h5 class="mb-1"><i class="fas fa-wave-square me-2"></i>Output Components</h5>
+                                        <small class="text-muted">Preview and download each part before relaying it on-air.</small>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="copySameHeaderBtn" disabled>
+                                        <i class="fas fa-copy"></i> Copy SAME Header
+                                    </button>
+                                </div>
+                                <div class="p-3" id="easGeneratorResults">
+                                    <p class="text-muted mb-0">Fill out the form to generate SAME/EAS audio assets.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <div>
@@ -942,12 +1247,14 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
         </div>
 
         <!-- Operation Status -->
-        <div id="operationStatus" class="mt-3"></div>
+        <div id="operationStatus" class="mt-3" style="display: none;"></div>
     </div>
 
+    {% if not setup_mode %}
     <!-- Confirmation Modal -->
     <div class="modal fade confirmation-modal" id="confirmationModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -1083,11 +1390,14 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
+    {% if not setup_mode %}
     <!-- Keyboard Shortcuts Info -->
     <div class="keyboard-shortcuts">
         <i class="fas fa-keyboard"></i> Alt+1-8: Switch Tabs | Alt+R: Refresh | Alt+H: Help
     </div>
+    {% endif %}
 </div>
 {% endblock %}
 
@@ -1095,6 +1405,34 @@
     <script>
         const BOUNDARY_TYPE_CONFIG = window.BOUNDARY_TYPE_CONFIG || {};
         const DEFAULT_BOUNDARY_TYPES = new Set(Object.keys(BOUNDARY_TYPE_CONFIG));
+        const ADMIN_SETUP_MODE = {{ 'true' if setup_mode else 'false' }};
+        const EAS_EVENT_CODES = {{ eas_event_codes|tojson }};
+        const EAS_DEFAULTS = {
+            originator: {{ eas_originator|tojson }},
+            stationId: {{ eas_station_id|tojson }},
+            attentionSeconds: {{ eas_attention_seconds|default(8)|tojson }},
+            sampleRate: {{ eas_sample_rate|default(44100)|tojson }},
+            ttsProvider: {{ eas_tts_provider|tojson }},
+            defaultSameCodes: {{ eas_default_same_codes|tojson }},
+        };
+        const EAS_FIPS_TREE = {{ eas_fips_states|tojson }};
+        const EAS_FIPS_LOOKUP = {{ eas_fips_lookup|tojson }};
+        const EAS_ORIGINATOR_DESCRIPTIONS = {{ eas_originator_descriptions|tojson }};
+        const EAS_P_DIGIT_MEANINGS = {{ eas_p_digit_meanings|tojson }};
+        const MAX_SAME_CODES = 31;
+        const EAS_STATE_BY_ABBR = {};
+        const EAS_STATE_BY_FIPS = {};
+        (Array.isArray(EAS_FIPS_TREE) ? EAS_FIPS_TREE : []).forEach((state) => {
+            if (!state) {
+                return;
+            }
+            if (state.abbr) {
+                EAS_STATE_BY_ABBR[state.abbr] = state;
+            }
+            if (state.state_fips) {
+                EAS_STATE_BY_FIPS[state.state_fips] = state;
+            }
+        });
 
         // Global variables
         let confirmationModal;
@@ -1105,6 +1443,8 @@
         let alertSearchTimeout = null;
         let editingAlertId = null;
         let locationSettingsCache = window.APP_LOCATION ? { ...window.APP_LOCATION } : null;
+        let easLastResponse = null;
+        let selectedSameCodes = [];
 
         const sanitizeBoundaryTypeInput = (value) => {
             if (!value) {
@@ -1247,17 +1587,27 @@
 
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
-            confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+            initializeUserManagement();
+
+            if (ADMIN_SETUP_MODE) {
+                return;
+            }
+
+            const confirmationModalElement = document.getElementById('confirmationModal');
+            if (confirmationModalElement) {
+                confirmationModal = new bootstrap.Modal(confirmationModalElement);
+            }
+
             const editAlertModalElement = document.getElementById('editAlertModal');
             if (editAlertModalElement) {
                 editAlertModal = new bootstrap.Modal(editAlertModalElement);
             }
+
             loadBoundaries();
             loadSystemHealth();
             setupKeyboardShortcuts();
             initializeAlertManagement();
             initializeLocationSettings();
-            initializeUserManagement();
             initializeEasPanel();
             initializeCustomTypeControls();
 
@@ -1432,8 +1782,15 @@
                     form.reset();
                     form.classList.remove('was-validated');
                     confirmInput.setCustomValidity('');
-                    showStatus(data.message || 'User created successfully.', 'success');
+                    const successMessage = data.message || 'User created successfully.';
+                    const finalMessage = ADMIN_SETUP_MODE ? `${successMessage} Redirecting to sign in…` : successMessage;
+                    showStatus(finalMessage, 'success', ADMIN_SETUP_MODE ? 0 : 5000);
                     loadUserAccounts();
+                    if (ADMIN_SETUP_MODE) {
+                        setTimeout(() => {
+                            window.location.href = '/login';
+                        }, 1800);
+                    }
                 } catch (error) {
                     console.error('Failed to create user', error);
                     showStatus('Unexpected error while creating user.', 'danger');
@@ -1532,6 +1889,7 @@
         }
 
         function initializeEasPanel() {
+            initializeEasGenerator();
             loadEasMessages();
             const refreshButton = document.getElementById('refreshEasMessages');
             if (refreshButton) {
@@ -1625,6 +1983,1192 @@
                 console.error('Failed to load EAS messages', error);
                 showStatus('Unexpected error while loading EAS transmissions.', 'danger');
             }
+        }
+
+        function initializeEasGenerator() {
+            const form = document.getElementById('easGeneratorForm');
+            if (!form) {
+                return;
+            }
+
+            initializeSameCodeSelector();
+            populateEasEventCodes();
+            const eventNameInput = document.getElementById('easEventName');
+            if (eventNameInput) {
+                eventNameInput.addEventListener('input', () => {
+                    eventNameInput.dataset.autofilled = 'false';
+                });
+            }
+
+            const quickRwtButton = document.getElementById('quickRwtButton');
+            if (quickRwtButton) {
+                quickRwtButton.addEventListener('click', () => applyQuickRwtTemplate());
+            }
+
+            const eventSelect = document.getElementById('easEventCode');
+            if (eventSelect) {
+                eventSelect.addEventListener('change', () => {
+                    syncEasEventName(true);
+                    updateSameHeaderPreview();
+                });
+            }
+
+            const toneProfileSelect = document.getElementById('easToneProfile');
+            if (toneProfileSelect) {
+                toneProfileSelect.addEventListener('change', () => updateToneControls());
+            }
+
+            form.addEventListener('submit', handleManualEasGenerate);
+
+            const resetButton = document.getElementById('resetEasGenerator');
+            if (resetButton) {
+                resetButton.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    resetEasGeneratorForm();
+                });
+            }
+
+            const randomButton = document.getElementById('generateIdentifierBtn');
+            if (randomButton) {
+                randomButton.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    assignNewIdentifier(true);
+                });
+            }
+
+            ['easOriginator', 'easStationId', 'easDuration'].forEach((elementId) => {
+                const element = document.getElementById(elementId);
+                if (!element) {
+                    return;
+                }
+                element.addEventListener('input', () => updateSameHeaderPreview());
+                element.addEventListener('change', () => updateSameHeaderPreview());
+            });
+
+            resetEasGeneratorForm(true);
+
+            const copyButton = document.getElementById('copySameHeaderBtn');
+            if (copyButton) {
+                copyButton.addEventListener('click', async () => {
+                    if (!easLastResponse || !easLastResponse.same_header) {
+                        return;
+                    }
+                    try {
+                        await navigator.clipboard.writeText(easLastResponse.same_header);
+                        setEasGeneratorStatus('SAME header copied to clipboard.', 'success');
+                    } catch (error) {
+                        setEasGeneratorStatus('Unable to copy header to clipboard.', 'warning');
+                    }
+                });
+            }
+        }
+
+        function populateEasEventCodes() {
+            const select = document.getElementById('easEventCode');
+            if (!select) {
+                return;
+            }
+
+            const previousValue = select.value;
+            const domEntries = Array.from(select.options || [])
+                .map((option) => {
+                    const code = option.value;
+                    const optionText = (option.textContent || '').trim();
+                    const parts = optionText.split('—').map((part) => part.trim()).filter(Boolean);
+                    const name = parts.length > 1 ? parts.slice(1).join(' — ') : (parts[0] || code);
+                    return { code, name };
+                })
+                .filter((entry) => entry.code);
+
+            let entries = Array.isArray(EAS_EVENT_CODES) ? [...EAS_EVENT_CODES] : [];
+            if (!entries.length && domEntries.length) {
+                entries = domEntries;
+            }
+
+            entries = entries
+                .map((entry) => ({ code: entry.code, name: entry.name || entry.code }))
+                .filter((entry) => entry.code)
+                .sort((a, b) => a.code.localeCompare(b.code));
+
+            if (!entries.length) {
+                entries = [{ code: 'RWT', name: 'Required Weekly Test' }];
+            }
+
+            select.innerHTML = '';
+            const fragment = document.createDocumentFragment();
+
+            entries.forEach((entry) => {
+                const option = document.createElement('option');
+                option.value = entry.code;
+                option.textContent = `${entry.code} — ${entry.name || entry.code}`;
+                fragment.appendChild(option);
+            });
+
+            select.appendChild(fragment);
+
+            const preferredCode = entries.find((entry) => entry.code === previousValue)?.code
+                || entries.find((entry) => entry.code === 'RWT')?.code
+                || (entries.length ? entries[0].code : 'RWT');
+
+            select.value = preferredCode;
+            syncEasEventName(true);
+        }
+
+        function syncEasEventName(force = false) {
+            const select = document.getElementById('easEventCode');
+            const input = document.getElementById('easEventName');
+            if (!select || !input) {
+                return;
+            }
+
+            const entry = (Array.isArray(EAS_EVENT_CODES) ? EAS_EVENT_CODES : []).find((item) => item.code === select.value);
+            if (!entry) {
+                if (force && !input.value) {
+                    input.value = select.value || '';
+                    input.dataset.autofilled = 'true';
+                }
+                return;
+            }
+
+            if (force || !input.value || input.dataset.autofilled === 'true') {
+                input.value = entry.name || entry.code;
+                input.dataset.autofilled = 'true';
+            }
+        }
+
+        function getConfiguredDefaultSameCodes() {
+            if (Array.isArray(window.APP_LOCATION?.same_codes) && window.APP_LOCATION.same_codes.length) {
+                return window.APP_LOCATION.same_codes;
+            }
+            if (Array.isArray(EAS_DEFAULTS.defaultSameCodes) && EAS_DEFAULTS.defaultSameCodes.length) {
+                return EAS_DEFAULTS.defaultSameCodes;
+            }
+            return [];
+        }
+
+        function resetEasGeneratorForm(skipEventPopulation = false) {
+            const form = document.getElementById('easGeneratorForm');
+            if (!form) {
+                return;
+            }
+
+            form.reset();
+
+            if (!skipEventPopulation) {
+                populateEasEventCodes();
+            } else {
+                syncEasEventName(true);
+            }
+
+            setEasDefaultValue('easOriginator', EAS_DEFAULTS.originator);
+            const defaultStation = (EAS_DEFAULTS.stationId || '').toString().toUpperCase();
+            setEasDefaultValue('easStationId', defaultStation);
+            setEasDefaultValue('easToneSeconds', EAS_DEFAULTS.attentionSeconds);
+            setEasDefaultValue('easSampleRate', EAS_DEFAULTS.sampleRate);
+
+            const toneProfileSelect = document.getElementById('easToneProfile');
+            if (toneProfileSelect) {
+                toneProfileSelect.value = 'attention';
+            }
+            updateToneControls();
+
+            const includeTts = document.getElementById('easIncludeTts');
+            if (includeTts) {
+                includeTts.checked = (EAS_DEFAULTS.ttsProvider || '') === 'azure';
+            }
+
+            assignNewIdentifier(false);
+            setSelectedSameCodes(getConfiguredDefaultSameCodes());
+            setEasGeneratorStatus('');
+            renderEasGeneratorResults(null);
+            updateSameHeaderPreview();
+        }
+
+        function applyQuickRwtTemplate() {
+            const eventSelect = document.getElementById('easEventCode');
+            if (eventSelect) {
+                let desired = 'RWT';
+                const hasDesired = Array.from(eventSelect.options || []).some((option) => option.value === desired);
+                if (!hasDesired && eventSelect.options.length) {
+                    desired = eventSelect.options[0].value;
+                }
+                eventSelect.value = desired;
+                eventSelect.dispatchEvent(new Event('change'));
+            }
+            syncEasEventName(true);
+
+            const originatorSelect = document.getElementById('easOriginator');
+            const defaultOriginator = (EAS_DEFAULTS.originator || 'WXR').toString().toUpperCase();
+            if (originatorSelect && originatorSelect.options.length) {
+                const hasDefault = Array.from(originatorSelect.options).some((option) => option.value === defaultOriginator);
+                originatorSelect.value = hasDefault ? defaultOriginator : originatorSelect.options[0].value;
+            }
+
+            setEasDefaultValue('easStationId', (EAS_DEFAULTS.stationId || '').toString().toUpperCase());
+
+            const durationInput = document.getElementById('easDuration');
+            if (durationInput) {
+                durationInput.value = '15';
+            }
+
+            const statusSelect = document.getElementById('easStatus');
+            if (statusSelect) {
+                statusSelect.value = 'Test';
+            }
+
+            const toneProfileSelect = document.getElementById('easToneProfile');
+            if (toneProfileSelect) {
+                toneProfileSelect.value = 'none';
+            }
+
+            const toneSecondsInput = document.getElementById('easToneSeconds');
+            if (toneSecondsInput) {
+                toneSecondsInput.value = '0';
+            }
+
+            updateToneControls();
+
+            assignNewIdentifier(true);
+            setSelectedSameCodes(getConfiguredDefaultSameCodes());
+
+            const headlineInput = document.getElementById('easHeadline');
+            if (headlineInput) {
+                headlineInput.value = 'This is a Required Weekly Test.';
+            }
+
+            const messageInput = document.getElementById('easMessage');
+            if (messageInput) {
+                messageInput.value = 'This is a test of the Emergency Alert System. No action is required.';
+            }
+
+            const instructionInput = document.getElementById('easInstruction');
+            if (instructionInput) {
+                instructionInput.value = '';
+            }
+
+            setEasGeneratorStatus('Loaded the Required Weekly Test preset with the attention signal omitted. Review the narration before transmitting.', 'info');
+            updateSameHeaderPreview();
+        }
+
+        function setEasDefaultValue(elementId, value) {
+            if (value === undefined || value === null) {
+                return;
+            }
+            const element = document.getElementById(elementId);
+            if (!element) {
+                return;
+            }
+            if (element.type === 'checkbox') {
+                element.checked = Boolean(value);
+                return;
+            }
+            element.value = value;
+        }
+
+        function updateToneControls() {
+            const toneProfileSelect = document.getElementById('easToneProfile');
+            const toneSecondsInput = document.getElementById('easToneSeconds');
+            if (!toneProfileSelect || !toneSecondsInput) {
+                return;
+            }
+
+            const profile = (toneProfileSelect.value || '').toLowerCase();
+            const omitTone = profile === 'none';
+
+            toneSecondsInput.readOnly = omitTone;
+            toneSecondsInput.classList.toggle('bg-light', omitTone);
+            toneSecondsInput.classList.toggle('text-muted', omitTone);
+            if (omitTone) {
+                toneSecondsInput.value = '0';
+                toneSecondsInput.setAttribute('aria-readonly', 'true');
+            } else {
+                toneSecondsInput.removeAttribute('aria-readonly');
+                const secondsValue = Number(toneSecondsInput.value);
+                if (!Number.isFinite(secondsValue) || secondsValue <= 0) {
+                    toneSecondsInput.value = EAS_DEFAULTS.attentionSeconds || 8;
+                }
+            }
+        }
+
+        function assignNewIdentifier(force = false) {
+            const input = document.getElementById('easIdentifier');
+            if (!input) {
+                return;
+            }
+            if (!force && input.value.trim()) {
+                return;
+            }
+            const station = (EAS_DEFAULTS.stationId || 'EASNODES')
+                .toString()
+                .toUpperCase()
+                .replace(/[^A-Za-z0-9]/g, '')
+                .slice(0, 8) || 'EASNODES';
+            const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+            input.value = `${station}-${timestamp}`;
+        }
+
+        function normalizeSameCode(value) {
+            if (value === undefined || value === null) {
+                return '';
+            }
+            const digits = String(value).replace(/[^0-9]/g, '');
+            if (!digits) {
+                return '';
+            }
+            return digits.padStart(6, '0').slice(0, 6);
+        }
+
+        function getSameCodeDetails(code) {
+            const normalized = normalizeSameCode(code);
+            if (!normalized) {
+                return null;
+            }
+            const pDigit = normalized[0];
+            const stateFips = normalized.slice(1, 3);
+            const countyFips = normalized.slice(3);
+            const state = EAS_STATE_BY_FIPS[stateFips] || {};
+            const stateName = state.name || state.abbr || stateFips;
+            const stateAbbr = state.abbr || stateFips;
+            const isStatewide = countyFips === '000';
+            const lookupLabel = EAS_FIPS_LOOKUP ? EAS_FIPS_LOOKUP[normalized] : null;
+            const description = lookupLabel || (isStatewide ? `All Areas, ${stateAbbr}` : normalized);
+            return {
+                code: normalized,
+                pDigit,
+                pMeaning: (EAS_P_DIGIT_MEANINGS && EAS_P_DIGIT_MEANINGS[pDigit]) || null,
+                stateFips,
+                stateName,
+                stateAbbr,
+                countyFips,
+                isStatewide,
+                description,
+            };
+        }
+
+        function populateStateOptions() {
+            const stateSelect = document.getElementById('easStateSelect');
+            if (!stateSelect) {
+                return;
+            }
+            stateSelect.innerHTML = '<option value="">Select state or territory…</option>';
+            const fragment = document.createDocumentFragment();
+            (Array.isArray(EAS_FIPS_TREE) ? EAS_FIPS_TREE : []).forEach((state) => {
+                if (!state || !state.abbr) {
+                    return;
+                }
+                const option = document.createElement('option');
+                option.value = state.abbr;
+                option.textContent = `${state.name || state.abbr} (${state.abbr})`;
+                fragment.appendChild(option);
+            });
+            stateSelect.appendChild(fragment);
+        }
+
+        function populateCountyOptions(stateAbbr, selectedCode = '') {
+            const countySelect = document.getElementById('easCountySelect');
+            if (!countySelect) {
+                return;
+            }
+            countySelect.innerHTML = '';
+            countySelect.disabled = true;
+
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = stateAbbr ? 'Select county or parish…' : 'Select a state first…';
+            countySelect.appendChild(placeholder);
+
+            if (!stateAbbr) {
+                return;
+            }
+
+            const state = EAS_STATE_BY_ABBR[stateAbbr];
+            if (!state) {
+                return;
+            }
+
+            if (state.statewide_code) {
+                const statewideOption = document.createElement('option');
+                statewideOption.value = state.statewide_code;
+                statewideOption.textContent = `Entire ${state.name || state.abbr} (${state.statewide_code})`;
+                countySelect.appendChild(statewideOption);
+            }
+
+            (Array.isArray(state.counties) ? state.counties : []).forEach((county) => {
+                if (!county || !county.code) {
+                    return;
+                }
+                const option = document.createElement('option');
+                option.value = county.code;
+                option.textContent = `${county.name || county.code} (${county.code})`;
+                countySelect.appendChild(option);
+            });
+
+            countySelect.disabled = false;
+            if (selectedCode) {
+                countySelect.value = selectedCode;
+            }
+        }
+
+        function updateSelectedSameCodesDisplay() {
+            const container = document.getElementById('easSelectedLocations');
+            const hiddenInput = document.getElementById('easSameCodes');
+            if (hiddenInput) {
+                hiddenInput.value = selectedSameCodes.join(', ');
+            }
+            if (!container) {
+                return;
+            }
+            if (!selectedSameCodes.length) {
+                container.innerHTML = '<p class="text-muted small mb-0">No SAME / FIPS locations selected yet.</p>';
+                updateSameHeaderPreview();
+                return;
+            }
+            const items = selectedSameCodes.map((code) => {
+                const detail = getSameCodeDetails(code) || {
+                    code,
+                    description: code,
+                    pMeaning: null,
+                    isStatewide: false,
+                };
+                const portion = detail.pMeaning ? detail.pMeaning : `P=${escapeHtml(detail.code[0])}`;
+                const portionLabel = detail.isStatewide ? 'Entire jurisdiction' : portion;
+                return `
+                    <div class="border rounded-3 p-2 bg-dark bg-opacity-10 d-flex align-items-center justify-content-between mb-2 gap-3">
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold">${escapeHtml(detail.description || detail.code)}</div>
+                            <div class="small text-muted">PSSCCC: <code>${escapeHtml(detail.code)}</code> · ${escapeHtml(portionLabel)}</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger" data-remove-same-code="${escapeHtml(detail.code)}">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                `;
+            }).join('');
+            container.innerHTML = items;
+            updateSameHeaderPreview();
+        }
+
+        function setSelectedSameCodes(codes) {
+            const normalized = Array.isArray(codes) ? codes.map(normalizeSameCode).filter(Boolean) : [];
+            const unique = [];
+            normalized.forEach((code) => {
+                if (!code) {
+                    return;
+                }
+                if (!unique.includes(code)) {
+                    unique.push(code);
+                }
+            });
+            if (unique.length > MAX_SAME_CODES) {
+                setEasGeneratorStatus('SAME headers support a maximum of 31 locations. Extra entries were ignored.', 'warning');
+            }
+            selectedSameCodes = unique.slice(0, MAX_SAME_CODES);
+            updateSelectedSameCodesDisplay();
+
+            const stateSelect = document.getElementById('easStateSelect');
+            if (!stateSelect) {
+                return;
+            }
+            if (!selectedSameCodes.length) {
+                stateSelect.value = '';
+                populateCountyOptions('');
+                return;
+            }
+            const lastDetail = getSameCodeDetails(selectedSameCodes[selectedSameCodes.length - 1]);
+            if (lastDetail) {
+                const state = EAS_STATE_BY_FIPS[lastDetail.stateFips];
+                if (state && state.abbr) {
+                    stateSelect.value = state.abbr;
+                    populateCountyOptions(state.abbr, lastDetail.code);
+                    return;
+                }
+            }
+            stateSelect.value = '';
+            populateCountyOptions('');
+        }
+
+        function addSameCodes(codes) {
+            const stateSelect = document.getElementById('easStateSelect');
+            const countySelect = document.getElementById('easCountySelect');
+            let lastDetail = null;
+            let limitReached = false;
+            (Array.isArray(codes) ? codes : []).forEach((code) => {
+                const normalized = normalizeSameCode(code);
+                if (!normalized || selectedSameCodes.includes(normalized)) {
+                    return;
+                }
+                if (selectedSameCodes.length >= MAX_SAME_CODES) {
+                    limitReached = true;
+                    return;
+                }
+                selectedSameCodes.push(normalized);
+                lastDetail = getSameCodeDetails(normalized) || lastDetail;
+            });
+            if (limitReached) {
+                setEasGeneratorStatus('Maximum of 31 SAME locations reached; additional entries were ignored.', 'warning');
+            }
+            updateSelectedSameCodesDisplay();
+            if (lastDetail && stateSelect && countySelect) {
+                const state = EAS_STATE_BY_FIPS[lastDetail.stateFips];
+                if (state && state.abbr) {
+                    stateSelect.value = state.abbr;
+                    populateCountyOptions(state.abbr, lastDetail.code);
+                }
+            }
+        }
+
+        function removeSameCode(code) {
+            const normalized = normalizeSameCode(code);
+            if (!normalized) {
+                return;
+            }
+            selectedSameCodes = selectedSameCodes.filter((item) => item !== normalized);
+            updateSelectedSameCodesDisplay();
+        }
+
+        function handleAddSameCode() {
+            const stateSelect = document.getElementById('easStateSelect');
+            const countySelect = document.getElementById('easCountySelect');
+            if (!stateSelect || !countySelect) {
+                return;
+            }
+            const stateAbbr = stateSelect.value;
+            const countyCode = countySelect.value;
+            if (!stateAbbr || !countyCode) {
+                setEasGeneratorStatus('Select a state and county before adding a location code.', 'warning');
+                return;
+            }
+            addSameCodes([countyCode]);
+        }
+
+        function initializeSameCodeSelector() {
+            populateStateOptions();
+            populateCountyOptions('');
+            updateSelectedSameCodesDisplay();
+
+            const stateSelect = document.getElementById('easStateSelect');
+            const countySelect = document.getElementById('easCountySelect');
+            const addButton = document.getElementById('addSameCodeBtn');
+            const clearButton = document.getElementById('clearSameCodeBtn');
+            const manualInput = document.getElementById('manualSameCodesInput');
+            const manualAdd = document.getElementById('applyManualSameCodes');
+            const manualClear = document.getElementById('clearManualSameCodes');
+            const selectedContainer = document.getElementById('easSelectedLocations');
+
+            if (stateSelect) {
+                stateSelect.addEventListener('change', (event) => {
+                    const abbr = event.target ? event.target.value : '';
+                    populateCountyOptions(abbr || '');
+                });
+            }
+
+            if (addButton) {
+                addButton.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    handleAddSameCode();
+                });
+            }
+
+            if (clearButton) {
+                clearButton.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    setSelectedSameCodes([]);
+                });
+            }
+
+            if (manualAdd) {
+                manualAdd.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    if (!manualInput) {
+                        return;
+                    }
+                    const codes = parseSameCodeInput(manualInput.value);
+                    manualInput.value = '';
+                    if (codes.length) {
+                        addSameCodes(codes);
+                    }
+                });
+            }
+
+            if (manualClear) {
+                manualClear.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    if (manualInput) {
+                        manualInput.value = '';
+                    }
+                    updateSameHeaderPreview();
+                });
+            }
+
+            if (manualInput) {
+                manualInput.addEventListener('input', () => {
+                    updateSameHeaderPreview();
+                });
+            }
+
+            if (selectedContainer) {
+                selectedContainer.addEventListener('click', (event) => {
+                    const target = event.target;
+                    if (!target) {
+                        return;
+                    }
+                    const button = target.closest('[data-remove-same-code]');
+                    if (button) {
+                        const code = button.getAttribute('data-remove-same-code');
+                        removeSameCode(code);
+                    }
+                });
+            }
+        }
+
+        function parseSameCodeInput(raw) {
+            if (!raw) {
+                return [];
+            }
+            return raw
+                .split(/[^0-9]+/)
+                .map((item) => normalizeSameCode(item))
+                .filter(Boolean);
+        }
+
+        function gatherManualSameCodes() {
+            const manualInput = document.getElementById('manualSameCodesInput');
+            return manualInput ? parseSameCodeInput(manualInput.value) : [];
+        }
+
+        function gatherAllSameCodes() {
+            const combined = Array.from(selectedSameCodes);
+            let limitReached = combined.length >= MAX_SAME_CODES;
+            gatherManualSameCodes().forEach((code) => {
+                if (!code || combined.includes(code) || limitReached) {
+                    return;
+                }
+                if (combined.length >= MAX_SAME_CODES) {
+                    limitReached = true;
+                    return;
+                }
+                combined.push(code);
+            });
+            if (limitReached) {
+                setEasGeneratorStatus('Only the first 31 SAME locations are encoded per the specification.', 'warning');
+            }
+            return combined.slice(0, MAX_SAME_CODES);
+        }
+
+        function roundDurationMinutes(value) {
+            let minutes = Number(value);
+            if (!Number.isFinite(minutes) || minutes <= 0) {
+                minutes = 15;
+            }
+            if (minutes <= 60) {
+                minutes = Math.ceil(minutes / 15) * 15;
+            } else if (minutes <= 360) {
+                minutes = Math.ceil(minutes / 30) * 30;
+            } else {
+                minutes = Math.ceil(minutes / 60) * 60;
+            }
+            return Math.max(15, Math.min(minutes, 600));
+        }
+
+        function formatDurationMinutesLabel(minutes) {
+            if (!Number.isFinite(minutes)) {
+                return null;
+            }
+            if (minutes === 0) {
+                return '0 minutes (immediate purge)';
+            }
+            if (minutes % 60 === 0) {
+                const hours = minutes / 60;
+                return `${hours} hour${hours === 1 ? '' : 's'}`;
+            }
+            return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+        }
+
+        function computeSameHeaderPreview() {
+            const originatorInput = document.getElementById('easOriginator');
+            const stationInput = document.getElementById('easStationId');
+            const durationInput = document.getElementById('easDuration');
+            const eventSelect = document.getElementById('easEventCode');
+
+            const codes = gatherAllSameCodes();
+            const hasCodes = codes.length > 0;
+
+            const originatorRaw = (originatorInput?.value || EAS_DEFAULTS.originator || 'WXR')
+                .toUpperCase()
+                .replace(/[^A-Z0-9]/g, '');
+            const originator = originatorRaw.padEnd(3, 'X').slice(0, 3);
+
+            const eventRaw = (eventSelect?.value || 'RWT').toUpperCase().replace(/[^A-Z0-9?]/g, '');
+            const eventCode = eventRaw.padEnd(3, 'T').slice(0, 3);
+
+            const durationRounded = roundDurationMinutes(durationInput?.value ?? 15);
+            const durationCode = String(durationRounded).padStart(4, '0');
+
+            const now = new Date();
+            const startOfYear = Date.UTC(now.getUTCFullYear(), 0, 1, 0, 0, 0, 0);
+            const millisIntoYear = Date.UTC(
+                now.getUTCFullYear(),
+                now.getUTCMonth(),
+                now.getUTCDate(),
+                now.getUTCHours(),
+                now.getUTCMinutes(),
+                0,
+                0,
+            ) - startOfYear;
+            const dayOfYear = Math.floor(millisIntoYear / 86400000) + 1;
+            const hour = now.getUTCHours();
+            const minute = now.getUTCMinutes();
+            const julianCode = `${dayOfYear.toString().padStart(3, '0')}${hour.toString().padStart(2, '0')}${minute
+                .toString()
+                .padStart(2, '0')}`;
+
+            const stationRaw = (stationInput?.value || EAS_DEFAULTS.stationId || 'EASNODES').toUpperCase();
+            const stationIdentifier = stationRaw.padEnd(8, ' ').slice(0, 8);
+
+            const locationField = hasCodes ? codes.join('-') : 'PSSCCC';
+            const header = `ZCZC-${originator}-${eventCode}-${locationField}+${durationCode}-${julianCode}-${stationIdentifier}-`;
+
+            if (!hasCodes) {
+                return {
+                    header,
+                    detail: {
+                        preamble: 'ZCZC',
+                        preamble_description:
+                            'SAME headers begin with a sixteen-byte 0xAB preamble for receiver synchronisation.',
+                        originator,
+                        originator_description: EAS_ORIGINATOR_DESCRIPTIONS?.[originator] || null,
+                        event_code: eventCode,
+                        locations: [],
+                        raw_locations: [],
+                        purge_code: durationCode,
+                        purge_minutes: durationRounded,
+                        purge_label: formatDurationMinutesLabel(durationRounded),
+                        issue_code: julianCode,
+                        issue_time_label: `Day ${dayOfYear.toString().padStart(3, '0')} at ${hour
+                            .toString()
+                            .padStart(2, '0')}:${minute.toString().padStart(2, '0')} UTC`,
+                        issue_time_iso: new Date(
+                            Date.UTC(now.getUTCFullYear(), 0, dayOfYear, hour, minute, 0, 0),
+                        ).toISOString(),
+                        station_identifier: stationIdentifier,
+                        placeholder_locations: true,
+                    },
+                };
+            }
+
+            const locationDetails = codes.map((code) => {
+                const info = getSameCodeDetails(code);
+                if (!info) {
+                    return {
+                        code,
+                        description: code,
+                        p_digit: code[0],
+                        p_meaning: EAS_P_DIGIT_MEANINGS?.[code[0]] || null,
+                        state_abbr: code.slice(1, 3),
+                        county_fips: code.slice(3),
+                        is_statewide: code.slice(3) === '000',
+                    };
+                }
+                return {
+                    code: info.code,
+                    description: info.description || info.code,
+                    p_digit: info.pDigit,
+                    p_meaning: info.pMeaning,
+                    state_abbr: info.stateAbbr,
+                    state_name: info.stateName,
+                    county_fips: info.countyFips,
+                    is_statewide: info.isStatewide,
+                };
+            });
+
+            return {
+                header,
+                detail: {
+                    preamble: 'ZCZC',
+                    preamble_description:
+                        'SAME headers begin with a sixteen-byte 0xAB preamble for receiver synchronisation.',
+                    originator,
+                    originator_description: EAS_ORIGINATOR_DESCRIPTIONS?.[originator] || null,
+                    event_code: eventCode,
+                    locations: locationDetails,
+                    raw_locations: codes,
+                    purge_code: durationCode,
+                    purge_minutes: durationRounded,
+                    purge_label: formatDurationMinutesLabel(durationRounded),
+                    issue_code: julianCode,
+                    issue_time_label: `Day ${dayOfYear.toString().padStart(3, '0')} at ${hour
+                        .toString()
+                        .padStart(2, '0')}:${minute.toString().padStart(2, '0')} UTC`,
+                    issue_time_iso: new Date(
+                        Date.UTC(now.getUTCFullYear(), 0, dayOfYear, hour, minute, 0, 0),
+                    ).toISOString(),
+                    station_identifier: stationIdentifier,
+                    placeholder_locations: false,
+                },
+            };
+        }
+
+        function renderSameHeaderDetail(detail, options = {}) {
+            const settings = {
+                includeLocations: true,
+                includePreambleNote: true,
+                emptyMessage: '',
+                wrapperClass: 'border rounded-3 p-3 mb-3 bg-dark bg-opacity-10',
+                ...options,
+            };
+
+            if (!detail || !detail.originator) {
+                return settings.emptyMessage || '';
+            }
+
+            const originatorDescription =
+                detail.originator_description
+                || (EAS_ORIGINATOR_DESCRIPTIONS ? EAS_ORIGINATOR_DESCRIPTIONS[detail.originator] : null);
+            const purgeLabel = detail.purge_label
+                ? `<span class="small text-muted ms-1">(${escapeHtml(detail.purge_label)})</span>`
+                : '';
+            const issueDescription = detail.issue_time_label
+                ? `<div class="small text-muted">${escapeHtml(detail.issue_time_label)}</div>`
+                : '';
+
+            let locationRows = '';
+            if (settings.includeLocations) {
+                locationRows = (Array.isArray(detail.locations) ? detail.locations : [])
+                    .map((loc) => {
+                        const portion = loc.p_meaning || (loc.p_digit ? `P=${loc.p_digit}` : '—');
+                        const areaLabel = loc.description || loc.code;
+                        const subLabel = loc.is_statewide ? 'Entire jurisdiction' : (loc.county_fips ? `County FIPS ${loc.county_fips}` : '');
+                        const stateLabel = loc.state_name || loc.state_abbr || '';
+                        return `
+                            <tr>
+                                <td><code>${escapeHtml(loc.code)}</code></td>
+                                <td>${escapeHtml(areaLabel)}${stateLabel ? `<div class="small text-muted">${escapeHtml(stateLabel)}</div>` : ''}</td>
+                                <td>${escapeHtml(portion)}${subLabel ? `<div class="small text-muted">${escapeHtml(subLabel)}</div>` : ''}</td>
+                            </tr>
+                        `;
+                    })
+                    .join('');
+            }
+
+            const hasLocationRows = Boolean(locationRows);
+            const rawLocations = Array.isArray(detail.raw_locations) ? detail.raw_locations : [];
+            const fallbackLocations = rawLocations.length
+                ? rawLocations.map((code) => `<code>${escapeHtml(code)}</code>`).join(', ')
+                : '';
+
+            const wrapperClass = typeof settings.wrapperClass === 'string'
+                ? settings.wrapperClass
+                : 'border rounded-3 p-3 mb-3 bg-dark bg-opacity-10';
+
+            let html = `<div class="${escapeHtml(wrapperClass)}">`;
+            html += `
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="small text-uppercase fw-bold text-muted">Originator (ORG)</div>
+                        <div>${escapeHtml(detail.originator || '—')}</div>
+                        ${originatorDescription ? `<div class="small text-muted">${escapeHtml(originatorDescription)}</div>` : ''}
+                    </div>
+                    <div class="col-md-6">
+                        <div class="small text-uppercase fw-bold text-muted">Purge Time (TTTT)</div>
+                        <div>${escapeHtml(detail.purge_code || '—')}${purgeLabel}</div>
+                    </div>
+                </div>
+                <div class="row g-3 mt-2">
+                    <div class="col-md-6">
+                        <div class="small text-uppercase fw-bold text-muted">Issue Time (JJJHHMM)</div>
+                        <div>${escapeHtml(detail.issue_code || '—')}</div>
+                        ${issueDescription}
+                    </div>
+                    <div class="col-md-6">
+                        <div class="small text-uppercase fw-bold text-muted">Station Identifier (LLLLLLLL)</div>
+                        <div>${escapeHtml(detail.station_identifier || '—')}</div>
+                    </div>
+                </div>
+            `;
+
+            if (settings.includeLocations) {
+                if (hasLocationRows) {
+                    html += `
+                        <div class="table-responsive mt-3">
+                            <table class="table table-sm table-borderless mb-0">
+                                <thead>
+                                    <tr>
+                                        <th class="text-muted text-uppercase small">Code</th>
+                                        <th class="text-muted text-uppercase small">Area</th>
+                                        <th class="text-muted text-uppercase small">Portion</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${locationRows}</tbody>
+                            </table>
+                        </div>
+                    `;
+                } else if (detail.placeholder_locations) {
+                    html += '<div class="small text-muted mt-3">Add at least one SAME / FIPS location to finalise the header.</div>';
+                } else if (fallbackLocations) {
+                    html += `<div class="small text-muted mt-3">Locations: ${fallbackLocations}</div>`;
+                }
+            }
+
+            if (settings.includePreambleNote) {
+                const preambleNote = detail.preamble_description
+                    || 'SAME headers begin with a sixteen-byte 0xAB preamble for receiver synchronisation.';
+                html += `<div class="small text-muted mt-3">${escapeHtml(preambleNote)}</div>`;
+            }
+
+            html += '</div>';
+            return html;
+        }
+
+        function updateSameHeaderPreview() {
+            const previewElement = document.getElementById('sameHeaderPreview');
+            const breakdownContainer = document.getElementById('sameHeaderPreviewBreakdown');
+            const noteElement = document.getElementById('sameHeaderPreviewNote');
+            const preview = computeSameHeaderPreview();
+
+            if (previewElement) {
+                previewElement.textContent = preview.header;
+            }
+            if (noteElement) {
+                const note = preview.detail?.preamble_description
+                    || 'Sixteen 0xAB bytes precede the ASCII header for receiver synchronisation.';
+                noteElement.textContent = note;
+            }
+            if (breakdownContainer) {
+                breakdownContainer.innerHTML = renderSameHeaderDetail(preview.detail, {
+                    emptyMessage: '<p class="text-muted mb-0">Add at least one SAME / FIPS location to preview the header breakdown.</p>',
+                    wrapperClass: 'border rounded-3 p-3 bg-dark bg-opacity-10 mb-0',
+                });
+            }
+
+            return preview;
+        }
+
+        async function handleManualEasGenerate(event) {
+            event.preventDefault();
+            const form = event.target;
+            const submitButton = form.querySelector('button[type="submit"]');
+            if (submitButton) {
+                submitButton.disabled = true;
+            }
+
+            setEasGeneratorStatus('Generating audio package…', 'info');
+
+            try {
+                const payload = collectEasFormPayload(form);
+                const response = await fetch('/admin/eas/manual_generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    setEasGeneratorStatus(data.error || 'Unable to generate EAS audio components.', 'danger');
+                    return;
+                }
+
+                easLastResponse = data;
+                renderEasGeneratorResults(data);
+                setEasGeneratorStatus('Manual EAS package generated. Review each component below.', 'success');
+            } catch (error) {
+                console.error('Failed to generate manual EAS package', error);
+                setEasGeneratorStatus('Unexpected error while generating EAS audio.', 'danger');
+            } finally {
+                if (submitButton) {
+                    submitButton.disabled = false;
+                }
+            }
+        }
+
+        function collectEasFormPayload(form) {
+            const formData = new FormData(form);
+            const payload = {};
+
+            formData.forEach((value, key) => {
+                if (typeof value === 'string') {
+                    payload[key] = value.trim();
+                } else {
+                    payload[key] = value;
+                }
+            });
+
+            payload.same_codes = gatherAllSameCodes();
+            payload.include_tts = form.querySelector('#easIncludeTts')?.checked ?? false;
+            return payload;
+        }
+
+        function renderEasGeneratorResults(data) {
+            const container = document.getElementById('easGeneratorResults');
+            const copyButton = document.getElementById('copySameHeaderBtn');
+            if (!container) {
+                return;
+            }
+
+            if (!data) {
+                container.innerHTML = '<p class="text-muted mb-0">Fill out the form to generate SAME/EAS audio assets.</p>';
+                if (copyButton) {
+                    copyButton.disabled = true;
+                }
+                return;
+            }
+
+            const sameHeader = data.same_header || '';
+            const headerDetail = data.same_header_detail || {};
+            const headerLocations = Array.isArray(headerDetail.locations) ? headerDetail.locations : [];
+            const fallbackLocations = (data.same_locations || []).map((code) => `<code>${escapeHtml(code)}</code>`).join(', ');
+            let toneProfile = 'EAS Attention Tone';
+            if ((data.tone_profile || '').toLowerCase() === '1050hz') {
+                toneProfile = 'Legacy 1050 Hz Tone';
+            } else if ((data.tone_profile || '').toLowerCase() === 'none') {
+                toneProfile = 'Attention Signal Omitted';
+            }
+
+            const toneDuration = (data.tone_profile || '').toLowerCase() === 'none'
+                ? 'Not included'
+                : data.tone_seconds
+                    ? `${Number(data.tone_seconds).toFixed(1)} seconds`
+                    : '—';
+            const messageText = data.message_text
+                ? escapeHtml(data.message_text).replace(/\r?\n/g, '<br>')
+                : '';
+            const eomHeader = data.eom_header ? `<code>${escapeHtml(data.eom_header)}</code>` : '';
+            const sampleRate = data.sample_rate ? `${escapeHtml(String(data.sample_rate))} Hz` : '—';
+            const components = data.components || {};
+
+            const locationBadges = headerLocations
+                .map((loc) => {
+                    const label = loc.description || loc.code;
+                    return `<span class="badge bg-dark-subtle text-dark me-2 mb-1">${escapeHtml(label)} · <code>${escapeHtml(loc.code)}</code></span>`;
+                })
+                .join('');
+
+            let html = `
+                <div class="mb-3">
+                    <label class="text-uppercase small fw-bold text-muted">SAME Header</label>
+                    <div class="d-flex align-items-center gap-2">
+                        <code class="flex-grow-1">${escapeHtml(sameHeader)}</code>
+                        ${data.event_code ? `<span class="badge bg-secondary">${escapeHtml(data.event_code)}</span>` : ''}
+                    </div>
+                    <div class="small text-muted mt-2">
+                        <strong>${escapeHtml(data.event_name ? `${data.event_code || ''} — ${data.event_name}` : (data.event_code || ''))}</strong>
+                    </div>
+                    ${headerLocations.length
+                        ? `<div class="small text-muted mt-2">Targets:</div><div class="d-flex flex-wrap gap-2 mt-1">${locationBadges}</div>`
+                        : `<div class="small text-muted">${fallbackLocations ? `Locations: ${fallbackLocations}` : 'No SAME locations resolved.'}</div>`}
+                    ${eomHeader ? `<div class="small text-muted mt-2">EOM Header: ${eomHeader}</div>` : ''}
+                </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <div class="small text-uppercase fw-bold text-muted">Tone Profile</div>
+                        <div>${escapeHtml(toneProfile)} · ${escapeHtml(toneDuration)}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="small text-uppercase fw-bold text-muted">Sample Rate</div>
+                        <div>${sampleRate}</div>
+                    </div>
+                </div>
+            `;
+
+            if (messageText) {
+                html += `
+                    <div class="mb-3">
+                        <label class="text-uppercase small fw-bold text-muted">Narration Preview</label>
+                        <div class="alert alert-info-custom mb-0">${messageText}</div>
+                    </div>
+                `;
+            }
+
+            if (headerDetail && Object.keys(headerDetail).length) {
+                html += renderSameHeaderDetail(headerDetail, {
+                    wrapperClass: 'border rounded-3 p-3 mb-3 bg-dark bg-opacity-10',
+                });
+            }
+
+            html += buildEasAudioCard('SAME Header Burst', components.same, 'Three data bursts with one second of silence between each transmission.');
+            html += buildEasAudioCard(`${toneProfile}`, components.attention, 'Attention signal for legacy receivers.');
+            if (components.tts) {
+                html += buildEasAudioCard('Narration / TTS', components.tts, 'Synthesised narration using the configured provider.');
+            } else if (data.tts_warning) {
+                html += `<div class="alert alert-warning-custom">${escapeHtml(data.tts_warning)}</div>`;
+            }
+            html += buildEasAudioCard('End of Message (EOM)', components.eom, 'Completes the activation with three end-of-message bursts.');
+            html += buildEasAudioCard('Composite Package', components.composite, 'Full playback including header, tone, narration, and EOM.');
+
+            container.innerHTML = html;
+            if (copyButton) {
+                copyButton.disabled = !sameHeader;
+            }
+            updateSameHeaderPreview();
+        }
+
+        function formatBytes(value) {
+            const bytes = Number(value);
+            if (!Number.isFinite(bytes) || bytes <= 0) {
+                return '0 B';
+            }
+            const units = ['B', 'KB', 'MB', 'GB'];
+            let index = 0;
+            let size = bytes;
+            while (size >= 1024 && index < units.length - 1) {
+                size /= 1024;
+                index += 1;
+            }
+            const precision = size >= 10 || index === 0 ? 0 : 1;
+            return `${size.toFixed(precision)} ${units[index]}`;
+        }
+
+        function buildEasAudioCard(title, component, description) {
+            if (!component || !component.data_url) {
+                return '';
+            }
+            const duration = Number(component.duration_seconds || 0);
+            const durationLabel = duration ? `${duration.toFixed(duration >= 10 ? 0 : 2)} seconds` : '—';
+            const sizeLabel = component.size_bytes ? formatBytes(Number(component.size_bytes)) : null;
+            const filename = component.filename || `${title.replace(/\s+/g, '_').toLowerCase()}.wav`;
+
+            return `
+                <div class="border rounded-3 p-3 mb-3">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <h6 class="mb-1">${escapeHtml(title)}</h6>
+                            <small class="text-muted">${escapeHtml(description || '')}${sizeLabel ? ` · ${escapeHtml(sizeLabel)}` : ''} · ${escapeHtml(durationLabel)}</small>
+                        </div>
+                        <a class="btn btn-sm btn-outline-primary" href="${escapeHtml(component.data_url)}" download="${escapeHtml(filename)}">
+                            <i class="fas fa-download"></i> Download
+                        </a>
+                    </div>
+                    <audio controls class="w-100 mt-3" src="${escapeHtml(component.data_url)}"></audio>
+                </div>
+            `;
+        }
+
+        function setEasGeneratorStatus(message, type = 'info') {
+            const container = document.getElementById('easGeneratorStatus');
+            if (!container) {
+                return;
+            }
+            if (!message) {
+                container.style.display = 'none';
+                container.innerHTML = '';
+                return;
+            }
+            const classes = {
+                success: 'alert-success-custom',
+                danger: 'alert-danger-custom',
+                warning: 'alert-warning-custom',
+                info: 'alert-info-custom',
+            };
+            const alertClass = classes[type] || classes.info;
+            container.innerHTML = `<div class="alert ${alertClass} mb-0">${escapeHtml(message)}</div>`;
+            container.style.display = 'block';
         }
 
         async function handleUserPasswordReset(userId, username) {
@@ -1726,6 +3270,9 @@
         // Status display functions
         function showStatus(message, type = 'info', duration = 5000) {
             const statusDiv = document.getElementById('operationStatus');
+            if (!statusDiv) {
+                return;
+            }
             statusDiv.className = `alert alert-${type}-custom`;
             statusDiv.innerHTML = `
                 <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-triangle' : 'info-circle'}"></i>
@@ -2795,7 +4342,7 @@
             }
         }
 
-        const escapeHtml = (value) => {
+        function escapeHtml(value) {
             if (typeof value !== 'string') {
                 return value;
             }
@@ -2805,7 +4352,7 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
-        };
+        }
 
         const renderQueryDetails = (container, queryUrl, params) => {
             if (!container || !queryUrl) {
