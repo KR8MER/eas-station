@@ -2,19 +2,48 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Callable, Iterable
+
 from flask import Flask
 
 from . import routes_admin, routes_exports, routes_led, routes_public, template_helpers
 
 
+@dataclass(frozen=True)
+class RouteModule:
+    """Describe a route bundle that can be attached to the Flask app."""
+
+    name: str
+    registrar: Callable[..., None]
+    requires_logger: bool = True
+
+
+def iter_route_modules() -> Iterable[RouteModule]:
+    """Yield the registered route modules in initialization order."""
+
+    yield RouteModule("template_helpers", template_helpers.register, requires_logger=False)
+    yield RouteModule("routes_public", routes_public.register)
+    yield RouteModule("routes_exports", routes_exports.register)
+    yield RouteModule("routes_led", routes_led.register)
+    yield RouteModule("routes_admin", routes_admin.register)
+
+
 def register_routes(app: Flask, logger) -> None:
     """Register all route groups with the provided Flask application."""
 
-    template_helpers.register(app)
-    routes_public.register(app, logger)
-    routes_exports.register(app, logger)
-    routes_led.register(app, logger)
-    routes_admin.register(app, logger)
+    for module in iter_route_modules():
+        module_logger = logger.getChild(module.name)
+        try:
+            if module.requires_logger:
+                module.registrar(app, logger)
+            else:
+                module.registrar(app)
+        except Exception as exc:  # pragma: no cover - defensive
+            module_logger.error("Failed to register route module: %s", exc)
+            raise
+        else:
+            module_logger.debug("Registered route module")
 
 
-__all__ = ["register_routes"]
+__all__ = ["RouteModule", "iter_route_modules", "register_routes"]
