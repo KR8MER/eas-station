@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Manual EAS Activation — {{ event.identifier }}{% endblock %}
+{% block content %}
+<div class="container py-4 manual-eas-print">
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <h1 class="h3 mb-2">{{ event.event_code }} — {{ event.event_name }}</h1>
+            <p class="mb-1 text-muted">Identifier: <strong>{{ event.identifier }}</strong></p>
+            <p class="mb-0 text-muted">
+                Generated {{ event.created_at.isoformat() if event.created_at else 'Unknown time' }}
+            </p>
+        </div>
+        <div class="d-print-none">
+            {% if summary_url %}
+            <a class="btn btn-outline-primary btn-sm" href="{{ summary_url }}" target="_blank" rel="noopener">
+                <i class="fas fa-file-export"></i> Export JSON
+            </a>
+            {% endif %}
+            <button type="button" class="btn btn-primary btn-sm ms-2" onclick="window.print();">
+                <i class="fas fa-print"></i> Print
+            </button>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <strong>SAME Header</strong>
+                </div>
+                <div class="card-body">
+                    <p class="mb-2"><code class="text-break">{{ event.same_header }}</code></p>
+                    {% set tone_profile_label = event.tone_profile or 'unknown' %}
+                    {% set tone_seconds_value = event.tone_seconds if event.tone_seconds is not none else 0 %}
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">Status</dt>
+                        <dd class="col-sm-8">{{ event.status }} · {{ event.message_type }}</dd>
+                        <dt class="col-sm-4">Sent</dt>
+                        <dd class="col-sm-8">{{ event.sent_at.isoformat() if event.sent_at else '—' }}</dd>
+                        <dt class="col-sm-4">Expires</dt>
+                        <dd class="col-sm-8">{{ event.expires_at.isoformat() if event.expires_at else '—' }}</dd>
+                        <dt class="col-sm-4">Tone Profile</dt>
+                        <dd class="col-sm-8">{{ tone_profile_label|capitalize }} ({{ '%.1f'|format(tone_seconds_value) }} seconds)</dd>
+                        <dt class="col-sm-4">Sample Rate</dt>
+                        <dd class="col-sm-8">{{ event.sample_rate or '—' }} Hz</dd>
+                    </dl>
+                </div>
+            </div>
+
+            {% if header_detail.locations %}
+            <div class="card shadow-sm mt-4">
+                <div class="card-header bg-light">
+                    <strong>Targeted Locations</strong>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Code</th>
+                                    <th scope="col">Area</th>
+                                    <th scope="col">Portion</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for loc in header_detail.locations %}
+                                <tr>
+                                    <td><code>{{ loc.code }}</code></td>
+                                    <td>{{ loc.description }}<br><small class="text-muted">{{ loc.state_name }}</small></td>
+                                    <td>{{ loc.p_meaning or 'Entire area' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if event.headline %}
+            <div class="card shadow-sm mt-4">
+                <div class="card-header bg-light">
+                    <strong>Headline</strong>
+                </div>
+                <div class="card-body">
+                    <p class="mb-0">{{ event.headline }}</p>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if event.message_text %}
+            <div class="card shadow-sm mt-4">
+                <div class="card-header bg-light">
+                    <strong>Public Message</strong>
+                </div>
+                <div class="card-body">
+                    <p class="mb-0">{{ event.message_text.replace('\n', '<br>')|safe }}</p>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if event.instruction_text %}
+            <div class="card shadow-sm mt-4">
+                <div class="card-header bg-light">
+                    <strong>Instructions</strong>
+                </div>
+                <div class="card-body">
+                    <p class="mb-0">{{ event.instruction_text.replace('\n', '<br>')|safe }}</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        <div class="col-lg-5">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <strong>Audio Components</strong>
+                    <span class="badge bg-secondary">{{ components|length }} files</span>
+                </div>
+                <div class="card-body">
+                    {% if components %}
+                        {% for key, comp in components.items() %}
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="mb-1 text-uppercase">{{ key }}</h6>
+                                    <small class="text-muted">{{ comp.duration_seconds|default(0)|round(2) }} s · {{ comp.size_bytes|default(0) }} bytes</small>
+                                </div>
+                                {% if comp.download_url %}
+                                <a class="btn btn-sm btn-outline-primary d-print-none" href="{{ comp.download_url }}" target="_blank" rel="noopener">
+                                    <i class="fas fa-download"></i>
+                                </a>
+                                {% endif %}
+                            </div>
+                            {% if comp.download_url %}
+                            <audio class="w-100 mt-2" controls src="{{ comp.download_url }}"></audio>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted mb-0">No audio assets were stored for this activation.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -18,6 +18,9 @@ tracks releases under the 2.1.x series.
 - Added a CLI helper (`tools/generate_sample_audio.py`) to create demonstration SAME audio
   clips without ingesting a live CAP product.
 - Delivered an in-app Manual Broadcast Builder on the EAS Output tab so operators can generate SAME headers, attention tones (EAS dual-tone or 1050 Hz), optional narration, and composite audio without leaving the browser.
+- Archived every manual EAS activation automatically, writing audio and summary
+  assets to disk, logging them in the database, and exposing a printable/exportable
+  history table within the admin console.
 - Unlocked an in-app first-run experience so the Admin panel exposes an
   "First-Time Administrator Setup" wizard when no accounts exist.
 - Introduced optional Azure AI speech synthesis to append narrated voiceovers when the
@@ -38,6 +41,9 @@ tracks releases under the 2.1.x series.
 - Updated the Quick Weekly Test preset to omit the attention signal by default and added a
   “No attention signal (omit)” option so manual packages can exclude the dual-tone or 1050 Hz
   alert when regulations allow.
+### Fixed
+- Corrected the Quick Weekly Test preset so the sample Required Weekly Test script
+  populates the message body as expected.
 - Standardised the manual and automated encoder timing so each SAME section includes a one-second
   guard interval and the End Of Message burst transmits the canonical `NNNN` payload per 47 CFR §11.31.
 - Replaced the free-form originator/call-sign fields with a guarded originator dropdown listing the four FCC originator codes (EAS, CIV, WXR, PEP) and a station identifier input, filtered the event selector to remove placeholder `??*` codes, and enforced the 31-location SAME limit in the UI.
