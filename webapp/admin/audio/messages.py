@@ -18,8 +18,7 @@ def register_message_admin_routes(app, logger) -> None:
 
     @app.route('/admin/eas_messages', methods=['GET'])
     def admin_eas_messages():
-        if not app.config.get('EAS_BROADCAST_ENABLED', False):
-            return jsonify({'messages': [], 'total': 0})
+        eas_enabled = app.config.get('EAS_BROADCAST_ENABLED', False)
 
         try:
             limit = request.args.get('limit', type=int) or 50
@@ -46,7 +45,7 @@ def register_message_admin_routes(app, logger) -> None:
                     }
                 )
 
-            return jsonify({'messages': items, 'total': total})
+            return jsonify({'messages': items, 'total': total, 'eas_enabled': eas_enabled})
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.error('Failed to list EAS messages: %s', exc)
             return jsonify({'error': 'Unable to load EAS messages'}), 500

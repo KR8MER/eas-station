@@ -497,8 +497,7 @@ def register_audio_routes(app, logger, eas_config):
 
     @app.route('/admin/eas_messages', methods=['GET'])
     def admin_eas_messages():
-        if not app.config.get('EAS_BROADCAST_ENABLED', False):
-            return jsonify({'messages': [], 'total': 0})
+        eas_enabled = app.config.get('EAS_BROADCAST_ENABLED', False)
 
         try:
             limit = request.args.get('limit', type=int) or 50
@@ -524,7 +523,7 @@ def register_audio_routes(app, logger, eas_config):
                     'detail_url': url_for('audio_detail', message_id=message.id),
                 })
 
-            return jsonify({'messages': items, 'total': total})
+            return jsonify({'messages': items, 'total': total, 'eas_enabled': eas_enabled})
         except Exception as exc:
             logger.error(f"Failed to list EAS messages: {exc}")
             return jsonify({'error': 'Unable to load EAS messages'}), 500

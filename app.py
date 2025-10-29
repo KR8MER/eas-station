@@ -48,7 +48,11 @@ from app_utils.eas import (
     manual_default_same_codes,
     samples_to_wav_bytes,
 )
-from app_core.eas_storage import get_eas_static_prefix, ensure_eas_audio_columns
+from app_core.eas_storage import (
+    backfill_eas_message_payloads,
+    ensure_eas_audio_columns,
+    get_eas_static_prefix,
+)
 from app_core.system_health import get_system_health
 from webapp import register_routes
 from webapp.admin.boundaries import (
@@ -539,6 +543,7 @@ def initialize_database():
                 "EAS audio columns could not be ensured"
             )
             return False
+        backfill_eas_message_payloads(logger)
         settings = get_location_settings(force_reload=True)
         timezone_name = settings.get('timezone')
         if timezone_name:
