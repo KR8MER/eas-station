@@ -9,7 +9,8 @@ from urllib.parse import quote
 
 import requests
 from flask import jsonify, request
-from sqlalchemy import desc, or_
+from sqlalchemy import desc, or_, text
+from sqlalchemy.exc import OperationalError
 
 from app_core.alerts import (
     assign_alert_geometry,
@@ -25,7 +26,7 @@ from app_core.models import (
     LEDMessage,
     SystemLog,
 )
-from app_utils import UTC_TZ, get_location_timezone, local_now, utc_now
+from app_utils import UTC_TZ, format_bytes, get_location_timezone, local_now, utc_now
 
 
 NOAA_API_BASE_URL = "https://api.weather.gov/alerts"
@@ -302,6 +303,59 @@ def retrieve_noaa_alerts(
 
 def register_maintenance_routes(app, logger):
     """Attach administrative maintenance endpoints to the Flask app."""
+
+    @app.route("/admin/check_db_health", methods=["GET"])
+    def check_db_health():
+        """Provide a quick health check of the database connection and size."""
+
+        try:
+            db.session.execute(text("SELECT 1"))
+            connectivity_status = "Connected"
+        except OperationalError as exc:
+            logger.error("Database connectivity check failed: %s", exc)
+            return jsonify({"error": "Database connectivity check failed."}), 500
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.error("Unexpected error during database health check: %s", exc)
+            return (
+                jsonify(
+                    {
+                        "error": "Database health check encountered an unexpected error.",
+                    }
+                ),
+                500,
+            )
+
+        database_size = "Unavailable"
+        try:
+            size_bytes = db.session.execute(
+                text("SELECT pg_database_size(current_database())")
+            ).scalar()
+            if size_bytes is not None:
+                database_size = format_bytes(size_bytes)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Could not determine database size: %s", exc)
+
+        active_connections: Union[str, int] = "Unavailable"
+        try:
+            connection_count = db.session.execute(
+                text(
+                    "SELECT count(*) FROM pg_stat_activity "
+                    "WHERE datname = current_database()"
+                )
+            ).scalar()
+            if connection_count is not None:
+                active_connections = int(connection_count)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Could not determine active connection count: %s", exc)
+
+        return jsonify(
+            {
+                "connectivity": connectivity_status,
+                "database_size": database_size,
+                "active_connections": active_connections,
+                "checked_at": utc_now().isoformat(),
+            }
+        )
 
     @app.route("/admin/trigger_poll", methods=["POST"])
     def trigger_poll():
