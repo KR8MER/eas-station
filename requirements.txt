@@ -1,4 +1,10 @@
 # NOAA CAP Alerts System Requirements
+#
+# NOTE: PostgreSQL with the PostGIS extension is required for spatial
+# functionality, but it must be provisioned in its own container or
+# service. These packages only cover the Python client libraries that
+# communicate with the external database instance.
+#
 # Core Flask and web framework dependencies
 Flask==2.3.3
 Flask-SQLAlchemy==3.0.5
@@ -33,3 +39,7 @@ gunicorn==21.2.0
 
 # Development and debugging (optional)
 # flask-debugtoolbar==0.13.1  # Uncomment for development
+
+# Optional speech synthesis support
+# azure-cognitiveservices-speech==1.38.0  # Required when enabling Azure AI voiceovers
+pyttsx3==2.90  # Offline text-to-speech engine for the pyttsx3 provider

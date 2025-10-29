@@ -1,12 +1,9 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Health Monitor - NOAA CAP Alerts</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <style>
+{% extends "base.html" %}
+
+{% block title %}System Health Monitor - NOAA CAP Alerts{% endblock %}
+
+{% block extra_css %}
+<style>
         .health-card { border-left: 4px solid #007bff; }
         .health-card.warning { border-left-color: #ffc107; }
         .health-card.danger { border-left-color: #dc3545; }
@@ -21,31 +18,11 @@
         .system-overview { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
         .system-overview .card-body { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); }
     </style>
-</head>
-<body class="bg-light">
-    <nav class="navbar navbar-dark bg-primary">
-        <div class="container-fluid">
-            <span class="navbar-brand">
-                <i class="fas fa-heartbeat"></i> System Health Monitor
-            </span>
-            <div>
-                <a href="/stats" class="btn btn-outline-light btn-sm me-2">
-                    <i class="fas fa-chart-bar"></i> Statistics
-                </a>
-                <a href="/alerts" class="btn btn-outline-light btn-sm me-2">
-                    <i class="fas fa-exclamation-triangle"></i> Alerts
-                </a>
-                <a href="/admin" class="btn btn-outline-light btn-sm me-2">
-                    <i class="fas fa-cog"></i> Admin
-                </a>
-                <a href="/" class="btn btn-outline-light btn-sm">
-                    <i class="fas fa-home"></i> Home
-                </a>
-            </div>
-        </div>
-    </nav>
+{% endblock %}
 
-    <div class="container-fluid mt-4">
+{% block content %}
+<div class="container-fluid mt-4">
+        <div class="alert alert-danger d-none" id="refresh-error" role="alert"></div>
         <!-- System Overview -->
         <div class="row mb-4">
             <div class="col-12">
@@ -56,27 +33,27 @@
                             <div class="col-md-3">
                                 <div class="metric-row">
                                     <div class="metric-label text-white-50">Hostname</div>
-                                    <div class="metric-value text-white">{{ system.hostname or 'Unknown' }}</div>
+                                    <div class="metric-value text-white" id="hostname-value">{{ system.hostname or 'Unknown' }}</div>
                                 </div>
                                 <div class="metric-row">
                                     <div class="metric-label text-white-50">Operating System</div>
-                                    <div class="metric-value text-white">{{ system.system or 'Unknown' }} {{ system.release or '' }}</div>
+                                    <div class="metric-value text-white" id="os-value">{{ (system.system or 'Unknown') ~ ' ' ~ (system.release or '') }}</div>
                                 </div>
                             </div>
                             <div class="col-md-3">
                                 <div class="metric-row">
                                     <div class="metric-label text-white-50">Architecture</div>
-                                    <div class="metric-value text-white">{{ system.machine or 'Unknown' }}</div>
+                                    <div class="metric-value text-white" id="architecture-value">{{ system.machine or 'Unknown' }}</div>
                                 </div>
                                 <div class="metric-row">
                                     <div class="metric-label text-white-50">Uptime</div>
-                                    <div class="metric-value text-white">{{ format_uptime(system.uptime_seconds or 0) }}</div>
+                                    <div class="metric-value text-white" id="uptime-value">{{ format_uptime(system.uptime_seconds or 0) }}</div>
                                 </div>
                             </div>
                             <div class="col-md-3">
                                 <div class="metric-row">
                                     <div class="metric-label text-white-50">Load Average</div>
-                                    <div class="metric-value text-white">
+                                    <div class="metric-value text-white" id="load-average-value">
                                         {% if load_averages %}
                                             {{ ', '.join(load_averages|map('string')) }}
                                         {% else %}
@@ -86,7 +63,7 @@
                                 </div>
                                 <div class="metric-row">
                                     <div class="metric-label text-white-50">Processes</div>
-                                    <div class="metric-value text-white">{{ processes.total_processes or 0 }} total ({{ processes.running_processes or 0 }} running)</div>
+                                    <div class="metric-value text-white" id="processes-summary">{{ processes.total_processes or 0 }} total ({{ processes.running_processes or 0 }} running)</div>
                                 </div>
                             </div>
                             <div class="col-md-3 text-end">
@@ -94,7 +71,7 @@
                                     <div class="metric-label text-white-50">Last Updated</div>
                                     <div class="metric-value text-white" id="current-time"></div>
                                 </div>
-                                <button class="btn btn-light btn-sm mt-2" onclick="refreshPage()">
+                                <button class="btn btn-light btn-sm mt-2 refresh-trigger" type="button">
                                     <i class="fas fa-sync-alt"></i> Refresh Now
                                 </button>
                             </div>
@@ -107,7 +84,7 @@
         <!-- Resource Usage Row -->
         <div class="row mb-4">
             <!-- CPU Usage -->
-            <div class="col-lg-4 mb-3">
+            <div class="col-lg-4 mb-3" id="cpu-card">
                 {% set cpu_class = 'danger' if cpu.cpu_usage_percent > 80 else 'warning' if cpu.cpu_usage_percent > 50 else 'success' %}
                 <div class="card health-card {{ cpu_class }} h-100">
                     <div class="card-body">
@@ -172,7 +149,7 @@
             </div>
 
             <!-- Memory Usage -->
-            <div class="col-lg-4 mb-3">
+            <div class="col-lg-4 mb-3" id="memory-card">
                 {% set mem_class = 'danger' if memory.percentage > 90 else 'warning' if memory.percentage > 75 else 'success' %}
                 <div class="card health-card {{ mem_class }} h-100">
                     <div class="card-body">
@@ -225,16 +202,25 @@
             </div>
 
             <!-- Services & Database -->
-            <div class="col-lg-4 mb-3">
+            <div class="col-lg-4 mb-3" id="services-card">
                 <div class="card health-card h-100">
                     <div class="card-body">
                         <h5><i class="fas fa-cogs section-icon"></i> Services & Database</h5>
-                        
+
                         <!-- Database Status -->
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <span class="metric-label">Database</span>
-                            {% set db_class = 'success' if database.status == 'connected' else 'danger' %}
-                            <span class="badge bg-{{ db_class }}">{{ database.status or 'Unknown' }}</span>
+                            {% set db_status = database.status or 'Unknown' %}
+                            {% if db_status == 'connected' %}
+                                {% set db_class = 'success' %}
+                            {% elif 'error' in db_status|lower %}
+                                {% set db_class = 'danger' %}
+                            {% elif db_status|lower in ['unavailable', 'unknown'] %}
+                                {% set db_class = 'secondary' %}
+                            {% else %}
+                                {% set db_class = 'warning' %}
+                            {% endif %}
+                            <span class="badge bg-{{ db_class }}">{{ db_status }}</span>
                         </div>
                         {% if database.info %}
                             {% if database.info.version %}
@@ -255,8 +241,15 @@
                         {% for service_name, status in services.items() %}
                         <div class="d-flex justify-content-between align-items-center mb-1">
                             <span class="metric-label">{{ service_name.title() }}</span>
-                            {% set service_class = 'success' if status == 'active' else 'danger' %}
-                            <span class="badge bg-{{ service_class }} status-badge">{{ status }}</span>
+                            {% set normalized_status = (status or '')|lower %}
+                            {% if normalized_status == 'active' %}
+                                {% set service_class = 'success' %}
+                            {% elif normalized_status in ['inactive', 'unknown', 'unavailable'] %}
+                                {% set service_class = 'secondary' %}
+                            {% else %}
+                                {% set service_class = 'danger' %}
+                            {% endif %}
+                            <span class="badge bg-{{ service_class }} status-badge">{{ status or 'unknown' }}</span>
                         </div>
                         {% endfor %}
                         {% endif %}
@@ -268,7 +261,7 @@
         <!-- Storage & Network Row -->
         <div class="row mb-4">
             <!-- Disk Storage -->
-            <div class="col-lg-8 mb-3">
+            <div class="col-lg-8 mb-3" id="storage-card">
                 <div class="card health-card">
                     <div class="card-body">
                         <h5><i class="fas fa-hdd section-icon"></i> Storage Usage</h5>
@@ -299,7 +292,7 @@
             </div>
 
             <!-- Network Summary -->
-            <div class="col-lg-4 mb-3">
+            <div class="col-lg-4 mb-3" id="network-card">
                 <div class="card health-card">
                     <div class="card-body">
                         <h5><i class="fas fa-network-wired section-icon"></i> Network</h5>
@@ -334,7 +327,7 @@
 
         <!-- Process Information -->
         <div class="row">
-            <div class="col-12">
+            <div class="col-12" id="processes-card">
                 <div class="card health-card">
                     <div class="card-body">
                         <h5><i class="fas fa-tasks section-icon"></i> Top Processes (CPU Usage)</h5>
@@ -385,8 +378,8 @@
         </div>
 
         <!-- Temperature Sensors (if available) -->
-        {% if temperature %}
-        <div class="row mt-4">
+        <div class="row mt-4 {% if not temperature %}d-none{% endif %}" id="temperature-section">
+            {% if temperature %}
             <div class="col-12">
                 <div class="card health-card">
                     <div class="card-body">
@@ -418,62 +411,660 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
         </div>
-        {% endif %}
     </div>
 
     <!-- Auto-refresh button -->
-    <button class="btn btn-primary refresh-btn" onclick="refreshPage()" title="Refresh system data">
+    <button class="btn btn-primary refresh-btn refresh-trigger" type="button" title="Refresh system data">
         <i class="fas fa-sync-alt"></i>
     </button>
+</div>
+{% endblock %}
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+{% block scripts %}
     <script>
-        // Update current time
-        function updateTime() {
-            const timeElement = document.getElementById('current-time');
-            if (timeElement) {
-                timeElement.textContent = new Date().toLocaleTimeString();
+        const initialHealthData = {{ health_data_json | safe }} || {};
+        const REFRESH_INTERVAL_MS = 30000;
+        let lastUpdatedTime = null;
+
+        function escapeHtml(value) {
+            if (value === null || value === undefined) {
+                return '';
             }
-        }
-        
-        // Initialize time update
-        updateTime();
-
-        // Auto-refresh every 30 seconds
-        setTimeout(function() {
-            window.location.reload();
-        }, 30000);
-
-        // Update time every second until page refreshes
-        setInterval(updateTime, 1000);
-
-        // Add loading state to refresh button
-        function refreshPage() {
-            const refreshBtn = document.querySelector('.refresh-btn');
-            if (refreshBtn) {
-                refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-                refreshBtn.disabled = true;
-            }
-            
-            setTimeout(function() {
-                window.location.reload();
-            }, 500);
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
 
-        // Update refresh button to use the new function
-        document.addEventListener('DOMContentLoaded', function() {
-            const refreshBtn = document.querySelector('.refresh-btn');
-            if (refreshBtn) {
-                refreshBtn.onclick = refreshPage;
+        function toNumber(value, fallback = 0) {
+            const numberValue = Number(value);
+            return Number.isFinite(numberValue) ? numberValue : fallback;
+        }
+
+        function formatBytes(bytes) {
+            const numeric = toNumber(bytes, 0);
+            if (numeric <= 0) {
+                return '0 B';
+            }
+            const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+            const exponent = Math.min(Math.floor(Math.log(numeric) / Math.log(1024)), units.length - 1);
+            const value = numeric / Math.pow(1024, exponent);
+            const precision = value >= 10 || exponent === 0 ? 0 : 1;
+            return `${value.toFixed(precision)} ${units[exponent]}`;
+        }
+
+        function formatUptime(seconds) {
+            const numeric = toNumber(seconds, 0);
+            if (numeric <= 0) {
+                return '0s';
+            }
+            let remaining = Math.floor(numeric);
+            const days = Math.floor(remaining / 86400);
+            remaining -= days * 86400;
+            const hours = Math.floor(remaining / 3600);
+            remaining -= hours * 3600;
+            const minutes = Math.floor(remaining / 60);
+            remaining -= minutes * 60;
+            const parts = [];
+            if (days) {
+                parts.push(`${days}d`);
+            }
+            if (hours) {
+                parts.push(`${hours}h`);
+            }
+            if (minutes) {
+                parts.push(`${minutes}m`);
+            }
+            parts.push(`${remaining}s`);
+            return parts.join(' ');
+        }
+
+        function formatPercent(value) {
+            const numeric = toNumber(value, 0);
+            return numeric.toFixed(1);
+        }
+
+        function setElementText(id, text) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.textContent = text;
+            }
+        }
+
+        function updateCurrentTimeDisplay() {
+            const element = document.getElementById('current-time');
+            if (!element || !lastUpdatedTime) {
+                return;
             }
 
-            // Also update the refresh button in the overview section
-            const overviewRefreshBtn = document.querySelector('.card-body .btn-sm');
-            if (overviewRefreshBtn) {
-                overviewRefreshBtn.onclick = refreshPage;
+            const now = new Date();
+            const secondsAgo = Math.max(0, Math.floor((now.getTime() - lastUpdatedTime.getTime()) / 1000));
+            const formattedTime = lastUpdatedTime.toLocaleTimeString();
+            element.textContent = `${formattedTime} (${secondsAgo}s ago)`;
+        }
+
+        function showError(message) {
+            const alertElement = document.getElementById('refresh-error');
+            if (!alertElement) {
+                return;
             }
+            alertElement.textContent = message;
+            alertElement.classList.remove('d-none');
+        }
+
+        function hideError() {
+            const alertElement = document.getElementById('refresh-error');
+            if (!alertElement) {
+                return;
+            }
+            alertElement.textContent = '';
+            alertElement.classList.add('d-none');
+        }
+
+        function setRefreshing(isRefreshing) {
+            const buttons = document.querySelectorAll('.refresh-trigger');
+            buttons.forEach((button) => {
+                if (isRefreshing) {
+                    if (!button.dataset.originalContent) {
+                        button.dataset.originalContent = button.innerHTML;
+                    }
+                    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                    button.disabled = true;
+                } else {
+                    const original = button.dataset.originalContent;
+                    button.innerHTML = original || '<i class="fas fa-sync-alt"></i>';
+                    if (original) {
+                        delete button.dataset.originalContent;
+                    }
+                    button.disabled = false;
+                }
+            });
+        }
+
+        function joinLoadAverages(loadAverages) {
+            if (!Array.isArray(loadAverages) || !loadAverages.length) {
+                return 'N/A';
+            }
+            return loadAverages.map((value) => formatPercent(value)).join(', ');
+        }
+
+        function updateOverview(data) {
+            const system = data.system || {};
+            const processes = data.processes || {};
+            const loadAverages = Array.isArray(data.load_averages) ? data.load_averages : [];
+
+            setElementText('hostname-value', system.hostname || 'Unknown');
+            setElementText('os-value', `${system.system || 'Unknown'} ${system.release || ''}`.trim());
+            setElementText('architecture-value', system.machine || 'Unknown');
+            setElementText('uptime-value', formatUptime(system.uptime_seconds));
+            setElementText('load-average-value', joinLoadAverages(loadAverages));
+
+            const totalProcesses = toNumber(processes.total_processes, 0);
+            const runningProcesses = toNumber(processes.running_processes, 0);
+            setElementText('processes-summary', `${totalProcesses} total (${runningProcesses} running)`);
+        }
+
+        function renderCpuCard(cpu) {
+            const usage = toNumber(cpu.cpu_usage_percent, 0);
+            const cpuClass = usage > 80 ? 'danger' : usage > 50 ? 'warning' : 'success';
+            const progressClass = usage > 80 ? 'bg-danger' : usage > 50 ? 'bg-warning' : 'bg-success';
+            const perCoreUsage = Array.isArray(cpu.cpu_usage_per_core) ? cpu.cpu_usage_per_core : [];
+
+            let perCoreHtml = '';
+            if (perCoreUsage.length && perCoreUsage.length <= 8) {
+                const perCoreRows = perCoreUsage
+                    .map((value, index) => `
+                            <div class="col-6 col-lg-12 col-xl-6">
+                                <small>
+                                    <div class="d-flex justify-content-between">
+                                        <span>Core ${index}</span>
+                                        <span class="metric-value">${formatPercent(value)}%</span>
+                                    </div>
+                                </small>
+                            </div>
+                        `)
+                    .join('');
+                perCoreHtml = `
+                    <hr>
+                    <h6 class="text-muted">Per-Core Usage</h6>
+                    <div class="row">
+                        ${perCoreRows}
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="card health-card ${cpuClass} h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-microchip section-icon"></i> CPU Usage</h5>
+
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="metric-label">Overall Usage</span>
+                            <span class="badge bg-${usage > 80 ? 'danger' : usage > 50 ? 'warning' : 'success'}">
+                                ${formatPercent(usage)}%
+                            </span>
+                        </div>
+                        <div class="progress progress-sm mb-3">
+                            <div class="progress-bar ${progressClass}" style="width: ${Math.min(100, Math.max(0, usage))}%"></div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-6">
+                                <small>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Physical Cores:</span>
+                                        <span class="metric-value">${cpu.physical_cores ?? 'N/A'}</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Total Cores:</span>
+                                        <span class="metric-value">${cpu.total_cores ?? 'N/A'}</span>
+                                    </div>
+                                </small>
+                            </div>
+                            <div class="col-6">
+                                <small>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Max Freq:</span>
+                                        <span class="metric-value">${toNumber(cpu.max_frequency, 0).toFixed(0)} MHz</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Current:</span>
+                                        <span class="metric-value">${toNumber(cpu.current_frequency, 0).toFixed(0)} MHz</span>
+                                    </div>
+                                </small>
+                            </div>
+                        </div>
+                        ${perCoreHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderMemoryCard(memory) {
+            const usage = toNumber(memory.percentage, 0);
+            const memoryClass = usage > 90 ? 'danger' : usage > 75 ? 'warning' : 'success';
+            const progressClass = usage > 90 ? 'bg-danger' : usage > 75 ? 'bg-warning' : 'bg-success';
+            const swapUsage = toNumber(memory.swap_percentage, 0);
+
+            const swapSection = memory.swap_total && toNumber(memory.swap_total, 0) > 0
+                ? `
+                        <div class="d-flex justify-content-between align-items-center mb-2 mt-3">
+                            <span class="metric-label">Swap Usage</span>
+                            <span class="badge bg-info">${formatPercent(swapUsage)}%</span>
+                        </div>
+                        <div class="progress progress-sm mb-2">
+                            <div class="progress-bar bg-info" style="width: ${Math.min(100, Math.max(0, swapUsage))}%"></div>
+                        </div>
+                        <small class="text-muted">${formatBytes(memory.swap_used)} / ${formatBytes(memory.swap_total)}</small>
+                    `
+                : '';
+
+            return `
+                <div class="card health-card ${memoryClass} h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-memory section-icon"></i> Memory Usage</h5>
+
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="metric-label">RAM Usage</span>
+                            <span class="badge bg-${usage > 90 ? 'danger' : usage > 75 ? 'warning' : 'success'}">${formatPercent(usage)}%</span>
+                        </div>
+                        <div class="progress progress-sm mb-2">
+                            <div class="progress-bar ${progressClass}" style="width: ${Math.min(100, Math.max(0, usage))}%"></div>
+                        </div>
+                        <small class="text-muted">${formatBytes(memory.used)} / ${formatBytes(memory.total)}</small>
+                        ${swapSection}
+                        <hr>
+                        <div class="row">
+                            <div class="col-6">
+                                <small>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Available:</span>
+                                        <span class="metric-value">${formatBytes(memory.available)}</span>
+                                    </div>
+                                </small>
+                            </div>
+                            <div class="col-6">
+                                <small>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Free:</span>
+                                        <span class="metric-value">${formatBytes(memory.free)}</span>
+                                    </div>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderServicesCard(database, services) {
+            const dbStatusRaw = (database && database.status) ? String(database.status) : 'Unknown';
+            const statusLower = dbStatusRaw.toLowerCase();
+            let dbClass = 'warning';
+            if (statusLower === 'connected') {
+                dbClass = 'success';
+            } else if (statusLower.includes('error')) {
+                dbClass = 'danger';
+            } else if (statusLower === 'unknown' || statusLower === 'unavailable') {
+                dbClass = 'secondary';
+            }
+
+            const dbInfo = (database && database.info) || {};
+            const databaseDetails = [];
+            if (dbInfo.version) {
+                databaseDetails.push(`<small class="text-muted d-block">Version: ${escapeHtml(dbInfo.version)}</small>`);
+            }
+            if (dbInfo.size) {
+                databaseDetails.push(`<small class="text-muted d-block">Size: ${escapeHtml(dbInfo.size)}</small>`);
+            }
+            if (dbInfo.active_connections !== undefined) {
+                databaseDetails.push(`<small class="text-muted d-block">Active Connections: ${escapeHtml(dbInfo.active_connections)}</small>`);
+            }
+
+            const serviceEntries = services && typeof services === 'object' ? Object.entries(services) : [];
+            const servicesHtml = serviceEntries.length
+                ? `
+                        <hr>
+                        <h6 class="text-muted">System Services</h6>
+                        ${serviceEntries
+                            .map(([name, status]) => {
+                                const normalized = String(status || '').toLowerCase();
+                                let badgeClass = 'danger';
+                                if (normalized === 'active') {
+                                    badgeClass = 'success';
+                                } else if (['inactive', 'unknown', 'unavailable'].includes(normalized)) {
+                                    badgeClass = 'secondary';
+                                }
+                                const rawName = String(name || '');
+                                const displayName = rawName
+                                    ? rawName.replace(/\b\w/g, (char) => char.toUpperCase())
+                                    : 'Unknown';
+                                const safeName = escapeHtml(displayName);
+                                const safeStatus = escapeHtml(status || 'unknown');
+                                return `
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="metric-label">${safeName}</span>
+                                        <span class="badge bg-${badgeClass} status-badge">${safeStatus}</span>
+                                    </div>
+                                `;
+                            })
+                            .join('')}
+                    `
+                : '';
+
+            return `
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-cogs section-icon"></i> Services &amp; Database</h5>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="metric-label">Database</span>
+                            <span class="badge bg-${dbClass}">${escapeHtml(dbStatusRaw)}</span>
+                        </div>
+                        ${databaseDetails.join('')}
+                        ${servicesHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderStorageCard(disks) {
+            const diskItems = Array.isArray(disks) ? disks : [];
+            const diskHtml = diskItems
+                .map((disk) => {
+                    const percentage = toNumber(disk.percentage, 0);
+                    const badgeClass = percentage > 90 ? 'danger' : percentage > 75 ? 'warning' : 'success';
+                    const progressClass = percentage > 90 ? 'bg-danger' : percentage > 75 ? 'bg-warning' : 'bg-success';
+                    return `
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="metric-label">
+                                    <strong>${escapeHtml(disk.device || 'Unknown')}</strong>
+                                    <small class="text-muted">(${escapeHtml(disk.mountpoint || 'Unknown')})</small>
+                                </span>
+                                <span class="badge bg-${badgeClass}">${formatPercent(percentage)}%</span>
+                            </div>
+                            <div class="progress progress-sm mb-1">
+                                <div class="progress-bar ${progressClass}" style="width: ${Math.min(100, Math.max(0, percentage))}%"></div>
+                            </div>
+                            <small class="text-muted">
+                                ${formatBytes(disk.used)} used / ${formatBytes(disk.total)} total
+                                (${formatBytes(disk.free)} free) • ${escapeHtml(disk.fstype || 'Unknown')}
+                            </small>
+                        </div>
+                    `;
+                })
+                .join('');
+
+            return `
+                <div class="card health-card">
+                    <div class="card-body">
+                        <h5><i class="fas fa-hdd section-icon"></i> Storage Usage</h5>
+                        ${diskHtml || '<p class="text-muted">No disk information available</p>'}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderNetworkCard(network) {
+            const hostname = network && network.hostname ? network.hostname : 'Unknown';
+            const interfaces = Array.isArray(network && network.interfaces) ? network.interfaces.slice(0, 3) : [];
+            const moreCount = Array.isArray(network && network.interfaces) && network.interfaces.length > 3
+                ? network.interfaces.length - 3
+                : 0;
+
+            const interfaceHtml = interfaces
+                .map((interfaceInfo) => {
+                    const statusClass = interfaceInfo.is_up ? 'success' : 'secondary';
+                    const addresses = Array.isArray(interfaceInfo.addresses)
+                        ? interfaceInfo.addresses.filter((addr) => addr.type === 'IPv4').slice(0, 2)
+                        : [];
+                    const addressHtml = addresses
+                        .map((addr) => `<small class="text-muted d-block">${escapeHtml(addr.address || 'Unknown')}</small>`)
+                        .join('');
+                    return `
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="metric-label">${escapeHtml(interfaceInfo.name || 'Unknown')}</span>
+                                <span class="badge bg-${statusClass} status-badge">${interfaceInfo.is_up ? 'UP' : 'DOWN'}</span>
+                            </div>
+                            ${addressHtml}
+                        </div>
+                    `;
+                })
+                .join('');
+
+            const moreText = moreCount > 0
+                ? `<small class="text-muted">... and ${moreCount} more interfaces</small>`
+                : '';
+
+            return `
+                <div class="card health-card">
+                    <div class="card-body">
+                        <h5><i class="fas fa-network-wired section-icon"></i> Network</h5>
+                        <div class="metric-row mb-3">
+                            <span class="metric-label">Hostname:</span>
+                            <span class="metric-value">${escapeHtml(hostname)}</span>
+                        </div>
+                        ${interfaceHtml}
+                        ${moreText}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderProcessesCard(processes) {
+            const processList = Array.isArray(processes && processes.top_processes)
+                ? processes.top_processes.slice(0, 10)
+                : [];
+
+            const tableBody = processList
+                .map((proc) => {
+                    const name = proc.name || 'Unknown';
+                    const shortName = name.length > 20 ? `${escapeHtml(name.substring(0, 20))}...` : escapeHtml(name);
+                    const titleAttr = escapeHtml(name);
+                    return `
+                        <tr>
+                            <td><code>${escapeHtml(proc.pid ?? 'N/A')}</code></td>
+                            <td><span title="${titleAttr}">${shortName}</span></td>
+                            <td><span class="metric-value">${formatPercent(proc.cpu_percent)}%</span></td>
+                            <td><span class="metric-value">${formatPercent(proc.memory_percent)}%</span></td>
+                            <td><small class="text-muted">${escapeHtml(proc.username || 'N/A')}</small></td>
+                        </tr>
+                    `;
+                })
+                .join('');
+
+            const content = tableBody
+                ? `
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>PID</th>
+                                        <th>Process Name</th>
+                                        <th>CPU %</th>
+                                        <th>Memory %</th>
+                                        <th>User</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${tableBody}
+                                </tbody>
+                            </table>
+                        </div>
+                    `
+                : '<p class="text-muted text-center py-3">No process information available</p>';
+
+            return `
+                <div class="card health-card">
+                    <div class="card-body">
+                        <h5><i class="fas fa-tasks section-icon"></i> Top Processes (CPU Usage)</h5>
+                        ${content}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderTemperatureSection(temperature) {
+            if (!temperature || typeof temperature !== 'object') {
+                return '';
+            }
+            const sensorEntries = Object.entries(temperature);
+            if (!sensorEntries.length) {
+                return '';
+            }
+
+            const sensorsHtml = sensorEntries
+                .map(([name, entries]) => {
+                    const readings = Array.isArray(entries) ? entries : [];
+                    const readingHtml = readings
+                        .map((entry) => {
+                            const current = formatPercent(entry.current);
+                            const badge = entry.critical && entry.current > entry.critical * 0.8
+                                ? '<span class="badge bg-warning ms-1">Hot</span>'
+                                : '';
+                            const high = entry.high !== undefined && entry.high !== null
+                                ? `High: ${formatPercent(entry.high)}°C`
+                                : '';
+                            const critical = entry.critical !== undefined && entry.critical !== null
+                                ? `Critical: ${formatPercent(entry.critical)}°C`
+                                : '';
+                            const thresholds = [high, critical].filter(Boolean).join(' • ');
+                            const thresholdsHtml = thresholds ? `<small class="text-muted">${thresholds}</small>` : '';
+                            return `
+                                <div class="metric-row">
+                                    <span class="metric-label">${escapeHtml(entry.label || 'Sensor')}:</span>
+                                    <span class="metric-value">${current}°C ${badge}</span>
+                                </div>
+                                ${thresholdsHtml}
+                            `;
+                        })
+                        .join('');
+                    return `
+                        <div class="col-md-4 mb-3">
+                            <h6 class="text-muted">${escapeHtml(name)}</h6>
+                            ${readingHtml}
+                        </div>
+                    `;
+                })
+                .join('');
+
+            return `
+                <div class="col-12">
+                    <div class="card health-card">
+                        <div class="card-body">
+                            <h5><i class="fas fa-thermometer-half section-icon"></i> Temperature Sensors</h5>
+                            <div class="row">
+                                ${sensorsHtml}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function applyHealthData(data) {
+            if (!data || typeof data !== 'object') {
+                return;
+            }
+
+            updateOverview(data);
+
+            const cpuContainer = document.getElementById('cpu-card');
+            if (cpuContainer) {
+                cpuContainer.innerHTML = renderCpuCard(data.cpu || {});
+            }
+
+            const memoryContainer = document.getElementById('memory-card');
+            if (memoryContainer) {
+                memoryContainer.innerHTML = renderMemoryCard(data.memory || {});
+            }
+
+            const servicesContainer = document.getElementById('services-card');
+            if (servicesContainer) {
+                servicesContainer.innerHTML = renderServicesCard(data.database || {}, data.services || {});
+            }
+
+            const storageContainer = document.getElementById('storage-card');
+            if (storageContainer) {
+                storageContainer.innerHTML = renderStorageCard(data.disk || []);
+            }
+
+            const networkContainer = document.getElementById('network-card');
+            if (networkContainer) {
+                networkContainer.innerHTML = renderNetworkCard(data.network || {});
+            }
+
+            const processesContainer = document.getElementById('processes-card');
+            if (processesContainer) {
+                processesContainer.innerHTML = renderProcessesCard(data.processes || {});
+            }
+
+            const temperatureSection = document.getElementById('temperature-section');
+            if (temperatureSection) {
+                const temperatureHtml = renderTemperatureSection(data.temperature);
+                if (temperatureHtml) {
+                    temperatureSection.classList.remove('d-none');
+                    temperatureSection.innerHTML = temperatureHtml;
+                } else {
+                    temperatureSection.classList.add('d-none');
+                    temperatureSection.innerHTML = '';
+                }
+            }
+
+            const timestamp = data.local_timestamp || data.timestamp;
+            const parsedDate = timestamp ? new Date(timestamp) : new Date();
+            lastUpdatedTime = Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+            updateCurrentTimeDisplay();
+        }
+
+        async function refreshHealthData(showSpinner = false) {
+            try {
+                if (showSpinner) {
+                    setRefreshing(true);
+                }
+                hideError();
+
+                const response = await fetch('/api/system_health', {
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Request failed with status ${response.status}`);
+                }
+
+                const data = await response.json();
+                applyHealthData(data);
+            } catch (error) {
+                console.error('Error refreshing system health data:', error);
+                showError('Unable to refresh system health data. Please try again.');
+            } finally {
+                if (showSpinner) {
+                    setRefreshing(false);
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            applyHealthData(initialHealthData);
+            updateCurrentTimeDisplay();
+            setInterval(updateCurrentTimeDisplay, 1000);
+
+            document.querySelectorAll('.refresh-trigger').forEach((button) => {
+                button.addEventListener('click', () => {
+                    refreshHealthData(true);
+                });
+            });
+
+            setInterval(() => {
+                refreshHealthData(false);
+            }, REFRESH_INTERVAL_MS);
         });
     </script>
-</body>
-</html>
+{% endblock %}

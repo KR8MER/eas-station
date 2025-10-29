@@ -65,6 +65,20 @@ CREATE TABLE system_log (
 CREATE INDEX idx_system_log_timestamp ON system_log(timestamp);
 CREATE INDEX idx_system_log_level ON system_log(level);
 
+-- Administrator accounts for web console access
+CREATE TABLE IF NOT EXISTS admin_users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(80) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    salt VARCHAR(64) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_login_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_users_username ON admin_users(username);
+CREATE INDEX IF NOT EXISTS idx_admin_users_active ON admin_users(is_active);
+
 -- Create poll history table
 CREATE TABLE poll_history (
     id SERIAL PRIMARY KEY,
@@ -100,6 +114,20 @@ CREATE TABLE IF NOT EXISTS led_messages (
 
 CREATE INDEX IF NOT EXISTS idx_led_messages_created_at ON led_messages(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_led_messages_active ON led_messages(is_active);
+
+-- Store generated SAME headers and audio/text assets
+CREATE TABLE IF NOT EXISTS eas_messages (
+    id SERIAL PRIMARY KEY,
+    cap_alert_id INTEGER REFERENCES cap_alerts(id),
+    same_header VARCHAR(255) NOT NULL,
+    audio_filename VARCHAR(255) NOT NULL,
+    text_filename VARCHAR(255) NOT NULL,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_eas_messages_created_at ON eas_messages(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_eas_messages_cap_alert ON eas_messages(cap_alert_id);
 
 -- Create intersections table to log alert-boundary overlaps
 CREATE TABLE intersections (
@@ -139,6 +167,21 @@ CREATE TABLE IF NOT EXISTS led_sign_status (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_led_sign_status_ip ON led_sign_status(sign_ip);
+
+-- Persistent location configuration used by the admin console
+CREATE TABLE IF NOT EXISTS location_settings (
+    id SERIAL PRIMARY KEY,
+    county_name VARCHAR(255) NOT NULL,
+    state_code CHAR(2) NOT NULL,
+    timezone VARCHAR(64) NOT NULL,
+    zone_codes JSONB NOT NULL DEFAULT '[]'::jsonb,
+    area_terms JSONB NOT NULL DEFAULT '[]'::jsonb,
+    map_center_lat DOUBLE PRECISION NOT NULL,
+    map_center_lng DOUBLE PRECISION NOT NULL,
+    map_default_zoom INTEGER NOT NULL DEFAULT 8,
+    led_default_lines JSONB NOT NULL DEFAULT '[]'::jsonb,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
 
 -- Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()

@@ -10,6 +10,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         libpq-dev \
+        ffmpeg \
+        espeak \
+        libespeak-ng1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create and set working directory

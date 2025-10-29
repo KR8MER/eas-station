@@ -4,45 +4,138 @@ NOAA CAP Alerts and GIS Boundary Mapping System
 Flask Web Application with Enhanced Boundary Management and Alerts History
 
 Author: KR8MER Amateur Radio Emergency Communications
-Description: Emergency alert system for Putnam County, Ohio with proper timezone handling
-Version: 2.0 - Complete with All Routes and Functionality
+Description: Emergency alert system with configurable U.S. jurisdiction support and proper timezone handling
+Version: 2.1.7 - Removes legacy artifacts and unused assets from the repository
 """
 
 # =============================================================================
 # IMPORTS AND DEPENDENCIES
 # =============================================================================
 
+import base64
 import os
 import json
+import math
+import re
 import psutil
-import platform
-import socket
-import subprocess
-import shutil
-import threading
-import time
-import threading
-import importlib
-import importlib.util
-import pytz
-from dotenv import load_dotenv
+from typing import Any, Dict, List, Optional, Tuple, Union
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
-from enum import Enum
-from contextlib import nullcontext
+from urllib.parse import quote, urljoin, urlparse
+from types import SimpleNamespace
+
+from dotenv import load_dotenv
+import requests
+import pytz
+
+# Application utilities
+from app_utils import (
+    UTC_TZ,
+    build_system_health_snapshot,
+    format_bytes,
+    format_local_date,
+    format_local_datetime,
+    format_local_time,
+    format_uptime,
+    get_location_timezone,
+    get_location_timezone_name,
+    is_alert_expired,
+    local_now,
+    parse_nws_datetime as _parse_nws_datetime,
+    set_location_timezone,
+    utc_now,
+)
+from app_utils.eas import (
+    P_DIGIT_MEANINGS,
+    EASAudioGenerator,
+    ORIGINATOR_DESCRIPTIONS,
+    PRIMARY_ORIGINATORS,
+    SAME_HEADER_FIELD_DESCRIPTIONS,
+    build_same_header,
+    describe_same_header,
+    load_eas_config,
+    manual_default_same_codes,
+    samples_to_wav_bytes,
+)
+from app_utils.event_codes import EVENT_CODE_REGISTRY
+from app_utils.fips_codes import get_same_lookup, get_us_state_county_tree
 
 # Flask and extensions
-from flask import Flask, request, jsonify, render_template, flash, redirect, url_for, render_template_string, has_app_context
-from flask_sqlalchemy import SQLAlchemy
-
-# Database imports
-from geoalchemy2 import Geometry
+from flask import (
+    Flask,
+    request,
+    jsonify,
+    render_template,
+    flash,
+    redirect,
+    url_for,
+    render_template_string,
+    has_app_context,
+    session,
+    g,
+    send_file,
+    abort,
+)
 from geoalchemy2.functions import ST_GeomFromGeoJSON, ST_Intersects, ST_AsGeoJSON
 from sqlalchemy import text, func, or_, desc
 from sqlalchemy.exc import OperationalError
 
 # Logging
 import logging
+import click
+
+from app_core.alerts import (
+    assign_alert_geometry,
+    calculate_alert_intersections,
+    ensure_multipolygon,
+    get_active_alerts_query,
+    get_expired_alerts_query,
+    parse_noaa_cap_alert,
+)
+from app_core.boundaries import (
+    BOUNDARY_GROUP_LABELS,
+    BOUNDARY_TYPE_CONFIG,
+    calculate_geometry_length_miles,
+    describe_mtfcc,
+    extract_name_and_description,
+    get_boundary_color,
+    get_boundary_display_label,
+    get_boundary_group,
+    get_field_mappings,
+    normalize_boundary_type,
+)
+from app_core.extensions import db
+from app_core.led import (
+    Color,
+    Effect,
+    DisplayMode,
+    Font,
+    FontSize,
+    LED_AVAILABLE,
+    LED_SIGN_IP,
+    LED_SIGN_PORT,
+    MessagePriority,
+    SpecialFunction,
+    Speed,
+    ensure_led_tables,
+    initialise_led_controller,
+    led_controller,
+    led_module,
+)
+from app_core.location import get_location_settings, update_location_settings
+from app_core.models import (
+    AdminUser,
+    Boundary,
+    CAPAlert,
+    EASMessage,
+    ManualEASActivation,
+    Intersection,
+    LEDMessage,
+    LEDSignStatus,
+    LocationSettings,
+    PollHistory,
+    SystemLog,
+)
 
 # =============================================================================
 # CONFIGURATION AND SETUP
@@ -59,833 +152,107 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
-# Database configuration
-DATABASE_URL = os.getenv(
-    'DATABASE_URL',
-    'postgresql+psycopg2://casaos:casaos@postgresql:5432/casaos'
+# Application versioning (exposed via templates for quick deployment verification)
+SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.1.7')
+
+# NOAA API configuration for manual alert import workflows
+NOAA_API_BASE_URL = 'https://api.weather.gov/alerts'
+# Allowed query parameters documented at
+# https://www.weather.gov/documentation/services-web-api#/default/get_alerts
+NOAA_ALLOWED_QUERY_PARAMS = frozenset({
+    'area',
+    'zone',
+    'region',
+    'region_type',
+    'point',
+    'start',
+    'end',
+    'event',
+    'status',
+    'message_type',
+    'urgency',
+    'severity',
+    'certainty',
+    'limit',
+    'cursor',
+})
+NOAA_USER_AGENT = os.environ.get(
+    'NOAA_USER_AGENT',
+    'KR8MER CAP Alert System/2.1 (+https://github.com/KR8MER/noaa_alerts_systems)'
 )
+
+
+def _build_database_url() -> str:
+    url = os.getenv('DATABASE_URL')
+    if url:
+        return url
+
+    user = os.getenv('POSTGRES_USER', 'postgres') or 'postgres'
+    password = os.getenv('POSTGRES_PASSWORD', '')
+    host = os.getenv('POSTGRES_HOST', 'postgres') or 'postgres'
+    port = os.getenv('POSTGRES_PORT', '5432') or '5432'
+    database = os.getenv('POSTGRES_DB', user) or user
+
+    user_part = quote(user, safe='')
+    if password:
+        auth_part = f"{user_part}:{quote(password, safe='')}"
+    else:
+        auth_part = user_part
+
+    return f"postgresql+psycopg2://{auth_part}@{host}:{port}/{database}"
+
+
+# Database configuration
+DATABASE_URL = _build_database_url()
+os.environ.setdefault('DATABASE_URL', DATABASE_URL)
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize database
-db = SQLAlchemy(app)
+db.init_app(app)
+
+# Configure EAS output integration
+EAS_CONFIG = load_eas_config(app.root_path)
+app.config['EAS_BROADCAST_ENABLED'] = bool(EAS_CONFIG.get('enabled'))
+app.config['EAS_OUTPUT_DIR'] = EAS_CONFIG.get('output_dir')
+app.config['EAS_OUTPUT_WEB_SUBDIR'] = EAS_CONFIG.get('web_subdir', 'eas_messages')
 
 # Guard database schema preparation so we only attempt it once per process.
 _db_initialized = False
 _db_initialization_error = None
-_db_init_lock = threading.Lock()
-
-# Timezone configuration for Putnam County, Ohio (Eastern Time)
-PUTNAM_COUNTY_TZ = pytz.timezone('America/New_York')
-UTC_TZ = pytz.UTC
-
 logger.info("NOAA Alerts System startup")
 
 # =============================================================================
-# LED SIGN CONFIGURATION AND INITIALIZATION
+# BOUNDARY TYPE METADATA
 # =============================================================================
 
-# LED Sign Configuration
-LED_SIGN_IP = os.getenv('LED_SIGN_IP', '192.168.1.100')
-LED_SIGN_PORT = int(os.getenv('LED_SIGN_PORT', '10001'))
-LED_AVAILABLE = False
-led_controller = None
-
-_led_tables_initialized = False
-_led_tables_error = None
-_led_tables_lock = threading.Lock()
-
-
-def _fallback_message_priority():
-    class _MessagePriority(Enum):
-        EMERGENCY = 0
-        URGENT = 1
-        NORMAL = 2
-        LOW = 3
-
-    return _MessagePriority
-try:
-    from led_sign_controller import (
-        LEDSignController,
-        Color,
-        FontSize,
-        Effect,
-        Speed,
-        MessagePriority,
-    )
-except ImportError as e:
-    logger.warning(f"LED controller module not found: {e}")
-    LED_AVAILABLE = False
-    MessagePriority = _fallback_message_priority()
-else:
-    try:
-        led_controller = LEDSignController(LED_SIGN_IP, LED_SIGN_PORT)
-        LED_AVAILABLE = True
-        logger.info(
-            "LED controller initialized successfully for %s:%s",
-            LED_SIGN_IP,
-            LED_SIGN_PORT,
-        )
-    except Exception as e:
-        logger.error(f"Failed to initialize LED controller: {e}")
-        LED_AVAILABLE = False
-        MessagePriority = _fallback_message_priority()
-
+USERNAME_PATTERN = re.compile(r'^[A-Za-z0-9_.-]{3,64}$')
 
 # =============================================================================
 # TIMEZONE AND DATETIME UTILITIES
 # =============================================================================
 
-def utc_now() -> datetime:
-    """Return the current timezone-aware UTC timestamp."""
-
-    return datetime.now(UTC_TZ)
-
-
-def local_now():
-    """Get current Putnam County local time"""
-    return utc_now().astimezone(PUTNAM_COUNTY_TZ)
-
 
 def parse_nws_datetime(dt_string):
-    """Parse NWS datetime strings which can be in various formats"""
-    if not dt_string:
-        return None
+    """Parse NWS datetime strings while reusing the shared utility logger."""
 
-    dt_string = str(dt_string).strip()
+    return _parse_nws_datetime(dt_string, logger=logger)
 
-    if dt_string.endswith('Z'):
-        try:
-            dt = datetime.fromisoformat(dt_string.replace('Z', '+00:00'))
-            return dt.astimezone(UTC_TZ)
-        except ValueError:
-            pass
-
-    try:
-        dt = datetime.fromisoformat(dt_string)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=UTC_TZ)
-        return dt.astimezone(UTC_TZ)
-    except ValueError:
-        pass
-
-    if 'EDT' in dt_string:
-        try:
-            dt_clean = dt_string.replace(' EDT', '').replace('EDT', '')
-            dt = datetime.fromisoformat(dt_clean)
-            # FIXED: Use pytz to properly localize as EDT
-            eastern_tz = pytz.timezone('US/Eastern')
-            dt = eastern_tz.localize(dt, is_dst=True)  # is_dst=True for EDT
-            return dt.astimezone(UTC_TZ)
-        except ValueError:
-            pass
-
-    if 'EST' in dt_string:
-        try:
-            dt_clean = dt_string.replace(' EST', '').replace('EST', '')
-            dt = datetime.fromisoformat(dt_clean)
-            est_tz = pytz.timezone('US/Eastern')
-            dt = est_tz.localize(dt)
-            return dt.astimezone(UTC_TZ)
-        except ValueError:
-            pass
-
-    logger.warning(f"Could not parse datetime: {dt_string}")
-    return None
-
-
-def format_local_datetime(dt, include_utc=True):
-    """Format datetime in Putnam County local time with optional UTC"""
-    if not dt:
-        return "Unknown"
-
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC_TZ)
-
-    local_dt = dt.astimezone(PUTNAM_COUNTY_TZ)
-    local_str = local_dt.strftime('%B %d, %Y at %I:%M %p %Z')
-
-    if include_utc:
-        utc_str = dt.astimezone(UTC_TZ).strftime('%H:%M UTC')
-        return f"{local_str} ({utc_str})"
-    else:
-        return local_str
-
-
-def format_local_date(dt):
-    """Format date in Putnam County local time"""
-    if not dt:
-        return "Unknown"
-
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC_TZ)
-
-    local_dt = dt.astimezone(PUTNAM_COUNTY_TZ)
-    return local_dt.strftime('%B %d, %Y')
-
-
-def format_local_time(dt):
-    """Format time only in Putnam County local time with UTC"""
-    if not dt:
-        return "Unknown"
-
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC_TZ)
-
-    local_dt = dt.astimezone(PUTNAM_COUNTY_TZ)
-    utc_dt = dt.astimezone(UTC_TZ)
-
-    local_str = local_dt.strftime('%I:%M %p %Z')
-    utc_str = utc_dt.strftime('%H:%M UTC')
-
-    return f"{local_str} ({utc_str})"
-
-
-def is_alert_expired(expires_dt):
-    """Check if alert is expired using current time"""
-    if not expires_dt:
-        return False
-
-    if expires_dt.tzinfo is None:
-        expires_dt = expires_dt.replace(tzinfo=UTC_TZ)
-
-    return expires_dt < utc_now()
-
-
-# =============================================================================
-# DATABASE MODELS
-# =============================================================================
-
-class Boundary(db.Model):
-    __tablename__ = 'boundaries'
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(255), nullable=False)
-    type = db.Column(db.String(50), nullable=False)
-    description = db.Column(db.Text)
-    geom = db.Column(Geometry('MULTIPOLYGON', srid=4326))
-    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
-    updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now)
-
-
-class CAPAlert(db.Model):
-    __tablename__ = 'cap_alerts'
-
-    id = db.Column(db.Integer, primary_key=True)
-    identifier = db.Column(db.String(255), unique=True, nullable=False)
-    sent = db.Column(db.DateTime(timezone=True), nullable=False)
-    expires = db.Column(db.DateTime(timezone=True))
-    status = db.Column(db.String(50), nullable=False)
-    message_type = db.Column(db.String(50), nullable=False)
-    scope = db.Column(db.String(50), nullable=False)
-    category = db.Column(db.String(50))
-    event = db.Column(db.String(255), nullable=False)
-    urgency = db.Column(db.String(50))
-    severity = db.Column(db.String(50))
-    certainty = db.Column(db.String(50))
-    area_desc = db.Column(db.Text)
-    headline = db.Column(db.Text)
-    description = db.Column(db.Text)
-    instruction = db.Column(db.Text)
-    raw_json = db.Column(db.JSON)
-    geom = db.Column(Geometry('POLYGON', srid=4326))
-    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
-    updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now)
-
-
-class SystemLog(db.Model):
-    __tablename__ = 'system_log'
-
-    id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime(timezone=True), default=utc_now)
-    level = db.Column(db.String(20), nullable=False)
-    message = db.Column(db.Text, nullable=False)
-    module = db.Column(db.String(100))
-    details = db.Column(db.JSON)
-
-
-class Intersection(db.Model):
-    __tablename__ = 'intersections'
-
-    id = db.Column(db.Integer, primary_key=True)
-    cap_alert_id = db.Column(db.Integer, db.ForeignKey('cap_alerts.id', ondelete='CASCADE'))
-    boundary_id = db.Column(db.Integer, db.ForeignKey('boundaries.id', ondelete='CASCADE'))
-    intersection_area = db.Column(db.Float)
-    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
-
-
-class PollHistory(db.Model):
-    __tablename__ = 'poll_history'
-
-    id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime(timezone=True), default=utc_now)
-    status = db.Column(db.String(20), nullable=False)
-    alerts_fetched = db.Column(db.Integer, default=0)
-    alerts_new = db.Column(db.Integer, default=0)
-    alerts_updated = db.Column(db.Integer, default=0)
-    execution_time_ms = db.Column(db.Integer)
-    error_message = db.Column(db.Text)
-
-
-# =============================================================================
-# LED SIGN DATABASE MODELS
-# =============================================================================
-
-class LEDMessage(db.Model):
-    __tablename__ = 'led_messages'
-
-    id = db.Column(db.Integer, primary_key=True)
-    message_type = db.Column(db.String(50), nullable=False)
-    content = db.Column(db.Text, nullable=False)
-    priority = db.Column(db.Integer, default=2)
-    color = db.Column(db.String(20))
-    font_size = db.Column(db.String(20))
-    effect = db.Column(db.String(20))
-    speed = db.Column(db.String(20))
-    display_time = db.Column(db.Integer)
-    scheduled_time = db.Column(db.DateTime(timezone=True))
-    sent_at = db.Column(db.DateTime(timezone=True))
-    is_active = db.Column(db.Boolean, default=True)
-    alert_id = db.Column(db.Integer, db.ForeignKey('cap_alerts.id'))
-    repeat_interval = db.Column(db.Integer)
-    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
-
-
-class LEDSignStatus(db.Model):
-    __tablename__ = 'led_sign_status'
-
-    id = db.Column(db.Integer, primary_key=True)
-    sign_ip = db.Column(db.String(15), nullable=False)
-    brightness_level = db.Column(db.Integer, default=10)
-    error_count = db.Column(db.Integer, default=0)
-    last_error = db.Column(db.Text)
-    last_update = db.Column(db.DateTime(timezone=True), default=utc_now)
-    is_connected = db.Column(db.Boolean, default=False)
-
-
-# =============================================================================
-# LED TABLE INITIALIZATION HELPERS
-# =============================================================================
-
-
-def _ensure_led_tables_impl():
-    global _led_tables_initialized, _led_tables_error
-
-    if _led_tables_initialized:
-        return True
-
-    base_ready = initialize_database()
-    if not base_ready:
-        return False
-
-    context = nullcontext() if has_app_context() else app.app_context()
-
-    with context:
-        try:
-            LEDMessage.__table__.create(db.engine, checkfirst=True)
-            LEDSignStatus.__table__.create(db.engine, checkfirst=True)
-        except OperationalError as led_error:
-            _led_tables_error = led_error
-            logger.error("LED table initialization failed: %s", led_error)
-            return False
-        except Exception as led_error:
-            _led_tables_error = led_error
-            logger.error("LED table initialization failed: %s", led_error)
-            raise
-        else:
-            _led_tables_initialized = True
-            _led_tables_error = None
-            logger.info("LED tables ensured")
-            return True
-
-
-def ensure_led_tables(force: bool = False):
-    global _led_tables_initialized, _led_tables_error
-
-    if force:
-        _led_tables_initialized = False
-        _led_tables_error = None
-
-    if _led_tables_initialized:
-        return True
-
-    if isinstance(_led_tables_error, OperationalError):
-        logger.debug("Skipping LED table initialization due to prior OperationalError")
-        return False
-
-    if _led_tables_error is not None:
-        raise _led_tables_error
-
-    with _led_tables_lock:
-        if _led_tables_initialized:
-            return True
-
-        if isinstance(_led_tables_error, OperationalError):
-            logger.debug("Skipping LED table initialization due to prior OperationalError")
-            return False
-
-        if _led_tables_error is not None:
-            raise _led_tables_error
-
-        return _ensure_led_tables_impl()
-
-
-# =============================================================================
-# DATABASE HELPER FUNCTIONS
-# =============================================================================
-
-def get_active_alerts_query():
-    """Get query for active (non-expired) alerts - preserves all data"""
-    now = utc_now()
-    return CAPAlert.query.filter(
-        or_(
-            CAPAlert.expires.is_(None),
-            CAPAlert.expires > now
-        )
-    ).filter(
-        CAPAlert.status != 'Expired'
-    )
-
-
-def get_expired_alerts_query():
-    """Get query for expired alerts"""
-    now = utc_now()
-    return CAPAlert.query.filter(CAPAlert.expires < now)
-
-
-# =============================================================================
-# GEOJSON AND BOUNDARY PROCESSING UTILITIES
-# =============================================================================
-
-def get_field_mappings():
-    """Define field mappings for different boundary types"""
-    return {
-        'electric': {
-            'name_fields': ['COMPNAME', 'Company', 'Provider', 'Utility'],
-            'description_fields': ['COMPCODE', 'COMPTYPE', 'Shape_Leng', 'SHAPE_STAr']
-        },
-        'villages': {
-            'name_fields': ['CORPORATIO', 'VILLAGE', 'NAME', 'Municipality'],
-            'description_fields': ['POP_2020', 'POP_2010', 'POP_2000', 'SQMI']
-        },
-        'school': {
-            'name_fields': ['District', 'DISTRICT', 'SCHOOL_DIS', 'NAME'],
-            'description_fields': ['STUDENTS', 'Shape_Area', 'ENROLLMENT']
-        },
-        'fire': {
-            'name_fields': ['DEPT', 'DEPARTMENT', 'STATION', 'FIRE_DEPT'],
-            'description_fields': ['STATION_NUM', 'TYPE', 'SERVICE_AREA']
-        },
-        'ems': {
-            'name_fields': ['DEPT', 'DEPARTMENT', 'SERVICE', 'PROVIDER'],
-            'description_fields': ['STATION', 'Area', 'Shape_Area', 'SERVICE_TYPE']
-        },
-        'township': {
-            'name_fields': ['TOWNSHIP_N', 'TOWNSHIP', 'TWP_NAME', 'NAME'],
-            'description_fields': ['POPULATION', 'AREA_SQMI', 'POP_2010', 'COUNTY_COD']
-        },
-        'telephone': {
-            'name_fields': ['TELNAME', 'PROVIDER', 'COMPANY', 'TELECOM', 'CARRIER'],
-            'description_fields': ['TELCO', 'NAME', 'LATA', 'SERVICE_TYPE']
-        },
-        'county': {
-            'name_fields': ['COUNTY', 'COUNTY_NAME', 'NAME'],
-            'description_fields': ['FIPS_CODE', 'POPULATION', 'AREA_SQMI']
-        }
-    }
-
-
-def extract_name_and_description(properties, boundary_type):
-    """Extract name and description from feature properties"""
-    mappings = get_field_mappings()
-    type_mapping = mappings.get(boundary_type, {})
-
-    # Extract name
-    name = None
-    for field in type_mapping.get('name_fields', []):
-        if field in properties and properties[field]:
-            name = str(properties[field]).strip()
-            break
-
-    # Fallback name extraction
-    if not name:
-        for field in ['name', 'NAME', 'Name', 'OBJECTID', 'ID', 'FID']:
-            if field in properties and properties[field]:
-                name = str(properties[field]).strip()
-                break
-
-    if not name:
-        name = "Unknown"
-
-    # Extract description
-    description_parts = []
-    for field in type_mapping.get('description_fields', []):
-        if field in properties and properties[field] is not None:
-            value = properties[field]
-            if isinstance(value, (int, float)):
-                if field.upper().startswith('POP'):
-                    description_parts.append(f"Population {field[-4:]}: {value:,}")
-                elif field == 'AREA_SQMI':
-                    description_parts.append(f"Area: {value:.2f} sq mi")
-                elif field == 'SQMI':
-                    description_parts.append(f"Area: {value:.2f} sq mi")
-                elif field == 'Area':
-                    description_parts.append(f"Area: {value:.2f} sq mi")
-                elif field in ['Shape_Area', 'SHAPE_STAr', 'ShapeSTArea']:
-                    if 'Area' in properties and properties['Area']:
-                        continue
-                    sq_miles = value / 2589988.11
-                    if sq_miles > 500:
-                        sq_feet_to_sq_miles = value / 27878400
-                        if sq_feet_to_sq_miles <= 500:
-                            description_parts.append(f"Area: {sq_feet_to_sq_miles:.2f} sq mi")
-                        else:
-                            continue
-                    else:
-                        description_parts.append(f"Area: {sq_miles:.2f} sq mi")
-                elif field == 'STATION' and boundary_type == 'ems':
-                    description_parts.append(f"Station: {value}")
-                elif field.upper() in ['SHAPE_LENG', 'PERIMETER', 'Shape_Length', 'ShapeSTLength']:
-                    miles = value * 0.000621371
-                    description_parts.append(f"Perimeter: {miles:.2f} miles")
-                else:
-                    description_parts.append(f"{field}: {value}")
-            else:
-                description_parts.append(f"{field}: {value}")
-
-    # Add common geographic info
-    for field in ['county_nam', 'COUNTY', 'County', 'COUNTY_COD']:
-        if field in properties and properties[field]:
-            description_parts.append(f"County: {properties[field]}")
-            break
-
-    description = "; ".join(description_parts) if description_parts else ""
-    return name, description
-
-
-def ensure_multipolygon(geometry):
-    """Convert Polygon to MultiPolygon if needed"""
-    if geometry['type'] == 'Polygon':
-        return {
-            'type': 'MultiPolygon',
-            'coordinates': [geometry['coordinates']]
-        }
-    return geometry
 
 
 # =============================================================================
 # SYSTEM MONITORING UTILITIES
 # =============================================================================
 
+
 def get_system_health():
-    """Get comprehensive system health information"""
-    try:
-        uname = platform.uname()
-        boot_time = psutil.boot_time()
+    """Get comprehensive system health information."""
 
-        cpu_info = {
-            'physical_cores': psutil.cpu_count(logical=False),
-            'total_cores': psutil.cpu_count(logical=True),
-            'max_frequency': psutil.cpu_freq().max if psutil.cpu_freq() else 0,
-            'current_frequency': psutil.cpu_freq().current if psutil.cpu_freq() else 0,
-            'cpu_usage_percent': psutil.cpu_percent(interval=1),
-            'cpu_usage_per_core': psutil.cpu_percent(interval=1, percpu=True)
-        }
-
-        memory = psutil.virtual_memory()
-        swap = psutil.swap_memory()
-        memory_info = {
-            'total': memory.total,
-            'available': memory.available,
-            'used': memory.used,
-            'free': memory.free,
-            'percentage': memory.percent,
-            'swap_total': swap.total,
-            'swap_used': swap.used,
-            'swap_free': swap.free,
-            'swap_percentage': swap.percent
-        }
-
-        disk_info = []
-        try:
-            partitions = psutil.disk_partitions()
-            for partition in partitions:
-                try:
-                    partition_usage = psutil.disk_usage(partition.mountpoint)
-                    disk_info.append({
-                        'device': partition.device,
-                        'mountpoint': partition.mountpoint,
-                        'fstype': partition.fstype,
-                        'total': partition_usage.total,
-                        'used': partition_usage.used,
-                        'free': partition_usage.free,
-                        'percentage': (partition_usage.used / partition_usage.total) * 100
-                    })
-                except PermissionError:
-                    continue
-        except:
-            disk_usage = psutil.disk_usage('/')
-            disk_info.append({
-                'device': '/',
-                'mountpoint': '/',
-                'fstype': 'unknown',
-                'total': disk_usage.total,
-                'used': disk_usage.used,
-                'free': disk_usage.free,
-                'percentage': (disk_usage.used / disk_usage.total) * 100
-            })
-
-        network_info = {
-            'hostname': socket.gethostname(),
-            'interfaces': []
-        }
-
-        try:
-            net_if_addrs = psutil.net_if_addrs()
-            net_if_stats = psutil.net_if_stats()
-
-            for interface_name, interface_addresses in net_if_addrs.items():
-                interface_info = {
-                    'name': interface_name,
-                    'addresses': [],
-                    'is_up': net_if_stats[interface_name].isup if interface_name in net_if_stats else False
-                }
-
-                for address in interface_addresses:
-                    if address.family == socket.AF_INET:
-                        interface_info['addresses'].append({
-                            'type': 'IPv4',
-                            'address': address.address,
-                            'netmask': address.netmask,
-                            'broadcast': address.broadcast
-                        })
-                    elif address.family == socket.AF_INET6:
-                        interface_info['addresses'].append({
-                            'type': 'IPv6',
-                            'address': address.address,
-                            'netmask': address.netmask
-                        })
-
-                if interface_info['addresses']:
-                    network_info['interfaces'].append(interface_info)
-        except:
-            pass
-
-        process_info = {
-            'total_processes': len(psutil.pids()),
-            'running_processes': len(
-                [p for p in psutil.process_iter(['status']) if p.info['status'] == psutil.STATUS_RUNNING]),
-            'top_processes': []
-        }
-
-        try:
-            processes = []
-            for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'username']):
-                try:
-                    proc.cpu_percent()
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-
-            time.sleep(0.1)
-
-            for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'username']):
-                try:
-                    pinfo = proc.as_dict(attrs=['pid', 'name', 'cpu_percent', 'memory_percent', 'username'])
-                    if pinfo['cpu_percent'] is not None:
-                        processes.append(pinfo)
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-
-            processes.sort(key=lambda x: x['cpu_percent'] or 0, reverse=True)
-            process_info['top_processes'] = processes[:10]
-        except:
-            pass
-
-        load_averages = None
-        try:
-            if hasattr(os, 'getloadavg'):
-                load_averages = os.getloadavg()
-        except:
-            pass
-
-        db_status = 'unknown'
-        db_info = {}
-        try:
-            result = db.session.execute(text('SELECT version()')).fetchone()
-            if result:
-                db_status = 'connected'
-                db_info['version'] = result[0] if result[0] else 'Unknown'
-
-                try:
-                    size_result = db.session.execute(text(
-                        "SELECT pg_size_pretty(pg_database_size(current_database()))"
-                    )).fetchone()
-                    if size_result:
-                        db_info['size'] = size_result[0]
-                except:
-                    db_info['size'] = 'Unknown'
-
-                try:
-                    conn_result = db.session.execute(text(
-                        "SELECT count(*) FROM pg_stat_activity WHERE state = 'active'"
-                    )).fetchone()
-                    if conn_result:
-                        db_info['active_connections'] = conn_result[0]
-                except:
-                    db_info['active_connections'] = 'Unknown'
-        except Exception as e:
-            db_status = f'error: {str(e)}'
-
-        services_status = {}
-        try:
-            result = subprocess.run(['systemctl', 'is-active', 'apache2'],
-                                    capture_output=True, text=True, timeout=5)
-            services_status['apache2'] = result.stdout.strip()
-        except:
-            services_status['apache2'] = 'unknown'
-
-        try:
-            result = subprocess.run(['systemctl', 'is-active', 'postgresql'],
-                                    capture_output=True, text=True, timeout=5)
-            services_status['postgresql'] = result.stdout.strip()
-        except:
-            services_status['postgresql'] = 'unknown'
-
-        temperature_info = {}
-        try:
-            temps = psutil.sensors_temperatures()
-            if temps:
-                for name, entries in temps.items():
-                    temperature_info[name] = []
-                    for entry in entries:
-                        temperature_info[name].append({
-                            'label': entry.label or 'Unknown',
-                            'current': entry.current,
-                            'high': entry.high,
-                            'critical': entry.critical
-                        })
-        except:
-            pass
-
-        return {
-            'timestamp': utc_now().isoformat(),
-            'local_timestamp': local_now().isoformat(),
-            'system': {
-                'hostname': uname.node,
-                'system': uname.system,
-                'release': uname.release,
-                'version': uname.version,
-                'machine': uname.machine,
-                'processor': uname.processor,
-                'boot_time': datetime.fromtimestamp(boot_time, UTC_TZ).isoformat(),
-                'uptime_seconds': time.time() - boot_time
-            },
-            'cpu': cpu_info,
-            'memory': memory_info,
-            'disk': disk_info,
-            'network': network_info,
-            'processes': process_info,
-            'load_averages': load_averages,
-            'database': {
-                'status': db_status,
-                'info': db_info
-            },
-            'services': services_status,
-            'temperature': temperature_info
-        }
-
-    except Exception as e:
-        logger.error(f"Error getting system health: {str(e)}")
-        return {
-            'error': str(e),
-            'timestamp': utc_now().isoformat(),
-            'local_timestamp': local_now().isoformat()
-        }
+    return build_system_health_snapshot(db, logger)
 
 
-def format_bytes(bytes_value):
-    """Format bytes into human readable format"""
-    if bytes_value == 0:
-        return "0 B"
-
-    size_names = ["B", "KB", "MB", "GB", "TB", "PB"]
-    import math
-    i = int(math.floor(math.log(bytes_value, 1024)))
-    p = math.pow(1024, i)
-    s = round(bytes_value / p, 2)
-    return f"{s} {size_names[i]}"
-
-
-def format_uptime(seconds):
-    """Format uptime seconds into human readable format"""
-    days = int(seconds // 86400)
-    hours = int((seconds % 86400) // 3600)
-    minutes = int((seconds % 3600) // 60)
-
-    if days > 0:
-        return f"{days}d {hours}h {minutes}m"
-    elif hours > 0:
-        return f"{hours}h {minutes}m"
-    else:
-        return f"{minutes}m"
-
-
-# =============================================================================
-# INTERSECTION CALCULATION HELPER FUNCTIONS
-# =============================================================================
-
-def calculate_alert_intersections(alert):
-    """Calculate intersections between an alert and all boundaries"""
-    if not alert.geom:
-        return 0
-
-    intersections_created = 0
-
-    try:
-        boundaries = Boundary.query.all()
-
-        for boundary in boundaries:
-            if not boundary.geom:
-                continue
-
-            try:
-                intersection_result = db.session.execute(
-                    text("""
-                        SELECT ST_Intersects(:alert_geom, :boundary_geom) as intersects,
-                               ST_Area(ST_Intersection(:alert_geom, :boundary_geom)) as area
-                    """),
-                    {
-                        'alert_geom': alert.geom,
-                        'boundary_geom': boundary.geom
-                    }
-                ).fetchone()
-
-                if intersection_result and intersection_result.intersects:
-                    db.session.query(Intersection).filter_by(
-                        cap_alert_id=alert.id,
-                        boundary_id=boundary.id
-                    ).delete()
-
-                    intersection = Intersection(
-                        cap_alert_id=alert.id,
-                        boundary_id=boundary.id,
-                        intersection_area=float(intersection_result.area) if intersection_result.area else 0.0,
-                        created_at=utc_now()
-                    )
-                    db.session.add(intersection)
-                    intersections_created += 1
-
-                    logger.debug(f"Created intersection: Alert {alert.identifier} <-> Boundary {boundary.name}")
-
-            except Exception as e:
-                logger.error(f"Error calculating intersection for boundary {boundary.id}: {str(e)}")
-                continue
-
-    except Exception as e:
-        logger.error(f"Error in calculate_alert_intersections for alert {alert.identifier}: {str(e)}")
-        raise
-
-    return intersections_created
+def _led_enums_available() -> bool:
+    return all(enum is not None for enum in (Color, Font, DisplayMode, Speed))
 
 
 # =============================================================================
@@ -1196,6 +563,110 @@ def stats():
             logger.error(f"Error getting fun stats: {str(e)}")
             stats_data['fun_stats'] = {'longest_headline': 0, 'most_common_event': 'None'}
 
+        # Alert analytics dataset for interactive dashboard features
+        try:
+            now = utc_now()
+            year_ago = now - timedelta(days=365)
+
+            alert_rows = db.session.query(
+                CAPAlert.identifier,
+                CAPAlert.sent,
+                CAPAlert.expires,
+                CAPAlert.severity,
+                CAPAlert.status,
+                CAPAlert.event
+            ).filter(
+                CAPAlert.sent.isnot(None),
+                CAPAlert.sent >= year_ago
+            ).order_by(CAPAlert.sent).all()
+
+            def _ensure_local(dt):
+                if dt is None:
+                    return None
+                if dt.tzinfo is None:
+                    dt = UTC_TZ.localize(dt)
+                return dt.astimezone(get_location_timezone())
+
+            alert_events = []
+            severity_set = set()
+            status_set = set()
+            event_set = set()
+            dow_hour_matrix = [[0] * 24 for _ in range(7)]
+            daily_counts = defaultdict(int)
+            timeline_rows = []
+
+            for identifier, sent, expires, severity, status, event in alert_rows:
+                local_sent = _ensure_local(sent)
+                if local_sent is None:
+                    continue
+                local_expires = _ensure_local(expires)
+
+                severity_label = severity or 'Unknown'
+                status_label = status or 'Unknown'
+                event_label = event or 'Unknown'
+
+                severity_set.add(severity_label)
+                status_set.add(status_label)
+                event_set.add(event_label)
+
+                dow_index = (local_sent.weekday() + 1) % 7
+                dow_hour_matrix[dow_index][local_sent.hour] += 1
+                daily_counts[local_sent.date()] += 1
+
+                alert_events.append({
+                    'id': identifier,
+                    'sent': local_sent.isoformat(),
+                    'expires': local_expires.isoformat() if local_expires else None,
+                    'severity': severity_label,
+                    'status': status_label,
+                    'event': event_label
+                })
+
+                timeline_rows.append((
+                    identifier,
+                    event_label,
+                    severity_label,
+                    status_label,
+                    local_sent,
+                    local_expires
+                ))
+
+            timeline_rows.sort(key=lambda row: row[4], reverse=True)
+            stats_data['lifecycle_timeline'] = [
+                {
+                    'id': row[0],
+                    'event': row[1],
+                    'severity': row[2],
+                    'status': row[3],
+                    'start': row[4].isoformat(),
+                    'end': row[5].isoformat() if row[5] else None,
+                    'duration_hours': round(((row[5] - row[4]).total_seconds() / 3600), 2) if row[5] else None
+                }
+                for row in timeline_rows[:30]
+            ]
+            stats_data['alert_events'] = alert_events
+            stats_data['filter_options'] = {
+                'severities': sorted(severity_set),
+                'statuses': sorted(status_set),
+                'events': sorted(event_set)
+            }
+            stats_data['dow_hour_matrix'] = dow_hour_matrix
+            stats_data['daily_alerts'] = [
+                {'date': date.isoformat(), 'count': count}
+                for date, count in sorted(daily_counts.items())
+            ]
+        except Exception as e:
+            logger.error(f"Error preparing analytics dataset: {str(e)}")
+            stats_data.setdefault('lifecycle_timeline', [])
+            stats_data.setdefault('alert_events', [])
+            stats_data.setdefault('filter_options', {
+                'severities': [],
+                'statuses': [],
+                'events': []
+            })
+            stats_data.setdefault('dow_hour_matrix', [[0] * 24 for _ in range(7)])
+            stats_data.setdefault('daily_alerts', [])
+
         # Add utility functions to template context
         stats_data['format_bytes'] = format_bytes
         stats_data['format_uptime'] = format_uptime
@@ -1207,14 +678,40 @@ def stats():
         return f"<h1>Error loading statistics</h1><p>{str(e)}</p><p><a href='/'>← Back to Main</a></p>"
 
 
+@app.route('/about')
+def about_page():
+    """Present project background information within the web UI."""
+    try:
+        return render_template('about.html')
+    except Exception as exc:
+        logger.error(f"Error rendering about page: {exc}")
+        return (
+            "<h1>About</h1><p>Project documentation is available in ABOUT.md on the server.</p>"
+        )
+
+
+@app.route('/help')
+def help_page():
+    """Provide quick-start and troubleshooting guidance for operators."""
+    try:
+        return render_template('help.html')
+    except Exception as exc:
+        logger.error(f"Error rendering help page: {exc}")
+        return (
+            "<h1>Help</h1><p>Refer to HELP.md in the repository for the full operations guide.</p>"
+        )
+
+
 @app.route('/system_health')
 def system_health_page():
     """Dedicated system health monitoring page"""
     try:
         health_data = get_system_health()
-        health_data['format_bytes'] = format_bytes
-        health_data['format_uptime'] = format_uptime
-        return render_template('system_health.html', **health_data)
+        template_context = dict(health_data)
+        template_context['format_bytes'] = format_bytes
+        template_context['format_uptime'] = format_uptime
+        template_context['health_data_json'] = json.dumps(health_data)
+        return render_template('system_health.html', **template_context)
     except Exception as e:
         logger.error(f"Error loading system health page: {str(e)}")
         return f"<h1>Error loading system health</h1><p>{str(e)}</p><p><a href='/'>← Back to Main</a></p>"
@@ -1307,6 +804,43 @@ def alerts():
 
             pagination = MockPagination(page, per_page, total_count, alerts_list)
 
+        audio_map: Dict[int, List[Dict[str, Any]]] = {}
+        if alerts_list:
+            alert_ids = [alert.id for alert in alerts_list if getattr(alert, 'id', None)]
+            if alert_ids:
+                try:
+                    web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+                    eas_messages = (
+                        EASMessage.query
+                        .filter(EASMessage.cap_alert_id.in_(alert_ids))
+                        .order_by(EASMessage.created_at.desc())
+                        .all()
+                    )
+
+                    def _static_path(filename: Optional[str]) -> Optional[str]:
+                        if not filename:
+                            return None
+                        parts = [web_prefix, filename] if web_prefix else [filename]
+                        return '/'.join(part for part in parts if part)
+
+                    for message in eas_messages:
+                        if not message.cap_alert_id:
+                            continue
+                        audio_path = _static_path(message.audio_filename)
+                        text_path = _static_path(message.text_filename)
+                        metadata = dict(message.metadata_payload or {})
+                        audio_map.setdefault(message.cap_alert_id, []).append({
+                            'id': message.id,
+                            'created_at': message.created_at,
+                            'audio_url': url_for('static', filename=audio_path) if audio_path else None,
+                            'text_url': url_for('static', filename=text_path) if text_path else None,
+                            'detail_url': url_for('audio_detail', message_id=message.id),
+                            'event': metadata.get('event'),
+                            'severity': metadata.get('severity'),
+                        })
+                except Exception as audio_error:
+                    logger.warning('Unable to attach EAS audio metadata: %s', audio_error)
+
         try:
             total_alerts = CAPAlert.query.count()
             active_alerts = get_active_alerts_query().count()
@@ -1353,7 +887,8 @@ def alerts():
                                statuses=statuses,
                                severities=severities,
                                events=events,
-                               current_filters=current_filters)
+                               current_filters=current_filters,
+                               audio_map=audio_map)
 
     except Exception as e:
         logger.error(f"Error loading alerts page: {str(e)}")
@@ -1373,6 +908,395 @@ def alerts():
         </details>
         {% endif %}
         """, error=str(e), debug=traceback.format_exc() if app.debug else None)
+
+
+@app.route('/audio')
+def audio_history():
+    try:
+        eas_enabled = app.config.get('EAS_BROADCAST_ENABLED', False)
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 25, type=int)
+        per_page = min(max(per_page, 10), 100)
+
+        search = request.args.get('search', '').strip()
+        event_filter = request.args.get('event', '').strip()
+        severity_filter = request.args.get('severity', '').strip()
+        status_filter = request.args.get('status', '').strip()
+
+        base_query = db.session.query(EASMessage, CAPAlert).outerjoin(
+            CAPAlert, EASMessage.cap_alert_id == CAPAlert.id
+        )
+
+        if search:
+            search_term = f'%{search}%'
+            base_query = base_query.filter(
+                or_(
+                    CAPAlert.event.ilike(search_term),
+                    CAPAlert.headline.ilike(search_term),
+                    CAPAlert.identifier.ilike(search_term),
+                    EASMessage.same_header.ilike(search_term),
+                )
+            )
+
+        if event_filter:
+            base_query = base_query.filter(CAPAlert.event == event_filter)
+        if severity_filter:
+            base_query = base_query.filter(CAPAlert.severity == severity_filter)
+        if status_filter:
+            base_query = base_query.filter(CAPAlert.status == status_filter)
+
+        query = base_query.order_by(EASMessage.created_at.desc())
+
+        manual_query = ManualEASActivation.query
+        include_manual = True
+
+        if search:
+            search_term = f'%{search}%'
+            manual_query = manual_query.filter(
+                or_(
+                    ManualEASActivation.event_name.ilike(search_term),
+                    ManualEASActivation.event_code.ilike(search_term),
+                    ManualEASActivation.identifier.ilike(search_term),
+                    ManualEASActivation.same_header.ilike(search_term),
+                )
+            )
+        if event_filter:
+            manual_query = manual_query.filter(
+                or_(
+                    ManualEASActivation.event_name == event_filter,
+                    ManualEASActivation.event_code == event_filter,
+                )
+            )
+        if status_filter:
+            manual_query = manual_query.filter(ManualEASActivation.status == status_filter)
+        if severity_filter:
+            include_manual = False
+
+        if include_manual:
+            manual_query = manual_query.order_by(ManualEASActivation.created_at.desc())
+
+        automated_total = query.order_by(None).count()
+        manual_total = manual_query.order_by(None).count() if include_manual else 0
+        total_count = automated_total + manual_total
+
+        total_pages = max(1, math.ceil(total_count / per_page)) if per_page else 1
+        page = max(1, min(page, total_pages))
+        offset = (page - 1) * per_page
+        fetch_limit = offset + per_page
+
+        automated_records = query.limit(fetch_limit).all() if fetch_limit else []
+        manual_records: List[ManualEASActivation] = []
+        if include_manual and fetch_limit:
+            manual_records = manual_query.limit(fetch_limit).all()
+
+        web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+
+        def _static_path(filename: Optional[str]) -> Optional[str]:
+            if not filename:
+                return None
+            parts = [web_prefix, filename] if web_prefix else [filename]
+            return '/'.join(part for part in parts if part)
+
+        def _manual_web_path(subpath: Optional[str], *, fallback_prefix: Optional[str] = None) -> Optional[str]:
+            if not subpath:
+                return None
+            effective_prefix = fallback_prefix if fallback_prefix is not None else web_prefix
+            parts = [effective_prefix, subpath] if effective_prefix else [subpath]
+            return '/'.join(part for part in parts if part)
+
+        def _sort_key(value: Optional[datetime]) -> datetime:
+            if value is None:
+                return datetime.min.replace(tzinfo=timezone.utc)
+            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+        messages: List[Dict[str, Any]] = []
+        for message, alert in automated_records:
+            metadata = dict(message.metadata_payload or {})
+            event_name = (alert.event if alert and alert.event else metadata.get('event')) or 'Unknown Event'
+            severity = alert.severity if alert and alert.severity else metadata.get('severity')
+            status = alert.status if alert and alert.status else metadata.get('status')
+            audio_path = _static_path(message.audio_filename)
+            text_path = _static_path(message.text_filename)
+            eom_filename = metadata.get('eom_filename')
+            eom_path = _static_path(eom_filename) if eom_filename else None
+
+            messages.append({
+                'id': message.id,
+                'event': event_name,
+                'severity': severity,
+                'status': status,
+                'created_at': message.created_at,
+                'same_header': message.same_header,
+                'audio_url': url_for('static', filename=audio_path) if audio_path else None,
+                'text_url': url_for('static', filename=text_path) if text_path else None,
+                'detail_url': url_for('audio_detail', message_id=message.id),
+                'alert_url': url_for('alert_detail', alert_id=alert.id) if alert else None,
+                'alert_identifier': alert.identifier if alert else None,
+                'eom_url': url_for('static', filename=eom_path) if eom_path else None,
+                'source': 'automated',
+                'alert_label': 'View Alert',
+            })
+
+        if include_manual and manual_records:
+            for event in manual_records:
+                metadata = dict(event.metadata_payload or {})
+                components_payload = event.components_payload or {}
+                manual_prefix = metadata.get('web_prefix', web_prefix)
+
+                composite_component = components_payload.get('composite')
+                audio_component = (
+                    composite_component
+                    or components_payload.get('tts')
+                    or components_payload.get('attention')
+                    or components_payload.get('same')
+                )
+                eom_component = components_payload.get('eom')
+
+                audio_subpath = audio_component.get('storage_subpath') if audio_component else None
+                audio_url = (
+                    url_for(
+                        'static',
+                        filename=_manual_web_path(
+                            audio_subpath,
+                            fallback_prefix=manual_prefix,
+                        ),
+                    )
+                    if audio_subpath
+                    else None
+                )
+
+                summary_subpath = metadata.get('summary_subpath') or (
+                    '/'.join(part for part in [event.storage_path, event.summary_filename] if part)
+                    if event.summary_filename
+                    else None
+                )
+                summary_url = (
+                    url_for(
+                        'static',
+                        filename=_manual_web_path(
+                            summary_subpath,
+                            fallback_prefix=manual_prefix,
+                        ),
+                    )
+                    if summary_subpath
+                    else None
+                )
+
+                eom_subpath = eom_component.get('storage_subpath') if eom_component else None
+                eom_url = (
+                    url_for(
+                        'static',
+                        filename=_manual_web_path(
+                            eom_subpath,
+                            fallback_prefix=manual_prefix,
+                        ),
+                    )
+                    if eom_subpath
+                    else None
+                )
+
+                messages.append({
+                    'id': event.id,
+                    'event': event.event_name or event.event_code or 'Manual Activation',
+                    'severity': metadata.get('severity'),
+                    'status': event.status,
+                    'created_at': event.created_at,
+                    'same_header': event.same_header,
+                    'audio_url': audio_url,
+                    'text_url': summary_url,
+                    'detail_url': url_for('manual_eas_print', event_id=event.id),
+                    'alert_url': url_for('manual_eas_print', event_id=event.id),
+                    'alert_identifier': event.identifier,
+                    'eom_url': eom_url,
+                    'source': 'manual',
+                    'alert_label': 'View Activation',
+                })
+
+        messages.sort(key=lambda item: _sort_key(item.get('created_at')), reverse=True)
+        page_start = offset
+        page_end = offset + per_page
+        messages = messages[page_start:page_end]
+
+        class CombinedPagination:
+            def __init__(self, page_number: int, page_size: int, total_items: int):
+                self.page = page_number
+                self.per_page = page_size
+                self.total = total_items
+                self.pages = max(1, math.ceil(total_items / page_size)) if page_size else 1
+                self.has_prev = self.page > 1
+                self.has_next = self.page < self.pages
+                self.prev_num = self.page - 1 if self.has_prev else None
+                self.next_num = self.page + 1 if self.has_next else None
+
+            def iter_pages(self, left_edge: int = 2, left_current: int = 2, right_current: int = 3, right_edge: int = 2):
+                last = self.pages
+                for num in range(1, last + 1):
+                    if num <= left_edge or (
+                        self.page - left_current - 1 < num < self.page + right_current
+                    ) or num > last - right_edge:
+                        yield num
+                    elif num == left_edge + 1 or num == self.page + right_current:
+                        yield None
+
+        pagination = CombinedPagination(page, per_page, total_count)
+
+        try:
+            cap_events = [
+                row[0]
+                for row in db.session.query(CAPAlert.event)
+                .join(EASMessage, EASMessage.cap_alert_id == CAPAlert.id)
+                .filter(CAPAlert.event.isnot(None))
+                .distinct()
+                .order_by(CAPAlert.event)
+                .all()
+            ]
+
+            cap_severities = [
+                row[0]
+                for row in db.session.query(CAPAlert.severity)
+                .join(EASMessage, EASMessage.cap_alert_id == CAPAlert.id)
+                .filter(CAPAlert.severity.isnot(None))
+                .distinct()
+                .order_by(CAPAlert.severity)
+                .all()
+            ]
+
+            cap_statuses = [
+                row[0]
+                for row in db.session.query(CAPAlert.status)
+                .join(EASMessage, EASMessage.cap_alert_id == CAPAlert.id)
+                .filter(CAPAlert.status.isnot(None))
+                .distinct()
+                .order_by(CAPAlert.status)
+                .all()
+            ]
+
+            manual_event_names = [
+                row[0]
+                for row in db.session.query(ManualEASActivation.event_name)
+                .filter(ManualEASActivation.event_name.isnot(None))
+                .distinct()
+                .order_by(ManualEASActivation.event_name)
+                .all()
+            ]
+
+            manual_statuses = [
+                row[0]
+                for row in db.session.query(ManualEASActivation.status)
+                .filter(ManualEASActivation.status.isnot(None))
+                .distinct()
+                .order_by(ManualEASActivation.status)
+                .all()
+            ]
+
+            events = sorted({value for value in cap_events + manual_event_names if value})
+            severities = sorted({value for value in cap_severities if value})
+            statuses = sorted({value for value in cap_statuses + manual_statuses if value})
+        except Exception as filter_error:
+            logger.warning('Unable to load audio filter metadata: %s', filter_error)
+            events = []
+            severities = []
+            statuses = []
+
+        current_filters = {
+            'search': search,
+            'event': event_filter,
+            'severity': severity_filter,
+            'status': status_filter,
+            'per_page': per_page,
+        }
+
+        total_messages = EASMessage.query.count() + ManualEASActivation.query.count()
+
+        return render_template(
+            'audio_history.html',
+            messages=messages,
+            pagination=pagination,
+            events=events,
+            severities=severities,
+            statuses=statuses,
+            current_filters=current_filters,
+            total_messages=total_messages,
+            eas_enabled=eas_enabled,
+        )
+
+    except Exception as exc:
+        logger.error('Error loading audio archive: %s', exc)
+        return render_template_string(
+            """
+            <h1>Error Loading Audio Archive</h1>
+            <div class=\"alert alert-danger\">{{ error }}</div>
+            <p><a href='/' class='btn btn-primary'>← Back to Main</a></p>
+            """,
+            error=str(exc),
+        )
+
+
+@app.route('/audio/<int:message_id>')
+def audio_detail(message_id: int):
+    try:
+        message = EASMessage.query.get_or_404(message_id)
+        alert = CAPAlert.query.get(message.cap_alert_id) if message.cap_alert_id else None
+        metadata = dict(message.metadata_payload or {})
+        event_name = (alert.event if alert and alert.event else metadata.get('event')) or 'Unknown Event'
+        severity = alert.severity if alert and alert.severity else metadata.get('severity')
+        status = alert.status if alert and alert.status else metadata.get('status')
+        same_locations = metadata.get('locations')
+        if isinstance(same_locations, list):
+            locations = same_locations
+        elif same_locations is None:
+            locations = []
+        else:
+            locations = [str(same_locations)]
+
+        web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+
+        def _static_path(filename: Optional[str]) -> Optional[str]:
+            if not filename:
+                return None
+            parts = [web_prefix, filename] if web_prefix else [filename]
+            return '/'.join(part for part in parts if part)
+
+        audio_path = _static_path(message.audio_filename)
+        text_path = _static_path(message.text_filename)
+        eom_filename = metadata.get('eom_filename')
+        eom_path = _static_path(eom_filename) if eom_filename else None
+
+        audio_url = url_for('static', filename=audio_path) if audio_path else None
+        text_url = url_for('static', filename=text_path) if text_path else None
+        eom_url = url_for('static', filename=eom_path) if eom_path else None
+
+        summary_data: Optional[Dict[str, Any]] = None
+        output_root = str(app.config.get('EAS_OUTPUT_DIR') or '').strip()
+        if output_root and message.text_filename:
+            summary_path = os.path.join(output_root, message.text_filename)
+            if os.path.exists(summary_path):
+                try:
+                    with open(summary_path, 'r', encoding='utf-8') as handle:
+                        summary_data = json.load(handle)
+                except Exception as summary_error:
+                    logger.debug('Unable to read audio summary %s: %s', summary_path, summary_error)
+
+        return render_template(
+            'audio_detail.html',
+            message=message,
+            alert=alert,
+            metadata=metadata,
+            summary_data=summary_data,
+            audio_url=audio_url,
+            text_url=text_url,
+            eom_url=eom_url,
+            event_name=event_name,
+            severity=severity,
+            status=status,
+            locations=locations,
+        )
+
+    except Exception as exc:
+        logger.error('Error loading audio detail %s: %s', message_id, exc)
+        flash('Unable to load audio detail at this time.', 'error')
+        return redirect(url_for('audio_history'))
+
 
 @app.route('/api/alerts/<int:alert_id>/geometry')
 def get_alert_geometry(alert_id):
@@ -1518,12 +1442,49 @@ def alert_detail(alert_id):
         county_coverage = coverage_data.get('county', {}).get('coverage_percentage', 0)
         is_actually_county_wide = county_coverage >= 95.0  # Consider 95%+ as county-wide
 
+        audio_entries: List[Dict[str, Any]] = []
+        web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+
+        def _static_path(filename: Optional[str]) -> Optional[str]:
+            if not filename:
+                return None
+            parts = [web_prefix, filename] if web_prefix else [filename]
+            return '/'.join(part for part in parts if part)
+
+        try:
+            messages = (
+                EASMessage.query
+                .filter(EASMessage.cap_alert_id == alert_id)
+                .order_by(EASMessage.created_at.desc())
+                .all()
+            )
+
+            for message in messages:
+                metadata = dict(message.metadata_payload or {})
+                audio_path = _static_path(message.audio_filename)
+                text_path = _static_path(message.text_filename)
+                eom_filename = metadata.get('eom_filename')
+                eom_path = _static_path(eom_filename) if eom_filename else None
+                audio_entries.append({
+                    'id': message.id,
+                    'created_at': message.created_at,
+                    'same_header': message.same_header,
+                    'audio_url': url_for('static', filename=audio_path) if audio_path else None,
+                    'text_url': url_for('static', filename=text_path) if text_path else None,
+                    'detail_url': url_for('audio_detail', message_id=message.id),
+                    'metadata': metadata,
+                    'eom_url': url_for('static', filename=eom_path) if eom_path else None,
+                })
+        except Exception as audio_error:
+            logger.warning('Unable to load audio archive for alert %s: %s', alert.identifier, audio_error)
+
         return render_template('alert_detail.html',
                              alert=alert,
                              intersections=intersections,
                              is_county_wide=is_county_wide,
                              is_actually_county_wide=is_actually_county_wide,
-                             coverage_data=coverage_data)
+                             coverage_data=coverage_data,
+                             audio_entries=audio_entries)
 
     except Exception as e:
         logger.error(f"Error in alert_detail route: {str(e)}")
@@ -1593,7 +1554,7 @@ def get_alerts():
             if not is_county_wide and alert.area_desc:
                 area_lower = alert.area_desc.lower()
 
-                # Multi-county alerts that include Putnam should be treated as county-wide for Putnam
+                # Multi-county alerts that include the configured county should be treated as county-wide
                 if 'putnam' in area_lower:
                     # Count counties (semicolons or commas usually separate them)
                     separator_count = max(area_lower.count(';'), area_lower.count(','))
@@ -1770,7 +1731,8 @@ def get_boundaries():
         )
 
         if boundary_type:
-            query = query.filter(Boundary.type == boundary_type)
+            normalized_type = normalize_boundary_type(boundary_type)
+            query = query.filter(func.lower(Boundary.type) == normalized_type)
 
         if search:
             query = query.filter(Boundary.name.ilike(f'%{search}%'))
@@ -1782,12 +1744,17 @@ def get_boundaries():
         features = []
         for boundary in boundaries:
             if boundary.geometry:
+                normalized_type = normalize_boundary_type(boundary.type)
                 features.append({
                     'type': 'Feature',
                     'properties': {
                         'id': boundary.id,
                         'name': boundary.name,
-                        'type': boundary.type,
+                        'type': normalized_type,
+                        'raw_type': boundary.type,
+                        'display_type': get_boundary_display_label(boundary.type),
+                        'group': get_boundary_group(boundary.type),
+                        'color': get_boundary_color(boundary.type),
                         'description': boundary.description
                     },
                     'geometry': json.loads(boundary.geometry)
@@ -1818,17 +1785,18 @@ def api_system_status():
         current_utc = utc_now()
         current_local = local_now()
 
+        location_tz = get_location_timezone()
         return jsonify({
             'status': 'online',
             'timestamp': current_utc.isoformat(),
             'local_timestamp': current_local.isoformat(),
-            'timezone': str(PUTNAM_COUNTY_TZ),
+            'timezone': get_location_timezone_name(),
             'boundaries_count': total_boundaries,
             'active_alerts_count': active_alerts,
             'database_status': 'connected',
             'last_poll': {
                 'timestamp': last_poll.timestamp.isoformat() if last_poll else None,
-                'local_timestamp': last_poll.timestamp.astimezone(PUTNAM_COUNTY_TZ).isoformat() if last_poll else None,
+                'local_timestamp': last_poll.timestamp.astimezone(location_tz).isoformat() if last_poll else None,
                 'status': last_poll.status if last_poll else None,
                 'alerts_fetched': last_poll.alerts_fetched if last_poll else 0,
                 'alerts_new': last_poll.alerts_new if last_poll else 0
@@ -1860,10 +1828,108 @@ def api_system_health():
 # ADMINISTRATIVE ROUTES
 # =============================================================================
 
+# =============================================================================
+# AUTHENTICATION ROUTES
+# =============================================================================
+
+
+def _is_safe_redirect_target(target: Optional[str]) -> bool:
+    if not target:
+        return False
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(urljoin(request.host_url, target))
+    return (
+        test_url.scheme in ('http', 'https')
+        and ref_url.netloc == test_url.netloc
+    )
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    next_param = request.args.get('next') if request.method == 'GET' else request.form.get('next')
+    if g.current_user:
+        target = next_param if _is_safe_redirect_target(next_param) else url_for('admin')
+        return redirect(target)
+
+    error = None
+    if request.method == 'POST':
+        username = (request.form.get('username') or '').strip()
+        password = request.form.get('password') or ''
+
+        if not username or not password:
+            error = 'Username and password are required.'
+        else:
+            user = AdminUser.query.filter(
+                func.lower(AdminUser.username) == username.lower()
+            ).first()
+            if user and user.is_active and user.check_password(password):
+                session['user_id'] = user.id
+                session.permanent = True
+                user.last_login_at = utc_now()
+                log_entry = SystemLog(
+                    level='INFO',
+                    message='Administrator logged in',
+                    module='auth',
+                    details={
+                        'username': user.username,
+                        'remote_addr': request.remote_addr,
+                    },
+                )
+                db.session.add(user)
+                db.session.add(log_entry)
+                db.session.commit()
+
+                target = next_param if _is_safe_redirect_target(next_param) else url_for('admin')
+                return redirect(target)
+
+            db.session.add(SystemLog(
+                level='WARNING',
+                message='Failed administrator login attempt',
+                module='auth',
+                details={
+                    'username': username,
+                    'remote_addr': request.remote_addr,
+                },
+            ))
+            db.session.commit()
+            error = 'Invalid username or password.'
+
+    show_setup = AdminUser.query.count() == 0
+
+    return render_template(
+        'login.html',
+        error=error,
+        next=next_param or url_for('admin'),
+        show_setup=show_setup,
+    )
+
+
+@app.route('/logout')
+def logout():
+    user = g.current_user
+    if user:
+        db.session.add(SystemLog(
+            level='INFO',
+            message='Administrator logged out',
+            module='auth',
+            details={
+                'username': user.username,
+                'remote_addr': request.remote_addr,
+            },
+        ))
+        db.session.commit()
+    session.pop('user_id', None)
+    flash('You have been signed out.')
+    return redirect(url_for('login'))
+
+
 @app.route('/admin')
 def admin():
     """Admin interface"""
     try:
+        setup_mode = getattr(g, 'admin_setup_mode', None)
+        if setup_mode is None:
+            setup_mode = AdminUser.query.count() == 0
         total_boundaries = Boundary.query.count()
         total_alerts = CAPAlert.query.count()
         active_alerts = get_active_alerts_query().count()
@@ -1873,16 +1939,704 @@ def admin():
             Boundary.type, func.count(Boundary.id).label('count')
         ).group_by(Boundary.type).all()
 
+        location_settings = get_location_settings()
+        manual_same_defaults = manual_default_same_codes()
+        location_settings_view = dict(location_settings)
+        location_settings_view.setdefault('same_codes', manual_same_defaults)
+
+        eas_enabled = app.config.get('EAS_BROADCAST_ENABLED', False)
+        total_eas_messages = EASMessage.query.count() if eas_enabled else 0
+        recent_eas_messages = []
+        if eas_enabled:
+            recent_eas_messages = (
+                EASMessage.query.order_by(EASMessage.created_at.desc()).limit(10).all()
+            )
+
+        eas_event_options = [
+            {'code': code, 'name': entry.get('name', code)}
+            for code, entry in EVENT_CODE_REGISTRY.items()
+            if '?' not in code
+        ]
+        eas_event_options.sort(key=lambda item: item['code'])
+
+        eas_state_tree = get_us_state_county_tree()
+        eas_lookup = get_same_lookup()
+        originator_choices = [
+            {
+                'code': code,
+                'description': ORIGINATOR_DESCRIPTIONS.get(code, ''),
+            }
+            for code in PRIMARY_ORIGINATORS
+        ]
+
         return render_template('admin.html',
                                total_boundaries=total_boundaries,
                                total_alerts=total_alerts,
                                active_alerts=active_alerts,
                                expired_alerts=expired_alerts,
-                               boundary_stats=boundary_stats
+                               boundary_stats=boundary_stats,
+                               location_settings=location_settings_view,
+                               eas_enabled=eas_enabled,
+                               eas_total_messages=total_eas_messages,
+                               eas_recent_messages=recent_eas_messages,
+                               eas_web_subdir=app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages'),
+                               eas_event_codes=eas_event_options,
+                               eas_originator=EAS_CONFIG.get('originator', 'WXR'),
+                               eas_station_id=EAS_CONFIG.get('station_id', 'EASNODES'),
+                               eas_attention_seconds=EAS_CONFIG.get('attention_tone_seconds', 8),
+                               eas_sample_rate=EAS_CONFIG.get('sample_rate', 44100),
+                               eas_tts_provider=(EAS_CONFIG.get('tts_provider') or '').strip().lower(),
+                               eas_fips_states=eas_state_tree,
+                               eas_fips_lookup=eas_lookup,
+                               eas_originator_descriptions=ORIGINATOR_DESCRIPTIONS,
+                               eas_originator_choices=originator_choices,
+                               eas_header_fields=SAME_HEADER_FIELD_DESCRIPTIONS,
+                               eas_p_digit_meanings=P_DIGIT_MEANINGS,
+                               eas_default_same_codes=manual_same_defaults,
+                               setup_mode=setup_mode,
                                )
     except Exception as e:
         logger.error(f"Error rendering admin template: {str(e)}")
         return f"<h1>Admin Interface</h1><p>Admin panel loading...</p><p><a href='/'>← Back to Main</a></p>"
+
+
+@app.route('/admin/users', methods=['GET', 'POST'])
+def admin_users():
+    if request.method == 'GET':
+        users = AdminUser.query.order_by(AdminUser.username.asc()).all()
+        return jsonify({'users': [user.to_safe_dict() for user in users]})
+
+    payload = request.get_json(silent=True) or {}
+    username = (payload.get('username') or '').strip()
+    password = payload.get('password') or ''
+
+    creating_first_user = AdminUser.query.count() == 0
+    if g.current_user is None and not creating_first_user:
+        return jsonify({'error': 'Authentication required.'}), 401
+
+    if not username or not password:
+        return jsonify({'error': 'Username and password are required.'}), 400
+
+    if not USERNAME_PATTERN.match(username):
+        return jsonify({'error': 'Usernames must be 3-64 characters and may include letters, numbers, dots, underscores, and hyphens.'}), 400
+
+    if len(password) < 8:
+        return jsonify({'error': 'Password must be at least 8 characters long.'}), 400
+
+    existing = AdminUser.query.filter(func.lower(AdminUser.username) == username.lower()).first()
+    if existing:
+        return jsonify({'error': 'Username already exists.'}), 400
+
+    new_user = AdminUser(username=username)
+    new_user.set_password(password)
+    db.session.add(new_user)
+    db.session.add(SystemLog(
+        level='INFO',
+        message='Administrator account created',
+        module='auth',
+        details={
+            'username': new_user.username,
+            'created_by': g.current_user.username if g.current_user else 'initial_setup',
+        },
+    ))
+    db.session.commit()
+
+    return jsonify({'message': 'User created successfully.', 'user': new_user.to_safe_dict()}), 201
+
+
+@app.route('/admin/users/<int:user_id>', methods=['PATCH', 'DELETE'])
+def admin_user_detail(user_id: int):
+    user = AdminUser.query.get_or_404(user_id)
+
+    if request.method == 'PATCH':
+        payload = request.get_json(silent=True) or {}
+        password = payload.get('password') or ''
+        if len(password) < 8:
+            return jsonify({'error': 'Password must be at least 8 characters long.'}), 400
+
+        user.set_password(password)
+        db.session.add(user)
+        db.session.add(SystemLog(
+            level='INFO',
+            message='Administrator password reset',
+            module='auth',
+            details={
+                'username': user.username,
+                'updated_by': g.current_user.username if g.current_user else None,
+            },
+        ))
+        db.session.commit()
+        return jsonify({'message': 'Password updated successfully.', 'user': user.to_safe_dict()})
+
+    if user.id == getattr(g.current_user, 'id', None):
+        return jsonify({'error': 'You cannot delete your own account while logged in.'}), 400
+
+    active_users = AdminUser.query.filter(AdminUser.is_active.is_(True)).count()
+    if user.is_active and active_users <= 1:
+        return jsonify({'error': 'At least one active administrator account is required.'}), 400
+
+    db.session.delete(user)
+    db.session.add(SystemLog(
+        level='WARNING',
+        message='Administrator account deleted',
+        module='auth',
+        details={
+            'username': user.username,
+            'deleted_by': g.current_user.username if g.current_user else None,
+        },
+    ))
+    db.session.commit()
+    return jsonify({'message': 'User deleted successfully.'})
+
+
+@app.route('/admin/eas_messages', methods=['GET'])
+def admin_eas_messages():
+    if not app.config.get('EAS_BROADCAST_ENABLED', False):
+        return jsonify({'messages': [], 'total': 0})
+
+    try:
+        limit = request.args.get('limit', type=int) or 50
+        limit = min(max(limit, 1), 500)
+        base_query = EASMessage.query.order_by(EASMessage.created_at.desc())
+        messages = base_query.limit(limit).all()
+        total = base_query.count()
+
+        static_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+        items = []
+        for message in messages:
+            data = message.to_dict()
+            audio_path = '/'.join(part for part in [static_prefix, message.audio_filename] if part)
+            text_path = '/'.join(part for part in [static_prefix, message.text_filename] if part)
+            items.append({
+                **data,
+                'audio_url': url_for('static', filename=audio_path),
+                'text_url': url_for('static', filename=text_path),
+            })
+
+        return jsonify({'messages': items, 'total': total})
+    except Exception as exc:
+        logger.error(f"Failed to list EAS messages: {exc}")
+        return jsonify({'error': 'Unable to load EAS messages'}), 500
+
+
+@app.route('/admin/eas/manual_generate', methods=['POST'])
+def admin_manual_eas_generate():
+    creating_first_user = AdminUser.query.count() == 0
+    if g.current_user is None and not creating_first_user:
+        return jsonify({'error': 'Authentication required.'}), 401
+
+    payload = request.get_json(silent=True) or {}
+
+    def _validation_error(message: str, status: int = 400):
+        return jsonify({'error': message}), status
+
+    identifier = (payload.get('identifier') or '').strip()[:120]
+    if not identifier:
+        identifier = f"MANUAL-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+
+    event_code = (payload.get('event_code') or '').strip().upper()
+    if not event_code or len(event_code) != 3 or not event_code.isalnum():
+        return _validation_error('Event code must be a three-character SAME identifier.')
+    if event_code not in EVENT_CODE_REGISTRY or '?' in event_code:
+        return _validation_error('Select a recognised SAME event code.')
+
+    event_name = (payload.get('event_name') or '').strip()
+    if not event_name:
+        registry_entry = EVENT_CODE_REGISTRY.get(event_code)
+        event_name = registry_entry.get('name', event_code) if registry_entry else event_code
+
+    same_input = payload.get('same_codes')
+    if isinstance(same_input, str):
+        raw_codes = re.split(r'[^0-9]+', same_input)
+    elif isinstance(same_input, list):
+        raw_codes = []
+        for item in same_input:
+            if item is None:
+                continue
+            raw_codes.extend(re.split(r'[^0-9]+', str(item)))
+    else:
+        raw_codes = []
+
+    location_codes: List[str] = []
+    for code in raw_codes:
+        digits = ''.join(ch for ch in str(code) if ch.isdigit())
+        if not digits:
+            continue
+        location_codes.append(digits.zfill(6)[:6])
+
+    if not location_codes:
+        return _validation_error('At least one SAME/FIPS location code is required.')
+
+    try:
+        duration_minutes = float(payload.get('duration_minutes', 15) or 15)
+    except (TypeError, ValueError):
+        return _validation_error('Duration must be a numeric value representing minutes.')
+    if duration_minutes <= 0:
+        return _validation_error('Duration must be greater than zero minutes.')
+
+    tone_seconds_raw = payload.get('tone_seconds')
+    if tone_seconds_raw in (None, '', 'null'):
+        tone_seconds = None
+    else:
+        try:
+            tone_seconds = float(tone_seconds_raw)
+        except (TypeError, ValueError):
+            return _validation_error('Tone duration must be numeric.')
+
+    tone_profile_raw = (payload.get('tone_profile') or 'attention').strip().lower()
+    if tone_profile_raw in {'none', 'omit', 'off', 'disabled'}:
+        tone_profile = 'none'
+    elif tone_profile_raw in {'1050', '1050hz', 'single'}:
+        tone_profile = '1050hz'
+    else:
+        tone_profile = 'attention'
+
+    if tone_profile == 'none':
+        tone_seconds = 0.0
+    elif tone_seconds is not None and tone_seconds <= 0:
+        return _validation_error('Tone duration must be greater than zero seconds when a signal is included.')
+
+    include_tts = bool(payload.get('include_tts', True))
+
+    allowed_originators = set(PRIMARY_ORIGINATORS)
+    originator = (payload.get('originator') or EAS_CONFIG.get('originator', 'WXR')).strip().upper() or 'WXR'
+    if originator not in allowed_originators:
+        return _validation_error('Originator must be one of the authorised SAME senders.')
+
+    station_id = (payload.get('station_id') or EAS_CONFIG.get('station_id', 'EASNODES')).strip() or 'EASNODES'
+
+    status = (payload.get('status') or 'Actual').strip() or 'Actual'
+    message_type = (payload.get('message_type') or 'Alert').strip() or 'Alert'
+
+    try:
+        sample_rate = int(payload.get('sample_rate') or EAS_CONFIG.get('sample_rate', 44100) or 44100)
+    except (TypeError, ValueError):
+        return _validation_error('Sample rate must be an integer value.')
+    if sample_rate < 8000 or sample_rate > 48000:
+        return _validation_error('Sample rate must be between 8000 and 48000 Hz.')
+
+    sent_dt = datetime.now(timezone.utc)
+    expires_dt = sent_dt + timedelta(minutes=duration_minutes)
+
+    manual_config = dict(EAS_CONFIG)
+    manual_config['enabled'] = True
+    manual_config['originator'] = originator[:3].upper()
+    manual_config['station_id'] = station_id.upper().ljust(8)[:8]
+    manual_config['attention_tone_seconds'] = tone_seconds if tone_seconds is not None else manual_config.get('attention_tone_seconds', 8)
+    manual_config['sample_rate'] = sample_rate
+
+    alert_object = SimpleNamespace(
+        identifier=identifier,
+        event=event_name or event_code,
+        headline=(payload.get('headline') or '').strip(),
+        description=(payload.get('message') or '').strip(),
+        instruction=(payload.get('instruction') or '').strip(),
+        sent=sent_dt,
+        expires=expires_dt,
+        status=status,
+        message_type=message_type,
+    )
+
+    payload_wrapper: Dict[str, Any] = {
+        'identifier': identifier,
+        'sent': sent_dt,
+        'expires': expires_dt,
+        'status': status,
+        'message_type': message_type,
+        'raw_json': {
+            'properties': {
+                'geocode': {
+                    'SAME': location_codes,
+                }
+            }
+        },
+    }
+
+    try:
+        header, formatted_locations, resolved_event_code = build_same_header(
+            alert_object,
+            payload_wrapper,
+            manual_config,
+            location_settings=None,
+        )
+        generator = EASAudioGenerator(manual_config, logger)
+        components = generator.build_manual_components(
+            alert_object,
+            header,
+            repeats=3,
+            tone_profile=tone_profile,
+            tone_duration=tone_seconds,
+            include_tts=include_tts,
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.error(f"Failed to build manual EAS package: {exc}")
+        return jsonify({'error': 'Unable to generate EAS audio components.'}), 500
+
+    def _safe_base(value: str) -> str:
+        cleaned = re.sub(r'[^A-Za-z0-9]+', '_', value).strip('_')
+        return cleaned or 'manual_eas'
+
+    base_name = _safe_base(identifier)
+    sample_rate = components.get('sample_rate', sample_rate)
+
+    output_root = str(manual_config.get('output_dir') or app.config.get('EAS_OUTPUT_DIR') or '').strip()
+    if not output_root:
+        logger.error('Manual EAS output directory is not configured.')
+        return jsonify({'error': 'Manual EAS output directory is not configured.'}), 500
+
+    manual_root = os.path.join(output_root, 'manual')
+    os.makedirs(manual_root, exist_ok=True)
+
+    timestamp_tag = datetime.utcnow().strftime('%Y%m%d%H%M%S')
+    slug = f"{base_name}_{timestamp_tag}"
+    event_dir = os.path.join(manual_root, slug)
+    os.makedirs(event_dir, exist_ok=True)
+    storage_root = '/'.join(part for part in ['manual', slug] if part)
+    web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+
+    def _package_audio(samples: List[int], suffix: str) -> Optional[Dict[str, Any]]:
+        if not samples:
+            return None
+        wav_bytes = samples_to_wav_bytes(samples, sample_rate)
+        duration = round(len(samples) / sample_rate, 3)
+        filename = f"{slug}_{suffix}.wav"
+        file_path = os.path.join(event_dir, filename)
+        with open(file_path, 'wb') as handle:
+            handle.write(wav_bytes)
+
+        storage_subpath = '/'.join(part for part in [storage_root, filename] if part)
+        web_parts = [web_prefix, storage_subpath] if web_prefix else [storage_subpath]
+        web_path = '/'.join(part for part in web_parts if part)
+        download_url = url_for('static', filename=web_path)
+        data_url = f"data:audio/wav;base64,{base64.b64encode(wav_bytes).decode('ascii')}"
+        return {
+            'filename': filename,
+            'data_url': data_url,
+            'download_url': download_url,
+            'storage_subpath': storage_subpath,
+            'duration_seconds': duration,
+            'size_bytes': len(wav_bytes),
+        }
+
+    state_tree = get_us_state_county_tree()
+    state_index = {
+        state.get('state_fips'): {'abbr': state.get('abbr'), 'name': state.get('name')}
+        for state in state_tree
+        if state.get('state_fips')
+    }
+    same_lookup = get_same_lookup()
+    header_detail = describe_same_header(header, lookup=same_lookup, state_index=state_index)
+
+    same_component = _package_audio(components.get('same_samples') or [], 'same')
+    attention_component = _package_audio(components.get('attention_samples') or [], 'attention')
+    tts_component = _package_audio(components.get('tts_samples') or [], 'tts')
+    eom_component = _package_audio(components.get('eom_samples') or [], 'eom')
+    composite_component = _package_audio(components.get('composite_samples') or [], 'full')
+
+    stored_components = {
+        'same': same_component,
+        'attention': attention_component,
+        'tts': tts_component,
+        'eom': eom_component,
+        'composite': composite_component,
+    }
+
+    response_payload: Dict[str, Any] = {
+        'identifier': identifier,
+        'event_code': resolved_event_code,
+        'event_name': event_name,
+        'same_header': header,
+        'same_locations': formatted_locations,
+        'eom_header': components.get('eom_header'),
+        'tone_profile': components.get('tone_profile'),
+        'tone_seconds': components.get('tone_seconds'),
+        'message_text': components.get('message_text'),
+        'tts_warning': components.get('tts_warning'),
+        'tts_provider': components.get('tts_provider'),
+        'duration_minutes': duration_minutes,
+        'sent_at': sent_dt.isoformat(),
+        'expires_at': expires_dt.isoformat(),
+        'components': stored_components,
+        'sample_rate': sample_rate,
+        'same_header_detail': header_detail,
+        'storage_path': storage_root,
+    }
+
+    summary_filename = f"{slug}_summary.json"
+    summary_path = os.path.join(event_dir, summary_filename)
+
+    summary_components = {
+        key: {
+            'filename': value['filename'],
+            'duration_seconds': value['duration_seconds'],
+            'size_bytes': value['size_bytes'],
+            'storage_subpath': value['storage_subpath'],
+        }
+        for key, value in stored_components.items()
+        if value
+    }
+
+    summary_payload = {
+        'identifier': identifier,
+        'event_code': resolved_event_code,
+        'event_name': event_name,
+        'same_header': header,
+        'same_locations': formatted_locations,
+        'tone_profile': components.get('tone_profile'),
+        'tone_seconds': components.get('tone_seconds'),
+        'duration_minutes': duration_minutes,
+        'sample_rate': sample_rate,
+        'status': status,
+        'message_type': message_type,
+        'sent_at': sent_dt.isoformat(),
+        'expires_at': expires_dt.isoformat(),
+        'headline': alert_object.headline,
+        'message_text': components.get('message_text'),
+        'instruction_text': alert_object.instruction,
+        'components': summary_components,
+    }
+
+    with open(summary_path, 'w', encoding='utf-8') as handle:
+        json.dump(summary_payload, handle, indent=2)
+
+    summary_subpath = '/'.join(part for part in [storage_root, summary_filename] if part)
+    summary_parts = [web_prefix, summary_subpath] if web_prefix else [summary_subpath]
+    summary_web_path = '/'.join(part for part in summary_parts if part)
+    summary_url = url_for('static', filename=summary_web_path)
+
+    response_payload['export_url'] = summary_url
+
+    archive_time = datetime.now(timezone.utc)
+    ManualEASActivation.query.filter(ManualEASActivation.archived_at.is_(None)).update(
+        {'archived_at': archive_time}, synchronize_session=False
+    )
+
+    db_components = {
+        key: {
+            'filename': value['filename'],
+            'duration_seconds': value['duration_seconds'],
+            'size_bytes': value['size_bytes'],
+            'storage_subpath': value['storage_subpath'],
+        }
+        for key, value in stored_components.items()
+        if value
+    }
+
+    activation_record = ManualEASActivation(
+        identifier=identifier,
+        event_code=resolved_event_code,
+        event_name=event_name or resolved_event_code,
+        status=status,
+        message_type=message_type,
+        same_header=header,
+        same_locations=formatted_locations,
+        tone_profile=components.get('tone_profile') or 'attention',
+        tone_seconds=components.get('tone_seconds'),
+        sample_rate=sample_rate,
+        includes_tts=bool(tts_component),
+        tts_warning=components.get('tts_warning'),
+        sent_at=sent_dt,
+        expires_at=expires_dt,
+        headline=alert_object.headline,
+        message_text=components.get('message_text'),
+        instruction_text=alert_object.instruction,
+        duration_minutes=duration_minutes,
+        storage_path=storage_root,
+        summary_filename=summary_filename,
+        components_payload=db_components,
+        metadata_payload={
+            'summary_subpath': summary_subpath,
+            'web_prefix': web_prefix,
+            'includes_tts': bool(tts_component),
+        },
+    )
+
+    try:
+        db.session.add(activation_record)
+        db.session.flush()
+        db.session.add(SystemLog(
+            level='INFO',
+            message='Manual EAS package generated',
+            module='admin',
+            details={
+                'identifier': identifier,
+                'event_code': resolved_event_code,
+                'location_count': len(formatted_locations),
+                'tone_profile': response_payload['tone_profile'],
+                'tts_included': bool(tts_component),
+                'manual_activation_id': activation_record.id,
+            },
+        ))
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        logger.error('Failed to persist manual EAS activation: %s', exc)
+        return jsonify({'error': 'Unable to persist manual activation details.'}), 500
+
+    response_payload['activation'] = {
+        'id': activation_record.id,
+        'created_at': activation_record.created_at.isoformat() if activation_record.created_at else None,
+        'print_url': url_for('manual_eas_print', event_id=activation_record.id),
+        'export_url': summary_url,
+        'components': {
+            key: {
+                'download_url': value['download_url'],
+                'filename': value['filename'],
+            }
+            for key, value in stored_components.items()
+            if value
+        },
+    }
+
+    return jsonify(response_payload)
+
+
+@app.route('/admin/eas/manual_events', methods=['GET'])
+def admin_manual_eas_events():
+    creating_first_user = AdminUser.query.count() == 0
+    if g.current_user is None and not creating_first_user:
+        return jsonify({'error': 'Authentication required.'}), 401
+
+    try:
+        limit = request.args.get('limit', type=int) or 100
+        limit = min(max(limit, 1), 500)
+        total = ManualEASActivation.query.count()
+        events = (
+            ManualEASActivation.query.order_by(ManualEASActivation.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+        web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+        items = []
+
+        for event in events:
+            components_payload = event.components_payload or {}
+
+            def _component_with_url(meta: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+                if not meta:
+                    return None
+                storage_subpath = meta.get('storage_subpath')
+                web_parts = [web_prefix, storage_subpath] if storage_subpath else []
+                web_path = '/'.join(part for part in web_parts if part)
+                download_url = url_for('static', filename=web_path) if storage_subpath else None
+                return {
+                    'filename': meta.get('filename'),
+                    'duration_seconds': meta.get('duration_seconds'),
+                    'size_bytes': meta.get('size_bytes'),
+                    'storage_subpath': storage_subpath,
+                    'download_url': download_url,
+                }
+
+            summary_subpath = None
+            if event.summary_filename:
+                summary_subpath = '/'.join(
+                    part for part in [event.storage_path, event.summary_filename] if part
+                )
+            export_url = (
+                url_for('manual_eas_export', event_id=event.id)
+                if summary_subpath
+                else None
+            )
+
+            items.append({
+                'id': event.id,
+                'identifier': event.identifier,
+                'event_code': event.event_code,
+                'event_name': event.event_name,
+                'status': event.status,
+                'message_type': event.message_type,
+                'same_header': event.same_header,
+                'created_at': event.created_at.isoformat() if event.created_at else None,
+                'archived_at': event.archived_at.isoformat() if event.archived_at else None,
+                'print_url': url_for('manual_eas_print', event_id=event.id),
+                'export_url': export_url,
+                'components': {
+                    key: _component_with_url(meta)
+                    for key, meta in components_payload.items()
+                },
+            })
+
+        return jsonify({'events': items, 'total': total})
+    except Exception as exc:
+        logger.error('Failed to list manual EAS activations: %s', exc)
+        return jsonify({'error': 'Unable to load manual activations.'}), 500
+
+
+@app.route('/admin/eas/manual_events/<int:event_id>/print')
+def manual_eas_print(event_id: int):
+    creating_first_user = AdminUser.query.count() == 0
+    if g.current_user is None and not creating_first_user:
+        return redirect(url_for('login'))
+
+    event = ManualEASActivation.query.get_or_404(event_id)
+    components_payload = event.components_payload or {}
+    web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+
+    def _component_with_url(meta: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if not meta:
+            return None
+        storage_subpath = meta.get('storage_subpath')
+        web_parts = [web_prefix, storage_subpath] if storage_subpath else []
+        web_path = '/'.join(part for part in web_parts if part)
+        download_url = url_for('static', filename=web_path) if storage_subpath else None
+        return {
+            'filename': meta.get('filename'),
+            'duration_seconds': meta.get('duration_seconds'),
+            'size_bytes': meta.get('size_bytes'),
+            'download_url': download_url,
+        }
+
+    components: Dict[str, Dict[str, Any]] = {}
+    for key, meta in components_payload.items():
+        component_value = _component_with_url(meta)
+        if component_value:
+            components[key] = component_value
+
+    state_tree = get_us_state_county_tree()
+    state_index = {
+        state.get('state_fips'): {'abbr': state.get('abbr'), 'name': state.get('name')}
+        for state in state_tree
+        if state.get('state_fips')
+    }
+    same_lookup = get_same_lookup()
+    header_detail = describe_same_header(event.same_header, lookup=same_lookup, state_index=state_index)
+
+    return render_template(
+        'manual_eas_print.html',
+        event=event,
+        components=components,
+        header_detail=header_detail,
+        summary_url=url_for('manual_eas_export', event_id=event.id)
+        if event.summary_filename
+        else None,
+    )
+
+
+@app.route('/admin/eas/manual_events/<int:event_id>/export')
+def manual_eas_export(event_id: int):
+    creating_first_user = AdminUser.query.count() == 0
+    if g.current_user is None and not creating_first_user:
+        return abort(401)
+
+    event = ManualEASActivation.query.get_or_404(event_id)
+    if not event.summary_filename:
+        return abort(404)
+
+    output_root = str(app.config.get('EAS_OUTPUT_DIR') or '').strip()
+    if not output_root:
+        return abort(404)
+
+    file_path = os.path.join(output_root, event.storage_path or '', event.summary_filename)
+    if not os.path.exists(file_path):
+        return abort(404)
+
+    return send_file(
+        file_path,
+        as_attachment=True,
+        download_name=event.summary_filename,
+        mimetype='application/json',
+    )
 
 
 @app.route('/logs')
@@ -1916,6 +2670,654 @@ def trigger_poll():
     except Exception as e:
         logger.error(f"Error triggering poll: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/location_settings', methods=['GET', 'PUT'])
+def admin_location_settings():
+    """Retrieve or update the configurable location settings."""
+    try:
+        if request.method == 'GET':
+            settings = get_location_settings()
+            return jsonify({'settings': settings})
+
+        payload = request.get_json(silent=True) or {}
+        updated = update_location_settings({
+            'county_name': payload.get('county_name'),
+            'state_code': payload.get('state_code'),
+            'timezone': payload.get('timezone'),
+            'zone_codes': payload.get('zone_codes'),
+            'area_terms': payload.get('area_terms'),
+            'led_default_lines': payload.get('led_default_lines'),
+            'map_center_lat': payload.get('map_center_lat'),
+            'map_center_lng': payload.get('map_center_lng'),
+            'map_default_zoom': payload.get('map_default_zoom'),
+        })
+        return jsonify({'success': 'Location settings updated', 'settings': updated})
+    except Exception as e:
+        logger.error("Error processing location settings update: %s", e)
+        return jsonify({'error': f'Failed to process location settings: {str(e)}'}), 500
+
+
+class NOAAImportError(Exception):
+    """Raised when manual NOAA alert retrieval fails."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: Optional[int] = None,
+        query_url: Optional[str] = None,
+        params: Optional[Dict[str, Union[str, int]]] = None,
+        detail: Optional[str] = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.query_url = query_url
+        self.params = params
+        self.detail = detail
+
+
+def normalize_manual_import_datetime(value: Union[str, datetime, None]) -> Optional[datetime]:
+    """Normalize manual import datetimes to UTC for consistent NOAA queries."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        dt_value = value
+    else:
+        raw_value = str(value).strip()
+        if not raw_value:
+            return None
+        try:
+            dt_value = datetime.fromisoformat(raw_value)
+        except ValueError:
+            try:
+                dt_value = datetime.fromisoformat(raw_value.replace('Z', '+00:00'))
+            except ValueError:
+                logger.warning("Manual import received unrecognized datetime format: %s", raw_value)
+                return None
+    if dt_value.tzinfo is None:
+        dt_value = get_location_timezone().localize(dt_value)
+    return dt_value.astimezone(UTC_TZ)
+
+
+def format_noaa_timestamp(dt_value: Optional[datetime]) -> Optional[str]:
+    """Render UTC timestamps in the NOAA API's preferred ISO format."""
+    if not dt_value:
+        return None
+    return dt_value.astimezone(UTC_TZ).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def build_noaa_alert_request(
+    *,
+    identifier: Optional[str] = None,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+    area: Optional[str] = None,
+    event: Optional[str] = None,
+    limit: int = 10,
+) -> Tuple[str, Optional[Dict[str, Union[str, int]]]]:
+    """Construct the NOAA alerts endpoint and query parameters for manual imports."""
+    query_url = NOAA_API_BASE_URL
+    params: Optional[Dict[str, Union[str, int]]] = None
+
+    if identifier:
+        encoded_identifier = quote(identifier.strip(), safe=':.')
+        query_url = f"{NOAA_API_BASE_URL}/{encoded_identifier}.json"
+    else:
+        params = {}
+        if start:
+            formatted_start = format_noaa_timestamp(start)
+            if formatted_start:
+                params['start'] = formatted_start
+        if end:
+            formatted_end = format_noaa_timestamp(end)
+            if formatted_end:
+                params['end'] = formatted_end
+        if area:
+            params['area'] = area
+        if event:
+            params['event'] = event
+
+        if params:
+            params = {
+                key: value
+                for key, value in params.items()
+                if key in NOAA_ALLOWED_QUERY_PARAMS and value is not None
+            } or None
+        else:
+            params = None
+
+    return query_url, params
+
+
+def _alert_datetime_to_iso(dt_value: Optional[datetime]) -> Optional[str]:
+    """Render alert datetimes in ISO8601 with UTC timezone."""
+
+    if not dt_value:
+        return None
+    if dt_value.tzinfo is None:
+        aware_value = dt_value.replace(tzinfo=UTC_TZ)
+    else:
+        aware_value = dt_value.astimezone(UTC_TZ)
+    return aware_value.isoformat()
+
+
+def serialize_admin_alert(alert: CAPAlert) -> Dict[str, Any]:
+    """Return a JSON-serializable representation of an alert for admin tooling."""
+
+    return {
+        'id': alert.id,
+        'identifier': alert.identifier,
+        'event': alert.event,
+        'headline': alert.headline,
+        'description': alert.description,
+        'instruction': alert.instruction,
+        'area_desc': alert.area_desc,
+        'status': alert.status,
+        'message_type': alert.message_type,
+        'scope': alert.scope,
+        'category': alert.category,
+        'severity': alert.severity,
+        'urgency': alert.urgency,
+        'certainty': alert.certainty,
+        'sent': _alert_datetime_to_iso(alert.sent),
+        'expires': _alert_datetime_to_iso(alert.expires),
+        'updated_at': _alert_datetime_to_iso(alert.updated_at),
+        'created_at': _alert_datetime_to_iso(alert.created_at),
+    }
+
+
+def retrieve_noaa_alerts(
+    *,
+    identifier: Optional[str] = None,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+    area: Optional[str] = None,
+    event: Optional[str] = None,
+    limit: int = 10,
+) -> Tuple[List[dict], str, Optional[Dict[str, Union[str, int]]]]:
+    """Execute a NOAA alerts query and return parsed features."""
+    query_url, params = build_noaa_alert_request(
+        identifier=identifier,
+        start=start,
+        end=end,
+        area=area,
+        event=event,
+        limit=limit,
+    )
+
+    headers = {
+        'Accept': 'application/geo+json, application/json;q=0.9',
+        'User-Agent': NOAA_USER_AGENT,
+    }
+
+    try:
+        response = requests.get(query_url, params=params, headers=headers, timeout=20)
+    except requests.RequestException as exc:
+        logger.error("NOAA alert import request failed: %s", exc)
+        raise NOAAImportError(
+            f'Failed to retrieve NOAA alert data: {exc}',
+            query_url=query_url,
+            params=params,
+        ) from exc
+
+    final_url = response.url
+
+    if response.status_code == 404:
+        raise NOAAImportError(
+            'No alert was found for the supplied identifier or filters.',
+            status_code=404,
+            query_url=final_url,
+            params=params,
+        )
+
+    if response.status_code >= 400:
+        error_detail: Optional[str] = None
+        parameter_errors: Optional[List[str]] = None
+        try:
+            error_payload = response.json()
+            if isinstance(error_payload, dict):
+                error_detail = error_payload.get('detail') or error_payload.get('title')
+                raw_parameter_errors = error_payload.get('parameterErrors')
+                if isinstance(raw_parameter_errors, list):
+                    formatted_errors = []
+                    for item in raw_parameter_errors:
+                        if isinstance(item, dict):
+                            name = item.get('parameter')
+                            message = item.get('message')
+                            if name and message:
+                                formatted_errors.append(f"{name}: {message}")
+                    if formatted_errors:
+                        parameter_errors = formatted_errors
+        except ValueError:
+            error_detail = response.text.strip() or None
+
+        logger.error(
+            "NOAA manual import returned %s for %s with params %s: %s",
+            response.status_code,
+            final_url,
+            params,
+            error_detail or 'no error payload provided'
+        )
+
+        message = f'Failed to retrieve NOAA alert data: {response.status_code} {response.reason}'
+        if error_detail:
+            message = f"{message} ({error_detail})"
+        if parameter_errors:
+            message = f"{message} — {'; '.join(parameter_errors)}"
+
+        raise NOAAImportError(
+            message,
+            status_code=response.status_code,
+            query_url=final_url,
+            params=params,
+            detail=error_detail,
+        )
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        logger.error("NOAA alert import returned invalid JSON: %s", exc)
+        raise NOAAImportError(
+            'NOAA API response could not be decoded as JSON.',
+            query_url=final_url,
+            params=params,
+        ) from exc
+
+    if identifier:
+        if isinstance(payload, dict) and 'features' in payload:
+            alerts_payloads = payload.get('features', []) or []
+        else:
+            alerts_payloads = [payload]
+    else:
+        alerts_payloads = payload.get('features', []) if isinstance(payload, dict) else []
+
+    if not identifier:
+        try:
+            effective_limit = max(1, min(int(limit or 10), 50))
+        except (TypeError, ValueError):
+            effective_limit = 10
+        alerts_payloads = alerts_payloads[:effective_limit]
+
+    if not alerts_payloads:
+        raise NOAAImportError(
+            'NOAA API did not return any alerts for the provided criteria.',
+            status_code=404,
+            query_url=final_url,
+            params=params,
+        )
+
+    return alerts_payloads, final_url, params
+
+
+@app.route('/admin/import_alert', methods=['POST'])
+def import_specific_alert():
+    """Manually import NOAA alerts (including expired) by identifier or date range."""
+    data = request.get_json(silent=True) or request.form or {}
+
+    identifier = (data.get('identifier') or '').strip()
+    start_raw = (data.get('start') or '').strip()
+    end_raw = (data.get('end') or '').strip()
+    area = (data.get('area') or '').strip()
+    event_filter = (data.get('event') or '').strip()
+
+    try:
+        limit_value = int(data.get('limit', 10))
+    except (TypeError, ValueError):
+        limit_value = 10
+    limit_value = max(1, min(limit_value, 50))
+
+    start_dt = normalize_manual_import_datetime(start_raw)
+    end_dt = normalize_manual_import_datetime(end_raw)
+
+    if start_raw and start_dt is None:
+        return jsonify({'error': 'Could not parse the provided start timestamp. Use ISO 8601 format (e.g., 2025-01-15T13:00:00-05:00).'}), 400
+
+    if end_raw and end_dt is None:
+        return jsonify({'error': 'Could not parse the provided end timestamp. Use ISO 8601 format (e.g., 2025-01-15T18:00:00-05:00).'}), 400
+
+    if not identifier and not (start_dt and end_dt):
+        return jsonify({
+            'error': 'Provide an alert identifier or both start and end timestamps.'
+        }), 400
+
+    now_utc = utc_now()
+    if end_dt and end_dt > now_utc:
+        logger.info(
+            "Clamping manual NOAA import end time %s to current UTC %s", end_dt.isoformat(), now_utc.isoformat()
+        )
+        end_dt = now_utc
+
+    if start_dt and end_dt and start_dt > end_dt:
+        return jsonify({'error': 'The start time must be before the end time.'}), 400
+
+    cleaned_area = ''.join(ch for ch in area.upper() if ch.isalpha()) if area else ''
+    normalized_area = cleaned_area[:2] if cleaned_area else None
+
+    if identifier:
+        if area and (not normalized_area or len(normalized_area) != 2):
+            return jsonify({'error': 'State filters must use the two-letter postal abbreviation.'}), 400
+    else:
+        if not normalized_area or len(normalized_area) != 2:
+            return jsonify({'error': 'Provide the two-letter state code when searching without an identifier.'}), 400
+
+    try:
+        alerts_payloads, query_url, params = retrieve_noaa_alerts(
+            identifier=identifier or None,
+            start=start_dt,
+            end=end_dt,
+            area=normalized_area,
+            event=event_filter or None,
+            limit=limit_value,
+        )
+    except NOAAImportError as exc:
+        status_code = exc.status_code or 502
+        response_payload = {
+            'error': str(exc),
+            'status_code': exc.status_code,
+            'query_url': exc.query_url,
+            'params': exc.params,
+        }
+        if exc.detail:
+            response_payload['detail'] = exc.detail
+        if status_code == 404 and identifier:
+            response_payload['identifier'] = identifier
+        return jsonify(response_payload), status_code
+
+    start_iso = format_noaa_timestamp(start_dt)
+    end_iso = format_noaa_timestamp(end_dt)
+
+    inserted = 0
+    updated = 0
+    skipped = 0
+    identifiers: List[str] = []
+
+    try:
+        for feature in alerts_payloads:
+            parsed_result = parse_noaa_cap_alert(feature)
+            if not parsed_result:
+                skipped += 1
+                continue
+
+            parsed, geometry = parsed_result
+            alert_identifier = parsed['identifier']
+            if alert_identifier not in identifiers:
+                identifiers.append(alert_identifier)
+
+            existing = CAPAlert.query.filter_by(identifier=alert_identifier).first()
+
+            if existing:
+                for key, value in parsed.items():
+                    setattr(existing, key, value)
+                existing.updated_at = utc_now()
+                assign_alert_geometry(existing, geometry)
+                db.session.flush()
+                try:
+                    if existing.geom:
+                        calculate_alert_intersections(existing)
+                except Exception as intersection_error:
+                    logger.warning(
+                        "Intersection recalculation failed for alert %s: %s",
+                        alert_identifier,
+                        intersection_error
+                    )
+                updated += 1
+            else:
+                new_alert = CAPAlert(**parsed)
+                new_alert.created_at = utc_now()
+                new_alert.updated_at = utc_now()
+                assign_alert_geometry(new_alert, geometry)
+                db.session.add(new_alert)
+                db.session.flush()
+                try:
+                    if new_alert.geom:
+                        calculate_alert_intersections(new_alert)
+                except Exception as intersection_error:
+                    logger.warning(
+                        "Intersection calculation failed for new alert %s: %s",
+                        alert_identifier,
+                        intersection_error
+                    )
+                inserted += 1
+
+        log_entry = SystemLog(
+            level='INFO',
+            message='Manual NOAA alert import executed',
+            module='admin',
+            details={
+                'identifiers': identifiers,
+                'inserted': inserted,
+                'updated': updated,
+                'skipped': skipped,
+                'query_url': query_url,
+                'params': params,
+                'requested_filters': {
+                    'identifier': identifier or None,
+                    'start': start_iso,
+                    'end': end_iso,
+                    'area': normalized_area,
+                    'event': event_filter or None,
+                    'limit': limit_value,
+                },
+                'requested_at_utc': utc_now().isoformat(),
+                'requested_at_local': local_now().isoformat()
+            }
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+
+    except Exception as exc:
+        db.session.rollback()
+        logger.error("Manual NOAA alert import failed: %s", exc)
+        return jsonify({'error': f'Failed to import NOAA alert data: {exc}'}), 500
+
+    return jsonify({
+        'message': f'Imported {inserted} alert(s) and updated {updated} existing alert(s).',
+        'inserted': inserted,
+        'updated': updated,
+        'skipped': skipped,
+        'identifiers': identifiers,
+        'query_url': query_url,
+        'params': params
+    })
+
+
+@app.route('/admin/alerts', methods=['GET'])
+def admin_list_alerts():
+    """List alerts for the admin UI with optional search and expiration filters."""
+
+    try:
+        include_expired = request.args.get('include_expired', 'false').lower() == 'true'
+        search_term = (request.args.get('search') or '').strip()
+        limit_param = request.args.get('limit', type=int)
+        limit = 100 if not limit_param else max(1, min(limit_param, 200))
+
+        base_query = CAPAlert.query
+
+        if not include_expired:
+            now = utc_now()
+            base_query = base_query.filter(
+                or_(CAPAlert.expires.is_(None), CAPAlert.expires > now)
+            )
+
+        if search_term:
+            like_pattern = f"%{search_term}%"
+            base_query = base_query.filter(
+                or_(
+                    CAPAlert.identifier.ilike(like_pattern),
+                    CAPAlert.event.ilike(like_pattern),
+                    CAPAlert.headline.ilike(like_pattern)
+                )
+            )
+
+        total_count = base_query.order_by(None).count()
+        alerts = (
+            base_query
+            .order_by(desc(CAPAlert.sent))
+            .limit(limit)
+            .all()
+        )
+
+        serialized_alerts = [serialize_admin_alert(alert) for alert in alerts]
+
+        return jsonify({
+            'alerts': serialized_alerts,
+            'returned': len(serialized_alerts),
+            'total': total_count,
+            'include_expired': include_expired,
+            'limit': limit,
+            'search': search_term or None,
+        })
+    except Exception as exc:
+        logger.error("Failed to load alerts for admin listing: %s", exc)
+        return jsonify({'error': 'Failed to load alerts.'}), 500
+
+
+@app.route('/admin/alerts/<int:alert_id>', methods=['GET', 'PATCH', 'DELETE'])
+def admin_alert_detail(alert_id: int):
+    """Retrieve, update, or delete a single alert from the admin interface."""
+
+    alert = CAPAlert.query.get(alert_id)
+    if not alert:
+        return jsonify({'error': 'Alert not found.'}), 404
+
+    if request.method == 'GET':
+        return jsonify({'alert': serialize_admin_alert(alert)})
+
+    if request.method == 'DELETE':
+        identifier = alert.identifier
+        try:
+            Intersection.query.filter_by(cap_alert_id=alert.id).delete(synchronize_session=False)
+
+            try:
+                if ensure_led_tables():
+                    LEDMessage.query.filter_by(alert_id=alert.id).delete(synchronize_session=False)
+            except Exception as led_cleanup_error:
+                logger.warning(
+                    "Failed to clean LED messages for alert %s during deletion: %s",
+                    identifier,
+                    led_cleanup_error,
+                )
+                db.session.rollback()
+                return jsonify({'error': 'Failed to remove LED sign entries linked to this alert.'}), 500
+
+            db.session.delete(alert)
+
+            log_entry = SystemLog(
+                level='WARNING',
+                message='Alert deleted from admin interface',
+                module='admin',
+                details={
+                    'alert_id': alert_id,
+                    'identifier': identifier,
+                    'deleted_at_utc': utc_now().isoformat(),
+                },
+            )
+            db.session.add(log_entry)
+            db.session.commit()
+
+            logger.info("Admin deleted alert %s (%s)", identifier, alert_id)
+            return jsonify({'message': f'Alert {identifier} deleted.', 'identifier': identifier})
+        except Exception as exc:
+            db.session.rollback()
+            logger.error("Failed to delete alert %s (%s): %s", identifier, alert_id, exc)
+            return jsonify({'error': 'Failed to delete alert.'}), 500
+
+    payload = request.get_json(silent=True) or {}
+    if not payload:
+        return jsonify({'error': 'No update payload provided.'}), 400
+
+    allowed_fields = {
+        'event',
+        'headline',
+        'description',
+        'instruction',
+        'area_desc',
+        'status',
+        'severity',
+        'urgency',
+        'certainty',
+        'category',
+        'expires',
+    }
+    required_non_empty = {'event', 'status'}
+
+    updates: Dict[str, Any] = {}
+    change_details: Dict[str, Dict[str, Optional[str]]] = {}
+
+    for field in allowed_fields:
+        if field not in payload:
+            continue
+
+        value = payload[field]
+
+        if field == 'expires':
+            if value in (None, '', []):
+                updates[field] = None
+            else:
+                normalized = normalize_manual_import_datetime(value)
+                if not normalized:
+                    return jsonify({'error': 'Could not parse the provided expiration time.'}), 400
+                updates[field] = normalized
+        else:
+            if isinstance(value, str):
+                value = value.strip()
+            if field in required_non_empty and not value:
+                return jsonify({'error': f'{field.replace("_", " ").title()} is required.'}), 400
+            updates[field] = value or None
+
+        previous_value = getattr(alert, field)
+        if isinstance(previous_value, datetime):
+            previous_rendered = _alert_datetime_to_iso(previous_value)
+        else:
+            previous_rendered = previous_value
+
+        new_value = updates[field]
+        if isinstance(new_value, datetime):
+            new_rendered: Optional[str] = new_value.isoformat()
+        else:
+            new_rendered = new_value
+
+        change_details[field] = {
+            'old': previous_rendered,
+            'new': new_rendered,
+        }
+
+    if not updates:
+        return jsonify({'message': 'No changes detected.', 'alert': serialize_admin_alert(alert)})
+
+    try:
+        for field, value in updates.items():
+            setattr(alert, field, value)
+
+        alert.updated_at = utc_now()
+
+        log_entry = SystemLog(
+            level='INFO',
+            message='Alert updated from admin interface',
+            module='admin',
+            details={
+                'alert_id': alert.id,
+                'identifier': alert.identifier,
+                'changes': change_details,
+                'updated_at_utc': alert.updated_at.isoformat(),
+            },
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+
+        logger.info(
+            "Admin updated alert %s fields: %s",
+            alert.identifier,
+            ', '.join(sorted(updates.keys())),
+        )
+
+        db.session.refresh(alert)
+        return jsonify({'message': 'Alert updated successfully.', 'alert': serialize_admin_alert(alert)})
+    except Exception as exc:
+        db.session.rollback()
+        logger.error("Failed to update alert %s (%s): %s", alert.identifier, alert.id, exc)
+        return jsonify({'error': 'Failed to update alert.'}), 500
 
 
 @app.route('/admin/mark_expired', methods=['POST'])
@@ -2364,6 +3766,206 @@ def calculate_single_alert(alert_id):
 # BOUNDARY MANAGEMENT ROUTES
 # =============================================================================
 
+def ensure_boundary_geometry_column():
+    """Ensure the boundaries table accepts any geometry subtype with SRID 4326."""
+    engine = db.engine
+    if engine.dialect.name != 'postgresql':
+        logger.debug(
+            "Skipping boundaries.geom verification for non-PostgreSQL database (%s)",
+            engine.dialect.name,
+        )
+        return True
+
+    try:
+        result = db.session.execute(
+            text(
+                """
+                SELECT type
+                FROM geometry_columns
+                WHERE f_table_name = :table
+                  AND f_geometry_column = :column
+                ORDER BY (f_table_schema = current_schema()) DESC
+                LIMIT 1
+                """
+            ),
+            {'table': 'boundaries', 'column': 'geom'}
+        ).scalar()
+
+        if result and result.upper() == 'MULTIPOLYGON':
+            logger.info("Updating boundaries.geom column to support multiple geometry types")
+            db.session.execute(
+                text(
+                    """
+                    ALTER TABLE boundaries
+                    ALTER COLUMN geom TYPE geometry(GEOMETRY, 4326)
+                    USING ST_SetSRID(geom, 4326)
+                    """
+                )
+            )
+            db.session.commit()
+        elif not result:
+            logger.debug("geometry_columns entry for boundaries.geom not found; skipping type verification")
+        return True
+    except Exception as exc:
+        logger.warning("Could not ensure boundaries.geom column configuration: %s", exc)
+        db.session.rollback()
+        return False
+
+
+def ensure_postgis_extension() -> bool:
+    """Enable the PostGIS extension when running against PostgreSQL."""
+
+    engine = db.engine
+    if engine.dialect.name != 'postgresql':
+        return True
+
+    try:
+        db.session.execute(text('CREATE EXTENSION IF NOT EXISTS postgis'))
+        db.session.commit()
+    except OperationalError as exc:
+        logger.error('Failed to enable PostGIS extension: %s', exc)
+        db.session.rollback()
+        return False
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.error('Unexpected error enabling PostGIS extension: %s', exc)
+        db.session.rollback()
+        raise
+    else:
+        logger.info('PostGIS extension ensured for the active database')
+        return True
+
+
+@app.route('/admin/check_db_health', methods=['GET'])
+def check_db_health():
+    """Provide a quick health check of the database connection and size."""
+    try:
+        db.session.execute(text('SELECT 1'))
+        connectivity_status = 'Connected'
+    except OperationalError as exc:
+        logger.error("Database connectivity check failed: %s", exc)
+        return jsonify({'error': 'Database connectivity check failed.'}), 500
+    except Exception as exc:
+        logger.error("Unexpected error during database health check: %s", exc)
+        return jsonify({'error': 'Database health check encountered an unexpected error.'}), 500
+
+    database_size = 'Unavailable'
+    try:
+        size_bytes = db.session.execute(
+            text('SELECT pg_database_size(current_database())')
+        ).scalar()
+        if size_bytes is not None:
+            database_size = format_bytes(size_bytes)
+    except Exception as exc:
+        logger.warning("Could not determine database size: %s", exc)
+
+    active_connections: Union[str, int] = 'Unavailable'
+    try:
+        connection_count = db.session.execute(
+            text('SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()')
+        ).scalar()
+        if connection_count is not None:
+            active_connections = int(connection_count)
+    except Exception as exc:
+        logger.warning("Could not determine active connection count: %s", exc)
+
+    return jsonify({
+        'connectivity': connectivity_status,
+        'database_size': database_size,
+        'active_connections': active_connections,
+        'checked_at': utc_now().isoformat()
+    })
+
+
+@app.route('/admin/preview_geojson', methods=['POST'])
+def preview_geojson():
+    """Preview GeoJSON contents and extract useful metadata without persisting."""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+
+        file = request.files['file']
+        raw_boundary_type = request.form.get('boundary_type', 'unknown')
+        boundary_type = normalize_boundary_type(raw_boundary_type)
+        boundary_label = get_boundary_display_label(raw_boundary_type)
+
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+
+        if not file.filename.lower().endswith('.geojson'):
+            return jsonify({'error': 'File must be a GeoJSON file'}), 400
+
+        try:
+            file_contents = file.read().decode('utf-8')
+        except UnicodeDecodeError:
+            return jsonify({'error': 'Unable to decode file. Please ensure it is UTF-8 encoded.'}), 400
+
+        try:
+            geojson_data = json.loads(file_contents)
+        except json.JSONDecodeError:
+            return jsonify({'error': 'Invalid GeoJSON format'}), 400
+
+        features = geojson_data.get('features')
+        if not isinstance(features, list) or not features:
+            return jsonify({
+                'error': 'GeoJSON file does not contain any features.',
+                'boundary_type': boundary_label,
+                'total_features': 0
+            }), 400
+
+        preview_limit = 5
+        previews: List[Dict[str, Any]] = []
+        all_fields = set()
+        owner_fields = set()
+        line_id_fields = set()
+        recommended_fields = set()
+
+        for feature in features:
+            properties = feature.get('properties', {}) or {}
+            all_fields.update(properties.keys())
+
+        for feature in features[:preview_limit]:
+            properties = feature.get('properties', {}) or {}
+            name, description = extract_name_and_description(properties, boundary_type)
+            metadata = extract_feature_metadata(feature)
+
+            preview_entry = {
+                'name': name,
+                'description': description,
+                'owner': metadata.get('owner'),
+                'line_id': metadata.get('line_id'),
+                'mtfcc': metadata.get('mtfcc'),
+                'classification': metadata.get('classification'),
+                'length_label': metadata.get('length_label'),
+                'additional_details': metadata.get('additional_details'),
+            }
+            previews.append(preview_entry)
+
+            if metadata.get('owner_field'):
+                owner_fields.add(metadata['owner_field'])
+            if metadata.get('line_id_field'):
+                line_id_fields.add(metadata['line_id_field'])
+            recommended_fields.update(metadata.get('recommended_fields', set()))
+
+        response_data = {
+            'boundary_type': boundary_label,
+            'normalized_type': boundary_type,
+            'total_features': len(features),
+            'preview_count': len(previews),
+            'all_fields': sorted(all_fields),
+            'previews': previews,
+            'owner_fields': sorted(owner_fields),
+            'line_id_fields': sorted(line_id_fields),
+            'recommended_additional_fields': sorted(recommended_fields),
+            'field_mappings': get_field_mappings().get(boundary_type, {}),
+        }
+
+        return jsonify(response_data)
+
+    except Exception as exc:
+        logger.error("Error previewing GeoJSON: %s", exc)
+        return jsonify({'error': f'Failed to preview GeoJSON: {str(exc)}'}), 500
+
+
 @app.route('/admin/upload_boundaries', methods=['POST'])
 def upload_boundaries():
     """Upload GeoJSON boundary file with enhanced processing"""
@@ -2372,7 +3974,9 @@ def upload_boundaries():
             return jsonify({'error': 'No file provided'}), 400
 
         file = request.files['file']
-        boundary_type = request.form.get('boundary_type', 'unknown')
+        raw_boundary_type = request.form.get('boundary_type', 'unknown')
+        boundary_type = normalize_boundary_type(raw_boundary_type)
+        boundary_label = get_boundary_display_label(raw_boundary_type)
 
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
@@ -2411,7 +4015,7 @@ def upload_boundaries():
                 )
 
                 boundary.geom = db.session.execute(
-                    text("SELECT ST_GeomFromGeoJSON(:geom)"),
+                    text("SELECT ST_SetSRID(ST_GeomFromGeoJSON(:geom), 4326)"),
                     {"geom": geometry_json}
                 ).scalar()
 
@@ -2423,16 +4027,22 @@ def upload_boundaries():
 
         try:
             db.session.commit()
-            logger.info(f"Successfully uploaded {boundaries_added} {boundary_type} boundaries")
+            logger.info(
+                "Successfully uploaded %s %s boundaries",
+                boundaries_added,
+                boundary_label,
+            )
         except Exception as e:
             db.session.rollback()
             return jsonify({'error': f'Database error: {str(e)}'}), 500
 
         response_data = {
-            'success': f'Successfully uploaded {boundaries_added} {boundary_type} boundaries',
+            'success': f'Successfully uploaded {boundaries_added} {boundary_label} boundaries',
             'boundaries_added': boundaries_added,
             'total_features': len(features),
-            'errors': errors[:10] if errors else []
+            'errors': errors[:10] if errors else [],
+            'normalized_type': boundary_type,
+            'display_label': boundary_label,
         }
 
         if errors:
@@ -2449,12 +4059,19 @@ def upload_boundaries():
 def clear_boundaries(boundary_type):
     """Clear all boundaries of a specific type"""
     try:
+        normalized_type = None
+
         if boundary_type == 'all':
             deleted_count = Boundary.query.delete()
             message = f'Deleted all {deleted_count} boundaries'
         else:
-            deleted_count = Boundary.query.filter_by(type=boundary_type).delete()
-            message = f'Deleted {deleted_count} {boundary_type} boundaries'
+            normalized_type = normalize_boundary_type(boundary_type)
+            deleted_count = Boundary.query.filter(
+                func.lower(Boundary.type) == normalized_type
+            ).delete(synchronize_session=False)
+            message = (
+                f"Deleted {deleted_count} {get_boundary_display_label(boundary_type)} boundaries"
+            )
 
         db.session.commit()
 
@@ -2464,6 +4081,7 @@ def clear_boundaries(boundary_type):
             module='admin',
             details={
                 'boundary_type': boundary_type,
+                'normalized_type': normalized_type if boundary_type != 'all' else 'all',
                 'deleted_count': deleted_count,
                 'deleted_at_utc': utc_now().isoformat(),
                 'deleted_at_local': local_now().isoformat()
@@ -2741,6 +4359,9 @@ def api_led_send_message():
 
         if not led_controller:
             return jsonify({'success': False, 'error': 'LED controller not available'})
+
+        if not _led_enums_available():
+            return jsonify({'success': False, 'error': 'LED library enums unavailable'})
 
         lines = data.get('lines')
         if isinstance(lines, str):
@@ -3125,7 +4746,7 @@ def export_alerts():
             'total': len(alerts_data),
             'exported_at': utc_now().isoformat(),
             'exported_at_local': local_now().isoformat(),
-            'timezone': str(PUTNAM_COUNTY_TZ)
+            'timezone': get_location_timezone_name()
         })
 
     except Exception as e:
@@ -3160,7 +4781,7 @@ def export_boundaries():
             'total': len(boundaries_data),
             'exported_at': utc_now().isoformat(),
             'exported_at_local': local_now().isoformat(),
-            'timezone': str(PUTNAM_COUNTY_TZ)
+            'timezone': get_location_timezone_name()
         })
 
     except Exception as e:
@@ -3217,7 +4838,7 @@ def export_statistics():
             'total': len(stats_data),
             'exported_at': utc_now().isoformat(),
             'exported_at_local': local_now().isoformat(),
-            'timezone': str(PUTNAM_COUNTY_TZ)
+            'timezone': get_location_timezone_name()
         })
 
     except Exception as e:
@@ -3263,7 +4884,7 @@ def export_intersections():
             'total': len(intersection_data),
             'exported_at': utc_now().isoformat(),
             'exported_at_local': local_now().isoformat(),
-            'timezone': str(PUTNAM_COUNTY_TZ)
+            'timezone': get_location_timezone_name()
         })
 
     except Exception as e:
@@ -3333,7 +4954,7 @@ def health_check():
             'status': 'healthy',
             'timestamp': utc_now().isoformat(),
             'local_timestamp': local_now().isoformat(),
-            'version': '2.0',
+            'version': SYSTEM_VERSION,
             'database': 'connected',
             'led_available': LED_AVAILABLE
         })
@@ -3359,12 +4980,13 @@ def ping():
 @app.route('/version')
 def version():
     """Version information endpoint"""
+    location = get_location_settings()
     return jsonify({
-        'version': '2.0',
+        'version': SYSTEM_VERSION,
         'name': 'NOAA CAP Alerts System',
         'author': 'KR8MER Amateur Radio Emergency Communications',
-        'description': 'Emergency alert system for Putnam County, Ohio',
-        'timezone': str(PUTNAM_COUNTY_TZ),
+        'description': f"Emergency alert system for {location['county_name']}, {location['state_code']}",
+        'timezone': get_location_timezone_name(),
         'led_available': LED_AVAILABLE,
         'timestamp': utc_now().isoformat(),
         'local_timestamp': local_now().isoformat()
@@ -3399,12 +5021,19 @@ Allow: /
 @app.context_processor
 def inject_global_vars():
     """Inject global variables into all templates"""
+    location_settings = get_location_settings()
     return {
         'current_utc_time': utc_now(),
         'current_local_time': local_now(),
-        'timezone_name': str(PUTNAM_COUNTY_TZ),
+        'timezone_name': get_location_timezone_name(),
         'led_available': LED_AVAILABLE,
-        'system_version': '2.0'
+        'system_version': SYSTEM_VERSION,
+        'location_settings': location_settings,
+        'boundary_type_config': BOUNDARY_TYPE_CONFIG,
+        'boundary_group_labels': BOUNDARY_GROUP_LABELS,
+        'current_user': getattr(g, 'current_user', None),
+        'eas_broadcast_enabled': app.config.get('EAS_BROADCAST_ENABLED', False),
+        'eas_output_web_subdir': app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages'),
     }
 
 
@@ -3421,6 +5050,37 @@ def before_request():
 
     # Ensure the database schema exists before handling the request.
     initialize_database()
+
+    # Load the current user from the session for downstream use.
+    g.current_user = None
+    user_id = session.get('user_id')
+    if user_id is not None:
+        user = AdminUser.query.get(user_id)
+        if user and user.is_active:
+            g.current_user = user
+        else:
+            session.pop('user_id', None)
+
+    try:
+        g.admin_setup_mode = AdminUser.query.count() == 0
+    except Exception:
+        g.admin_setup_mode = False
+
+    # Allow authentication endpoints without additional checks.
+    if request.endpoint in {'login', 'static'}:
+        return
+
+    protected_prefixes = ('/admin', '/logs')
+    if any(request.path.startswith(prefix) for prefix in protected_prefixes):
+        if g.current_user is None:
+            if g.admin_setup_mode and request.endpoint in {'admin', 'admin_users'}:
+                if request.method == 'GET' or (request.method == 'POST' and request.endpoint == 'admin_users'):
+                    return
+            accept_header = request.headers.get('Accept', '')
+            next_url = request.full_path if request.query_string else request.path
+            if request.method != 'GET' or 'application/json' in accept_header or request.is_json:
+                return jsonify({'error': 'Authentication required'}), 401
+            return redirect(url_for('login', next=next_url))
 
 
 @app.after_request
@@ -3454,7 +5114,18 @@ def initialize_database():
         return
 
     try:
+        if not ensure_postgis_extension():
+            _db_initialization_error = RuntimeError("PostGIS extension could not be ensured")
+            return False
         db.create_all()
+        ensure_boundary_geometry_column()
+        settings = get_location_settings(force_reload=True)
+        timezone_name = settings.get('timezone')
+        if timezone_name:
+            set_location_timezone(timezone_name)
+        if not LED_AVAILABLE:
+            initialise_led_controller(logger)
+            ensure_led_tables()
     except OperationalError as db_error:
         _db_initialization_error = db_error
         logger.error("Database initialization failed: %s", db_error)
@@ -3507,6 +5178,38 @@ def test_led():
         logger.warning("LED controller not available")
 
 
+@app.cli.command('create-admin-user')
+@click.option('--username', prompt=True)
+@click.option('--password', prompt=True, hide_input=True, confirmation_prompt=True)
+def create_admin_user_cli(username: str, password: str):
+    """Create a new administrator user account."""
+    initialize_database()
+
+    username = username.strip()
+    if not USERNAME_PATTERN.match(username):
+        raise click.ClickException('Usernames must be 3-64 characters and may include letters, numbers, dots, underscores, and hyphens.')
+
+    if len(password) < 8:
+        raise click.ClickException('Password must be at least 8 characters long.')
+
+    existing = AdminUser.query.filter(func.lower(AdminUser.username) == username.lower()).first()
+    if existing:
+        raise click.ClickException('That username already exists.')
+
+    user = AdminUser(username=username)
+    user.set_password(password)
+    db.session.add(user)
+    db.session.add(SystemLog(
+        level='INFO',
+        message='Administrator account created via CLI',
+        module='auth',
+        details={'username': username},
+    ))
+    db.session.commit()
+
+    click.echo(f'Created administrator account for {username}.')
+
+
 @app.cli.command()
 def cleanup_expired():
     """Mark expired alerts as expired (safe cleanup)"""
@@ -3541,7 +5244,7 @@ def create_app(config=None):
         app.config.update(config)
 
     with app.app_context():
-        db.create_all()
+        initialize_database()
 
     return app
 
@@ -3552,6 +5255,6 @@ def create_app(config=None):
 
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()
+        initialize_database()
 
     app.run(debug=True, host='0.0.0.0', port=5000)

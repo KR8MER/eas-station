@@ -1,0 +1,3 @@
+# Static output placeholder
+#
+# Flask serves generated EAS assets from this directory.

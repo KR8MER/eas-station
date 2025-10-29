@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-NOAA CAP Alert Poller for Putnam County, OH (OHZ016/OHC137)
-Docker-safe DB defaults, strict county filtering, PostGIS geometry/intersections,
+NOAA CAP Alert Poller with configurable location filtering
+Docker-safe DB defaults, strict jurisdiction filtering, PostGIS geometry/intersections,
 optional LED sign integration.
 
 Defaults for Docker (override with env or --database-url):
@@ -21,11 +21,16 @@ import requests
 import logging
 import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import argparse
 
 import pytz
 from dotenv import load_dotenv
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, os.pardir))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 load_dotenv()
 from sqlalchemy import create_engine, text, func, or_
@@ -36,47 +41,33 @@ from sqlalchemy.exc import SQLAlchemyError, OperationalError
 # Timezones and helpers
 # =======================================================================================
 
+from app_utils import (
+    format_local_datetime as util_format_local_datetime,
+    local_now as util_local_now,
+    parse_nws_datetime as util_parse_nws_datetime,
+    set_location_timezone,
+    utc_now as util_utc_now,
+)
+from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS, ensure_list, normalise_upper
+from app_utils.eas import EASBroadcaster, load_eas_config
+
 UTC_TZ = pytz.UTC
-PUTNAM_COUNTY_TZ = pytz.timezone('America/New_York')
+
 
 def utc_now():
-    return datetime.now(UTC_TZ)
+    return util_utc_now()
+
 
 def local_now():
-    return datetime.now(PUTNAM_COUNTY_TZ)
+    return util_local_now()
+
 
 def parse_nws_datetime(dt_string):
-    if not dt_string:
-        return None
-    try:
-        # Normalize trailing Z to +00:00
-        if dt_string.endswith('Z'):
-            dt_string = dt_string[:-1] + '+00:00'
-        # Try common formats
-        for fmt in ('%Y-%m-%dT%H:%M:%S%z',
-                    '%Y-%m-%dT%H:%M:%S.%f%z'):
-            try:
-                dt = datetime.strptime(dt_string, fmt)
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=UTC_TZ)
-                return dt.astimezone(UTC_TZ)
-            except ValueError:
-                continue
-    except Exception as e:
-        logging.warning(f"Could not parse datetime: {dt_string} - {e}")
-    return None
+    return util_parse_nws_datetime(dt_string, logger=logging.getLogger(__name__))
+
 
 def format_local_datetime(dt, include_utc=True):
-    if not dt:
-        return "Unknown"
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC_TZ)
-    local_dt = dt.astimezone(PUTNAM_COUNTY_TZ)
-    local_str = local_dt.strftime('%B %d, %Y at %I:%M %p %Z')
-    if include_utc:
-        utc_str = dt.astimezone(UTC_TZ).strftime('%H:%M UTC')
-        return f"{local_str} ({utc_str})"
-    return local_str
+    return util_format_local_datetime(dt, include_utc=include_utc)
 
 # =======================================================================================
 # Optional LED controller import
@@ -105,7 +96,7 @@ try:
     if project_root.endswith('/poller'):
         project_root = os.path.dirname(project_root)
     sys.path.insert(0, project_root)
-    from app import db, CAPAlert, SystemLog, Boundary, Intersection  # type: ignore
+    from app import db, CAPAlert, SystemLog, Boundary, Intersection, LocationSettings, EASMessage  # type: ignore
     from sqlalchemy import Column, Integer, String, DateTime, Text, JSON  # noqa: F401
 
     class PollHistory(db.Model):  # type: ignore
@@ -197,12 +188,38 @@ except Exception as e:
         status = Column(String(20))
         error_message = Column(Text)
 
+    class LocationSettings(Base):
+        __tablename__ = 'location_settings'
+        __table_args__ = {'extend_existing': True}
+        id = Column(Integer, primary_key=True)
+        county_name = Column(String(255))
+        state_code = Column(String(2))
+        timezone = Column(String(64))
+        zone_codes = Column(JSON)
+        area_terms = Column(JSON)
+        map_center_lat = Column(Float)
+        map_center_lng = Column(Float)
+        map_default_zoom = Column(Integer)
+        led_default_lines = Column(JSON)
+        updated_at = Column(DateTime, default=utc_now)
+
+    class EASMessage(Base):
+        __tablename__ = 'eas_messages'
+        __table_args__ = {'extend_existing': True}
+        id = Column(Integer, primary_key=True)
+        cap_alert_id = Column(Integer, ForeignKey('cap_alerts.id'))
+        same_header = Column(String(255))
+        audio_filename = Column(String(255))
+        text_filename = Column(String(255))
+        created_at = Column(DateTime, default=utc_now)
+        metadata_payload = Column('metadata', JSON)
+
 # =======================================================================================
 # Poller
 # =======================================================================================
 
 class CAPPoller:
-    """CAP alert poller with strict Putnam County filtering, PostGIS, optional LED."""
+    """CAP alert poller with strict location filtering, PostGIS, optional LED."""
 
     def __init__(self, database_url: str, led_sign_ip: str = None, led_sign_port: int = 10001):
         self.database_url = database_url
@@ -223,17 +240,33 @@ class CAPPoller:
         except Exception as e:
             self.logger.warning(f"Database table verification failed: {e}")
 
+        self.location_settings = self._load_location_settings()
+        self.location_name = f"{self.location_settings['county_name']}, {self.location_settings['state_code']}".strip(', ')
+        self.county_upper = self.location_settings['county_name'].upper()
+        self.state_code = self.location_settings['state_code']
+
+        # EAS broadcaster
+        self.eas_broadcaster = None
+        try:
+            eas_config = load_eas_config(PROJECT_ROOT)
+            self.eas_broadcaster = EASBroadcaster(
+                self.db_session, EASMessage, eas_config, self.logger, self.location_settings
+            )
+        except Exception as exc:
+            self.logger.warning(f"EAS broadcaster unavailable: {exc}")
+            self.eas_broadcaster = None
+
         # HTTP Session
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'NOAA CAP Alert System/1.0 (Putnam County, OH EMS)'
+            'User-Agent': f"NOAA CAP Alert System/1.0 ({self.location_name})"
         })
 
         # LED
         self.led_controller = None
         if led_sign_ip and LED_AVAILABLE:
             try:
-                self.led_controller = LEDSignController(led_sign_ip, led_sign_port)
+                self.led_controller = LEDSignController(led_sign_ip, led_sign_port, location_settings=self.location_settings)
                 self.logger.info(f"LED sign controller initialized for {led_sign_ip}:{led_sign_port}")
             except Exception as e:
                 self.logger.error(f"Failed to initialize LED controller: {e}")
@@ -242,16 +275,53 @@ class CAPPoller:
 
         # Endpoints
         self.cap_endpoints = [
-            'https://api.weather.gov/alerts/active?zone=OHZ016',
-            'https://api.weather.gov/alerts/active?zone=OHC137',
+            f"https://api.weather.gov/alerts/active?zone={code}"
+            for code in self.location_settings['zone_codes']
+        ] or [
+            f"https://api.weather.gov/alerts/active?zone={code}"
+            for code in DEFAULT_LOCATION_SETTINGS['zone_codes']
         ]
 
-        # Strict Putnam County terms
-        self.putnam_county_identifiers = [
-            'OHZ016', 'OHC137', 'PUTNAM COUNTY', 'PUTNAM CO',
-            'OTTAWA', 'LEIPSIC', 'PANDORA', 'GLANDORF', 'KALIDA',
-            'FORT JENNINGS', 'COLUMBUS GROVE', 'DUPONT', 'MILLER CITY', 'OTTOVILLE'
-        ]
+        # Strict location terms
+        base_identifiers = self.location_settings['area_terms'] or list(DEFAULT_LOCATION_SETTINGS['area_terms'])
+        derived_identifiers = {self.county_upper}
+        if 'COUNTY' not in self.county_upper:
+            derived_identifiers.add(f"{self.county_upper} COUNTY")
+        derived_identifiers.add(self.county_upper.replace(' COUNTY', ''))
+        self.putnam_county_identifiers = list({term for term in base_identifiers if term} | derived_identifiers)
+        self.zone_codes = set(self.location_settings['zone_codes'])
+
+    # ---------- Engine with retry ----------
+    def _load_location_settings(self) -> Dict[str, Any]:
+        defaults = dict(DEFAULT_LOCATION_SETTINGS)
+        settings: Dict[str, Any] = dict(defaults)
+
+        try:
+            record = self.db_session.query(LocationSettings).order_by(LocationSettings.id).first()
+            if record:
+                settings.update({
+                    'county_name': record.county_name or defaults['county_name'],
+                    'state_code': (record.state_code or defaults['state_code']).upper(),
+                    'timezone': record.timezone or defaults['timezone'],
+                    'zone_codes': normalise_upper(record.zone_codes) or list(defaults['zone_codes']),
+                    'area_terms': normalise_upper(record.area_terms) or list(defaults['area_terms']),
+                    'map_center_lat': record.map_center_lat or defaults['map_center_lat'],
+                    'map_center_lng': record.map_center_lng or defaults['map_center_lng'],
+                    'map_default_zoom': record.map_default_zoom or defaults['map_default_zoom'],
+                    'led_default_lines': ensure_list(record.led_default_lines) or list(defaults['led_default_lines']),
+                })
+            else:
+                self.logger.info("No location settings found; using defaults")
+        except Exception as exc:  # pragma: no cover - defensive logging
+            self.logger.warning("Falling back to default location settings: %s", exc)
+
+        if not settings['zone_codes']:
+            settings['zone_codes'] = list(defaults['zone_codes'])
+        if not settings['area_terms']:
+            settings['area_terms'] = list(defaults['area_terms'])
+
+        set_location_timezone(settings['timezone'])
+        return settings
 
     # ---------- Engine with retry ----------
     def _make_engine_with_retry(self, url: str, retries: int = 30, delay: float = 2.0):
@@ -310,25 +380,17 @@ class CAPPoller:
             ugc_codes = geocode.get('UGC', []) or []
 
             for ugc in ugc_codes:
-                if ugc in ('OHZ016', 'OHC137'):
+                if str(ugc).upper() in self.zone_codes:
                     self.logger.info(f"✓ Alert ACCEPTED by UGC: {event} ({ugc})")
                     return True
 
             area_desc = (properties.get('areaDesc') or '').upper()
-            if 'PUTNAM' not in area_desc:
-                self.logger.debug(f"✗ REJECT (no PUTNAM): {event}")
-                return False
-
-            for term in self.putnam_county_identifiers:
-                if term in area_desc:
-                    self.logger.info(f"✓ Alert ACCEPTED by area match: {event} ({term})")
-                    return True
-
-            if any(term in area_desc for term in ('PUTNAM COUNTY', 'PUTNAM CO')):
-                self.logger.info(f"✓ Alert ACCEPTED (Putnam County in text): {event}")
+            matched_terms = [term for term in self.putnam_county_identifiers if term and term in area_desc]
+            if matched_terms:
+                self.logger.info(f"✓ Alert ACCEPTED by area match: {event} ({matched_terms[0]})")
                 return True
 
-            self.logger.info(f"✗ REJECT (not specific enough): {event} - {area_desc}")
+            self.logger.info(f"✗ REJECT (not specific enough for {self.county_upper}): {event} - {area_desc}")
             return False
         except Exception as e:
             self.logger.error(f"Error checking relevance: {e}")
@@ -383,7 +445,7 @@ class CAPPoller:
             if geometry_data and isinstance(geometry_data, dict):
                 geom_json = json.dumps(geometry_data)
                 result = self.db_session.execute(
-                    text("SELECT ST_GeomFromGeoJSON(:g)"),
+                    text("SELECT ST_SetSRID(ST_GeomFromGeoJSON(:g), 4326)"),
                     {"g": geom_json}
                 ).scalar()
                 alert.geom = result
@@ -440,13 +502,14 @@ class CAPPoller:
 
     def save_cap_alert(self, alert_data: Dict) -> Tuple[bool, Optional[CAPAlert]]:
         try:
-            geometry_data = alert_data.pop('_geometry_data', None)
+            payload = dict(alert_data)
+            geometry_data = payload.pop('_geometry_data', None)
             existing = self.db_session.query(CAPAlert).filter_by(
-                identifier=alert_data['identifier']
+                identifier=payload['identifier']
             ).first()
 
             if existing:
-                for k, v in alert_data.items():
+                for k, v in payload.items():
                     if k != 'raw_json' and hasattr(existing, k):
                         setattr(existing, k, v)
                 old_geom = existing.geom
@@ -460,7 +523,7 @@ class CAPPoller:
                 self.logger.info(f"Updated alert: {existing.event}")
                 return False, existing
 
-            new_alert = CAPAlert(**alert_data)
+            new_alert = CAPAlert(**payload)
             new_alert.created_at = utc_now()
             new_alert.updated_at = utc_now()
             self._set_alert_geometry(new_alert, geometry_data)
@@ -472,6 +535,12 @@ class CAPPoller:
                 self.process_intersections(new_alert)
             if self.led_controller and not self.is_alert_expired(new_alert):
                 self.update_led_display()
+
+            if self.eas_broadcaster:
+                try:
+                    self.eas_broadcaster.handle_alert(new_alert, payload)
+                except Exception as exc:
+                    self.logger.error(f"EAS broadcast failed for {new_alert.identifier}: {exc}")
 
             self.logger.info(f"Saved new alert: {new_alert.identifier} - {new_alert.event}")
             return True, new_alert
@@ -596,7 +665,7 @@ class CAPPoller:
             details.update({
                 'logged_at_utc': utc_now().isoformat(),
                 'logged_at_local': local_now().isoformat(),
-                'timezone': str(PUTNAM_COUNTY_TZ)
+                'timezone': self.location_settings['timezone']
             })
             entry = SystemLog(level=level, message=message, module='cap_poller',
                               details=details, timestamp=utc_now())
@@ -617,15 +686,15 @@ class CAPPoller:
             'alerts_fetched': 0, 'alerts_new': 0, 'alerts_updated': 0,
             'alerts_filtered': 0, 'alerts_accepted': 0, 'intersections_calculated': 0,
             'execution_time_ms': 0, 'status': 'SUCCESS', 'error_message': None,
-            'zone': 'OHZ016/OHC137 (Putnam County, OH) - STRICT FILTERING',
+            'zone': f"{'/'.join(self.location_settings['zone_codes'])} ({self.location_name}) - STRICT FILTERING",
             'poll_time_utc': poll_start_utc.isoformat(),
             'poll_time_local': poll_start_local.isoformat(),
-            'timezone': str(PUTNAM_COUNTY_TZ), 'led_updated': False
+            'timezone': self.location_settings['timezone'], 'led_updated': False
         }
 
         try:
             self.logger.info(
-                f"Starting CAP alert polling cycle for Putnam County, OH (STRICT MODE) at {format_local_datetime(poll_start_utc)}"
+                f"Starting CAP alert polling cycle for {self.location_name} at {format_local_datetime(poll_start_utc)}"
             )
 
             alerts_data = self.fetch_cap_alerts()
@@ -639,7 +708,7 @@ class CAPPoller:
                 self.logger.info(f"Processing alert: {event} (ID: {alert_id[:20] if alert_id!='No ID' else 'No ID'}...)")
 
                 if not self.is_relevant_alert(alert_data):
-                    self.logger.info(f"• Filtered out (not specific to Putnam)")
+                    self.logger.info(f"• Filtered out (not specific to {self.county_upper})")
                     stats['alerts_filtered'] += 1
                     continue
 
@@ -654,12 +723,12 @@ class CAPPoller:
                     stats['alerts_new'] += 1
                     stats['led_updated'] = True
                     self.logger.info(
-                        f"Saved new Putnam alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
+                        f"Saved new {self.location_name} alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
                     )
                 else:
                     stats['alerts_updated'] += 1
                     self.logger.info(
-                        f"Updated Putnam alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
+                        f"Updated {self.location_name} alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
                     )
 
             self.cleanup_old_poll_history()
@@ -714,7 +783,7 @@ def build_database_url_from_env() -> str:
     return f"postgresql+psycopg2://{user}:{pw}@{host}:{port}/{db}"
 
 def main():
-    parser = argparse.ArgumentParser(description='NOAA CAP Alert Poller (Putnam County ONLY)')
+    parser = argparse.ArgumentParser(description='NOAA CAP Alert Poller (configurable location)')
     parser.add_argument('--database-url',
                         default=build_database_url_from_env(),
                         help='SQLAlchemy DB URL (defaults from env POSTGRES_* or DATABASE_URL)')

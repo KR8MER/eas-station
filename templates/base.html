@@ -14,6 +14,19 @@
     <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 
+    {% if location_settings %}
+    <script>
+        window.APP_LOCATION = {{ location_settings | tojson }};
+    </script>
+    {% endif %}
+
+    {% if boundary_type_config %}
+    <script>
+        window.BOUNDARY_TYPE_CONFIG = {{ boundary_type_config | tojson }};
+        window.BOUNDARY_GROUP_LABELS = {{ boundary_group_labels | tojson }};
+    </script>
+    {% endif %}
+
     <style>
         :root {
             --primary-color: #007bff;
@@ -236,8 +249,23 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('audio_history') }}">
+                            <i class="fas fa-headphones"></i> Audio Archive
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="/stats">
                             <i class="fas fa-chart-bar"></i> Statistics
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('about_page') }}">
+                            <i class="fas fa-circle-info"></i> About
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('help_page') }}">
+                            <i class="fas fa-circle-question"></i> Help
                         </a>
                     </li>
                     <li class="nav-item">
@@ -250,6 +278,24 @@
                             <i class="fas fa-tv"></i> LED Control
                         </a>
                     </li>
+                    {% if current_user %}
+                    <li class="nav-item">
+                        <span class="nav-link disabled text-nowrap">
+                            <i class="fas fa-user-shield"></i> {{ current_user.username }}
+                        </span>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('logout') }}">
+                            <i class="fas fa-sign-out-alt"></i> Logout
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('login') }}">
+                            <i class="fas fa-sign-in-alt"></i> Login
+                        </a>
+                    </li>
+                    {% endif %}
                 </ul>
             </div>
         </div>
@@ -277,11 +323,14 @@
     <!-- Footer -->
     <footer class="footer">
         <div class="container-fluid text-center">
-            <small class="text-muted">
-                <i class="fas fa-satellite-dish"></i> 2025 KR8MER CAP Emergency Alert System |
-                <i class="fas fa-radio"></i> Amateur Radio Emergency Communications |
-                <i class="fas fa-server"></i> Raspberry Pi Server |
-                <span id="current-time">Loading...</span>
+            <small class="text-muted d-flex flex-column flex-sm-row align-items-center justify-content-center gap-2">
+                <span>
+                    <i class="fas fa-satellite-dish"></i> 2025 KR8MER CAP Emergency Alert System |
+                    <i class="fas fa-radio"></i> Amateur Radio Emergency Communications |
+                    <i class="fas fa-server"></i> Raspberry Pi Server |
+                    <span id="current-time">Loading...</span>
+                </span>
+                <span class="text-uppercase fw-semibold">Version {{ system_version }}</span>
             </small>
         </div>
     </footer>

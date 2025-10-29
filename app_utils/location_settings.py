@@ -1,0 +1,57 @@
+"""Location settings defaults and helpers for the NOAA alerts system."""
+
+from __future__ import annotations
+
+import os
+from typing import Iterable, List, Sequence
+
+DEFAULT_TIMEZONE = os.getenv("DEFAULT_TIMEZONE", "America/New_York")
+DEFAULT_COUNTY_NAME = os.getenv("DEFAULT_COUNTY_NAME", "Putnam County")
+DEFAULT_STATE_CODE = os.getenv("DEFAULT_STATE_CODE", "OH")
+DEFAULT_ZONE_CODES = os.getenv("DEFAULT_ZONE_CODES", "OHZ016,OHC137")
+DEFAULT_AREA_TERMS = os.getenv(
+    "DEFAULT_AREA_TERMS",
+    "PUTNAM COUNTY,PUTNAM CO,OTTAWA,LEIPSIC,PANDORA,GLANDORF,KALIDA,FORT JENNINGS,"
+    "COLUMBUS GROVE,DUPONT,MILLER CITY,OTTOVILLE",
+)
+DEFAULT_MAP_CENTER_LAT = float(os.getenv("DEFAULT_MAP_CENTER_LAT", "41.0195"))
+DEFAULT_MAP_CENTER_LNG = float(os.getenv("DEFAULT_MAP_CENTER_LNG", "-84.1190"))
+DEFAULT_MAP_ZOOM = int(os.getenv("DEFAULT_MAP_ZOOM", "9"))
+DEFAULT_LED_LINES = os.getenv(
+    "DEFAULT_LED_LINES",
+    "PUTNAM COUNTY,EMERGENCY MGMT,NO ALERTS,SYSTEM READY",
+)
+
+
+def _split_csv(value: str) -> List[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def ensure_list(value: Iterable[str] | Sequence[str] | str | None) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return _split_csv(value)
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+DEFAULT_LOCATION_SETTINGS = {
+    "county_name": DEFAULT_COUNTY_NAME,
+    "state_code": DEFAULT_STATE_CODE,
+    "timezone": DEFAULT_TIMEZONE,
+    "zone_codes": ensure_list(DEFAULT_ZONE_CODES),
+    "area_terms": ensure_list(DEFAULT_AREA_TERMS),
+    "map_center_lat": DEFAULT_MAP_CENTER_LAT,
+    "map_center_lng": DEFAULT_MAP_CENTER_LNG,
+    "map_default_zoom": DEFAULT_MAP_ZOOM,
+    "led_default_lines": ensure_list(DEFAULT_LED_LINES),
+}
+
+
+def normalise_upper(values: Iterable[str]) -> List[str]:
+    return [value.upper() for value in ensure_list(values)]
+
+
+def as_title(value: str) -> str:
+    return value.strip() if value else value
+

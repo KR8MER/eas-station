@@ -1,0 +1,520 @@
+<div class="container-fluid mt-3" id="statisticsDashboardRoot">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-4">
+                <i class="fas fa-chart-bar"></i> Emergency Alert Statistics Dashboard
+                <small class="text-muted">Comprehensive system analytics and insights</small>
+            </h1>
+        </div>
+    </div>
+
+    <div class="filters-panel">
+        <h3><i class="fas fa-filter"></i> Advanced Filtering</h3>
+        <div class="filters-grid">
+            <div>
+                <label for="dateRangePreset">Date Range</label>
+                <select id="dateRangePreset">
+                    <option value="last7">Last 7 days</option>
+                    <option value="last30" selected>Last 30 days</option>
+                    <option value="last90">Last 90 days</option>
+                    <option value="last180">Last 180 days</option>
+                    <option value="last365">Last 365 days</option>
+                    <option value="custom">Custom range</option>
+                </select>
+            </div>
+            <div>
+                <label for="startDateInput">Start Date</label>
+                <input type="date" id="startDateInput">
+            </div>
+            <div>
+                <label for="endDateInput">End Date</label>
+                <input type="date" id="endDateInput">
+            </div>
+            <div>
+                <label for="severityFilter">Severities</label>
+                <select id="severityFilter" multiple></select>
+            </div>
+            <div>
+                <label for="statusFilter">Statuses</label>
+                <select id="statusFilter" multiple></select>
+            </div>
+            <div>
+                <label for="eventFilter">Alert Types</label>
+                <select id="eventFilter" multiple></select>
+            </div>
+        </div>
+        <div class="filters-actions">
+            <button class="apply" id="applyFiltersBtn"><i class="fas fa-sync"></i> Apply Filters</button>
+            <button class="reset" id="resetFiltersBtn"><i class="fas fa-undo"></i> Reset</button>
+            <button class="reset" id="exportDashboardBtn"><i class="fas fa-file-export"></i> Export Filtered Data</button>
+        </div>
+        <div class="filter-summary" id="filterSummary">
+            <span><i class="fas fa-info-circle"></i> Filters active across all charts.</span>
+        </div>
+    </div>
+
+    <div class="quick-stats" id="filteredQuickStats">
+        <div class="quick-stat">
+            <div class="quick-stat-number" id="filteredTotalAlerts">0</div>
+            <div class="quick-stat-label">Alerts in Range</div>
+        </div>
+        <div class="quick-stat">
+            <div class="quick-stat-number" id="filteredAvgPerDay">0</div>
+            <div class="quick-stat-label">Average Per Day</div>
+        </div>
+        <div class="quick-stat">
+            <div class="quick-stat-number" id="filteredTopSeverity">—</div>
+            <div class="quick-stat-label">Top Severity</div>
+        </div>
+        <div class="quick-stat">
+            <div class="quick-stat-number" id="filteredTopEvent">—</div>
+            <div class="quick-stat-label">Top Alert Type</div>
+        </div>
+    </div>
+
+    <!-- Key Metrics Cards -->
+    <div class="row">
+        <div class="col-lg-2 col-md-4 col-sm-6">
+            <div class="stat-card green">
+                <div class="stat-number" id="activeAlertsCount">{{ active_alerts or 0 }}</div>
+                <div class="stat-label">Active Alerts</div>
+                <div class="stat-subtitle">Currently active</div>
+                <div class="stat-delta" id="activeAlertsDelta"></div>
+                <div class="stat-sparkline" id="sparkline-active"></div>
+            </div>
+        </div>
+        <div class="col-lg-2 col-md-4 col-sm-6">
+            <div class="stat-card orange">
+                <div class="stat-number" id="expiredAlertsCount">{{ expired_alerts or 0 }}</div>
+                <div class="stat-label">Expired Alerts</div>
+                <div class="stat-subtitle">No longer active</div>
+                <div class="stat-delta" id="expiredAlertsDelta"></div>
+                <div class="stat-sparkline" id="sparkline-expired"></div>
+            </div>
+        </div>
+        <div class="col-lg-2 col-md-4 col-sm-6">
+            <div class="stat-card blue">
+                <div class="stat-number" id="totalAlertsCount">{{ total_alerts or 0 }}</div>
+                <div class="stat-label">Total Alerts</div>
+                <div class="stat-subtitle">All time</div>
+                <div class="stat-delta" id="totalAlertsDelta"></div>
+                <div class="stat-sparkline" id="sparkline-total"></div>
+            </div>
+        </div>
+        <div class="col-lg-2 col-md-4 col-sm-6">
+            <div class="stat-card purple">
+                <div class="stat-number" id="boundaryCount">{{ total_boundaries or 0 }}</div>
+                <div class="stat-label">Boundaries</div>
+                <div class="stat-subtitle">Geographic regions</div>
+                <div class="stat-delta" id="boundaryDelta"></div>
+            </div>
+        </div>
+        <div class="col-lg-2 col-md-4 col-sm-6">
+            <div class="stat-card red">
+                <div class="stat-number" id="uptime-days">Loading...</div>
+                <div class="stat-label">System Uptime</div>
+                <div class="stat-subtitle">Days online</div>
+                <div class="stat-delta" id="uptimeDelta"></div>
+            </div>
+        </div>
+        <div class="col-lg-2 col-md-4 col-sm-6">
+            <div class="stat-card teal">
+                <div class="stat-number" id="reliabilityDisplay">{{ (polling.success_rate * 100) | round(1) if polling and polling.success_rate else 95 }}%</div>
+                <div class="stat-label">Reliability</div>
+                <div class="stat-subtitle">System uptime</div>
+                <div class="stat-delta" id="reliabilityDelta"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="analytics-section">
+        <h2 class="section-header">
+            <i class="fas fa-chart-area"></i> Advanced Time-Series Analytics
+        </h2>
+
+        <div class="chart-grid-large">
+            <div class="chart-container">
+                <div class="chart-title">
+                    <i class="fas fa-stream"></i> Multi-Timeline Comparison
+                </div>
+                <div id="multiTimelineChart">
+                    <div class="loading-message">
+                        <div class="spinner"></div>
+                        <div>Preparing comparative timelines...</div>
+                    </div>
+                </div>
+                <div class="timeline-annotations" id="timelineAnnotations"></div>
+            </div>
+        </div>
+
+        <div class="chart-grid">
+            <div class="chart-container">
+                <div class="chart-title">
+                    <i class="fas fa-project-diagram"></i> Predictive Alert Forecast (Next 7 Days)
+                </div>
+                <div id="forecastChart">
+                    <div class="loading-message">
+                        <div class="spinner"></div>
+                        <div>Computing alert forecast...</div>
+                    </div>
+                </div>
+                <div class="timeline-annotations" id="forecastSummary"></div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">
+                    <i class="fas fa-layer-group"></i> Master-Detail Alert Drilldown
+                </div>
+                <div id="masterDetailChart">
+                    <div class="loading-message">
+                        <div class="spinner"></div>
+                        <div>Building drilldown hierarchy...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Analysis -->
+    <h2 class="section-header">
+        <i class="fas fa-tags"></i> Alert Analysis
+    </h2>
+
+    <div class="chart-grid">
+        <!-- Alert Types Distribution -->
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-chart-pie"></i> Alert Types Distribution
+            </div>
+            <div id="alertTypesChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading alert types chart...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alert Severity -->
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-exclamation-triangle"></i> Alert Severity Levels
+            </div>
+            <div id="severityChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading severity chart...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Time-Based Analysis -->
+    <h2 class="section-header">
+        <i class="fas fa-clock"></i> Time-Based Analysis
+    </h2>
+
+    <!-- Temporal Heatmap -->
+    <div class="chart-grid-large">
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-calendar-day"></i> Alert Activity Heatmap (Day of Week × Hour)
+            </div>
+            <div id="temporalHeatmapChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading temporal activity matrix...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="chart-grid-small">
+        <!-- Day of Week -->
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-calendar-week"></i> Alerts by Day of Week
+            </div>
+            <div id="dayOfWeekChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading day of week chart...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Monthly Distribution -->
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-calendar-alt"></i> Monthly Alert Distribution
+            </div>
+            <div id="monthlyChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading monthly chart...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alert Status -->
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-list-ul"></i> Alert Status Breakdown
+            </div>
+            <div id="statusChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading status chart...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Historical Trend -->
+    {% if alert_by_year and alert_by_year|length > 1 %}
+    <div class="chart-grid-large">
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-chart-line"></i> Historical Alert Trend
+            </div>
+            <div id="yearlyTrendChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading yearly trend...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Geographic Impact -->
+    {% if most_affected_boundaries and most_affected_boundaries|length > 0 %}
+    <h2 class="section-header">
+        <i class="fas fa-map-marked-alt"></i> Geographic Impact Analysis
+    </h2>
+
+    <div class="chart-grid">
+        <!-- Most Affected Areas -->
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-map-pin"></i> Most Affected Boundaries
+            </div>
+            <div id="affectedAreasChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading affected areas...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Boundary Types -->
+        {% if boundary_stats and boundary_stats|length > 0 %}
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-layer-group"></i> Boundary Types Distribution
+            </div>
+            <div id="boundaryTypesChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading boundary types...</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Impact Details Table -->
+    <div class="chart-container">
+        <div class="chart-title">
+            <i class="fas fa-table"></i> Detailed Impact Report
+        </div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Boundary Name</th>
+                    <th>Type</th>
+                    <th>Alert Count</th>
+                    <th>Impact Level</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for boundary in most_affected_boundaries[:10] %}
+                <tr>
+                    <td><strong>{{ boundary.name }}</strong></td>
+                    <td>
+                        <span class="badge bg-secondary">{{ boundary.type.title() }}</span>
+                    </td>
+                    <td>{{ boundary.count }}</td>
+                    <td>
+                        {% if boundary.count >= 10 %}
+                        <span class="impact-badge impact-high">High Impact</span>
+                        {% elif boundary.count >= 5 %}
+                        <span class="impact-badge impact-medium">Medium Impact</span>
+                        {% else %}
+                        <span class="impact-badge impact-low">Low Impact</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- System Performance -->
+    {% if polling or avg_durations %}
+    <h2 class="section-header">
+        <i class="fas fa-tachometer-alt"></i> System Performance Metrics
+    </h2>
+
+    <div class="chart-grid">
+        <!-- Reliability Gauge -->
+        {% if polling and polling.success_rate %}
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-shield-alt"></i> System Reliability
+            </div>
+            <div id="reliabilityGauge">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading reliability gauge...</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Average Alert Duration -->
+        {% if avg_durations and avg_durations|length > 0 %}
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-hourglass-half"></i> Average Alert Duration
+            </div>
+            <div id="durationChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading duration chart...</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Performance Quick Stats -->
+    {% if polling %}
+    <div class="quick-stats">
+        <div class="quick-stat">
+            <div class="quick-stat-number">{{ polling.total_polls or 0 }}</div>
+            <div class="quick-stat-label">Total Polls</div>
+        </div>
+        <div class="quick-stat">
+            <div class="quick-stat-number">{{ polling.successful_polls or 0 }}</div>
+            <div class="quick-stat-label">Successful</div>
+        </div>
+        <div class="quick-stat">
+            <div class="quick-stat-number">{{ polling.failed_polls or 0 }}</div>
+            <div class="quick-stat-label">Failed</div>
+        </div>
+        <div class="quick-stat">
+            <div class="quick-stat-number">{{ polling.avg_time_ms | round(0) if polling.avg_time_ms else 0 }}ms</div>
+            <div class="quick-stat-label">Avg Response</div>
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <!-- Recent Activity -->
+    {% if recent_by_day and recent_by_day|length > 0 %}
+    <h2 class="section-header">
+        <i class="fas fa-history"></i> Recent Activity Trends
+    </h2>
+
+    <div class="chart-grid-large">
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-chart-area"></i> Recent Alert Activity (Last 30 Days)
+            </div>
+            <div id="recentActivityChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading recent activity...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="analytics-section">
+        <h2 class="section-header">
+            <i class="fas fa-tasks"></i> Alert Lifecycle Timeline
+        </h2>
+
+        <div class="lifecycle-legend">
+            <span><span class="legend-dot" style="background:#dc3545"></span>Extreme</span>
+            <span><span class="legend-dot" style="background:#fd7e14"></span>Severe</span>
+            <span><span class="legend-dot" style="background:#ffc107"></span>Moderate</span>
+            <span><span class="legend-dot" style="background:#17a2b8"></span>Minor/Other</span>
+        </div>
+
+        <div class="chart-grid-large">
+            <div class="chart-container">
+                <div class="chart-title">
+                    <i class="fas fa-business-time"></i> Issuance Through Expiration
+                </div>
+                <div id="lifecycleChart">
+                    <div class="loading-message">
+                        <div class="spinner"></div>
+                        <div>Loading lifecycle timeline...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fun Statistics -->
+    {% if fun_stats %}
+    <h2 class="section-header">
+        <i class="fas fa-star"></i> Interesting System Facts
+    </h2>
+
+    <div class="fun-stats">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="fun-stat">
+                    <h4>{{ fun_stats.busiest_hour or 'N/A' }}</h4>
+                    <p>Peak alert hour</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="fun-stat">
+                    <h4>{{ fun_stats.busiest_day or 'N/A' }}</h4>
+                    <p>Most active day</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="fun-stat">
+                    <h4>{{ fun_stats.avg_duration or 'N/A' }}</h4>
+                    <p>Average alert duration</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="fun-stat">
+                    <h4>"{{ fun_stats.most_common_event or 'None' }}"</h4>
+                    <p>Most common alert type</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Footer Info -->
+    <div class="mt-5 text-center text-muted">
+        <small>
+            <i class="fas fa-info-circle"></i> Statistics generated from {{ total_alerts or 0 }} total alerts across {{ total_boundaries or 0 }} geographic boundaries
+            <br>
+            Dashboard last updated: <span id="stats-timestamp"></span> |
+            Data refresh interval: 5 minutes |
+            <a href="/export/statistics" class="text-decoration-none">
+                <i class="fas fa-download"></i> Export Data
+            </a>
+        </small>
+    </div>
+</div>

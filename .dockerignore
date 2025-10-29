@@ -4,8 +4,9 @@ __pycache__/
 *.pyd
 *.db
 *.sqlite3
-.env
 venv/
 .git
 logs/
 *.log
+.env
+!.env.example

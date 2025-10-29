@@ -540,7 +540,7 @@
                                         {% endif %}
                                     </h6>
                                     <p class="mb-2">
-                                        This alert covers <strong>{{ county_coverage }}%</strong> of Putnam County
+                                        This alert covers <strong>{{ county_coverage }}%</strong> of {{ location_settings.county_name }}
                                         {% if county_coverage >= 95 %}
                                             , affecting virtually all emergency service boundaries.
                                         {% elif county_coverage >= 75 %}
@@ -748,7 +748,7 @@
                         <div class="card-header">
                             <h5 class="mb-0">
                                 <i class="fas fa-clock"></i> Timing Information
-                                <small class="text-muted">(Putnam County Time)</small>
+                                <small class="text-muted">({{ location_settings.county_name }} Time)</small>
                             </h5>
                         </div>
                         <div class="card-body timing-card">
@@ -790,7 +790,7 @@
                             </div>
                             <hr>
                             <small class="text-muted">
-                                <i class="fas fa-info-circle"></i> All times shown in Eastern Time (Putnam County local time) with UTC reference.
+                                <i class="fas fa-info-circle"></i> All times shown in {{ location_settings.timezone }} local time with UTC reference.
                                 Times automatically adjust for daylight saving changes.
                             </small>
                         </div>
@@ -830,7 +830,7 @@
                             {% if coverage_data and coverage_data.get('county') %}
                             <div class="detail-item">
                                 <span class="detail-label">Exact Coverage</span>
-                                {{ coverage_data['county']['coverage_percentage'] }}% of Putnam County
+                                {{ coverage_data['county']['coverage_percentage'] }}% of {{ location_settings.county_name }}
                             </div>
                             {% endif %}
                             <hr>
@@ -840,6 +840,97 @@
                             </div>
                         </div>
                     </div>
+
+                    {% if audio_entries %}
+                    <div class="card mt-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="fas fa-headphones"></i> Broadcast Audio Archive
+                            </h5>
+                            <a href="{{ url_for('audio_history') }}" class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-folder-open"></i> View All Audio
+                            </a>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th scope="col" class="text-nowrap">Generated</th>
+                                            <th scope="col">Details</th>
+                                            <th scope="col" class="text-nowrap">SAME Header</th>
+                                            <th scope="col" class="text-nowrap text-center">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for entry in audio_entries %}
+                                        {% set meta = entry.metadata or {} %}
+                                        <tr>
+                                            <td class="text-nowrap">
+                                                {{ entry.created_at | format_local_datetime(false) if entry.created_at else 'Unknown' }}
+                                                <br>
+                                                <small class="text-muted">
+                                                    {{ entry.created_at | format_local_time if entry.created_at else '' }}
+                                                </small>
+                                            </td>
+                                            <td>
+                                                <strong>{{ meta.get('event', alert.event) or 'Unknown Event' }}</strong>
+                                                {% if meta.get('severity') or alert.severity %}
+                                                    <span class="badge bg-danger ms-1">{{ meta.get('severity', alert.severity) }}</span>
+                                                {% endif %}
+                                                {% if meta.get('status') or alert.status %}
+                                                    <span class="badge bg-secondary ms-1">{{ meta.get('status', alert.status) }}</span>
+                                                {% endif %}
+                                                {% if meta.get('event_code') %}
+                                                    <span class="badge bg-info ms-1">{{ meta.get('event_code') }}</span>
+                                                {% endif %}
+                                                {% set locations_meta = meta.get('locations') %}
+                                                {% if locations_meta %}
+                                                    <div class="small text-muted mt-1">
+                                                        <i class="fas fa-map-pin"></i>
+                                                        {% if locations_meta is string %}
+                                                            {{ locations_meta }}
+                                                        {% elif locations_meta is iterable %}
+                                                            {{ locations_meta | join(', ') }}
+                                                        {% else %}
+                                                            {{ locations_meta }}
+                                                        {% endif %}
+                                                    </div>
+                                                {% endif %}
+                                            </td>
+                                            <td class="text-break">
+                                                <code>{{ entry.same_header }}</code>
+                                            </td>
+                                            <td class="text-center">
+                                                <div class="btn-group btn-group-sm" role="group">
+                                                    {% if entry.audio_url %}
+                                                    <a class="btn btn-outline-primary" href="{{ entry.audio_url }}" target="_blank" rel="noopener">
+                                                        <i class="fas fa-play"></i>
+                                                    </a>
+                                                    {% endif %}
+                                                    {% if entry.text_url %}
+                                                    <a class="btn btn-outline-info" href="{{ entry.text_url }}" target="_blank" rel="noopener" title="Download summary">
+                                                        <i class="fas fa-file-alt"></i>
+                                                    </a>
+                                                    {% endif %}
+                                                    <a class="btn btn-outline-secondary" href="{{ entry.detail_url }}" title="View detail">
+                                                        <i class="fas fa-headphones"></i>
+                                                    </a>
+                                                    {% if entry.eom_url %}
+                                                    <a class="btn btn-outline-warning" href="{{ entry.eom_url }}" target="_blank" rel="noopener" title="EOM Burst">
+                                                        <i class="fas fa-broadcast-tower"></i>
+                                                    </a>
+                                                    {% endif %}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
 
                     <!-- Actions -->
                     <div class="card mt-4 alert-actions">
