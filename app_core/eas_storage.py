@@ -159,16 +159,22 @@ def ensure_eas_audio_columns(logger) -> bool:
 
     try:
         changed = False
-        for column in ("audio_data", "eom_audio_data"):
+        column_definitions = {
+            "audio_data": "BYTEA",
+            "eom_audio_data": "BYTEA",
+            "text_payload": "JSONB DEFAULT '{}'::jsonb",
+        }
+
+        for column, definition in column_definitions.items():
             exists = db.session.execute(column_check_sql, {"column": column}).scalar()
             if exists:
                 continue
 
             logger.info(
-                "Adding eas_messages.%s column for cached audio payloads", column
+                "Adding eas_messages.%s column for cached message payloads", column
             )
             db.session.execute(
-                text(f"ALTER TABLE eas_messages ADD COLUMN {column} BYTEA")
+                text(f"ALTER TABLE eas_messages ADD COLUMN {column} {definition}")
             )
             changed = True
 
