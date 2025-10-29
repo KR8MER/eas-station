@@ -13,12 +13,14 @@ from flask import (
     abort,
     current_app,
     flash,
+    g,
     jsonify,
     redirect,
     render_template,
     render_template_string,
     request,
     send_file,
+    session,
     url_for,
 )
 from sqlalchemy import desc, func, or_
@@ -1515,6 +1517,9 @@ def register(app, logger):
 
     @app.route('/admin/eas_messages/purge', methods=['POST'])
     def admin_purge_eas_messages():
+        if g.current_user is None:
+            return jsonify({'error': 'Authentication required.'}), 401
+
         payload = request.get_json(silent=True) or {}
 
         ids = payload.get('ids')
