@@ -1065,11 +1065,14 @@
                                                 <select class="form-select" id="easToneProfile" name="tone_profile">
                                                     <option value="attention">EAS Attention (853/960 Hz)</option>
                                                     <option value="1050">Legacy 1050 Hz Tone</option>
+                                                    <option value="none">No attention signal (omit)</option>
                                                 </select>
+                                                <div class="form-text">Skip the tone when only data bursts are required.</div>
                                             </div>
                                             <div class="col-md-6">
                                                 <label for="easToneSeconds" class="form-label fw-bold">Attention Signal Duration (seconds)</label>
-                                                <input type="number" class="form-control" id="easToneSeconds" name="tone_seconds" step="0.5" min="0.5">
+                                                <input type="number" class="form-control" id="easToneSeconds" name="tone_seconds" step="0.5" min="0">
+                                                <div class="form-text">Set to 0 to omit the tone entirely.</div>
                                             </div>
                                         </div>
 
@@ -2010,6 +2013,11 @@
                 });
             }
 
+            const toneProfileSelect = document.getElementById('easToneProfile');
+            if (toneProfileSelect) {
+                toneProfileSelect.addEventListener('change', () => updateToneControls());
+            }
+
             form.addEventListener('submit', handleManualEasGenerate);
 
             const resetButton = document.getElementById('resetEasGenerator');
@@ -2158,6 +2166,12 @@
             setEasDefaultValue('easToneSeconds', EAS_DEFAULTS.attentionSeconds);
             setEasDefaultValue('easSampleRate', EAS_DEFAULTS.sampleRate);
 
+            const toneProfileSelect = document.getElementById('easToneProfile');
+            if (toneProfileSelect) {
+                toneProfileSelect.value = 'attention';
+            }
+            updateToneControls();
+
             const includeTts = document.getElementById('easIncludeTts');
             if (includeTts) {
                 includeTts.checked = (EAS_DEFAULTS.ttsProvider || '') === 'azure';
@@ -2204,13 +2218,15 @@
 
             const toneProfileSelect = document.getElementById('easToneProfile');
             if (toneProfileSelect) {
-                toneProfileSelect.value = 'attention';
+                toneProfileSelect.value = 'none';
             }
 
             const toneSecondsInput = document.getElementById('easToneSeconds');
             if (toneSecondsInput) {
-                toneSecondsInput.value = EAS_DEFAULTS.attentionSeconds || 8;
+                toneSecondsInput.value = '0';
             }
+
+            updateToneControls();
 
             assignNewIdentifier(true);
             setSelectedSameCodes(getConfiguredDefaultSameCodes());
@@ -2230,7 +2246,7 @@
                 instructionInput.value = '';
             }
 
-            setEasGeneratorStatus('Loaded the Required Weekly Test preset. Review the narration before transmitting.', 'info');
+            setEasGeneratorStatus('Loaded the Required Weekly Test preset with the attention signal omitted. Review the narration before transmitting.', 'info');
             updateSameHeaderPreview();
         }
 
@@ -2247,6 +2263,31 @@
                 return;
             }
             element.value = value;
+        }
+
+        function updateToneControls() {
+            const toneProfileSelect = document.getElementById('easToneProfile');
+            const toneSecondsInput = document.getElementById('easToneSeconds');
+            if (!toneProfileSelect || !toneSecondsInput) {
+                return;
+            }
+
+            const profile = (toneProfileSelect.value || '').toLowerCase();
+            const omitTone = profile === 'none';
+
+            toneSecondsInput.readOnly = omitTone;
+            toneSecondsInput.classList.toggle('bg-light', omitTone);
+            toneSecondsInput.classList.toggle('text-muted', omitTone);
+            if (omitTone) {
+                toneSecondsInput.value = '0';
+                toneSecondsInput.setAttribute('aria-readonly', 'true');
+            } else {
+                toneSecondsInput.removeAttribute('aria-readonly');
+                const secondsValue = Number(toneSecondsInput.value);
+                if (!Number.isFinite(secondsValue) || secondsValue <= 0) {
+                    toneSecondsInput.value = EAS_DEFAULTS.attentionSeconds || 8;
+                }
+            }
         }
 
         function assignNewIdentifier(force = false) {
@@ -2983,8 +3024,18 @@
             const headerDetail = data.same_header_detail || {};
             const headerLocations = Array.isArray(headerDetail.locations) ? headerDetail.locations : [];
             const fallbackLocations = (data.same_locations || []).map((code) => `<code>${escapeHtml(code)}</code>`).join(', ');
-            const toneProfile = data.tone_profile === '1050hz' ? 'Legacy 1050 Hz Tone' : 'EAS Attention Tone';
-            const toneDuration = data.tone_seconds ? `${Number(data.tone_seconds).toFixed(1)} seconds` : '—';
+            let toneProfile = 'EAS Attention Tone';
+            if ((data.tone_profile || '').toLowerCase() === '1050hz') {
+                toneProfile = 'Legacy 1050 Hz Tone';
+            } else if ((data.tone_profile || '').toLowerCase() === 'none') {
+                toneProfile = 'Attention Signal Omitted';
+            }
+
+            const toneDuration = (data.tone_profile || '').toLowerCase() === 'none'
+                ? 'Not included'
+                : data.tone_seconds
+                    ? `${Number(data.tone_seconds).toFixed(1)} seconds`
+                    : '—';
             const messageText = data.message_text
                 ? escapeHtml(data.message_text).replace(/\r?\n/g, '<br>')
                 : '';

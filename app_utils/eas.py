@@ -435,10 +435,13 @@ def build_same_header(alert: object, payload: Dict[str, object], config: Dict[st
 
 
 def build_eom_header(config: Dict[str, object]) -> str:
-    originator = str(config.get('originator', 'WXR'))[:3].upper()
-    station = str(config.get('station_id', 'EASNODES')).ljust(8)[:8]
-    julian = _julian_time(datetime.now(timezone.utc))
-    return f"ZCZC-{originator}-EOM-000000+0000-{julian}-{station}-"
+    """Return the EOM payload per 47 CFR §11.31(c).
+
+    The End Of Message burst is simply the ASCII string ``NNNN`` framed by the
+    SAME preamble. No originator, location, or timing fields are transmitted.
+    """
+
+    return "NNNN"
 
 
 def _compose_message_text(alert: object) -> str:
@@ -643,13 +646,13 @@ class EASAudioGenerator:
         )
 
         samples: List[int] = []
-        for _ in range(3):
+        for burst_index in range(3):
             samples.extend(header_samples)
             samples.extend(_generate_silence(1.0, self.sample_rate))
 
         tone_duration = float(self.config.get('attention_tone_seconds', 8) or 8)
         samples.extend(_generate_tone((853.0, 960.0), tone_duration, self.sample_rate, amplitude))
-        samples.extend(_generate_silence(0.5, self.sample_rate))
+        samples.extend(_generate_silence(1.0, self.sample_rate))
 
         message_text = _compose_message_text(alert)
         if message_text:
@@ -658,8 +661,10 @@ class EASAudioGenerator:
 
         voice_samples = self._maybe_generate_voiceover(message_text)
         if voice_samples:
-            samples.extend(_generate_silence(0.5, self.sample_rate))
+            samples.extend(_generate_silence(1.0, self.sample_rate))
             samples.extend(voice_samples)
+
+        samples.extend(_generate_silence(1.0, self.sample_rate))
 
         _write_wave_file(audio_path, samples, self.sample_rate)
         self.logger.info(f"Generated SAME audio at {audio_path}")
@@ -708,6 +713,8 @@ class EASAudioGenerator:
             if burst_index < 2:
                 samples.extend(_generate_silence(1.0, self.sample_rate))
 
+        samples.extend(_generate_silence(1.0, self.sample_rate))
+
         _write_wave_file(audio_path, samples, self.sample_rate)
         if self.logger:
             self.logger.debug('Generated EOM audio at %s', audio_path)
@@ -724,7 +731,7 @@ class EASAudioGenerator:
         tone_duration: Optional[float] = None,
         include_tts: bool = True,
         silence_between_headers: float = 1.0,
-        silence_after_header: float = 0.5,
+        silence_after_header: float = 1.0,
     ) -> Dict[str, object]:
         amplitude = 0.7 * 32767
         same_bits = _encode_same_bits(header)
@@ -744,20 +751,28 @@ class EASAudioGenerator:
             if burst_index < repeats - 1:
                 same_samples.extend(_generate_silence(silence_between_headers, self.sample_rate))
 
-        tone_seconds = tone_duration
-        if tone_seconds is None:
-            tone_seconds = float(self.config.get('attention_tone_seconds', 8) or 8)
-        tone_seconds = max(0.25, float(tone_seconds))
-
         profile = (tone_profile or 'attention').strip().lower()
-        if profile in {'1050', '1050hz', 'single'}:
-            tone_freqs: Iterable[float] = (1050.0,)
-            profile_label = '1050hz'
-        else:
-            tone_freqs = (853.0, 960.0)
-            profile_label = 'attention'
+        omit_tone = profile in {'none', 'omit', 'off', 'disabled'}
 
-        attention_samples = _generate_tone(tone_freqs, tone_seconds, self.sample_rate, amplitude)
+        tone_seconds = tone_duration
+        if tone_seconds in (None, ''):
+            tone_seconds = float(self.config.get('attention_tone_seconds', 8) or 8)
+
+        attention_samples: List[int] = []
+        if omit_tone:
+            tone_seconds = 0.0
+            tone_freqs: Iterable[float] = ()
+            profile_label = 'none'
+        else:
+            tone_seconds = max(0.25, float(tone_seconds))
+            if profile in {'1050', '1050hz', 'single'}:
+                tone_freqs = (1050.0,)
+                profile_label = '1050hz'
+            else:
+                tone_freqs = (853.0, 960.0)
+                profile_label = 'attention'
+
+            attention_samples = _generate_tone(tone_freqs, tone_seconds, self.sample_rate, amplitude)
 
         message_text = _compose_message_text(alert)
         tts_samples: List[int] = []
@@ -790,6 +805,8 @@ class EASAudioGenerator:
             if burst_index < 2:
                 eom_samples.extend(_generate_silence(1.0, self.sample_rate))
 
+        eom_samples.extend(_generate_silence(1.0, self.sample_rate))
+
         trailing_silence = _generate_silence(silence_after_header, self.sample_rate)
         composite_samples: List[int] = []
         composite_samples.extend(same_samples)
@@ -805,7 +822,7 @@ class EASAudioGenerator:
             'header': header,
             'message_text': message_text,
             'tone_profile': profile_label,
-            'tone_seconds': tone_seconds,
+            'tone_seconds': float(tone_seconds),
             'same_samples': same_samples,
             'attention_samples': attention_samples,
             'tts_samples': tts_samples,

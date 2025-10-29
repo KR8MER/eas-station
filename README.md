@@ -235,7 +235,7 @@ When enabled, the poller generates full SAME header bursts, raises an optional G
 2. **Install audio / GPIO dependencies** on the device that runs the poller container (e.g., `alsa-utils` for `aplay`, `RPi.GPIO` for Raspberry Pi hardware). The broadcaster automatically detects when `RPi.GPIO` is unavailable and will log a warning instead of raising an exception.
 
 3. **Review generated assets**:
-   - Each alert produces a `*.wav` file that contains three SAME bursts, the attention tone, and an automatically generated EOM data burst sequence.
+   - Each alert produces a `*.wav` file that contains three SAME bursts, the selected attention tone (or no tone when omitted), and an automatically generated EOM data burst sequence.
    - A matching `*.txt` file stores the JSON metadata (identifier, timestamps, SAME header, and narrative).
    - The admin console lists the most recent transmissions, allowing operators to play audio or download the summary directly from the browser.
 
@@ -245,12 +245,12 @@ The **Manual Broadcast Builder** on the EAS Output tab mirrors the workflow of a
 
 1. Open **Admin → EAS Output** and build your SAME target list with the hierarchical picker: choose a state or territory, select the county or statewide PSSCCC entry, and click **Add Location**. The textarea still accepts pasted codes for bulk entry, and the running list is de-duplicated automatically with a hard stop at the 31-code SAME limit.
 2. Confirm the ORG, EEE, purge time (TTTT), and station identifier (LLLLLLLL). The originator selector now reflects the four production codes (EAS, CIV, WXR, PEP), the event dropdown hides the legacy `??*` placeholders, and the live header preview renders the complete `ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-` sequence so you can verify every field before you transmit.
-3. Need a test in a hurry? Tap **Quick Weekly Test** to preload the Required Weekly Test template: the tool drops in the configured SAME counties, forces the alert into `Test` status, and seeds the headline/message so you only have to review before going live.
-4. Click **Generate Package** to produce discrete WAV files for the SAME bursts, attention signal (dual-tone or 1050 Hz), optional narration, and the EOM burst. A composite file is also produced so you can audition the full activation end-to-end. SAME headers always transmit in three bursts automatically per the FCC specification.
+3. Need a test in a hurry? Tap **Quick Weekly Test** to preload the Required Weekly Test template: the tool drops in the configured SAME counties, forces the alert into `Test` status, seeds the headline/message, and omits the attention signal (FCC does not require tones for RWTs). Switch the attention selector if you need to add it back in.
+4. Click **Generate Package** to produce discrete WAV files for the SAME bursts, attention signal (dual-tone, 1050 Hz, or omit entirely), optional narration, and the EOM burst. A composite file is also produced so you can audition the full activation end-to-end. SAME headers always transmit in three bursts automatically per the FCC specification, with one-second guard intervals between each section.
 
-The header breakdown card reiterates the commercial nomenclature (preamble, ORG, EEE, PSSCCC, +TTTT, -JJJHHMM, -LLLLLLLL-, and the trailing NNNN) and includes the FCC/FEMA guidance for each field so operators and trainees can cross-check the encoding rules.
+The header breakdown card reiterates the commercial nomenclature (preamble, ORG, EEE, PSSCCC, +TTTT, -JJJHHMM, -LLLLLLLL-, and the trailing `NNNN` EOM burst) and includes the FCC/FEMA guidance for each field so operators and trainees can cross-check the encoding rules.
 
-> 📻 Under the hood the digital bursts now honour the FCC SAME framing: 520 5⁄6 baud, seven LSB-first ASCII bits with a trailing null bit, and fractional-bit timing that keeps the 2083⅓ Hz/1562.5 Hz AFSK tones locked on spec.
+> 📻 Under the hood the digital bursts now honour the FCC SAME framing: 520 5⁄6 baud, seven LSB-first ASCII bits with a trailing null bit, and fractional-bit timing that keeps the 2083⅓ Hz/1562.5 Hz AFSK tones locked on spec. Each section carries a full one-second pause, and the End Of Message burst transmits the canonical `NNNN` payload exactly three times.
 
 Prefer scripts or automated testing? The legacy helper at `tools/generate_sample_audio.py` is still shipped with the project for command-line use.
 

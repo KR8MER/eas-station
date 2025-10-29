@@ -1706,13 +1706,28 @@ def admin_manual_eas_generate():
     if duration_minutes <= 0:
         return _validation_error('Duration must be greater than zero minutes.')
 
-    tone_seconds = payload.get('tone_seconds')
-    try:
-        tone_seconds = float(tone_seconds) if tone_seconds is not None else None
-    except (TypeError, ValueError):
-        return _validation_error('Tone duration must be numeric.')
+    tone_seconds_raw = payload.get('tone_seconds')
+    if tone_seconds_raw in (None, '', 'null'):
+        tone_seconds = None
+    else:
+        try:
+            tone_seconds = float(tone_seconds_raw)
+        except (TypeError, ValueError):
+            return _validation_error('Tone duration must be numeric.')
 
-    tone_profile = (payload.get('tone_profile') or 'attention').strip().lower()
+    tone_profile_raw = (payload.get('tone_profile') or 'attention').strip().lower()
+    if tone_profile_raw in {'none', 'omit', 'off', 'disabled'}:
+        tone_profile = 'none'
+    elif tone_profile_raw in {'1050', '1050hz', 'single'}:
+        tone_profile = '1050hz'
+    else:
+        tone_profile = 'attention'
+
+    if tone_profile == 'none':
+        tone_seconds = 0.0
+    elif tone_seconds is not None and tone_seconds <= 0:
+        return _validation_error('Tone duration must be greater than zero seconds when a signal is included.')
+
     include_tts = bool(payload.get('include_tts', True))
 
     allowed_originators = set(PRIMARY_ORIGINATORS)
