@@ -833,9 +833,11 @@ class EASBroadcaster:
         self.logger.info('Playing alert audio using %s', ' '.join(command))
         _run_command(command, self.logger)
 
-    def handle_alert(self, alert: object, payload: Dict[str, object]) -> None:
+    def handle_alert(self, alert: object, payload: Dict[str, object]) -> Dict[str, object]:
+        result: Dict[str, object] = {"same_triggered": False}
         if not self.enabled or not alert:
-            return
+            result["reason"] = "Broadcasting disabled"
+            return result
 
         status = (getattr(alert, 'status', '') or '').lower()
         message_type = (payload.get('message_type') or getattr(alert, 'message_type', '') or '').lower()
@@ -848,14 +850,17 @@ class EASBroadcaster:
 
         if status not in {'actual', 'test'}:
             self.logger.debug('Skipping EAS generation for status %s', status)
-            return
+            result['reason'] = f"Unsupported status: {status}"
+            return result
         if message_type not in {'alert', 'update', 'test'}:
             self.logger.debug('Skipping EAS generation for message type %s', message_type)
-            return
+            result['reason'] = f"Unsupported message type: {message_type}"
+            return result
         if event_name in suppressed_events:
             pretty_event = getattr(alert, 'event', '') or payload.get('event') or event_name
             self.logger.info('Skipping EAS generation for event %s', pretty_event)
-            return
+            result['reason'] = f"Suppressed event {pretty_event}"
+            return result
 
         try:
             header, location_codes, event_code = build_same_header(
@@ -866,7 +871,8 @@ class EASBroadcaster:
             )
         except ValueError as exc:
             self.logger.info('Skipping EAS generation: %s', exc)
-            return
+            result['reason'] = str(exc)
+            return result
 
         (
             audio_filename,
@@ -885,6 +891,17 @@ class EASBroadcaster:
 
         audio_path = os.path.join(self.audio_generator.output_dir, audio_filename)
         eom_path = os.path.join(self.audio_generator.output_dir, eom_filename) if eom_filename else None
+
+        result.update(
+            {
+                "same_triggered": True,
+                "event_code": event_code,
+                "same_header": header,
+                "audio_path": audio_path,
+                "eom_path": eom_path,
+                "location_codes": location_codes,
+            }
+        )
 
         controller = self.gpio_controller
         if controller:
@@ -929,9 +946,13 @@ class EASBroadcaster:
             self.db_session.add(record)
             self.db_session.commit()
             self.logger.info('Stored EAS message metadata for alert %s', getattr(alert, 'identifier', 'unknown'))
+            result['record_id'] = getattr(record, 'id', None)
         except Exception as exc:
             self.logger.error(f"Failed to persist EAS message record: {exc}")
             self.db_session.rollback()
+            result['error'] = str(exc)
+
+        return result
 
 
 __all__ = [

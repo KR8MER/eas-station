@@ -6,6 +6,8 @@ from flask import Flask, jsonify
 from sqlalchemy import text
 
 from app_core.extensions import db
+from app_core.models import RadioReceiver
+from app_core.radio import ensure_radio_tables
 from app_core.led import LED_AVAILABLE
 from app_core.location import get_location_settings
 from app_utils import get_location_timezone_name, local_now, utc_now
@@ -26,6 +28,13 @@ def register(app: Flask, logger) -> None:
         try:
             db.session.execute(text("SELECT 1")).fetchone()
 
+            try:
+                ensure_radio_tables(route_logger)
+                receiver_total = RadioReceiver.query.count()
+            except Exception as radio_exc:  # pragma: no cover - defensive
+                route_logger.debug("Radio table check failed: %s", radio_exc)
+                receiver_total = None
+
             return jsonify(
                 {
                     "status": "healthy",
@@ -34,6 +43,7 @@ def register(app: Flask, logger) -> None:
                     "version": _system_version(),
                     "database": "connected",
                     "led_available": LED_AVAILABLE,
+                    "radio_receivers": receiver_total,
                 }
             )
         except Exception as exc:  # pragma: no cover - defensive
@@ -103,6 +113,50 @@ Allow: /
             200,
             {"Content-Type": "text/plain"},
         )
+
+    @app.route("/api/monitoring/radio")
+    def monitoring_radio():
+        try:
+            ensure_radio_tables(route_logger)
+        except Exception as exc:  # pragma: no cover - defensive
+            route_logger.debug("Radio table validation failed: %s", exc)
+
+        receivers = (
+            RadioReceiver.query.order_by(RadioReceiver.display_name, RadioReceiver.identifier).all()
+        )
+
+        payload = []
+        for receiver in receivers:
+            latest = receiver.latest_status()
+            payload.append(
+                {
+                    "id": receiver.id,
+                    "identifier": receiver.identifier,
+                    "display_name": receiver.display_name,
+                    "driver": receiver.driver,
+                    "frequency_hz": receiver.frequency_hz,
+                    "sample_rate": receiver.sample_rate,
+                    "gain": receiver.gain,
+                    "channel": receiver.channel,
+                    "auto_start": receiver.auto_start,
+                    "enabled": receiver.enabled,
+                    "notes": receiver.notes,
+                    "latest_status": (
+                        {
+                            "reported_at": latest.reported_at.isoformat() if latest and latest.reported_at else None,
+                            "locked": bool(latest.locked) if latest else None,
+                            "signal_strength": latest.signal_strength if latest else None,
+                            "last_error": latest.last_error if latest else None,
+                            "capture_mode": latest.capture_mode if latest else None,
+                            "capture_path": latest.capture_path if latest else None,
+                        }
+                        if latest
+                        else None
+                    ),
+                }
+            )
+
+        return jsonify({"receivers": payload, "count": len(payload)})
 
 
 __all__ = ["register"]

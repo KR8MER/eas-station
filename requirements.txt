@@ -14,6 +14,7 @@ Werkzeug==2.3.7
 SQLAlchemy==2.0.21
 psycopg2-binary==2.9.7
 GeoAlchemy2==0.14.1
+Alembic==1.12.1
 
 # HTTP client for API calls
 requests==2.31.0
