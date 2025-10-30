@@ -155,11 +155,23 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 
 raw_secure_flag = os.environ.get('SESSION_COOKIE_SECURE')
 if raw_secure_flag is not None:
-    session_cookie_secure = raw_secure_flag.lower() == 'true'
+    session_cookie_secure = raw_secure_flag.lower() in {'1', 'true', 'yes'}
+    logger.info(
+        'Session cookie HTTPS requirement overridden via SESSION_COOKIE_SECURE=%s',
+        session_cookie_secure,
+    )
 else:
     debug_env = os.environ.get('FLASK_ENV', '').lower() == 'development'
     debug_flag = os.environ.get('FLASK_DEBUG', '').lower() in {'1', 'true', 'yes'}
-    session_cookie_secure = not (debug_env or debug_flag)
+    prefer_https = os.environ.get('PREFERRED_URL_SCHEME', '').lower() == 'https'
+    session_cookie_secure = prefer_https and not (debug_env or debug_flag)
+    if session_cookie_secure:
+        logger.info('Session cookies will require HTTPS transport.')
+    else:
+        logger.warning(
+            'Session cookies are not limited to HTTPS transport. '
+            'Set SESSION_COOKIE_SECURE=true in production deployments.'
+        )
 
 app.config['SESSION_COOKIE_SECURE'] = session_cookie_secure
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
