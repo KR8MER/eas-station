@@ -138,7 +138,7 @@ def _fetch_intersections_per_boundary(alert: CAPAlert, alert_geom) -> List[Dict[
     return intersections
 
 
-_fallback_logger = logging.getLogger("noaa_alerts_systems")
+_fallback_logger = logging.getLogger("eas_station")
 
 
 def _logger():
