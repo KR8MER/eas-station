@@ -6,27 +6,27 @@
 # communicate with the external database instance.
 #
 # Core Flask and web framework dependencies
-Flask==2.3.3
-Flask-SQLAlchemy==3.0.5
-Werkzeug==2.3.7
+Flask==3.0.3
+Flask-SQLAlchemy==3.1.1
+Werkzeug==3.0.6
 
 # Database dependencies
-SQLAlchemy==2.0.21
-psycopg2-binary==2.9.7
-GeoAlchemy2==0.14.1
-Alembic==1.12.1
+SQLAlchemy==2.0.44
+psycopg2-binary==2.9.10
+GeoAlchemy2==0.15.2
+Alembic==1.14.0
 
 # HTTP client for API calls
-requests==2.31.0
+requests==2.32.3
 
 # Timezone handling (CRITICAL FOR PROPER TIME DISPLAY)
-pytz==2023.3
+pytz==2024.2
 
 # System monitoring
-psutil==5.9.5
+psutil==6.1.1
 
 # Environment variables
-python-dotenv==1.0.0
+python-dotenv==1.0.1
 
 # JSON handling (usually included with Python)
 # But some systems may need explicit installation
@@ -36,7 +36,7 @@ python-dotenv==1.0.0
 # python-dateutil==2.8.2  # Uncomment if needed
 
 # Production WSGI server
-gunicorn==21.2.0
+gunicorn==23.0.0
 
 # Development and debugging (optional)
 # flask-debugtoolbar==0.13.1  # Uncomment for development

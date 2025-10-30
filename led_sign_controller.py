@@ -583,7 +583,7 @@ class Alpha9120CController:
         if self.socket:
             try:
                 self.socket.close()
-            except:
+            except Exception:
                 pass
             self.socket = None
         self.connected = False

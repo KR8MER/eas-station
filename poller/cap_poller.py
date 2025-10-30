@@ -1866,7 +1866,7 @@ class CAPPoller:
         except Exception as e:
             self.logger.error(f"log_poll_history error: {e}")
             try: self.db_session.rollback()
-            except: pass
+            except Exception: pass
 
     def log_system_event(self, level: str, message: str, details: Dict = None):
         try:
@@ -1888,7 +1888,7 @@ class CAPPoller:
         except Exception as e:
             self.logger.error(f"log_system_event error: {e}")
             try: self.db_session.rollback()
-            except: pass
+            except Exception: pass
 
     # ---------- Main poll ----------
     def poll_and_process(self) -> Dict:
