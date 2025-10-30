@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
-tracks releases under the 2.1.x series.
+tracks releases under the 2.x series.
 
 ## [Unreleased]
 ### Added
@@ -221,4 +221,14 @@ tracks releases under the 2.1.x series.
   `poll_history.data_source` columns during application or poller start-up.
 - Surfaced poll provenance in the statistics dashboard, including the observed feed sources
   for the most recent runs.
+
+## [2.3.0] - 2025-10-30
+### Changed
+- Normalized every database URL builder to require `POSTGRES_PASSWORD`, apply safe
+  defaults for the other `POSTGRES_*` variables, and URL-encode credentials so
+  special characters work consistently across the web app, CLI, and poller.
+- Trimmed duplicate database connection variables from the default `.env` file and
+  aligned the container metadata defaults with the current PostGIS image tag.
+- Bumped the default `APP_BUILD_VERSION` to 2.3.0 across the application and sample
+  environment template so deployments surface the new release number.
 

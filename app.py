@@ -157,7 +157,7 @@ if not secret_key or secret_key == 'dev-key-change-in-production':
 app.secret_key = secret_key
 
 # Application versioning (exposed via templates for quick deployment verification)
-SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.2.0')
+SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.3.0')
 app.config['SYSTEM_VERSION'] = SYSTEM_VERSION
 
 def _build_database_url() -> str:

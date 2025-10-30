@@ -5,10 +5,10 @@ Docker-safe DB defaults, strict jurisdiction filtering, PostGIS geometry/interse
 optional LED sign integration.
 
 Database Configuration (via environment variables or --database-url):
-  POSTGRES_HOST      - Database host (default: postgresql for Docker)
+  POSTGRES_HOST      - Database host (default: postgres for Docker)
   POSTGRES_PORT      - Database port (default: 5432)
-  POSTGRES_DB        - Database name (REQUIRED)
-  POSTGRES_USER      - Database user (REQUIRED)
+  POSTGRES_DB        - Database name (defaults to POSTGRES_USER)
+  POSTGRES_USER      - Database user (default: postgres)
   POSTGRES_PASSWORD  - Database password (REQUIRED)
   DATABASE_URL       - Or provide full connection string to override individual vars
 
@@ -33,6 +33,7 @@ import argparse
 
 import pytz
 from dotenv import load_dotenv
+from urllib.parse import quote
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, os.pardir))
@@ -1786,26 +1787,28 @@ class CAPPoller:
 # =======================================================================================
 
 def build_database_url_from_env() -> str:
-    # Highest priority: DATABASE_URL
+    """Build a SQLAlchemy database URL from environment variables."""
+
     url = os.getenv("DATABASE_URL")
     if url:
         return url
-    # Else compose from parts - require explicit credentials for security
-    host = os.getenv("POSTGRES_HOST", "postgresql")  # Docker service name default is safe
-    port = os.getenv("POSTGRES_PORT", "5432")        # Standard PostgreSQL port
-    db   = os.getenv("POSTGRES_DB")
-    user = os.getenv("POSTGRES_USER")
-    pw   = os.getenv("POSTGRES_PASSWORD")
 
-    # Require explicit configuration of credentials
-    if not all([db, user, pw]):
+    user = os.getenv("POSTGRES_USER", "postgres") or "postgres"
+    password = os.getenv("POSTGRES_PASSWORD", "")
+    host = os.getenv("POSTGRES_HOST", "postgres") or "postgres"
+    port = os.getenv("POSTGRES_PORT", "5432") or "5432"
+    database = os.getenv("POSTGRES_DB", user) or user
+
+    if not password:
         raise ValueError(
-            "Database configuration incomplete. Either set DATABASE_URL or all of: "
-            "POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD"
+            "POSTGRES_PASSWORD environment variable must be set. "
+            "Either set DATABASE_URL or all required POSTGRES_* variables including password."
         )
 
-    # Use psycopg2 driver explicitly for SQLAlchemy
-    return f"postgresql+psycopg2://{user}:{pw}@{host}:{port}/{db}"
+    user_part = quote(user, safe="")
+    password_part = quote(password, safe="")
+
+    return f"postgresql+psycopg2://{user_part}:{password_part}@{host}:{port}/{database}"
 
 def main():
     parser = argparse.ArgumentParser(description='Emergency CAP Alert Poller (configurable feeds)')
