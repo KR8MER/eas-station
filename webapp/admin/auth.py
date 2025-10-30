@@ -20,8 +20,12 @@ def register_auth_routes(app, logger):
     def _is_safe_redirect_target(target: Optional[str]) -> bool:
         if not target:
             return False
-        ref_url = urlparse(request.host_url)
+        # Parse the target URL to extract the path
         test_url = urlparse(urljoin(request.host_url, target))
+        # Don't redirect to login page itself to prevent redirect loops
+        if test_url.path.rstrip('/') == '/login':
+            return False
+        ref_url = urlparse(request.host_url)
         return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
 
     @app.route('/login', methods=['GET', 'POST'])
