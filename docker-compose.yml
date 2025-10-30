@@ -28,12 +28,15 @@ services:
       - --continuous
       - --interval
       - "120"
+      - --log-level
+      - "DEBUG"
     restart: unless-stopped
     env_file:
       - .env
     environment:
       CAP_POLLER_MODE: IPAWS
       CAP_ENDPOINTS: ${IPAWS_CAP_FEED_URLS:-}
+      LOG_LEVEL: DEBUG
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

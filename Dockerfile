@@ -13,6 +13,8 @@ RUN apt-get update \
         ffmpeg \
         espeak \
         libespeak-ng1 \
+        ca-certificates \
+    && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Create and set working directory
