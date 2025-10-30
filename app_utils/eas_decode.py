@@ -243,8 +243,20 @@ def _bits_to_text(bits: List[int]) -> Dict[str, object]:
         cleaned = segment.strip()
         if not cleaned:
             continue
-        if cleaned.upper().startswith("ZCZC") or cleaned.upper().startswith("NNNN"):
-            headers.append(cleaned)
+
+        upper_segment = cleaned.upper()
+        header_start = -1
+        for marker in ("ZCZC", "NNNN"):
+            header_start = upper_segment.find(marker)
+            if header_start != -1:
+                break
+
+        if header_start == -1:
+            continue
+
+        candidate = cleaned[header_start:]
+        if candidate:
+            headers.append(candidate)
 
     return {
         "text": raw_text,
