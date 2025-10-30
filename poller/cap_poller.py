@@ -4,13 +4,16 @@ NOAA CAP Alert Poller with configurable location filtering
 Docker-safe DB defaults, strict jurisdiction filtering, PostGIS geometry/intersections,
 optional LED sign integration.
 
-Defaults for Docker (override with env or --database-url):
-  POSTGRES_HOST=postgresql   # service/container name (NOT localhost)
-  POSTGRES_PORT=5432
-  POSTGRES_DB=casaos
-  POSTGRES_USER=casaos
-  POSTGRES_PASSWORD=casaos
-  DATABASE_URL=postgresql+psycopg2://casaos:casaos@postgresql:5432/casaos
+Database Configuration (via environment variables or --database-url):
+  POSTGRES_HOST      - Database host (default: postgresql for Docker)
+  POSTGRES_PORT      - Database port (default: 5432)
+  POSTGRES_DB        - Database name (REQUIRED)
+  POSTGRES_USER      - Database user (REQUIRED)
+  POSTGRES_PASSWORD  - Database password (REQUIRED)
+  DATABASE_URL       - Or provide full connection string to override individual vars
+
+All database credentials must be explicitly configured via environment variables.
+No default passwords are provided for security.
 """
 
 import os
