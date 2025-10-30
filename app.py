@@ -164,7 +164,7 @@ def _build_database_url() -> str:
     """Build database URL from environment variables.
 
     Prioritizes DATABASE_URL if set, otherwise builds from POSTGRES_* variables.
-    Requires POSTGRES_PASSWORD to be explicitly set for security.
+    If POSTGRES_PASSWORD is omitted, builds a URL without credentials.
     """
     url = os.getenv('DATABASE_URL')
     if url:
@@ -177,18 +177,16 @@ def _build_database_url() -> str:
     port = os.getenv('POSTGRES_PORT', '5432') or '5432'
     database = os.getenv('POSTGRES_DB', user) or user
 
-    # Require explicit password for security (consistent with configure.py and cap_poller.py)
-    if not password:
-        raise ValueError(
-            "POSTGRES_PASSWORD environment variable must be set. "
-            "Either set DATABASE_URL or all required POSTGRES_* variables including password."
-        )
-
     # URL-encode credentials to handle special characters
     user_part = quote(user, safe='')
-    password_part = quote(password, safe='')
+    password_part = quote(password, safe='') if password else ''
 
-    return f"postgresql+psycopg2://{user_part}:{password_part}@{host}:{port}/{database}"
+    if password_part:
+        auth_segment = f"{user_part}:{password_part}"
+    else:
+        auth_segment = user_part
+
+    return f"postgresql+psycopg2://{auth_segment}@{host}:{port}/{database}"
 
 
 def _get_eas_output_root() -> Optional[str]:

@@ -9,10 +9,10 @@ Database Configuration (via environment variables or --database-url):
   POSTGRES_PORT      - Database port (default: 5432)
   POSTGRES_DB        - Database name (defaults to POSTGRES_USER)
   POSTGRES_USER      - Database user (default: postgres)
-  POSTGRES_PASSWORD  - Database password (REQUIRED)
+  POSTGRES_PASSWORD  - Database password (optional, recommended)
   DATABASE_URL       - Or provide full connection string to override individual vars
 
-All database credentials must be explicitly configured via environment variables.
+All database credentials should be explicitly configured via environment variables when available.
 No default passwords are provided for security.
 """
 
@@ -1799,16 +1799,15 @@ def build_database_url_from_env() -> str:
     port = os.getenv("POSTGRES_PORT", "5432") or "5432"
     database = os.getenv("POSTGRES_DB", user) or user
 
-    if not password:
-        raise ValueError(
-            "POSTGRES_PASSWORD environment variable must be set. "
-            "Either set DATABASE_URL or all required POSTGRES_* variables including password."
-        )
-
     user_part = quote(user, safe="")
-    password_part = quote(password, safe="")
+    password_part = quote(password, safe="") if password else ""
 
-    return f"postgresql+psycopg2://{user_part}:{password_part}@{host}:{port}/{database}"
+    if password_part:
+        auth_segment = f"{user_part}:{password_part}"
+    else:
+        auth_segment = user_part
+
+    return f"postgresql+psycopg2://{auth_segment}@{host}:{port}/{database}"
 
 def main():
     parser = argparse.ArgumentParser(description='Emergency CAP Alert Poller (configurable feeds)')
