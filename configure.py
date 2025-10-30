@@ -22,13 +22,25 @@ class Config:
         )
     SECRET_KEY = _secret_key
 
-    # Database settings - Require explicit DATABASE_URL configuration
+    # Database settings - Auto-build from POSTGRES_* or use DATABASE_URL
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
+
     if not SQLALCHEMY_DATABASE_URI:
-        raise ValueError(
-            "DATABASE_URL environment variable must be set. "
-            "Example: postgresql+psycopg2://user:password@host:5432/dbname"
-        )
+        # Build from individual POSTGRES_* variables (same logic as app.py)
+        user = os.environ.get('POSTGRES_USER', 'postgres') or 'postgres'
+        password = os.environ.get('POSTGRES_PASSWORD', '')
+        host = os.environ.get('POSTGRES_HOST', 'postgres') or 'postgres'
+        port = os.environ.get('POSTGRES_PORT', '5432') or '5432'
+        database = os.environ.get('POSTGRES_DB', user) or user
+
+        if not password:
+            raise ValueError(
+                "POSTGRES_PASSWORD environment variable must be set. "
+                "Either set DATABASE_URL or all required POSTGRES_* variables."
+            )
+
+        SQLALCHEMY_DATABASE_URI = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
+
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_pre_ping': True,
