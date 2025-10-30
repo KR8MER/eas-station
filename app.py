@@ -150,11 +150,16 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SECURE'] = (
-    os.environ.get('SESSION_COOKIE_SECURE', 'true').lower() == 'true'
-    if not app.debug
-    else False
-)
+
+raw_secure_flag = os.environ.get('SESSION_COOKIE_SECURE')
+if raw_secure_flag is not None:
+    session_cookie_secure = raw_secure_flag.lower() == 'true'
+else:
+    debug_env = os.environ.get('FLASK_ENV', '').lower() == 'development'
+    debug_flag = os.environ.get('FLASK_DEBUG', '').lower() in {'1', 'true', 'yes'}
+    session_cookie_secure = not (debug_env or debug_flag)
+
+app.config['SESSION_COOKIE_SECURE'] = session_cookie_secure
 app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
 try:
     session_hours = int(os.environ.get('SESSION_LIFETIME_HOURS', '12'))
