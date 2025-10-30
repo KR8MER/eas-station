@@ -1,5 +1,5 @@
 # Full EAS Console Parity To-Do List
-
+~~…~~
 ## 1. Multi-SDR Front-End Orchestration *(recommended starting point)*
 - [x] Build a modular multi-SDR capture framework.
   - [x] Draft base interfaces and a coordination manager in `app_core/radio/manager.py`.
@@ -8,6 +8,7 @@
   - [x] Persist receiver configuration in Postgres (new tables via Alembic migration under `app_core/models.py`) and surface a CRUD UI in `webapp/routes_settings_radio.py` with a template in `templates/settings/radio.html`.
     - [x] Added SQLAlchemy models for receiver configuration and status history in `app_core/models.py`.
   - [x] Update system health endpoints to report receiver lock, signal metrics, and error states.
+~~…~~
 
 ## 2. Audio Ingest Pipeline
 - [ ] Implement a unified audio ingest pipeline.
