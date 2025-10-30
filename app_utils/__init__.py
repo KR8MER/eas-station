@@ -15,6 +15,7 @@ from .time import (
     utc_now,
 )
 from .formatting import format_bytes, format_uptime
+from .export import generate_csv
 from .system import build_system_health_snapshot
 from .alert_sources import (
     ALERT_SOURCE_IPAWS,
@@ -38,6 +39,7 @@ __all__ = [
     "is_alert_expired",
     "format_bytes",
     "format_uptime",
+    "generate_csv",
     "build_system_health_snapshot",
     "get_location_timezone",
     "get_location_timezone_name",
