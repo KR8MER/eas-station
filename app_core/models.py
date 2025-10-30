@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from flask import current_app, has_app_context
 from geoalchemy2 import Geometry
@@ -393,6 +393,100 @@ class LocationSettings(db.Model):
             "led_default_lines": list(self.led_default_lines or []),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+class RadioReceiver(db.Model):
+    """Persistent configuration for a hardware or virtual radio receiver."""
+
+    __tablename__ = "radio_receivers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    identifier = db.Column(db.String(64), unique=True, nullable=False)
+    display_name = db.Column(db.String(128), nullable=False)
+    driver = db.Column(db.String(64), nullable=False)
+    frequency_hz = db.Column(db.Float, nullable=False)
+    sample_rate = db.Column(db.Integer, nullable=False)
+    gain = db.Column(db.Float)
+    channel = db.Column(db.Integer)
+    auto_start = db.Column(db.Boolean, nullable=False, default=True)
+    enabled = db.Column(db.Boolean, nullable=False, default=True)
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+    def to_receiver_config(self) -> "ReceiverConfig":
+        """Translate this database row into a radio manager configuration object."""
+
+        from app_core.radio import ReceiverConfig
+
+        return ReceiverConfig(
+            identifier=self.identifier,
+            driver=self.driver,
+            frequency_hz=float(self.frequency_hz),
+            sample_rate=int(self.sample_rate),
+            gain=self.gain,
+            channel=self.channel,
+            enabled=bool(self.enabled and self.auto_start),
+        )
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging helper
+        return (
+            f"<RadioReceiver id={self.id} identifier={self.identifier!r} "
+            f"driver={self.driver!r} frequency_hz={self.frequency_hz}>"
+        )
+
+    def latest_status(self) -> Optional["RadioReceiverStatus"]:
+        """Return the most recent status sample if any have been recorded."""
+
+        if hasattr(self, "status_logs"):
+            return self.status_logs.order_by(RadioReceiverStatus.created_at.desc()).first()
+
+        return None
+
+
+class RadioReceiverStatus(db.Model):
+    """Historical status samples emitted by configured receivers."""
+
+    __tablename__ = "radio_receiver_status"
+
+    id = db.Column(db.Integer, primary_key=True)
+    receiver_id = db.Column(
+        db.Integer,
+        db.ForeignKey("radio_receivers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+    locked = db.Column(db.Boolean, default=False, nullable=False)
+    signal_strength = db.Column(db.Float)
+    last_error = db.Column(db.Text)
+
+    receiver = db.relationship(
+        "RadioReceiver",
+        backref=db.backref("status_logs", lazy="dynamic", cascade="all, delete-orphan"),
+    )
+
+    def to_receiver_status(self) -> "ReceiverStatus":
+        """Convert the status row into the lightweight dataclass used by the manager."""
+
+        from app_core.radio import ReceiverStatus
+
+        return ReceiverStatus(
+            identifier=self.receiver.identifier if self.receiver else "unknown",
+            locked=bool(self.locked),
+            signal_strength=self.signal_strength,
+            last_error=self.last_error,
+        )
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging helper
+        return (
+            f"<RadioReceiverStatus receiver_id={self.receiver_id} locked={self.locked} "
+            f"signal_strength={self.signal_strength}>"
+        )
 
 
 class LEDMessage(db.Model):

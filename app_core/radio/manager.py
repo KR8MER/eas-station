@@ -5,7 +5,10 @@ from __future__ import annotations
 import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Mapping, Optional
+from typing import TYPE_CHECKING, Dict, Iterable, List, Mapping, Optional
+
+if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
+    from app_core.models import RadioReceiver, RadioReceiverStatus
 
 
 @dataclass(frozen=True)
@@ -99,6 +102,16 @@ class RadioManager:
 
             self._receivers = desired
 
+    def configure_from_records(self, receiver_rows: Iterable["RadioReceiver"]) -> None:
+        """Convenience helper that builds configs from database records."""
+
+        configs: List[ReceiverConfig] = []
+        for row in receiver_rows:
+            config = row.to_receiver_config()
+            configs.append(config)
+
+        self.configure_receivers(configs)
+
     def start_all(self) -> None:
         """Start all configured receivers."""
 
@@ -118,3 +131,15 @@ class RadioManager:
 
         with self._lock:
             return [receiver.get_status() for receiver in self._receivers.values()]
+
+    @staticmethod
+    def build_status_from_rows(
+        status_rows: Iterable["RadioReceiverStatus"],
+    ) -> List[ReceiverStatus]:
+        """Convert database status entries into manager-friendly reports."""
+
+        reports: List[ReceiverStatus] = []
+        for row in status_rows:
+            reports.append(row.to_receiver_status())
+
+        return reports
