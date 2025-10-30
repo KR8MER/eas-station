@@ -592,6 +592,10 @@ def before_request():
     except Exception:
         g.admin_setup_mode = False
 
+    # Allow authentication endpoints without CSRF or other checks.
+    if request.endpoint in {'login', 'static'}:
+        return
+
     if request.method in CSRF_PROTECTED_METHODS:
         session_token = session.get(CSRF_SESSION_KEY)
         request_token = None
@@ -608,10 +612,6 @@ def before_request():
             if request.path.startswith('/api/') or request.is_json or 'application/json' in (request.headers.get('Accept', '') or ''):
                 return jsonify({'error': 'Invalid or missing CSRF token'}), 400
             abort(400)
-
-    # Allow authentication endpoints without additional checks.
-    if request.endpoint in {'login', 'static'}:
-        return
 
     if request.path.startswith('/api/'):
         normalized_path = request.path.rstrip('/') or '/'
