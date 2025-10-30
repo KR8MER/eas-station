@@ -30,7 +30,7 @@ class Config:
         # Build from individual POSTGRES_* variables (same logic as app.py)
         user = os.environ.get('POSTGRES_USER', 'postgres') or 'postgres'
         password = os.environ.get('POSTGRES_PASSWORD', '')
-        host = os.environ.get('POSTGRES_HOST', 'postgres') or 'postgres'
+        host = os.environ.get('POSTGRES_HOST', 'host.docker.internal') or 'host.docker.internal'
         port = os.environ.get('POSTGRES_PORT', '5432') or '5432'
         database = os.environ.get('POSTGRES_DB', user) or user
 

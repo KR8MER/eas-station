@@ -5,7 +5,7 @@ Docker-safe DB defaults, strict jurisdiction filtering, PostGIS geometry/interse
 optional LED sign integration.
 
 Database Configuration (via environment variables or --database-url):
-  POSTGRES_HOST      - Database host (default: postgres for Docker)
+  POSTGRES_HOST      - Database host (default: host.docker.internal; override for Docker services)
   POSTGRES_PORT      - Database port (default: 5432)
   POSTGRES_DB        - Database name (defaults to POSTGRES_USER)
   POSTGRES_USER      - Database user (default: postgres)
@@ -1795,7 +1795,7 @@ def build_database_url_from_env() -> str:
 
     user = os.getenv("POSTGRES_USER", "postgres") or "postgres"
     password = os.getenv("POSTGRES_PASSWORD", "")
-    host = os.getenv("POSTGRES_HOST", "postgres") or "postgres"
+    host = os.getenv("POSTGRES_HOST", "host.docker.internal") or "host.docker.internal"
     port = os.getenv("POSTGRES_PORT", "5432") or "5432"
     database = os.getenv("POSTGRES_DB", user) or user
 

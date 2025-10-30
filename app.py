@@ -173,7 +173,7 @@ def _build_database_url() -> str:
     # Build from individual POSTGRES_* variables
     user = os.getenv('POSTGRES_USER', 'postgres') or 'postgres'
     password = os.getenv('POSTGRES_PASSWORD', '')
-    host = os.getenv('POSTGRES_HOST', 'postgres') or 'postgres'
+    host = os.getenv('POSTGRES_HOST', 'host.docker.internal') or 'host.docker.internal'
     port = os.getenv('POSTGRES_PORT', '5432') or '5432'
     database = os.getenv('POSTGRES_DB', user) or user
 

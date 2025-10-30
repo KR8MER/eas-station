@@ -85,7 +85,7 @@ Rewrote docstring to document the configuration without showing credentials:
 ```python
 """
   Database Configuration (via environment variables or --database-url):
-    POSTGRES_HOST      - Database host (default: postgres for Docker)
+    POSTGRES_HOST      - Database host (default: host.docker.internal; override for Docker services)
     POSTGRES_PORT      - Database port (default: 5432)
     POSTGRES_DB        - Database name (defaults to POSTGRES_USER)
     POSTGRES_USER      - Database user (default: postgres)
@@ -196,7 +196,7 @@ Defaults for Docker (override with env or --database-url):
 ```python
 """
   Database Configuration (via environment variables or --database-url):
-    POSTGRES_HOST      - Database host (default: postgres for Docker)
+    POSTGRES_HOST      - Database host (default: host.docker.internal; override for Docker services)
     POSTGRES_PORT      - Database port (default: 5432)
     POSTGRES_DB        - Database name (defaults to POSTGRES_USER)
     POSTGRES_USER      - Database user (default: postgres)
@@ -217,7 +217,7 @@ All three files now follow the **same logic**:
 ### Priority Order:
 1. **DATABASE_URL** (if set) - Use it directly
 2. **POSTGRES_* variables** - Build URL from components
-   - POSTGRES_HOST (default: 'postgres')
+   - POSTGRES_HOST (default: 'host.docker.internal'; override to 'alerts-db' when using the embedded profile)
    - POSTGRES_PORT (default: '5432')
    - POSTGRES_DB (default: POSTGRES_USER)
    - POSTGRES_USER (default: 'postgres')
