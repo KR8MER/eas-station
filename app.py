@@ -162,7 +162,7 @@ else:
     session_cookie_secure = not (debug_env or debug_flag)
 
 app.config['SESSION_COOKIE_SECURE'] = session_cookie_secure
-app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 try:
     session_hours = int(os.environ.get('SESSION_LIFETIME_HOURS', '12'))
 except ValueError:
