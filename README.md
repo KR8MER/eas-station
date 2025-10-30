@@ -491,13 +491,13 @@ nano .env  # or use your preferred editor
 
 **Using Docker exec:**
 ```bash
-docker compose exec postgresql psql -U casaos -d casaos
+docker compose exec postgresql psql -U postgres -d alerts
 ```
 
 **From host machine (if psql installed):**
 ```bash
-psql -h localhost -p 5432 -U casaos -d casaos
-# Password: casaos (or your custom password)
+psql -h localhost -p 5432 -U postgres -d alerts
+# Password: change-me (or your custom password from .env)
 ```
 
 ### Database Schema
@@ -518,19 +518,19 @@ The system automatically creates the following tables:
 **Create Backup:**
 ```bash
 # Dump entire database
-docker compose exec postgresql pg_dump -U casaos casaos > backup_$(date +%Y%m%d_%H%M%S).sql
+docker compose exec postgresql pg_dump -U postgres alerts > backup_$(date +%Y%m%d_%H%M%S).sql
 
 # Backup with compression
-docker compose exec postgresql pg_dump -U casaos casaos | gzip > backup.sql.gz
+docker compose exec postgresql pg_dump -U postgres alerts | gzip > backup.sql.gz
 ```
 
 **Restore from Backup:**
 ```bash
 # From plain SQL
-cat backup_20250128_120000.sql | docker compose exec -T postgresql psql -U casaos -d casaos
+cat backup_20250128_120000.sql | docker compose exec -T postgresql psql -U postgres -d alerts
 
 # From compressed backup
-gunzip -c backup.sql.gz | docker compose exec -T postgresql psql -U casaos -d casaos
+gunzip -c backup.sql.gz | docker compose exec -T postgresql psql -U postgres -d alerts
 ```
 
 **Reset Database (WARNING: Deletes all data):**
@@ -721,7 +721,7 @@ docker stats
 **Solutions:**
 1. Validate GeoJSON format at [geojson.io](https://geojson.io)
 2. Ensure UTF-8 encoding (not UTF-16 or other)
-3. Check PostGIS extension: `docker compose exec postgresql psql -U casaos -d casaos -c "SELECT PostGIS_Version();"`
+3. Check PostGIS extension: `docker compose exec postgresql psql -U postgres -d alerts -c "SELECT PostGIS_Version();"`
 4. Verify upload folder permissions: `docker compose exec app ls -la /app/uploads`
 5. Check file size limits in Flask configuration
 
@@ -786,8 +786,8 @@ docker stats
    brew install postgresql postgis
 
    # Create database
-   createdb casaos
-   psql -d casaos -c "CREATE EXTENSION postgis;"
+   createdb alerts
+   psql -d alerts -c "CREATE EXTENSION postgis;"
    ```
 
 4. **Configure `.env` for local development:**

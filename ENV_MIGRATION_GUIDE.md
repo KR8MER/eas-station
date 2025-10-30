@@ -41,7 +41,7 @@ Open your `.env` file and make these changes:
 # ALERTS_DB_USER=postgres
 # ALERTS_DB_PASS=postgres
 # ALERTS_DB_CONTAINER=alerts-db
-# ALERTS_DB_VOLUME=noaa_alerts_systems_alerts-db
+# ALERTS_DB_VOLUME=eas-station_alerts-db
 # ALERTS_DB_VERSION=16.2
 
 # 2. ADD these new lines after POLL_INTERVAL_SEC:
@@ -118,12 +118,12 @@ After migration:
 
 ```bash
 # Restart containers to pick up changes
-cd ~/noaa_alerts_systems
-sudo docker compose down
-sudo docker compose up -d
+cd ~/eas-station
+docker compose down
+docker compose up -d
 
 # Check logs
-sudo docker compose logs -f ipaws-poller
+docker compose logs -f ipaws-poller
 
 # Should see:
 # INFO:__main__:Starting CAP Alert Poller with LED Integration - Mode: IPAWS
@@ -138,7 +138,7 @@ If you have issues:
 cp .env.backup .env
 
 # Restart
-sudo docker compose restart
+docker compose restart
 ```
 
 ## Questions?

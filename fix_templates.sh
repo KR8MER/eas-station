@@ -1,5 +1,8 @@
- # Go to project directory
-cd /home/pi/noaa_alerts_system
+# NOTE: This is a legacy maintenance script from the original deployment.
+# Adjust paths as needed for your environment.
+
+# Go to project directory
+cd "$(dirname "$0")"
 
 # Remove corrupted files
 for html_file in *.html; do
@@ -106,14 +109,14 @@ cat > templates/admin.html << 'EOF'
 EOF
 
 # Fix WSGI file
-cp wsgi.py wsgi.py.backup
+cp wsgi.py wsgi.py.backup 2>/dev/null || true
 cat > wsgi.py << 'EOF'
 #!/usr/bin/env python3
 import sys
 import os
 
-# Set working directory
-project_dir = '/home/pi/noaa_alerts_system'
+# Set working directory to script location
+project_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(project_dir)
 sys.path.insert(0, project_dir)
 

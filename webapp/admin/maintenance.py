@@ -51,7 +51,7 @@ NOAA_ALLOWED_QUERY_PARAMS = frozenset(
 )
 NOAA_USER_AGENT = os.environ.get(
     "NOAA_USER_AGENT",
-    "KR8MER Emergency Alert Hub/2.1 (+https://github.com/KR8MER/noaa_alerts_systems; NOAA+IPAWS)",
+    "KR8MER Emergency Alert Hub/2.1 (+https://github.com/KR8MER/eas-station; NOAA+IPAWS)",
 )
 
 

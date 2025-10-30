@@ -402,7 +402,7 @@ class CAPPoller:
         self.session = requests.Session()
         default_user_agent = os.getenv(
             'NOAA_USER_AGENT',
-            'KR8MER Emergency Alert Hub/2.1 (+https://github.com/KR8MER/noaa_alerts_systems; NOAA+IPAWS)',
+            'KR8MER Emergency Alert Hub/2.1 (+https://github.com/KR8MER/eas-station; NOAA+IPAWS)',
         )
         self.session.headers.update({
             'User-Agent': default_user_agent,

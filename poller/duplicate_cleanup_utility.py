@@ -10,8 +10,10 @@ from datetime import datetime
 from collections import defaultdict
 
 # Add project root to path
-sys.path.insert(0, '/home/pi/noaa_alerts_system')
-os.chdir('/home/pi/noaa_alerts_system')
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+sys.path.insert(0, project_root)
+os.chdir(project_root)
 
 from app import app, db, CAPAlert, Intersection
 from sqlalchemy import func
