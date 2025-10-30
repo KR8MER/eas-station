@@ -114,7 +114,7 @@ EAS Station is not just an alert monitor—it's a **complete emergency broadcast
 ### One-Command Installation
 
 ```bash
-bash -c "git clone -b Experimental https://github.com/KR8MER/eas-station.git && cd eas-station && cp .env.example .env && docker compose up -d --build"
+bash -c "git clone https://github.com/KR8MER/eas-station.git && cd eas-station && cp .env.example .env && docker compose up -d --build"
 ```
 
 > 💡 Update `.env` before or immediately after the first launch so `POSTGRES_HOST`, `POSTGRES_PASSWORD`, and related settings point at your database deployment.
@@ -127,7 +127,7 @@ bash -c "git clone -b Experimental https://github.com/KR8MER/eas-station.git && 
 If you prefer to run each step manually, the equivalent sequence is:
 
 ```bash
-git clone -b Experimental https://github.com/KR8MER/eas-station.git
+git clone https://github.com/KR8MER/eas-station.git
 cd eas-station
 # Copy the template environment file and edit it before exposing services.
 cp .env.example .env
@@ -165,7 +165,7 @@ docker compose up -d --build
 ### Quick Update (Pull Latest Changes)
 
 ```bash
-git pull origin Experimental
+git pull origin
 docker compose build --pull
 docker compose up -d --force-recreate
 # Include the embedded database overlay when you want Compose to refresh the bundled
