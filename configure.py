@@ -13,14 +13,22 @@ load_dotenv()
 class Config:
     """Base configuration class"""
 
-    # Flask settings
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
+    # Flask settings - Require SECRET_KEY to be explicitly set
+    _secret_key = os.environ.get('SECRET_KEY', '')
+    if not _secret_key or _secret_key == 'dev-key-change-in-production':
+        raise ValueError(
+            "SECRET_KEY environment variable must be set to a secure random string. "
+            "Generate one with: python -c 'import secrets; print(secrets.token_hex(32))'"
+        )
+    SECRET_KEY = _secret_key
 
-    # Database settings
-    SQLALCHEMY_DATABASE_URI = os.environ.get(
-        'DATABASE_URL',
-        'postgresql+psycopg2://casaos:casaos@postgresql:5432/casaos'
-    )
+    # Database settings - Require explicit DATABASE_URL configuration
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
+    if not SQLALCHEMY_DATABASE_URI:
+        raise ValueError(
+            "DATABASE_URL environment variable must be set. "
+            "Example: postgresql+psycopg2://user:password@host:5432/dbname"
+        )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_pre_ping': True,

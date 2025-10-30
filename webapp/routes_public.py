@@ -330,9 +330,11 @@ def register(app: Flask, logger) -> None:
     @app.route("/alerts")
     def alerts():
         try:
+            # Validate pagination parameters
             page = request.args.get("page", 1, type=int)
+            page = max(1, page)  # Ensure page is at least 1
             per_page = request.args.get("per_page", 25, type=int)
-            per_page = min(max(per_page, 10), 100)
+            per_page = min(max(per_page, 10), 100)  # Clamp between 10 and 100
 
             search = request.args.get("search", "").strip()
             status_filter = request.args.get("status", "").strip()

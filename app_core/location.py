@@ -49,10 +49,11 @@ def _coerce_int(value: Any, fallback: int) -> int:
 def get_location_settings(force_reload: bool = False) -> Dict[str, Any]:
     global _location_settings_cache
 
-    if force_reload:
-        _location_settings_cache = None
-
+    # Move force_reload check inside lock to prevent race condition
     with _location_settings_lock:
+        if force_reload:
+            _location_settings_cache = None
+
         if _location_settings_cache is None:
             record = _ensure_location_settings_record()
             _location_settings_cache = record.to_dict()
