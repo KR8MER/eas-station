@@ -27,12 +27,109 @@
         </div>
     </div>
 
-    <div id="radioStatus" class="alert d-none" role="alert"></div>
+    {% set location = location_settings or {} %}
+    <div class="row g-3 mb-4">
+        <div class="col-lg-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body">
+                    <div class="d-flex align-items-start mb-3">
+                        <div class="bg-primary text-white rounded-circle p-3 me-3">
+                            <i class="fas fa-location-dot"></i>
+                        </div>
+                        <div>
+                            <h2 class="h6 text-uppercase text-muted mb-1">Primary Coverage</h2>
+                            <div class="fw-semibold">{{ location.county_name or 'Unconfigured' }}, {{ location.state_code or '—' }}</div>
+                            <div class="text-muted small">Timezone: {{ location.timezone or '—' }}</div>
+                        </div>
+                    </div>
+                    {% if location.zone_codes %}
+                    <p class="small text-muted mb-2">SAME / FIPS Zones</p>
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        {% for code in location.zone_codes %}
+                        <span class="badge bg-light text-dark border">{{ code }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% if location.area_terms %}
+                    <p class="small text-muted mb-2">Watched Keywords</p>
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for term in location.area_terms %}
+                        <span class="badge bg-secondary-subtle text-secondary-emphasis">{{ term }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="card-footer text-center text-muted small">
+                    Adjust coverage under <a href="/admin#location-settings" class="text-decoration-none">Admin &raquo; Location Settings</a>.
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body">
+                    <h2 class="h6 text-uppercase text-muted mb-3">Receiver Status</h2>
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="display-6 fw-bold me-3" id="summaryTotal">0</div>
+                        <div>
+                            <div class="fw-semibold">Total Receivers</div>
+                            <div class="text-muted small">Configured in the orchestration pool.</div>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="display-6 fw-bold text-success me-3" id="summaryLocked">0</div>
+                        <div>
+                            <div class="fw-semibold">Locked</div>
+                            <div class="text-muted small">Reporting carrier lock / valid samples.</div>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="display-6 fw-bold text-primary me-3" id="summaryEnabled">0</div>
+                        <div>
+                            <div class="fw-semibold">Auto-start Enabled</div>
+                            <div class="text-muted small">Will arm automatically for SAME events.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer text-muted small">
+                    Status values refresh automatically while this page is open.
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body">
+                    <h2 class="h6 text-uppercase text-muted mb-3">Capture Workflow</h2>
+                    <ol class="ps-3 small mb-0">
+                        <li class="mb-2">Create receivers for each USB dongle with a unique identifier.</li>
+                        <li class="mb-2">Enable <strong>Auto-start</strong> to let the poller launch tuned listeners.</li>
+                        <li class="mb-2">When the poller hears SAME bursts it requests captures from every enabled receiver.</li>
+                        <li class="mb-0">Monitor signal lock and error states below to diagnose hardware or driver issues.</li>
+                    </ol>
+                </div>
+                <div class="card-footer text-muted small">
+                    Built-in drivers: RTL-SDR (RTL2832U) and Airspy via SoapySDR.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="radioStatus" class="alert d-none" role="alert" aria-live="polite"></div>
 
     <div class="card shadow-sm">
-        <div class="card-body">
+        <div class="card-header d-flex flex-column flex-md-row gap-2 gap-md-3 align-items-md-center justify-content-between">
+            <div>
+                <h2 class="h5 mb-1">Receiver Fleet</h2>
+                <div class="text-muted small">Last status update <span id="radioLastUpdated">—</span></div>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-secondary" id="refreshStatusBtn">
+                    <i class="fas fa-rotate"></i> Refresh Status
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-striped align-middle" id="radioReceiversTable">
+                <table class="table table-striped table-hover align-middle mb-0" id="radioReceiversTable">
                     <thead class="table-light">
                         <tr>
                             <th scope="col">Name</th>
@@ -47,6 +144,9 @@
                     <tbody></tbody>
                 </table>
             </div>
+        </div>
+        <div class="card-footer text-muted small">
+            History is preserved for each receiver to audit captures and lock performance.
         </div>
     </div>
 </div>
@@ -114,7 +214,6 @@
         </div>
     </div>
 </div>
-
 {% endblock %}
 
 {% block scripts %}
@@ -128,33 +227,177 @@
     const receiverModal = new bootstrap.Modal(modalElement);
     const form = document.getElementById('radioReceiverForm');
     const addButton = document.getElementById('addReceiverBtn');
+    const refreshButton = document.getElementById('refreshStatusBtn');
+    const lastUpdatedLabel = document.getElementById('radioLastUpdated');
+    const summaryTotal = document.getElementById('summaryTotal');
+    const summaryEnabled = document.getElementById('summaryEnabled');
+    const summaryLocked = document.getElementById('summaryLocked');
+
+    const CRUD_ENDPOINT = '/api/radio/receivers';
+    const MONITORING_ENDPOINT = '/api/monitoring/radio';
+    const AUTO_REFRESH_INTERVAL_MS = 15000;
 
     let receivers = Array.isArray(initialReceivers) ? initialReceivers : [];
+    let autoRefreshHandle = null;
+    let statusHideHandle = null;
+
+    function escapeHtml(value) {
+        if (value === null || value === undefined) {
+            return '';
+        }
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
 
     function setStatus(message, kind = 'info') {
         if (!statusBanner) {
             return;
         }
+
+        if (statusHideHandle) {
+            window.clearTimeout(statusHideHandle);
+            statusHideHandle = null;
+        }
+
         if (!message) {
             statusBanner.classList.add('d-none');
             statusBanner.textContent = '';
             return;
         }
+
         statusBanner.className = `alert alert-${kind}`;
         statusBanner.textContent = message;
+        statusBanner.classList.remove('d-none');
+
+        statusHideHandle = window.setTimeout(() => {
+            setStatus('', kind);
+        }, 6000);
+    }
+
+    function setLastUpdated(date) {
+        if (!lastUpdatedLabel) {
+            return;
+        }
+
+        if (!date) {
+            lastUpdatedLabel.textContent = '—';
+            lastUpdatedLabel.removeAttribute('data-timestamp');
+            lastUpdatedLabel.removeAttribute('title');
+            return;
+        }
+
+        const resolved = date instanceof Date ? date : new Date(date);
+        if (Number.isNaN(resolved.getTime())) {
+            lastUpdatedLabel.textContent = '—';
+            lastUpdatedLabel.removeAttribute('data-timestamp');
+            lastUpdatedLabel.removeAttribute('title');
+            return;
+        }
+
+        lastUpdatedLabel.textContent = resolved.toLocaleTimeString();
+        lastUpdatedLabel.setAttribute('data-timestamp', resolved.toISOString());
+        lastUpdatedLabel.title = `Last updated ${resolved.toLocaleString()}`;
+    }
+
+    function deriveLatestStatusTimestamp() {
+        let latest = null;
+        for (const receiver of receivers) {
+            const reportedAt = receiver?.latest_status?.reported_at;
+            if (!reportedAt) {
+                continue;
+            }
+            const date = new Date(reportedAt);
+            if (Number.isNaN(date.getTime())) {
+                continue;
+            }
+            if (!latest || date > latest) {
+                latest = date;
+            }
+        }
+        return latest;
     }
 
     function formatFrequency(value) {
-        if (typeof value !== 'number' || !isFinite(value)) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
             return '—';
         }
-        return (value / 1_000_000).toFixed(3);
+        return (numeric / 1_000_000).toFixed(3);
+    }
+
+    function formatSampleRate(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            return '—';
+        }
+        return numeric.toLocaleString();
+    }
+
+    function renderStatusBadge(status) {
+        if (!status) {
+            return '<span class="badge bg-secondary">No samples</span>';
+        }
+
+        const locked = status.locked === true;
+        const badgeClass = locked ? 'bg-success' : 'bg-warning text-dark';
+        const label = locked ? 'Locked' : 'No lock';
+
+        const strengthValue = typeof status.signal_strength === 'number'
+            ? status.signal_strength
+            : (typeof status.signal_strength === 'string'
+                ? Number.parseFloat(status.signal_strength)
+                : Number.NaN);
+        const strength = Number.isFinite(strengthValue)
+            ? `<div class="small text-muted">Signal: ${strengthValue.toFixed(1)} dBFS</div>`
+            : '';
+        const mode = status.capture_mode
+            ? `<div class="small text-muted text-uppercase">Mode: ${escapeHtml(status.capture_mode)}</div>`
+            : '';
+        const capture = status.capture_path
+            ? `<div class="small text-muted">Captured: ${escapeHtml(status.capture_path)}</div>`
+            : '';
+        const error = status.last_error
+            ? `<div class="small text-danger mt-1">${escapeHtml(status.last_error)}</div>`
+            : '';
+        const timestamp = status.reported_at
+            ? `<div class="small text-muted">${new Date(status.reported_at).toLocaleString()}</div>`
+            : '';
+
+        return `
+            <span class="badge ${badgeClass}">${label}</span>
+            ${strength}
+            ${mode}
+            ${capture}
+            ${error}
+            ${timestamp}
+        `;
+    }
+
+    function updateSummary() {
+        const total = receivers.length;
+        const enabled = receivers.filter((receiver) => receiver.enabled !== false).length;
+        const locked = receivers.filter((receiver) => receiver?.latest_status?.locked === true).length;
+
+        if (summaryTotal) {
+            summaryTotal.textContent = total;
+        }
+        if (summaryEnabled) {
+            summaryEnabled.textContent = enabled;
+        }
+        if (summaryLocked) {
+            summaryLocked.textContent = locked;
+        }
     }
 
     function renderReceivers() {
         if (!tableBody) {
             return;
         }
+
         tableBody.innerHTML = '';
 
         if (!receivers.length) {
@@ -165,17 +408,24 @@
             cell.textContent = 'No receivers configured yet.';
             row.appendChild(cell);
             tableBody.appendChild(row);
+            updateSummary();
             return;
         }
 
         receivers.forEach((receiver) => {
             const row = document.createElement('tr');
+            const displayName = escapeHtml(receiver.display_name || '—');
+            const identifier = escapeHtml(receiver.identifier || '—');
+            const driver = escapeHtml(receiver.driver || '—');
+            const frequency = formatFrequency(receiver.frequency_hz);
+            const sampleRate = formatSampleRate(receiver.sample_rate);
+
             row.innerHTML = `
-                <td class="fw-semibold">${receiver.display_name || '—'}</td>
-                <td><code>${receiver.identifier || '—'}</code></td>
-                <td>${receiver.driver || '—'}</td>
-                <td class="text-end">${formatFrequency(receiver.frequency_hz)}</td>
-                <td class="text-end">${receiver.sample_rate?.toLocaleString?.() || '—'}</td>
+                <td class="fw-semibold">${displayName}</td>
+                <td><code>${identifier}</code></td>
+                <td>${driver}</td>
+                <td class="text-end">${frequency}</td>
+                <td class="text-end">${sampleRate}</td>
                 <td>${renderStatusBadge(receiver.latest_status)}</td>
                 <td class="text-end">
                     <div class="btn-group btn-group-sm" role="group">
@@ -188,26 +438,15 @@
                     </div>
                 </td>
             `;
+
             tableBody.appendChild(row);
         });
+
+        updateSummary();
     }
 
-    function renderStatusBadge(status) {
-        if (!status) {
-            return '<span class="badge bg-secondary">No samples</span>';
-        }
-        const locked = status.locked === true;
-        const badgeClass = locked ? 'bg-success' : 'bg-warning text-dark';
-        const label = locked ? 'Locked' : 'No lock';
-        const error = status.last_error ? `<div class="small text-danger mt-1">${status.last_error}</div>` : '';
-        const capture = status.capture_path ? `<div class="small text-muted">Captured: ${status.capture_path}</div>` : '';
-        const timestamp = status.reported_at ? `<div class="small text-muted">${new Date(status.reported_at).toLocaleString()}</div>` : '';
-        return `
-            <span class="badge ${badgeClass}">${label}</span>
-            ${error}
-            ${capture}
-            ${timestamp}
-        `;
+    function deriveReceiverFromId(id) {
+        return receivers.find((item) => String(item.id) === String(id));
     }
 
     function openModal(receiver = null) {
@@ -229,19 +468,56 @@
         receiverModal.show();
     }
 
-    async function refreshReceivers() {
+    async function loadReceivers(endpoint = CRUD_ENDPOINT) {
+        const response = await fetch(endpoint);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const result = await response.json();
+        return Array.isArray(result.receivers) ? result.receivers : [];
+    }
+
+    function toggleRefreshButton(loading) {
+        if (!refreshButton) {
+            return;
+        }
+        refreshButton.disabled = loading;
+        refreshButton.setAttribute('aria-busy', loading ? 'true' : 'false');
+        const icon = refreshButton.querySelector('i');
+        if (icon) {
+            icon.classList.toggle('fa-spin', Boolean(loading));
+        }
+    }
+
+    async function refreshReceivers({ endpoint = CRUD_ENDPOINT, silent = true, showSpinner = false } = {}) {
         try {
-            const response = await fetch('/api/radio/receivers');
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+            if (showSpinner) {
+                toggleRefreshButton(true);
             }
-            const result = await response.json();
-            receivers = Array.isArray(result.receivers) ? result.receivers : [];
+            const data = await loadReceivers(endpoint);
+            receivers = data;
             renderReceivers();
+            setLastUpdated(deriveLatestStatusTimestamp() || new Date());
+            if (!silent) {
+                setStatus('Receiver status updated.', 'info');
+            }
         } catch (error) {
             console.error('Failed to refresh receivers', error);
             setStatus('Failed to load receiver list.', 'danger');
+        } finally {
+            if (showSpinner) {
+                toggleRefreshButton(false);
+            }
         }
+    }
+
+    function scheduleAutoRefresh() {
+        if (autoRefreshHandle) {
+            window.clearInterval(autoRefreshHandle);
+        }
+        autoRefreshHandle = window.setInterval(() => {
+            refreshReceivers({ endpoint: MONITORING_ENDPOINT, silent: true });
+        }, AUTO_REFRESH_INTERVAL_MS);
     }
 
     async function submitReceiver(event) {
@@ -262,7 +538,7 @@
         delete payload.id;
 
         const method = receiverId ? 'PATCH' : 'POST';
-        const endpoint = receiverId ? `/api/radio/receivers/${receiverId}` : '/api/radio/receivers';
+        const endpoint = receiverId ? `${CRUD_ENDPOINT}/${receiverId}` : CRUD_ENDPOINT;
 
         try {
             const response = await fetch(endpoint, {
@@ -278,7 +554,8 @@
 
             receiverModal.hide();
             setStatus(receiverId ? 'Receiver updated successfully.' : 'Receiver created successfully.', 'success');
-            await refreshReceivers();
+            await refreshReceivers({ endpoint: CRUD_ENDPOINT, silent: true });
+            scheduleAutoRefresh();
         } catch (error) {
             console.error('Failed to save receiver', error);
             setStatus(error.message || 'Failed to save receiver.', 'danger');
@@ -296,13 +573,14 @@
         }
 
         try {
-            const response = await fetch(`/api/radio/receivers/${receiverId}`, { method: 'DELETE' });
+            const response = await fetch(`${CRUD_ENDPOINT}/${receiverId}`, { method: 'DELETE' });
             const result = await response.json();
             if (!response.ok || result.success !== true) {
                 throw new Error(result.error || 'Failed to delete receiver.');
             }
             setStatus('Receiver deleted successfully.', 'success');
-            await refreshReceivers();
+            await refreshReceivers({ endpoint: CRUD_ENDPOINT, silent: true });
+            scheduleAutoRefresh();
         } catch (error) {
             console.error('Failed to delete receiver', error);
             setStatus(error.message || 'Failed to delete receiver.', 'danger');
@@ -316,7 +594,7 @@
         }
         const id = target.getAttribute('data-id');
         const action = target.getAttribute('data-action');
-        const receiver = receivers.find((item) => String(item.id) === String(id));
+        const receiver = deriveReceiverFromId(id);
 
         if (action === 'edit' && receiver) {
             openModal(receiver);
@@ -327,8 +605,26 @@
 
     addButton?.addEventListener('click', () => openModal());
     form?.addEventListener('submit', submitReceiver);
+    refreshButton?.addEventListener('click', () => {
+        refreshReceivers({ endpoint: MONITORING_ENDPOINT, silent: false, showSpinner: true });
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            if (autoRefreshHandle) {
+                window.clearInterval(autoRefreshHandle);
+                autoRefreshHandle = null;
+            }
+        } else {
+            refreshReceivers({ endpoint: MONITORING_ENDPOINT, silent: true });
+            scheduleAutoRefresh();
+        }
+    });
 
     renderReceivers();
+    setLastUpdated(deriveLatestStatusTimestamp());
+    refreshReceivers({ endpoint: MONITORING_ENDPOINT, silent: true });
+    scheduleAutoRefresh();
 })();
 </script>
 {% endblock %}
