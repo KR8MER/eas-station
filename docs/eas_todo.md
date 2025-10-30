@@ -42,11 +42,11 @@
   - Add automated tests (pytest-based under `tests/`) covering ingest/output mocks and GPIO logic to prevent regressions.
 
 ## 7. Alert Verification & Analytics
-- [ ] Build an alert verification pipeline.
-  - Correlate CAP messages with downstream playout logs in `app_core/eas_storage.py` to confirm full delivery paths.
-  - Add a validation view (`webapp/routes/alert_verification.py`, `templates/eas/alert_verification.html`) that highlights mismatches, missing audio, or delayed retransmissions.
-  - Generate trend analytics (per originator, per station) stored in a new reporting table with Alembic migration and surfaced via charts using the existing `static/js/charts/` helpers.
-  - Ship CSV exports from the verification view using shared utilities in `app_utils/export.py`.
+- [x] Build an alert verification pipeline.
+  - [x] Correlate CAP messages with downstream playout logs in `app_core/eas_storage.py` to confirm full delivery paths.
+  - [x] Add a validation view (`webapp/routes/alert_verification.py`, `templates/eas/alert_verification.html`) that highlights mismatches, missing audio, or delayed retransmissions.
+  - [x] Generate trend analytics (per originator, per station) stored in a new reporting table with Alembic migration and surfaced via charts using the existing `static/js/charts/` helpers.
+  - [x] Ship CSV exports from the verification view using shared utilities in `app_utils/export.py`.
 
 ## 8. Security & Access Controls
 - [ ] Harden operator access and system security.

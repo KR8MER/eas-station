@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% block title %}Alert Verification & Analytics{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <div>
+            <h1 class="h3 mb-1">Alert Verification &amp; Analytics</h1>
+            <p class="text-muted mb-0">
+                Monitoring window: last {{ window_days }} days · Generated
+                {% if payload.generated_at %}
+                    {{ format_local_datetime(payload.generated_at, include_utc=True) }}
+                {% else %}
+                    —
+                {% endif %}
+            </p>
+        </div>
+        <div class="btn-group" role="group">
+            <a class="btn btn-outline-primary" href="{{ url_for('alert_verification_export', days=window_days) }}">
+                <i class="fas fa-file-csv"></i> Export CSV
+            </a>
+        </div>
+    </div>
+
+    {% set summary = payload.summary or {} %}
+    {% set total = summary.total or 0 %}
+    {% set delivered = (summary.delivered or 0) + (summary.partial or 0) %}
+    {% set issues_count = (summary.partial or 0) + (summary.pending or 0) + (summary.awaiting_playout or 0) + (summary.missing or 0) %}
+    {% set success_rate = (delivered / total * 100) if total else None %}
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-circle-check text-success"></i> Delivery Success</h5>
+                    <p class="display-6 fw-semibold mb-1">
+                        {% if success_rate is not none %}
+                            {{ '%.1f'|format(success_rate) }}%
+                        {% else %}
+                            <span class="text-muted">N/A</span>
+                        {% endif %}
+                    </p>
+                    <p class="text-muted mb-2">Alerts with at least one successful playout.</p>
+                    <dl class="row mb-0 small">
+                        <dt class="col-6">Total Alerts</dt>
+                        <dd class="col-6 text-end">{{ total }}</dd>
+                        <dt class="col-6">Fully Delivered</dt>
+                        <dd class="col-6 text-end">{{ summary.delivered or 0 }}</dd>
+                        <dt class="col-6">Partial Delivery</dt>
+                        <dd class="col-6 text-end">{{ summary.partial or 0 }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-triangle-exclamation text-warning"></i> Alerts Requiring Attention</h5>
+                    <p class="display-6 fw-semibold mb-1">{{ issues_count }}</p>
+                    <p class="text-muted mb-2">Alerts pending, missing, or with failed outputs.</p>
+                    <dl class="row mb-0 small">
+                        <dt class="col-6">Pending</dt>
+                        <dd class="col-6 text-end">{{ summary.pending or 0 }}</dd>
+                        <dt class="col-6">Awaiting Playout</dt>
+                        <dd class="col-6 text-end">{{ summary.awaiting_playout or 0 }}</dd>
+                        <dt class="col-6">Missing Audio</dt>
+                        <dd class="col-6 text-end">{{ summary.missing or 0 }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-hourglass-half text-info"></i> Average Latency</h5>
+                    <p class="display-6 fw-semibold mb-1">
+                        {% if summary.average_latency_seconds is not none %}
+                            {{ '%.1f'|format(summary.average_latency_seconds) }}s
+                        {% else %}
+                            <span class="text-muted">No samples</span>
+                        {% endif %}
+                    </p>
+                    <p class="text-muted mb-2">Delay threshold: {{ payload.delay_threshold_seconds }}s</p>
+                    {% if trends.originators %}
+                        <p class="small text-muted mb-0">{{ trends.originators|length }} originators analysed.</p>
+                    {% else %}
+                        <p class="small text-muted mb-0">No playout metrics recorded during this window.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-transparent d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+            <h5 class="card-title mb-0"><i class="fas fa-chart-line text-primary"></i> Delivery Trends</h5>
+            <span class="badge bg-secondary">Delay threshold: {{ payload.delay_threshold_seconds }} seconds</span>
+        </div>
+        <div class="card-body">
+            {% if trends.originators or trends.stations %}
+                <div class="row g-4">
+                    <div class="col-lg-6">
+                        <h6 class="text-muted text-uppercase">By Originator</h6>
+                        <div id="alert-originator-chart" style="min-height: 260px;"></div>
+                    </div>
+                    <div class="col-lg-6">
+                        <h6 class="text-muted text-uppercase">By Output Target</h6>
+                        <div id="alert-station-chart" style="min-height: 260px;"></div>
+                    </div>
+                </div>
+            {% else %}
+                <p class="text-muted mb-0">No delivery metrics are available for this window.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-transparent">
+            <h5 class="card-title mb-0"><i class="fas fa-list-check text-secondary"></i> Alert Delivery Records</h5>
+        </div>
+        <div class="card-body">
+            {% if payload.records %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th scope="col">Sent</th>
+                                <th scope="col">Identifier</th>
+                                <th scope="col">Event</th>
+                                <th scope="col">Status</th>
+                                <th scope="col">Outputs</th>
+                                <th scope="col" class="text-end">Latency</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in payload.records %}
+                                <tr>
+                                    <td>
+                                        {% if record.sent %}
+                                            {{ format_local_datetime(record.sent, include_utc=True) }}
+                                        {% else %}
+                                            <span class="text-muted">Unknown</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-nowrap">{{ record.identifier or '—' }}</td>
+                                    <td>{{ record.event or '—' }}</td>
+                                    <td>
+                                        {% if record.delivery_status == 'delivered' %}
+                                            <span class="badge bg-success text-uppercase">Delivered</span>
+                                        {% elif record.delivery_status == 'partial' %}
+                                            <span class="badge bg-warning text-dark text-uppercase">Partial</span>
+                                        {% elif record.delivery_status == 'pending' %}
+                                            <span class="badge bg-info text-uppercase">Pending</span>
+                                        {% elif record.delivery_status == 'missing' %}
+                                            <span class="badge bg-danger text-uppercase">Missing</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary text-uppercase">{{ record.delivery_status or 'Unknown' }}</span>
+                                        {% endif %}
+                                        {% if record.issues %}
+                                            <div class="small text-muted mt-1">
+                                                {% for issue in record.issues %}
+                                                    <div><i class="fas fa-circle-exclamation text-warning"></i> {{ issue }}</div>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if record.target_details %}
+                                            <ul class="list-unstyled mb-0 small">
+                                                {% for target in record.target_details %}
+                                                    <li>
+                                                        <strong>{{ target.target }}</strong>
+                                                        {% if target.status == 'delivered' %}
+                                                            <span class="text-success">delivered</span>
+                                                        {% elif target.status == 'failed' %}
+                                                            <span class="text-danger">failed</span>
+                                                        {% elif target.status == 'pending' %}
+                                                            <span class="text-info">pending</span>
+                                                        {% elif target.status == 'partial' %}
+                                                            <span class="text-warning">partial</span>
+                                                        {% else %}
+                                                            <span class="text-muted">{{ target.status }}</span>
+                                                        {% endif %}
+                                                        {% if target.latency_seconds is not none %}
+                                                            · {{ '%.1f'|format(target.latency_seconds) }}s
+                                                        {% endif %}
+                                                    </li>
+                                                {% endfor %}
+                                            </ul>
+                                        {% else %}
+                                            <span class="text-muted small">No playout data</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if record.average_latency_seconds is not none %}
+                                            {{ '%.1f'|format(record.average_latency_seconds) }}s
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="text-muted mb-0">No CAP alerts were recorded during this window.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-transparent">
+            <h5 class="card-title mb-0"><i class="fas fa-link-slash text-danger"></i> Unmatched Playout Records</h5>
+        </div>
+        <div class="card-body">
+            {% if payload.orphans %}
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th scope="col">Timestamp</th>
+                                <th scope="col">SAME Header</th>
+                                <th scope="col">Events Logged</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for orphan in payload.orphans %}
+                                <tr>
+                                    <td>
+                                        {% if orphan.created_at %}
+                                            {{ format_local_datetime(orphan.created_at, include_utc=True) }}
+                                        {% else %}
+                                            <span class="text-muted">Unknown</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-nowrap">{{ orphan.same_header }}</td>
+                                    <td>
+                                        {% if orphan.playout_events %}
+                                            <ul class="list-unstyled mb-0 small">
+                                                {% for event in orphan.playout_events %}
+                                                    <li>
+                                                        <strong>{{ event.target }}</strong>
+                                                        — {{ event.status }}
+                                                        {% if event.latency_seconds is not none %}
+                                                            ({{ '%.1f'|format(event.latency_seconds) }}s)
+                                                        {% endif %}
+                                                    </li>
+                                                {% endfor %}
+                                            </ul>
+                                        {% else %}
+                                            <span class="text-muted">No playout metadata captured.</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="text-muted mb-0">All playout records were matched to CAP alerts.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+    <script src="https://code.highcharts.com/highcharts.js"></script>
+    <script src="{{ url_for('static', filename='js/charts/alert_delivery.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            if (window.AlertVerificationCharts) {
+                window.AlertVerificationCharts.render({
+                    originators: {{ trends.originators | tojson }},
+                    stations: {{ trends.stations | tojson }},
+                    delayThreshold: {{ payload.delay_threshold_seconds | tojson }}
+                });
+            }
+        });
+    </script>
+{% endblock %}

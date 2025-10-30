@@ -262,6 +262,50 @@ class ManualEASActivation(db.Model):
         }
 
 
+class AlertDeliveryReport(db.Model):
+    __tablename__ = "alert_delivery_reports"
+
+    id = db.Column(db.Integer, primary_key=True)
+    generated_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    window_start = db.Column(db.DateTime(timezone=True), nullable=False)
+    window_end = db.Column(db.DateTime(timezone=True), nullable=False)
+    scope = db.Column(db.String(16), nullable=False)
+    originator = db.Column(db.String(64))
+    station = db.Column(db.String(128))
+    total_alerts = db.Column(db.Integer, nullable=False, default=0)
+    delivered_alerts = db.Column(db.Integer, nullable=False, default=0)
+    delayed_alerts = db.Column(db.Integer, nullable=False, default=0)
+    average_latency_seconds = db.Column(db.Integer)
+
+    __table_args__ = (
+        db.Index(
+            "idx_alert_delivery_reports_scope_window",
+            "scope",
+            "window_start",
+            "window_end",
+        ),
+        db.Index("idx_alert_delivery_reports_originator", "originator"),
+        db.Index("idx_alert_delivery_reports_station", "station"),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:  # pragma: no cover - convenience helper
+        return {
+            "id": self.id,
+            "generated_at": self.generated_at,
+            "window_start": self.window_start,
+            "window_end": self.window_end,
+            "scope": self.scope,
+            "originator": self.originator,
+            "station": self.station,
+            "total_alerts": self.total_alerts,
+            "delivered_alerts": self.delivered_alerts,
+            "delayed_alerts": self.delayed_alerts,
+            "average_latency_seconds": self.average_latency_seconds,
+        }
+
+
 class Intersection(db.Model):
     __tablename__ = "intersections"
 
