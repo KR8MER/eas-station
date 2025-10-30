@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from typing import Optional
 from urllib.parse import urljoin, urlparse
 
@@ -42,6 +43,9 @@ def register_auth_routes(app, logger):
                     func.lower(AdminUser.username) == username.lower()
                 ).first()
                 if user and user.is_active and user.check_password(password):
+                    csrf_key = app.config.get('CSRF_SESSION_KEY', '_csrf_token')
+                    session.clear()
+                    session[csrf_key] = secrets.token_urlsafe(32)
                     session['user_id'] = user.id
                     session.permanent = True
                     user.last_login_at = utc_now()
@@ -96,7 +100,9 @@ def register_auth_routes(app, logger):
                 },
             ))
             db.session.commit()
-        session.pop('user_id', None)
+        csrf_key = app.config.get('CSRF_SESSION_KEY', '_csrf_token')
+        session.clear()
+        session[csrf_key] = secrets.token_urlsafe(32)
         flash('You have been signed out.')
         return redirect(url_for('login'))
 

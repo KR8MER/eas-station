@@ -384,6 +384,10 @@ nano .env  # or use your preferred editor
 | `FLASK_ENV` | `production` | Environment mode (production/development) |
 | `FLASK_APP` | `app.py` | Main application file |
 | `SECRET_KEY` | *(required)* | **MUST be set to secure random value!** |
+| `SESSION_LIFETIME_HOURS` | `12` | Hours before an authenticated session expires |
+| `SESSION_COOKIE_SECURE` | `true` (disabled automatically when `FLASK_ENV=development`) | Enforce secure cookies over HTTPS |
+| `CORS_ALLOWED_ORIGINS` | *(empty)* | Comma-separated list of origins allowed to call `/api/*` endpoints |
+| `CORS_ALLOW_CREDENTIALS` | `false` | Enable `Access-Control-Allow-Credentials` for approved origins |
 
 #### Database Configuration
 
@@ -497,6 +501,8 @@ SELECT PostGIS_Version();
 
 ### API Endpoints (JSON)
 
+All `/api/*` endpoints require an authenticated admin session and include CSRF protection. Invoke them from the admin UI or ensure your integration maintains a logged-in session and forwards the `X-CSRF-Token` header obtained from the UI.
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/alerts` | GET | Get all active alerts |
@@ -519,6 +525,8 @@ SELECT PostGIS_Version();
 | `/admin/clear_boundaries/<type>` | DELETE | Clear boundaries by type |
 
 ### LED Control Endpoints (if enabled)
+
+These endpoints are also session-protected and expect the CSRF header when called programmatically.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|

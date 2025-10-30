@@ -26,6 +26,25 @@ from app_utils import is_alert_expired
 
 from .coverage import calculate_coverage_percentages
 
+_CPU_SAMPLE_INTERVAL_SECONDS = 1.0
+_last_cpu_sample_timestamp: Optional[datetime] = None
+_last_cpu_sample_value: float = 0.0
+
+
+def _get_cpu_usage_percent() -> float:
+    """Return a recently sampled CPU percentage without blocking the request."""
+
+    global _last_cpu_sample_timestamp, _last_cpu_sample_value
+
+    now = datetime.utcnow()
+    if (
+        _last_cpu_sample_timestamp is None
+        or (now - _last_cpu_sample_timestamp).total_seconds() >= _CPU_SAMPLE_INTERVAL_SECONDS
+    ):
+        _last_cpu_sample_value = psutil.cpu_percent(interval=None)
+        _last_cpu_sample_timestamp = now
+    return _last_cpu_sample_value
+
 
 def register_api_routes(app, logger):
     """Attach JSON API endpoints used by the admin UI."""
@@ -593,7 +612,7 @@ def register_api_routes(app, logger):
 
             last_poll = PollHistory.query.order_by(desc(PollHistory.timestamp)).first()
 
-            cpu = psutil.cpu_percent(interval=1)
+            cpu = _get_cpu_usage_percent()
             memory = psutil.virtual_memory()
             disk = psutil.disk_usage('/')
 
