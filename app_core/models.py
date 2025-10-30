@@ -521,6 +521,74 @@ class LEDSignStatus(db.Model):
     is_connected = db.Column(db.Boolean, default=False)
 
 
+class RadioReceiver(db.Model):
+    __tablename__ = "radio_receivers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    identifier = db.Column(db.String(64), unique=True, nullable=False)
+    driver = db.Column(db.String(64), nullable=False)
+    frequency_hz = db.Column(db.Float, nullable=False)
+    sample_rate = db.Column(db.Integer, nullable=False)
+    gain = db.Column(db.Float)
+    channel = db.Column(db.Integer)
+    enabled = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+    statuses = db.relationship(
+        "RadioReceiverStatus",
+        back_populates="receiver",
+        cascade="all, delete-orphan",
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "identifier": self.identifier,
+            "driver": self.driver,
+            "frequency_hz": self.frequency_hz,
+            "sample_rate": self.sample_rate,
+            "gain": self.gain,
+            "channel": self.channel,
+            "enabled": self.enabled,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class RadioReceiverStatus(db.Model):
+    __tablename__ = "radio_receiver_status"
+
+    id = db.Column(db.Integer, primary_key=True)
+    receiver_id = db.Column(
+        db.Integer,
+        db.ForeignKey("radio_receivers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    locked = db.Column(db.Boolean, nullable=False, default=False)
+    signal_strength = db.Column(db.Float)
+    last_error = db.Column(db.Text)
+    reported_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+
+    receiver = db.relationship("RadioReceiver", back_populates="statuses")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "receiver_id": self.receiver_id,
+            "locked": self.locked,
+            "signal_strength": self.signal_strength,
+            "last_error": self.last_error,
+            "reported_at": self.reported_at.isoformat() if self.reported_at else None,
+        }
+
+
 __all__ = [
     "Boundary",
     "CAPAlert",
@@ -532,4 +600,6 @@ __all__ = [
     "LocationSettings",
     "LEDMessage",
     "LEDSignStatus",
+    "RadioReceiver",
+    "RadioReceiverStatus",
 ]

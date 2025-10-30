@@ -175,6 +175,33 @@ CREATE TABLE IF NOT EXISTS led_sign_status (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_led_sign_status_ip ON led_sign_status(sign_ip);
 
+-- Persistent SDR receiver configuration and health telemetry
+CREATE TABLE IF NOT EXISTS radio_receivers (
+    id SERIAL PRIMARY KEY,
+    identifier VARCHAR(64) NOT NULL UNIQUE,
+    driver VARCHAR(64) NOT NULL,
+    frequency_hz DOUBLE PRECISION NOT NULL,
+    sample_rate INTEGER NOT NULL,
+    gain DOUBLE PRECISION,
+    channel INTEGER,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS radio_receiver_status (
+    id SERIAL PRIMARY KEY,
+    receiver_id INTEGER NOT NULL REFERENCES radio_receivers(id) ON DELETE CASCADE,
+    locked BOOLEAN NOT NULL DEFAULT FALSE,
+    signal_strength DOUBLE PRECISION,
+    last_error TEXT,
+    reported_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_radio_receivers_identifier ON radio_receivers(identifier);
+CREATE INDEX IF NOT EXISTS idx_radio_receiver_status_receiver_id ON radio_receiver_status(receiver_id);
+CREATE INDEX IF NOT EXISTS idx_radio_receiver_status_reported_at ON radio_receiver_status(reported_at DESC);
+
 -- Persistent location configuration used by the admin console
 CREATE TABLE IF NOT EXISTS location_settings (
     id SERIAL PRIMARY KEY,
