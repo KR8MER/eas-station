@@ -462,7 +462,10 @@ def register(app: Flask, logger) -> None:
                                     "id": message.id,
                                     "created_at": message.created_at,
                                     "audio_url": audio_url,
-                                    "summary_url": text_url,
+                                    "text_url": text_url,
+                                    "detail_url": url_for(
+                                        "audio_detail", message_id=message.id
+                                    ),
                                 }
                             )
                     except Exception as exc:
