@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from sqlalchemy import func
 
 from app_core.alerts import get_active_alerts_query, get_expired_alerts_query
@@ -27,7 +27,11 @@ def register(app: Flask, logger) -> None:
     @app.route("/export/alerts")
     def export_alerts():
         try:
-            alerts = CAPAlert.query.order_by(CAPAlert.sent.desc()).all()
+            # Add limit parameter to prevent unbounded data loading (default 10,000, max 50,000)
+            limit = request.args.get('limit', 10000, type=int)
+            limit = min(max(1, limit), 50000)  # Clamp between 1 and 50,000
+
+            alerts = CAPAlert.query.order_by(CAPAlert.sent.desc()).limit(limit).all()
             alerts_data: List[Dict[str, Any]] = []
 
             for alert in alerts:
@@ -70,6 +74,7 @@ def register(app: Flask, logger) -> None:
                 {
                     "data": alerts_data,
                     "total": len(alerts_data),
+                    "limit": limit,
                     "exported_at": utc_now().isoformat(),
                     "exported_at_local": local_now().isoformat(),
                     "timezone": get_location_timezone_name(),
@@ -82,7 +87,11 @@ def register(app: Flask, logger) -> None:
     @app.route("/export/boundaries")
     def export_boundaries():
         try:
-            boundaries = Boundary.query.order_by(Boundary.type, Boundary.name).all()
+            # Add limit parameter to prevent unbounded data loading (default 5,000, max 20,000)
+            limit = request.args.get('limit', 5000, type=int)
+            limit = min(max(1, limit), 20000)  # Clamp between 1 and 20,000
+
+            boundaries = Boundary.query.order_by(Boundary.type, Boundary.name).limit(limit).all()
             boundaries_data: List[Dict[str, Any]] = []
 
             for boundary in boundaries:
@@ -114,6 +123,7 @@ def register(app: Flask, logger) -> None:
                 {
                     "data": boundaries_data,
                     "total": len(boundaries_data),
+                    "limit": limit,
                     "exported_at": utc_now().isoformat(),
                     "exported_at_local": local_now().isoformat(),
                     "timezone": get_location_timezone_name(),

@@ -54,9 +54,11 @@ def register_audio_routes(app, logger, eas_config):
     def audio_history():
         try:
             eas_enabled = app.config.get('EAS_BROADCAST_ENABLED', False)
+            # Validate pagination parameters
             page = request.args.get('page', 1, type=int)
+            page = max(1, page)  # Ensure page is at least 1
             per_page = request.args.get('per_page', 25, type=int)
-            per_page = min(max(per_page, 10), 100)
+            per_page = min(max(per_page, 10), 100)  # Clamp between 10 and 100
 
             search = request.args.get('search', '').strip()
             event_filter = request.args.get('event', '').strip()

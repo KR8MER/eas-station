@@ -19,6 +19,7 @@ import json
 import math
 import re
 import psutil
+import threading
 from typing import Any, Dict, List, Optional, Tuple, Union
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
@@ -145,7 +146,15 @@ logger = logging.getLogger(__name__)
 
 # Create Flask app
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
+
+# Require SECRET_KEY to be explicitly set (fail fast if missing or using default)
+secret_key = os.environ.get('SECRET_KEY', '')
+if not secret_key or secret_key == 'dev-key-change-in-production':
+    raise ValueError(
+        "SECRET_KEY environment variable must be set to a secure random string. "
+        "Generate one with: python -c 'import secrets; print(secrets.token_hex(32))'"
+    )
+app.secret_key = secret_key
 
 # Application versioning (exposed via templates for quick deployment verification)
 SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.2.0')
@@ -355,6 +364,7 @@ app.config['EAS_OUTPUT_WEB_SUBDIR'] = EAS_CONFIG.get('web_subdir', 'eas_messages
 # Guard database schema preparation so we only attempt it once per process.
 _db_initialized = False
 _db_initialization_error = None
+_db_init_lock = threading.Lock()
 logger.info("NOAA Alerts System startup")
 
 # Register route modules
@@ -528,65 +538,71 @@ def initialize_database():
     """Create all database tables, logging any initialization failure."""
     global _db_initialized, _db_initialization_error
 
+    # Double-checked locking pattern for thread safety
     if _db_initialized:
         return
 
-    try:
-        postgis_helper = globals().get("ensure_postgis_extension")
-        if postgis_helper is None:
-            logger.warning(
-                "PostGIS helper unavailable during initialization; skipping extension check.",
-            )
-        elif not postgis_helper():
-            _db_initialization_error = RuntimeError("PostGIS extension could not be ensured")
+    with _db_init_lock:
+        # Check again after acquiring lock
+        if _db_initialized:
+            return
+
+        try:
+            postgis_helper = globals().get("ensure_postgis_extension")
+            if postgis_helper is None:
+                logger.warning(
+                    "PostGIS helper unavailable during initialization; skipping extension check.",
+                )
+            elif not postgis_helper():
+                _db_initialization_error = RuntimeError("PostGIS extension could not be ensured")
+                return False
+            db.create_all()
+            if not ensure_alert_source_columns(logger):
+                _db_initialization_error = RuntimeError("CAP alert source columns could not be ensured")
+                return False
+            ensure_boundary_geometry_column(logger)
+            if not ensure_eas_audio_columns(logger):
+                _db_initialization_error = RuntimeError(
+                    "EAS audio columns could not be ensured"
+                )
+                return False
+            if not ensure_eas_message_foreign_key(logger):
+                _db_initialization_error = RuntimeError(
+                    "EAS message foreign key constraint could not be ensured"
+                )
+                return False
+            if not ensure_manual_eas_audio_columns(logger):
+                _db_initialization_error = RuntimeError(
+                    "Manual EAS audio columns could not be ensured"
+                )
+                return False
+            if not ensure_poll_debug_table(logger):
+                _db_initialization_error = RuntimeError(
+                    "Poll debug table could not be ensured"
+                )
+                return False
+            backfill_eas_message_payloads(logger)
+            backfill_manual_eas_audio(logger)
+            settings = get_location_settings(force_reload=True)
+            timezone_name = settings.get('timezone')
+            if timezone_name:
+                set_location_timezone(timezone_name)
+            if not LED_AVAILABLE:
+                initialise_led_controller(logger)
+                ensure_led_tables()
+        except OperationalError as db_error:
+            _db_initialization_error = db_error
+            logger.error("Database initialization failed: %s", db_error)
             return False
-        db.create_all()
-        if not ensure_alert_source_columns(logger):
-            _db_initialization_error = RuntimeError("CAP alert source columns could not be ensured")
-            return False
-        ensure_boundary_geometry_column(logger)
-        if not ensure_eas_audio_columns(logger):
-            _db_initialization_error = RuntimeError(
-                "EAS audio columns could not be ensured"
-            )
-            return False
-        if not ensure_eas_message_foreign_key(logger):
-            _db_initialization_error = RuntimeError(
-                "EAS message foreign key constraint could not be ensured"
-            )
-            return False
-        if not ensure_manual_eas_audio_columns(logger):
-            _db_initialization_error = RuntimeError(
-                "Manual EAS audio columns could not be ensured"
-            )
-            return False
-        if not ensure_poll_debug_table(logger):
-            _db_initialization_error = RuntimeError(
-                "Poll debug table could not be ensured"
-            )
-            return False
-        backfill_eas_message_payloads(logger)
-        backfill_manual_eas_audio(logger)
-        settings = get_location_settings(force_reload=True)
-        timezone_name = settings.get('timezone')
-        if timezone_name:
-            set_location_timezone(timezone_name)
-        if not LED_AVAILABLE:
-            initialise_led_controller(logger)
-            ensure_led_tables()
-    except OperationalError as db_error:
-        _db_initialization_error = db_error
-        logger.error("Database initialization failed: %s", db_error)
-        return False
-    except Exception as db_error:
-        _db_initialization_error = db_error
-        logger.error("Database initialization failed: %s", db_error)
-        raise
-    else:
-        _db_initialized = True
-        _db_initialization_error = None
-        logger.info("Database tables ensured on startup")
-        return True
+        except Exception as db_error:
+            _db_initialization_error = db_error
+            logger.error("Database initialization failed: %s", db_error)
+            raise
+        else:
+            _db_initialized = True
+            _db_initialization_error = None
+            logger.info("Database tables ensured on startup")
+            return True
 
 
 if hasattr(app, "before_serving"):
@@ -705,4 +721,6 @@ if __name__ == '__main__':
     with app.app_context():
         initialize_database()
 
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Use FLASK_DEBUG environment variable to control debug mode (defaults to False for security)
+    debug_mode = os.getenv('FLASK_DEBUG', 'False').lower() in ('true', '1', 'yes')
+    app.run(debug=debug_mode, host='0.0.0.0', port=5000)

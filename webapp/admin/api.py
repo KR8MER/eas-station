@@ -77,16 +77,17 @@ def register_api_routes(app, logger):
 
             intersecting_boundaries = []
             if geometry:
-                intersections = db.session.query(Intersection, Boundary).join(
+                # Fix N+1 query: fetch geometry in a single query with proper join
+                intersections = db.session.query(
+                    Intersection,
+                    Boundary,
+                    func.ST_AsGeoJSON(Boundary.geom).label('geometry')
+                ).join(
                     Boundary, Intersection.boundary_id == Boundary.id
                 ).filter(Intersection.cap_alert_id == alert_id).all()
 
-                for intersection, boundary in intersections:
-                    boundary_geom = db.session.query(
-                        func.ST_AsGeoJSON(Boundary.geom).label('geometry')
-                    ).filter(Boundary.id == boundary.id).first()
-
-                    if boundary_geom and boundary_geom.geometry:
+                for intersection, boundary, boundary_geom_json in intersections:
+                    if boundary_geom_json:
                         intersecting_boundaries.append(
                             {
                                 'type': 'Feature',
@@ -97,7 +98,7 @@ def register_api_routes(app, logger):
                                     'description': boundary.description,
                                     'intersection_area': intersection.intersection_area,
                                 },
-                                'geometry': json.loads(boundary_geom.geometry),
+                                'geometry': json.loads(boundary_geom_json),
                             }
                         )
 
@@ -532,8 +533,11 @@ def register_api_routes(app, logger):
     def get_boundaries():
         """Get all boundaries as GeoJSON"""
         try:
+            # Validate pagination parameters
             page = request.args.get('page', 1, type=int)
+            page = max(1, page)  # Ensure page is at least 1
             per_page = request.args.get('per_page', 1000, type=int)
+            per_page = min(max(per_page, 1), 5000)  # Clamp between 1 and 5000
             boundary_type = request.args.get('type')
             search = request.args.get('search')
 

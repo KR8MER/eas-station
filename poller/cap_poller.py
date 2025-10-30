@@ -491,8 +491,8 @@ class CAPPoller:
             self.logger.warning("Could not ensure source columns exist: %s", exc)
             try:
                 self.db_session.rollback()
-            except Exception:
-                pass
+            except Exception as rollback_exc:
+                self.logger.debug("Rollback failed during source column check: %s", rollback_exc)
 
     def _ensure_debug_records_table(self) -> bool:
         if getattr(self, "_debug_table_checked", False):
@@ -1384,8 +1384,10 @@ class CAPPoller:
                 self.logger.info("Cleaned old poll history")
         except Exception as e:
             self.logger.error(f"cleanup_old_poll_history error: {e}")
-            try: self.db_session.rollback()
-            except: pass
+            try:
+                self.db_session.rollback()
+            except Exception as rollback_exc:
+                self.logger.debug("Rollback failed during poll history cleanup: %s", rollback_exc)
 
     def cleanup_old_debug_records(self):
         if not self._ensure_debug_records_table():
@@ -1600,8 +1602,10 @@ class CAPPoller:
             if hasattr(self, 'session'):
                 self.session.close()
             if self.led_controller:
-                try: self.led_controller.close()
-                except: pass
+                try:
+                    self.led_controller.close()
+                except Exception as led_exc:
+                    self.logger.debug("LED controller cleanup failed: %s", led_exc)
 
 # =======================================================================================
 # Main
@@ -1612,12 +1616,20 @@ def build_database_url_from_env() -> str:
     url = os.getenv("DATABASE_URL")
     if url:
         return url
-    # Else compose from parts (Docker-safe defaults)
-    host = os.getenv("POSTGRES_HOST", "postgresql")       # IMPORTANT: service name, not localhost
-    port = os.getenv("POSTGRES_PORT", "5432")
-    db   = os.getenv("POSTGRES_DB", "casaos")
-    user = os.getenv("POSTGRES_USER", "casaos")
-    pw   = os.getenv("POSTGRES_PASSWORD", "casaos")
+    # Else compose from parts - require explicit credentials for security
+    host = os.getenv("POSTGRES_HOST", "postgresql")  # Docker service name default is safe
+    port = os.getenv("POSTGRES_PORT", "5432")        # Standard PostgreSQL port
+    db   = os.getenv("POSTGRES_DB")
+    user = os.getenv("POSTGRES_USER")
+    pw   = os.getenv("POSTGRES_PASSWORD")
+
+    # Require explicit configuration of credentials
+    if not all([db, user, pw]):
+        raise ValueError(
+            "Database configuration incomplete. Either set DATABASE_URL or all of: "
+            "POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD"
+        )
+
     # Use psycopg2 driver explicitly for SQLAlchemy
     return f"postgresql+psycopg2://{user}:{pw}@{host}:{port}/{db}"
 
@@ -1649,7 +1661,9 @@ def main():
     logger = logging.getLogger(__name__)
 
     startup_utc = utc_now()
-    logger.info("Starting CAP Alert Poller with LED Integration - PUTNAM COUNTY STRICT MODE")
+    # Use dynamic location information instead of hardcoded "PUTNAM COUNTY"
+    poller_mode = (os.getenv('CAP_POLLER_MODE', 'NOAA') or 'NOAA').strip().upper()
+    logger.info(f"Starting CAP Alert Poller with LED Integration - Mode: {poller_mode}")
     logger.info(f"Startup time: {format_local_datetime(startup_utc)}")
     if args.led_ip:
         logger.info(f"LED Sign: {args.led_ip}:{args.led_port}")
