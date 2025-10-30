@@ -525,7 +525,7 @@ class RadioReceiver(db.Model):
     __tablename__ = "radio_receivers"
 
     id = db.Column(db.Integer, primary_key=True)
-    identifier = db.Column(db.String(64), unique=True, nullable=False)
+    identifier = db.Column(db.String(64), nullable=False)
     driver = db.Column(db.String(64), nullable=False)
     frequency_hz = db.Column(db.Float, nullable=False)
     sample_rate = db.Column(db.Integer, nullable=False)
@@ -544,6 +544,10 @@ class RadioReceiver(db.Model):
         "RadioReceiverStatus",
         back_populates="receiver",
         cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        db.Index("idx_radio_receivers_identifier", identifier, unique=True),
     )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -569,7 +573,6 @@ class RadioReceiverStatus(db.Model):
         db.Integer,
         db.ForeignKey("radio_receivers.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     locked = db.Column(db.Boolean, nullable=False, default=False)
     signal_strength = db.Column(db.Float)
@@ -577,6 +580,11 @@ class RadioReceiverStatus(db.Model):
     reported_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
 
     receiver = db.relationship("RadioReceiver", back_populates="statuses")
+
+    __table_args__ = (
+        db.Index("idx_radio_receiver_status_receiver_id", receiver_id),
+        db.Index("idx_radio_receiver_status_reported_at", reported_at.desc()),
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         return {
