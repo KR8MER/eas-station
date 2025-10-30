@@ -197,6 +197,29 @@ class EASMessage(db.Model):
         }
 
 
+class EASDecodedAudio(db.Model):
+    __tablename__ = "eas_decoded_audio"
+
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
+    original_filename = db.Column(db.String(255))
+    content_type = db.Column(db.String(128))
+    raw_text = db.Column(db.Text)
+    same_headers = db.Column(db.JSON, default=list)
+    quality_metrics = db.Column(db.JSON, default=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "original_filename": self.original_filename,
+            "content_type": self.content_type,
+            "raw_text": self.raw_text,
+            "same_headers": list(self.same_headers or []),
+            "quality_metrics": dict(self.quality_metrics or {}),
+        }
+
+
 class ManualEASActivation(db.Model):
     __tablename__ = "manual_eas_activations"
 

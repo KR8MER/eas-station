@@ -22,6 +22,170 @@
         </div>
     </div>
 
+    <div class="card mb-4">
+        <div class="card-header bg-transparent d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+            <h5 class="card-title mb-0"><i class="fas fa-wave-square text-primary"></i> SAME Audio Header Decoder</h5>
+            <span class="text-muted small">Upload a WAV or MP3 recording of SAME bursts.</span>
+        </div>
+        <div class="card-body">
+            <form method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
+                <input type="hidden" name="days" value="{{ window_days }}">
+                <div class="col-md-6">
+                    <label class="form-label" for="audio_file">Audio file</label>
+                    <input class="form-control" type="file" id="audio_file" name="audio_file" accept=".wav,.mp3" required>
+                    <div class="form-text">Only the header portion is analysed; voice content is ignored.</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-check mt-4">
+                        <input class="form-check-input" type="checkbox" id="store_results" name="store_results" {% if request.form.get('store_results') == 'on' %}checked{% endif %}>
+                        <label class="form-check-label" for="store_results">Store decode results</label>
+                    </div>
+                </div>
+                <div class="col-md-3 text-md-end">
+                    <button class="btn btn-primary" type="submit">
+                        <i class="fas fa-microphone-lines"></i> Decode Audio
+                    </button>
+                </div>
+            </form>
+
+            {% if decode_errors %}
+                <div class="alert alert-danger mt-3 mb-0">
+                    <ul class="mb-0">
+                        {% for error in decode_errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+
+            {% if stored_decode and not decode_errors %}
+                <div class="alert alert-success mt-3 mb-0">
+                    <i class="fas fa-check-circle"></i>
+                    Decoded results stored for {{ stored_decode.original_filename or 'uploaded audio' }}.
+                </div>
+            {% endif %}
+
+            {% if decode_result %}
+                <div class="mt-4">
+                    <h6 class="text-muted text-uppercase">Decode Summary</h6>
+                    <dl class="row mb-3 small">
+                        <dt class="col-sm-4">Detected headers</dt>
+                        <dd class="col-sm-8">{{ decode_result.headers|length }}</dd>
+                        <dt class="col-sm-4">Confidence</dt>
+                        <dd class="col-sm-8">{{ '%.2f'|format(decode_result.bit_confidence * 100) }}% avg · {{ '%.2f'|format(decode_result.min_bit_confidence * 100) }}% min</dd>
+                        <dt class="col-sm-4">Frame quality</dt>
+                        <dd class="col-sm-8">{{ decode_result.frame_count - decode_result.frame_errors }} valid of {{ decode_result.frame_count }}</dd>
+                        <dt class="col-sm-4">Duration analysed</dt>
+                        <dd class="col-sm-8">{{ '%.2f'|format(decode_result.duration_seconds) }} seconds @ {{ decode_result.sample_rate }} Hz</dd>
+                    </dl>
+
+                    {% if decode_result.raw_text %}
+                        <div class="mb-3">
+                            <label class="form-label">Raw decoded text</label>
+                            <pre class="bg-light border rounded px-3 py-2 small mb-0">{{ decode_result.raw_text }}</pre>
+                        </div>
+                    {% endif %}
+
+                    {% if decode_result.headers %}
+                        <div class="row g-3">
+                            {% for header in decode_result.headers %}
+                                <div class="col-xl-6">
+                                    <div class="border rounded p-3 h-100">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="mb-0">{{ header.header }}</h6>
+                                            <span class="badge bg-primary">{{ '%.1f'|format(header.confidence * 100) }}% confidence</span>
+                                        </div>
+                                        {% set detail = header.fields or {} %}
+                                        <dl class="row small mb-0">
+                                            <dt class="col-sm-5">Originator</dt>
+                                            <dd class="col-sm-7">{{ detail.originator or '—' }}{% if detail.originator_description %} ({{ detail.originator_description }}){% endif %}</dd>
+                                            <dt class="col-sm-5">Event</dt>
+                                            <dd class="col-sm-7">{{ detail.event_code or '—' }}</dd>
+                                            <dt class="col-sm-5">Station</dt>
+                                            <dd class="col-sm-7">{{ detail.station_identifier or '—' }}</dd>
+                                            <dt class="col-sm-5">Purge duration</dt>
+                                            <dd class="col-sm-7">{{ detail.purge_label or detail.purge_code or '—' }}</dd>
+                                            <dt class="col-sm-5">Issue time</dt>
+                                            <dd class="col-sm-7">{{ detail.issue_time_label or '—' }}</dd>
+                                        </dl>
+                                        {% if detail.locations %}
+                                            <div class="mt-2">
+                                                <h6 class="text-muted text-uppercase small mb-1">Locations ({{ detail.location_count }})</h6>
+                                                <ul class="list-unstyled small mb-0">
+                                                    {% for location in detail.locations %}
+                                                        <li>
+                                                            <strong>{{ location.code }}</strong>
+                                                            · {{ location.description }}
+                                                            {% if location.p_meaning %}
+                                                                <span class="text-muted">({{ location.p_meaning }})</span>
+                                                            {% endif %}
+                                                        </li>
+                                                    {% endfor %}
+                                                </ul>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">No SAME headers were detected in the supplied audio.</p>
+                    {% endif %}
+                </div>
+            {% endif %}
+
+            {% if recent_decodes %}
+                <hr>
+                <h6 class="text-muted text-uppercase mb-3">Recent Stored Decodes</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th scope="col">Recorded</th>
+                                <th scope="col">Source File</th>
+                                <th scope="col">Headers</th>
+                                <th scope="col">Confidence</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for decode in recent_decodes %}
+                                <tr>
+                                    <td>
+                                        {% if decode.created_at %}
+                                            {{ format_local_datetime(decode.created_at, include_utc=True) }}
+                                        {% else %}
+                                            <span class="text-muted">Unknown</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ decode.original_filename or '—' }}</td>
+                                    <td>
+                                        {% if decode.same_headers %}
+                                            <ul class="list-unstyled mb-0 small">
+                                                {% for header in decode.same_headers %}
+                                                    <li>{{ header.header or header }}</li>
+                                                {% endfor %}
+                                            </ul>
+                                        {% else %}
+                                            <span class="text-muted small">None captured</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% set metrics = decode.quality_metrics or {} %}
+                                        {% if metrics.bit_confidence is not none %}
+                                            {{ '%.1f'|format(metrics.bit_confidence * 100) }}%
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
     {% set summary = payload.summary or {} %}
     {% set total = summary.total or 0 %}
     {% set delivered = (summary.delivered or 0) + (summary.partial or 0) %}

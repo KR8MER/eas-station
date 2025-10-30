@@ -18,10 +18,12 @@ from app_core.extensions import db
 from app_core.models import (
     AlertDeliveryReport,
     CAPAlert,
+    EASDecodedAudio,
     EASMessage,
     ManualEASActivation,
 )
 from app_utils import ALERT_SOURCE_UNKNOWN
+from app_utils.eas_decode import SAMEAudioDecodeResult
 from app_utils.time import format_local_datetime, utc_now
 
 
@@ -35,6 +37,72 @@ TEST_EVENT_KEYWORDS = (
 DELIVERED_EVENT_STATUSES = {"delivered", "completed", "success", "ok", "played"}
 FAILED_EVENT_STATUSES = {"failed", "error", "timeout", "aborted"}
 PENDING_EVENT_STATUSES = {"pending", "queued", "waiting", "scheduled"}
+
+
+def record_audio_decode_result(
+    *,
+    filename: Optional[str],
+    content_type: Optional[str],
+    decode_payload: SAMEAudioDecodeResult,
+):
+    """Persist the results of decoding an uploaded SAME audio payload."""
+
+    safe_filename = (filename or "").strip()[:255] or None
+    safe_type = (content_type or "").strip()[:128] or None
+
+    record = EASDecodedAudio(
+        original_filename=safe_filename,
+        content_type=safe_type,
+        raw_text=decode_payload.raw_text,
+        same_headers=[header.to_dict() for header in decode_payload.headers],
+        quality_metrics={
+            "bit_count": decode_payload.bit_count,
+            "frame_count": decode_payload.frame_count,
+            "frame_errors": decode_payload.frame_errors,
+            "duration_seconds": decode_payload.duration_seconds,
+            "sample_rate": decode_payload.sample_rate,
+            "bit_confidence": decode_payload.bit_confidence,
+            "min_bit_confidence": decode_payload.min_bit_confidence,
+        },
+    )
+
+    try:
+        db.session.add(record)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+
+    return record
+
+
+def load_recent_audio_decodes(limit: int = 5) -> List[Dict[str, Any]]:
+    """Return the most recent decoded audio payloads for display."""
+
+    try:
+        query = EASDecodedAudio.query.order_by(EASDecodedAudio.created_at.desc())
+        if limit > 0:
+            query = query.limit(limit)
+        rows = query.all()
+    except Exception:
+        db.session.rollback()
+        return []
+
+    results: List[Dict[str, Any]] = []
+    for row in rows:
+        results.append(
+            {
+                "id": row.id,
+                "created_at": row.created_at,
+                "original_filename": row.original_filename,
+                "content_type": row.content_type,
+                "raw_text": row.raw_text,
+                "same_headers": list(row.same_headers or []),
+                "quality_metrics": dict(row.quality_metrics or {}),
+            }
+        )
+
+    return results
 
 
 def _resolve_delay_threshold_seconds() -> int:
