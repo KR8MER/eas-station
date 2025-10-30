@@ -30,21 +30,20 @@ class Config:
         # Build from individual POSTGRES_* variables (same logic as app.py)
         user = os.environ.get('POSTGRES_USER', 'postgres') or 'postgres'
         password = os.environ.get('POSTGRES_PASSWORD', '')
-        host = os.environ.get('POSTGRES_HOST', 'postgres') or 'postgres'
+        host = os.environ.get('POSTGRES_HOST', 'host.docker.internal') or 'host.docker.internal'
         port = os.environ.get('POSTGRES_PORT', '5432') or '5432'
         database = os.environ.get('POSTGRES_DB', user) or user
 
-        if not password:
-            raise ValueError(
-                "POSTGRES_PASSWORD environment variable must be set. "
-                "Either set DATABASE_URL or all required POSTGRES_* variables."
-            )
-
         # URL-encode credentials to handle special characters (same as app.py)
         user_part = quote(user, safe='')
-        password_part = quote(password, safe='')
+        password_part = quote(password, safe='') if password else ''
 
-        SQLALCHEMY_DATABASE_URI = f"postgresql+psycopg2://{user_part}:{password_part}@{host}:{port}/{database}"
+        if password_part:
+            auth_segment = f"{user_part}:{password_part}"
+        else:
+            auth_segment = user_part
+
+        SQLALCHEMY_DATABASE_URI = f"postgresql+psycopg2://{auth_segment}@{host}:{port}/{database}"
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {

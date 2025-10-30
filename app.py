@@ -157,14 +157,14 @@ if not secret_key or secret_key == 'dev-key-change-in-production':
 app.secret_key = secret_key
 
 # Application versioning (exposed via templates for quick deployment verification)
-SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.2.0')
+SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.3.0')
 app.config['SYSTEM_VERSION'] = SYSTEM_VERSION
 
 def _build_database_url() -> str:
     """Build database URL from environment variables.
 
     Prioritizes DATABASE_URL if set, otherwise builds from POSTGRES_* variables.
-    Requires POSTGRES_PASSWORD to be explicitly set for security.
+    If POSTGRES_PASSWORD is omitted, builds a URL without credentials.
     """
     url = os.getenv('DATABASE_URL')
     if url:
@@ -173,22 +173,20 @@ def _build_database_url() -> str:
     # Build from individual POSTGRES_* variables
     user = os.getenv('POSTGRES_USER', 'postgres') or 'postgres'
     password = os.getenv('POSTGRES_PASSWORD', '')
-    host = os.getenv('POSTGRES_HOST', 'postgres') or 'postgres'
+    host = os.getenv('POSTGRES_HOST', 'host.docker.internal') or 'host.docker.internal'
     port = os.getenv('POSTGRES_PORT', '5432') or '5432'
     database = os.getenv('POSTGRES_DB', user) or user
 
-    # Require explicit password for security (consistent with configure.py and cap_poller.py)
-    if not password:
-        raise ValueError(
-            "POSTGRES_PASSWORD environment variable must be set. "
-            "Either set DATABASE_URL or all required POSTGRES_* variables including password."
-        )
-
     # URL-encode credentials to handle special characters
     user_part = quote(user, safe='')
-    password_part = quote(password, safe='')
+    password_part = quote(password, safe='') if password else ''
 
-    return f"postgresql+psycopg2://{user_part}:{password_part}@{host}:{port}/{database}"
+    if password_part:
+        auth_segment = f"{user_part}:{password_part}"
+    else:
+        auth_segment = user_part
+
+    return f"postgresql+psycopg2://{auth_segment}@{host}:{port}/{database}"
 
 
 def _get_eas_output_root() -> Optional[str]:

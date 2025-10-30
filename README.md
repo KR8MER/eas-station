@@ -389,14 +389,14 @@ nano .env  # or use your preferred editor
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `POSTGRES_HOST` | `host.docker.internal` | Database hostname |
+| `POSTGRES_HOST` | `host.docker.internal` | Database hostname (override to `alerts-db` when using the embedded profile) |
 | `POSTGRES_PORT` | `5432` | Database port |
-| `POSTGRES_DB` | `casaos` | Database name |
-| `POSTGRES_USER` | `casaos` | Database username |
-| `POSTGRES_PASSWORD` | `casaos` | **Change in production!** |
+| `POSTGRES_DB` | `alerts` | Database name |
+| `POSTGRES_USER` | `postgres` | Database username |
+| `POSTGRES_PASSWORD` | `change-me` | **Change in production!** |
 | `DATABASE_URL` | *(computed)* | Full connection string |
 
-**Docker Networking Note:** When running in Docker, use `postgresql` as the hostname (Docker service name) instead of `localhost`. The default `.env` uses `host.docker.internal` for flexibility.
+**Docker Networking Note:** When running everything via Docker Compose with the embedded database service, override `POSTGRES_HOST` to `alerts-db` (the service name). When connecting back to an existing host-managed Postgres instance, the default `host.docker.internal` works across Windows, macOS, and modern Linux Docker releases.
 
 #### Alert Poller Settings
 
