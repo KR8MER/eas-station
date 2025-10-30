@@ -221,6 +221,8 @@ PUBLIC_API_GET_PATHS = {
 CSRF_SESSION_KEY = '_csrf_token'
 CSRF_HEADER_NAME = 'X-CSRF-Token'
 CSRF_PROTECTED_METHODS = {'POST', 'PUT', 'PATCH', 'DELETE'}
+CSRF_EXEMPT_ENDPOINTS = {'login', 'logout', 'static'}
+CSRF_EXEMPT_PATHS = {'/login', '/logout'}
 app.config['CSRF_SESSION_KEY'] = CSRF_SESSION_KEY
 
 # Require SECRET_KEY to be explicitly set (fail fast if missing or using default)
@@ -593,7 +595,7 @@ def before_request():
         g.admin_setup_mode = False
 
     # Allow authentication endpoints without CSRF or other checks.
-    if request.endpoint in {'login', 'static'}:
+    if (request.endpoint in CSRF_EXEMPT_ENDPOINTS) or (request.path in CSRF_EXEMPT_PATHS):
         return
 
     if request.method in CSRF_PROTECTED_METHODS:
@@ -609,6 +611,12 @@ def before_request():
                 request_token = request.headers.get('X-CSRFToken')
 
         if not session_token or not request_token or not hmac.compare_digest(session_token, request_token):
+            if request.endpoint == 'login' or request.path == '/login':
+                logger.info('Login CSRF token mismatch detected; refreshing session token and redirecting to login.')
+                session.pop(CSRF_SESSION_KEY, None)
+                session[CSRF_SESSION_KEY] = secrets.token_urlsafe(32)
+                flash('Your session has expired. Please sign in again.')
+                return redirect(url_for('login'))
             if request.path.startswith('/api/') or request.is_json or 'application/json' in (request.headers.get('Accept', '') or ''):
                 return jsonify({'error': 'Invalid or missing CSRF token'}), 400
             abort(400)
