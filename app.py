@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-NOAA CAP Alerts and GIS Boundary Mapping System
-Flask Web Application with Enhanced Boundary Management and Alerts History
+EAS Station - Complete Emergency Alert System Platform
+Flask-based CAP ingestion, SAME encoding, broadcast, and verification system
 
 Author: KR8MER Amateur Radio Emergency Communications
-Description: Emergency alert system with configurable U.S. jurisdiction support and proper timezone handling
+Description: Multi-source alert aggregation with FCC-compliant SAME encoding, PostGIS spatial intelligence,
+             SDR verification, and LED signage integration
 Version: 2.1.9 - Adds per-line LED formatting support and WYSIWYG message editing
 """
 

@@ -1,6 +1,6 @@
-# 📡 NOAA CAP Emergency Alert System
+# 📡 EAS Station
 
-> A comprehensive emergency alert management system for monitoring NOAA Common Alerting Protocol (CAP) alerts with real-time mapping, GIS boundary integration, and optional LED signage display.
+> A complete Emergency Alert System (EAS) platform for ingesting, broadcasting, and verifying NOAA and IPAWS Common Alerting Protocol (CAP) alerts. Features FCC-compliant SAME encoding, multi-source aggregation, PostGIS spatial intelligence, SDR verification, and integrated LED signage.
 
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://www.docker.com/)
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-blue?logo=python)](https://www.python.org/)
@@ -12,31 +12,71 @@
 
 ---
 
-## ✨ Features
+## 🎯 What is EAS Station?
 
-### Core Capabilities
-- 🗺️ **Interactive Map Dashboard** - Real-time visualization of active alerts with geographic boundaries
-- 📊 **Advanced Statistics** - Comprehensive analytics with charts showing alert trends, severity distribution, and geographic impact
-- 🔄 **Automatic Alert Polling** - Continuous background monitoring of NOAA and IPAWS CAP feeds (configurable intervals)
-- 🗄️ **PostGIS Integration** - Spatial database queries for precise alert-boundary intersections
-- 📍 **GIS Boundary Management** - Upload and manage county, district, and custom geographic boundaries
-- 🌓 **Dark/Light Theme** - Consistent theme support across all pages with persistent user preferences
-- 📱 **Responsive Design** - Mobile-friendly interface with Bootstrap 5
+EAS Station transforms Common Alerting Protocol (CAP) data from NOAA and IPAWS into FCC-compliant SAME/EAS broadcasts. Unlike simple alert monitors, it provides:
 
-### Advanced Features
-- 🚨 **LED Sign Integration** - Optional Alpha Protocol compatible LED display support
-- ⏰ **Timezone Aware** - Proper handling of Eastern Time (Putnam County, OH) with UTC storage
-- 📈 **System Health Monitoring** - Real-time CPU, memory, disk, network, and process monitoring
-- 📜 **Alert History** - Searchable archive with filtering by status, severity, and date
-- 🔍 **Detailed Alert Views** - Complete CAP alert information including instructions and affected areas
-- 🔐 **Secure by Default** - Environment-based secrets, proper session handling, security headers
-- 🧭 **Alert Provenance** - Displays the originating feed (NOAA, IPAWS, manual) across dashboards, exports, and LED signage while deduplicating overlapping identifiers
+- **Automatic SAME encoding and broadcast** - No manual intervention required for routine weather alerts
+- **Multi-source intelligence** - Aggregates NOAA Weather Service and FEMA IPAWS feeds with deduplication
+- **Spatial awareness** - Uses PostGIS to determine which geographic boundaries are affected
+- **Verification loop** - Captures broadcasts via SDR and decodes SAME headers to confirm delivery
+- **Compliance documentation** - Automatic audit logs and CSV exports for FCC reporting
 
-### Technical Highlights
-- 🐳 **Docker-First Architecture** - Single-command deployment with Docker Compose
-- 🔄 **Auto-Recovery** - Containers automatically restart on failure
-- 📊 **RESTful API** - JSON endpoints for integration with external systems
-- 🎨 **Modern UI** - Bootstrap 5 with Font Awesome icons and Highcharts visualization
+### 👥 Who Should Use This?
+
+- **Amateur Radio Emergency Services (ARES/RACES)** - Volunteer-operated EAS relay stations
+- **County Emergency Operations Centers** - Multi-jurisdictional alert aggregation and mapping
+- **Public Safety Answering Points (PSAPs)** - Real-time situational awareness for dispatch
+- **Emergency Management Agencies** - Compliance tracking and alert verification
+- **Community Radio Stations** - Open-source alternative to commercial EAS encoders
+- **Educational Institutions** - Campus alert systems with geographic boundary management
+
+---
+
+## ✨ What Makes EAS Station Different
+
+EAS Station is not just an alert monitor—it's a **complete emergency broadcast platform** that automates the entire CAP-to-EAS workflow:
+
+### 🎙️ Broadcast & Encoding
+- **FCC-Compliant SAME Encoding** - Generates proper SAME headers at 520⅔ baud with 3-burst transmission per §11.31
+- **Automatic EAS Audio Generation** - Complete WAV packages with attention tones, TTS narration, and EOM bursts
+- **GPIO Relay Control** - Hardware transmitter automation with configurable hold times
+- **Manual Broadcast Builder** - Full encoder interface with hierarchical SAME code picker and live header preview
+- **Quick Test Templates** - One-click RWT/RMT generation for compliance testing
+
+### 📡 Multi-Source Aggregation
+- **NOAA Weather Service** - Continuous polling of NWS CAP feeds with configurable intervals
+- **IPAWS/FEMA Integration** - Dedicated poller for Integrated Public Alert & Warning System feeds
+- **Manual CAP Injection** - CLI tools for importing CAP XML files for drills and exercises
+- **Intelligent Deduplication** - Cross-feed alert matching by identifier with source tracking
+- **Alert Provenance** - Clear labeling of NOAA vs. IPAWS vs. manual origins throughout the UI
+
+### 🗺️ Geographic Intelligence
+- **PostGIS Spatial Queries** - Real-time alert-boundary intersection calculations with polygon geometry
+- **Multi-Layer Boundary Support** - Counties, townships, fire districts, EMS zones, utilities, waterways, and custom polygons
+- **Interactive Map Dashboard** - Real-time Leaflet visualization with color-coded alert severity
+- **Automated Geometry Processing** - Converts CAP polygons and circles to PostGIS-compatible formats
+
+### 📻 Verification & Compliance
+- **Multi-SDR Orchestration** - Automatic IQ/PCM capture from RTL2832U and Airspy receivers during SAME events
+- **Audio Decode Verification** - Extract SAME headers from received broadcasts with confidence scoring
+- **Delivery Analytics** - Track received vs. relayed alerts with per-originator trending
+- **Compliance Exports** - CSV/PDF reports for FCC and state emergency management audits
+- **Complete Audit Trail** - Timestamped logs of all ingestions, broadcasts, and manual activations
+
+### 🖥️ Operations & Control
+- **LED Signage Synchronization** - Alpha Protocol display control with priority queuing and per-line formatting
+- **Real-Time System Health** - CPU, memory, disk, network, temperature monitoring with live dashboards
+- **Session-Based Admin Portal** - User authentication, boundary management, and broadcast controls
+- **Searchable Alert Archive** - Filter by severity, status, date, and geographic impact
+- **RESTful API** - JSON endpoints for external integration and automation
+
+### 🔧 Deployment & Infrastructure
+- **Docker-First Architecture** - Single-command deployment with automatic database migrations
+- **External PostGIS Database** - Bring your own managed PostgreSQL/PostGIS instance (no vendor lock-in)
+- **Auto-Recovery** - Containers restart on failure with health checks
+- **Environment-Based Configuration** - All settings via `.env` file with template-based setup
+- **Dark/Light Theme** - Consistent UI across all pages with persistent user preferences
 
 ---
 
@@ -60,7 +100,7 @@
 ### One-Command Installation
 
 ```bash
-bash -c "git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems.git && cd noaa_alerts_systems && cp .env.example .env && docker compose up -d --build"
+bash -c "git clone -b Experimental https://github.com/KR8MER/eas-station.git && cd eas-station && cp .env.example .env && docker compose up -d --build"
 ```
 
 > 💡 Update `.env` before or immediately after the first launch so `POSTGRES_HOST`, `POSTGRES_PASSWORD`, and related settings point at your database deployment.
@@ -73,8 +113,8 @@ bash -c "git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems
 If you prefer to run each step manually, the equivalent sequence is:
 
 ```bash
-git clone -b Experimental https://github.com/KR8MER/noaa_alerts_systems.git
-cd noaa_alerts_systems
+git clone -b Experimental https://github.com/KR8MER/eas-station.git
+cd eas-station
 # Copy the template environment file and edit it before exposing services.
 cp .env.example .env
 # IMPORTANT: Edit .env and set SECRET_KEY and POSTGRES_PASSWORD!
@@ -145,28 +185,34 @@ docker compose up -d --force-recreate
 ## 🏗️ System Architecture
 
 ```
-┌────────────────────────────────────────────────────────────────────┐
-│                 NOAA + IPAWS CAP Alert System Stack                 │
-├────────────────────────────────────────────────────────────────────┤
-│                                                                    │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐         │
-│  │   Flask App  │    │  NOAA Poller │    │ IPAWS Poller │         │
-│  │  (Gunicorn)  │◄───┤ (Background) │    │ (Background) │─────┐   │
-│  │   Port 5000  │    │   Continuous │    │   120 sec    │     │   │
-│  └──────────────┘    └──────────────┘    └──────────────┘     │   │
-│         │                    │                    │          │   │
-│         │                    └──────────────┬──────┘          │   │
-│         ▼                                   ▼                 ▼   │
-│  ┌──────────────────────────────────────────────────────────────┐ │
-│  │                   PostgreSQL + PostGIS                       │ │
-│  │                 (Persistent alert storage)                   │ │
-│  └──────────────────────────────────────────────────────────────┘ │
-│                                                                    │
-└────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                       EAS Station Platform                          │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │
+│  │   Flask App  │  │  NOAA Poller │  │ IPAWS Poller │             │
+│  │  (Gunicorn)  │  │ (Background) │  │ (Background) │             │
+│  │   Port 5000  │  │   Continuous │  │   120 sec    │             │
+│  └──────────────┘  └──────────────┘  └──────────────┘             │
+│         │                 │                   │                    │
+│         │                 └───────┬───────────┘                    │
+│         ▼                         ▼                                │
+│  ┌────────────────────────────────────────────────────────┐        │
+│  │            PostgreSQL + PostGIS Database               │        │
+│  │   (Alerts, Boundaries, EAS Messages, SDR Config)       │        │
+│  └────────────────────────────────────────────────────────┘        │
+│         │                                                           │
+│         └────────┬──────────┬──────────┬──────────┐                │
+│                  ▼          ▼          ▼          ▼                │
+│           ┌──────────┐ ┌────────┐ ┌────────┐ ┌─────────┐          │
+│           │   SAME   │ │  GPIO  │ │  SDR   │ │   LED   │          │
+│           │  Encoder │ │  Relay │ │ Capture│ │ Display │          │
+│           └──────────┘ └────────┘ └────────┘ └─────────┘          │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
          │                          │
          ▼                          ▼
-  External Users             NOAA & IPAWS Feeds
-   (Web Browser)              (Alert Polling)
+  Operators/Web UI         NOAA & IPAWS CAP Feeds
 ```
 
 ### Service Components
@@ -836,7 +882,7 @@ curl http://localhost:5000/health
 ## 📄 Project Structure
 
 ```
-noaa_alerts_systems/
+eas-station/
 ├── app.py                    # Main Flask application
 ├── requirements.txt          # Python dependencies
 ├── Dockerfile                # Container image definition
