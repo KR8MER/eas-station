@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: noaa-alerts:latest
+    image: eas-station:latest
     ports:
       - "5000:5000"
     env_file:
@@ -12,7 +12,7 @@ services:
       - "host.docker.internal:host-gateway"
 
   poller:
-    image: noaa-alerts:latest
+    image: eas-station:latest
     command: ["python", "poller/cap_poller.py", "--continuous"]
     restart: unless-stopped
     env_file:
@@ -21,7 +21,7 @@ services:
       - "host.docker.internal:host-gateway"
 
   ipaws-poller:
-    image: noaa-alerts:latest
+    image: eas-station:latest
     command:
       - python
       - poller/cap_poller.py

@@ -7,6 +7,12 @@
 [![Flask](https://img.shields.io/badge/Flask-2.3-green?logo=flask)](https://flask.palletsprojects.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue?logo=postgresql)](https://www.postgresql.org/)
 [![PostGIS](https://img.shields.io/badge/PostGIS-Enabled-orange)](https://postgis.net/)
+[![GitHub issues](https://img.shields.io/github/issues/KR8MER/eas-station)](https://github.com/KR8MER/eas-station/issues)
+[![GitHub stars](https://img.shields.io/github/stars/KR8MER/eas-station)](https://github.com/KR8MER/eas-station/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/KR8MER/eas-station)](https://github.com/KR8MER/eas-station/network)
+[![GitHub last commit](https://img.shields.io/github/last-commit/KR8MER/eas-station)](https://github.com/KR8MER/eas-station/commits)
+[![GitHub repo size](https://img.shields.io/github/repo-size/KR8MER/eas-station)](https://github.com/KR8MER/eas-station)
+[![License](https://img.shields.io/badge/License-Emergency_Comms-blue.svg)](LICENSE)
 
 **Built for:** Amateur Radio Emergency Communications (KR8MER) | Putnam County, Ohio
 
