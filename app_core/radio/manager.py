@@ -86,6 +86,10 @@ class RadioManager:
                 if not driver_cls:
                     raise KeyError(f"No driver registered for '{config.driver}'")
 
+                existing = self._receivers.get(config.identifier)
+                if existing is not None:
+                    existing.stop()
+
                 receiver = driver_cls(config)
                 desired[config.identifier] = receiver
 
