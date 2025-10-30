@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>{% block title %}KR8MER CAP - Emergency Alert System{% endblock %}</title>
 
     <!-- Favicon -->
@@ -13,6 +14,25 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+    <script>
+        window.CSRF_TOKEN = {{ csrf_token | tojson }};
+        (function() {
+            const originalFetch = window.fetch;
+            window.fetch = function(input, init) {
+                init = init || {};
+                const method = (init.method || 'GET').toUpperCase();
+                if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+                    const headers = new Headers(init.headers || {});
+                    if (window.CSRF_TOKEN && !headers.has('X-CSRF-Token')) {
+                        headers.set('X-CSRF-Token', window.CSRF_TOKEN);
+                    }
+                    init.headers = headers;
+                }
+                return originalFetch.call(this, input, init);
+            };
+        })();
+    </script>
 
     {% if location_settings %}
     <script>
@@ -511,6 +531,39 @@
 
             // Load saved theme
             loadTheme();
+
+            document.querySelectorAll('form').forEach((form) => {
+                const method = (form.getAttribute('method') || 'GET').toUpperCase();
+                if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+                    return;
+                }
+                if (!form.querySelector('input[name="csrf_token"]')) {
+                    const tokenField = document.createElement('input');
+                    tokenField.type = 'hidden';
+                    tokenField.name = 'csrf_token';
+                    tokenField.value = window.CSRF_TOKEN || '';
+                    form.appendChild(tokenField);
+                }
+            });
+
+            document.addEventListener('submit', function(event) {
+                const form = event.target;
+                if (!(form instanceof HTMLFormElement)) {
+                    return;
+                }
+                const method = (form.getAttribute('method') || 'GET').toUpperCase();
+                if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+                    return;
+                }
+                let tokenField = form.querySelector('input[name="csrf_token"]');
+                if (!tokenField) {
+                    tokenField = document.createElement('input');
+                    tokenField.type = 'hidden';
+                    tokenField.name = 'csrf_token';
+                    form.appendChild(tokenField);
+                }
+                tokenField.value = window.CSRF_TOKEN || '';
+            }, true);
 
             // Update time immediately and then every second
             updateCurrentTime();

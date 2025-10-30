@@ -13,11 +13,13 @@ Version: 2.1.9 - Adds per-line LED formatting support and WYSIWYG message editin
 # =============================================================================
 
 import base64
+import hmac
 import io
 import os
 import json
 import math
 import re
+import secrets
 import psutil
 import threading
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -147,6 +149,45 @@ logger = logging.getLogger(__name__)
 # Create Flask app
 app = Flask(__name__)
 
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SECURE'] = (
+    os.environ.get('SESSION_COOKIE_SECURE', 'true').lower() == 'true'
+    if not app.debug
+    else False
+)
+app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
+try:
+    session_hours = int(os.environ.get('SESSION_LIFETIME_HOURS', '12'))
+except ValueError:
+    session_hours = 12
+app.permanent_session_lifetime = timedelta(hours=session_hours)
+
+raw_origins = os.environ.get('CORS_ALLOWED_ORIGINS', '')
+if raw_origins.strip():
+    allowed_origins = {
+        origin.strip()
+        for origin in raw_origins.split(',')
+        if origin.strip()
+    }
+else:
+    allowed_origins = set()
+app.config['CORS_ALLOWED_ORIGINS'] = allowed_origins
+app.config['CORS_ALLOW_CREDENTIALS'] = (
+    os.environ.get('CORS_ALLOW_CREDENTIALS', 'false').lower() == 'true'
+)
+
+PUBLIC_API_GET_PATHS = {
+    '/api/alerts',
+    '/api/alerts/historical',
+    '/api/boundaries',
+    '/api/system_status',
+}
+
+CSRF_SESSION_KEY = '_csrf_token'
+CSRF_HEADER_NAME = 'X-CSRF-Token'
+CSRF_PROTECTED_METHODS = {'POST', 'PUT', 'PATCH', 'DELETE'}
+app.config['CSRF_SESSION_KEY'] = CSRF_SESSION_KEY
+
 # Require SECRET_KEY to be explicitly set (fail fast if missing or using default)
 secret_key = os.environ.get('SECRET_KEY', '')
 if not secret_key or secret_key == 'dev-key-change-in-production':
@@ -159,6 +200,15 @@ app.secret_key = secret_key
 # Application versioning (exposed via templates for quick deployment verification)
 SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.3.0')
 app.config['SYSTEM_VERSION'] = SYSTEM_VERSION
+
+
+def generate_csrf_token() -> str:
+    token = session.get(CSRF_SESSION_KEY)
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session[CSRF_SESSION_KEY] = token
+    return token
+
 
 def _build_database_url() -> str:
     """Build database URL from environment variables.
@@ -471,6 +521,7 @@ def inject_global_vars():
         'current_user': getattr(g, 'current_user', None),
         'eas_broadcast_enabled': app.config.get('EAS_BROADCAST_ENABLED', False),
         'eas_output_web_subdir': app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages'),
+        'csrf_token': generate_csrf_token(),
     }
 
 
@@ -503,13 +554,40 @@ def before_request():
     except Exception:
         g.admin_setup_mode = False
 
+    if request.method in CSRF_PROTECTED_METHODS:
+        session_token = session.get(CSRF_SESSION_KEY)
+        request_token = None
+        if request.is_json:
+            request_token = request.headers.get(CSRF_HEADER_NAME)
+        else:
+            request_token = request.form.get('csrf_token')
+            if not request_token:
+                request_token = request.headers.get(CSRF_HEADER_NAME)
+            if not request_token:
+                request_token = request.headers.get('X-CSRFToken')
+
+        if not session_token or not request_token or not hmac.compare_digest(session_token, request_token):
+            if request.path.startswith('/api/') or request.is_json or 'application/json' in (request.headers.get('Accept', '') or ''):
+                return jsonify({'error': 'Invalid or missing CSRF token'}), 400
+            abort(400)
+
     # Allow authentication endpoints without additional checks.
     if request.endpoint in {'login', 'static'}:
         return
 
-    protected_prefixes = ('/admin', '/logs')
+    if request.path.startswith('/api/'):
+        normalized_path = request.path.rstrip('/') or '/'
+        if (
+            request.method in {'GET', 'HEAD', 'OPTIONS'}
+            and normalized_path in PUBLIC_API_GET_PATHS
+        ):
+            return
+
+    protected_prefixes = ('/admin', '/logs', '/api')
     if any(request.path.startswith(prefix) for prefix in protected_prefixes):
         if g.current_user is None:
+            if request.path.startswith('/api/'):
+                return jsonify({'error': 'Authentication required'}), 401
             if g.admin_setup_mode and request.endpoint in {'admin', 'admin_users'}:
                 if request.method == 'GET' or (request.method == 'POST' and request.endpoint == 'admin_users'):
                     return
@@ -525,9 +603,23 @@ def after_request(response):
     """After request hook for headers and cleanup"""
     # Add CORS headers for API endpoints
     if request.path.startswith('/api/'):
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        allowed_origins = app.config.get('CORS_ALLOWED_ORIGINS', set())
+        origin = request.headers.get('Origin')
+        allow_any = '*' in allowed_origins
+
+        if allow_any:
+            response.headers['Access-Control-Allow-Origin'] = '*'
+        elif origin and origin in allowed_origins:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers.add('Vary', 'Origin')
+
+        if allow_any or (origin and origin in allowed_origins):
+            response.headers['Access-Control-Allow-Headers'] = (
+                f'Content-Type,Authorization,{CSRF_HEADER_NAME}'
+            )
+            response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
+            if app.config.get('CORS_ALLOW_CREDENTIALS') and not allow_any:
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
 
     # Add security headers
     response.headers.add('X-Content-Type-Options', 'nosniff')
