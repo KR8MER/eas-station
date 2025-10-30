@@ -727,6 +727,12 @@ class CAPPoller:
         area_desc = '; '.join(area_descs)
         return geometry, area_desc, geocodes
 
+    def _coords_equal(self, p1: List[float], p2: List[float], epsilon: float = 1e-7) -> bool:
+        """Check if two coordinate pairs are equal within floating-point tolerance."""
+        if len(p1) < 2 or len(p2) < 2:
+            return False
+        return abs(p1[0] - p2[0]) < epsilon and abs(p1[1] - p2[1]) < epsilon
+
     def _parse_cap_polygon(self, polygon_text: Optional[str]) -> Optional[List[List[float]]]:
         if not polygon_text:
             return None
@@ -746,7 +752,8 @@ class CAPPoller:
         if len(coords) < 3:
             return None
 
-        if coords[0] != coords[-1]:
+        # Use epsilon tolerance for coordinate comparison to handle floating-point precision
+        if not self._coords_equal(coords[0], coords[-1]):
             coords.append(coords[0])
 
         return coords
@@ -801,7 +808,8 @@ class CAPPoller:
 
             coords.append([math.degrees(lon_rad), math.degrees(lat_rad)])
 
-        if coords and coords[0] != coords[-1]:
+        # Use epsilon tolerance for ring closure
+        if coords and not self._coords_equal(coords[0], coords[-1]):
             coords.append(coords[0])
 
         return coords
@@ -828,6 +836,24 @@ class CAPPoller:
         return sent_dt, message_type_priority
 
     def _should_replace_alert(self, existing_alert: Dict, candidate_alert: Dict) -> bool:
+        """Determine if candidate alert should replace existing alert.
+
+        CANCEL messages always supersede other message types for the same identifier,
+        regardless of timestamp, as they represent authoritative cancellations.
+        """
+        existing_props = existing_alert.get('properties', {})
+        candidate_props = candidate_alert.get('properties', {})
+
+        existing_msg_type = (existing_props.get('messageType') or '').strip().upper()
+        candidate_msg_type = (candidate_props.get('messageType') or '').strip().upper()
+
+        # CANCEL always wins over non-CANCEL
+        if candidate_msg_type == 'CANCEL' and existing_msg_type != 'CANCEL':
+            return True
+        if existing_msg_type == 'CANCEL' and candidate_msg_type != 'CANCEL':
+            return False
+
+        # Otherwise use timestamp and priority-based logic
         existing_sent, existing_priority = self._alert_sort_key(existing_alert)
         candidate_sent, candidate_priority = self._alert_sort_key(candidate_alert)
 
@@ -840,6 +866,7 @@ class CAPPoller:
         if candidate_priority < existing_priority:
             return False
 
+        # Prefer alerts with geometry over those without
         existing_geometry = existing_alert.get('geometry')
         candidate_geometry = candidate_alert.get('geometry')
         if candidate_geometry and not existing_geometry:
@@ -969,6 +996,14 @@ class CAPPoller:
         return geom_type, polygon_count, preview
 
     # ---------- Relevance ----------
+    def _validate_ugc_code(self, ugc: str) -> bool:
+        """Validate UGC code format: [A-Z]{2}[CZ]\d{3} (e.g., OHZ016, OHC137)."""
+        if not ugc or not isinstance(ugc, str):
+            return False
+        ugc = ugc.strip().upper()
+        # Valid UGC format: 2 letters, C or Z, 3 digits
+        return bool(re.match(r'^[A-Z]{2}[CZ]\d{3}$', ugc))
+
     def get_alert_relevance_details(self, alert_data: Dict) -> Dict[str, Any]:
         result: Dict[str, Any] = {
             'is_relevant': False,
@@ -986,7 +1021,20 @@ class CAPPoller:
             event = properties.get('event', 'Unknown')
             geocode = properties.get('geocode', {}) or {}
             ugc_codes = geocode.get('UGC', []) or []
-            normalized_ugc = [str(ugc).upper() for ugc in ugc_codes if ugc]
+
+            # Validate and normalize UGC codes
+            normalized_ugc = []
+            for ugc in ugc_codes:
+                if not ugc:
+                    continue
+                ugc_str = str(ugc).strip().upper()
+                if self._validate_ugc_code(ugc_str):
+                    normalized_ugc.append(ugc_str)
+                else:
+                    self.logger.warning(
+                        f"Skipping malformed UGC code '{ugc}' in alert {properties.get('identifier', 'Unknown')}"
+                    )
+
             result['ugc_codes'] = normalized_ugc
 
             area_desc_raw = properties.get('areaDesc') or ''
@@ -1009,9 +1057,17 @@ class CAPPoller:
                     )
                     return result
 
-            matched_terms = [
-                term for term in self.putnam_county_identifiers if term and term in area_desc_upper
-            ]
+            # Use word boundary matching to avoid partial matches
+            # (e.g., "PUTNAM" shouldn't match "WEST PUTNAM CITY")
+            matched_terms = []
+            for term in self.putnam_county_identifiers:
+                if not term:
+                    continue
+                # Use word boundaries to ensure we match complete terms
+                pattern = r'\b' + re.escape(term) + r'\b'
+                if re.search(pattern, area_desc_upper):
+                    matched_terms.append(term)
+
             result['matched_terms'] = matched_terms
             if matched_terms:
                 message = f"✓ Alert ACCEPTED by area match: {event} ({matched_terms[0]})"
@@ -1101,14 +1157,67 @@ class CAPPoller:
             return None
 
     # ---------- Save / Geometry / Intersections ----------
+    def _count_vertices(self, coords, depth: int = 0) -> int:
+        """Recursively count vertices in nested coordinate arrays."""
+        if depth > 10:  # Prevent infinite recursion on malformed data
+            self.logger.warning("Maximum geometry nesting depth exceeded")
+            return 0
+
+        if not isinstance(coords, list):
+            return 0
+
+        # Check if this is a coordinate pair [lon, lat]
+        if coords and len(coords) >= 2 and isinstance(coords[0], (int, float)):
+            return 1
+
+        # Otherwise recursively count nested arrays
+        return sum(self._count_vertices(item, depth + 1) for item in coords)
+
     def _set_alert_geometry(self, alert: CAPAlert, geometry_data: Optional[Dict]):
+        """Set alert geometry with validation for complexity and validity."""
         try:
             if geometry_data and isinstance(geometry_data, dict):
+                # Check polygon complexity before storing
+                coords = geometry_data.get('coordinates', [])
+                total_vertices = self._count_vertices(coords)
+
+                # Warn and skip geometries that are excessively complex
+                if total_vertices > 10000:
+                    self.logger.warning(
+                        f"Alert {getattr(alert, 'identifier', '?')} has {total_vertices} vertices "
+                        "(exceeds 10,000 limit). Geometry will not be stored to prevent performance issues."
+                    )
+                    alert.geom = None
+                    return
+
+                if total_vertices > 5000:
+                    self.logger.info(
+                        f"Alert {getattr(alert, 'identifier', '?')} has {total_vertices} vertices "
+                        "(high complexity)"
+                    )
+
                 geom_json = json.dumps(geometry_data)
                 result = self.db_session.execute(
                     text("SELECT ST_SetSRID(ST_GeomFromGeoJSON(:g), 4326)"),
                     {"g": geom_json}
                 ).scalar()
+
+                # Validate geometry and attempt repair if invalid
+                is_valid = self.db_session.execute(
+                    text("SELECT ST_IsValid(:geom)"),
+                    {"geom": result}
+                ).scalar()
+
+                if not is_valid:
+                    self.logger.warning(
+                        f"Invalid geometry for alert {getattr(alert, 'identifier', '?')}, "
+                        "attempting automatic repair with ST_MakeValid"
+                    )
+                    result = self.db_session.execute(
+                        text("SELECT ST_MakeValid(:geom)"),
+                        {"geom": result}
+                    ).scalar()
+
                 alert.geom = result
                 self.logger.debug(f"Geometry set for alert {alert.identifier}")
             else:
@@ -1117,6 +1226,23 @@ class CAPPoller:
         except Exception as e:
             self.logger.warning(f"Could not set geometry for alert {getattr(alert,'identifier','?')}: {e}")
             alert.geom = None
+
+    def _has_geometry_changed(self, old_geom, new_geom) -> bool:
+        """Use PostGIS ST_Equals to reliably compare geometries."""
+        if old_geom is None and new_geom is None:
+            return False
+        if old_geom is None or new_geom is None:
+            return True
+
+        try:
+            result = self.db_session.execute(
+                text("SELECT ST_Equals(:old, :new)"),
+                {"old": old_geom, "new": new_geom}
+            ).scalar()
+            return not result
+        except Exception as exc:
+            self.logger.warning(f"Geometry comparison failed, assuming changed: {exc}")
+            return True
 
     def _needs_intersection_calculation(self, alert: CAPAlert) -> bool:
         if not alert.geom:
@@ -1128,38 +1254,57 @@ class CAPPoller:
             return True
 
     def process_intersections(self, alert: CAPAlert):
+        """Calculate and store intersections with proper transaction handling."""
         try:
             if not alert.geom:
                 return
+
+            # Delete old intersections
             self.db_session.query(Intersection).filter_by(cap_alert_id=alert.id).delete()
+
+            # Query all boundaries with valid geometries
             boundaries = self.db_session.query(Boundary).filter(Boundary.geom.isnot(None)).all()
 
-            created = 0
+            # Build list of new intersections (don't commit until all are calculated)
+            new_intersections = []
             with_area = 0
+
             for boundary in boundaries:
                 try:
                     res = self.db_session.query(
                         func.ST_Intersects(alert.geom, boundary.geom).label('intersects'),
                         func.ST_Area(func.ST_Intersection(alert.geom, boundary.geom)).label('ia')
                     ).first()
+
                     if res and res.intersects:
                         ia = float(res.ia or 0)
-                        self.db_session.add(Intersection(
-                            cap_alert_id=alert.id, boundary_id=boundary.id,
-                            intersection_area=ia, created_at=utc_now()
+                        new_intersections.append(Intersection(
+                            cap_alert_id=alert.id,
+                            boundary_id=boundary.id,
+                            intersection_area=ia,
+                            created_at=utc_now()
                         ))
-                        created += 1
                         if ia > 0:
                             with_area += 1
                 except Exception as be:
                     self.logger.warning(f"Intersection error with boundary {boundary.id}: {be}")
+                    # Continue processing other boundaries
+
+            # Bulk insert all intersections atomically
+            if new_intersections:
+                self.db_session.bulk_save_objects(new_intersections)
 
             self.db_session.commit()
-            if created:
-                self.logger.info(f"Intersections for alert {alert.identifier}: {created} ({with_area} > 0 area)")
+
+            if new_intersections:
+                self.logger.info(
+                    f"Intersections for alert {alert.identifier}: {len(new_intersections)} "
+                    f"({with_area} with area > 0)"
+                )
         except Exception as e:
             self.db_session.rollback()
             self.logger.error(f"Error processing intersections for alert {alert.id}: {e}")
+            raise  # Re-raise so caller knows intersection calculation failed
 
     def save_cap_alert(self, alert_data: Dict) -> Tuple[bool, Optional[CAPAlert]]:
         try:
@@ -1171,13 +1316,18 @@ class CAPPoller:
 
             if existing:
                 for k, v in payload.items():
-                    if k != 'raw_json' and hasattr(existing, k):
+                    # Update raw_json to maintain audit trail
+                    if hasattr(existing, k):
                         setattr(existing, k, v)
                 old_geom = existing.geom
                 self._set_alert_geometry(existing, geometry_data)
                 existing.updated_at = utc_now()
                 self.db_session.commit()
-                if (existing.geom != old_geom) or self._needs_intersection_calculation(existing):
+
+                # Use PostGIS ST_Equals for reliable geometry comparison
+                geom_changed = self._has_geometry_changed(old_geom, existing.geom)
+
+                if geom_changed or self._needs_intersection_calculation(existing):
                     self.process_intersections(existing)
                 if self.led_controller and not self.is_alert_expired(existing):
                     self.update_led_display()
@@ -1216,8 +1366,28 @@ class CAPPoller:
             return False, None
 
     # ---------- LED ----------
-    def is_alert_expired(self, alert) -> bool:
-        return bool(getattr(alert, 'expires', None) and alert.expires < utc_now())
+    def is_alert_expired(self, alert, max_age_days: int = 30) -> bool:
+        """Check if alert is expired or older than max_age_days.
+
+        Alerts with no expiration are considered expired after max_age_days
+        to prevent indefinite accumulation of stale alerts.
+        """
+        # Check explicit expiration
+        if getattr(alert, 'expires', None) and alert.expires < utc_now():
+            return True
+
+        # Check age-based expiration for alerts without explicit expiry
+        sent = getattr(alert, 'sent', None)
+        if not getattr(alert, 'expires', None) and sent:
+            age = utc_now() - sent
+            if age.total_seconds() > (max_age_days * 86400):
+                self.logger.debug(
+                    f"Alert {getattr(alert, 'identifier', '?')} has no expiration "
+                    f"but is {age.days} days old, treating as expired"
+                )
+                return True
+
+        return False
 
     def update_led_display(self):
         if not self.led_controller:
