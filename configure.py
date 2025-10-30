@@ -5,6 +5,7 @@ Configuration settings for NOAA CAP Alerts System
 
 import os
 from dotenv import load_dotenv
+from urllib.parse import quote
 
 # Load environment variables from .env file
 load_dotenv()
@@ -39,7 +40,11 @@ class Config:
                 "Either set DATABASE_URL or all required POSTGRES_* variables."
             )
 
-        SQLALCHEMY_DATABASE_URI = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
+        # URL-encode credentials to handle special characters (same as app.py)
+        user_part = quote(user, safe='')
+        password_part = quote(password, safe='')
+
+        SQLALCHEMY_DATABASE_URI = f"postgresql+psycopg2://{user_part}:{password_part}@{host}:{port}/{database}"
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {

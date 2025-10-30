@@ -123,9 +123,10 @@ if not password:
 ### File: `configure.py`
 
 **Changes:**
-1. Auto-builds DATABASE_URL from POSTGRES_* (lines 28-42)
-2. Matches app.py's behavior exactly
-3. No longer requires DATABASE_URL to be pre-set
+1. Auto-builds DATABASE_URL from POSTGRES_* (lines 28-47)
+2. **CRITICAL FIX:** Added URL-encoding of credentials to handle special characters
+3. Matches app.py's behavior exactly
+4. No longer requires DATABASE_URL to be pre-set
 
 **Before:**
 ```python
@@ -136,6 +137,8 @@ if not SQLALCHEMY_DATABASE_URI:
 
 **After:**
 ```python
+from urllib.parse import quote
+
 SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
 
 if not SQLALCHEMY_DATABASE_URI:
@@ -149,8 +152,14 @@ if not SQLALCHEMY_DATABASE_URI:
     if not password:
         raise ValueError("POSTGRES_PASSWORD environment variable must be set...")
 
-    SQLALCHEMY_DATABASE_URI = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
+    # URL-encode credentials to handle special characters (@, :, /, etc.)
+    user_part = quote(user, safe='')
+    password_part = quote(password, safe='')
+
+    SQLALCHEMY_DATABASE_URI = f"postgresql+psycopg2://{user_part}:{password_part}@{host}:{port}/{database}"
 ```
+
+**Security Note:** Without URL encoding, passwords containing `@`, `:`, `/`, `#`, `?`, or other reserved URI characters would create invalid connection strings and break the application. This was a critical bug that would prevent apps from starting with strong passwords.
 
 ---
 
