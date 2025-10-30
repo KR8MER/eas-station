@@ -28,6 +28,7 @@ import hashlib
 import math
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 import argparse
 
@@ -65,6 +66,7 @@ from app_utils.alert_sources import (
 )
 from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS, ensure_list, normalise_upper
 from app_utils.eas import EASBroadcaster, load_eas_config
+from app_core.radio import RadioManager, ensure_radio_tables
 
 UTC_TZ = pytz.UTC
 
@@ -120,6 +122,8 @@ try:
         LocationSettings,
         EASMessage,
         PollDebugRecord,
+        RadioReceiver,
+        RadioReceiverStatus,
     )  # type: ignore
     from sqlalchemy import Column, Integer, String, DateTime, Text, JSON  # noqa: F401
 
@@ -290,6 +294,55 @@ except Exception as e:
         created_at = Column(DateTime, default=utc_now)
         metadata_payload = Column('metadata', JSON)
 
+    class RadioReceiver(Base):
+        __tablename__ = 'radio_receivers'
+        __table_args__ = {'extend_existing': True}
+
+        id = Column(Integer, primary_key=True)
+        identifier = Column(String(64), unique=True, nullable=False)
+        display_name = Column(String(128), nullable=False)
+        driver = Column(String(64), nullable=False)
+        frequency_hz = Column(Float, nullable=False)
+        sample_rate = Column(Integer, nullable=False)
+        gain = Column(Float)
+        channel = Column(Integer)
+        auto_start = Column(Boolean, nullable=False, default=True)
+        enabled = Column(Boolean, nullable=False, default=True)
+        notes = Column(Text)
+        created_at = Column(DateTime, default=utc_now)
+        updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+        def to_receiver_config(self):  # pragma: no cover - compatibility shim
+            from app_core.radio import ReceiverConfig
+
+            return ReceiverConfig(
+                identifier=self.identifier,
+                driver=self.driver,
+                frequency_hz=float(self.frequency_hz),
+                sample_rate=int(self.sample_rate),
+                gain=self.gain,
+                channel=self.channel,
+                enabled=bool(self.enabled and self.auto_start),
+            )
+
+    class RadioReceiverStatus(Base):
+        __tablename__ = 'radio_receiver_status'
+        __table_args__ = {'extend_existing': True}
+
+        id = Column(Integer, primary_key=True)
+        receiver_id = Column(
+            Integer,
+            ForeignKey('radio_receivers.id', ondelete='CASCADE'),
+            nullable=False,
+        )
+        reported_at = Column(DateTime, default=utc_now, nullable=False)
+        locked = Column(Boolean, default=False, nullable=False)
+        signal_strength = Column(Float)
+        last_error = Column(Text)
+        capture_mode = Column(String(16))
+        capture_path = Column(String(255))
+
+
 # =======================================================================================
 # Poller
 # =======================================================================================
@@ -365,6 +418,30 @@ class CAPPoller:
                 self.logger.error(f"Failed to initialize LED controller: {e}")
         elif led_sign_ip:
             self.logger.warning("LED sign IP provided but controller not available")
+
+        # Radio manager configuration
+        self.radio_manager: Optional[RadioManager] = None
+        self._radio_receiver_cache: Dict[str, RadioReceiver] = {}
+        capture_dir_env = os.getenv("RADIO_CAPTURE_DIR", os.path.join(PROJECT_ROOT, "radio_captures"))
+        self.radio_capture_dir = Path(capture_dir_env)
+        try:
+            self.radio_capture_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            self.logger.warning("Unable to create radio capture directory %s: %s", self.radio_capture_dir, exc)
+
+        capture_mode = (os.getenv("RADIO_CAPTURE_MODE", "iq") or "iq").lower()
+        if capture_mode not in {"iq", "pcm"}:
+            self.logger.warning("Unsupported RADIO_CAPTURE_MODE '%s'; defaulting to 'iq'", capture_mode)
+            capture_mode = "iq"
+        self.radio_capture_mode = capture_mode
+
+        try:
+            self.radio_capture_duration = max(1.0, float(os.getenv("RADIO_CAPTURE_DURATION", "30")))
+        except ValueError:
+            self.logger.warning("Invalid RADIO_CAPTURE_DURATION; defaulting to 30 seconds")
+            self.radio_capture_duration = 30.0
+
+        self._setup_radio_manager()
 
         # Endpoint configuration & defaults
         self.poller_mode = (os.getenv('CAP_POLLER_MODE', 'NOAA') or 'NOAA').strip().upper()
@@ -509,6 +586,168 @@ class CAPPoller:
             self.logger.debug("Could not ensure poll_debug_records table: %s", exc)
             self._debug_table_checked = False
         return self._debug_table_checked
+
+    def _setup_radio_manager(self) -> None:
+        try:
+            if not ensure_radio_tables(self.logger):
+                self.logger.warning("Radio receiver tables unavailable; skipping capture orchestration")
+                return
+        except RuntimeError as exc:
+            self.logger.debug("Falling back to manual radio table creation: %s", exc)
+            try:
+                RadioReceiver.__table__.create(bind=self.engine, checkfirst=True)
+                RadioReceiverStatus.__table__.create(bind=self.engine, checkfirst=True)
+            except Exception as table_exc:
+                self.logger.warning("Unable to create radio tables manually: %s", table_exc)
+                return
+        except Exception as exc:
+            self.logger.warning("Unable to verify radio tables: %s", exc)
+            return
+
+        try:
+            manager = RadioManager()
+            manager.register_builtin_drivers()
+        except Exception as exc:
+            self.logger.warning("Radio manager unavailable: %s", exc)
+            return
+
+        self.radio_manager = manager
+        self._refresh_radio_configuration(initial=True)
+
+    def _refresh_radio_configuration(self, initial: bool = False) -> None:
+        if not self.radio_manager:
+            return
+
+        try:
+            receivers = (
+                self.db_session.query(RadioReceiver)
+                .order_by(RadioReceiver.identifier)
+                .all()
+            )
+        except Exception as exc:
+            self.logger.error("Failed to load radio receivers: %s", exc)
+            return
+
+        cache: Dict[str, RadioReceiver] = {}
+        configs = []
+        for receiver in receivers:
+            identifier = receiver.identifier
+            if not identifier:
+                continue
+            cache[identifier] = receiver
+            try:
+                configs.append(receiver.to_receiver_config())
+            except Exception as exc:
+                self.logger.error("Invalid receiver %s: %s", identifier, exc)
+
+        try:
+            self.radio_manager.configure_receivers(configs)
+            self._radio_receiver_cache = cache
+            if configs:
+                self.radio_manager.start_all()
+        except Exception as exc:
+            self.logger.error("Failed to configure radio manager: %s", exc)
+
+    def _coordinate_radio_captures(self, alert: CAPAlert, broadcast_result: Dict[str, Any]) -> List[Dict[str, object]]:
+        if not self.radio_manager or not self._radio_receiver_cache:
+            return []
+
+        capture_mode = broadcast_result.get("preferred_capture_mode") or self.radio_capture_mode
+        prefix_parts = [
+            broadcast_result.get("event_code"),
+            getattr(alert, "identifier", None),
+        ]
+        prefix_raw = "-".join(part for part in prefix_parts if part)
+        safe_prefix = re.sub(r"[^A-Za-z0-9_-]", "_", prefix_raw) or "capture"
+
+        try:
+            results = self.radio_manager.request_captures(
+                self.radio_capture_duration,
+                self.radio_capture_dir,
+                prefix=safe_prefix,
+                mode=capture_mode,
+            )
+            for entry in results:
+                identifier = entry.get("identifier")
+                if entry.get("path"):
+                    self.logger.info(
+                        "Captured %s data for receiver %s → %s",
+                        (entry.get("mode") or "iq").upper(),
+                        identifier,
+                        entry.get("path"),
+                    )
+                else:
+                    self.logger.warning(
+                        "Radio capture failed for %s: %s",
+                        identifier,
+                        entry.get("error"),
+                    )
+            return results
+        except Exception as exc:
+            self.logger.error("Radio capture orchestration failed: %s", exc)
+            return []
+
+    def _record_receiver_statuses(self, capture_events: Optional[List[Dict[str, Any]]] = None) -> None:
+        if not self.radio_manager or not self._radio_receiver_cache:
+            return
+
+        events = capture_events or []
+        rows_written = 0
+
+        try:
+            for event in events:
+                timestamp = event.get("timestamp") or utc_now()
+                for capture in event.get("captures", []):
+                    identifier = capture.get("identifier")
+                    if not identifier:
+                        continue
+                    receiver = self._radio_receiver_cache.get(identifier)
+                    if not receiver:
+                        continue
+
+                    status = capture.get("status")
+                    reported_at = getattr(status, "reported_at", None) or timestamp
+                    error_text = capture.get("error")
+                    last_error = getattr(status, "last_error", None)
+                    if last_error and error_text and error_text not in last_error:
+                        last_error = f"{last_error}; {error_text}"
+                    elif not last_error:
+                        last_error = error_text
+
+                    row = RadioReceiverStatus(
+                        receiver_id=receiver.id,
+                        reported_at=reported_at,
+                        locked=bool(getattr(status, "locked", False)),
+                        signal_strength=getattr(status, "signal_strength", None),
+                        last_error=last_error,
+                        capture_mode=capture.get("mode"),
+                        capture_path=str(capture.get("path")) if capture.get("path") else None,
+                    )
+                    self.db_session.add(row)
+                    rows_written += 1
+
+            status_reports = self.radio_manager.get_status_reports()
+            for report in status_reports:
+                receiver = self._radio_receiver_cache.get(report.identifier)
+                if not receiver:
+                    continue
+                row = RadioReceiverStatus(
+                    receiver_id=receiver.id,
+                    reported_at=report.reported_at or utc_now(),
+                    locked=bool(report.locked),
+                    signal_strength=report.signal_strength,
+                    last_error=report.last_error,
+                    capture_mode=report.capture_mode,
+                    capture_path=report.capture_path,
+                )
+                self.db_session.add(row)
+                rows_written += 1
+
+            if rows_written:
+                self.db_session.commit()
+        except Exception as exc:
+            self.logger.error("Failed to record radio receiver statuses: %s", exc)
+            self.db_session.rollback()
 
     # ---------- Engine with retry ----------
     def _load_location_settings(self) -> Dict[str, Any]:
@@ -1308,7 +1547,7 @@ class CAPPoller:
             self.logger.error(f"Error processing intersections for alert {alert.id}: {e}")
             raise  # Re-raise so caller knows intersection calculation failed
 
-    def save_cap_alert(self, alert_data: Dict) -> Tuple[bool, Optional[CAPAlert]]:
+    def save_cap_alert(self, alert_data: Dict) -> Tuple[bool, Optional[CAPAlert], Optional[Dict[str, Any]]]:
         try:
             payload = dict(alert_data)
             geometry_data = payload.pop('_geometry_data', None)
@@ -1334,7 +1573,7 @@ class CAPPoller:
                 if self.led_controller and not self.is_alert_expired(existing):
                     self.update_led_display()
                 self.logger.info(f"Updated alert: {existing.event}")
-                return False, existing
+                return False, existing, None
 
             new_alert = CAPAlert(**payload)
             new_alert.created_at = utc_now()
@@ -1349,23 +1588,34 @@ class CAPPoller:
             if self.led_controller and not self.is_alert_expired(new_alert):
                 self.update_led_display()
 
+            capture_metadata: Optional[Dict[str, Any]] = None
             if self.eas_broadcaster:
                 try:
-                    self.eas_broadcaster.handle_alert(new_alert, payload)
+                    broadcast_result = self.eas_broadcaster.handle_alert(new_alert, payload)
+                    if broadcast_result and broadcast_result.get("same_triggered"):
+                        capture_results = self._coordinate_radio_captures(new_alert, broadcast_result)
+                        capture_metadata = {
+                            "alert_identifier": getattr(new_alert, "identifier", None),
+                            "broadcast": broadcast_result,
+                            "captures": capture_results,
+                        }
+                    else:
+                        capture_metadata = {"broadcast": broadcast_result}
                 except Exception as exc:
                     self.logger.error(f"EAS broadcast failed for {new_alert.identifier}: {exc}")
+                    capture_metadata = {"error": str(exc)}
 
             self.logger.info(f"Saved new alert: {new_alert.identifier} - {new_alert.event}")
-            return True, new_alert
+            return True, new_alert, capture_metadata
 
         except SQLAlchemyError as e:
             self.logger.error(f"Database error saving alert: {e}")
             self.db_session.rollback()
-            return False, None
+            return False, None, None
         except Exception as e:
             self.logger.error(f"Error saving CAP alert: {e}")
             self.db_session.rollback()
-            return False, None
+            return False, None, None
 
     # ---------- LED ----------
     def is_alert_expired(self, alert, max_age_days: int = 30) -> bool:
@@ -1657,14 +1907,18 @@ class CAPPoller:
             'timezone': self.location_settings['timezone'], 'led_updated': False,
             'sources': [], 'duplicates_filtered': 0,
             'poll_run_id': poll_run_id,
+            'radio_captures': 0,
         }
 
         debug_records: List[Dict[str, Any]] = []
+        capture_events: List[Dict[str, Any]] = []
 
         try:
             self.logger.info(
                 f"Starting CAP alert polling cycle for {self.location_name} at {format_local_datetime(poll_start_utc)}"
             )
+
+            self._refresh_radio_configuration()
 
             alerts_data = self.fetch_cap_alerts()
             stats['alerts_fetched'] = len(alerts_data)
@@ -1719,7 +1973,7 @@ class CAPPoller:
                     debug_entry['polygon_count'] = polygon_count
                     debug_entry['geometry_preview'] = preview
 
-                is_new, alert = self.save_cap_alert(parsed)
+                is_new, alert, capture_metadata = self.save_cap_alert(parsed)
                 if is_new:
                     stats['alerts_new'] += 1
                     stats['led_updated'] = True
@@ -1738,6 +1992,11 @@ class CAPPoller:
                 if not alert:
                     debug_entry.setdefault('notes', []).append('Database save failed')
 
+                if capture_metadata:
+                    capture_metadata.setdefault('timestamp', utc_now())
+                    stats['radio_captures'] += len(capture_metadata.get('captures', []))
+                    capture_events.append(capture_metadata)
+
             self.cleanup_old_poll_history()
             self.log_poll_history(stats)
             self.persist_debug_records(poll_run_id, poll_start_utc, stats, debug_records)
@@ -1751,7 +2010,8 @@ class CAPPoller:
             self.logger.info(
                 f"Polling cycle completed: {stats['alerts_accepted']} accepted, {stats['alerts_new']} new, "
                 f"{stats['alerts_updated']} updated, {stats['alerts_filtered']} filtered, "
-                f"{stats['duplicates_filtered']} duplicates skipped"
+                f"{stats['duplicates_filtered']} duplicates skipped, "
+                f"{stats['radio_captures']} radio captures"
             )
             if stats['sources']:
                 self.logger.info("Polling sources: %s", ", ".join(stats['sources']))
@@ -1766,6 +2026,12 @@ class CAPPoller:
 
             self.persist_debug_records(poll_run_id, poll_start_utc, stats, debug_records)
             self.cleanup_old_debug_records()
+
+        finally:
+            try:
+                self._record_receiver_statuses(capture_events)
+            except Exception as exc:
+                self.logger.error("Failed to persist radio status snapshots: %s", exc)
 
         return stats
 

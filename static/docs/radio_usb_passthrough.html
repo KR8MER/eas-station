@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>USB Passthrough Guide for SDR Receivers</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 2rem auto; max-width: 860px; line-height: 1.6; color: #1f2933; }
+        h1, h2, h3 { color: #102a43; }
+        pre { background: #f5f7fa; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; }
+        code { background: #f5f7fa; padding: 0.1rem 0.3rem; border-radius: 0.25rem; }
+        a { color: #1d4ed8; }
+        .note { border-left: 4px solid #2c5282; background: #ebf8ff; padding: 0.75rem 1rem; border-radius: 0.5rem; }
+        ul { padding-left: 1.25rem; }
+    </style>
+</head>
+<body>
+    <h1>USB Passthrough for Multi-SDR Deployments</h1>
+    <p>
+        The NOAA alerts stack needs raw USB access so the SoapySDR drivers can open RTL-SDR and Airspy
+        receivers. Instead of running the container in privileged mode, expose the <code>/dev/bus/usb</code>
+        hierarchy directly. The radio manager only requires read/write access to the USB character devices—no
+        kernel modules or <code>CAP_SYS_RAWIO</code> capabilities.
+    </p>
+
+    <h2>Docker Compose Example</h2>
+    <p>Add the USB bus mapping to the <code>app</code> service:</p>
+<pre><code class="language-yaml">services:
+  app:
+    image: ghcr.io/kr8mer/noaa-alerts:latest
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    environment:
+      - RADIO_CAPTURE_DIR=/var/lib/noaa/radio
+      - RADIO_CAPTURE_DURATION=30
+      - RADIO_CAPTURE_MODE=iq
+</code></pre>
+
+    <div class="note">
+        Use the <code>devices</code> directive instead of <code>privileged: true</code>. The container retains a
+        minimal security profile and only the SDR interfaces are exposed.
+    </div>
+
+    <h2>Verifying Device Visibility</h2>
+    <ol>
+        <li>Attach the SDR to the host and confirm it appears under <code>lsusb</code>.</li>
+        <li>Start the stack with the new mapping.</li>
+        <li>Run <code>docker compose exec app ls /dev/bus/usb</code> to confirm the bus IDs are accessible.</li>
+    </ol>
+
+    <h2>SoapySDR Driver Packages</h2>
+    <p>
+        Install the appropriate SoapySDR plugins on the host so the device nodes expose the expected USB
+        interfaces:
+    </p>
+    <ul>
+        <li><strong>RTL-SDR</strong>: <code>soapysdr-module-rtlsdr</code></li>
+        <li><strong>Airspy</strong>: <code>soapysdr-module-airspy</code></li>
+    </ul>
+    <p>The Python bindings inside the container will discover the drivers automatically.</p>
+
+    <h2>Troubleshooting</h2>
+    <ul>
+        <li>
+            <strong>Permission denied:</strong> ensure the host user running Docker can read the USB bus devices.
+            Adding the user to the <code>plugdev</code> group or a dedicated <code>usb</code> group resolves most
+            permission issues.
+        </li>
+        <li>
+            <strong>No matching driver:</strong> confirm the <code>driver</code> field in the radio settings matches
+            the Soapy module name (for example <code>rtlsdr</code> or <code>airspy</code>).
+        </li>
+        <li>
+            <strong>Multiple dongles:</strong> assign unique identifiers in the radio settings UI. The manager uses the
+            identifier to correlate capture requests and status snapshots.
+        </li>
+    </ul>
+
+    <p>Once the mapping is in place, the radio settings page can start each receiver and capture IQ buffers for SAME activations.</p>
+</body>
+</html>

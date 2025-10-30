@@ -277,6 +277,13 @@ The header breakdown card reiterates the commercial nomenclature (preamble, ORG,
 
 Prefer scripts or automated testing? The legacy helper at `tools/generate_sample_audio.py` is still shipped with the project for command-line use.
 
+### Multi-SDR Capture Orchestration
+
+- Configure receivers on **Admin → Radio Settings**. Each entry tracks the driver, tuned frequency, sample rate, and optional gain overrides. The UI persists configurations to Postgres and surfaces the latest lock/signal telemetry.
+- Expose your SDR hardware by mapping <code>/dev/bus/usb</code> into the container rather than running it in privileged mode. The [USB passthrough guide](static/docs/radio_usb_passthrough.html) includes a ready-to-use Docker Compose snippet.
+- Optional environment controls are available in `.env`: `RADIO_CAPTURE_DIR` (output directory), `RADIO_CAPTURE_DURATION` (seconds captured per SAME event), and `RADIO_CAPTURE_MODE` (`iq` for complex32 IQ data or `pcm` for float32 audio).
+- During polling the CAP ingestor automatically triggers IQ captures for new SAME activations and records status snapshots that appear under **/api/monitoring/radio** and the health endpoint.
+
 #### Optional text-to-speech voiceovers
 
 The encoder can append a spoken narration after the SAME bursts and attention tone using either an online Azure AI voice or an offline pyttsx3 engine.

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import datetime
 import threading
 import time
-from typing import Dict, Optional
+from pathlib import Path
+from typing import Dict, List, Optional
 
 from .manager import ReceiverConfig, ReceiverInterface, ReceiverStatus, RadioManager
 
@@ -19,6 +21,77 @@ class _SoapySDRHandle:
         self.numpy = numpy_module
 
 
+class _CaptureTicket:
+    """Track the progress of a capture request for a single receiver."""
+
+    def __init__(
+        self,
+        *,
+        identifier: str,
+        path: Path,
+        samples_required: int,
+        mode: str,
+        numpy_module,
+    ) -> None:
+        self.identifier = identifier
+        self.path = path
+        self.samples_required = samples_required
+        self.mode = mode
+        self.numpy = numpy_module
+        self.samples_captured = 0
+        self.error: Optional[Exception] = None
+        self.event = threading.Event()
+        self._file = None
+
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._file = open(self.path, "wb")
+
+    @property
+    def completed(self) -> bool:
+        return self.error is not None or self.samples_captured >= self.samples_required
+
+    def write(self, samples) -> None:
+        if self.completed or self._file is None:
+            return
+
+        remaining = self.samples_required - self.samples_captured
+        if remaining <= 0:
+            self.close()
+            return
+
+        to_take = min(len(samples), remaining)
+        if to_take <= 0:
+            return
+
+        chunk = samples[:to_take]
+        try:
+            if self.mode == "pcm":
+                interleaved = self.numpy.empty((to_take * 2,), dtype=self.numpy.float32)
+                interleaved[0::2] = chunk.real.astype(self.numpy.float32, copy=False)
+                interleaved[1::2] = chunk.imag.astype(self.numpy.float32, copy=False)
+                interleaved.tofile(self._file)
+            else:
+                chunk.astype(self.numpy.complex64, copy=False).tofile(self._file)
+        except Exception as exc:
+            self.fail(exc)
+            return
+
+        self.samples_captured += to_take
+        if self.samples_captured >= self.samples_required:
+            self.close()
+
+    def fail(self, exc: Exception) -> None:
+        self.error = exc
+        self.close()
+
+    def close(self) -> None:
+        if self._file is not None:
+            try:
+                self._file.close()
+            finally:
+                self._file = None
+        self.event.set()
+
 class _SoapySDRReceiver(ReceiverInterface):
     """Common functionality for receivers implemented via SoapySDR."""
 
@@ -31,6 +104,8 @@ class _SoapySDRReceiver(ReceiverInterface):
         self._running = threading.Event()
         self._status = ReceiverStatus(identifier=config.identifier, locked=False)
         self._status_lock = threading.Lock()
+        self._capture_requests: List[_CaptureTicket] = []
+        self._capture_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Lifecycle helpers
@@ -61,6 +136,7 @@ class _SoapySDRReceiver(ReceiverInterface):
             self._thread.join(timeout=2.0)
 
         self._teardown_handle()
+        self._cancel_capture_requests(RuntimeError("Receiver stopped"))
         self._update_status(locked=False)
 
     # ------------------------------------------------------------------
@@ -73,6 +149,9 @@ class _SoapySDRReceiver(ReceiverInterface):
                 locked=self._status.locked,
                 signal_strength=self._status.signal_strength,
                 last_error=self._status.last_error,
+                capture_mode=self._status.capture_mode,
+                capture_path=self._status.capture_path,
+                reported_at=self._status.reported_at,
             )
 
     def _update_status(
@@ -81,6 +160,8 @@ class _SoapySDRReceiver(ReceiverInterface):
         locked: Optional[bool] = None,
         signal_strength: Optional[float] = None,
         last_error: Optional[str] = None,
+        capture_mode: Optional[str] = None,
+        capture_path: Optional[str] = None,
     ) -> None:
         with self._status_lock:
             if locked is not None:
@@ -92,6 +173,11 @@ class _SoapySDRReceiver(ReceiverInterface):
             elif locked:
                 # Clear stale error state when the receiver reports healthy.
                 self._status.last_error = None
+            if capture_mode is not None:
+                self._status.capture_mode = capture_mode
+            if capture_path is not None:
+                self._status.capture_path = capture_path
+            self._status.reported_at = datetime.datetime.now(datetime.timezone.utc)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -193,11 +279,91 @@ class _SoapySDRReceiver(ReceiverInterface):
                     magnitude = 0.0
 
                 self._update_status(locked=True, signal_strength=magnitude)
+                if result.ret > 0:
+                    self._process_capture(buffer[: result.ret])
             except Exception as exc:
                 self._update_status(locked=False, last_error=str(exc))
                 self._running.clear()
                 break
 
+        self._cancel_capture_requests(RuntimeError("Capture loop exited"))
+
+    def capture_to_file(
+        self,
+        duration_seconds: float,
+        output_dir: Path,
+        prefix: str,
+        *,
+        mode: str = "iq",
+    ) -> Path:
+        if not self._running.is_set() or not self._handle:
+            raise RuntimeError("Receiver is not running")
+
+        safe_mode = (mode or "iq").lower()
+        if safe_mode not in {"iq", "pcm"}:
+            raise ValueError("Capture mode must be 'iq' or 'pcm'")
+
+        if duration_seconds <= 0:
+            raise ValueError("Capture duration must be positive")
+
+        total_samples = max(1, int(self.config.sample_rate * float(duration_seconds)))
+        timestamp = time.strftime("%Y%m%dT%H%M%S")
+        extension = "iq" if safe_mode == "iq" else "pcm"
+        filename = f"{prefix}_{timestamp}.{extension}" if prefix else f"capture_{timestamp}.{extension}"
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        path = output_dir / filename
+
+        ticket = _CaptureTicket(
+            identifier=self.config.identifier,
+            path=path,
+            samples_required=total_samples,
+            mode=safe_mode,
+            numpy_module=self._handle.numpy,
+        )
+
+        with self._capture_lock:
+            self._capture_requests.append(ticket)
+
+        timeout = max(5.0, float(duration_seconds) * 2.0)
+        completed = ticket.event.wait(timeout=timeout)
+
+        with self._capture_lock:
+            if ticket in self._capture_requests:
+                self._capture_requests.remove(ticket)
+
+        if not completed:
+            ticket.fail(TimeoutError(f"Timed out capturing samples for {self.config.identifier}"))
+            raise ticket.error  # type: ignore[misc]
+
+        if ticket.error:
+            raise ticket.error
+
+        self._update_status(capture_mode=safe_mode, capture_path=str(path))
+        return path
+
+    def _process_capture(self, samples) -> None:
+        with self._capture_lock:
+            pending = list(self._capture_requests)
+
+        if not pending:
+            return
+
+        for ticket in pending:
+            if ticket.completed:
+                continue
+            ticket.write(samples)
+
+        with self._capture_lock:
+            self._capture_requests = [ticket for ticket in self._capture_requests if not ticket.completed]
+
+    def _cancel_capture_requests(self, exc: Exception) -> None:
+        with self._capture_lock:
+            pending = self._capture_requests
+            self._capture_requests = []
+
+        for ticket in pending:
+            ticket.fail(exc)
             # Yield to the scheduler to avoid busy-spinning when readStream returns quickly.
             time.sleep(0.01)
 

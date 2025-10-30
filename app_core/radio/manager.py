@@ -5,6 +5,8 @@ from __future__ import annotations
 import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Iterable, List, Mapping, Optional
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
@@ -32,6 +34,9 @@ class ReceiverStatus:
     locked: bool
     signal_strength: Optional[float] = None
     last_error: Optional[str] = None
+    capture_mode: Optional[str] = None
+    capture_path: Optional[str] = None
+    reported_at: Optional[datetime] = None
 
 
 class ReceiverInterface(ABC):
@@ -51,6 +56,17 @@ class ReceiverInterface(ABC):
     @abstractmethod
     def get_status(self) -> ReceiverStatus:
         """Return the latest health information for the receiver."""
+
+    @abstractmethod
+    def capture_to_file(
+        self,
+        duration_seconds: float,
+        output_dir: Path,
+        prefix: str,
+        *,
+        mode: str = "iq",
+    ) -> Path:
+        """Capture a block of samples and persist them to disk."""
 
 
 class RadioManager:
@@ -137,7 +153,71 @@ class RadioManager:
         """Collect status reports from every active receiver."""
 
         with self._lock:
-            return [receiver.get_status() for receiver in self._receivers.values()]
+            reports = []
+            for receiver in self._receivers.values():
+                status = receiver.get_status()
+                if status.reported_at is None:
+                    status.reported_at = datetime.now(timezone.utc)
+                reports.append(status)
+            return reports
+
+    def request_captures(
+        self,
+        duration_seconds: float,
+        output_dir: Path,
+        *,
+        prefix: str = "capture",
+        mode: str = "iq",
+    ) -> List[Dict[str, object]]:
+        """Ask every configured receiver to capture a block of samples."""
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        safe_mode = (mode or "iq").lower()
+
+        with self._lock:
+            receivers = dict(self._receivers)
+
+        results: List[Dict[str, object]] = []
+        for identifier, receiver in receivers.items():
+            suffix = f"{prefix}_{identifier}" if prefix else identifier
+            try:
+                path = receiver.capture_to_file(
+                    duration_seconds,
+                    output_dir,
+                    suffix,
+                    mode=safe_mode,
+                )
+                status = receiver.get_status()
+                status.capture_mode = safe_mode
+                status.capture_path = str(path)
+                status.reported_at = status.reported_at or datetime.now(timezone.utc)
+                results.append(
+                    {
+                        "identifier": identifier,
+                        "path": path,
+                        "mode": safe_mode,
+                        "status": status,
+                        "error": None,
+                    }
+                )
+            except Exception as exc:
+                status = receiver.get_status()
+                combined_error = str(exc)
+                if status.last_error and status.last_error != combined_error:
+                    combined_error = f"{status.last_error}; {combined_error}"
+                status.last_error = combined_error
+                status.reported_at = status.reported_at or datetime.now(timezone.utc)
+                results.append(
+                    {
+                        "identifier": identifier,
+                        "path": None,
+                        "mode": safe_mode,
+                        "status": status,
+                        "error": str(exc),
+                    }
+                )
+
+        return results
 
     @staticmethod
     def build_status_from_rows(

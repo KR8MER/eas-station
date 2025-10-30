@@ -401,7 +401,7 @@ class RadioReceiver(db.Model):
     __tablename__ = "radio_receivers"
 
     id = db.Column(db.Integer, primary_key=True)
-    identifier = db.Column(db.String(64), unique=True, nullable=False)
+    identifier = db.Column(db.String(64), nullable=False)
     display_name = db.Column(db.String(128), nullable=False)
     driver = db.Column(db.String(64), nullable=False)
     frequency_hz = db.Column(db.Float, nullable=False)
@@ -411,11 +411,23 @@ class RadioReceiver(db.Model):
     auto_start = db.Column(db.Boolean, nullable=False, default=True)
     enabled = db.Column(db.Boolean, nullable=False, default=True)
     notes = db.Column(db.Text)
-    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = db.Column(
         db.DateTime(timezone=True),
         default=utc_now,
         onupdate=utc_now,
+        nullable=False,
+    )
+
+    statuses = db.relationship(
+        "RadioReceiverStatus",
+        back_populates="receiver",
+        cascade="all, delete-orphan",
+        lazy="dynamic",
+    )
+
+    __table_args__ = (
+        db.Index("idx_radio_receivers_identifier", identifier, unique=True),
     )
 
     def to_receiver_config(self) -> "ReceiverConfig":
@@ -433,19 +445,19 @@ class RadioReceiver(db.Model):
             enabled=bool(self.enabled and self.auto_start),
         )
 
+    def latest_status(self) -> Optional["RadioReceiverStatus"]:
+        """Return the most recent status sample if any have been recorded."""
+
+        if self.statuses is None:
+            return None
+
+        return self.statuses.order_by(RadioReceiverStatus.reported_at.desc()).first()
+
     def __repr__(self) -> str:  # pragma: no cover - debugging helper
         return (
             f"<RadioReceiver id={self.id} identifier={self.identifier!r} "
             f"driver={self.driver!r} frequency_hz={self.frequency_hz}>"
         )
-
-    def latest_status(self) -> Optional["RadioReceiverStatus"]:
-        """Return the most recent status sample if any have been recorded."""
-
-        if hasattr(self, "status_logs"):
-            return self.status_logs.order_by(RadioReceiverStatus.created_at.desc()).first()
-
-        return None
 
 
 class RadioReceiverStatus(db.Model):
@@ -458,16 +470,22 @@ class RadioReceiverStatus(db.Model):
         db.Integer,
         db.ForeignKey("radio_receivers.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
-    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
-    locked = db.Column(db.Boolean, default=False, nullable=False)
+    reported_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+    locked = db.Column(db.Boolean, nullable=False, default=False)
     signal_strength = db.Column(db.Float)
     last_error = db.Column(db.Text)
+    capture_mode = db.Column(db.String(16))
+    capture_path = db.Column(db.String(255))
 
     receiver = db.relationship(
         "RadioReceiver",
-        backref=db.backref("status_logs", lazy="dynamic", cascade="all, delete-orphan"),
+        back_populates="statuses",
+    )
+
+    __table_args__ = (
+        db.Index("idx_radio_receiver_status_receiver_id", receiver_id),
+        db.Index("idx_radio_receiver_status_reported_at", reported_at.desc()),
     )
 
     def to_receiver_status(self) -> "ReceiverStatus":
@@ -480,6 +498,9 @@ class RadioReceiverStatus(db.Model):
             locked=bool(self.locked),
             signal_strength=self.signal_strength,
             last_error=self.last_error,
+            capture_mode=self.capture_mode,
+            capture_path=self.capture_path,
+            reported_at=self.reported_at,
         )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging helper
@@ -519,82 +540,6 @@ class LEDSignStatus(db.Model):
     last_error = db.Column(db.Text)
     last_update = db.Column(db.DateTime(timezone=True), default=utc_now)
     is_connected = db.Column(db.Boolean, default=False)
-
-
-class RadioReceiver(db.Model):
-    __tablename__ = "radio_receivers"
-
-    id = db.Column(db.Integer, primary_key=True)
-    identifier = db.Column(db.String(64), nullable=False)
-    driver = db.Column(db.String(64), nullable=False)
-    frequency_hz = db.Column(db.Float, nullable=False)
-    sample_rate = db.Column(db.Integer, nullable=False)
-    gain = db.Column(db.Float)
-    channel = db.Column(db.Integer)
-    enabled = db.Column(db.Boolean, nullable=False, default=True)
-    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
-    updated_at = db.Column(
-        db.DateTime(timezone=True),
-        default=utc_now,
-        onupdate=utc_now,
-        nullable=False,
-    )
-
-    statuses = db.relationship(
-        "RadioReceiverStatus",
-        back_populates="receiver",
-        cascade="all, delete-orphan",
-    )
-
-    __table_args__ = (
-        db.Index("idx_radio_receivers_identifier", identifier, unique=True),
-    )
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "id": self.id,
-            "identifier": self.identifier,
-            "driver": self.driver,
-            "frequency_hz": self.frequency_hz,
-            "sample_rate": self.sample_rate,
-            "gain": self.gain,
-            "channel": self.channel,
-            "enabled": self.enabled,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-        }
-
-
-class RadioReceiverStatus(db.Model):
-    __tablename__ = "radio_receiver_status"
-
-    id = db.Column(db.Integer, primary_key=True)
-    receiver_id = db.Column(
-        db.Integer,
-        db.ForeignKey("radio_receivers.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    locked = db.Column(db.Boolean, nullable=False, default=False)
-    signal_strength = db.Column(db.Float)
-    last_error = db.Column(db.Text)
-    reported_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
-
-    receiver = db.relationship("RadioReceiver", back_populates="statuses")
-
-    __table_args__ = (
-        db.Index("idx_radio_receiver_status_receiver_id", receiver_id),
-        db.Index("idx_radio_receiver_status_reported_at", reported_at.desc()),
-    )
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "id": self.id,
-            "receiver_id": self.receiver_id,
-            "locked": self.locked,
-            "signal_strength": self.signal_strength,
-            "last_error": self.last_error,
-            "reported_at": self.reported_at.isoformat() if self.reported_at else None,
-        }
 
 
 __all__ = [
