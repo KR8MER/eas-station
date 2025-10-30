@@ -182,24 +182,6 @@ app.config['CORS_ALLOW_CREDENTIALS'] = (
     os.environ.get('CORS_ALLOW_CREDENTIALS', 'false').lower() == 'true'
 )
 
-app.config['COMPLIANCE_ALERT_EMAILS'] = _parse_env_list('COMPLIANCE_ALERT_EMAILS')
-app.config['COMPLIANCE_SNMP_TARGETS'] = _parse_env_list('COMPLIANCE_SNMP_TARGETS')
-app.config['COMPLIANCE_SNMP_COMMUNITY'] = os.environ.get('COMPLIANCE_SNMP_COMMUNITY', 'public')
-app.config['COMPLIANCE_HEALTH_INTERVAL'] = _parse_int_env('COMPLIANCE_HEALTH_INTERVAL', 300)
-app.config['RECEIVER_OFFLINE_THRESHOLD_MINUTES'] = _parse_int_env(
-    'RECEIVER_OFFLINE_THRESHOLD_MINUTES', 10
-)
-app.config['AUDIO_PATH_ALERT_THRESHOLD_MINUTES'] = _parse_int_env(
-    'AUDIO_PATH_ALERT_THRESHOLD_MINUTES', 60
-)
-
-PUBLIC_API_GET_PATHS = {
-    '/api/alerts',
-    '/api/alerts/historical',
-    '/api/boundaries',
-    '/api/system_status',
-}
-
 
 def _parse_env_list(name: str) -> List[str]:
     raw_value = os.environ.get(name, '')
@@ -217,6 +199,24 @@ def _parse_int_env(name: str, default: int) -> int:
     except (TypeError, ValueError):
         return default
 
+
+app.config['COMPLIANCE_ALERT_EMAILS'] = _parse_env_list('COMPLIANCE_ALERT_EMAILS')
+app.config['COMPLIANCE_SNMP_TARGETS'] = _parse_env_list('COMPLIANCE_SNMP_TARGETS')
+app.config['COMPLIANCE_SNMP_COMMUNITY'] = os.environ.get('COMPLIANCE_SNMP_COMMUNITY', 'public')
+app.config['COMPLIANCE_HEALTH_INTERVAL'] = _parse_int_env('COMPLIANCE_HEALTH_INTERVAL', 300)
+app.config['RECEIVER_OFFLINE_THRESHOLD_MINUTES'] = _parse_int_env(
+    'RECEIVER_OFFLINE_THRESHOLD_MINUTES', 10
+)
+app.config['AUDIO_PATH_ALERT_THRESHOLD_MINUTES'] = _parse_int_env(
+    'AUDIO_PATH_ALERT_THRESHOLD_MINUTES', 60
+)
+
+PUBLIC_API_GET_PATHS = {
+    '/api/alerts',
+    '/api/alerts/historical',
+    '/api/boundaries',
+    '/api/system_status',
+}
 CSRF_SESSION_KEY = '_csrf_token'
 CSRF_HEADER_NAME = 'X-CSRF-Token'
 CSRF_PROTECTED_METHODS = {'POST', 'PUT', 'PATCH', 'DELETE'}
