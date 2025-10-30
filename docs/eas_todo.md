@@ -3,7 +3,7 @@
 ## 1. Multi-SDR Front-End Orchestration *(recommended starting point)*
 - [ ] Build a modular multi-SDR capture framework.
   - [x] Draft base interfaces and a coordination manager in `app_core/radio/manager.py`.
-  - Sketch a `radio/` package (for example `app_core/radio/manager.py`) that defines a `ReceiverInterface` abstraction (configure, tune, start/stop stream) and concrete drivers for supported SDR SDKs (SoapySDR, RTL-SDR via pyrtlsdr, Airspy, etc.).
+  - [x] Implement SoapySDR-backed drivers for RTL2832U and Airspy receivers in `app_core/radio/drivers.py`, plus helper registration utilities. Deployment docs still need to spell out how to grant the container USB device access without enabling CAP_SYS_RAWIO (pass through `/dev/bus/usb` instead of running fully privileged).
   - Extend the poller layer (`poller/` services) to request audio captures via the new manager when SAME bursts are detected, buffering raw IQ or PCM data per receiver.
   - Persist receiver configuration in Postgres (new tables via Alembic migration under `app_core/models.py`) and surface a CRUD UI in `webapp/routes/settings_radio.py` with a template in `templates/settings/radio.html`.
     - [x] Added SQLAlchemy models for receiver configuration and status history in `app_core/models.py`.
