@@ -17,6 +17,7 @@ from . import (
     routes_public,
     template_helpers,
 )
+from .routes import eas_compliance
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,7 @@ def iter_route_modules() -> Iterable[RouteModule]:
     yield RouteModule("template_helpers", template_helpers.register, requires_logger=False)
     yield RouteModule("routes_public", routes_public.register)
     yield RouteModule("routes_monitoring", routes_monitoring.register)
+    yield RouteModule("routes_eas_compliance", eas_compliance.register)
     yield RouteModule("routes_settings_radio", routes_settings_radio.register)
     yield RouteModule("routes_exports", routes_exports.register)
     yield RouteModule("routes_led", routes_led.register)
