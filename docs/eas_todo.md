@@ -39,3 +39,24 @@
   - Provide guided setup scripts (`tools/setup_wizard.py`) that populate `.env`, radio configs, and audio profiles.
   - Extend Docker services (update `docker-compose.yml`) with containers for audio capture (PulseAudio/JACK) and hardware access, documenting udev rules in `docs/deployment/audio_hardware.md`.
   - Add automated tests (pytest-based under `tests/`) covering ingest/output mocks and GPIO logic to prevent regressions.
+
+## 7. Alert Verification & Analytics
+- [ ] Build an alert verification pipeline.
+  - Correlate CAP messages with downstream playout logs in `app_core/eas_storage.py` to confirm full delivery paths.
+  - Add a validation view (`webapp/routes/alert_verification.py`, `templates/eas/alert_verification.html`) that highlights mismatches, missing audio, or delayed retransmissions.
+  - Generate trend analytics (per originator, per station) stored in a new reporting table with Alembic migration and surfaced via charts using the existing `static/js/charts/` helpers.
+  - Ship CSV exports from the verification view using shared utilities in `app_utils/export.py`.
+
+## 8. Security & Access Controls
+- [ ] Harden operator access and system security.
+  - Implement role-based access controls in `app_core/auth/roles.py` and enforce them across admin routes.
+  - Require MFA enrollment for operator accounts, adding TOTP enrollment flows in `webapp/routes/auth.py` and templates under `templates/auth/`.
+  - Add security auditing hooks that log configuration and control changes to a dedicated table with retention policies.
+  - Document security procedures in `docs/security_hardening.md`, including recommended firewall rules and patch cadence.
+
+## 9. Resilience & Disaster Recovery
+- [ ] Improve resilience for severe weather outages.
+  - Create automated database backup routines (`tools/backup_scheduler.py`) and provide restore playbooks in `docs/disaster_recovery.md`.
+  - Add health probes for dependent services (database, Redis, audio daemons) exposed via `/health/dependencies` endpoint.
+  - Implement an optional cold-standby node synchronization workflow using `docker-compose.override.yml` examples for multi-site deployments.
+  - Provide operator runbooks in `docs/runbooks/outage_response.md` describing failover activation and validation steps.

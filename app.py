@@ -61,6 +61,7 @@ from app_core.eas_storage import (
 )
 from app_core.system_health import get_system_health
 from app_core.poller_debug import ensure_poll_debug_table
+from app_core.radio import ensure_radio_tables
 from webapp import register_routes
 from webapp.admin.boundaries import (
     ensure_alert_source_columns,
@@ -685,6 +686,11 @@ def initialize_database():
             if not ensure_poll_debug_table(logger):
                 _db_initialization_error = RuntimeError(
                     "Poll debug table could not be ensured"
+                )
+                return False
+            if not ensure_radio_tables(logger):
+                _db_initialization_error = RuntimeError(
+                    "Radio receiver tables could not be ensured"
                 )
                 return False
             backfill_eas_message_payloads(logger)
