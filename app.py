@@ -176,6 +176,13 @@ app.config['CORS_ALLOW_CREDENTIALS'] = (
     os.environ.get('CORS_ALLOW_CREDENTIALS', 'false').lower() == 'true'
 )
 
+PUBLIC_API_GET_PATHS = {
+    '/api/alerts',
+    '/api/alerts/historical',
+    '/api/boundaries',
+    '/api/system_status',
+}
+
 CSRF_SESSION_KEY = '_csrf_token'
 CSRF_HEADER_NAME = 'X-CSRF-Token'
 CSRF_PROTECTED_METHODS = {'POST', 'PUT', 'PATCH', 'DELETE'}
@@ -567,6 +574,14 @@ def before_request():
     # Allow authentication endpoints without additional checks.
     if request.endpoint in {'login', 'static'}:
         return
+
+    if request.path.startswith('/api/'):
+        normalized_path = request.path.rstrip('/') or '/'
+        if (
+            request.method in {'GET', 'HEAD', 'OPTIONS'}
+            and normalized_path in PUBLIC_API_GET_PATHS
+        ):
+            return
 
     protected_prefixes = ('/admin', '/logs', '/api')
     if any(request.path.startswith(prefix) for prefix in protected_prefixes):
