@@ -59,7 +59,7 @@ from app_core.eas_storage import (
     ensure_manual_eas_audio_columns,
     get_eas_static_prefix,
 )
-from app_core.system_health import get_system_health
+from app_core.system_health import get_system_health, start_health_alert_worker
 from app_core.poller_debug import ensure_poll_debug_table
 from app_core.radio import ensure_radio_tables
 from webapp import register_routes
@@ -182,12 +182,40 @@ app.config['CORS_ALLOW_CREDENTIALS'] = (
     os.environ.get('CORS_ALLOW_CREDENTIALS', 'false').lower() == 'true'
 )
 
+app.config['COMPLIANCE_ALERT_EMAILS'] = _parse_env_list('COMPLIANCE_ALERT_EMAILS')
+app.config['COMPLIANCE_SNMP_TARGETS'] = _parse_env_list('COMPLIANCE_SNMP_TARGETS')
+app.config['COMPLIANCE_SNMP_COMMUNITY'] = os.environ.get('COMPLIANCE_SNMP_COMMUNITY', 'public')
+app.config['COMPLIANCE_HEALTH_INTERVAL'] = _parse_int_env('COMPLIANCE_HEALTH_INTERVAL', 300)
+app.config['RECEIVER_OFFLINE_THRESHOLD_MINUTES'] = _parse_int_env(
+    'RECEIVER_OFFLINE_THRESHOLD_MINUTES', 10
+)
+app.config['AUDIO_PATH_ALERT_THRESHOLD_MINUTES'] = _parse_int_env(
+    'AUDIO_PATH_ALERT_THRESHOLD_MINUTES', 60
+)
+
 PUBLIC_API_GET_PATHS = {
     '/api/alerts',
     '/api/alerts/historical',
     '/api/boundaries',
     '/api/system_status',
 }
+
+
+def _parse_env_list(name: str) -> List[str]:
+    raw_value = os.environ.get(name, '')
+    if not raw_value:
+        return []
+    return [entry.strip() for entry in raw_value.split(',') if entry and entry.strip()]
+
+
+def _parse_int_env(name: str, default: int) -> int:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    try:
+        return int(str(raw_value).strip())
+    except (TypeError, ValueError):
+        return default
 
 CSRF_SESSION_KEY = '_csrf_token'
 CSRF_HEADER_NAME = 'X-CSRF-Token'
@@ -434,6 +462,9 @@ logger.info("NOAA Alerts System startup")
 
 # Register route modules
 register_routes(app, logger)
+
+# Start background health monitoring alerts
+start_health_alert_worker(app, logger)
 
 # =============================================================================
 # BOUNDARY TYPE METADATA

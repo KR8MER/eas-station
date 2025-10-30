@@ -300,6 +300,11 @@
                     </li>
                     {% if current_user %}
                     <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('compliance_dashboard') }}">
+                            <i class="fas fa-clipboard-check"></i> Compliance
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <span class="nav-link disabled text-nowrap">
                             <i class="fas fa-user-shield"></i> {{ current_user.username }}
                         </span>

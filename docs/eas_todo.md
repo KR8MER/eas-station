@@ -30,10 +30,10 @@
   - Implement a manual override web control in `webapp/routes/system_controls.py`, ensuring proper authentication and audit logging.
 
 ## 5. Compliance & Monitoring Dashboard
-- [ ] Create a compliance dashboard.
-  - Build a dashboard view (`webapp/routes/eas_compliance.py`, `templates/eas/compliance.html`) summarizing weekly tests, received vs. relayed alerts, and receiver status.
-  - Implement automatic generation of EAS logs and export to CSV/PDF for station records in `app_core/eas_storage.py`.
-  - Add alerting hooks (email/SNMP) via a background worker (`app_core/system_health.py`) when receivers or audio paths fail.
+- [x] Create a compliance dashboard.
+  - [x] Build a dashboard view (`webapp/routes/eas_compliance.py`, `templates/eas/compliance.html`) summarizing weekly tests, received vs. relayed alerts, and receiver status.
+  - [x] Implement automatic generation of EAS logs and export to CSV/PDF for station records in `app_core/eas_storage.py`.
+  - [x] Add alerting hooks (email/SNMP) via a background worker (`app_core/system_health.py`) when receivers or audio paths fail.
 
 ## 6. Configuration & Deployment Tooling
 - [ ] Ship setup and deployment tooling.

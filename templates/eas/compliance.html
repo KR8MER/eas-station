@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}EAS Compliance Dashboard{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <div>
+            <h1 class="h3 mb-1">EAS Compliance Dashboard</h1>
+            <p class="text-muted mb-0">
+                Monitoring window: last {{ window_days }} days · Generated
+                {{ format_local_datetime(dashboard.generated_at, include_utc=True) if dashboard.generated_at else '—' }}
+            </p>
+        </div>
+        <div class="btn-group" role="group">
+            <a class="btn btn-outline-primary" href="{{ url_for('compliance_export_csv', days=window_days) }}">
+                <i class="fas fa-file-csv"></i> Download CSV
+            </a>
+            <a class="btn btn-outline-primary" href="{{ url_for('compliance_export_pdf', days=window_days) }}">
+                <i class="fas fa-file-pdf"></i> Download PDF
+            </a>
+        </div>
+    </div>
+
+    {% set relay = dashboard.received_vs_relayed or {} %}
+    {% set weekly = dashboard.weekly_tests or {} %}
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-broadcast-tower text-primary"></i> Relay Performance</h5>
+                    <p class="display-6 fw-semibold mb-1">
+                        {% if relay.relay_rate is not none %}
+                            {{ '%.1f'|format(relay.relay_rate) }}%
+                        {% else %}
+                            <span class="text-muted">N/A</span>
+                        {% endif %}
+                    </p>
+                    <p class="text-muted mb-2">Ratio of alerts received vs. relayed during the window.</p>
+                    <dl class="row mb-0 small">
+                        <dt class="col-6">Received</dt>
+                        <dd class="col-6 text-end">{{ relay.received or 0 }}</dd>
+                        <dt class="col-6">Relayed</dt>
+                        <dd class="col-6 text-end">{{ relay.relayed or 0 }}</dd>
+                        <dt class="col-6">Automated</dt>
+                        <dd class="col-6 text-end">{{ relay.auto_relayed or 0 }}</dd>
+                        <dt class="col-6">Manual</dt>
+                        <dd class="col-6 text-end">{{ relay.manual_relayed or 0 }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-calendar-check text-success"></i> Weekly Test Coverage</h5>
+                    <p class="display-6 fw-semibold mb-1">
+                        {% if weekly.relay_rate is not none %}
+                            {{ '%.1f'|format(weekly.relay_rate) }}%
+                        {% else %}
+                            <span class="text-muted">N/A</span>
+                        {% endif %}
+                    </p>
+                    <p class="text-muted mb-2">Required test relays during the monitoring window.</p>
+                    <dl class="row mb-0 small">
+                        <dt class="col-6">Tests Received</dt>
+                        <dd class="col-6 text-end">{{ weekly.received_total or 0 }}</dd>
+                        <dt class="col-6">Tests Relayed</dt>
+                        <dd class="col-6 text-end">{{ weekly.relayed_total or 0 }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-satellite-dish text-warning"></i> Receiver Health</h5>
+                    <p class="display-6 fw-semibold mb-1">{{ receiver_snapshot.total }}</p>
+                    <p class="text-muted mb-2">Configured receivers · {{ receiver_snapshot.issues }} with issues</p>
+                    {% if receiver_snapshot.issue_items %}
+                        <ul class="list-unstyled small mb-0">
+                            {% for receiver in receiver_snapshot.issue_items[:3] %}
+                                <li>
+                                    <i class="fas fa-triangle-exclamation text-danger"></i>
+                                    {{ receiver.display_name or receiver.identifier }} — {{ receiver.issue }}
+                                </li>
+                            {% endfor %}
+                            {% if receiver_snapshot.issue_items|length > 3 %}
+                                <li class="text-muted">… and {{ receiver_snapshot.issue_items|length - 3 }} more</li>
+                            {% endif %}
+                        </ul>
+                    {% else %}
+                        <p class="text-success small mb-0"><i class="fas fa-check-circle"></i> All receivers reporting within {{ receiver_snapshot.threshold_minutes }} minutes.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header bg-transparent">
+                    <h5 class="card-title mb-0"><i class="fas fa-wave-square text-info"></i> Audio Path Status</h5>
+                </div>
+                <div class="card-body">
+                    {% if audio_status.enabled %}
+                        <p class="mb-1"><strong>Output Directory:</strong> {{ audio_status.output_dir or 'Not configured' }}</p>
+                        <p class="mb-3"><strong>Last Activity:</strong>
+                            {% if audio_status.last_activity %}
+                                {{ format_local_datetime(audio_status.last_activity, include_utc=True) }}
+                            {% else %}
+                                <span class="text-muted">No activity recorded</span>
+                            {% endif %}
+                        </p>
+                        {% if audio_status.issues %}
+                            <div class="alert alert-warning mb-0" role="alert">
+                                <ul class="mb-0 ps-3">
+                                    {% for issue in audio_status.issues %}
+                                        <li>{{ issue }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% else %}
+                            <p class="text-success mb-0"><i class="fas fa-check-circle"></i> All audio paths healthy.</p>
+                        {% endif %}
+                    {% else %}
+                        <p class="text-muted mb-0">Audio broadcasting is currently disabled for this deployment.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header bg-transparent">
+                    <h5 class="card-title mb-0"><i class="fas fa-chart-line text-secondary"></i> Weekly Test History</h5>
+                </div>
+                <div class="card-body">
+                    {% if weekly.rows %}
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Week Starting</th>
+                                        <th class="text-end">Received</th>
+                                        <th class="text-end">Relayed</th>
+                                        <th class="text-end">Compliance</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in weekly.rows[:8] %}
+                                        <tr>
+                                            <td>{{ format_local_datetime(row.week_start, include_utc=False) }}</td>
+                                            <td class="text-end">{{ row.received }}</td>
+                                            <td class="text-end">{{ row.relayed }}</td>
+                                            <td class="text-end">
+                                                {% if row.compliance is not none %}
+                                                    {{ '%.1f'|format(row.compliance) }}%
+                                                {% else %}
+                                                    <span class="text-muted">—</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">No weekly test activity recorded during this window.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0"><i class="fas fa-list-check text-primary"></i> Recent Compliance Activity</h5>
+            <span class="badge bg-secondary">Timezone: {{ timezone_name }}</span>
+        </div>
+        <div class="card-body">
+            {% if dashboard.recent_activity %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th scope="col">Timestamp</th>
+                                <th scope="col">Category</th>
+                                <th scope="col">Event</th>
+                                <th scope="col">Identifier</th>
+                                <th scope="col">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for entry in dashboard.recent_activity %}
+                                <tr>
+                                    <td>{{ format_local_datetime(entry.timestamp, include_utc=True) }}</td>
+                                    <td>
+                                        {% if entry.category == 'received' %}
+                                            <span class="badge bg-info text-uppercase">Received</span>
+                                        {% elif entry.category == 'relayed' %}
+                                            <span class="badge bg-success text-uppercase">Relayed</span>
+                                        {% elif entry.category == 'manual' %}
+                                            <span class="badge bg-warning text-dark text-uppercase">Manual</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary text-uppercase">{{ entry.category }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ entry.event_label or '—' }}</td>
+                                    <td class="text-monospace">{{ entry.identifier or '—' }}</td>
+                                    <td>{{ entry.status or '—' }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="text-muted mb-0">No compliance activity recorded during this monitoring window.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

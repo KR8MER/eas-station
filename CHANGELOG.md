@@ -6,6 +6,8 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 ### Added
+- Introduced a compliance dashboard with CSV/PDF exports and automated
+  receiver/audio health alerting to monitor regulatory readiness.
 - Enabled the manual broadcast builder to target county subdivisions and the
   nationwide 000000 SAME code by exposing P-digit selection alongside the
   existing state and county pickers.
