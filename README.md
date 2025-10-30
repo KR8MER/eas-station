@@ -396,7 +396,7 @@ nano .env  # or use your preferred editor
 | `POSTGRES_PASSWORD` | `change-me` | **Change in production!** |
 | `DATABASE_URL` | *(computed)* | Full connection string |
 
-**Docker Networking Note:** When running everything via Docker Compose with the embedded database service, override `POSTGRES_HOST` to `alerts-db` (the service name). When connecting back to an existing host-managed Postgres instance, the default `host.docker.internal` works across Windows, macOS, and modern Linux Docker releases.
+**Docker Networking Note:** When running everything via Docker Compose with the embedded database service, override `POSTGRES_HOST` to `alerts-db` (the service name, also reachable via the alias `postgres`). When connecting back to an existing host-managed Postgres instance, the default `host.docker.internal` works across Windows, macOS, and modern Linux Docker releases.
 
 #### Alert Poller Settings
 
