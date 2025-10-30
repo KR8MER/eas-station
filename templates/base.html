@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token }}">
-    <title>{% block title %}KR8MER CAP - Emergency Alert System{% endblock %}</title>
+    <title>{% block title %}EAS Station - Emergency Alert System{% endblock %}</title>
 
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
@@ -244,8 +244,8 @@
     <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container-fluid">
             <a class="navbar-brand" href="/">
-                <i class="fas fa-satellite-dish brand-icon"></i>
-                KR8MER CAP Emergency Alerts
+                <i class="fas fa-broadcast-tower brand-icon"></i>
+                EAS Station
                 <div class="health-indicator">
                     <div class="health-dot health-good" id="system-health-dot"></div>
                     <span id="system-health-text">System OK</span>
@@ -355,10 +355,9 @@
         <div class="container-fluid text-center">
             <small class="text-muted d-flex flex-column flex-sm-row align-items-center justify-content-center gap-2">
                 <span>
-                    <i class="fas fa-satellite-dish"></i> 2025 KR8MER CAP Emergency Alert System |
-                    <i class="fas fa-radio"></i> Amateur Radio Emergency Communications |
-                    <i class="fas fa-server"></i> Raspberry Pi Server |
-                    <span id="current-time">Loading...</span>
+                    <i class="fas fa-broadcast-tower"></i> 2025 EAS Station - Emergency Alert System |
+                    <i class="fas fa-shield-alt"></i> Public Safety Broadcasting |
+                    <i class="fas fa-clock"></i> <span id="current-time">Loading...</span>
                 </span>
                 <span class="text-uppercase fw-semibold">Version {{ system_version }}</span>
             </small>

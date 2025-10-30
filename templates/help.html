@@ -1,83 +1,498 @@
 {% extends 'base.html' %}
-{% block title %}Help &amp; Operations Guide | KR8MER CAP Emergency Alerts{% endblock %}
+{% block title %}Help & Operations Guide | EAS Station{% endblock %}
 {% block content %}
 <div class="container py-4">
     <div class="row justify-content-center">
-        <div class="col-12 col-lg-10 col-xl-8">
-            <div class="card shadow-sm mb-4">
-                <div class="card-body p-4">
-                    <h1 class="h3 mb-3"><i class="fas fa-life-ring me-2"></i>Help &amp; Operations Guide</h1>
-                    <p class="lead">Use this guide to bring the alert system online, verify daily health, and respond when an activation occurs.</p>
-                    <p class="mb-0">For an in-depth walkthrough, consult the <code>HELP.md</code> document in the repository root.</p>
+        <div class="col-12 col-lg-10 col-xl-9">
+            <!-- Header -->
+            <div class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4 p-md-5 text-center">
+                    <i class="fas fa-life-ring fa-4x text-primary mb-3"></i>
+                    <h1 class="display-5 fw-bold mb-3">Help & Operations Guide</h1>
+                    <p class="lead text-muted">Complete documentation for operating and maintaining your EAS Station</p>
                 </div>
             </div>
 
-            <div class="card shadow-sm mb-4">
+            <!-- Quick Navigation -->
+            <div class="card shadow-sm mb-4 border-0 bg-light">
                 <div class="card-body p-4">
-                    <h2 class="h4 mb-3"><i class="fas fa-play-circle me-2"></i>Quick Start Checklist</h2>
-                    <ol class="mb-0 ps-3">
-                        <li>Ensure the PostgreSQL + PostGIS container and Redis (if used) are running.</li>
-                        <li>Launch the Flask web container and confirm the dashboard loads without errors.</li>
-                        <li>Verify the <strong>System Health</strong> widget reports a green status and recent poll times.</li>
-                        <li>Run <code>docker compose exec app python tools/generate_sample_audio.py</code> to validate the audio encoder and Azure voiceover (when configured).</li>
-                        <li>Confirm the LED control page can reach the configured sign and display a test message.</li>
-                    </ol>
-                </div>
-            </div>
-
-            <div class="card shadow-sm mb-4">
-                <div class="card-body p-4">
-                    <h2 class="h4 mb-3"><i class="fas fa-tasks me-2"></i>Routine Operations</h2>
-                    <div class="accordion" id="operationsAccordion">
-                        <div class="accordion-item">
-                            <h3 class="accordion-header" id="dailyChecksHeading">
-                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#dailyChecks" aria-expanded="true" aria-controls="dailyChecks">
-                                    Daily System Checks
-                                </button>
-                            </h3>
-                            <div id="dailyChecks" class="accordion-collapse collapse show" aria-labelledby="dailyChecksHeading" data-bs-parent="#operationsAccordion">
-                                <div class="accordion-body">
-                                    <ul>
-                                        <li>Review the dashboard map for active alerts and confirm geometry renders correctly.</li>
-                                        <li>Check <strong>Alerts History</strong> for recent CAP updates and resend failures.</li>
-                                        <li>Open the <strong>Statistics</strong> page to spot unusual ingest volumes.</li>
-                                        <li>Monitor LED sign acknowledgements within the LED Control page.</li>
-                                        <li>Audit the system log (Admin &rarr; Logs tab) for warnings or authentication attempts.</li>
-                                    </ul>
-                                </div>
-                            </div>
+                    <h2 class="h5 mb-3"><i class="fas fa-compass me-2"></i>Quick Navigation</h2>
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <a href="#installation" class="btn btn-outline-primary w-100 text-start">
+                                <i class="fas fa-download me-2"></i>Installation
+                            </a>
                         </div>
-                        <div class="accordion-item">
-                            <h3 class="accordion-header" id="activationHeading">
-                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#activationWorkflow" aria-expanded="false" aria-controls="activationWorkflow">
-                                    During an Alert Activation
+                        <div class="col-md-4">
+                            <a href="#daily-operations" class="btn btn-outline-primary w-100 text-start">
+                                <i class="fas fa-tasks me-2"></i>Daily Operations
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="#alert-handling" class="btn btn-outline-primary w-100 text-start">
+                                <i class="fas fa-exclamation-triangle me-2"></i>Alert Handling
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="#configuration" class="btn btn-outline-primary w-100 text-start">
+                                <i class="fas fa-cog me-2"></i>Configuration
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="#troubleshooting" class="btn btn-outline-primary w-100 text-start">
+                                <i class="fas fa-wrench me-2"></i>Troubleshooting
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="#compliance" class="btn btn-outline-primary w-100 text-start">
+                                <i class="fas fa-clipboard-check me-2"></i>Compliance
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Installation & Setup -->
+            <div id="installation" class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-download text-primary me-2"></i>Installation & Setup
+                    </h2>
+
+                    <div class="accordion" id="installAccordion">
+                        <!-- Docker Installation -->
+                        <div class="accordion-item border-0 shadow-sm mb-2">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#dockerInstall" aria-expanded="true">
+                                    <i class="fab fa-docker me-2 text-info"></i>
+                                    <strong>Docker Installation (Recommended)</strong>
                                 </button>
                             </h3>
-                            <div id="activationWorkflow" class="accordion-collapse collapse" aria-labelledby="activationHeading" data-bs-parent="#operationsAccordion">
+                            <div id="dockerInstall" class="accordion-collapse collapse show" data-bs-parent="#installAccordion">
                                 <div class="accordion-body">
-                                    <ol class="ps-3">
-                                        <li>Confirm the CAP alert details on the dashboard and review polygons or county overlays.</li>
-                                        <li>Use <strong>Alerts History</strong> to read the full message, verifying SAME codes and expiration.</li>
-                                        <li>Trigger the LED announcement or override message if the default automation is insufficient.</li>
-                                        <li>Monitor the audio encoder output directory for generated SAME and audio files.</li>
-                                        <li>Log operator actions in the Admin logs for post-event review.</li>
+                                    <p><strong>Prerequisites:</strong></p>
+                                    <ul class="mb-3">
+                                        <li>Docker 20.10+ and Docker Compose 2.0+</li>
+                                        <li>4GB+ RAM, 20GB+ storage</li>
+                                        <li>Linux (recommended), macOS, or Windows with WSL2</li>
+                                    </ul>
+
+                                    <p><strong>Installation Steps:</strong></p>
+                                    <ol class="mb-3">
+                                        <li class="mb-2">
+                                            <strong>Clone the repository:</strong>
+                                            <pre class="bg-dark text-white p-3 rounded mt-2"><code>git clone https://github.com/KR8MER/eas-station.git
+cd eas-station</code></pre>
+                                        </li>
+                                        <li class="mb-2">
+                                            <strong>Copy environment template:</strong>
+                                            <pre class="bg-dark text-white p-3 rounded mt-2"><code>cp .env.example .env</code></pre>
+                                        </li>
+                                        <li class="mb-2">
+                                            <strong>Generate secure secret key:</strong>
+                                            <pre class="bg-dark text-white p-3 rounded mt-2"><code>python -c 'import secrets; print(secrets.token_hex(32))'</code></pre>
+                                            Edit <code>.env</code> and set <code>SECRET_KEY</code> to the generated value.
+                                        </li>
+                                        <li class="mb-2">
+                                            <strong>Configure database credentials:</strong>
+                                            <pre class="bg-dark text-white p-3 rounded mt-2"><code>POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your_secure_password
+POSTGRES_HOST=host.docker.internal
+POSTGRES_PORT=5432
+POSTGRES_DB=alerts</code></pre>
+                                        </li>
+                                        <li class="mb-2">
+                                            <strong>Set location and timezone:</strong>
+                                            <pre class="bg-dark text-white p-3 rounded mt-2"><code>STATION_LOCATION_LAT=40.7128
+STATION_LOCATION_LON=-74.0060
+TIMEZONE=America/New_York</code></pre>
+                                        </li>
+                                        <li class="mb-2">
+                                            <strong>Start services:</strong>
+                                            <pre class="bg-dark text-white p-3 rounded mt-2"><code># With embedded database
+docker-compose --profile embedded-db up -d
+
+# With external database
+docker-compose up -d</code></pre>
+                                        </li>
+                                        <li class="mb-2">
+                                            <strong>Create admin user:</strong>
+                                            <pre class="bg-dark text-white p-3 rounded mt-2"><code>docker-compose exec app flask create-admin-user</code></pre>
+                                        </li>
+                                        <li class="mb-2">
+                                            <strong>Access the dashboard:</strong><br>
+                                            Open <code>http://localhost:5000</code> in your browser
+                                        </li>
                                     </ol>
                                 </div>
                             </div>
                         </div>
-                        <div class="accordion-item">
-                            <h3 class="accordion-header" id="manualToolsHeading">
-                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#manualTools" aria-expanded="false" aria-controls="manualTools">
-                                    Manual Tools &amp; Scripts
+
+                        <!-- Raspberry Pi Setup -->
+                        <div class="accordion-item border-0 shadow-sm mb-2">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#piSetup">
+                                    <i class="fab fa-raspberry-pi me-2 text-danger"></i>
+                                    <strong>Raspberry Pi Deployment</strong>
                                 </button>
                             </h3>
-                            <div id="manualTools" class="accordion-collapse collapse" aria-labelledby="manualToolsHeading" data-bs-parent="#operationsAccordion">
+                            <div id="piSetup" class="accordion-collapse collapse" data-bs-parent="#installAccordion">
                                 <div class="accordion-body">
-                                    <ul>
-                                        <li><code>docker compose exec app python tools/generate_sample_audio.py</code> – produce demo SAME audio for equipment checks.</li>
-                                        <li><code>manual_eas_event.py</code> – inject CAP XML for manual activations with audit logging.</li>
-                                        <li><code>manual_alert_fetch.py</code> – fetch individual CAP identifiers for debugging.</li>
-                                        <li><code>fix_template_issues.py</code> – rebuild HTML templates if corruption occurs.</li>
+                                    <p><strong>Recommended Hardware:</strong></p>
+                                    <ul class="mb-3">
+                                        <li>Raspberry Pi 4 Model B (4GB or 8GB RAM)</li>
+                                        <li>High-endurance microSD card (32GB+) or USB SSD</li>
+                                        <li>Official power supply (3A USB-C)</li>
+                                        <li>Ethernet connection (preferred for reliability)</li>
+                                    </ul>
+
+                                    <p><strong>Setup Steps:</strong></p>
+                                    <ol class="mb-3">
+                                        <li>Install Raspberry Pi OS (64-bit recommended)</li>
+                                        <li>Enable SSH and set hostname</li>
+                                        <li>Install Docker: <code>curl -fsSL https://get.docker.com | sh</code></li>
+                                        <li>Add user to docker group: <code>sudo usermod -aG docker $USER</code></li>
+                                        <li>Reboot and follow Docker installation steps above</li>
+                                        <li>Consider moving Docker data to SSD for better performance</li>
+                                    </ol>
+
+                                    <div class="alert alert-info mb-0">
+                                        <i class="fas fa-lightbulb me-2"></i>
+                                        <strong>Tip:</strong> For GPIO relay control, ensure the user running Docker has GPIO permissions or run containers in privileged mode.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Initial Configuration -->
+                        <div class="accordion-item border-0 shadow-sm mb-2">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#initialConfig">
+                                    <i class="fas fa-cog me-2 text-success"></i>
+                                    <strong>Initial Configuration</strong>
+                                </button>
+                            </h3>
+                            <div id="initialConfig" class="accordion-collapse collapse" data-bs-parent="#installAccordion">
+                                <div class="accordion-body">
+                                    <p><strong>After installation, configure these essential settings:</strong></p>
+                                    <ol class="mb-3">
+                                        <li class="mb-2">
+                                            <strong>Location Settings:</strong> Admin → Settings → Location
+                                            <ul>
+                                                <li>Set station coordinates</li>
+                                                <li>Configure timezone</li>
+                                                <li>Set coverage area radius</li>
+                                            </ul>
+                                        </li>
+                                        <li class="mb-2">
+                                            <strong>Alert Filters:</strong> Admin → Settings → Alerts
+                                            <ul>
+                                                <li>Choose which event types to monitor</li>
+                                                <li>Set severity thresholds</li>
+                                                <li>Configure geographic filters</li>
+                                            </ul>
+                                        </li>
+                                        <li class="mb-2">
+                                            <strong>CAP Feed Sources:</strong> Set in <code>.env</code>
+                                            <pre class="bg-dark text-white p-3 rounded mt-2"><code>CAP_ENDPOINTS=https://api.weather.gov/alerts/active,https://ipaws.example.com/feed</code></pre>
+                                        </li>
+                                        <li class="mb-2">
+                                            <strong>LED Sign (Optional):</strong>
+                                            <pre class="bg-dark text-white p-3 rounded mt-2"><code>LED_SIGN_IP=192.168.1.100
+LED_SIGN_PORT=10001</code></pre>
+                                        </li>
+                                        <li class="mb-2">
+                                            <strong>Azure TTS (Optional):</strong>
+                                            <pre class="bg-dark text-white p-3 rounded mt-2"><code>AZURE_SPEECH_KEY=your_key_here
+AZURE_SPEECH_REGION=eastus</code></pre>
+                                        </li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Daily Operations -->
+            <div id="daily-operations" class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-tasks text-primary me-2"></i>Daily Operations
+                    </h2>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="card h-100 border-info">
+                                <div class="card-body">
+                                    <h3 class="h6 fw-bold text-info">
+                                        <i class="fas fa-check-circle me-2"></i>Morning Checklist
+                                    </h3>
+                                    <ul class="small mb-0">
+                                        <li>Check system health indicator (navbar)</li>
+                                        <li>Review overnight alerts in Alert History</li>
+                                        <li>Verify poller services are running</li>
+                                        <li>Check database connectivity</li>
+                                        <li>Review system logs for errors</li>
+                                        <li>Test LED sign connection (if applicable)</li>
+                                        <li>Verify audio archive is growing</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="card h-100 border-warning">
+                                <div class="card-body">
+                                    <h3 class="h6 fw-bold text-warning">
+                                        <i class="fas fa-clipboard-list me-2"></i>Weekly Tasks
+                                    </h3>
+                                    <ul class="small mb-0">
+                                        <li>Review Statistics dashboard for trends</li>
+                                        <li>Check disk space usage</li>
+                                        <li>Review and archive old alerts (if needed)</li>
+                                        <li>Verify weekly EAS test was received</li>
+                                        <li>Update system if new version available</li>
+                                        <li>Backup database (if not automated)</li>
+                                        <li>Review compliance logs</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-success mt-3 mb-0">
+                        <h4 class="alert-heading h6"><i class="fas fa-chart-line me-2"></i>Monitoring Dashboard Widgets</h4>
+                        <ul class="mb-0 small">
+                            <li><strong>System Health:</strong> Green = healthy, Yellow = warning, Red = critical</li>
+                            <li><strong>Interactive Map:</strong> Shows active alerts with color-coded severity</li>
+                            <li><strong>Recent Alerts:</strong> Last 10 alerts with quick details</li>
+                            <li><strong>Statistics:</strong> Alert counts by type, severity, and time period</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Alert Handling -->
+            <div id="alert-handling" class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-exclamation-triangle text-danger me-2"></i>Alert Handling Procedures
+                    </h2>
+
+                    <div class="alert alert-danger">
+                        <h4 class="alert-heading h6"><i class="fas fa-bolt me-2"></i>When an Alert is Received</h4>
+                        <ol class="mb-0 small">
+                            <li><strong>Notification:</strong> System health indicator may change color, dashboard updates</li>
+                            <li><strong>Review Alert:</strong> Click on alert in map or history to see full details</li>
+                            <li><strong>Verify Scope:</strong> Check if alert affects your coverage area</li>
+                            <li><strong>Audio Generated:</strong> SAME audio automatically created (if enabled)</li>
+                            <li><strong>LED Display:</strong> Sign updated automatically (if configured)</li>
+                            <li><strong>Take Action:</strong> Follow station procedures for on-air activation</li>
+                        </ol>
+                    </div>
+
+                    <h3 class="h6 mt-4 mb-3">Alert Detail View</h3>
+                    <p>Clicking an alert provides comprehensive information:</p>
+                    <ul>
+                        <li><strong>Event Type:</strong> Tornado Warning, Flood Watch, etc.</li>
+                        <li><strong>Severity:</strong> Extreme, Severe, Moderate, Minor</li>
+                        <li><strong>Urgency:</strong> Immediate, Expected, Future</li>
+                        <li><strong>Areas Affected:</strong> Counties, zones, or custom polygons</li>
+                        <li><strong>Time Range:</strong> Effective time and expiration</li>
+                        <li><strong>Description:</strong> Full alert text from NWS</li>
+                        <li><strong>Instructions:</strong> Recommended actions for public</li>
+                        <li><strong>SAME Codes:</strong> Event, originator, and location codes</li>
+                        <li><strong>Map View:</strong> Affected area overlaid on map</li>
+                        <li><strong>Audio Files:</strong> Download SAME headers and voice announcements</li>
+                    </ul>
+
+                    <h3 class="h6 mt-4 mb-3">Manual Alert Activation</h3>
+                    <p>For testing or manual activations, use the Admin panel:</p>
+                    <ol>
+                        <li>Navigate to Admin → Manual EAS Activation</li>
+                        <li>Select event type from dropdown</li>
+                        <li>Choose affected counties/areas</li>
+                        <li>Set duration and effective time</li>
+                        <li>Enter custom message text (optional)</li>
+                        <li>Preview SAME codes before generation</li>
+                        <li>Click "Generate EAS Audio" to create files</li>
+                        <li>Audio appears in Audio Archive for broadcast</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- Configuration -->
+            <div id="configuration" class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-cog text-primary me-2"></i>Advanced Configuration
+                    </h2>
+
+                    <div class="accordion" id="configAccordion">
+                        <!-- Environment Variables -->
+                        <div class="accordion-item border-0 shadow-sm mb-2">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#envVars" aria-expanded="true">
+                                    <i class="fas fa-file-code me-2"></i>
+                                    <strong>Environment Variables (.env)</strong>
+                                </button>
+                            </h3>
+                            <div id="envVars" class="accordion-collapse collapse show" data-bs-parent="#configAccordion">
+                                <div class="accordion-body">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>Variable</th>
+                                                    <th>Description</th>
+                                                    <th>Default</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td><code>SECRET_KEY</code></td>
+                                                    <td>Flask secret key for sessions</td>
+                                                    <td><em>Required</em></td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>POSTGRES_HOST</code></td>
+                                                    <td>Database server hostname</td>
+                                                    <td>host.docker.internal</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>CAP_ENDPOINTS</code></td>
+                                                    <td>Comma-separated CAP feed URLs</td>
+                                                    <td>NWS active alerts</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>CAP_TIMEOUT</code></td>
+                                                    <td>HTTP timeout for CAP requests (seconds)</td>
+                                                    <td>30</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>LED_SIGN_IP</code></td>
+                                                    <td>IP address of LED sign</td>
+                                                    <td>192.168.1.100</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>AZURE_SPEECH_KEY</code></td>
+                                                    <td>Azure AI Speech API key</td>
+                                                    <td><em>Optional</em></td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>FLASK_DEBUG</code></td>
+                                                    <td>Enable debug mode (dev only!)</td>
+                                                    <td>False</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>LOG_LEVEL</code></td>
+                                                    <td>Logging level</td>
+                                                    <td>INFO</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <p class="small text-muted mb-0">See <code>.env.example</code> for complete list with descriptions</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Alert Filters -->
+                        <div class="accordion-item border-0 shadow-sm mb-2">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#alertFilters">
+                                    <i class="fas fa-filter me-2"></i>
+                                    <strong>Alert Filtering & Routing</strong>
+                                </button>
+                            </h3>
+                            <div id="alertFilters" class="accordion-collapse collapse" data-bs-parent="#configAccordion">
+                                <div class="accordion-body">
+                                    <p><strong>Configure which alerts trigger actions:</strong></p>
+                                    <ul class="mb-3">
+                                        <li><strong>Geographic Filtering:</strong> Only process alerts intersecting configured coverage area</li>
+                                        <li><strong>Event Type Filtering:</strong> Whitelist specific event codes (TOR, FFW, SVR, etc.)</li>
+                                        <li><strong>Severity Filtering:</strong> Only act on Severe or Extreme severity</li>
+                                        <li><strong>Originator Filtering:</strong> Trust only EAS, WXR, CIV originators</li>
+                                    </ul>
+
+                                    <p><strong>Configuration locations:</strong></p>
+                                    <ul class="mb-0">
+                                        <li>Web UI: Admin → Settings → Alert Filters</li>
+                                        <li>Database: <code>location_settings</code> table</li>
+                                        <li>Code: <code>configure.py</code> for defaults</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Audio Settings -->
+                        <div class="accordion-item border-0 shadow-sm mb-2">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#audioSettings">
+                                    <i class="fas fa-volume-up me-2"></i>
+                                    <strong>Audio Generation Settings</strong>
+                                </button>
+                            </h3>
+                            <div id="audioSettings" class="accordion-collapse collapse" data-bs-parent="#configAccordion">
+                                <div class="accordion-body">
+                                    <p><strong>SAME Audio Configuration:</strong></p>
+                                    <ul class="mb-3">
+                                        <li><strong>Sample Rate:</strong> 22050 Hz (standard for EAS)</li>
+                                        <li><strong>Attention Tone:</strong> 853 Hz + 960 Hz, 8-10 seconds</li>
+                                        <li><strong>Header Bursts:</strong> 3x transmission of SAME header</li>
+                                        <li><strong>EOM Bursts:</strong> 3x end-of-message tone</li>
+                                    </ul>
+
+                                    <p><strong>Voice Synthesis Options:</strong></p>
+                                    <ul class="mb-3">
+                                        <li><strong>Azure AI Speech:</strong> Natural-sounding neural voices (requires API key)</li>
+                                        <li><strong>eSpeak NG:</strong> Free, offline TTS (included in container)</li>
+                                        <li><strong>Custom Templates:</strong> Edit message templates in <code>app_utils/eas_tts.py</code></li>
+                                    </ul>
+
+                                    <p><strong>Output Formats:</strong></p>
+                                    <ul class="mb-0">
+                                        <li>WAV (uncompressed, broadcast-ready)</li>
+                                        <li>MP3 (compressed, for archival/web)</li>
+                                        <li>Metadata JSON (alert details and codes)</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- LED Integration -->
+                        <div class="accordion-item border-0 shadow-sm mb-2">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#ledIntegration">
+                                    <i class="fas fa-tv me-2"></i>
+                                    <strong>LED Sign Integration</strong>
+                                </button>
+                            </h3>
+                            <div id="ledIntegration" class="accordion-collapse collapse" data-bs-parent="#configAccordion">
+                                <div class="accordion-body">
+                                    <p><strong>Supported LED Signs:</strong></p>
+                                    <ul class="mb-3">
+                                        <li>Alpha Protocol-compatible signs (Alpha 9120C, etc.)</li>
+                                        <li>Network connection via TCP/IP</li>
+                                        <li>Default port: 10001</li>
+                                    </ul>
+
+                                    <p><strong>Configuration Steps:</strong></p>
+                                    <ol class="mb-3">
+                                        <li>Set LED sign IP address in <code>.env</code></li>
+                                        <li>Verify network connectivity: <code>ping [LED_IP]</code></li>
+                                        <li>Test connection: LED Control → Test Message</li>
+                                        <li>Configure auto-update rules in Admin → LED Settings</li>
+                                    </ol>
+
+                                    <p><strong>Message Formatting:</strong></p>
+                                    <ul class="mb-0">
+                                        <li>Supports multiple text files (pages)</li>
+                                        <li>Color control (requires color-capable sign)</li>
+                                        <li>Speed and effect settings</li>
+                                        <li>Priority-based message queuing</li>
+                                        <li>Automatic alert message generation</li>
                                     </ul>
                                 </div>
                             </div>
@@ -86,41 +501,332 @@
                 </div>
             </div>
 
-            <div class="card shadow-sm mb-4">
+            <!-- Troubleshooting -->
+            <div id="troubleshooting" class="card shadow-sm mb-4 border-0">
                 <div class="card-body p-4">
-                    <h2 class="h4 mb-3"><i class="fas fa-tools me-2"></i>Troubleshooting</h2>
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <h3 class="h6 text-uppercase text-muted">Common Issues</h3>
-                            <ul class="mb-0">
-                                <li>Database connection failures: verify the PostGIS container credentials and network reachability.</li>
-                                <li>Missing audio: confirm Azure credentials or disable voiceovers in the environment file.</li>
-                                <li>LED sign offline: recheck IP/port, power cycle the controller, and confirm firewall allowances.</li>
-                                <li>Poller stalled: inspect <code>poller/</code> logs and restart the ingestion service container.</li>
-                            </ul>
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-wrench text-warning me-2"></i>Troubleshooting Guide
+                    </h2>
+
+                    <div class="accordion" id="troubleshootAccordion">
+                        <!-- Common Issues -->
+                        <div class="accordion-item border-0 shadow-sm mb-2">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#commonIssues" aria-expanded="true">
+                                    <i class="fas fa-question-circle me-2 text-danger"></i>
+                                    <strong>Common Issues & Solutions</strong>
+                                </button>
+                            </h3>
+                            <div id="commonIssues" class="accordion-collapse collapse show" data-bs-parent="#troubleshootAccordion">
+                                <div class="accordion-body">
+                                    <div class="mb-3">
+                                        <h4 class="h6 fw-bold text-danger">Dashboard won't load / 500 errors</h4>
+                                        <ul class="small">
+                                            <li>Check database connectivity: <code>docker-compose logs app</code></li>
+                                            <li>Verify PostgreSQL is running: <code>docker-compose ps</code></li>
+                                            <li>Check network: <code>docker-compose exec app ping postgres</code></li>
+                                            <li>Review logs for specific error messages</li>
+                                            <li>Restart services: <code>docker-compose restart</code></li>
+                                        </ul>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <h4 class="h6 fw-bold text-danger">No alerts appearing</h4>
+                                        <ul class="small">
+                                            <li>Verify poller is running: <code>docker-compose ps poller</code></li>
+                                            <li>Check poller logs: <code>docker-compose logs poller</code></li>
+                                            <li>Verify CAP_ENDPOINTS in .env is correct</li>
+                                            <li>Test CAP feed manually: <code>curl [CAP_URL]</code></li>
+                                            <li>Check geographic filters aren't too restrictive</li>
+                                            <li>Review Admin → IPAWS Debug page for feed status</li>
+                                        </ul>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <h4 class="h6 fw-bold text-danger">LED sign not responding</h4>
+                                        <ul class="small">
+                                            <li>Verify IP address: <code>ping [LED_IP]</code></li>
+                                            <li>Check port 10001 is open (firewall)</li>
+                                            <li>Test connection via LED Control page</li>
+                                            <li>Review logs: <code>docker-compose logs app | grep led</code></li>
+                                            <li>Power cycle LED sign controller</li>
+                                            <li>Verify sign is in network mode, not RS-232</li>
+                                        </ul>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <h4 class="h6 fw-bold text-danger">Audio generation fails</h4>
+                                        <ul class="small">
+                                            <li>Check Azure credentials if using AI Speech</li>
+                                            <li>Verify eSpeak is installed: <code>docker-compose exec app which espeak</code></li>
+                                            <li>Check disk space: <code>df -h</code></li>
+                                            <li>Review audio logs in Admin → Logs</li>
+                                            <li>Test manual generation in Admin → Manual EAS</li>
+                                            <li>Verify output directory permissions</li>
+                                        </ul>
+                                    </div>
+
+                                    <div class="mb-0">
+                                        <h4 class="h6 fw-bold text-danger">Can't log in / 400 errors</h4>
+                                        <ul class="small mb-0">
+                                            <li>Clear browser cookies and cache</li>
+                                            <li>Verify SECRET_KEY is set in .env</li>
+                                            <li>Check username/password spelling</li>
+                                            <li>Reset password via CLI: <code>docker-compose exec app flask reset-password [username]</code></li>
+                                            <li>Create new admin: <code>docker-compose exec app flask create-admin-user</code></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="col-md-6">
-                            <h3 class="h6 text-uppercase text-muted">Where to Get Help</h3>
-                            <ul class="mb-0">
-                                <li>Consult <strong>ABOUT.md</strong> and <strong>HELP.md</strong> for architecture references.</li>
-                                <li>Review <strong>CHANGELOG.md</strong> for recent behaviour adjustments.</li>
-                                <li>Coordinate with the KR8MER ARES engineering team for hardware-specific support.</li>
-                                <li>Open an issue on GitHub when software defects are suspected.</li>
-                            </ul>
+
+                        <!-- Log Files -->
+                        <div class="accordion-item border-0 shadow-sm mb-2">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#logFiles">
+                                    <i class="fas fa-file-alt me-2"></i>
+                                    <strong>Log Files & Debugging</strong>
+                                </button>
+                            </h3>
+                            <div id="logFiles" class="accordion-collapse collapse" data-bs-parent="#troubleshootAccordion">
+                                <div class="accordion-body">
+                                    <p><strong>View logs via Docker:</strong></p>
+                                    <pre class="bg-dark text-white p-3 rounded"><code># All services
+docker-compose logs
+
+# Specific service
+docker-compose logs app
+docker-compose logs poller
+
+# Follow (tail) logs
+docker-compose logs -f app
+
+# Last 100 lines
+docker-compose logs --tail=100 app</code></pre>
+
+                                    <p class="mt-3"><strong>Log locations inside containers:</strong></p>
+                                    <ul class="mb-3">
+                                        <li><code>/var/log/eas-station/app.log</code> - Application logs</li>
+                                        <li><code>/var/log/eas-station/poller.log</code> - CAP poller logs</li>
+                                        <li>System logs viewable in Admin → Logs page</li>
+                                    </ul>
+
+                                    <p><strong>Enable debug mode (development only!):</strong></p>
+                                    <pre class="bg-dark text-white p-3 rounded"><code>FLASK_DEBUG=True
+LOG_LEVEL=DEBUG</code></pre>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Database Issues -->
+                        <div class="accordion-item border-0 shadow-sm mb-2">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#databaseIssues">
+                                    <i class="fas fa-database me-2"></i>
+                                    <strong>Database Troubleshooting</strong>
+                                </button>
+                            </h3>
+                            <div id="databaseIssues" class="accordion-collapse collapse" data-bs-parent="#troubleshootAccordion">
+                                <div class="accordion-body">
+                                    <p><strong>Connect to database:</strong></p>
+                                    <pre class="bg-dark text-white p-3 rounded"><code># Via Docker Compose
+docker-compose exec alerts-db psql -U postgres -d alerts
+
+# Direct connection
+psql -h localhost -U postgres -d alerts</code></pre>
+
+                                    <p class="mt-3"><strong>Common database commands:</strong></p>
+                                    <pre class="bg-dark text-white p-3 rounded"><code>-- List tables
+\dt
+
+-- Check table sizes
+SELECT relname, pg_size_pretty(pg_total_relation_size(relid))
+FROM pg_catalog.pg_statio_user_tables
+ORDER BY pg_total_relation_size(relid) DESC;
+
+-- Count alerts
+SELECT COUNT(*) FROM cap_alerts;
+
+-- Check PostGIS version
+SELECT PostGIS_version();</code></pre>
+
+                                    <p class="mt-3"><strong>Backup and restore:</strong></p>
+                                    <pre class="bg-dark text-white p-3 rounded mb-0"><code># Backup
+docker-compose exec alerts-db pg_dump -U postgres alerts > backup.sql
+
+# Restore
+docker-compose exec -T alerts-db psql -U postgres alerts < backup.sql</code></pre>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="card shadow-sm mb-5">
-                <div class="card-body p-4 d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
-                    <div>
-                        <h2 class="h4 mb-1"><i class="fas fa-question-circle me-2"></i>Need additional assistance?</h2>
-                        <p class="mb-0">Reach out through the KR8MER amateur radio channels or the project&apos;s GitHub discussions to collaborate with fellow operators.</p>
+            <!-- Compliance -->
+            <div id="compliance" class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-clipboard-check text-success me-2"></i>FCC Compliance & Documentation
+                    </h2>
+
+                    <div class="alert alert-warning">
+                        <h4 class="alert-heading h6"><i class="fas fa-balance-scale me-2"></i>Regulatory Requirements</h4>
+                        <p class="small mb-2">Broadcast stations must comply with FCC EAS regulations (47 CFR Part 11). Key requirements include:</p>
+                        <ul class="small mb-0">
+                            <li>Monitor designated EAS sources 24/7</li>
+                            <li>Transmit National, State, and Local alerts</li>
+                            <li>Conduct weekly tests (usually Wednesdays)</li>
+                            <li>Participate in monthly state-level tests</li>
+                            <li>Maintain logs of all EAS activities</li>
+                            <li>Keep equipment operational and tested</li>
+                        </ul>
                     </div>
-                    <a class="btn btn-primary" href="https://github.com/KR8MER/eas-station" target="_blank" rel="noopener">
-                        <i class="fab fa-github me-2"></i>Project Repository
-                    </a>
+
+                    <h3 class="h6 mt-4 mb-3">EAS Station Compliance Features</h3>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="card border-success h-100">
+                                <div class="card-body">
+                                    <h4 class="h6 fw-bold text-success">
+                                        <i class="fas fa-file-invoice me-2"></i>Automated Logging
+                                    </h4>
+                                    <ul class="small mb-0">
+                                        <li>All alerts automatically logged</li>
+                                        <li>Timestamps in UTC and local time</li>
+                                        <li>Full CAP XML archived</li>
+                                        <li>Audio generation records</li>
+                                        <li>Operator actions tracked</li>
+                                        <li>Export logs as CSV/PDF</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="card border-info h-100">
+                                <div class="card-body">
+                                    <h4 class="h6 fw-bold text-info">
+                                        <i class="fas fa-chart-bar me-2"></i>Compliance Dashboard
+                                    </h4>
+                                    <ul class="small mb-0">
+                                        <li>Weekly test tracking</li>
+                                        <li>Alert reception statistics</li>
+                                        <li>System health monitoring</li>
+                                        <li>Required monthly test logs</li>
+                                        <li>Equipment test documentation</li>
+                                        <li>View in Admin → Compliance</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h3 class="h6 mt-4 mb-3">Required Documentation</h3>
+                    <p>Station logs should include (available in Admin → Logs and Compliance):</p>
+                    <ul>
+                        <li><strong>Weekly Tests:</strong> Date, time, source, result (usually Wed 8:30-11:30 local)</li>
+                        <li><strong>Monthly Tests:</strong> State-level RMT participation</li>
+                        <li><strong>National Tests:</strong> Nationwide EAS test (annually)</li>
+                        <li><strong>Actual Activations:</strong> All EAN, EAT, and emergency alerts</li>
+                        <li><strong>Equipment Maintenance:</strong> Service, repairs, upgrades</li>
+                        <li><strong>Operator Training:</strong> Staff training sessions</li>
+                    </ul>
+
+                    <div class="alert alert-info mb-0">
+                        <h4 class="alert-heading h6"><i class="fas fa-download me-2"></i>Export Compliance Reports</h4>
+                        <p class="small mb-0">
+                            Generate FCC-ready compliance reports: Admin → Compliance → Export Report<br>
+                            Reports include all required information formatted for FCC inspection or license renewal.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Command Reference -->
+            <div class="card shadow-sm mb-4 border-0 bg-dark text-white">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-terminal me-2"></i>Command Reference
+                    </h2>
+
+                    <h3 class="h6 mb-3">Docker Compose Commands</h3>
+                    <pre class="bg-black text-white p-3 rounded mb-3"><code># Start all services
+docker-compose up -d
+
+# Stop all services
+docker-compose down
+
+# Restart a service
+docker-compose restart app
+
+# View logs
+docker-compose logs -f app
+
+# Update to latest version
+git pull
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d</code></pre>
+
+                    <h3 class="h6 mb-3">Flask CLI Commands</h3>
+                    <pre class="bg-black text-white p-3 rounded mb-0"><code># Create admin user
+docker-compose exec app flask create-admin-user
+
+# Initialize database
+docker-compose exec app flask init-db
+
+# Run cleanup task
+docker-compose exec app flask cleanup-expired
+
+# Test LED controller
+docker-compose exec app flask test-led</code></pre>
+                </div>
+            </div>
+
+            <!-- Additional Resources -->
+            <div class="card shadow-sm mb-4 border-0 bg-primary text-white">
+                <div class="card-body p-4 text-center">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-question-circle me-2"></i>Need More Help?
+                    </h2>
+                    <p class="mb-3">Additional resources and community support:</p>
+                    <div class="row g-2 justify-content-center">
+                        <div class="col-auto">
+                            <a href="https://github.com/KR8MER/eas-station" class="btn btn-light" target="_blank" rel="noopener">
+                                <i class="fab fa-github me-2"></i>GitHub Repository
+                            </a>
+                        </div>
+                        <div class="col-auto">
+                            <a href="https://github.com/KR8MER/eas-station/issues" class="btn btn-light" target="_blank" rel="noopener">
+                                <i class="fas fa-bug me-2"></i>Report Issue
+                            </a>
+                        </div>
+                        <div class="col-auto">
+                            <a href="{{ url_for('about_page') }}" class="btn btn-light">
+                                <i class="fas fa-info-circle me-2"></i>About EAS Station
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Tips -->
+            <div class="card shadow-sm mb-4 border-0 border-start border-5 border-success">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">
+                        <i class="fas fa-lightbulb text-success me-2"></i>Pro Tips
+                    </h2>
+                    <ul class="mb-0">
+                        <li><strong>Bookmark the dashboard:</strong> Add http://[your-server]:5000 to your browser for quick access</li>
+                        <li><strong>Set up mobile access:</strong> Configure port forwarding or VPN for remote monitoring</li>
+                        <li><strong>Enable email notifications:</strong> Configure SMTP settings for alert digests</li>
+                        <li><strong>Regular backups:</strong> Schedule automatic database backups to external storage</li>
+                        <li><strong>Monitor disk space:</strong> Set up alerts when audio archive grows large</li>
+                        <li><strong>Test thoroughly:</strong> Use manual activation feature to test your broadcast chain end-to-end</li>
+                        <li><strong>Keep updated:</strong> Watch GitHub releases for new features and security updates</li>
+                        <li><strong>Document local procedures:</strong> Create station-specific documentation for operators</li>
+                    </ul>
                 </div>
             </div>
         </div>

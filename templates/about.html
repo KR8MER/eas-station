@@ -1,92 +1,519 @@
 {% extends 'base.html' %}
-{% block title %}About | KR8MER CAP Emergency Alerts{% endblock %}
+{% block title %}About | EAS Station{% endblock %}
 {% block content %}
 <div class="container py-4">
     <div class="row justify-content-center">
-        <div class="col-12 col-lg-10 col-xl-8">
-            <div class="card shadow-sm mb-4">
-                <div class="card-body p-4">
-                    <h1 class="h3 mb-3"><i class="fas fa-info-circle me-2"></i>About the KR8MER CAP Emergency Alert System</h1>
-                    <p class="lead">This community-driven project distributes National Weather Service CAP alerts, SAME audio, and LED board messaging for regional emergency communications partners.</p>
-                    <p>The platform couples a Flask web application with scheduled ingest services, Azure-powered voice synthesis, and hardware integrations so local operators can monitor, validate, and relay critical weather and civil alerts.</p>
+        <div class="col-12 col-lg-10 col-xl-9">
+            <!-- Header -->
+            <div class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4 p-md-5">
+                    <div class="text-center mb-4">
+                        <i class="fas fa-broadcast-tower fa-4x text-primary mb-3"></i>
+                        <h1 class="display-5 fw-bold mb-3">About EAS Station</h1>
+                        <p class="lead text-muted">Professional Emergency Alert System monitoring, processing, and distribution platform</p>
+                    </div>
+                    <hr class="my-4">
+                    <p class="fs-5">EAS Station is a comprehensive, open-source emergency alert processing system designed for broadcasters, emergency communications professionals, and public safety organizations. It integrates CAP (Common Alerting Protocol) feeds, SAME (Specific Area Message Encoding) audio generation, and multi-channel alert distribution to provide real-time emergency notifications.</p>
                 </div>
             </div>
 
-            <div class="card shadow-sm mb-4">
+            <!-- Mission & Purpose -->
+            <div class="card shadow-sm mb-4 border-0">
                 <div class="card-body p-4">
-                    <h2 class="h4 mb-3"><i class="fas fa-layer-group me-2"></i>System Architecture Overview</h2>
-                    <ul class="list-group list-group-flush">
-                        <li class="list-group-item bg-transparent">
-                            <strong>Data Acquisition:</strong> NOAA CAP feeds are polled on a schedule, parsed, and persisted with full geometry metadata for downstream analysis.
-                        </li>
-                        <li class="list-group-item bg-transparent">
-                            <strong>Web Operations:</strong> Flask serves the operator dashboard, alert archives, statistics, LED control, and this public help content.
-                        </li>
-                        <li class="list-group-item bg-transparent">
-                            <strong>Broadcast Pipeline:</strong> The EAS encoder produces SAME headers, digital data bursts, and optional Azure AI Speech narration for broadcast-ready audio.
-                        </li>
-                        <li class="list-group-item bg-transparent">
-                            <strong>Hardware Integrations:</strong> Network LED signage and GPIO-triggered transmitters receive synchronized alert status updates.
-                        </li>
-                    </ul>
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-bullseye text-primary me-2"></i>Mission & Purpose
+                    </h2>
+                    <p>EAS Station was created to bridge the gap between modern digital alert systems and traditional broadcast infrastructure. Our platform enables:</p>
+                    <div class="row g-3 mt-2">
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-start">
+                                <i class="fas fa-check-circle text-success me-2 mt-1"></i>
+                                <div>
+                                    <strong>Real-Time Alert Monitoring:</strong> Continuous polling of NOAA, NWS, and IPAWS CAP feeds with instant alert detection and processing.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-start">
+                                <i class="fas fa-check-circle text-success me-2 mt-1"></i>
+                                <div>
+                                    <strong>Geospatial Intelligence:</strong> PostGIS-powered spatial analysis to determine which alerts affect your coverage area.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-start">
+                                <i class="fas fa-check-circle text-success me-2 mt-1"></i>
+                                <div>
+                                    <strong>Broadcast Automation:</strong> FCC-compliant SAME encoding with automated voice synthesis for immediate on-air deployment.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-start">
+                                <i class="fas fa-check-circle text-success me-2 mt-1"></i>
+                                <div>
+                                    <strong>Multi-Channel Distribution:</strong> Simultaneous delivery via LED signs, GPIO relays, web dashboards, and API endpoints.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div class="card shadow-sm mb-4">
+            <!-- System Architecture -->
+            <div class="card shadow-sm mb-4 border-0">
                 <div class="card-body p-4">
-                    <h2 class="h4 mb-3"><i class="fas fa-toolbox me-2"></i>Software Stack</h2>
-                    <p class="mb-3">The project combines open source geospatial tooling, broadcast utilities, and optional cloud services:</p>
-                    <div class="row g-3">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-sitemap text-primary me-2"></i>System Architecture
+                    </h2>
+                    <p class="mb-4">EAS Station employs a modern, containerized architecture designed for reliability and scalability:</p>
+
+                    <div class="accordion" id="architectureAccordion">
+                        <!-- Data Ingestion Layer -->
+                        <div class="accordion-item border-0 shadow-sm mb-2">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#dataIngestion" aria-expanded="true">
+                                    <i class="fas fa-download me-2 text-info"></i>
+                                    <strong>Data Ingestion Layer</strong>
+                                </button>
+                            </h3>
+                            <div id="dataIngestion" class="accordion-collapse collapse show" data-bs-parent="#architectureAccordion">
+                                <div class="accordion-body">
+                                    <p><strong>Dedicated polling services</strong> continuously monitor multiple CAP feed sources:</p>
+                                    <ul class="mb-0">
+                                        <li><strong>NOAA CAP Feeds:</strong> Real-time weather alerts from the National Weather Service</li>
+                                        <li><strong>IPAWS Integration:</strong> Federal emergency alerts via the Integrated Public Alert and Warning System</li>
+                                        <li><strong>Custom Sources:</strong> Support for additional CAP 1.2-compliant alert feeds</li>
+                                        <li><strong>Polling Intelligence:</strong> Configurable intervals, retry logic, and duplicate detection</li>
+                                        <li><strong>Parse & Validate:</strong> Full XML schema validation with detailed error reporting</li>
+                                        <li><strong>Spatial Processing:</strong> Automatic extraction and normalization of geographic polygons, circles, and SAME/FIPS codes</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Processing & Storage -->
+                        <div class="accordion-item border-0 shadow-sm mb-2">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#processing">
+                                    <i class="fas fa-database me-2 text-success"></i>
+                                    <strong>Processing & Storage Layer</strong>
+                                </button>
+                            </h3>
+                            <div id="processing" class="accordion-collapse collapse" data-bs-parent="#architectureAccordion">
+                                <div class="accordion-body">
+                                    <p><strong>PostgreSQL with PostGIS extensions</strong> provides enterprise-grade data management:</p>
+                                    <ul class="mb-3">
+                                        <li><strong>Geospatial Database:</strong> PostGIS 3.4+ enables advanced spatial queries and indexing</li>
+                                        <li><strong>Alert Archival:</strong> Complete historical record with full-text search capabilities</li>
+                                        <li><strong>Boundary Management:</strong> TIGER/Line county boundaries, weather zones, and custom service areas</li>
+                                        <li><strong>Intersection Detection:</strong> Automatic identification of alerts affecting configured coverage areas</li>
+                                        <li><strong>Audit Logging:</strong> Comprehensive activity tracking for compliance and debugging</li>
+                                        <li><strong>SAME Code Registry:</strong> Built-in database of event codes, originator codes, and location codes</li>
+                                    </ul>
+                                    <p class="mb-0"><em>Data retention policies are configurable to meet FCC requirements and station policies.</em></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Broadcast Generation -->
+                        <div class="accordion-item border-0 shadow-sm mb-2">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#broadcast">
+                                    <i class="fas fa-microphone me-2 text-danger"></i>
+                                    <strong>Broadcast Generation Pipeline</strong>
+                                </button>
+                            </h3>
+                            <div id="broadcast" class="accordion-collapse collapse" data-bs-parent="#architectureAccordion">
+                                <div class="accordion-body">
+                                    <p><strong>FCC-compliant audio generation</strong> for on-air broadcast:</p>
+                                    <ul class="mb-3">
+                                        <li><strong>SAME Encoder:</strong> Pure Python implementation of EAS header/EOM burst generation</li>
+                                        <li><strong>Attention Signal:</strong> Standard two-tone attention signal (853 Hz + 960 Hz)</li>
+                                        <li><strong>Voice Synthesis:</strong> Optional Azure AI Speech integration for natural-sounding voice announcements</li>
+                                        <li><strong>Audio Processing:</strong> FFmpeg and SoX for professional audio formatting (WAV, MP3, normalization)</li>
+                                        <li><strong>Template Engine:</strong> Customizable message templates for different event types</li>
+                                        <li><strong>Verification:</strong> Built-in audio validation and playback testing</li>
+                                    </ul>
+                                    <p class="mb-0"><em>All audio files include metadata tagging for archive management and compliance documentation.</em></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Distribution Layer -->
+                        <div class="accordion-item border-0 shadow-sm mb-2">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#distribution">
+                                    <i class="fas fa-share-alt me-2 text-warning"></i>
+                                    <strong>Multi-Channel Distribution</strong>
+                                </button>
+                            </h3>
+                            <div id="distribution" class="accordion-collapse collapse" data-bs-parent="#architectureAccordion">
+                                <div class="accordion-body">
+                                    <p><strong>Flexible alert delivery</strong> to multiple output channels:</p>
+                                    <ul class="mb-3">
+                                        <li><strong>Web Dashboard:</strong> Real-time alert visualization with interactive maps and filtering</li>
+                                        <li><strong>LED Signage:</strong> Direct integration with Alpha protocol-compatible LED signs</li>
+                                        <li><strong>GPIO Control:</strong> Relay triggers for transmitter control and studio automation</li>
+                                        <li><strong>REST API:</strong> JSON endpoints for integration with external systems</li>
+                                        <li><strong>Email Notifications:</strong> Alert digests and compliance reports via SMTP</li>
+                                        <li><strong>SNMP Traps:</strong> Network monitoring system integration</li>
+                                        <li><strong>SDR Verification:</strong> Optional alert verification via software-defined radio monitoring</li>
+                                    </ul>
+                                    <p class="mb-0"><em>All distribution channels include failover logic and delivery confirmation when available.</em></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Web Interface -->
+                        <div class="accordion-item border-0 shadow-sm mb-2">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#webInterface">
+                                    <i class="fas fa-desktop me-2 text-primary"></i>
+                                    <strong>Web Interface & Control Panel</strong>
+                                </button>
+                            </h3>
+                            <div id="webInterface" class="accordion-collapse collapse" data-bs-parent="#architectureAccordion">
+                                <div class="accordion-body">
+                                    <p><strong>Flask-powered web application</strong> provides comprehensive system management:</p>
+                                    <ul class="mb-0">
+                                        <li><strong>Interactive Map:</strong> Leaflet-based map showing active alerts with polygon overlays</li>
+                                        <li><strong>Alert History:</strong> Searchable archive with filtering by date, type, severity, and area</li>
+                                        <li><strong>Audio Archive:</strong> Complete library of generated SAME audio with playback and download</li>
+                                        <li><strong>Statistics Dashboard:</strong> Alert trends, system health metrics, and compliance reports</li>
+                                        <li><strong>LED Control Panel:</strong> Real-time sign management and message scheduling</li>
+                                        <li><strong>Admin Console:</strong> User management, system configuration, and maintenance tools</li>
+                                        <li><strong>Compliance Tracking:</strong> FCC EAS monitoring logs and required weekly test documentation</li>
+                                        <li><strong>System Health:</strong> Resource monitoring, database status, and service health checks</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Technology Stack -->
+            <div class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-code text-primary me-2"></i>Technology Stack
+                    </h2>
+                    <p class="mb-4">Built on proven, production-ready technologies:</p>
+
+                    <div class="row g-4">
                         <div class="col-md-6">
-                            <h3 class="h6 text-uppercase text-muted">Core Platform</h3>
-                            <ul class="mb-0">
-                                <li>Python 3 with Flask &amp; SQLAlchemy</li>
-                                <li>GeoAlchemy2 &amp; PostGIS spatial extensions</li>
-                                <li>Celery-style pollers &amp; scheduler helpers</li>
-                                <li>Requests, Pydantic utilities, and PyTZ</li>
+                            <h3 class="h6 fw-bold text-primary mb-3">
+                                <i class="fas fa-server me-2"></i>Backend & Core Services
+                            </h3>
+                            <ul class="list-unstyled">
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Python 3.11+</strong> - Core application language</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Flask 3.x</strong> - Web framework with Werkzeug WSGI</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Gunicorn</strong> - Production WSGI HTTP server</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>SQLAlchemy 2.x</strong> - Database ORM and query builder</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>GeoAlchemy2</strong> - Spatial database extensions</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Alembic</strong> - Database migration management</li>
                             </ul>
                         </div>
+
                         <div class="col-md-6">
-                            <h3 class="h6 text-uppercase text-muted">Infrastructure</h3>
-                            <ul class="mb-0">
-                                <li>Docker &amp; Docker Compose orchestration</li>
-                                <li>PostgreSQL with PostGIS (dedicated container)</li>
-                                <li>Redis-backed task queues (optional)</li>
-                                <li>Raspberry Pi and networked LED controllers</li>
+                            <h3 class="h6 fw-bold text-success mb-3">
+                                <i class="fas fa-database me-2"></i>Database & Storage
+                            </h3>
+                            <ul class="list-unstyled">
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>PostgreSQL 17</strong> - Primary data store</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>PostGIS 3.4</strong> - Spatial database extensions</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Psycopg2</strong> - PostgreSQL adapter</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Redis</strong> (optional) - Session storage and caching</li>
+                            </ul>
+
+                            <h3 class="h6 fw-bold text-info mb-3 mt-4">
+                                <i class="fas fa-globe me-2"></i>Geospatial Tools
+                            </h3>
+                            <ul class="list-unstyled">
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Shapely</strong> - Geometric operations</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>PyProj</strong> - Coordinate transformations</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Leaflet.js</strong> - Interactive web maps</li>
                             </ul>
                         </div>
+
                         <div class="col-md-6">
-                            <h3 class="h6 text-uppercase text-muted">Broadcast Chain</h3>
-                            <ul class="mb-0">
-                                <li>Custom SAME encoder &amp; audio pipeline</li>
-                                <li>SoX/FFmpeg utilities for waveform processing</li>
-                                <li>Azure AI Speech synthesis (optional voiceover)</li>
-                                <li>GPIO relay management scripts</li>
+                            <h3 class="h6 fw-bold text-danger mb-3">
+                                <i class="fas fa-volume-up me-2"></i>Audio Processing
+                            </h3>
+                            <ul class="list-unstyled">
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>NumPy</strong> - Waveform generation</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>SciPy</strong> - Signal processing</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>FFmpeg</strong> - Audio format conversion</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>SoX</strong> - Audio processing utilities</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Azure AI Speech</strong> - Neural TTS voices</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>eSpeak NG</strong> - Offline TTS fallback</li>
                             </ul>
                         </div>
+
                         <div class="col-md-6">
-                            <h3 class="h6 text-uppercase text-muted">Operator Tooling</h3>
-                            <ul class="mb-0">
-                                <li>Web dashboards &amp; health monitors</li>
-                                <li>CLI ingestion &amp; manual activation scripts</li>
-                                <li>Template repair utilities</li>
-                                <li>Extensive documentation in <code>ABOUT.md</code> &amp; <code>HELP.md</code></li>
+                            <h3 class="h6 fw-bold text-warning mb-3">
+                                <i class="fas fa-cogs me-2"></i>Infrastructure & DevOps
+                            </h3>
+                            <ul class="list-unstyled">
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Docker</strong> - Application containerization</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Docker Compose</strong> - Multi-container orchestration</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Nginx</strong> (optional) - Reverse proxy & SSL termination</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Systemd</strong> - Service management on Linux</li>
+                            </ul>
+
+                            <h3 class="h6 fw-bold text-secondary mb-3 mt-4">
+                                <i class="fas fa-plug me-2"></i>Hardware Integration
+                            </h3>
+                            <ul class="list-unstyled">
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>RPi.GPIO</strong> - Raspberry Pi relay control</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Alpha Protocol</strong> - LED sign communication</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>pyrtlsdr</strong> (optional) - SDR verification</li>
                             </ul>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="card shadow-sm mb-4">
+            <!-- Key Features -->
+            <div class="card shadow-sm mb-4 border-0">
                 <div class="card-body p-4">
-                    <h2 class="h4 mb-3"><i class="fas fa-file-alt me-2"></i>Project Resources</h2>
-                    <p class="mb-3">Need more detail? Explore the reference material shipped with the repository:</p>
-                    <ul class="mb-0">
-                        <li><a href="https://github.com/KR8MER/eas-station" class="text-decoration-none" target="_blank" rel="noopener">Project on GitHub</a> for history, issues, and community coordination.</li>
-                        <li><a href="{{ url_for('help_page') }}" class="text-decoration-none">Help &amp; Operations Guide</a> for practical workflows.</li>
-                        <li>Repository copies of <code>ABOUT.md</code> and <code>HELP.md</code> ship with every deployment for offline reference.</li>
-                    </ul>
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-star text-primary me-2"></i>Key Features
+                    </h2>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="p-3 bg-light rounded">
+                                <h3 class="h6 fw-bold"><i class="fas fa-shield-check text-success me-2"></i>FCC Compliance</h3>
+                                <p class="small mb-0">Complete EAS monitoring logs, weekly test tracking, and required documentation generation.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 bg-light rounded">
+                                <h3 class="h6 fw-bold"><i class="fas fa-map-marked-alt text-info me-2"></i>Spatial Intelligence</h3>
+                                <p class="small mb-0">Automatic detection of alerts affecting your coverage area using PostGIS spatial queries.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 bg-light rounded">
+                                <h3 class="h6 fw-bold"><i class="fas fa-bolt text-warning me-2"></i>Real-Time Processing</h3>
+                                <p class="small mb-0">Sub-second alert detection and processing with immediate distribution to all configured channels.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 bg-light rounded">
+                                <h3 class="h6 fw-bold"><i class="fas fa-chart-line text-primary me-2"></i>Analytics & Reporting</h3>
+                                <p class="small mb-0">Comprehensive statistics, trend analysis, and compliance reporting with CSV export.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 bg-light rounded">
+                                <h3 class="h6 fw-bold"><i class="fas fa-lock text-danger me-2"></i>Security & Access Control</h3>
+                                <p class="small mb-0">Multi-user support with role-based permissions, session management, and audit logging.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 bg-light rounded">
+                                <h3 class="h6 fw-bold"><i class="fas fa-code-branch text-secondary me-2"></i>Open Source</h3>
+                                <p class="small mb-0">MIT licensed with active development and community contributions welcome.</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+            </div>
+
+            <!-- Deployment Options -->
+            <div class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-rocket text-primary me-2"></i>Deployment Options
+                    </h2>
+                    <p>EAS Station is designed for flexible deployment across various environments:</p>
+                    <div class="row g-3 mt-2">
+                        <div class="col-md-6">
+                            <div class="card border-primary">
+                                <div class="card-body">
+                                    <h3 class="h6 fw-bold text-primary">
+                                        <i class="fas fa-raspberry-pi me-2"></i>Raspberry Pi (Recommended)
+                                    </h3>
+                                    <p class="small mb-2">Perfect for broadcast facilities with modest requirements:</p>
+                                    <ul class="small mb-0">
+                                        <li>Raspberry Pi 4 (4GB+ RAM recommended)</li>
+                                        <li>SSD storage via USB 3.0 for reliability</li>
+                                        <li>Direct GPIO access for relay control</li>
+                                        <li>Low power consumption (~10W)</li>
+                                        <li>Compact form factor for rack mounting</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-success">
+                                <div class="card-body">
+                                    <h3 class="h6 fw-bold text-success">
+                                        <i class="fas fa-server me-2"></i>Dedicated Server
+                                    </h3>
+                                    <p class="small mb-2">Ideal for large-scale deployments or multi-station networks:</p>
+                                    <ul class="small mb-0">
+                                        <li>Any Linux server (Ubuntu, Debian, RHEL)</li>
+                                        <li>2+ CPU cores, 4GB+ RAM</li>
+                                        <li>Handles higher alert volumes</li>
+                                        <li>Better performance for audio processing</li>
+                                        <li>Supports advanced SDR verification</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-info">
+                                <div class="card-body">
+                                    <h3 class="h6 fw-bold text-info">
+                                        <i class="fas fa-cloud me-2"></i>Cloud Hosting
+                                    </h3>
+                                    <p class="small mb-2">Scalable deployment for distributed operations:</p>
+                                    <ul class="small mb-0">
+                                        <li>AWS, Azure, Google Cloud, DigitalOcean</li>
+                                        <li>Elastic scaling for high availability</li>
+                                        <li>Managed database services available</li>
+                                        <li>Global CDN for dashboard access</li>
+                                        <li>Automated backups and disaster recovery</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-warning">
+                                <div class="card-body">
+                                    <h3 class="h6 fw-bold text-warning">
+                                        <i class="fas fa-laptop me-2"></i>Development & Testing
+                                    </h3>
+                                    <p class="small mb-2">Run locally for testing and configuration:</p>
+                                    <ul class="small mb-0">
+                                        <li>Windows, macOS, or Linux desktop</li>
+                                        <li>Docker Desktop for easy setup</li>
+                                        <li>Test configurations before deployment</li>
+                                        <li>Develop custom integrations</li>
+                                        <li>Train staff on system operations</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Use Cases -->
+            <div class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-users text-primary me-2"></i>Who Uses EAS Station?
+                    </h2>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <h3 class="h6 fw-bold text-danger">
+                                <i class="fas fa-broadcast-tower me-2"></i>Broadcast Stations
+                            </h3>
+                            <ul class="small">
+                                <li>AM/FM radio stations</li>
+                                <li>Television broadcasters</li>
+                                <li>LPFM and community radio</li>
+                                <li>Internet streaming services</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h3 class="h6 fw-bold text-primary">
+                                <i class="fas fa-ambulance me-2"></i>Emergency Management
+                            </h3>
+                            <ul class="small">
+                                <li>County emergency operations centers</li>
+                                <li>FEMA regional offices</li>
+                                <li>State emergency management agencies</li>
+                                <li>Disaster response coordinators</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h3 class="h6 fw-bold text-warning">
+                                <i class="fas fa-satellite-dish me-2"></i>Amateur Radio
+                            </h3>
+                            <ul class="small">
+                                <li>ARES/RACES groups</li>
+                                <li>EmComm coordinators</li>
+                                <li>SKYWARN networks</li>
+                                <li>Community emergency response teams</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h3 class="h6 fw-bold text-success">
+                                <i class="fas fa-building me-2"></i>Institutions
+                            </h3>
+                            <ul class="small">
+                                <li>College/university campuses</li>
+                                <li>Hospital systems</li>
+                                <li>Large corporate campuses</li>
+                                <li>Government facilities</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Project Resources -->
+            <div class="card shadow-sm mb-4 border-0 bg-primary text-white">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-book-open me-2"></i>Documentation & Resources
+                    </h2>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <h3 class="h6 fw-bold">
+                                <i class="fas fa-file-code me-2"></i>Project Resources
+                            </h3>
+                            <ul class="mb-0">
+                                <li><a href="https://github.com/KR8MER/eas-station" class="text-white text-decoration-underline" target="_blank" rel="noopener">GitHub Repository</a> - Source code and issue tracking</li>
+                                <li><a href="{{ url_for('help_page') }}" class="text-white text-decoration-underline">Help & Operations Guide</a> - Day-to-day operations</li>
+                                <li><code>README.md</code> - Installation and quick start</li>
+                                <li><code>CHANGELOG.md</code> - Version history and updates</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h3 class="h6 fw-bold">
+                                <i class="fas fa-graduation-cap me-2"></i>Community & Support
+                            </h3>
+                            <ul class="mb-0">
+                                <li>GitHub Discussions for Q&A</li>
+                                <li>Issue tracker for bug reports</li>
+                                <li>Pull requests welcome for contributions</li>
+                                <li>Documentation improvements appreciated</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- License & Credits -->
+            <div class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4 text-center">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-balance-scale text-primary me-2"></i>License & Credits
+                    </h2>
+                    <p class="mb-3">EAS Station is open-source software released under the <strong>MIT License</strong>.</p>
+                    <p class="text-muted small mb-0">
+                        Originally developed for amateur radio emergency communications by KR8MER.<br>
+                        Built with contributions from broadcasters, emergency managers, and developers worldwide.<br>
+                        Special thanks to NOAA, NWS, and FEMA for providing public CAP feeds.
+                    </p>
+                </div>
+            </div>
+
+            <!-- CTA -->
+            <div class="text-center">
+                <a href="{{ url_for('help_page') }}" class="btn btn-primary btn-lg me-2 mb-2">
+                    <i class="fas fa-life-ring me-2"></i>View Help Guide
+                </a>
+                <a href="https://github.com/KR8MER/eas-station" class="btn btn-outline-primary btn-lg mb-2" target="_blank" rel="noopener">
+                    <i class="fab fa-github me-2"></i>View on GitHub
+                </a>
             </div>
         </div>
     </div>
