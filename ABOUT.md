@@ -1,11 +1,11 @@
-# ℹ️ About the NOAA CAP Emergency Alert System
+# ℹ️ About EAS Station
 
-The NOAA CAP Emergency Alert System (EAS) is a Flask-powered operations hub that ingests National Oceanic and Atmospheric Administration (NOAA) Common Alerting Protocol (CAP) products, evaluates their geographic impact, and prepares on-air messaging for emergency communications teams. The project is maintained by amateur radio operators supporting Putnam County, Ohio, and ships with tooling for monitoring, manual activations, and LED signage integrations.
+EAS Station is a complete Emergency Alert System platform that automates the ingestion, encoding, broadcast, and verification of Common Alerting Protocol (CAP) alerts. Built by amateur radio operators supporting Putnam County, Ohio, it combines NOAA and IPAWS feed aggregation, FCC-compliant SAME encoding, PostGIS spatial intelligence, SDR verification, and LED signage integration into a unified operations hub.
 
 ## Mission and Scope
-- **Primary Goal:** Deliver timely situational awareness to emergency communications volunteers by automating NOAA alert ingestion, enrichment, and dissemination.
-- **Deployment Model:** Container-first architecture designed for on-premise or field deployments with an external PostgreSQL/PostGIS database service.
-- **Operational Focus:** Supports automatic alert polling, manual CAP overrides, local SAME audio generation, and optional LED signage broadcast.
+- **Primary Goal:** Provide emergency communications teams with automated CAP-to-EAS workflow, from alert ingestion through broadcast verification, with complete compliance documentation.
+- **Deployment Model:** Container-first architecture designed for on-premise or field deployments with external PostgreSQL/PostGIS database service.
+- **Operational Focus:** Multi-source alert aggregation, automatic SAME broadcast generation, SDR-based verification, spatial boundary awareness, and audit trail management.
 
 ## Core Services
 | Component | Description |
