@@ -77,6 +77,13 @@ class RadioManager:
         with self._lock:
             return dict(self._drivers)
 
+    def register_builtin_drivers(self) -> None:
+        """Register the built-in SDR drivers shipped with the application."""
+
+        from .drivers import register_builtin_drivers
+
+        register_builtin_drivers(self)
+
     def configure_receivers(self, configs: Iterable[ReceiverConfig]) -> None:
         """Instantiate and track receivers for the provided configurations."""
 
