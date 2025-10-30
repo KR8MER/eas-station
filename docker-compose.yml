@@ -45,6 +45,10 @@ services:
     profiles:
       - embedded-db
     restart: unless-stopped
+    networks:
+      default:
+        aliases:
+          - postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
