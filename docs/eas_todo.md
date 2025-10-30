@@ -46,8 +46,8 @@
   - [x] Correlate CAP messages with downstream playout logs in `app_core/eas_storage.py` to confirm full delivery paths.
   - [x] Add a validation view (`webapp/routes/alert_verification.py`, `templates/eas/alert_verification.html`) that highlights mismatches, missing audio, or delayed retransmissions.
   - [x] Generate trend analytics (per originator, per station) stored in a new reporting table with Alembic migration and surfaced via charts using the existing `static/js/charts/` helpers.
-  - [x] Ship CSV exports from the verification view using shared utilities in `app_utils/export.py`.
-  - [ ] Create a way to ingest .WAV and .MP3 files containing EAS Headers and display and possibly store the results of the decode.
+- [x] Ship CSV exports from the verification view using shared utilities in `app_utils/export.py`.
+  - [x] Create a way to ingest .WAV and .MP3 files containing EAS Headers and display and possibly store the results of the decode.
 
 ## 8. Security & Access Controls
 - [ ] Harden operator access and system security.
