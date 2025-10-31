@@ -8,7 +8,7 @@ Be respectful and constructive. EAS Station is maintained by volunteers supporti
 
 ## Licensing and Copyright
 
-- The EAS Station source code is released under the [MIT License](LICENSE). Timothy Kramer (KR8MER) retains the project copyright.
+- The EAS Station source code is released under the [MIT License](LICENSE). Timothy Kramer (K8R8MER) retains the project copyright.
 - By contributing, you agree that your submissions will be licensed under the MIT License and may be redistributed under those terms.
 
 ## Developer Certificate of Origin (DCO)
@@ -34,7 +34,8 @@ If you contribute on behalf of an organization, ensure you have the necessary au
 1. **Fork the repository** and create a topic branch (`feature/...`, `fix/...`, or `docs/...`).
 2. **Follow the development guidelines** in [`AGENTS.md`](AGENTS.md) and existing code patterns.
 3. **Add tests or documentation** that cover your changes when possible.
-4. **Run the test suite** or relevant checks locally before opening a pull request.
-5. **Submit a pull request** describing the change, its motivation, and any verification steps performed.
+4. **Update [`CHANGELOG.md`](CHANGELOG.md)** under the `[Unreleased]` heading to record what changed and why.
+5. **Run the test suite or targeted regression checks** (alert ingest, SAME generation, GPIO control, audio playout) before opening a pull request so reviewers know nothing critical regressed.
+6. **Submit a pull request** describing the change, its motivation, and any verification steps performed.
 
 We encourage proposals and discussion via GitHub issues before major changes. Thanks for helping build EAS Station!

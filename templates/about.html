@@ -10,19 +10,19 @@
                     <div class="text-center mb-4">
                         <i class="fas fa-broadcast-tower fa-4x text-primary mb-3"></i>
                         <h1 class="display-5 fw-bold mb-3">About EAS Station</h1>
-                        <p class="lead text-muted">Professional Emergency Alert System monitoring, processing, and distribution platform</p>
+                        <p class="lead text-muted">Software-defined drop-in replacement for commercial EAS encoder/decoders built on Raspberry Pi-class hardware</p>
                     </div>
                     <div class="alert alert-warning d-flex align-items-start" role="alert">
                         <i class="fas fa-triangle-exclamation fa-lg me-3"></i>
                         <div>
-                            <strong>Development-Only Notice:</strong> EAS Station is an experimental project cross-checked
-                            against community tools like multimon-ng. It is <em>not</em> FCC-certified, is <em>not</em> ready for
-                            production deployment, and must never be relied upon for life-or-death decision making or regulatory
-                            compliance.
+                            <strong>Development-Only Notice:</strong> EAS Station is actively pursuing feature parity with
+                            commercial encoder/decoders but remains experimental. It is <em>not yet</em> FCC-certified, is <em>not</em>
+                            ready for production deployment, and must only be evaluated in controlled lab and training
+                            environments until certification paths are explored.
                         </div>
                     </div>
                     <hr class="my-4">
-                    <p class="fs-5">EAS Station is a comprehensive, open-source emergency alert processing system designed for broadcasters, emergency communications professionals, and public safety organizations. It integrates CAP (Common Alerting Protocol) feeds, SAME (Specific Area Message Encoding) audio generation, and multi-channel alert distribution to provide real-time emergency notifications.</p>
+                    <p class="fs-5">EAS Station is a comprehensive, open-source emergency alert processing system designed for broadcasters, emergency communications professionals, and public safety organizations. It integrates CAP (Common Alerting Protocol) feeds, SAME (Specific Area Message Encoding) audio generation, and multi-channel alert distribution to provide real-time emergency notifications—all with the explicit goal of replacing utilitarian hardware appliances with a disciplined software stack running on Raspberry Pi-class platforms, SDR receivers, and a handful of HATs.</p>
                 </div>
             </div>
 
@@ -32,7 +32,7 @@
                     <h2 class="h4 mb-3">
                         <i class="fas fa-bullseye text-primary me-2"></i>Mission & Purpose
                     </h2>
-                    <p>EAS Station was created to bridge the gap between modern digital alert systems and traditional broadcast infrastructure. Our platform enables:</p>
+                    <p>EAS Station was created to bridge the gap between modern digital alert systems and traditional broadcast infrastructure. Our platform is being engineered as a drop-in replacement that enables:</p>
                     <div class="row g-3 mt-2">
                         <div class="col-md-6">
                             <div class="d-flex align-items-start">
@@ -67,14 +67,96 @@
                             </div>
                         </div>
                     </div>
-                </div>
             </div>
+        </div>
 
-            <!-- System Architecture -->
-            <div class="card shadow-sm mb-4 border-0">
-                <div class="card-body p-4">
-                    <h2 class="h4 mb-3">
-                        <i class="fas fa-sitemap text-primary me-2"></i>System Architecture
+        <!-- Drop-In Replacement Requirements -->
+        <div class="card shadow-sm mb-4 border-0">
+            <div class="card-body p-4">
+                <h2 class="h4 mb-3">
+                    <i class="fas fa-list-check text-success me-2"></i>Drop-In Replacement Requirements
+                </h2>
+                <p class="mb-3">The <a href="https://github.com/KR8MER/eas-station/blob/main/docs/master_todo.md" class="text-decoration-none">Master Implementation Roadmap</a> tracks the nine capability areas that must be completed before the project can stand in for commercial hardware:</p>
+                <ul class="mb-0">
+                    <li><strong>Reliable Baseband Capture</strong> – Unified ingest from SDR, line-in, and file sources with synchronized metering.</li>
+                    <li><strong>Deterministic Audio Playout</strong> – Queue-driven SAME headers, attention tones, GPIO triggers, and narration.</li>
+                    <li><strong>Hardware Control & Redundancy</strong> – Audited GPIO, relay, and network control with watchdog timers.</li>
+                    <li><strong>Security & Access Assurance</strong> – Role-based access, MFA, and tamper-evident change logs.</li>
+                    <li><strong>Resilient Operations</strong> – Backup, failover, and health monitoring workflows.</li>
+                    <li><strong>Turnkey Deployment</strong> – Setup wizards, configuration validation, and commodity hardware guidance.</li>
+                    <li><strong>Regulatory Compliance Support</strong> – Analytics and reporting for FCC weekly/monthly test obligations.</li>
+                    <li><strong>Unified Documentation</strong> – Synchronized repository and web content so operators follow the same guardrails.</li>
+                    <li><strong>Certification Readiness</strong> – Evidence collection, soak testing, and documentation packages that support an FCC Part 11 submission.</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Reference Hardware Build -->
+        <div class="card shadow-sm mb-4 border-0">
+            <div class="card-body p-4">
+                <h2 class="h4 mb-3">
+                    <i class="fas fa-microchip text-danger me-2"></i>Reference Raspberry Pi Hardware Stack
+                </h2>
+                <p class="mb-3">The roadmap targets a reproducible build assembled entirely from commodity parts so integrators can swap in software for the rack-mount black boxes sold today:</p>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start">
+                            <i class="fas fa-raspberry-pi text-success me-2 mt-1"></i>
+                            <div>
+                                <strong>Compute:</strong> Raspberry Pi&nbsp;4 Model&nbsp;B (4&nbsp;GB/8&nbsp;GB) with active cooling and UPS-backed power.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start">
+                            <i class="fas fa-plug text-primary me-2 mt-1"></i>
+                            <div>
+                                <strong>Dry Contacts:</strong> Multi-relay GPIO HAT providing normally-open/closed paths for transmitter keying and tower lights.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start">
+                            <i class="fas fa-ethernet text-warning me-2 mt-1"></i>
+                            <div>
+                                <strong>Serial Control:</strong> RS-232 HAT or USB adapter for legacy EAS peripherals and studio automation links.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start">
+                            <i class="fas fa-volume-up text-danger me-2 mt-1"></i>
+                            <div>
+                                <strong>Audio I/O:</strong> Pi-compatible sound card or USB interface delivering balanced program and monitor feeds.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start">
+                            <i class="fas fa-tv text-info me-2 mt-1"></i>
+                            <div>
+                                <strong>Confidence Monitoring:</strong> Native HDMI output for local displays plus dashboard telemetry for remote checks.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-start">
+                            <i class="fas fa-broadcast-tower text-secondary me-2 mt-1"></i>
+                            <div>
+                                <strong>Verification:</strong> Dual SDR receivers (RTL-SDR, Airspy, etc.) validating retransmission audio and SAME headers.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <p class="mt-3 mb-0">Software integration, guided setup, and long-haul reliability trials tie the stack together so the project can pursue FCC certification with confidence.</p>
+            </div>
+        </div>
+
+        <!-- System Architecture -->
+        <div class="card shadow-sm mb-4 border-0">
+            <div class="card-body p-4">
+                <h2 class="h4 mb-3">
+                    <i class="fas fa-sitemap text-primary me-2"></i>System Architecture
                     </h2>
                     <p class="mb-4">EAS Station employs a modern, containerized architecture designed for reliability and scalability:</p>
 
@@ -465,6 +547,23 @@
                             </ul>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Release Management -->
+            <div class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-clipboard-check text-primary me-2"></i>Release Management &amp; Audit Trails
+                    </h2>
+                    <p class="mb-3">EAS Station treats every deployment like regulated equipment. Follow these guardrails before promoting changes:</p>
+                    <ul class="mb-0">
+                        <li class="mb-2"><strong>Version numbering matters.</strong> Set <code>APP_BUILD_VERSION</code> for every build so the footer and health endpoints report the running release.</li>
+                        <li class="mb-2"><strong>CHANGELOG-first workflow.</strong> Document behaviour changes under the <code>[Unreleased]</code> heading and call out how regressions were prevented.</li>
+                        <li class="mb-2"><strong>Snapshot before upgrades.</strong> Run <code>python tools/create_backup.py</code> to capture the configuration, database dump, and git revision metadata.</li>
+                        <li class="mb-2"><strong>Upgrade in place.</strong> Apply updates with <code>python tools/inplace_upgrade.py</code> to rebuild containers, run migrations, and restart services without wiping volumes.</li>
+                        <li class="mb-0"><strong>Validate immediately.</strong> After the upgrade completes, spot-check ingest, SAME generation, GPIO relays, and audio playout so regressions are caught before lab exercises.</li>
+                    </ul>
                 </div>
             </div>
 

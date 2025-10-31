@@ -6,6 +6,7 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 ### Added
+- Added `tools/inplace_upgrade.py` for in-place upgrades that pull, rebuild, migrate, and restart services without destroying volumes, plus `tools/create_backup.py` to snapshot `.env`, compose files, and a Postgres dump with audit metadata before changes.
 - Introduced a compliance dashboard with CSV/PDF exports and automated
   receiver/audio health alerting to monitor regulatory readiness.
 - Enabled the manual broadcast builder to target county subdivisions and the
@@ -42,6 +43,7 @@ tracks releases under the 2.x series.
   can either rely on the bundled `alerts-db` PostGIS container or connect to an
   existing deployment without editing the primary compose file.
 ### Changed
+- Documented the release governance workflow across the README, ABOUT page, Terms of Use, master roadmap, and site footer so version numbering, changelog discipline, and regression verification remain mandatory for every contribution.
 - Suppressed automatic EAS generation for Special Weather Statements and Dense Fog Advisories to align with standard activation practices.
 - Clarified in the README and dependency notes that PostgreSQL with PostGIS must run in a dedicated container separate from the application services.
 - Documented a single-line command for cloning the Experimental branch and launching the Docker Compose stack so operators can bootstrap quickly.
