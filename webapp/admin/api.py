@@ -631,19 +631,53 @@ def register_api_routes(app, logger):
                     status = 'warning'
 
             if cpu >= 90:
-                _record_status('critical', 'CPU usage exceeds 90%.')
+                _record_status(
+                    'critical',
+                    f'CPU usage is {cpu:.1f}%, exceeding the 90% critical threshold.',
+                )
             elif cpu >= 75:
-                _record_status('warning', 'CPU usage is above 75%.')
+                _record_status(
+                    'warning',
+                    f'CPU usage is {cpu:.1f}%, above the 75% warning threshold.',
+                )
 
             if memory.percent >= 92:
-                _record_status('critical', 'Memory usage exceeds 92%.')
+                _record_status(
+                    'critical',
+                    (
+                        'Memory usage is '
+                        f'{memory.percent:.1f}%, exceeding the 92% critical threshold.'
+                    ),
+                )
             elif memory.percent >= 80:
-                _record_status('warning', 'Memory usage is above 80%.')
+                _record_status(
+                    'warning',
+                    (
+                        'Memory usage is '
+                        f'{memory.percent:.1f}%, above the 80% warning threshold.'
+                    ),
+                )
 
             if disk.percent >= 95:
-                _record_status('critical', 'Disk usage exceeds 95%.')
+                _record_status(
+                    'critical',
+                    (
+                        'Disk usage is '
+                        f'{disk.percent:.1f}% on the root volume with '
+                        f"{disk.free // (1024 * 1024 * 1024)} GB free, exceeding the "
+                        '95% critical threshold.'
+                    ),
+                )
             elif disk.percent >= 85:
-                _record_status('warning', 'Disk usage is above 85%.')
+                _record_status(
+                    'warning',
+                    (
+                        'Disk usage is '
+                        f'{disk.percent:.1f}% on the root volume with '
+                        f"{disk.free // (1024 * 1024 * 1024)} GB free, above the "
+                        '85% warning threshold.'
+                    ),
+                )
 
             poll_snapshot = None
             location_tz = get_location_timezone()
@@ -652,15 +686,36 @@ def register_api_routes(app, logger):
                 if poll_timestamp.tzinfo is None:
                     poll_timestamp = poll_timestamp.replace(tzinfo=UTC_TZ)
                 poll_age_minutes = (current_utc - poll_timestamp).total_seconds() / 60.0
+                poll_local_time = poll_timestamp.astimezone(location_tz)
+                poll_time_display = poll_local_time.strftime('%Y-%m-%d %H:%M %Z')
                 if poll_age_minutes >= 60:
-                    _record_status('critical', f'Last poll was {poll_age_minutes:.0f} minutes ago.')
+                    _record_status(
+                        'critical',
+                        (
+                            'Last poll ran '
+                            f'{poll_age_minutes:.0f} minutes ago '
+                            f'(local time {poll_time_display}).'
+                        ),
+                    )
                 elif poll_age_minutes >= 15:
-                    _record_status('warning', f'Last poll was {poll_age_minutes:.0f} minutes ago.')
+                    _record_status(
+                        'warning',
+                        (
+                            'Last poll ran '
+                            f'{poll_age_minutes:.0f} minutes ago '
+                            f'(local time {poll_time_display}).'
+                        ),
+                    )
 
                 poll_status = (last_poll.status or '').strip().lower()
                 if poll_status and poll_status not in {'success', 'ok', 'completed'}:
                     level = 'critical' if poll_status in {'failed', 'error'} else 'warning'
-                    _record_status(level, f'Last poll reported status: {last_poll.status}.')
+                    error_detail = (last_poll.error_message or '').strip()
+                    detail_suffix = f" Details: {error_detail}" if error_detail else ''
+                    _record_status(
+                        level,
+                        f"Last poll reported status '{last_poll.status}'.{detail_suffix}",
+                    )
 
                 poll_snapshot = {
                     'timestamp': poll_timestamp.isoformat(),
@@ -668,9 +723,15 @@ def register_api_routes(app, logger):
                     'status': last_poll.status,
                     'alerts_fetched': last_poll.alerts_fetched or 0,
                     'alerts_new': last_poll.alerts_new or 0,
+                    'error_message': (last_poll.error_message or '').strip() or None,
+                    'data_source': last_poll.data_source,
                 }
             else:
-                _record_status('warning', 'No poll activity has been recorded yet.')
+                _record_status(
+                    'warning',
+                    'No poll activity has been recorded yet; verify the poller service is '
+                    'running and configured.',
+                )
 
             status_summary = 'All systems operational.'
             if status_reasons:
