@@ -14,7 +14,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-from .eas import describe_same_header
+from .eas import ORIGINATOR_DESCRIPTIONS, describe_same_header
 from .eas_fsk import SAME_BAUD, SAME_MARK_FREQ, SAME_SPACE_FREQ, encode_same_bits
 from .fips_codes import get_same_lookup
 from app_utils.event_codes import EVENT_CODE_REGISTRY
