@@ -49,33 +49,37 @@
 
     <style>
         :root {
-            --primary-color: #007bff;
-            --secondary-color: #6c757d;
-            --success-color: #28a745;
-            --danger-color: #dc3545;
-            --warning-color: #ffc107;
-            --info-color: #17a2b8;
-            --light-color: #f8f9fa;
-            --dark-color: #343a40;
-            --bg-color: #ffffff;
-            --text-color: #212529;
-            --border-color: #dee2e6;
-            --shadow-color: rgba(0, 0, 0, 0.1);
+            --primary-color: #204885; /* Aegean Blue */
+            --secondary-color: #872a96; /* Plum Crazy */
+            --accent-color: #ff8c42; /* Vibrant orange contrast */
+            --success-color: #2eb08d;
+            --danger-color: #e05263;
+            --warning-color: #ffb347;
+            --info-color: #2f5aa1;
+            --light-color: #f4f5fb;
+            --dark-color: #19263a;
+            --bg-color: #e8ecf7;
+            --surface-color: #ffffff;
+            --text-color: #1c2233;
+            --border-color: #ced7ea;
+            --shadow-color: rgba(32, 72, 133, 0.12);
         }
 
         [data-theme="dark"] {
-            --primary-color: #4dabf7;
-            --secondary-color: #adb5bd;
-            --success-color: #51cf66;
-            --danger-color: #ff6b6b;
-            --warning-color: #ffd43b;
-            --info-color: #339af0;
-            --light-color: #495057;
-            --dark-color: #212529;
-            --bg-color: #1a1a1a;
-            --text-color: #f8f9fa;
-            --border-color: #495057;
-            --shadow-color: rgba(255, 255, 255, 0.1);
+            --primary-color: #3c66c1;
+            --secondary-color: #b069c7;
+            --accent-color: #ff9f57;
+            --success-color: #47d3b1;
+            --danger-color: #ff7a8a;
+            --warning-color: #ffc76b;
+            --info-color: #6ca0ff;
+            --light-color: #2a3245;
+            --dark-color: #0b1220;
+            --bg-color: #101628;
+            --surface-color: #1b2335;
+            --text-color: #f5f6fa;
+            --border-color: #2f3a54;
+            --shadow-color: rgba(0, 0, 0, 0.4);
         }
 
         body {
@@ -86,26 +90,49 @@
         }
 
         .navbar {
-            background-color: var(--primary-color) !important;
+            background: linear-gradient(120deg, var(--primary-color), var(--secondary-color)) !important;
             border-bottom: 1px solid var(--border-color);
+            box-shadow: 0 4px 14px var(--shadow-color);
+        }
+
+        .navbar .navbar-brand,
+        .navbar .nav-link,
+        .navbar .navbar-toggler {
+            color: #f7f8ff !important;
+        }
+
+        .navbar .nav-link:hover,
+        .navbar .nav-link:focus,
+        .navbar .nav-link.active {
+            color: var(--accent-color) !important;
         }
 
         .card {
-            background-color: var(--bg-color);
+            background-color: var(--surface-color);
             border: 1px solid var(--border-color);
             box-shadow: 0 0.125rem 0.25rem var(--shadow-color);
             transition: background-color 0.3s ease, color 0.3s ease;
         }
 
+        a {
+            color: var(--primary-color);
+            transition: color 0.2s ease;
+        }
+
+        a:hover,
+        a:focus {
+            color: var(--accent-color);
+        }
+
         .table {
-            background-color: var(--bg-color);
+            background-color: var(--surface-color);
             color: var(--text-color);
         }
 
         .table th {
-            background-color: var(--light-color);
+            background: linear-gradient(135deg, var(--secondary-color), var(--accent-color));
             border-top: none;
-            color: var(--text-color);
+            color: #fff;
         }
 
         .btn-theme-toggle {
@@ -119,8 +146,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: var(--primary-color);
-            color: white;
+            background: linear-gradient(135deg, var(--accent-color), var(--secondary-color));
+            color: #fff;
             border: none;
             box-shadow: 0 4px 12px var(--shadow-color);
             transition: all 0.3s ease;
@@ -132,11 +159,20 @@
         }
 
         .footer {
-            background-color: var(--light-color);
-            color: var(--text-color);
+            background: linear-gradient(120deg, var(--primary-color), var(--secondary-color));
+            color: #f8f9ff;
             padding: 20px 0;
             margin-top: 50px;
             border-top: 1px solid var(--border-color);
+        }
+
+        .footer a {
+            color: #f8f9ff;
+        }
+
+        .footer a:hover,
+        .footer a:focus {
+            color: var(--accent-color);
         }
 
         .navbar-brand {
@@ -246,7 +282,7 @@
             <a class="navbar-brand" href="/">
                 <i class="fas fa-broadcast-tower brand-icon"></i>
                 EAS Station
-                <div class="health-indicator">
+                <div class="health-indicator" id="system-health-indicator" title="System OK">
                     <div class="health-dot health-good" id="system-health-dot"></div>
                     <span id="system-health-text">System OK</span>
                 </div>
@@ -529,26 +565,48 @@
 
                 const healthDot = document.getElementById('system-health-dot');
                 const healthText = document.getElementById('system-health-text');
+                const indicator = document.getElementById('system-health-indicator');
 
                 if (healthDot && healthText) {
-                    if (data.status === 'healthy') {
-                        healthDot.className = 'health-dot health-good';
-                        healthText.textContent = 'System OK';
-                    } else if (data.status === 'warning') {
-                        healthDot.className = 'health-dot health-warning';
-                        healthText.textContent = 'Warning';
-                    } else {
-                        healthDot.className = 'health-dot health-critical';
-                        healthText.textContent = 'Critical';
+                    const statusKey = (data.status || '').toString().toLowerCase();
+                    const statusStyles = {
+                        healthy: { className: 'health-dot health-good', label: 'Healthy' },
+                        online: { className: 'health-dot health-good', label: 'Healthy' },
+                        warning: { className: 'health-dot health-warning', label: 'Warning' },
+                        critical: { className: 'health-dot health-critical', label: 'Critical' },
+                    };
+
+                    const fallback = { className: 'health-dot health-warning', label: 'Status' };
+                    const style = statusStyles[statusKey] || fallback;
+                    const summary = (data.status_summary || '').toString().trim();
+
+                    healthDot.className = style.className;
+
+                    let displayText = style.label;
+                    if (statusKey === 'healthy') {
+                        displayText = summary || 'System OK';
+                    } else if (summary) {
+                        displayText = `${style.label} · ${summary}`;
+                    }
+
+                    healthText.textContent = displayText;
+
+                    if (indicator) {
+                        indicator.setAttribute('title', summary || displayText);
                     }
                 }
             } catch (error) {
                 console.warn('Could not check system health:', error);
                 const healthDot = document.getElementById('system-health-dot');
                 const healthText = document.getElementById('system-health-text');
+                const indicator = document.getElementById('system-health-indicator');
                 if (healthDot && healthText) {
                     healthDot.className = 'health-dot health-warning';
-                    healthText.textContent = 'Unknown';
+                    const fallbackText = 'Status unavailable';
+                    healthText.textContent = fallbackText;
+                    if (indicator) {
+                        indicator.setAttribute('title', fallbackText);
+                    }
                 }
             }
         }
