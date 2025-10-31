@@ -104,6 +104,29 @@ def _run_ffmpeg_decode(path: str, sample_rate: int) -> bytes:
     return bytes(result.stdout)
 
 
+def _resample_with_scipy(samples: List[float], orig_rate: int, target_rate: int) -> List[float]:
+    """Resample audio using scipy when ffmpeg is unavailable."""
+    try:
+        from scipy import signal
+        import numpy as np
+
+        # Convert to numpy array
+        samples_array = np.array(samples, dtype=np.float32)
+
+        # Calculate the number of output samples
+        num_samples = int(len(samples_array) * target_rate / orig_rate)
+
+        # Resample using scipy
+        resampled = signal.resample(samples_array, num_samples)
+
+        return resampled.tolist()
+    except ImportError:
+        raise AudioDecodeError(
+            "Neither ffmpeg nor scipy is available for audio resampling. "
+            "Install ffmpeg or run: pip install scipy"
+        )
+
+
 def _read_audio_samples(path: str, sample_rate: int) -> List[float]:
     """Return normalised PCM samples from an arbitrary audio file."""
 
@@ -112,13 +135,28 @@ def _read_audio_samples(path: str, sample_rate: int) -> List[float]:
 
         with wave.open(path, "rb") as handle:
             params = handle.getparams()
-            if params.nchannels == 1 and params.sampwidth == 2 and params.framerate == sample_rate:
+            native_rate = params.framerate
+
+            # Read the raw PCM data
+            if params.nchannels == 1 and params.sampwidth == 2:
                 pcm = handle.readframes(params.nframes)
                 if pcm:
-                    return _convert_pcm_to_floats(pcm)
+                    samples = _convert_pcm_to_floats(pcm)
+
+                    # If sample rates match, return as-is
+                    if native_rate == sample_rate:
+                        return samples
+
+                    # Try scipy resampling first as it's faster and more reliable
+                    try:
+                        return _resample_with_scipy(samples, native_rate, sample_rate)
+                    except (ImportError, AudioDecodeError):
+                        # Fall back to ffmpeg if scipy isn't available
+                        pass
     except Exception:
         pass
 
+    # Fall back to ffmpeg for non-WAV files or if resampling failed
     pcm_bytes = _run_ffmpeg_decode(path, sample_rate)
     return _convert_pcm_to_floats(pcm_bytes)
 
