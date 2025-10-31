@@ -16,11 +16,14 @@ All database credentials should be explicitly configured via environment variabl
 No default passwords are provided for security.
 """
 
+import atexit
+import base64
 import os
 import sys
 import time
 import json
 import re
+import tempfile
 import uuid
 import requests
 import logging
@@ -408,12 +411,8 @@ class CAPPoller:
         self.session.headers.update({
             'User-Agent': default_user_agent,
         })
-        ca_bundle_override = os.getenv('REQUESTS_CA_BUNDLE') or os.getenv('CAP_POLLER_CA_BUNDLE')
-        if ca_bundle_override:
-            self.logger.debug('Using custom CA bundle for CAP polling: %s', ca_bundle_override)
-            self.session.verify = ca_bundle_override
-        else:
-            self.session.verify = certifi.where()
+        self._ca_bundle_tempfile: Optional[str] = None
+        self._configure_http_session_tls()
 
         # LED
         self.led_controller = None
@@ -525,6 +524,71 @@ class CAPPoller:
         derived_identifiers.add(self.county_upper.replace(' COUNTY', ''))
         self.putnam_county_identifiers = list({term for term in base_identifiers if term} | derived_identifiers)
         self.zone_codes = set(self.location_settings['zone_codes'])
+
+    def _configure_http_session_tls(self) -> None:
+        ca_bundle_override = os.getenv('REQUESTS_CA_BUNDLE') or os.getenv('CAP_POLLER_CA_BUNDLE')
+        inline_bundle_bytes: Optional[bytes] = None
+        inline_bundle_source: Optional[str] = None
+
+        base64_value = os.getenv('CAP_POLLER_CA_BUNDLE_BASE64')
+        if base64_value:
+            try:
+                inline_bundle_bytes = base64.b64decode(base64_value)
+                inline_bundle_source = 'CAP_POLLER_CA_BUNDLE_BASE64'
+            except Exception as exc:
+                self.logger.error('Failed to decode CAP_POLLER_CA_BUNDLE_BASE64: %s', exc)
+
+        if inline_bundle_bytes is None:
+            inline_value = os.getenv('CAP_POLLER_CA_BUNDLE_INLINE')
+            if inline_value:
+                inline_bundle_bytes = inline_value.encode('utf-8')
+                inline_bundle_source = 'CAP_POLLER_CA_BUNDLE_INLINE'
+
+        if inline_bundle_bytes:
+            try:
+                temp_file = tempfile.NamedTemporaryFile('wb', delete=False, prefix='cap_poller_ca_', suffix='.pem')
+                try:
+                    temp_file.write(inline_bundle_bytes)
+                    if not inline_bundle_bytes.endswith(b'\n'):
+                        temp_file.write(b'\n')
+                    temp_file.flush()
+                finally:
+                    temp_file.close()
+                self._ca_bundle_tempfile = temp_file.name
+                atexit.register(self._cleanup_temp_ca_bundle)
+                self.session.verify = temp_file.name
+                self.logger.info('Using inline CA bundle provided via %s', inline_bundle_source)
+                return
+            except Exception as exc:
+                self.logger.error('Failed to persist inline CA bundle from %s: %s', inline_bundle_source, exc)
+                self._ca_bundle_tempfile = None
+
+        if ca_bundle_override:
+            if os.path.exists(ca_bundle_override):
+                self.logger.info('Using custom CA bundle for CAP polling: %s', ca_bundle_override)
+                self.session.verify = ca_bundle_override
+            else:
+                self.logger.error(
+                    'Configured CA bundle path %s does not exist; falling back to certifi store',
+                    ca_bundle_override,
+                )
+                self.session.verify = certifi.where()
+        else:
+            self.session.verify = certifi.where()
+
+    def _cleanup_temp_ca_bundle(self) -> None:
+        if not self._ca_bundle_tempfile:
+            return
+        try:
+            os.remove(self._ca_bundle_tempfile)
+        except FileNotFoundError:
+            pass
+        except Exception as exc:
+            logger = getattr(self, 'logger', None)
+            if logger:
+                logger.debug('Failed to remove temporary CA bundle %s: %s', self._ca_bundle_tempfile, exc)
+        finally:
+            self._ca_bundle_tempfile = None
 
     # ---------- Engine with retry ----------
     def _ensure_source_columns(self):
@@ -1185,7 +1249,8 @@ class CAPPoller:
             except requests.exceptions.SSLError as exc:
                 self.logger.error(
                     "TLS certificate verification failed for %s: %s. "
-                    "Provide a CA bundle via REQUESTS_CA_BUNDLE or CAP_POLLER_CA_BUNDLE if your environment "
+                    "Provide a CA bundle via REQUESTS_CA_BUNDLE, CAP_POLLER_CA_BUNDLE, "
+                    "CAP_POLLER_CA_BUNDLE_INLINE, or CAP_POLLER_CA_BUNDLE_BASE64 if your environment "
                     "uses custom certificates.",
                     endpoint,
                     exc,

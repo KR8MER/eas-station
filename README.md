@@ -193,6 +193,10 @@ docker compose up -d --force-recreate
   poller continues targeting the Weather Service zone feeds derived from your location settings.
 - Remove or comment out the `ipaws-poller` section in `docker-compose.yml` if you do not need the
   additional feed in a given deployment.
+- When your environment performs TLS interception or relies on a private trust store, provide the
+  required certificates with `CAP_POLLER_CA_BUNDLE`/`REQUESTS_CA_BUNDLE` (file path) or supply the
+  raw PEM data via `CAP_POLLER_CA_BUNDLE_INLINE` or `CAP_POLLER_CA_BUNDLE_BASE64` so the poller can
+  validate the FEMA endpoints.
 
 ---
 
