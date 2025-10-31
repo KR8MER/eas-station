@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 
 revision = "20241112_add_eas_message_segments"
@@ -13,11 +14,22 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Get database connection and inspector
+    conn = op.get_bind()
+    inspector = inspect(conn)
+
+    # Check existing columns
+    existing_columns = {col['name'] for col in inspector.get_columns('eas_messages')}
+
     with op.batch_alter_table("eas_messages", schema=None) as batch:
-        batch.add_column(sa.Column("same_audio_data", sa.LargeBinary(), nullable=True))
-        batch.add_column(sa.Column("attention_audio_data", sa.LargeBinary(), nullable=True))
-        batch.add_column(sa.Column("tts_audio_data", sa.LargeBinary(), nullable=True))
-        batch.add_column(sa.Column("buffer_audio_data", sa.LargeBinary(), nullable=True))
+        if 'same_audio_data' not in existing_columns:
+            batch.add_column(sa.Column("same_audio_data", sa.LargeBinary(), nullable=True))
+        if 'attention_audio_data' not in existing_columns:
+            batch.add_column(sa.Column("attention_audio_data", sa.LargeBinary(), nullable=True))
+        if 'tts_audio_data' not in existing_columns:
+            batch.add_column(sa.Column("tts_audio_data", sa.LargeBinary(), nullable=True))
+        if 'buffer_audio_data' not in existing_columns:
+            batch.add_column(sa.Column("buffer_audio_data", sa.LargeBinary(), nullable=True))
 
 
 def downgrade() -> None:
