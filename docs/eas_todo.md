@@ -1,5 +1,7 @@
 # Full EAS Console Parity To-Do List
 
+> 📌 Looking for a condensed overview with next steps? Start with the [Master Implementation Roadmap](master_todo.md) for high-level priorities and planning guidance, then use this document to track granular milestones.
+
 ## Recently Completed Milestones
 - **Multi-receiver orchestration** – The new radio manager (`app_core/radio/manager.py`) and SoapySDR drivers coordinate RTL2832U and Airspy hardware, persist configuration in `RadioReceiver` models, and expose CRUD management through `/settings/radio`.
 - **Compliance dashboards** – `/admin/compliance` now surfaces received vs. relayed counts, Required Weekly Test tracking, receiver health snapshots, and CSV/PDF exports powered by `app_core/eas_storage.py` and `app_core/system_health.py`.

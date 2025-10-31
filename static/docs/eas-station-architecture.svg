@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" role="img" aria-labelledby="title desc">
+  <title id="title">EAS Station Platform Architecture</title>
+  <desc id="desc">Diagram illustrating NOAA and IPAWS CAP feeds flowing into background pollers, the Flask web app, the shared PostgreSQL database, and the downstream SAME encoder, GPIO relay, SDR capture, and LED display services.</desc>
+  <defs>
+    <linearGradient id="panelGradient" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#0f3b6d"/>
+      <stop offset="100%" stop-color="#1d6ab3"/>
+    </linearGradient>
+    <linearGradient id="dbGradient" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#12593b"/>
+      <stop offset="100%" stop-color="#34a06a"/>
+    </linearGradient>
+    <linearGradient id="outputGradient" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#4b3b8f"/>
+      <stop offset="100%" stop-color="#7c6fcb"/>
+    </linearGradient>
+    <style>
+      text { font-family: 'Segoe UI', 'Roboto', sans-serif; fill: #112233; }
+      .panel text { fill: #f5f9ff; font-weight: 600; }
+      .panel tspan { font-weight: 400; font-size: 18px; }
+      .heading { font-size: 26px; font-weight: 600; fill: #0f2a45; }
+      .caption { font-size: 18px; fill: #1a3d60; }
+      .panel { fill: url(#panelGradient); stroke: #0c2a4d; stroke-width: 2; rx: 14; }
+      .db { fill: url(#dbGradient); stroke: #0f3d2a; stroke-width: 2; }
+      .output { fill: url(#outputGradient); stroke: #352b62; stroke-width: 2; }
+      .group-label { font-size: 18px; font-weight: 600; fill: #0f2a45; }
+      .small { font-size: 17px; fill: #f5f9ff; }
+      .arrow { fill: none; stroke: #1b4d89; stroke-width: 4; marker-end: url(#arrowhead); }
+      .arrow-secondary { fill: none; stroke: #0f7a4d; stroke-width: 4; marker-end: url(#arrowhead); }
+      .arrow-output { fill: none; stroke: #4b3b8f; stroke-width: 4; marker-end: url(#arrowhead); }
+      .feed { fill: #f3f7fd; stroke: #1b4d89; stroke-width: 2; rx: 12; }
+      .feed text { fill: #1b4d89; font-weight: 600; }
+    </style>
+    <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" />
+    </marker>
+  </defs>
+  <rect width="960" height="560" fill="#f8fbff" rx="24"/>
+  <text class="heading" x="480" y="60" text-anchor="middle">EAS Station Platform</text>
+  <text class="caption" x="480" y="90" text-anchor="middle">Lab-only architecture for evaluating NOAA &amp; IPAWS alerts</text>
+
+  <!-- Feeds -->
+  <g transform="translate(70,160)">
+    <rect class="feed" width="210" height="100"/>
+    <text x="105" y="45" text-anchor="middle">NOAA CAP Feeds</text>
+  </g>
+  <g transform="translate(70,300)">
+    <rect class="feed" width="210" height="100"/>
+    <text x="105" y="45" text-anchor="middle">IPAWS CAP Feeds</text>
+  </g>
+
+  <!-- Pollers & App -->
+  <g transform="translate(330,160)">
+    <rect class="panel" width="220" height="110"/>
+    <text x="110" y="45" text-anchor="middle">NOAA Poller</text>
+    <text class="small" x="110" y="70" text-anchor="middle">Continuous CAP ingestion</text>
+    <text class="small" x="110" y="95" text-anchor="middle">Deduplicates by SAME ID</text>
+  </g>
+  <g transform="translate(330,300)">
+    <rect class="panel" width="220" height="110"/>
+    <text x="110" y="45" text-anchor="middle">IPAWS Poller</text>
+    <text class="small" x="110" y="70" text-anchor="middle">120-second CAP refresh</text>
+    <text class="small" x="110" y="95" text-anchor="middle">GeoJSON conversion</text>
+  </g>
+  <g transform="translate(600,220)">
+    <rect class="panel" width="230" height="120"/>
+    <text x="115" y="50" text-anchor="middle">Flask Web App</text>
+    <text class="small" x="115" y="75" text-anchor="middle">Operators dashboard &amp; API</text>
+    <text class="small" x="115" y="100" text-anchor="middle">Manual alert verification lab</text>
+  </g>
+
+  <!-- Database -->
+  <g transform="translate(330,40)">
+    <rect class="db" width="500" height="90" rx="20"/>
+    <text x="250" y="35" text-anchor="middle" fill="#f5f9ff" font-size="22" font-weight="600">PostgreSQL + PostGIS</text>
+    <text x="250" y="60" text-anchor="middle" fill="#e8f9f0" font-size="18">Alerts • Boundaries • Audio captures • SDR config</text>
+  </g>
+
+  <!-- Outputs -->
+  <g transform="translate(330,440)">
+    <rect class="output" width="500" height="90" rx="20"/>
+    <text x="250" y="35" text-anchor="middle" fill="#f7f5ff" font-size="22" font-weight="600">Lab Integrations</text>
+    <text x="250" y="60" text-anchor="middle" fill="#ece8ff" font-size="18">SAME encoder · GPIO relay · SDR capture · LED status</text>
+  </g>
+
+  <!-- External audiences -->
+  <g transform="translate(40,40)">
+    <text class="group-label" x="0" y="0">Operators</text>
+    <text class="caption" x="0" y="25">Web UI &amp; API clients</text>
+  </g>
+  <g transform="translate(40,520)">
+    <text class="group-label" x="0" y="0">Feeds</text>
+    <text class="caption" x="0" y="25">NOAA &amp; IPAWS CAP sources</text>
+  </g>
+
+  <!-- Arrows -->
+  <path class="arrow" d="M 280 210 H 330"/>
+  <path class="arrow" d="M 280 350 H 330"/>
+  <path class="arrow" d="M 550 215 L 600 235"/>
+  <path class="arrow" d="M 550 355 L 600 325"/>
+  <path class="arrow-secondary" d="M 550 110 L 600 220"/>
+  <path class="arrow-secondary" d="M 550 110 L 600 340"/>
+  <path class="arrow-output" d="M 715 340 L 715 440"/>
+  <path class="arrow-output" d="M 440 440 L 440 410"/>
+  <path class="arrow-secondary" d="M 440 130 L 440 160"/>
+  <path class="arrow-secondary" d="M 440 130 L 440 300"/>
+  <path class="arrow-secondary" d="M 440 130 L 440 440"/>
+
+  <!-- Operator arrow -->
+  <path class="arrow" d="M 120 65 L 600 230"/>
+</svg>
