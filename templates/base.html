@@ -88,9 +88,18 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 16px;
+            line-height: 1.6;
+            letter-spacing: 0.01em;
             background-color: var(--bg-color);
             color: var(--text-color);
+            text-rendering: optimizeLegibility;
+            -webkit-font-smoothing: antialiased;
             transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        main {
+            padding: 2.5rem 1.5rem 3rem;
         }
 
         .navbar {
@@ -163,20 +172,77 @@
         }
 
         .footer {
-            background: linear-gradient(120deg, var(--primary-soft), var(--secondary-soft));
-            color: #f8f9ff;
-            padding: 20px 0;
-            margin-top: 50px;
-            border-top: 1px solid var(--border-color);
+            background: var(--dark-color);
+            color: var(--light-color);
+            padding: 32px 0;
+            margin-top: 60px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 -8px 24px var(--shadow-color);
         }
 
         .footer a {
-            color: #f8f9ff;
+            color: inherit;
+            text-decoration: underline;
+            text-decoration-color: rgba(248, 249, 255, 0.5);
         }
 
         .footer a:hover,
         .footer a:focus {
             color: var(--accent-color);
+            text-decoration-color: var(--accent-color);
+        }
+
+        .footer-content {
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .footer-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .footer-brand {
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .footer-subtext {
+            font-size: 0.95rem;
+            opacity: 0.85;
+        }
+
+        .footer-clock,
+        .footer-version {
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+
+        .footer-clock i,
+        .footer-brand i {
+            color: var(--accent-color);
+        }
+
+        @media (max-width: 576px) {
+            main {
+                padding: 2rem 1rem 2.5rem;
+            }
+
+            .footer {
+                padding: 28px 0;
+            }
+
+            .footer-content {
+                gap: 1rem;
+            }
+
+            .footer-subtext,
+            .footer-clock,
+            .footer-version {
+                font-size: 0.9rem;
+            }
         }
 
         .navbar-brand {
@@ -411,15 +477,24 @@
 
     <!-- Footer -->
     <footer class="footer">
-        <div class="container-fluid text-center">
-            <small class="text-muted d-flex flex-column flex-sm-row align-items-center justify-content-center gap-2">
-                <span>
-                    <i class="fas fa-broadcast-tower"></i> 2025 EAS Station - Emergency Alert System |
-                    <i class="fas fa-shield-alt"></i> Public Safety Broadcasting |
-                    <i class="fas fa-clock"></i> <span id="current-time">Loading...</span>
-                </span>
-                <span class="text-uppercase fw-semibold">Version {{ system_version }}</span>
-            </small>
+        <div class="container-fluid">
+            <div class="footer-content d-flex flex-column flex-lg-row align-items-center justify-content-between text-center text-lg-start">
+                <div class="footer-meta">
+                    <div class="footer-brand">
+                        <i class="fas fa-broadcast-tower me-2"></i>2025 EAS Station
+                    </div>
+                    <div class="footer-subtext">
+                        <i class="fas fa-shield-alt me-2"></i>Emergency Alert System · Public Safety Broadcasting
+                    </div>
+                </div>
+                <div class="footer-clock d-flex align-items-center justify-content-center">
+                    <i class="fas fa-clock me-2"></i>
+                    <span id="current-time">Loading...</span>
+                </div>
+                <div class="footer-version text-uppercase fw-semibold">
+                    Version {{ system_version }}
+                </div>
+            </div>
         </div>
     </footer>
 
