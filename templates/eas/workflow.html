@@ -1,1081 +1,416 @@
 {% extends "base.html" %}
-
-{% block title %}Admin Panel - KR8MER CAP Emergency Alert System{% endblock %}
-
-{% block extra_css %}
-<style>
-        .admin-header {
-            background: linear-gradient(135deg, var(--primary-color), var(--info-color));
-            color: white;
-            padding: 2rem 0;
-            margin-bottom: 2rem;
-            box-shadow: 0 4px 20px var(--shadow-color);
-        }
-
-        .admin-card {
-            background-color: var(--bg-color);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            box-shadow: 0 4px 15px var(--shadow-color);
-            transition: all 0.3s ease;
-            margin-bottom: 2rem;
-            overflow: hidden;
-        }
-
-        .admin-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px var(--shadow-color);
-        }
-
-        .card-header-custom {
-            background: linear-gradient(135deg, var(--light-color), var(--border-color));
-            border-bottom: 2px solid var(--primary-color);
-            padding: 1.5rem;
-        }
-
-        .tabs-container {
-            border-bottom: 3px solid var(--border-color);
-            background: var(--light-color);
-            border-radius: 12px 12px 0 0;
-        }
-
-        .nav-tabs-custom {
-            border: none;
-            padding: 0.5rem 1rem;
-        }
-
-        .nav-tabs-custom .nav-link {
-            border: none;
-            background: transparent;
-            color: var(--text-color);
-            padding: 1rem 1.5rem;
-            margin: 0 0.25rem;
-            border-radius: 8px 8px 0 0;
-            transition: all 0.3s ease;
-            font-weight: 500;
-        }
-
-        .nav-tabs-custom .nav-link:hover {
-            background: var(--primary-color);
-            color: white;
-            transform: translateY(-2px);
-        }
-
-        .nav-tabs-custom .nav-link.active {
-            background: var(--primary-color);
-            color: white;
-            border-bottom: 3px solid var(--info-color);
-        }
-
-        .tab-content-custom {
-            padding: 2rem;
-            min-height: 400px;
-        }
-
-        .form-control, .form-select {
-            background-color: var(--bg-color);
-            border: 2px solid var(--border-color);
-            color: var(--text-color);
-            border-radius: 8px;
-            transition: all 0.3s ease;
-        }
-
-        .form-control:focus, .form-select:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-            background-color: var(--bg-color);
-            color: var(--text-color);
-        }
-
-        .btn-custom {
-            border-radius: 8px;
-            padding: 0.75rem 1.5rem;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            border: none;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .btn-custom:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px var(--shadow-color);
-        }
-
-        .btn-custom.btn-primary {
-            background: linear-gradient(135deg, var(--primary-color), var(--info-color));
-        }
-
-        .btn-custom.btn-success {
-            background: linear-gradient(135deg, var(--success-color), #20c997);
-        }
-
-        .btn-custom.btn-danger {
-            background: linear-gradient(135deg, var(--danger-color), #e74c3c);
-        }
-
-        .btn-custom.btn-warning {
-            background: linear-gradient(135deg, var(--warning-color), #f39c12);
-            color: var(--dark-color);
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1.5rem;
-            margin: 1.5rem 0;
-        }
-
-        .stat-card {
-            background: linear-gradient(135deg, var(--primary-color), var(--info-color));
-            color: white;
-            padding: 1.5rem;
-            border-radius: 12px;
-            text-align: center;
-            transition: all 0.3s ease;
-        }
-
-        .stat-card:hover {
-            transform: scale(1.05);
-        }
-
-        .stat-number {
-            font-size: 2rem;
-            font-weight: bold;
-            margin-bottom: 0.5rem;
-        }
-
-        .stat-label {
-            font-size: 0.9rem;
-            opacity: 0.9;
-        }
-
-        .operation-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 1.5rem;
-            margin: 1.5rem 0;
-        }
-
-        .operation-card {
-            background: var(--bg-color);
-            border: 2px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1.5rem;
-            text-align: center;
-            transition: all 0.3s ease;
-        }
-
-        .operation-card:hover {
-            border-color: var(--primary-color);
-            transform: translateY(-3px);
-            box-shadow: 0 10px 30px var(--shadow-color);
-        }
-
-        .alert-custom {
-            border-radius: 8px;
-            border: none;
-            padding: 1rem;
-            margin: 1rem 0;
-            box-shadow: 0 2px 10px var(--shadow-color);
-        }
-
-        .alert-success-custom {
-            background: linear-gradient(135deg, rgba(40, 167, 69, 0.1), rgba(32, 201, 151, 0.1));
-            border-left: 4px solid var(--success-color);
-            color: var(--success-color);
-        }
-
-        .alert-danger-custom {
-            background: linear-gradient(135deg, rgba(220, 53, 69, 0.1), rgba(231, 76, 60, 0.1));
-            border-left: 4px solid var(--danger-color);
-            color: var(--danger-color);
-        }
-
-        .alert-warning-custom {
-            background: linear-gradient(135deg, rgba(255, 196, 7, 0.1), rgba(243, 156, 18, 0.1));
-            border-left: 4px solid var(--warning-color);
-            color: #856404;
-        }
-
-        .alert-info-custom {
-            background: linear-gradient(135deg, rgba(23, 162, 184, 0.1), rgba(51, 154, 240, 0.1));
-            border-left: 4px solid var(--info-color);
-            color: var(--info-color);
-        }
-
-        .loading-spinner {
-            display: inline-block;
-            width: 1rem;
-            height: 1rem;
-            border: 2px solid transparent;
-            border-top: 2px solid currentColor;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .confirmation-modal {
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(5px);
-        }
-
-        .modal-content {
-            background: var(--bg-color);
-            border: none;
-            border-radius: 15px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        }
-
-        .modal-header {
-            border-bottom: 2px solid var(--border-color);
-            background: linear-gradient(135deg, var(--danger-color), #e74c3c);
-            color: white;
-            border-radius: 15px 15px 0 0;
-        }
-
-        .preview-container {
-            max-height: 400px;
-            overflow-y: auto;
-            border: 2px solid var(--border-color);
-            border-radius: 8px;
-            padding: 1rem;
-            background: var(--light-color);
-        }
-
-        .preview-item {
-            background: var(--bg-color);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 0.75rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .keyboard-shortcuts {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: var(--dark-color);
-            color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            opacity: 0.7;
-            transition: opacity 0.3s ease;
-        }
-
-        .keyboard-shortcuts:hover {
-            opacity: 1;
-        }
-
-        @media (max-width: 768px) {
-            .stats-grid, .operation-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .nav-tabs-custom .nav-link {
-                padding: 0.75rem 1rem;
-                font-size: 0.9rem;
-            }
-
-            .tab-content-custom {
-                padding: 1rem;
-            }
-        }
-
-        /* Print styles */
-        @media print {
-            .keyboard-shortcuts, .nav-tabs-custom {
-                display: none !important;
-            }
-        }
-    </style>
-{% endblock %}
-
+{% block title %}EAS Workflow Console{% endblock %}
 {% block content %}
-<div class="container-fluid py-4">
-    <!-- Admin Header -->
-    <div class="admin-header">
-        <div class="container-fluid">
-            <div class="row align-items-center">
-                <div class="col-md-8">
-                    <h1 class="mb-2">
-                        <i class="fas fa-cogs"></i> Admin Control Panel
-                    </h1>
-                    <p class="mb-0 opacity-75">
-                        KR8MER CAP Emergency Alert System - Administrative Dashboard
-                    </p>
-                </div>
-                <div class="col-md-4 text-md-end">
-                    <div class="d-flex flex-wrap gap-2 justify-content-md-end">
-                        <a href="/" class="btn btn-light btn-sm">
-                            <i class="fas fa-home"></i> Dashboard
-                        </a>
-                        <a href="/alerts" class="btn btn-light btn-sm">
-                            <i class="fas fa-history"></i> Alerts
-                        </a>
-                        <a href="/stats" class="btn btn-light btn-sm">
-                            <i class="fas fa-chart-bar"></i> Statistics
-                        </a>
-                        <a href="/system_health" class="btn btn-light btn-sm">
-                            <i class="fas fa-heartbeat"></i> Health
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="container-fluid">
-        <!-- System Overview -->
-        <div class="admin-card">
-            <div class="card-header-custom">
-                <h5 class="mb-0">
-                    <i class="fas fa-tachometer-alt text-primary"></i> System Overview
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-number">{{ active_alerts or 0 }}</div>
-                        <div class="stat-label">Active Alerts</div>
-                    </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, var(--warning-color), #f39c12);">
-                        <div class="stat-number">{{ expired_alerts or 0 }}</div>
-                        <div class="stat-label">Expired Alerts</div>
-                    </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, var(--success-color), #20c997);">
-                        <div class="stat-number">{{ total_boundaries or 0 }}</div>
-                        <div class="stat-label">Total Boundaries</div>
-                    </div>
-                    <div class="stat-card" style="background: linear-gradient(135deg, var(--info-color), #339af0);">
-                        <div class="stat-number">{{ total_alerts or 0 }}</div>
-                        <div class="stat-label">Total Alerts</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Main Admin Interface -->
-        <div class="admin-card">
-            {% if setup_mode %}
-            <div class="card-header-custom">
-                <h5 class="mb-0">
-                    <i class="fas fa-user-shield text-success"></i> First-Time Administrator Setup
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="row g-4">
-                    <div class="col-xl-6">
-                        <div class="alert alert-info-custom mb-4">
-                            <h5 class="fw-bold mb-2"><i class="fas fa-rocket"></i> Welcome to the control panel</h5>
-                            <p class="mb-2">Create the first administrator account to unlock the full admin experience. Once the account is saved you will be redirected to the sign-in page.</p>
-                            <p class="mb-0 small">
-                                Prefer the command line? Run
-                                <code>flask create-admin-user</code>
-                                inside the app container to provision an account manually.
-                            </p>
-                        </div>
-                        <ul class="list-unstyled text-muted small mb-4">
-                            <li class="mb-2"><i class="fas fa-check-circle text-success"></i> Choose a strong password (8+ characters) — hashes are stored using salted SHA-256.</li>
-                            <li class="mb-2"><i class="fas fa-check-circle text-success"></i> After signing in you can invite additional administrators and configure boundaries, polling, and broadcasting.</li>
-                            <li><i class="fas fa-check-circle text-success"></i> Rotate the default credentials immediately if this instance will be exposed beyond the local network.</li>
-                        </ul>
-                    </div>
-                    <div class="col-xl-6">
-                        <div class="border rounded-4 p-4 h-100" style="background: var(--light-color);">
-                            <h5 class="fw-bold mb-3"><i class="fas fa-user-plus text-success"></i> Create Administrator</h5>
-                            <form id="createUserForm" class="needs-validation" novalidate>
-                                <div class="mb-3">
-                                    <label for="newUserUsername" class="form-label">Username</label>
-                                    <input type="text" class="form-control" id="newUserUsername" name="username" pattern="[A-Za-z0-9_.-]{3,64}" required autofocus>
-                                    <div class="form-text">3-64 characters: letters, numbers, dot, dash, and underscore only.</div>
-                                    <div class="invalid-feedback">Enter a valid username (letters, numbers, dot, dash, underscore).</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="newUserPassword" class="form-label">Password</label>
-                                    <input type="password" class="form-control" id="newUserPassword" name="password" minlength="8" required>
-                                    <div class="form-text">Passwords are stored using salted SHA-256 hashes.</div>
-                                    <div class="invalid-feedback">Password must be at least 8 characters long.</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="newUserPasswordConfirm" class="form-label">Confirm Password</label>
-                                    <input type="password" class="form-control" id="newUserPasswordConfirm" minlength="8" required>
-                                    <div class="invalid-feedback">Passwords must match.</div>
-                                </div>
-                                <button type="submit" class="btn btn-custom btn-success w-100">
-                                    <i class="fas fa-user-shield"></i> Create Administrator Account
-                                </button>
-                            </form>
-                            <small class="text-muted d-block mt-3">You'll be redirected to the sign-in page after the account is created.</small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% else %}
-            <div class="tabs-container">
-                <ul class="nav nav-tabs nav-tabs-custom" id="adminTabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload" type="button" role="tab">
-                            <i class="fas fa-upload"></i> Upload Files
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="preview-tab" data-bs-toggle="tab" data-bs-target="#preview" type="button" role="tab">
-                            <i class="fas fa-eye"></i> Preview Data
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="manage-tab" data-bs-toggle="tab" data-bs-target="#manage" type="button" role="tab">
-                            <i class="fas fa-tasks"></i> Manage Data
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="operations-tab" data-bs-toggle="tab" data-bs-target="#operations" type="button" role="tab">
-                            <i class="fas fa-tools"></i> Operations
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="alerts-tab" data-bs-toggle="tab" data-bs-target="#alerts-mgmt" type="button" role="tab">
-                            <i class="fas fa-exclamation-triangle"></i> Alert Management
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="health-tab" data-bs-toggle="tab" data-bs-target="#health" type="button" role="tab">
-                            <i class="fas fa-heartbeat"></i> System Health
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="location-tab" data-bs-toggle="tab" data-bs-target="#location-settings" type="button" role="tab">
-                            <i class="fas fa-map-marker-alt"></i> Location Settings
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="eas-tab" data-bs-toggle="tab" data-bs-target="#eas-output" type="button" role="tab">
-                            <i class="fas fa-broadcast-tower"></i> EAS Output
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="users-tab" data-bs-toggle="tab" data-bs-target="#user-management" type="button" role="tab">
-                            <i class="fas fa-users-cog"></i> User Accounts
-                        </button>
-                    </li>
-                </ul>
-            </div>
-
-            <div class="tab-content tab-content-custom" id="adminTabContent">
-                <!-- Upload Tab -->
-                <div class="tab-pane fade show active" id="upload" role="tabpanel">
-                    <h4><i class="fas fa-upload text-primary"></i> Upload Boundary Files</h4>
-                    <p class="text-muted">Upload GeoJSON files to add new boundary layers to the system.</p>
-
-                    <form id="uploadForm" enctype="multipart/form-data" class="mt-4">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="boundaryType" class="form-label fw-bold">Boundary Type</label>
-                                    <select id="boundaryType" name="boundary_type" class="form-select" required>
-                                        <option value="">Select boundary type...</option>
-                                        <option value="electric">⚡ Electric Providers</option>
-                                        <option value="villages">🏘️ Villages</option>
-                                        <option value="school">🏫 School Districts</option>
-                                        <option value="fire">🔥 Fire Districts</option>
-                                        <option value="ems">🚑 EMS Districts</option>
-                                        <option value="township">🏘️ Townships</option>
-                                        <option value="telephone">📞 Telephone Providers</option>
-                                        <option value="railroads">🚆 Railroads</option>
-                                        <option value="rivers">🌊 Rivers & Streams</option>
-                                        <option value="waterbodies">💧 Lakes & Ponds</option>
-                                        <option value="county">🗺️ County Outlines</option>
-                                        <option value="custom">➕ Custom Type…</option>
-                                    </select>
-                                </div>
-                                <div class="mb-3" id="customBoundaryTypeWrapper" style="display: none;">
-                                    <label for="customBoundaryType" class="form-label fw-bold">Custom Type Name</label>
-                                    <input type="text" id="customBoundaryType" class="form-control" placeholder="e.g. Railroads">
-                                    <div class="form-text">Letters, numbers, and spaces are allowed. The system will create a safe identifier automatically.</div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="geoJsonFile" class="form-label fw-bold">GeoJSON File</label>
-                                    <input type="file" id="geoJsonFile" name="file" class="form-control" accept=".geojson,.json" required>
-                                    <div class="form-text">Upload a GeoJSON file containing boundary polygons</div>
-                                </div>
-                            </div>
-                        </div>
-                        <button type="submit" class="btn btn-custom btn-primary">
-                            <i class="fas fa-upload"></i> Upload Boundaries
-                        </button>
-                    </form>
-
-                    <div id="uploadStatus" class="mt-3"></div>
-                </div>
-
-                <!-- Preview Tab -->
-                <div class="tab-pane fade" id="preview" role="tabpanel">
-                    <h4><i class="fas fa-eye text-info"></i> Preview Data Extraction</h4>
-                    <p class="text-muted">Preview what data will be extracted from your GeoJSON file before uploading.</p>
-
-                    <form id="previewForm" enctype="multipart/form-data" class="mt-4">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="previewBoundaryType" class="form-label fw-bold">Boundary Type</label>
-                                    <select id="previewBoundaryType" name="boundary_type" class="form-select" required>
-                                        <option value="">Select boundary type...</option>
-                                        <option value="electric">⚡ Electric Providers</option>
-                                        <option value="villages">🏘️ Villages</option>
-                                        <option value="school">🏫 School Districts</option>
-                                        <option value="fire">🔥 Fire Districts</option>
-                                        <option value="ems">🚑 EMS Districts</option>
-                                        <option value="township">🏘️ Townships</option>
-                                        <option value="telephone">📞 Telephone Providers</option>
-                                        <option value="railroads">🚆 Railroads</option>
-                                        <option value="rivers">🌊 Rivers & Streams</option>
-                                        <option value="waterbodies">💧 Lakes & Ponds</option>
-                                        <option value="county">🗺️ County Outlines</option>
-                                        <option value="custom">➕ Custom Type…</option>
-                                    </select>
-                                </div>
-                                <div class="mb-3" id="customPreviewBoundaryTypeWrapper" style="display: none;">
-                                    <label for="customPreviewBoundaryType" class="form-label fw-bold">Custom Type Name</label>
-                                    <input type="text" id="customPreviewBoundaryType" class="form-control" placeholder="e.g. Rivers">
-                                    <div class="form-text">Provide a descriptive name; the system will handle the identifier.</div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="previewFile" class="form-label fw-bold">GeoJSON File</label>
-                                    <input type="file" id="previewFile" name="file" class="form-control" accept=".geojson,.json" required>
-                                    <div class="form-text">Preview data extraction before uploading</div>
-                                </div>
-                            </div>
-                        </div>
-                        <button type="button" class="btn btn-custom btn-info" onclick="previewExtraction()">
-                            <i class="fas fa-eye"></i> Preview Extraction
-                        </button>
-                    </form>
-
-                    <div id="previewResults" class="mt-4"></div>
-                </div>
-
-                <!-- Manage Tab -->
-                <div class="tab-pane fade" id="manage" role="tabpanel">
-                    <h4><i class="fas fa-tasks text-success"></i> Manage Boundary Data</h4>
-                    <p class="text-muted">View, edit, and delete existing boundary data in the system.</p>
-
-                    <div class="row mt-4">
-                        <div class="col-md-8">
-                            <h5>Current Boundaries</h5>
-                            <div id="boundariesList" class="mt-3">
-                                <div class="text-center py-4">
-                                    <div class="loading-spinner"></div>
-                                    <span class="ms-2">Loading boundaries...</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <h5>Bulk Operations</h5>
-                            <div class="operation-card">
-                            <h6>Delete by Type</h6>
-                            <select id="deleteType" class="form-select mb-3">
-                                <option value="">Select boundary type...</option>
-                                <option value="electric">⚡ Electric Providers</option>
-                                <option value="villages">🏘️ Villages</option>
-                                <option value="school">🏫 School Districts</option>
-                                <option value="fire">🔥 Fire Districts</option>
-                                <option value="ems">🚑 EMS Districts</option>
-                                <option value="township">🏘️ Townships</option>
-                                <option value="telephone">📞 Telephone Providers</option>
-                                <option value="railroads">🚆 Railroads</option>
-                                <option value="rivers">🌊 Rivers & Streams</option>
-                                <option value="waterbodies">💧 Lakes & Ponds</option>
-                                <option value="county">🗺️ County Outlines</option>
-                                <option value="custom">➕ Custom Type…</option>
-                            </select>
-                            <div class="mb-3" id="customDeleteBoundaryTypeWrapper" style="display: none;">
-                                <label for="customDeleteBoundaryType" class="form-label fw-bold">Custom Type Name</label>
-                                <input type="text" id="customDeleteBoundaryType" class="form-control" placeholder="e.g. Rail Corridors">
-                                <div class="form-text">Enter the custom type you previously uploaded to remove it from the system.</div>
-                            </div>
-                            <button onclick="deleteBoundariesByType()" class="btn btn-custom btn-warning w-100 mb-2">
-                                <i class="fas fa-trash-alt"></i> Delete by Type
-                            </button>
-                                <button onclick="clearAllBoundaries()" class="btn btn-custom btn-danger w-100">
-                                    <i class="fas fa-exclamation-triangle"></i> Clear ALL
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Operations Tab -->
-                <div class="tab-pane fade" id="operations" role="tabpanel">
-                    <h4><i class="fas fa-tools text-warning"></i> System Operations</h4>
-                    <p class="text-muted">Perform manual system operations and maintenance tasks.</p>
-
-                    <div class="operation-grid">
-                        <div class="operation-card">
-                            <i class="fas fa-download fa-2x text-primary mb-3"></i>
-                            <h6>CAP Alert Polling</h6>
-                            <p class="text-muted small">Manually fetch latest alerts from NOAA</p>
-                            <button onclick="triggerCAPPoll()" class="btn btn-custom btn-primary w-100">
-                                <i class="fas fa-satellite-dish"></i> Trigger Poll
-                            </button>
-                        </div>
-
-                        <div class="operation-card">
-                            <i class="fas fa-history fa-2x text-secondary mb-3"></i>
-                            <h6>Import Archived Alert</h6>
-                            <p class="text-muted small">Query NOAA for specific alerts (including expired) and store them locally.</p>
-                            <div class="mb-3">
-                                <label class="form-label">Alert Identifier</label>
-                                <input type="text" class="form-control" id="manualAlertIdentifier" placeholder="e.g. NWS-ID-123456" autocomplete="off">
-                            </div>
-                            <div class="row g-2">
-                                <div class="col-md-6">
-                                    <label class="form-label">Start (local)</label>
-                                    <input type="datetime-local" class="form-control" id="manualAlertStart">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">End (local)</label>
-                                    <input type="datetime-local" class="form-control" id="manualAlertEnd">
-                                </div>
-                            </div>
-                            <div class="row g-2 mt-2">
-                                <div class="col-md-4">
-                                    <label class="form-label">State (2-letter)</label>
-                                    <input type="text" class="form-control" id="manualAlertArea" value="OH" placeholder="e.g. OH" maxlength="2">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">Event Filter (optional)</label>
-                                    <input type="text" class="form-control" id="manualAlertEvent" placeholder="e.g. Tornado Warning">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">Result Limit</label>
-                                    <input type="number" class="form-control" id="manualAlertLimit" min="1" max="50" value="5">
-                                </div>
-                            </div>
-                            <div class="form-text mt-2">Provide an identifier for the fastest lookup, or specify a start and end range with the two-letter state code. NOAA manual imports require state-level queries.</div>
-                            <button onclick="manualImportAlert()" class="btn btn-custom btn-secondary w-100 mt-3">
-                                <i class="fas fa-cloud-download-alt"></i> Fetch &amp; Save
-                            </button>
-                            <div id="manualImportResults" class="small text-muted mt-2"></div>
-                        </div>
-
-                        <div class="operation-card">
-                            <i class="fas fa-database fa-2x text-success mb-3"></i>
-                            <h6>Database Optimization</h6>
-                            <p class="text-muted small">Optimize database performance</p>
-                            <button onclick="optimizeDatabase()" class="btn btn-custom btn-success w-100">
-                                <i class="fas fa-tools"></i> Optimize DB
-                            </button>
-                        </div>
-
-                        <div class="operation-card">
-                            <i class="fas fa-sitemap fa-2x text-info mb-3"></i>
-                            <h6>Fix Intersections</h6>
-                            <p class="text-muted small">Recalculate alert-boundary intersections</p>
-                            <button onclick="recalculateIntersections()" class="btn btn-custom btn-info w-100">
-                                <i class="fas fa-link"></i> Fix Intersections
-                            </button>
-                        </div>
-
-                        <div class="operation-card">
-                            <i class="fas fa-heartbeat fa-2x text-danger mb-3"></i>
-                            <h6>Database Health</h6>
-                            <p class="text-muted small">Check database health status</p>
-                            <button onclick="checkDatabaseHealth()" class="btn btn-custom btn-danger w-100">
-                                <i class="fas fa-stethoscope"></i> Health Check
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Alert Management Tab -->
-                <div class="tab-pane fade" id="alerts-mgmt" role="tabpanel">
-                    <h4><i class="fas fa-exclamation-triangle text-danger"></i> Alert Management</h4>
-                    <p class="text-muted">Manage expired alerts and data preservation.</p>
-
-                    <div class="operation-card mb-4">
-                        <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-lg-between gap-3 mb-3">
-                            <div>
-                                <h6 class="mb-1">Stored Alerts</h6>
-                                <div class="text-muted small">Edit or remove alerts directly from the database.</div>
-                            </div>
-                            <div class="d-flex align-items-center gap-3 flex-wrap">
-                                <div class="form-check form-switch mb-0">
-                                    <input class="form-check-input" type="checkbox" role="switch" id="includeExpiredAlertsToggle">
-                                    <label class="form-check-label small" for="includeExpiredAlertsToggle">Include expired alerts</label>
-                                </div>
-                                <button type="button" class="btn btn-custom btn-outline-primary" id="refreshAlertListButton">
-                                    <i class="fas fa-sync"></i> Refresh
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="row g-3 mb-3">
-                            <div class="col-md-6">
-                                <input type="text" class="form-control" id="alertSearchInput" placeholder="Search by identifier, event, or headline...">
-                            </div>
-                            <div class="col-md-6 text-md-end">
-                                <small id="adminAlertListMeta" class="text-muted"></small>
-                            </div>
-                        </div>
-
-                        <div id="adminAlertList" class="table-responsive">
-                            <div class="text-center py-4">
-                                <div class="loading-spinner"></div>
-                                <span class="ms-2">Loading alerts...</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="operation-card">
-                                <i class="fas fa-bookmark fa-2x text-success mb-3"></i>
-                                <h6>Mark Expired Alerts (SAFE)</h6>
-                                <p class="text-muted small">Mark expired alerts as inactive while preserving all data for historical analysis.</p>
-                                <button onclick="markExpiredAlerts()" class="btn btn-custom btn-success w-100">
-                                    <i class="fas fa-bookmark"></i> Mark as Expired
-                                </button>
-                                <small class="text-success mt-2 d-block">✓ Preserves all historical data</small>
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <div class="operation-card border-danger">
-                                <i class="fas fa-trash-alt fa-2x text-danger mb-3"></i>
-                                <h6>Delete Expired Alerts (DESTRUCTIVE)</h6>
-                                <p class="text-muted small">Permanently delete expired alerts from the database. This cannot be undone!</p>
-                                <button onclick="clearExpiredAlerts()" class="btn btn-custom btn-danger w-100">
-                                    <i class="fas fa-exclamation-triangle"></i> Delete Expired
-                                </button>
-                                <small class="text-danger mt-2 d-block">⚠️ Permanently removes historical data</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Health Tab -->
-                <div class="tab-pane fade" id="health" role="tabpanel">
-                    <h4><i class="fas fa-heartbeat text-info"></i> System Health Monitor</h4>
-                    <p class="text-muted">Real-time system health and performance monitoring.</p>
-
-                    <div id="systemHealthData" class="mt-4">
-                        <div class="text-center py-4">
-                            <div class="loading-spinner"></div>
-                            <span class="ms-2">Loading system health data...</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- User Management Tab -->
-                <div class="tab-pane fade" id="user-management" role="tabpanel">
-                    <h4><i class="fas fa-users-cog text-primary"></i> Administrator Accounts</h4>
-                    <p class="text-muted">Create, reset, and revoke access for control panel users.</p>
-
-                    <div class="row g-4 mt-2">
-                        <div class="col-lg-5">
-                            <div class="border rounded-4 p-4 h-100" style="background: var(--light-color);">
-                                <h5 class="fw-bold mb-3"><i class="fas fa-user-plus text-success"></i> Create User</h5>
-                                <form id="createUserForm" class="needs-validation" novalidate>
-                                    <div class="mb-3">
-                                        <label for="newUserUsername" class="form-label">Username</label>
-                                        <input type="text" class="form-control" id="newUserUsername" name="username" pattern="[A-Za-z0-9_.-]{3,64}" required>
-                                        <div class="form-text">3-64 characters: letters, numbers, dot, dash, and underscore only.</div>
-                                        <div class="invalid-feedback">Enter a valid username (letters, numbers, dot, dash, underscore).</div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label for="newUserPassword" class="form-label">Password</label>
-                                        <input type="password" class="form-control" id="newUserPassword" name="password" minlength="8" required>
-                                        <div class="form-text">Passwords are stored using salted SHA-256 hashes.</div>
-                                        <div class="invalid-feedback">Password must be at least 8 characters long.</div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label for="newUserPasswordConfirm" class="form-label">Confirm Password</label>
-                                        <input type="password" class="form-control" id="newUserPasswordConfirm" minlength="8" required>
-                                        <div class="invalid-feedback">Passwords must match.</div>
-                                    </div>
-                                    <button type="submit" class="btn btn-custom btn-success w-100">
-                                        <i class="fas fa-user-shield"></i> Create Administrator
-                                    </button>
-                                </form>
-                                <small class="text-muted d-block mt-3">
-                                    Tip: Use the "Reset Password" action to rotate credentials without deleting an account.
-                                </small>
-                            </div>
-                        </div>
-                        <div class="col-lg-7">
-                            <div class="border rounded-4 p-4 h-100">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h5 class="fw-bold mb-0"><i class="fas fa-address-book"></i> Existing Users</h5>
-                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="refreshUserList">
-                                        <i class="fas fa-sync-alt"></i> Refresh
-                                    </button>
-                                </div>
-                                <div class="table-responsive">
-                                    <table class="table table-hover align-middle mb-0">
-                                        <thead>
-                                            <tr>
-                                                <th scope="col">Username</th>
-                                                <th scope="col" class="text-nowrap">Created</th>
-                                                <th scope="col" class="text-nowrap">Last Login</th>
-                                                <th scope="col" class="text-end">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="userTableBody">
-                                            <tr>
-                                                <td colspan="4" class="text-center text-muted py-4">
-                                                    <div class="loading-spinner"></div>
-                                                    <span class="ms-2">Loading users...</span>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <small class="text-muted d-block mt-3">
-                                    At least one active administrator is required at all times. Accounts can only be deleted by another signed-in administrator.
-                                </small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Location Settings Tab -->
-                <div class="tab-pane fade" id="location-settings" role="tabpanel">
-                    <h4><i class="fas fa-map-marker-alt text-primary"></i> Location Configuration</h4>
-                    <p class="text-muted">Update the jurisdiction, timezone, and NOAA filters used by the system.</p>
-                    <div class="alert alert-warning d-flex align-items-start" role="alert">
-                        <i class="fas fa-satellite-dish me-3 mt-1"></i>
+<div class="container py-4 eas-workflow">
+                    <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
                         <div>
-                            Manage SDR receivers on the <a href="{{ url_for('radio_settings') }}">Radio Settings</a> page to coordinate multi-tuner captures.
+                            <h4 class="mb-1"><i class="fas fa-broadcast-tower text-danger"></i> SAME / EAS Broadcast Console</h4>
+                            <p class="text-muted mb-0">Craft headers, tones, narration, and EOM bursts from the admin console—no CLI required.</p>
                         </div>
-                    </div>
-
-                    <form id="locationSettingsForm" class="mt-4">
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label for="locationCountyName" class="form-label fw-bold">County / Jurisdiction Name</label>
-                                <input type="text" class="form-control" id="locationCountyName" name="county_name" value="{{ location_settings.county_name | default('') }}" required>
-                            </div>
-                            <div class="col-md-2">
-                                <label for="locationStateCode" class="form-label fw-bold">State Code</label>
-                                <input type="text" class="form-control" id="locationStateCode" name="state_code" value="{{ location_settings.state_code | default('') }}" maxlength="2" required>
-                            </div>
-                            <div class="col-md-4">
-                                <label for="locationTimezone" class="form-label fw-bold">Timezone (IANA identifier)</label>
-                                <input type="text" class="form-control" id="locationTimezone" name="timezone" value="{{ location_settings.timezone | default('America/New_York') }}" required>
-                                <small class="text-muted">Example: America/New_York, America/Chicago</small>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="locationZoneCodes" class="form-label fw-bold">NOAA Zone / UGC Codes</label>
-                                <textarea class="form-control" id="locationZoneCodes" name="zone_codes" rows="3" placeholder="One code per line">{{ (location_settings.zone_codes or []) | join('\n') }}</textarea>
-                                <small class="text-muted">These codes are queried from api.weather.gov (e.g. OHZ016).</small>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="locationAreaTerms" class="form-label fw-bold">Area Match Keywords</label>
-                                <textarea class="form-control" id="locationAreaTerms" name="area_terms" rows="3" placeholder="Names that indicate a relevant alert">{{ (location_settings.area_terms or []) | join('\n') }}</textarea>
-                                <small class="text-muted">Used to match alerts that list multiple counties.</small>
-                            </div>
-                            <div class="col-md-4">
-                                <label for="locationMapLat" class="form-label fw-bold">Map Center Latitude</label>
-                                <input type="number" step="0.0001" class="form-control" id="locationMapLat" name="map_center_lat" value="{{ location_settings.map_center_lat | default('0') }}">
-                            </div>
-                            <div class="col-md-4">
-                                <label for="locationMapLng" class="form-label fw-bold">Map Center Longitude</label>
-                                <input type="number" step="0.0001" class="form-control" id="locationMapLng" name="map_center_lng" value="{{ location_settings.map_center_lng | default('0') }}">
-                            </div>
-                            <div class="col-md-4">
-                                <label for="locationMapZoom" class="form-label fw-bold">Map Default Zoom</label>
-                                <input type="number" class="form-control" id="locationMapZoom" name="map_default_zoom" value="{{ location_settings.map_default_zoom | default('9') }}">
-                            </div>
-                            <div class="col-12">
-                                <label for="locationLedLines" class="form-label fw-bold">LED Sign Default Lines</label>
-                                <textarea class="form-control" id="locationLedLines" name="led_default_lines" rows="4" placeholder="Each line shown on the LED sign">{{ (location_settings.led_default_lines or []) | join('\n') }}</textarea>
-                                <small class="text-muted">These lines are used for canned messages and previews.</small>
-                            </div>
-                            <div class="col-12 d-flex align-items-center">
-                                <button type="submit" class="btn btn-custom btn-primary">
-                                    <i class="fas fa-save"></i> Save Location Settings
-                                </button>
-                                <button type="button" class="btn btn-outline-secondary ms-2" id="resetLocationSettings">
-                                    <i class="fas fa-undo"></i> Reset Changes
-                                </button>
-                                <span class="text-muted small ms-3" id="locationSettingsStatus"></span>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-
-                <!-- EAS Output Tab -->
-                <div class="tab-pane fade" id="eas-output" role="tabpanel">
-                    <div class="alert alert-info-custom mt-3">
-                        <h5 class="mb-1"><i class="fas fa-broadcast-tower me-2"></i>EAS Workflow Console</h5>
-                        <p class="mb-2">Manual broadcast generation, archived activations, and purge tools now live in the dedicated workflow hub.</p>
-                        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('eas.eas_workflow') }}">
-                            <i class="fas fa-external-link-alt me-1"></i>Open EAS Workflow
+                        <a href="{{ url_for('help_page') }}#manualTools" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-book-open me-1"></i> Operator quick guide
                         </a>
                     </div>
-                </div>
-        <!-- Operation Status -->
-        <div id="operationStatus" class="mt-3" style="display: none;"></div>
-    </div>
 
-    {% if not setup_mode %}
-    <!-- Confirmation Modal -->
-    <div class="modal fade confirmation-modal" id="confirmationModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">
-                        <i class="fas fa-exclamation-triangle"></i> Confirmation Required
-                    </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body" id="confirmationBody">
-                    <!-- Dynamic content -->
-                </div>
-                <div class="modal-footer" id="confirmationFooter">
-                    <!-- Dynamic buttons -->
-                </div>
-            </div>
-        </div>
-    </div>
+                    {% if eas_enabled %}
+                        <div class="alert alert-success-custom">
+                            <strong>EAS broadcasting is active.</strong>
+                            Generated WAV and JSON summaries are stored in <code>{{ eas_web_subdir }}</code> under the static directory.
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning-custom">
+                            <strong>EAS broadcasting is currently disabled.</strong>
+                            Set <code>EAS_BROADCAST_ENABLED=true</code> in your environment to enable automatic message capture.
+                        </div>
+                    {% endif %}
 
-    <!-- Edit Alert Modal -->
-    <div class="modal fade" id="editAlertModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">
-                        <i class="fas fa-edit"></i> Edit Alert
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <form id="editAlertForm">
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Identifier</label>
-                            <div class="form-control-plaintext" id="editAlertIdentifier"></div>
-                        </div>
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="editAlertEvent" class="form-label">Event <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control" id="editAlertEvent" required>
+                    <div id="easGeneratorStatus" style="display: none;"></div>
+
+                    <div class="row g-4 mb-4">
+                        <div class="col-xl-5">
+                            <div class="admin-card h-100">
+                                <div class="card-header-custom">
+                                    <h5 class="mb-1"><i class="fas fa-tools me-2"></i>Manual Broadcast Builder</h5>
+                                    <small class="text-muted">Enter alert metadata to generate the SAME burst, attention tone, narration, and EOM.</small>
+                                </div>
+                                <div class="p-3">
+                                    <form id="easGeneratorForm" class="eas-generator-form" novalidate>
+                                        <div class="mb-3">
+                                            <label for="easIdentifier" class="form-label fw-bold">Message Identifier</label>
+                                            <div class="input-group">
+                                                <input type="text" class="form-control" id="easIdentifier" name="identifier" maxlength="120" required>
+                                                <button class="btn btn-outline-secondary" type="button" id="generateIdentifierBtn" title="Generate timestamp-based ID">
+                                                    <i class="fas fa-random"></i>
+                                                </button>
+                                            </div>
+                                            <div class="form-text">Used for filenames and metadata in the generated package.</div>
+                                        </div>
+
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <label for="easEventCode" class="form-label fw-bold">Event Code (EEE)</label>
+                                                <select class="form-select" id="easEventCode" name="event_code" required>
+                                                    {% for option in eas_event_codes %}
+                                                        <option value="{{ option.code }}"{% if option.code == 'RWT' or (option.code != 'RWT' and loop.first) %} selected{% endif %}>{{ option.code }} — {{ option.name }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                                <div class="form-text">Three-character SAME code from 47&nbsp;CFR&nbsp;§11.31(e).</div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="easEventName" class="form-label fw-bold">Event Name</label>
+                                                <input type="text" class="form-control" id="easEventName" name="event_name" required>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                                            <button type="button" class="btn btn-outline-primary btn-sm" id="quickRwtButton">
+                                                <i class="fas fa-broadcast-tower me-1"></i> Quick Weekly Test
+                                            </button>
+                                            <span class="text-muted small">Loads a Required Weekly Test with your default SAME counties.</span>
+                                        </div>
+
+                                        <div class="mb-3 mt-3">
+                                            <label class="form-label fw-bold">Location Codes (PSSCCC)</label>
+                                            <div class="row g-2 align-items-end">
+                                                <div class="col-md-5 col-lg-4">
+                                                    <label for="easStateSelect" class="form-label text-uppercase small fw-bold text-muted mb-1">State / Territory</label>
+                                                    <select class="form-select" id="easStateSelect">
+                                                        <option value="">Select state or territory…</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-4 col-lg-5">
+                                                    <label for="easCountySelect" class="form-label text-uppercase small fw-bold text-muted mb-1">County / Parish</label>
+                                                    <select class="form-select" id="easCountySelect" disabled>
+                                                        <option value="">Select a state first…</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-3 col-lg-3">
+                                                    <label for="easPortionSelect" class="form-label text-uppercase small fw-bold text-muted mb-1">Portion (P digit)</label>
+                                                    <select class="form-select" id="easPortionSelect"></select>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex flex-wrap gap-2 mt-2">
+                                                <button type="button" class="btn btn-outline-primary btn-sm" id="addSameCodeBtn">
+                                                    <i class="fas fa-plus-circle"></i> Add Location
+                                                </button>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" id="clearSameCodeBtn">
+                                                    <i class="fas fa-trash-alt"></i> Clear List
+                                                </button>
+                                            </div>
+                                            <div class="mt-3 border rounded-3 p-3 bg-dark bg-opacity-10" id="easSelectedLocations">
+                                                <p class="text-muted small mb-0">No SAME / FIPS locations selected yet.</p>
+                                            </div>
+                                            <input type="hidden" id="easSameCodes" name="same_codes">
+                                            <div class="mt-2">
+                                                <button class="btn btn-link btn-sm px-0" type="button" data-bs-toggle="collapse" data-bs-target="#manualSameEntry" aria-expanded="false" aria-controls="manualSameEntry">
+                                                    <i class="fas fa-keyboard me-1"></i> Paste location codes manually
+                                                </button>
+                                                <div class="collapse mt-2" id="manualSameEntry">
+                                                    <textarea class="form-control" id="manualSameCodesInput" rows="2" placeholder="039137, 039069"></textarea>
+                                                    <div class="d-flex gap-2 mt-2">
+                                                        <button type="button" class="btn btn-outline-primary btn-sm" id="applyManualSameCodes">
+                                                            <i class="fas fa-plus"></i> Add Codes
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline-secondary btn-sm" id="clearManualSameCodes">
+                                                            <i class="fas fa-eraser"></i> Clear
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="form-text">Select PSSCCC entries by state and county or parish. Choose a portion with the P digit (0 = entire jurisdiction).</div>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label class="text-uppercase small fw-bold text-muted">SAME Header Preview</label>
+                                            <div class="border rounded-3 p-3 bg-dark bg-opacity-10">
+                                                <code class="d-block text-break" id="sameHeaderPreview">ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-</code>
+                                                <div class="small text-muted mt-2" id="sameHeaderPreviewNote">Sixteen 0xAB bytes precede the ASCII header for receiver synchronisation.</div>
+                                            </div>
+                                            <div class="mt-3 small" id="sameHeaderPreviewBreakdown">
+                                                <p class="text-muted mb-0">Adjust originator, event, locations, and purge time to see the formatted header.</p>
+                                            </div>
+                                            <div class="mt-3">
+                                                <label class="text-uppercase small fw-bold text-muted">Header Field Reference</label>
+                                                <ul class="list-group list-group-flush small">
+                                                    {% for field in eas_header_fields %}
+                                                        <li class="list-group-item bg-transparent px-0">
+                                                            <strong>{{ field.segment }}</strong>
+                                                            {% if field.label %}<span class="text-muted">({{ field.label }})</span>{% endif %}
+                                                            — {{ field.description }}
+                                                        </li>
+                                                    {% endfor %}
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <label for="easDuration" class="form-label fw-bold">Purge Time (TTTT · minutes)</label>
+                                                <input type="number" class="form-control" id="easDuration" name="duration_minutes" min="1" max="720" value="30">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-bold">Header Repetition</label>
+                                                <div class="form-control-plaintext border rounded px-3 py-2 bg-dark bg-opacity-10">
+                                                    SAME headers transmit in three bursts as required by the specification.
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="row g-3 mt-1">
+                                            <div class="col-md-6">
+                                                <label for="easToneProfile" class="form-label fw-bold">Attention Signal</label>
+                                                <select class="form-select" id="easToneProfile" name="tone_profile">
+                                                    <option value="attention">EAS Attention (853/960 Hz)</option>
+                                                    <option value="1050">Legacy 1050 Hz Tone</option>
+                                                    <option value="none">No attention signal (omit)</option>
+                                                </select>
+                                                <div class="form-text">Skip the tone when only data bursts are required.</div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="easToneSeconds" class="form-label fw-bold">Attention Signal Duration (seconds)</label>
+                                                <input type="number" class="form-control" id="easToneSeconds" name="tone_seconds" step="0.5" min="0">
+                                                <div class="form-text">Set to 0 to omit the tone entirely.</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="row g-3 mt-1">
+                                            <div class="col-md-6">
+                                                <label for="easSampleRate" class="form-label fw-bold">Sample Rate (Hz)</label>
+                                                <input type="number" class="form-control" id="easSampleRate" name="sample_rate" min="8000" max="48000" step="1">
+                                                <div class="form-text">Defaults to the broadcaster setting.</div>
+                                            </div>
+                                            <div class="col-md-6 d-flex align-items-end">
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="easIncludeTts" name="include_tts" checked>
+                                                    <label class="form-check-label" for="easIncludeTts">Include narration (TTS) when available</label>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <hr class="my-3">
+
+                                        <div class="row g-3">
+                                            <div class="col-md-4 col-lg-3">
+                                                <label for="easOriginator" class="form-label fw-bold">Originator (ORG)</label>
+                                                <select class="form-select" id="easOriginator" name="originator" required>
+                                                    {% for option in eas_originator_choices %}
+                                                        <option value="{{ option.code }}"{% if option.code == eas_originator %} selected{% endif %}>
+                                                            {{ option.code }}{% if option.description %} — {{ option.description }}{% endif %}
+                                                        </option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                            <div class="col-md-8 col-lg-9">
+                                                <label for="easStationId" class="form-label fw-bold">Station Identifier (LLLLLLLL)</label>
+                                                <input type="text" class="form-control" id="easStationId" name="station_id" maxlength="8" required>
+                                                <div class="form-text">Eight uppercase characters, using “/” instead of dashes.</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="row g-3 mt-1">
+                                            <div class="col-md-6">
+                                                <label for="easStatus" class="form-label fw-bold">Status</label>
+                                                <select class="form-select" id="easStatus" name="status">
+                                                    <option value="Actual">Actual</option>
+                                                    <option value="Test">Test</option>
+                                                    <option value="Exercise">Exercise</option>
+                                                    <option value="System">System</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="easMessageType" class="form-label fw-bold">Message Type</label>
+                                                <select class="form-select" id="easMessageType" name="message_type">
+                                                    <option value="Alert">Alert</option>
+                                                    <option value="Update">Update</option>
+                                                    <option value="Cancel">Cancel</option>
+                                                    <option value="Ack">Ack</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div class="mb-3 mt-3">
+                                            <label for="easHeadline" class="form-label fw-bold">Headline</label>
+                                            <input type="text" class="form-control" id="easHeadline" name="headline" maxlength="240">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="easMessageBody" class="form-label fw-bold">Message Body</label>
+                                            <textarea class="form-control" id="easMessageBody" name="message" rows="3" placeholder="Narration text to read to the public."></textarea>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="easInstruction" class="form-label fw-bold">Public Instructions</label>
+                                            <textarea class="form-control" id="easInstruction" name="instruction" rows="2" placeholder="Protective actions or follow-up guidance."></textarea>
+                                        </div>
+
+                                        <div class="d-flex gap-2">
+                                            <button type="submit" class="btn btn-custom btn-primary flex-grow-1">
+                                                <i class="fas fa-broadcast-tower"></i> Generate Package
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary" id="resetEasGenerator">
+                                                <i class="fas fa-undo"></i>
+                                            </button>
+                                        </div>
+                                    </form>
                                 </div>
                             </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="editAlertStatus" class="form-label">Status <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control" id="editAlertStatus" list="alertStatusOptions" required>
-                                    <datalist id="alertStatusOptions">
-                                        <option value="Actual"></option>
-                                        <option value="Test"></option>
-                                        <option value="Exercise"></option>
-                                        <option value="System"></option>
-                                        <option value="Draft"></option>
-                                        <option value="Expired"></option>
-                                    </datalist>
+                        </div>
+                        <div class="col-xl-7">
+                            <div class="admin-card h-100">
+                                <div class="card-header-custom d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <h5 class="mb-1"><i class="fas fa-wave-square me-2"></i>Output Components</h5>
+                                        <small class="text-muted">Preview and download each part before relaying it on-air.</small>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="copySameHeaderBtn" disabled>
+                                        <i class="fas fa-copy"></i> Copy SAME Header
+                                    </button>
+                                </div>
+                                <div class="p-3" id="easGeneratorResults">
+                                    <p class="text-muted mb-0">Fill out the form to generate SAME/EAS audio assets.</p>
                                 </div>
                             </div>
-                        </div>
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    <label for="editAlertSeverity" class="form-label">Severity</label>
-                                    <input type="text" class="form-control" id="editAlertSeverity" list="alertSeverityOptions">
-                                    <datalist id="alertSeverityOptions">
-                                        <option value="Extreme"></option>
-                                        <option value="Severe"></option>
-                                        <option value="Moderate"></option>
-                                        <option value="Minor"></option>
-                                        <option value="Unknown"></option>
-                                    </datalist>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    <label for="editAlertUrgency" class="form-label">Urgency</label>
-                                    <input type="text" class="form-control" id="editAlertUrgency" list="alertUrgencyOptions">
-                                    <datalist id="alertUrgencyOptions">
-                                        <option value="Immediate"></option>
-                                        <option value="Expected"></option>
-                                        <option value="Future"></option>
-                                        <option value="Past"></option>
-                                        <option value="Unknown"></option>
-                                    </datalist>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    <label for="editAlertCertainty" class="form-label">Certainty</label>
-                                    <input type="text" class="form-control" id="editAlertCertainty" list="alertCertaintyOptions">
-                                    <datalist id="alertCertaintyOptions">
-                                        <option value="Observed"></option>
-                                        <option value="Likely"></option>
-                                        <option value="Possible"></option>
-                                        <option value="Unlikely"></option>
-                                        <option value="Unknown"></option>
-                                    </datalist>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label for="editAlertCategory" class="form-label">Category</label>
-                            <input type="text" class="form-control" id="editAlertCategory">
-                        </div>
-                        <div class="mb-3">
-                            <label for="editAlertHeadline" class="form-label">Headline</label>
-                            <textarea class="form-control" id="editAlertHeadline" rows="2"></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label for="editAlertDescription" class="form-label">Description</label>
-                            <textarea class="form-control" id="editAlertDescription" rows="4"></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label for="editAlertInstruction" class="form-label">Instruction</label>
-                            <textarea class="form-control" id="editAlertInstruction" rows="3"></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label for="editAlertAreaDesc" class="form-label">Area Description</label>
-                            <textarea class="form-control" id="editAlertAreaDesc" rows="3"></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label for="editAlertExpires" class="form-label">Expiration</label>
-                            <input type="datetime-local" class="form-control" id="editAlertExpires">
-                            <div class="form-text">Leave blank to clear the expiration time.</div>
                         </div>
                     </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save"></i> Save Changes
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-    {% endif %}
 
-    {% if not setup_mode %}
-    <!-- Keyboard Shortcuts Info -->
-    <div class="keyboard-shortcuts">
-        <i class="fas fa-keyboard"></i> Alt+1-8: Switch Tabs | Alt+R: Refresh | Alt+H: Help
-    </div>
-    {% endif %}
+                    <div class="admin-card mt-4">
+                        <div class="card-header-custom d-flex align-items-center justify-content-between">
+                            <div>
+                                <h5 class="mb-1"><i class="fas fa-archive me-2"></i>Manual Broadcast Archive</h5>
+                                <small class="text-muted">Saved activations are archived for printing and export.</small>
+                            </div>
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshManualEasEvents">
+                                    <i class="fas fa-sync-alt"></i> Refresh
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" id="purgeManualEasEvents">
+                                    <i class="fas fa-trash-alt"></i> Purge…
+                                </button>
+                            </div>
+                        </div>
+                        <div class="p-3">
+                            <div id="manualEasStatus" class="text-muted small mb-2"></div>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col" class="text-nowrap">Created</th>
+                                            <th scope="col">Event</th>
+                                            <th scope="col" class="text-nowrap">SAME Header</th>
+                                            <th scope="col" class="text-nowrap text-center">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="manualEasEventsBody">
+                                        <tr>
+                                            <td colspan="4" class="text-center text-muted py-3">No manual activations recorded yet.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h5 class="fw-bold mb-0"><i class="fas fa-headphones"></i> Recent Transmissions</h5>
+                            <small class="text-muted" id="easMessageStatus">
+                                {% if eas_enabled and eas_recent_messages %}
+                                    Showing the most recent {{ eas_recent_messages|length }} of {{ eas_total_messages }} stored alerts.
+                                {% elif eas_enabled %}
+                                    No SAME audio has been generated yet.
+                                {% else %}
+                                    Enable broadcasting to capture SAME headers and audio files.
+                                {% endif %}
+                            </small>
+                        </div>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-outline-secondary" id="refreshEasMessages">
+                                <i class="fas fa-sync-alt"></i> Refresh
+                            </button>
+                            <button type="button" class="btn btn-outline-danger" id="purgeEasMessages">
+                                <i class="fas fa-trash-alt"></i> Purge…
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-striped align-middle">
+                            <thead>
+                                <tr>
+                                    <th scope="col" class="text-nowrap">Generated</th>
+                                    <th scope="col">Event</th>
+                                    <th scope="col" class="text-nowrap">SAME Header</th>
+                                    <th scope="col" class="text-nowrap text-center">Audio</th>
+                                    <th scope="col" class="text-nowrap text-center">Summary</th>
+                                    <th scope="col" class="text-nowrap text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="easMessagesTableBody">
+                                {% if eas_enabled and eas_recent_messages %}
+                                    {% for message in eas_recent_messages %}
+                                        {% set audio_url = url_for('eas_message_audio', message_id=message.id) %}
+                                        {% if message.text_payload %}
+                                            {% set text_url = url_for('eas_message_summary', message_id=message.id) %}
+                                        {% else %}
+                                            {% set text_url = url_for('static', filename=eas_web_subdir ~ '/' ~ message.text_filename) %}
+                                        {% endif %}
+                                        {% set detail_url = url_for('audio_detail', message_id=message.id) %}
+                                        <tr>
+                                            <td class="text-nowrap">{{ message.created_at|default('') }}</td>
+                                            <td>
+                                                <strong>{{ message.metadata_payload.event | default('Unknown Event') }}</strong>
+                                                {% if message.metadata_payload.severity %}
+                                                    <span class="badge bg-danger ms-2">{{ message.metadata_payload.severity }}</span>
+                                                {% endif %}
+                                                {% if message.metadata_payload.status %}
+                                                    <span class="badge bg-secondary ms-1">{{ message.metadata_payload.status }}</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="text-break"><code>{{ message.same_header }}</code></td>
+                                            <td class="text-center">
+                                                <a class="btn btn-sm btn-outline-primary" href="{{ audio_url }}" target="_blank" rel="noopener">
+                                                    <i class="fas fa-play"></i> Play
+                                                </a>
+                                            </td>
+                                            <td class="text-center">
+                                                {% if text_url %}
+                                                <a class="btn btn-sm btn-outline-info" href="{{ text_url }}" target="_blank" rel="noopener">
+                                                    <i class="fas fa-file-alt"></i> Summary
+                                                </a>
+                                                {% else %}
+                                                <span class="text-muted">N/A</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="text-center">
+                                                <div class="btn-group btn-group-sm" role="group">
+                                                    <a class="btn btn-outline-secondary" href="{{ detail_url }}" target="_blank" rel="noopener">
+                                                        <i class="fas fa-headphones"></i> Details
+                                                    </a>
+                                                    <button type="button" class="btn btn-outline-danger btn-delete-eas" data-message-id="{{ message.id }}">
+                                                        <i class="fas fa-trash-alt"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted py-4">
+                                            <div class="loading-spinner"></div>
+                                            <span class="ms-2">No transmissions recorded yet.</span>
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-    <script>
+<script>
         const BOUNDARY_TYPE_CONFIG = window.BOUNDARY_TYPE_CONFIG || {};
         const DEFAULT_BOUNDARY_TYPES = new Set(Object.keys(BOUNDARY_TYPE_CONFIG));
         const ADMIN_SETUP_MODE = {{ 'true' if setup_mode else 'false' }};
@@ -1260,34 +595,9 @@
 
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
-            initializeUserManagement();
-
-            if (ADMIN_SETUP_MODE) {
-                return;
+            if (typeof initializeEasPanel === 'function') {
+                initializeEasPanel();
             }
-
-            const confirmationModalElement = document.getElementById('confirmationModal');
-            if (confirmationModalElement) {
-                confirmationModal = new bootstrap.Modal(confirmationModalElement);
-            }
-
-            const editAlertModalElement = document.getElementById('editAlertModal');
-            if (editAlertModalElement) {
-                editAlertModal = new bootstrap.Modal(editAlertModalElement);
-            }
-
-            loadBoundaries();
-            loadSystemHealth();
-            setupKeyboardShortcuts();
-            initializeAlertManagement();
-            initializeLocationSettings();
-            initializeEasPanel();
-            initializeCustomTypeControls();
-
-            // Auto-refresh every 30 seconds
-            setInterval(() => {
-                loadSystemHealth();
-            }, 30000);
         });
 
         // Keyboard shortcuts
@@ -4676,5 +3986,6 @@
                 showStatus(`❌ Error: ${error.message}`, 'danger');
             }
         }
-    </script>
+    
+</script>
 {% endblock %}

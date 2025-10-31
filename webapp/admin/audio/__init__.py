@@ -12,14 +12,9 @@ def register_audio_routes(app: Flask, logger: Any, eas_config: dict[str, Any]) -
     from .history import register_history_routes
     from .detail import register_detail_routes
     from .files import register_file_routes
-    from .messages import register_message_admin_routes
-    from .manual import register_manual_routes
-
     register_history_routes(app, logger)
     register_detail_routes(app, logger)
     register_file_routes(app, logger)
-    register_message_admin_routes(app, logger)
-    register_manual_routes(app, logger, eas_config)
 
 
 __all__ = ["register_audio_routes"]
