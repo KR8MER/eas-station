@@ -251,7 +251,7 @@ def _correlate_and_decode_with_dll(samples: List[float], sample_rate: int) -> Tu
 
     # Process samples with subsampling
     idx = 0
-    confidences = []
+    bit_confidences: List[float] = []
 
     while idx + corr_len < len(samples):
         # Compute correlation (mark - space)
@@ -260,7 +260,10 @@ def _correlate_and_decode_with_dll(samples: List[float], sample_rate: int) -> Tu
         space_i_corr = sum(samples[idx + i] * space_i[i] for i in range(corr_len))
         space_q_corr = sum(samples[idx + i] * space_q[i] for i in range(corr_len))
 
-        correlation = (mark_i_corr**2 + mark_q_corr**2) - (space_i_corr**2 + space_q_corr**2)
+        mark_power = mark_i_corr**2 + mark_q_corr**2
+        space_power = space_i_corr**2 + space_q_corr**2
+        correlation = mark_power - space_power
+        total_power = mark_power + space_power
 
         # Update DCD shift register
         dcd_shreg = (dcd_shreg << 1) & 0xFFFFFFFF
@@ -297,6 +300,14 @@ def _correlate_and_decode_with_dll(samples: List[float], sample_rate: int) -> Tu
                 lasts |= 0x80
 
             curbit = (lasts >> 7) & 1
+
+            # Estimate confidence for this bit using correlation energy
+            if synced or in_message:
+                if total_power > 0:
+                    bit_confidence = min(abs(correlation) / total_power, 1.0)
+                else:
+                    bit_confidence = 0.0
+                bit_confidences.append(bit_confidence)
 
             # Check for preamble sync
             if (lasts & 0xFF) == PREAMBLE_BYTE and not in_message:
@@ -338,7 +349,21 @@ def _correlate_and_decode_with_dll(samples: List[float], sample_rate: int) -> Tu
                                 # With 3 location codes: 1+1+1+3+1+1+1 = 9 dashes total
                                 # The 8th dash comes after station ID, which is what we want
                                 dash_count = msg_text.count('-')
-                                if dash_count >= 8:  # 8 dashes includes station ID field
+                                location_count = 0
+                                if '+' in msg_text:
+                                    pre_expiration, _ = msg_text.split('+', 1)
+                                    location_segments = pre_expiration.split('-')[3:]
+                                    for segment in location_segments:
+                                        cleaned = segment.strip()
+                                        if len(cleaned) == 6 and cleaned.isdigit():
+                                            location_count += 1
+
+                                if location_count <= 0:
+                                    min_dashes = 6
+                                else:
+                                    min_dashes = 6 + max(location_count - 1, 0)
+
+                                if dash_count >= min_dashes:
                                     if 'ZCZC' in msg_text or 'NNNN' in msg_text:
                                         messages.append(msg_text.strip())
                                     current_msg = []
@@ -364,7 +389,10 @@ def _correlate_and_decode_with_dll(samples: List[float], sample_rate: int) -> Tu
         idx += SUBSAMP
 
     # Calculate average confidence
-    avg_confidence = 0.6  # Placeholder since we're using correlation
+    if bit_confidences:
+        avg_confidence = sum(bit_confidences) / len(bit_confidences)
+    else:
+        avg_confidence = 0.0
 
     return messages, avg_confidence
 
