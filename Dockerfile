@@ -27,8 +27,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application source into the image
 COPY . ./
 
+# Copy and set up the entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Expose default Flask port and start Gunicorn
 EXPOSE 5000
+
+ENTRYPOINT ["docker-entrypoint.sh"]
 
 CMD ["gunicorn", \
     "--bind", "0.0.0.0:5000", \
