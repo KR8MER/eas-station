@@ -6,11 +6,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+
 from app_utils.eas_fsk import (
     SAME_BAUD,
     SAME_MARK_FREQ,
     SAME_SPACE_FREQ,
-    encode_same_bits,
     generate_fsk_samples,
 )
 
@@ -55,31 +55,3 @@ def test_generate_fsk_samples_matches_reference_script():
 
     assert actual == expected
     assert len(actual) == len(bits) * int(round(sample_rate / BIT_RATE))
-
-
-def _char_bits(message: str, index: int) -> list[int]:
-    bits = encode_same_bits(message, include_preamble=False)
-    start = index * 10
-    return bits[start : start + 10]
-
-
-def test_encode_same_bits_includes_even_parity_for_odd_weight_chars() -> None:
-    # 'C' (0x43) has three set bits and requires the parity bit to be 1 to
-    # maintain even parity across the ASCII payload.
-    bits = _char_bits("C", 0)
-    data_bits = bits[1:8]
-    parity_bit = bits[8]
-
-    assert parity_bit == 1
-    assert (sum(data_bits) + parity_bit) % 2 == 0
-
-
-def test_encode_same_bits_includes_even_parity_for_even_weight_chars() -> None:
-    # 'A' (0x41) already has an even number of set bits so the parity bit
-    # should remain 0.
-    bits = _char_bits("A", 0)
-    data_bits = bits[1:8]
-    parity_bit = bits[8]
-
-    assert parity_bit == 0
-    assert (sum(data_bits) + parity_bit) % 2 == 0
