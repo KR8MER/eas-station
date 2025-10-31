@@ -134,6 +134,8 @@ from app_core.models import (
     LocationSettings,
     PollDebugRecord,
     PollHistory,
+    RadioReceiver,
+    RadioReceiverStatus,
     SystemLog,
 )
 
@@ -168,8 +170,8 @@ else:
     if session_cookie_secure:
         logger.info('Session cookies will require HTTPS transport.')
     else:
-        logger.warning(
-            'Session cookies are not limited to HTTPS transport. '
+        logger.info(
+            'Session cookies are not limited to HTTPS transport (HTTP or debug mode). '
             'Set SESSION_COOKIE_SECURE=true in production deployments.'
         )
 

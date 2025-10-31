@@ -33,6 +33,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import argparse
 
 import pytz
+import certifi
 from dotenv import load_dotenv
 from urllib.parse import quote
 
@@ -155,7 +156,7 @@ except Exception as e:
         ForeignKey,
         LargeBinary,
     )
-    from sqlalchemy.ext.declarative import declarative_base
+    from sqlalchemy.orm import declarative_base
     from sqlalchemy.orm import relationship  # noqa: F401
     from geoalchemy2 import Geometry
 
@@ -407,6 +408,12 @@ class CAPPoller:
         self.session.headers.update({
             'User-Agent': default_user_agent,
         })
+        ca_bundle_override = os.getenv('REQUESTS_CA_BUNDLE') or os.getenv('CAP_POLLER_CA_BUNDLE')
+        if ca_bundle_override:
+            self.logger.debug('Using custom CA bundle for CAP polling: %s', ca_bundle_override)
+            self.session.verify = ca_bundle_override
+        else:
+            self.session.verify = certifi.where()
 
         # LED
         self.led_controller = None
@@ -1175,6 +1182,14 @@ class CAPPoller:
                     else:
                         self.logger.warning("Alert has no identifier, including anyway")
                         alerts_without_identifier.append(alert)
+            except requests.exceptions.SSLError as exc:
+                self.logger.error(
+                    "TLS certificate verification failed for %s: %s. "
+                    "Provide a CA bundle via REQUESTS_CA_BUNDLE or CAP_POLLER_CA_BUNDLE if your environment "
+                    "uses custom certificates.",
+                    endpoint,
+                    exc,
+                )
             except requests.exceptions.RequestException as exc:
                 self.logger.error(f"Error fetching from {endpoint}: {str(exc)}")
             except Exception as exc:

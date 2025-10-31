@@ -573,8 +573,27 @@ class Alpha9120CController:
                 self.logger.warning("Initialization failed, but connection established")
                 return True
 
-        except Exception as e:
-            self.logger.error(f"Failed to connect to Alpha 9120C: {e}")
+        except ConnectionRefusedError as exc:
+            self.logger.warning(
+                "Alpha 9120C at %s:%s refused the connection: %s. "
+                "Set LED_SIGN_IP/LED_SIGN_PORT or start the hardware emulator to enable LED output.",
+                self.host,
+                self.port,
+                exc,
+            )
+            self.connected = False
+            return False
+        except OSError as exc:
+            self.logger.error(
+                "Failed to connect to Alpha 9120C at %s:%s due to OS error: %s",
+                self.host,
+                self.port,
+                exc,
+            )
+            self.connected = False
+            return False
+        except Exception as exc:
+            self.logger.error("Failed to connect to Alpha 9120C: %s", exc)
             self.connected = False
             return False
 
