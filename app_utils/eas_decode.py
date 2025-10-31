@@ -194,6 +194,9 @@ def _extract_bits(
 
     average_confidence = sum(bit_confidences) / len(bit_confidences)
     minimum_confidence = min(bit_confidences) if bit_confidences else 0.0
+    _extract_bits.last_confidence = average_confidence  # type: ignore[attr-defined]
+    _extract_bits.min_confidence = minimum_confidence  # type: ignore[attr-defined]
+    _extract_bits.bit_confidences = list(bit_confidences)  # type: ignore[attr-defined]
 
     return bits, average_confidence, minimum_confidence
 
@@ -202,44 +205,77 @@ def _bits_to_text(bits: List[int]) -> Dict[str, object]:
     """Convert mark/space bits into ASCII SAME text and headers."""
 
     characters: List[str] = []
-    frame_errors = 0
-    frame_count = 0
+    char_positions: List[int] = []
+    error_positions: List[int] = []
+
+    confidences: List[float] = list(getattr(_extract_bits, "bit_confidences", []))
+    confidence_threshold = 0.6  # Empirically high enough to isolate real SAME bursts
 
     i = 0
     while i + 10 <= len(bits):
-        frame_count += 1
-        start_bit = bits[i]
-        if start_bit != 0:
+        if bits[i] != 0:
+            i += 1
+            continue
+
+        frame_confidence = 0.0
+        if i + 10 <= len(confidences):
+            frame_confidence = sum(confidences[i:i + 10]) / 10.0
+        if frame_confidence < confidence_threshold:
+            error_positions.append(i)
+            i += 1
+            continue
+
+        stop_bit = bits[i + 9]
+        if stop_bit != 1:
+            error_positions.append(i)
             i += 1
             continue
 
         data_bits = bits[i + 1 : i + 8]
-        parity_or_unused = bits[i + 8]
-        stop_bit = bits[i + 9]
-
-        if stop_bit != 1:
-            frame_errors += 1
-            i += 1
-            continue
 
         value = 0
         for position, bit in enumerate(data_bits):
             value |= (bit & 1) << position
 
-        if parity_or_unused not in (0, 1):
-            frame_errors += 1
-
         try:
             character = chr(value)
         except ValueError:
-            frame_errors += 1
+            error_positions.append(i)
             i += 10
             continue
 
         characters.append(character)
+        char_positions.append(i)
         i += 10
 
     raw_text = "".join(characters)
+    trimmed_characters = characters
+    trimmed_positions = char_positions
+
+    if raw_text:
+        upper_text = raw_text.upper()
+
+        start_index = upper_text.find("ZCZC")
+        if start_index > 0:
+            trimmed_characters = trimmed_characters[start_index:]
+            trimmed_positions = trimmed_positions[start_index:]
+            raw_text = "".join(trimmed_characters)
+            upper_text = raw_text.upper()
+
+        end_index = upper_text.rfind("NNNN")
+        if end_index != -1:
+            end_offset = end_index + 4
+            if end_offset < len(trimmed_characters) and trimmed_characters[end_offset] == "\r":
+                end_offset += 1
+            trimmed_characters = trimmed_characters[:end_offset]
+            trimmed_positions = trimmed_positions[:end_offset]
+            raw_text = "".join(trimmed_characters)
+        else:
+            last_break = raw_text.rfind("\r")
+            if last_break != -1:
+                trimmed_characters = trimmed_characters[: last_break + 1]
+                trimmed_positions = trimmed_positions[: last_break + 1]
+                raw_text = "".join(trimmed_characters)
 
     headers: List[str] = []
     for segment in raw_text.split("\r"):
@@ -248,23 +284,38 @@ def _bits_to_text(bits: List[int]) -> Dict[str, object]:
             continue
 
         upper_segment = cleaned.upper()
-        header_start = -1
-        for marker in ("ZCZC", "NNNN"):
-            header_start = upper_segment.find(marker)
-            if header_start != -1:
-                break
-
-        if header_start == -1:
+        if "ZCZC" not in upper_segment and "NNNN" not in upper_segment:
             continue
+
+        header_start = upper_segment.find("ZCZC")
+        if header_start == -1:
+            header_start = upper_segment.find("NNNN")
 
         candidate = cleaned[header_start:]
         if candidate:
             headers.append(candidate)
 
+    valid_frame_count = len(trimmed_characters)
+
+    if headers:
+        raw_text = "\r".join(headers) + "\r"
+
+    if trimmed_positions:
+        first_bit = trimmed_positions[0]
+        last_bit = trimmed_positions[-1]
+        relevant_errors = [
+            pos for pos in error_positions if first_bit <= pos <= last_bit
+        ]
+    else:
+        relevant_errors = list(error_positions)
+
+    frame_errors = len(relevant_errors)
+    frame_count_value = valid_frame_count + frame_errors
+
     return {
         "text": raw_text,
         "headers": headers,
-        "frame_count": frame_count,
+        "frame_count": frame_count_value,
         "frame_errors": frame_errors,
     }
 
