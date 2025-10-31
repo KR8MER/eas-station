@@ -1,4 +1,10 @@
 # Full EAS Console Parity To-Do List
+
+## Recently Completed Milestones
+- **Multi-receiver orchestration** – The new radio manager (`app_core/radio/manager.py`) and SoapySDR drivers coordinate RTL2832U and Airspy hardware, persist configuration in `RadioReceiver` models, and expose CRUD management through `/settings/radio`.
+- **Compliance dashboards** – `/admin/compliance` now surfaces received vs. relayed counts, Required Weekly Test tracking, receiver health snapshots, and CSV/PDF exports powered by `app_core/eas_storage.py` and `app_core/system_health.py`.
+- **Alert verification lab** – `/admin/alert-verification` correlates playout telemetry with CAP ingestion, visualises latency trends, and decodes uploaded WAV/MP3 captures using `app_utils.eas_decode` helpers.
+- **SAME ingest tooling** – Operators can capture, store, and review decoded audio segments through the alert verification workflow, enriching compliance evidence with archival audio artifacts.
 ~~## 1. Multi-SDR Front-End Orchestration *(recommended starting point)*
 - [x] Build a modular multi-SDR capture framework.
   - [x] Draft base interfaces and a coordination manager in `app_core/radio/manager.py`.

@@ -10,6 +10,15 @@
                     <i class="fas fa-life-ring fa-4x text-primary mb-3"></i>
                     <h1 class="display-5 fw-bold mb-3">Help & Operations Guide</h1>
                     <p class="lead text-muted">Complete documentation for operating and maintaining your EAS Station</p>
+                    <div class="alert alert-warning d-flex align-items-start mt-4 text-start" role="alert">
+                        <i class="fas fa-triangle-exclamation fa-lg me-3"></i>
+                        <div>
+                            <strong>Safety Reminder:</strong> This guide supports an experimental build of EAS Station. The
+                            platform is verified against reference projects such as multimon-ng, but it is <em>not</em>
+                            FCC-approved and must only be used in controlled lab environments. Never depend on it for live
+                            emergency alerting or public safety workflows.
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -990,6 +999,24 @@ docker-compose exec app flask test-led</code></pre>
                                 <i class="fas fa-info-circle me-2"></i>About EAS Station
                             </a>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Safety & Legal Guidance -->
+            <div class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4">
+                    <h2 class="h5 mb-3">
+                        <i class="fas fa-user-shield text-primary me-2"></i>Safety & Legal Guidance
+                    </h2>
+                    <p class="mb-3">Operate EAS Station as a training and evaluation platform. Keep it isolated from
+                        production transmitter controls, IPAWS live credentials, and mission critical dispatch tooling. Any
+                        workflows you test here must be validated on certified FCC equipment before real-world use.</p>
+                    <div class="alert alert-secondary mb-0" role="alert">
+                        <i class="fas fa-file-contract me-2"></i>
+                        Review the <a href="{{ url_for('terms_page') }}" class="alert-link">Terms of Use</a> and
+                        <a href="{{ url_for('privacy_page') }}" class="alert-link">Privacy Policy</a> with your team to ensure
+                        everyone understands the development-only status of the project.
                     </div>
                 </div>
             </div>
