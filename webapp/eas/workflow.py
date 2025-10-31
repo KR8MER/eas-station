@@ -91,7 +91,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             eas_originator=eas_config.get('originator', 'WXR'),
             eas_station_id=eas_config.get('station_id', 'EASNODES'),
             eas_attention_seconds=eas_config.get('attention_tone_seconds', 8),
-            eas_sample_rate=eas_config.get('sample_rate', 44100),
+            eas_sample_rate=eas_config.get('sample_rate', 16000),
             eas_default_same_codes=manual_same_defaults,
             eas_header_fields=SAME_HEADER_FIELD_DESCRIPTIONS,
             eas_p_digit_meanings=P_DIGIT_MEANINGS,
@@ -200,7 +200,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
         message_type = (payload.get('message_type') or 'Alert').strip() or 'Alert'
 
         try:
-            sample_rate = int(payload.get('sample_rate') or eas_config.get('sample_rate', 44100) or 44100)
+            sample_rate = int(payload.get('sample_rate') or eas_config.get('sample_rate', 16000) or 16000)
         except (TypeError, ValueError):
             return _validation_error('Sample rate must be an integer value.')
         if sample_rate < 8000 or sample_rate > 48000:
