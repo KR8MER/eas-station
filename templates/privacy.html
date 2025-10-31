@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% block title %}Privacy Policy | EAS Station{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-10 col-xl-8">
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body p-4 p-md-5">
+                    <div class="text-center mb-4">
+                        <i class="fas fa-user-shield fa-4x text-primary mb-3"></i>
+                        <h1 class="display-6 fw-bold">Privacy Policy</h1>
+                        <p class="text-muted mb-0">Last updated: {{ current_time().strftime('%B %d, %Y') }}</p>
+                    </div>
+                    <div class="alert alert-info d-flex align-items-start" role="alert">
+                        <i class="fas fa-circle-info fa-lg me-3"></i>
+                        <div>
+                            This project is in active development and is intended for lab evaluation only. Review these practices
+                            before deploying any optional telemetry or uploading real-world data.
+                        </div>
+                    </div>
+                    <section class="mb-4">
+                        <h2 class="h4 text-primary">1. Project Scope</h2>
+                        <p>EAS Station runs entirely under your control. The maintainers do not operate hosted services, collect
+                           analytics, or process personal data from your deployments. Any data the software stores resides within
+                           the infrastructure you provision.</p>
+                    </section>
+                    <section class="mb-4">
+                        <h2 class="h4 text-primary">2. Local Data Storage</h2>
+                        <p>The application may store configuration details, receiver metadata, CAP alert content, generated audio,
+                           and system logs in your database and file system. These records are necessary for testing workflows but
+                           must not be treated as authoritative emergency information. Remove sample data before repurposing a
+                           system and secure any backups you create.</p>
+                    </section>
+                    <section class="mb-4">
+                        <h2 class="h4 text-primary">3. Optional Integrations</h2>
+                        <p>If you enable third-party services (such as Azure Speech or SMTP relays) their respective privacy
+                           policies apply. Configure credentials using environment variables and avoid transmitting sensitive or
+                           personally identifiable information through these integrations.</p>
+                    </section>
+                    <section class="mb-4">
+                        <h2 class="h4 text-primary">4. Development & Testing Data</h2>
+                        <p>Because EAS Station is experimental, populate it only with non-production test data. Do not ingest live
+                           IPAWS traffic, dispatch center logs, or other mission critical sources. The maintainers do not accept
+                           responsibility for safeguarding any datasets you choose to import.</p>
+                    </section>
+                    <section class="mb-4">
+                        <h2 class="h4 text-primary">5. Security Practices</h2>
+                        <ul>
+                            <li>Restrict access to the application behind VPNs or private networks.</li>
+                            <li>Rotate credentials regularly and store secrets outside of source control.</li>
+                            <li>Review dependency advisories and apply updates before exposing the system to additional testers.</li>
+                            <li>Disconnect experimental builds from broadcast chains, transmitter controls, or other live systems.</li>
+                        </ul>
+                    </section>
+                    <section class="mb-4">
+                        <h2 class="h4 text-primary">6. No Data Warranty</h2>
+                        <p>The maintainers disclaim all responsibility for data loss, corruption, or disclosure arising from use of
+                           the software. You are solely responsible for implementing appropriate backups and safeguards.</p>
+                    </section>
+                    <section class="mb-0">
+                        <h2 class="h4 text-primary">7. Contact</h2>
+                        <p>Submit privacy-related questions through the project's GitHub issues. Do not send sensitive personal
+                           data or emergency requests through that channel.</p>
+                    </section>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
