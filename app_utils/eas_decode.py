@@ -239,9 +239,221 @@ def _extract_bits(
     return bits, average_confidence, minimum_confidence
 
 
-def _bits_to_text(bits: List[int]) -> Dict[str, object]:
-    """Convert mark/space bits into ASCII SAME text and headers."""
+def _extract_bytes_from_bits(
+    bits: List[int], start_pos: int, max_bytes: int, *, confidence_threshold: float = 0.3
+) -> Tuple[List[int], List[int]]:
+    """Extract byte values and their positions from a bit stream starting at start_pos."""
 
+    confidences: List[float] = list(getattr(_extract_bits, "bit_confidences", []))
+    byte_values: List[int] = []
+    byte_positions: List[int] = []
+
+    i = start_pos
+    while i + 10 <= len(bits) and len(byte_values) < max_bytes:
+        # Check for valid frame: start bit (0) and stop bit (1)
+        if bits[i] != 0:
+            i += 1
+            continue
+
+        # Check confidence for this frame
+        frame_confidence = 0.0
+        if i + 10 <= len(confidences):
+            frame_confidence = sum(confidences[i:i + 10]) / 10.0
+        if frame_confidence < confidence_threshold:
+            i += 1
+            continue
+
+        if bits[i + 9] != 1:
+            i += 1
+            continue
+
+        # Extract data bits (7 or 8 bits depending on position)
+        # For preamble: 8 bits, for message: 7 bits
+        data_bits = bits[i + 1 : i + 9]
+
+        value = 0
+        for position, bit in enumerate(data_bits):
+            value |= (bit & 1) << position
+
+        byte_values.append(value)
+        byte_positions.append(i)
+        i += 10
+
+    return byte_values, byte_positions
+
+
+def _find_same_bursts(bits: List[int]) -> List[int]:
+    """Find the starting positions of SAME bursts by looking for ZCZC markers."""
+
+    # Look for 'ZCZC' pattern which marks the start of each SAME header
+    # 'Z' = 0x5A, 'C' = 0x43
+    # We'll search for sequences that look like ZCZC
+
+    burst_positions: List[int] = []
+
+    # Define character patterns (LSB first, 7 bits, framed)
+    # 'Z' = 0x5A = 0101101 (7 bits) -> LSB first = 0101101 -> framed: 0 + 0101101 + 0 + 1
+    Z_pattern = [0, 0, 1, 0, 1, 1, 0, 1, 0, 1]
+    C_pattern = [0, 1, 1, 0, 0, 0, 1, 1, 0, 1]  # 'C' = 0x43 = 1000011 -> LSB = 1100001
+
+    i = 0
+    while i < len(bits) - 40:  # Need at least 4 * 10 bits for ZCZC
+        # Check for ZCZC pattern
+        z1_matches = sum(1 for j in range(10) if i+j < len(bits) and bits[i+j] == Z_pattern[j])
+        c1_matches = sum(1 for j in range(10) if i+10+j < len(bits) and bits[i+10+j] == C_pattern[j])
+        z2_matches = sum(1 for j in range(10) if i+20+j < len(bits) and bits[i+20+j] == Z_pattern[j])
+        c2_matches = sum(1 for j in range(10) if i+30+j < len(bits) and bits[i+30+j] == C_pattern[j])
+
+        # If we found a reasonably good ZCZC match
+        total_matches = z1_matches + c1_matches + z2_matches + c2_matches
+        if total_matches >= 28:  # Allow ~30% bit errors (12 out of 40 bits can be wrong)
+            # Found a burst! Record the position
+            # This is the start of the message (ZCZC position)
+            burst_positions.append(i)
+            i += 400  # Skip ahead to avoid finding the same burst multiple times
+        else:
+            i += 10
+
+    return burst_positions
+
+
+def _process_decoded_text(raw_text: str, frame_count: int, frame_errors: int) -> Dict[str, object]:
+    """Process decoded text to extract and clean SAME headers."""
+
+    trimmed_text = raw_text
+
+    if raw_text:
+        upper_text = raw_text.upper()
+
+        # Trim to start at ZCZC if found
+        start_index = upper_text.find("ZCZC")
+        if start_index > 0:
+            trimmed_text = raw_text[start_index:]
+            upper_text = trimmed_text.upper()
+
+        # Trim to end at NNNN if found
+        end_index = upper_text.rfind("NNNN")
+        if end_index != -1:
+            end_offset = end_index + 4
+            if end_offset < len(trimmed_text) and trimmed_text[end_offset] == "\r":
+                end_offset += 1
+            trimmed_text = trimmed_text[:end_offset]
+        else:
+            # Otherwise trim at last carriage return
+            last_break = trimmed_text.rfind("\r")
+            if last_break != -1:
+                trimmed_text = trimmed_text[: last_break + 1]
+
+    # Extract headers
+    headers: List[str] = []
+    for segment in trimmed_text.split("\r"):
+        cleaned = segment.strip()
+        if not cleaned:
+            continue
+
+        upper_segment = cleaned.upper()
+        if "ZCZC" not in upper_segment and "NNNN" not in upper_segment:
+            continue
+
+        header_start = upper_segment.find("ZCZC")
+        if header_start == -1:
+            header_start = upper_segment.find("NNNN")
+
+        candidate = cleaned[header_start:]
+        if candidate:
+            headers.append(candidate)
+
+    if headers:
+        trimmed_text = "\r".join(headers) + "\r"
+
+    return {
+        "text": trimmed_text,
+        "headers": headers,
+        "frame_count": frame_count,
+        "frame_errors": frame_errors,
+    }
+
+
+def _vote_on_bytes(burst_bytes: List[List[int]]) -> List[int]:
+    """Perform 2-out-of-3 majority voting on byte sequences from multiple bursts."""
+
+    if not burst_bytes:
+        return []
+
+    # Find the maximum length among all bursts
+    max_len = max(len(burst) for burst in burst_bytes)
+    voted_bytes: List[int] = []
+
+    for pos in range(max_len):
+        # Collect byte values at this position from all bursts
+        candidates: List[int] = []
+        for burst in burst_bytes:
+            if pos < len(burst):
+                candidates.append(burst[pos])
+
+        if not candidates:
+            continue
+
+        # Perform majority voting
+        if len(candidates) == 1:
+            voted_bytes.append(candidates[0])
+        elif len(candidates) == 2:
+            # With 2 candidates, take the first one (or could average)
+            voted_bytes.append(candidates[0])
+        else:
+            # With 3 candidates, find the majority
+            # Count occurrences
+            from collections import Counter
+            counts = Counter(candidates)
+            most_common = counts.most_common(1)[0]
+
+            # If there's a clear majority (at least 2), use it
+            if most_common[1] >= 2:
+                voted_bytes.append(most_common[0])
+            else:
+                # No majority, take the first one
+                voted_bytes.append(candidates[0])
+
+    return voted_bytes
+
+
+def _bits_to_text(bits: List[int]) -> Dict[str, object]:
+    """Convert mark/space bits into ASCII SAME text and headers with 2-of-3 voting."""
+
+    # First, try to find the three SAME bursts
+    burst_positions = _find_same_bursts(bits)
+
+    # If we found multiple bursts, use voting
+    if len(burst_positions) >= 2:
+        burst_bytes: List[List[int]] = []
+
+        for burst_start in burst_positions[:3]:  # Use up to 3 bursts
+            # burst_start now points to the start of ZCZC (no preamble skip needed)
+            bytes_in_burst, _ = _extract_bytes_from_bits(
+                bits, burst_start, max_bytes=200, confidence_threshold=0.3
+            )
+            burst_bytes.append(bytes_in_burst)
+
+        # Perform voting
+        voted_bytes = _vote_on_bytes(burst_bytes)
+
+        # Convert voted bytes to characters
+        characters: List[str] = []
+        for byte_val in voted_bytes:
+            try:
+                # Mask to 7 bits for ASCII
+                char = chr(byte_val & 0x7F)
+                characters.append(char)
+            except ValueError:
+                continue
+
+        raw_text = "".join(characters)
+
+        # If voting produced a valid result, use it
+        if "ZCZC" in raw_text.upper() or "NNNN" in raw_text.upper():
+            return _process_decoded_text(raw_text, len(voted_bytes), 0)
+
+    # Fallback to original single-pass decode if voting didn't work
     characters: List[str] = []
     char_positions: List[int] = []
     error_positions: List[int] = []
@@ -287,60 +499,11 @@ def _bits_to_text(bits: List[int]) -> Dict[str, object]:
         i += 10
 
     raw_text = "".join(characters)
-    trimmed_characters = characters
-    trimmed_positions = char_positions
 
-    if raw_text:
-        upper_text = raw_text.upper()
-
-        start_index = upper_text.find("ZCZC")
-        if start_index > 0:
-            trimmed_characters = trimmed_characters[start_index:]
-            trimmed_positions = trimmed_positions[start_index:]
-            raw_text = "".join(trimmed_characters)
-            upper_text = raw_text.upper()
-
-        end_index = upper_text.rfind("NNNN")
-        if end_index != -1:
-            end_offset = end_index + 4
-            if end_offset < len(trimmed_characters) and trimmed_characters[end_offset] == "\r":
-                end_offset += 1
-            trimmed_characters = trimmed_characters[:end_offset]
-            trimmed_positions = trimmed_positions[:end_offset]
-            raw_text = "".join(trimmed_characters)
-        else:
-            last_break = raw_text.rfind("\r")
-            if last_break != -1:
-                trimmed_characters = trimmed_characters[: last_break + 1]
-                trimmed_positions = trimmed_positions[: last_break + 1]
-                raw_text = "".join(trimmed_characters)
-
-    headers: List[str] = []
-    for segment in raw_text.split("\r"):
-        cleaned = segment.strip()
-        if not cleaned:
-            continue
-
-        upper_segment = cleaned.upper()
-        if "ZCZC" not in upper_segment and "NNNN" not in upper_segment:
-            continue
-
-        header_start = upper_segment.find("ZCZC")
-        if header_start == -1:
-            header_start = upper_segment.find("NNNN")
-
-        candidate = cleaned[header_start:]
-        if candidate:
-            headers.append(candidate)
-
-    valid_frame_count = len(trimmed_characters)
-
-    if headers:
-        raw_text = "\r".join(headers) + "\r"
-
-    if trimmed_positions:
-        first_bit = trimmed_positions[0]
-        last_bit = trimmed_positions[-1]
+    # Calculate frame errors for fallback
+    if char_positions:
+        first_bit = char_positions[0]
+        last_bit = char_positions[-1]
         relevant_errors = [
             pos for pos in error_positions if first_bit <= pos <= last_bit
         ]
@@ -348,14 +511,9 @@ def _bits_to_text(bits: List[int]) -> Dict[str, object]:
         relevant_errors = list(error_positions)
 
     frame_errors = len(relevant_errors)
-    frame_count_value = valid_frame_count + frame_errors
+    frame_count = len(characters) + frame_errors
 
-    return {
-        "text": raw_text,
-        "headers": headers,
-        "frame_count": frame_count_value,
-        "frame_errors": frame_errors,
-    }
+    return _process_decoded_text(raw_text, frame_count, frame_errors)
 
 
 def _score_candidate(metadata: Dict[str, object]) -> float:
