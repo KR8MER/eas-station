@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import os
 import tempfile
-from typing import List, Optional
+from typing import Dict, List, Optional
 
-from flask import Flask, Response, render_template, request
+from flask import Flask, Response, abort, render_template, request, send_file
 from werkzeug.utils import secure_filename
 
 from app_core.eas_storage import (
@@ -15,6 +15,9 @@ from app_core.eas_storage import (
     load_recent_audio_decodes,
     record_audio_decode_result,
 )
+from app_core.models import EASDecodedAudio
+import base64
+import io
 from app_utils import format_local_datetime
 from app_utils.export import generate_csv
 from app_utils.eas_decode import AudioDecodeError, SAMEAudioDecodeResult, decode_same_audio
@@ -103,6 +106,19 @@ def register(app: Flask, logger) -> None:
         if request.method == "POST":
             decode_result, decode_errors, stored_decode = _handle_audio_decode()
 
+        decode_segment_urls: Dict[str, str] = {}
+        if decode_result and getattr(decode_result, "segments", None):
+            for key, segment in decode_result.segments.items():
+                wav_bytes = getattr(segment, "wav_bytes", None)
+                if not wav_bytes:
+                    continue
+                try:
+                    encoded = base64.b64encode(wav_bytes).decode("ascii")
+                except (TypeError, ValueError):
+                    continue
+                normalized = str(key).lower()
+                decode_segment_urls[normalized] = f"data:audio/wav;base64,{encoded}"
+
         try:
             payload = collect_alert_delivery_records(window_days=window_days)
             trends = build_alert_delivery_trends(
@@ -157,6 +173,7 @@ def register(app: Flask, logger) -> None:
             decode_errors=decode_errors,
             stored_decode=stored_decode,
             recent_decodes=recent_decodes,
+            decode_segment_urls=decode_segment_urls,
         )
 
     @app.route("/admin/alert-verification/export.csv")
@@ -192,6 +209,43 @@ def register(app: Flask, logger) -> None:
         response.headers["Content-Disposition"] = (
             f"attachment; filename=alert_verification_{window_days}d.csv"
         )
+        return response
+
+    @app.route("/admin/alert-verification/decodes/<int:decode_id>/audio/<string:segment>")
+    def alert_verification_decode_audio(decode_id: int, segment: str):
+        segment_key = (segment or "").strip().lower()
+        column_map = {
+            "header": "header_audio_data",
+            "message": "message_audio_data",
+            "eom": "eom_audio_data",
+            "buffer": "buffer_audio_data",
+        }
+
+        if segment_key not in column_map:
+            abort(400, description="Unsupported audio segment.")
+
+        record = EASDecodedAudio.query.get_or_404(decode_id)
+        payload = getattr(record, column_map[segment_key])
+        if not payload:
+            abort(404, description="Audio segment not available.")
+
+        download = (request.args.get("download") or "").strip().lower()
+        as_attachment = download in {"1", "true", "yes", "download"}
+
+        filename = f"decoded_{decode_id}_{segment_key}.wav"
+        file_obj = io.BytesIO(payload)
+        file_obj.seek(0)
+
+        response = send_file(
+            file_obj,
+            mimetype="audio/wav",
+            as_attachment=as_attachment,
+            download_name=filename,
+            max_age=0,
+        )
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
         return response
 
 

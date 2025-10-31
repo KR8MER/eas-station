@@ -96,6 +96,20 @@
                                         · {{ '%.2f'|format(segment.duration_seconds) }}s
                                         ({{ '%.2f'|format(segment.start_seconds) }}s –
                                         {{ '%.2f'|format(segment.end_seconds) }}s)
+                                        {% set inline_url = decode_segment_urls.get(name|lower) %}
+                                        {% if inline_url %}
+                                            <div class="mt-2">
+                                                <audio class="w-100" controls>
+                                                    <source src="{{ inline_url }}" type="audio/wav">
+                                                    Your browser does not support the audio element.
+                                                </audio>
+                                                <div class="mt-1">
+                                                    <a class="btn btn-sm btn-outline-primary" href="{{ inline_url }}" download="decode_{{ name|lower }}.wav">
+                                                        <i class="fas fa-download"></i> Download
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        {% endif %}
                                     </li>
                                 {% endfor %}
                             </ul>
@@ -206,16 +220,110 @@
                                         {% endif %}
                                     </td>
                                     <td>
-                                        {% if decode.segment_metadata %}
+                                        {% set metadata = decode.segment_metadata or {} %}
+                                        {% set has_fallback = not metadata and (decode.has_header_audio or decode.has_message_audio or decode.has_eom_audio or decode.has_buffer_audio) %}
+                                        {% if metadata %}
                                             <ul class="list-unstyled mb-0 small">
-                                                {% for key, meta in decode.segment_metadata.items() %}
+                                                {% for key, meta in metadata.items() %}
                                                     <li>
                                                         {{ key|capitalize }}
                                                         {% if meta.duration_seconds is defined %}
                                                             · {{ '%.2f'|format(meta.duration_seconds) }}s
                                                         {% endif %}
+                                                        <div class="mt-2">
+                                                            {% set segment_url = url_for('alert_verification_decode_audio', decode_id=decode.id, segment=key|lower) %}
+                                                            <audio class="w-100" controls>
+                                                                <source src="{{ segment_url }}" type="audio/wav">
+                                                                Your browser does not support the audio element.
+                                                            </audio>
+                                                            <div class="mt-1">
+                                                                <a class="btn btn-sm btn-outline-primary" href="{{ segment_url }}?download=1">
+                                                                    <i class="fas fa-download"></i>
+                                                                    Download
+                                                                </a>
+                                                            </div>
+                                                        </div>
                                                     </li>
                                                 {% endfor %}
+                                            </ul>
+                                        {% elif has_fallback %}
+                                            <ul class="list-unstyled mb-0 small">
+                                                {% if decode.has_header_audio %}
+                                                    {% set key = 'header' %}
+                                                    <li>
+                                                        Header
+                                                        <div class="mt-2">
+                                                            {% set segment_url = url_for('alert_verification_decode_audio', decode_id=decode.id, segment=key) %}
+                                                            <audio class="w-100" controls>
+                                                                <source src="{{ segment_url }}" type="audio/wav">
+                                                                Your browser does not support the audio element.
+                                                            </audio>
+                                                            <div class="mt-1">
+                                                                <a class="btn btn-sm btn-outline-primary" href="{{ segment_url }}?download=1">
+                                                                    <i class="fas fa-download"></i>
+                                                                    Download
+                                                                </a>
+                                                            </div>
+                                                        </div>
+                                                    </li>
+                                                {% endif %}
+                                                {% if decode.has_message_audio %}
+                                                    {% set key = 'message' %}
+                                                    <li>
+                                                        Message
+                                                        <div class="mt-2">
+                                                            {% set segment_url = url_for('alert_verification_decode_audio', decode_id=decode.id, segment=key) %}
+                                                            <audio class="w-100" controls>
+                                                                <source src="{{ segment_url }}" type="audio/wav">
+                                                                Your browser does not support the audio element.
+                                                            </audio>
+                                                            <div class="mt-1">
+                                                                <a class="btn btn-sm btn-outline-primary" href="{{ segment_url }}?download=1">
+                                                                    <i class="fas fa-download"></i>
+                                                                    Download
+                                                                </a>
+                                                            </div>
+                                                        </div>
+                                                    </li>
+                                                {% endif %}
+                                                {% if decode.has_eom_audio %}
+                                                    {% set key = 'eom' %}
+                                                    <li>
+                                                        EOM
+                                                        <div class="mt-2">
+                                                            {% set segment_url = url_for('alert_verification_decode_audio', decode_id=decode.id, segment=key) %}
+                                                            <audio class="w-100" controls>
+                                                                <source src="{{ segment_url }}" type="audio/wav">
+                                                                Your browser does not support the audio element.
+                                                            </audio>
+                                                            <div class="mt-1">
+                                                                <a class="btn btn-sm btn-outline-primary" href="{{ segment_url }}?download=1">
+                                                                    <i class="fas fa-download"></i>
+                                                                    Download
+                                                                </a>
+                                                            </div>
+                                                        </div>
+                                                    </li>
+                                                {% endif %}
+                                                {% if decode.has_buffer_audio %}
+                                                    {% set key = 'buffer' %}
+                                                    <li>
+                                                        Buffer
+                                                        <div class="mt-2">
+                                                            {% set segment_url = url_for('alert_verification_decode_audio', decode_id=decode.id, segment=key) %}
+                                                            <audio class="w-100" controls>
+                                                                <source src="{{ segment_url }}" type="audio/wav">
+                                                                Your browser does not support the audio element.
+                                                            </audio>
+                                                            <div class="mt-1">
+                                                                <a class="btn btn-sm btn-outline-primary" href="{{ segment_url }}?download=1">
+                                                                    <i class="fas fa-download"></i>
+                                                                    Download
+                                                                </a>
+                                                            </div>
+                                                        </div>
+                                                    </li>
+                                                {% endif %}
                                             </ul>
                                         {% else %}
                                             <span class="text-muted small">None</span>

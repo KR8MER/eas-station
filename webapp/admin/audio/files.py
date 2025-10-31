@@ -17,7 +17,7 @@ def register_file_routes(app, logger) -> None:
     @app.route('/eas_messages/<int:message_id>/audio', methods=['GET'])
     def eas_message_audio(message_id: int):
         variant = (request.args.get('variant') or 'primary').strip().lower()
-        if variant not in {'primary', 'eom'}:
+        if variant not in {'primary', 'eom', 'same', 'attention', 'tts', 'buffer'}:
             abort(400, description='Unsupported audio variant.')
 
         message = EASMessage.query.get_or_404(message_id)
@@ -28,12 +28,15 @@ def register_file_routes(app, logger) -> None:
         download = request.args.get('download', '').strip().lower()
         as_attachment = download in {'1', 'true', 'yes', 'download'}
 
+        metadata = message.metadata_payload or {}
         if variant == 'eom':
-            filename = (message.metadata_payload or {}).get('eom_filename') if message.metadata_payload else None
+            filename = metadata.get('eom_filename') if isinstance(metadata, dict) else None
             if not filename:
                 filename = f'eas_message_{message.id}_eom.wav'
-        else:
+        elif variant == 'primary':
             filename = message.audio_filename or f'eas_message_{message.id}.wav'
+        else:
+            filename = f'eas_message_{message.id}_{variant}.wav'
 
         file_obj = io.BytesIO(data)
         file_obj.seek(0)
