@@ -73,7 +73,7 @@ EAS Station is not just an alert monitor—it's a **complete emergency broadcast
 
 ### 📻 Verification & Compliance
 - **Multi-SDR Orchestration** - Automatic IQ/PCM capture from RTL2832U and Airspy receivers during SAME events
-- **Audio Decode Verification** - Extract SAME headers from received broadcasts with confidence scoring
+- **Audio Decode Verification** - Extract SAME headers from received broadcasts with confidence scoring (algorithm inspired by [multimon-ng](https://github.com/EliasOenal/multimon-ng))
 - **Delivery Analytics** - Track received vs. relayed alerts with per-originator trending
 - **Compliance Exports** - CSV/PDF reports for FCC and state emergency management audits
 - **Complete Audit Trail** - Timestamped logs of all ingestions, broadcasts, and manual activations
@@ -970,6 +970,7 @@ This project is provided as-is for emergency communications and public safety pu
 - **Flask Community** - Web framework and extensions
 - **Bootstrap & Font Awesome** - UI components and icons
 - **Amateur Radio Community** - Emergency communications support
+- **[multimon-ng](https://github.com/EliasOenal/multimon-ng)** - SAME/EAS decoder algorithm reference used for testing and debugging our Python implementation
 
 ---
 
