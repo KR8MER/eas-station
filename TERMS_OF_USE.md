@@ -1,11 +1,12 @@
 # ⚖️ Terms of Use
 
-_Last updated: January 15, 2025_
+_Last updated: January 30, 2025_
 
 > **Critical Safety Notice:** EAS Station is experimental software. It must not be used for life-safety, mission-critical, or FCC-mandated alerting. Commercially certified EAS equipment remains the only acceptable solution for regulatory compliance.
 
 ## 1. Project Status & Intended Use
-- EAS Station is a community-driven development project currently in a pre-production, experimental phase.
+- EAS Station is a community-driven development project currently in a pre-production, experimental phase with a roadmap focused on matching the functionality of commercial encoder/decoder hardware using off-the-shelf components.
+- The reference build leverages Raspberry Pi 4 compute modules paired with GPIO relay HATs, RS-232 interfaces, SDR receivers, and broadcast-grade audio cards, but those components are not an approved substitute for certified encoder/decoder equipment until the software attains formal authorization.
 - The codebase has been cross-checked against open-source utilities such as [multimon-ng](https://github.com/EliasOenal/multimon-ng) for decoder parity. All other logic, workflows, and documentation are original contributions from the project maintainers.
 - The software is provided strictly for research, testing, and educational exploration. It is **not** a replacement for FCC-certified Emergency Alert System hardware or services and must not be relied upon for life or property protection.
 
@@ -28,11 +29,17 @@ _Last updated: January 15, 2025_
 - Comparisons to third-party projects (e.g., multimon-ng) are for feature parity checks only.
 - Those projects are governed by their respective licenses and are not endorsed by, nor affiliated with, EAS Station.
 
-## 6. Updates
+## 6. Licensing & Contributions
+- The EAS Station source code is released under the [MIT License](LICENSE). Copyright remains with Timothy Kramer (K8R8MER).
+- By submitting code, documentation, or other content, contributors agree that their work is provided under the MIT License.
+- All commits must include a Developer Certificate of Origin (DCO) sign-off line (`Signed-off-by`) affirming that the contributor has the right to submit the work under the project license. Instructions are provided in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## 7. Updates
 - These terms may change as the project evolves.
 - Continued use of the repository or website after an update constitutes acceptance of the revised terms.
 - Significant changes will be documented in the project changelog or release notes.
+- Operators evaluating new builds must review the published changelog, confirm the advertised `APP_BUILD_VERSION`, and verify that critical workflows (alert ingest, SAME generation, GPIO control, audio playout) still function before relying on the update for lab exercises.
 
-## 7. Contact
+## 8. Contact
 - Questions about these terms can be directed through the GitHub issue tracker.
 - Do **not** submit emergency requests, personal data, or public warning content through that channel.

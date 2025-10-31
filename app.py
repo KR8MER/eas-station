@@ -249,7 +249,10 @@ if not secret_key or secret_key == 'dev-key-change-in-production':
 app.secret_key = secret_key
 
 # Application versioning (exposed via templates for quick deployment verification)
-SYSTEM_VERSION = os.environ.get('APP_BUILD_VERSION', '2.3.0')
+from app_utils.versioning import get_current_version
+
+
+SYSTEM_VERSION = get_current_version()
 app.config['SYSTEM_VERSION'] = SYSTEM_VERSION
 
 
