@@ -13,6 +13,7 @@ To match the expectations of purpose-built EAS appliances, the project must deli
 6. **Turnkey Deployment** – Guided setup, automated configuration, and validation tooling for predictable installations on commodity hardware.
 7. **Regulatory Compliance Support** – Reporting, analytics, and verification that prove the system is performing required weekly/monthly tasks.
 8. **Unified Documentation** – Repository and web UI content that keeps operators aligned on safety boundaries and configuration changes.
+9. **Certification Readiness** – Repeatable test harnesses, evidence collection, and configuration baselines that support an FCC Part 11 certification bid for the Raspberry Pi-based build.
 
 Each roadmap item below references the requirement(s) it unlocks so contributors can tie deliverables directly to hardware parity.
 
@@ -67,8 +68,9 @@ Each roadmap item below references the requirement(s) it unlocks so contributors
 - **Plan**:
   1. Build `tools/setup_wizard.py` to capture station metadata, audio profiles, and receiver definitions into `.env` and the database.
   2. Expand `docker-compose.yml` with optional services for audio capture daemons and document udev/USB permissions under `docs/deployment/audio_hardware.md`.
-  3. Add integration tests (pytest) that mock ingest/output paths and GPIO behaviors under `tests/` to protect against regressions.
-  4. Centralize post-install checklists in `docs/deployment/post_install.md`.
+  3. Document the reference Raspberry Pi build—including relay HAT pinouts, RS-232 adapter configuration, and supported USB audio chipsets—in `docs/hardware/reference_pi_build.md`.
+  4. Add integration tests (pytest) that mock ingest/output paths and GPIO behaviors under `tests/` to protect against regressions.
+  5. Centralize post-install checklists in `docs/deployment/post_install.md`.
 
 ## 7. Analytics & Compliance Enhancements (Requirement 7)
 - **Goal**: Give operators actionable insight into alert flow health and compliance posture.
@@ -87,6 +89,15 @@ Each roadmap item below references the requirement(s) it unlocks so contributors
   2. Cross-link README, ABOUT, and HELP pages to the latest disclaimers (Terms of Use, Privacy Policy) and roadmap status.
   3. Schedule periodic documentation audits to ensure web templates (`templates/*.html`) match repository markdown content.
   4. Capture release notes in `CHANGELOG.md` summarizing roadmap milestones.
+
+## 9. Certification Evidence & Reliability Trials (Requirement 9)
+- **Goal**: Produce the engineering artifacts, soak tests, and configuration baselines required to seek FCC Part 11 certification for the Raspberry Pi-based build.
+- **Status**: No formal test harness or documentation package exists beyond developer notes.
+- **Plan**:
+  1. Create automated acceptance tests under `tests/certification/` that exercise end-to-end alert ingest, playout, GPIO triggering, and SDR verification on reference hardware.
+  2. Develop `docs/certification/readiness_checklist.md` outlining required measurements (audio levels, timing tolerances, relay response) and evidence capture procedures.
+  3. Integrate long-duration reliability soak tests into CI or scheduled workflows, storing telemetry and fault reports for review.
+  4. Assemble a Part 11 compliance dossier (schematics, BOM, firmware/software versions) and version it alongside release candidates.
 
 ---
 

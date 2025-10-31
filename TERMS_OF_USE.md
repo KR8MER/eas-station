@@ -6,6 +6,7 @@ _Last updated: January 30, 2025_
 
 ## 1. Project Status & Intended Use
 - EAS Station is a community-driven development project currently in a pre-production, experimental phase with a roadmap focused on matching the functionality of commercial encoder/decoder hardware using off-the-shelf components.
+- The reference build leverages Raspberry Pi 4 compute modules paired with GPIO relay HATs, RS-232 interfaces, SDR receivers, and broadcast-grade audio cards, but those components are not an approved substitute for certified encoder/decoder equipment until the software attains formal authorization.
 - The codebase has been cross-checked against open-source utilities such as [multimon-ng](https://github.com/EliasOenal/multimon-ng) for decoder parity. All other logic, workflows, and documentation are original contributions from the project maintainers.
 - The software is provided strictly for research, testing, and educational exploration. It is **not** a replacement for FCC-certified Emergency Alert System hardware or services and must not be relied upon for life or property protection.
 

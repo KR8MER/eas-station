@@ -4,13 +4,27 @@
 
 ## Vision: A Software Drop-In Replacement
 
-Commercial EAS decoders are expensive, power-hungry appliances that demand rack space and proprietary maintenance. EAS Station is being engineered as a software-first, off-the-shelf alternative that can fulfill the same duties on commodity hardware. The roadmap focuses on delivering:
+Commercial EAS decoders are expensive, power-hungry appliances that demand rack space and proprietary maintenance. EAS Station is being engineered as a software-first, off-the-shelf alternative that can fulfill the same duties on commodity hardware. The target build centers on a Raspberry Pi 4 paired with HATs that expose dry-contact GPIO relays, RS-232 control, broadcast-quality audio input/output, and HDMI program confidence monitoring—backed by one or more SDR front-ends for verification. With disciplined software integration, repeatable setup, and demonstrable reliability in place, the project can pursue FCC Part 11 certification as a credible drop-in replacement. The roadmap focuses on delivering:
 
 - **Functional Parity** – Automated alert ingestion, SAME generation, playout, verification, and compliance logging equivalent to a certified encoder/decoder pair.
 - **Operational Resilience** – High availability, watchdog services, failover-ready storage, and verifiable audit trails so the platform can stand in for purpose-built hardware.
 - **Accessible Deployment** – Containerized services, reproducible images, and minimal peripheral requirements so integrators can assemble a station with readily available parts.
+- **Certification Readiness** – Compliance evidence, automated self-tests, and documentation packages that streamline the eventual FCC certification process.
 
 This vision guides the feature backlog, documentation, and governance decisions captured throughout the repository.
+
+### Reference Commodity Hardware Stack
+
+While the codebase remains hardware-agnostic, the following Raspberry Pi-based stack is the reference platform the roadmap optimises around:
+
+- **Compute:** Raspberry Pi 4 Model B (4 GB or 8 GB) with active cooling to survive 24/7 service.
+- **Dry-Contact Control:** Multi-relay GPIO HAT supplying normally-open and normally-closed contacts for transmitter keying.
+- **Serial Automation:** RS-232 HAT or USB interface to drive legacy EAS peripherals and studio controllers.
+- **Audio I/O:** Pi-compatible sound card (balanced line in/out) or USB audio interface for program and monitor buses.
+- **Monitoring:** Native HDMI for confidence monitoring plus network dashboards for remote operators.
+- **Verification:** Dual SDR receivers (e.g., RTL-SDR, Airspy) to capture air-chain audio and validate retransmission.
+
+All documentation and tooling emphasise a guided setup process so integrators can reproduce the build with off-the-shelf components instead of bespoke rack units.
 
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://www.docker.com/)
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-blue?logo=python)](https://www.python.org/)
