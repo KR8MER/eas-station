@@ -38,10 +38,16 @@ def encode_same_bits(message: str, *, include_preamble: bool = False) -> List[in
         ascii_code = ord(char) & 0x7F
 
         char_bits: List[int] = [0]
+        parity = 0
         for i in range(7):
-            char_bits.append((ascii_code >> i) & 1)
+            bit = (ascii_code >> i) & 1
+            char_bits.append(bit)
+            parity ^= bit
 
-        char_bits.append(0)
+        # SAME headers require even parity across the seven ASCII bits.
+        # ``parity`` will be ``1`` when there are an odd number of ``1``
+        # bits, so appending it ensures the total count remains even.
+        char_bits.append(parity)
         char_bits.append(1)
         bits.extend(char_bits)
 
