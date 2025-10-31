@@ -776,8 +776,12 @@ if hasattr(app, "before_serving"):
 elif hasattr(app, "before_first_request"):
     app.before_first_request(initialize_database)
 else:
-    with app.app_context():
-        initialize_database()
+    # Skip initialization if running migrations
+    # This prevents the chicken-and-egg problem where migrations need to add
+    # columns that the initialization code tries to query
+    if not os.environ.get("SKIP_DB_INIT"):
+        with app.app_context():
+            initialize_database()
 
 
 # =============================================================================
