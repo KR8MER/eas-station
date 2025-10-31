@@ -7,6 +7,7 @@ from typing import Dict, List
 
 from flask import g, jsonify, render_template, request
 from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 
 from app_core.extensions import db
 from app_core.models import AdminUser, Boundary, CAPAlert, EASMessage, SystemLog
@@ -31,30 +32,66 @@ def register_dashboard_routes(app, logger, eas_config):
     @app.route('/admin')
     def admin():
         """Admin interface"""
+
+        def safe_db_operation(description: str, default, operation):
+            try:
+                return operation()
+            except SQLAlchemyError as exc:  # pragma: no cover - defensive
+                logger.warning('Failed to %s: %s', description, exc)
+                try:
+                    db.session.rollback()
+                except SQLAlchemyError:  # pragma: no cover - defensive fallback
+                    pass
+                return default
+
         try:
             setup_mode = getattr(g, 'admin_setup_mode', None)
             if setup_mode is None:
-                setup_mode = AdminUser.query.count() == 0
-            total_boundaries = Boundary.query.count()
-            total_alerts = CAPAlert.query.count()
-            active_alerts = get_active_alerts_query().count()
-            expired_alerts = get_expired_alerts_query().count()
+                setup_mode = safe_db_operation(
+                    'determine administrator setup status',
+                    False,
+                    lambda: AdminUser.query.count() == 0,
+                )
 
-            boundary_stats = db.session.query(
-                Boundary.type, func.count(Boundary.id).label('count')
-            ).group_by(Boundary.type).all()
+            total_boundaries = safe_db_operation(
+                'count boundaries', 0, lambda: Boundary.query.count()
+            )
+            total_alerts = safe_db_operation(
+                'count CAP alerts', 0, lambda: CAPAlert.query.count()
+            )
+            active_alerts = safe_db_operation(
+                'count active CAP alerts', 0, lambda: get_active_alerts_query().count()
+            )
+            expired_alerts = safe_db_operation(
+                'count expired CAP alerts', 0, lambda: get_expired_alerts_query().count()
+            )
 
-            location_settings = get_location_settings()
+            boundary_stats = safe_db_operation(
+                'load boundary statistics',
+                [],
+                lambda: db.session.query(
+                    Boundary.type, func.count(Boundary.id).label('count')
+                ).group_by(Boundary.type).all(),
+            )
+
+            location_settings = safe_db_operation(
+                'load location settings', {}, get_location_settings
+            )
             manual_same_defaults = manual_default_same_codes()
             location_settings_view: Dict[str, List[str]] = dict(location_settings)
             location_settings_view.setdefault('same_codes', manual_same_defaults)
 
             eas_enabled = app.config.get('EAS_BROADCAST_ENABLED', False)
-            total_eas_messages = EASMessage.query.count() if eas_enabled else 0
-            recent_eas_messages = []
+            total_eas_messages = 0
+            recent_eas_messages: List[EASMessage] = []
             if eas_enabled:
-                recent_eas_messages = (
-                    EASMessage.query.order_by(EASMessage.created_at.desc()).limit(10).all()
+                total_eas_messages = safe_db_operation(
+                    'count EAS messages', 0, lambda: EASMessage.query.count()
+                )
+                recent_eas_messages = safe_db_operation(
+                    'load recent EAS messages',
+                    [],
+                    lambda: EASMessage.query.order_by(EASMessage.created_at.desc()).limit(10).all(),
                 )
 
             eas_event_options = [
@@ -108,6 +145,7 @@ def register_dashboard_routes(app, logger, eas_config):
                 pass
             logger.error('Error rendering admin template: %s', exc)
             return "<h1>Admin Interface</h1><p>Admin panel loading...</p><p><a href='/'>← Back to Main</a></p>"
+        
 
     @app.route('/admin/users', methods=['GET', 'POST'])
     def admin_users():
