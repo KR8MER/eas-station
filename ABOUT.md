@@ -2,6 +2,12 @@
 
 EAS Station is a complete Emergency Alert System platform that automates the ingestion, encoding, broadcast, and verification of Common Alerting Protocol (CAP) alerts. Built by amateur radio operators supporting Putnam County, Ohio, it combines NOAA and IPAWS feed aggregation, FCC-compliant SAME encoding, PostGIS spatial intelligence, SDR verification, and LED signage integration into a unified operations hub.
 
+## Safety Notice
+- **Development status:** The project remains experimental and has only been cross-checked against community tools like [multimon-ng](https://github.com/EliasOenal/multimon-ng) for decoding parity. All other implementations, workflows, and documentation are original and subject to change.
+- **No FCC certification:** The software is not an approved replacement for commercial Emergency Alert System encoders or other FCC-authorized equipment.
+- **Lab use only:** Operate EAS Station strictly in test environments and never rely on it for live public warning, life safety, or mission-critical decisions.
+- **Review legal docs:** Before inviting collaborators or storing data, read the repository [Terms of Use](TERMS_OF_USE.md) and [Privacy Policy](PRIVACY_POLICY.md).
+
 ## Mission and Scope
 - **Primary Goal:** Provide emergency communications teams with automated CAP-to-EAS workflow, from alert ingestion through broadcast verification, with complete compliance documentation.
 - **Deployment Model:** Container-first architecture designed for on-premise or field deployments with external PostgreSQL/PostGIS database service.
@@ -10,10 +16,12 @@ EAS Station is a complete Emergency Alert System platform that automates the ing
 ## Core Services
 | Component | Description |
 |-----------|-------------|
-| **Flask Web Application** | Provides the administrative dashboard, REST APIs, and user authentication for managing alerts and boundaries. |
+| **Flask Web Application** | Provides the administrative dashboard, REST APIs, alert verification tools, and user authentication. |
 | **Background Poller** | Continuously retrieves CAP alerts, updates the database, and queues notifications for review or broadcast. |
-| **PostgreSQL + PostGIS** | Stores CAP products, SAME messages, and geographic boundaries with spatial indexing and geometry functions. |
+| **PostgreSQL + PostGIS** | Stores CAP products, SAME messages, geographic boundaries, receiver inventories, and compliance artifacts. |
 | **EAS Audio Pipeline** | Generates SAME data bursts, synthesizes audio, and coordinates GPIO relay control for transmissions. |
+| **Radio Orchestration Service** | Manages multi-SDR receiver coordination, capture workflows, and health telemetry via `app_core/radio`. |
+| **Compliance & Analytics Layer** | Builds dashboards, CSV/PDF exports, and delivery analytics from `app_core/eas_storage.py` and `webapp/routes`. |
 | **LED Controller** | Manages Alpha Protocol LED signs for synchronized visual messaging alongside radio broadcasts. |
 
 ## Software Stack
@@ -33,9 +41,9 @@ The application combines open-source tooling and optional cloud integrations. Ve
 - psycopg2-binary 2.9.7 PostgreSQL driver
 
 ### System and Utilities
-- requests 2.31.0 for CAP feed retrieval
+- requests 2.31.0 for CAP feed retrieval and IPAWS integration
 - pytz 2023.3 timezone utilities
-- psutil 5.9.5 system health metrics
+- psutil 5.9.5 system health and receiver monitoring
 - python-dotenv 1.0.0 configuration loading
 
 ### Front-End Tooling

@@ -311,6 +311,26 @@ def register(app: Flask, logger) -> None:
                 "<h1>Help</h1><p>Refer to HELP.md in the repository for the full operations guide.</p>"
             )
 
+    @app.route("/terms")
+    def terms_page():
+        try:
+            return render_template("terms.html")
+        except Exception as exc:  # pragma: no cover - fallback content
+            route_logger.error("Error rendering terms page: %s", exc)
+            return (
+                "<h1>Terms of Use</h1><p>Refer to TERMS_OF_USE.md in the repository for the full terms.</p>"
+            )
+
+    @app.route("/privacy")
+    def privacy_page():
+        try:
+            return render_template("privacy.html")
+        except Exception as exc:  # pragma: no cover - fallback content
+            route_logger.error("Error rendering privacy page: %s", exc)
+            return (
+                "<h1>Privacy Policy</h1><p>Refer to PRIVACY_POLICY.md in the repository for the full policy.</p>"
+            )
+
     @app.route("/system_health")
     def system_health_page():
         try:

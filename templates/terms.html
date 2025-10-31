@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% block title %}Terms of Use | EAS Station{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-10 col-xl-8">
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body p-4 p-md-5">
+                    <div class="text-center mb-4">
+                        <i class="fas fa-scale-balanced fa-4x text-primary mb-3"></i>
+                        <h1 class="display-6 fw-bold">Terms of Use</h1>
+                        <p class="text-muted mb-0">Last updated: {{ current_time().strftime('%B %d, %Y') }}</p>
+                    </div>
+                    <div class="alert alert-warning d-flex align-items-start" role="alert">
+                        <i class="fas fa-triangle-exclamation fa-lg me-3"></i>
+                        <div>
+                            <strong>Critical Safety Notice:</strong> EAS Station is experimental software. It must not be used for
+                            life-safety, mission-critical, or FCC-mandated alerting. Commercially certified EAS equipment remains
+                            the only acceptable solution for regulatory compliance.
+                        </div>
+                    </div>
+                    <section class="mb-4">
+                        <h2 class="h4 text-primary">1. Project Status & Intended Use</h2>
+                        <p>EAS Station is an open-source development project currently in a pre-production, experimental phase.
+                           The codebase was compared against open-source utilities such as multimon-ng for validation purposes, but
+                           all other content—including generated alerts, workflows, and documentation—is original and community
+                           authored. The software is provided strictly for research, testing, and educational exploration.</p>
+                        <p>By accessing the application or source code you acknowledge that it is <strong>not</strong> a replacement
+                           for FCC-certified Emergency Alert System hardware or services and must not be relied upon for life or
+                           property protection.</p>
+                    </section>
+                    <section class="mb-4">
+                        <h2 class="h4 text-primary">2. No Production Deployment</h2>
+                        <p>The platform is <em>not</em> ready for production use. No representations or warranties are made about
+                           the accuracy, completeness, or reliability of the system. All outputs—including audio files, logs, and
+                           dashboards—may contain defects or omissions. You assume all risk for evaluating the software in lab or
+                           demonstration environments.</p>
+                    </section>
+                    <section class="mb-4">
+                        <h2 class="h4 text-primary">3. Disclaimer of Liability</h2>
+                        <p>The authors, maintainers, and contributors disclaim any liability for damages, injuries, penalties, or
+                           regulatory actions that may arise from use or misuse of EAS Station. No emergency responses, broadcast
+                           activations, or public warning decisions should be based on this project. Use at your own risk.</p>
+                    </section>
+                    <section class="mb-4">
+                        <h2 class="h4 text-primary">4. Acceptable Use</h2>
+                        <ul>
+                            <li>Operate the software only in controlled, non-production lab or development environments.</li>
+                            <li>Do not present generated outputs as official alerts or public information.</li>
+                            <li>Do not connect EAS Station directly to transmitter plants, IPAWS live interfaces, or any life-safety
+                                infrastructure.</li>
+                            <li>Retain attribution to the project and respect the licenses of any incorporated open-source
+                                dependencies.</li>
+                        </ul>
+                    </section>
+                    <section class="mb-4">
+                        <h2 class="h4 text-primary">5. External References</h2>
+                        <p>Comparisons to third-party projects (e.g., multimon-ng) are for feature parity checks only. Those
+                           projects are governed by their respective licenses and are not endorsed by, nor affiliated with, EAS
+                           Station.</p>
+                    </section>
+                    <section class="mb-4">
+                        <h2 class="h4 text-primary">6. Updates</h2>
+                        <p>These terms may change as the project evolves. Continued use of the website or source code after an
+                           update constitutes acceptance of the revised terms. Significant changes will be documented in the
+                           repository changelog.</p>
+                    </section>
+                    <section class="mb-0">
+                        <h2 class="h4 text-primary">7. Contact</h2>
+                        <p>Questions about these terms can be directed through the project issue tracker on GitHub. Do not submit
+                           emergency requests or public warning content through that channel.</p>
+                    </section>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
