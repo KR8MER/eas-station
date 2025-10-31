@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 960 560" role="img" aria-labelledby="title desc">
+  <title id="title">EAS Station Core Services</title>
+  <desc id="desc">Diagram illustrating the core services powering the EAS Station platform.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#061826" />
+      <stop offset="100%" stop-color="#0f2d46" />
+    </linearGradient>
+    <linearGradient id="panel" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#1f4b70" />
+      <stop offset="100%" stop-color="#15334e" />
+    </linearGradient>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="6" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#8bd5ff" />
+    </marker>
+    <style>
+      text { font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; fill: #f4f7fb; }
+      .headline { font-size: 30px; font-weight: 600; }
+      .subtitle { font-size: 18px; fill: #b8d9f9; }
+      .panel-title { font-size: 18px; font-weight: 600; }
+      .pill text { font-size: 14px; font-weight: 600; }
+    </style>
+  </defs>
+  <rect width="960" height="560" rx="28" fill="url(#bg)" />
+  <text x="480" y="80" class="headline" text-anchor="middle">EAS Station Core Services</text>
+  <text x="480" y="115" class="subtitle" text-anchor="middle">CAP ingest → SAME broadcast → Verification &amp; compliance</text>
+
+  <g transform="translate(80 150)">
+    <rect width="240" height="320" rx="18" fill="url(#panel)" stroke="#49b3ff" stroke-width="2" />
+    <text x="120" y="40" class="panel-title" text-anchor="middle">Ingestion &amp; Control</text>
+    <foreignObject x="20" y="70" width="200" height="230">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="color:#d4e7ff;font-size:16px;line-height:1.5;font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;">
+        <p>Flask admin portal, REST API, and alert review workflows.</p>
+        <p>Pollers for NOAA Weather Service &amp; FEMA IPAWS CAP feeds.</p>
+        <p>Manual CAP injection tools for drills and lab testing.</p>
+      </div>
+    </foreignObject>
+    <g class="pill" transform="translate(30 280)">
+      <rect width="180" height="36" rx="18" fill="#256a9c" />
+      <text x="90" y="25" text-anchor="middle">Operational UI &amp; API</text>
+    </g>
+  </g>
+
+  <g transform="translate(360 150)">
+    <rect width="240" height="320" rx="18" fill="url(#panel)" stroke="#8bd5ff" stroke-width="2" />
+    <text x="120" y="40" class="panel-title" text-anchor="middle">Processing Core</text>
+    <foreignObject x="20" y="70" width="200" height="230">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="color:#d4e7ff;font-size:16px;line-height:1.5;font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;">
+        <p>PostgreSQL + PostGIS store alerts, boundaries, receivers.</p>
+        <p>EAS audio pipeline builds SAME bursts and narration WAVs.</p>
+        <p>Radio manager orchestrates SDR capture &amp; GPIO relays.</p>
+      </div>
+    </foreignObject>
+    <g class="pill" transform="translate(30 280)">
+      <rect width="180" height="36" rx="18" fill="#2f7fb8" />
+      <text x="90" y="25" text-anchor="middle">Data, Audio, Radio</text>
+    </g>
+  </g>
+
+  <g transform="translate(640 150)">
+    <rect width="240" height="320" rx="18" fill="url(#panel)" stroke="#3bc9b0" stroke-width="2" />
+    <text x="120" y="40" class="panel-title" text-anchor="middle">Verification &amp; Output</text>
+    <foreignObject x="20" y="70" width="200" height="230">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="color:#d4e7ff;font-size:16px;line-height:1.5;font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;">
+        <p>Compliance dashboards with CSV/PDF exports.</p>
+        <p>Alert verification lab with SDR capture analysis.</p>
+        <p>LED signage coordination for synchronized messaging.</p>
+      </div>
+    </foreignObject>
+    <g class="pill" transform="translate(30 280)">
+      <rect width="180" height="36" rx="18" fill="#34a896" />
+      <text x="90" y="25" text-anchor="middle">Analytics &amp; Displays</text>
+    </g>
+  </g>
+
+  <path d="M320 310 L360 310" stroke="#8bd5ff" stroke-width="3" marker-end="url(#arrow)" />
+  <path d="M600 310 L640 310" stroke="#8bd5ff" stroke-width="3" marker-end="url(#arrow)" />
+</svg>

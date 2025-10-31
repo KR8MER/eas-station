@@ -14,15 +14,8 @@ EAS Station is a complete Emergency Alert System platform that automates the ing
 - **Operational Focus:** Multi-source alert aggregation, automatic SAME broadcast generation, SDR-based verification, spatial boundary awareness, and audit trail management.
 
 ## Core Services
-| Component | Description |
-|-----------|-------------|
-| **Flask Web Application** | Provides the administrative dashboard, REST APIs, alert verification tools, and user authentication. |
-| **Background Poller** | Continuously retrieves CAP alerts, updates the database, and queues notifications for review or broadcast. |
-| **PostgreSQL + PostGIS** | Stores CAP products, SAME messages, geographic boundaries, receiver inventories, and compliance artifacts. |
-| **EAS Audio Pipeline** | Generates SAME data bursts, synthesizes audio, and coordinates GPIO relay control for transmissions. |
-| **Radio Orchestration Service** | Manages multi-SDR receiver coordination, capture workflows, and health telemetry via `app_core/radio`. |
-| **Compliance & Analytics Layer** | Builds dashboards, CSV/PDF exports, and delivery analytics from `app_core/eas_storage.py` and `webapp/routes`. |
-| **LED Controller** | Manages Alpha Protocol LED signs for synchronized visual messaging alongside radio broadcasts. |
+
+![Diagram showing the ingestion and control services flowing into the processing core, which then feeds verification and output capabilities.](static/docs/core-services-overview.svg)
 
 ## Software Stack
 The application combines open-source tooling and optional cloud integrations. Versions below match the pinned dependencies in `requirements.txt` unless noted otherwise.
