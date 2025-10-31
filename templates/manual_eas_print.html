@@ -136,8 +136,9 @@
                                 </a>
                                 {% endif %}
                             </div>
-                            {% if comp.download_url %}
-                            <audio class="w-100 mt-2" controls src="{{ comp.download_url }}"></audio>
+                            {% set audio_src = comp.stream_url or comp.download_url %}
+                            {% if audio_src %}
+                            <audio class="w-100 mt-2" controls preload="none" src="{{ audio_src }}"></audio>
                             {% endif %}
                         </div>
                         {% endfor %}
