@@ -20,7 +20,7 @@ try:  # pragma: no cover - GPIO hardware is optional and platform specific
 except Exception:  # pragma: no cover - gracefully handle non-RPi environments
     RPiGPIO = None
 
-from app_utils.event_codes import resolve_event_code
+from app_utils.event_codes import EVENT_CODE_REGISTRY, resolve_event_code
 
 from .eas_fsk import (
     SAME_BAUD,
@@ -207,6 +207,8 @@ def describe_same_header(
 
     originator = parts[1] if len(parts) > 1 else ''
     event_code = parts[2] if len(parts) > 2 else ''
+    event_entry = EVENT_CODE_REGISTRY.get(event_code)
+    event_name = event_entry.get('name') if event_entry else None
 
     locations: List[str] = []
     duration_fragment = ''
@@ -304,6 +306,7 @@ def describe_same_header(
         'originator': originator,
         'originator_description': ORIGINATOR_DESCRIPTIONS.get(originator),
         'event_code': event_code,
+        'event_name': event_name,
         'location_count': len(detailed_locations),
         'locations': detailed_locations,
         'purge_code': duration_digits or None,

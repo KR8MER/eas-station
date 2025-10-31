@@ -111,6 +111,11 @@
                                             <h6 class="mb-0">{{ header.header }}</h6>
                                             <span class="badge bg-primary">{{ '%.1f'|format(header.confidence * 100) }}% confidence</span>
                                         </div>
+                                        {% if header.summary %}
+                                            <p class="small fw-semibold text-primary mb-2">
+                                                {{ header.summary }}
+                                            </p>
+                                        {% endif %}
                                         {% set detail = header.fields or {} %}
                                         <dl class="row small mb-0">
                                             <dt class="col-sm-5">Originator</dt>
@@ -179,7 +184,13 @@
                                         {% if decode.same_headers %}
                                             <ul class="list-unstyled mb-0 small">
                                                 {% for header in decode.same_headers %}
-                                                    <li>{{ header.header or header }}</li>
+                                                    <li class="mb-2">
+                                                        {% if header.summary is defined and header.summary %}
+                                                            <div class="fw-semibold">{{ header.summary }}</div>
+                                                        {% endif %}
+                                                        {% set header_text = header.header if header.header is defined else header %}
+                                                        <div class="text-muted">{{ header_text or header }}</div>
+                                                    </li>
                                                 {% endfor %}
                                             </ul>
                                         {% else %}
