@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from logging.config import fileConfig
 from typing import Any
 
@@ -25,6 +26,10 @@ def _get_configured_url() -> str:
     url = config.get_main_option("sqlalchemy.url", "")
     if url:
         return url
+
+    # Skip database initialization during migrations to prevent chicken-and-egg issues
+    # where migrations need to add columns that the initialization code tries to query
+    os.environ["SKIP_DB_INIT"] = "1"
 
     app = create_app()
     with app.app_context():

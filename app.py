@@ -877,8 +877,12 @@ def create_app(config=None):
     if config:
         app.config.update(config)
 
-    with app.app_context():
-        initialize_database()
+    # Skip initialization if running migrations
+    # This prevents the chicken-and-egg problem where migrations need to add
+    # columns that the initialization code tries to query
+    if not os.environ.get("SKIP_DB_INIT"):
+        with app.app_context():
+            initialize_database()
 
     return app
 
