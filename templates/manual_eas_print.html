@@ -161,7 +161,7 @@ async function deleteManualActivation() {
     }
 
     try {
-        const response = await fetch(`/admin/eas/manual_events/${eventId}`, {
+        const response = await fetch(`/eas/manual/events/${eventId}`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json'
@@ -172,9 +172,9 @@ async function deleteManualActivation() {
 
         if (response.ok) {
             showToast('Manual EAS activation deleted successfully', 'success');
-            // Redirect to admin page after a short delay
+            // Redirect to workflow after a short delay
             setTimeout(() => {
-                window.location.href = '/admin';
+                window.location.href = '{{ url_for('eas.workflow_home') }}';
             }, 1500);
         } else {
             showToast(result.error || 'Failed to delete manual EAS activation', 'error');

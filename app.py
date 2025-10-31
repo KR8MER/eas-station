@@ -641,7 +641,7 @@ def before_request():
         ):
             return
 
-    protected_prefixes = ('/admin', '/logs', '/api')
+    protected_prefixes = ('/admin', '/logs', '/api', '/eas')
     if any(request.path.startswith(prefix) for prefix in protected_prefixes):
         if g.current_user is None:
             if request.path.startswith('/api/'):

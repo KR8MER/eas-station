@@ -46,6 +46,12 @@
                 </a>
             </li>
             <li class="nav-item">
+                <a href="{{ url_for('eas.workflow_home') }}" class="nav-link {{ 'active' if request.endpoint and request.endpoint.startswith('eas.') }}">
+                    <i class="fas fa-broadcast-tower"></i>
+                    EAS Workflow
+                </a>
+            </li>
+            <li class="nav-item">
                 <a href="{{ url_for('logs') if url_for('logs') else '/logs' }}" class="nav-link {{ 'active' if request.endpoint == 'logs' }}">
                     <i class="fas fa-file-alt"></i>
                     System Logs

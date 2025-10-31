@@ -1,0 +1,616 @@
+{% extends "base.html" %}
+
+{% block title %}EAS Workflow Console{% endblock %}
+
+{% block extra_css %}
+<style>
+    .workflow-hero {
+        background: linear-gradient(135deg, var(--primary-color), var(--info-color));
+        color: white;
+        border-radius: 18px;
+        padding: 2.5rem 2rem;
+        box-shadow: 0 12px 40px rgba(13, 110, 253, 0.25);
+    }
+
+    .workflow-hero h1 {
+        font-weight: 600;
+    }
+
+    .workflow-card {
+        background: var(--bg-color);
+        border-radius: 16px;
+        border: 1px solid var(--border-color);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    }
+
+    .workflow-card .card-header {
+        border-bottom: 1px solid var(--border-color);
+        background: var(--light-color);
+        border-radius: 16px 16px 0 0;
+    }
+
+    .workflow-card .card-body {
+        padding: 1.75rem;
+    }
+
+    .badge-outline {
+        border: 1px solid currentColor;
+        background: transparent;
+        font-weight: 500;
+    }
+
+    .same-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.3rem 0.75rem;
+        border-radius: 999px;
+        border: 1px solid var(--border-color);
+        background: var(--light-color);
+        font-size: 0.85rem;
+        margin: 0 0.4rem 0.4rem 0;
+    }
+
+    .same-chip code {
+        font-size: 0.85rem;
+    }
+
+    .table-xs td,
+    .table-xs th {
+        padding: 0.5rem 0.75rem;
+    }
+
+    .activity-empty {
+        border: 2px dashed var(--border-color);
+        border-radius: 14px;
+        padding: 1.5rem;
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 0.95rem;
+    }
+
+    .status-banner {
+        border-radius: 12px;
+        padding: 0.9rem 1.2rem;
+        border: 1px solid transparent;
+    }
+
+    .status-banner.success {
+        background: rgba(25, 135, 84, 0.1);
+        border-color: rgba(25, 135, 84, 0.3);
+        color: var(--success-color);
+    }
+
+    .status-banner.error {
+        background: rgba(220, 53, 69, 0.12);
+        border-color: rgba(220, 53, 69, 0.3);
+        color: var(--danger-color);
+    }
+
+    .status-banner.info {
+        background: rgba(13, 110, 253, 0.12);
+        border-color: rgba(13, 110, 253, 0.3);
+        color: var(--primary-color);
+    }
+
+    @media (max-width: 767px) {
+        .workflow-hero {
+            padding: 2rem 1.5rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="workflow-hero mb-4">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+            <div>
+                <h1 class="h2 mb-2"><i class="fas fa-broadcast-tower me-2"></i>EAS Workflow Console</h1>
+                <p class="mb-0 opacity-75">
+                    Build and archive manual SAME activations, generate audio assets, and review recent transmissions in one secure hub.
+                </p>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                <div class="text-end">
+                    <div class="fw-semibold">Default Originator</div>
+                    <div>{{ eas_originator }}</div>
+                </div>
+                <div class="text-end">
+                    <div class="fw-semibold">Station ID</div>
+                    <div>{{ eas_station_id }}</div>
+                </div>
+                <div class="text-end">
+                    <div class="fw-semibold">Attention Tone</div>
+                    <div>{{ '%.1f'|format(eas_attention_seconds|float) }} seconds</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="workflow-card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 class="h5 mb-1"><i class="fas fa-tools me-2 text-primary"></i>Manual Activation Builder</h2>
+                        <p class="text-muted mb-0">Generate SAME headers, tones, narration, and export packages.</p>
+                    </div>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="loadDefaultCodes">
+                        <i class="fas fa-map-marker-alt me-1"></i> Load Default SAME Codes
+                    </button>
+                </div>
+                <div class="card-body">
+                    <form id="manualActivationForm" class="row g-3" autocomplete="off">
+                        <div class="col-md-6">
+                            <label for="identifierInput" class="form-label">Identifier</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="identifierInput" maxlength="120" placeholder="MANUAL-YYYYMMDDHHMM">
+                                <button class="btn btn-outline-secondary" type="button" id="generateIdentifier">
+                                    <i class="fas fa-random"></i>
+                                </button>
+                            </div>
+                            <div class="form-text">Used for filenames and audit trails.</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="originatorSelect" class="form-label">Originator</label>
+                            <select id="originatorSelect" class="form-select">
+                                {% for originator in eas_originator_choices %}
+                                <option value="{{ originator.code }}"{% if originator.code == eas_originator %} selected{% endif %}>{{ originator.code }} — {{ originator.description }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="stationIdInput" class="form-label">Station ID</label>
+                            <input type="text" id="stationIdInput" class="form-control" value="{{ eas_station_id }}" maxlength="8">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="eventCodeSelect" class="form-label">Event Code</label>
+                            <select id="eventCodeSelect" class="form-select" required>
+                                {% for option in eas_event_codes %}
+                                <option value="{{ option.code }}"{% if option.code == 'RWT' %} selected{% endif %}>{{ option.code }} — {{ option.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label for="eventNameInput" class="form-label">Event Name</label>
+                            <input type="text" id="eventNameInput" class="form-control" placeholder="Tornado Warning" required>
+                        </div>
+                        <div class="col-12">
+                            <label for="sameCodesInput" class="form-label">SAME / FIPS Location Codes</label>
+                            <textarea id="sameCodesInput" class="form-control" rows="3" placeholder="039137, 039069"></textarea>
+                            <div class="form-text">Enter PSSCCC values separated by commas, spaces, or new lines.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="durationInput" class="form-label">Duration (minutes)</label>
+                            <input type="number" step="0.1" min="1" id="durationInput" class="form-control" value="15">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="toneProfileSelect" class="form-label">Tone Profile</label>
+                            <select id="toneProfileSelect" class="form-select">
+                                <option value="attention" selected>Attention Signal</option>
+                                <option value="1050hz">1050&nbsp;Hz Tone</option>
+                                <option value="none">No Tone</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="toneSecondsInput" class="form-label">Tone Seconds</label>
+                            <input type="number" step="0.5" min="0" id="toneSecondsInput" class="form-control" value="{{ eas_attention_seconds }}">
+                            <div class="form-text">Ignored when tone profile is disabled.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="statusSelect" class="form-label">Status</label>
+                            <select id="statusSelect" class="form-select">
+                                <option value="Actual" selected>Actual</option>
+                                <option value="Test">Test</option>
+                                <option value="Exercise">Exercise</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="messageTypeSelect" class="form-label">Message Type</label>
+                            <select id="messageTypeSelect" class="form-select">
+                                <option value="Alert" selected>Alert</option>
+                                <option value="Update">Update</option>
+                                <option value="Cancel">Cancel</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label for="headlineInput" class="form-label">Headline</label>
+                            <input type="text" id="headlineInput" class="form-control" maxlength="255" placeholder="Immediate Tornado Warning for Tyler County">
+                        </div>
+                        <div class="col-12">
+                            <label for="messageInput" class="form-label">Public Message</label>
+                            <textarea id="messageInput" class="form-control" rows="3" placeholder="A tornado has been spotted..."></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label for="instructionInput" class="form-label">Instructions</label>
+                            <textarea id="instructionInput" class="form-control" rows="2" placeholder="Take shelter immediately..."></textarea>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="sampleRateInput" class="form-label">Sample Rate (Hz)</label>
+                            <input type="number" id="sampleRateInput" class="form-control" value="{{ eas_sample_rate }}" min="8000" max="48000" step="1">
+                        </div>
+                        <div class="col-md-4 form-check mt-4 ms-3">
+                            <input class="form-check-input" type="checkbox" id="includeTtsToggle" checked>
+                            <label class="form-check-label" for="includeTtsToggle">Include narration (TTS)</label>
+                            <div class="form-text">Provider: {{ eas_originator_descriptions.get(eas_originator, 'TTS') }}</div>
+                        </div>
+                        <div class="col-12 d-flex align-items-center gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-bolt me-1"></i> Generate Manual Package
+                            </button>
+                            <div id="formStatus" class="text-muted small"></div>
+                        </div>
+                    </form>
+
+                    <div id="generationStatus" class="status-banner mt-4" style="display: none;"></div>
+
+                    <div id="generationResults" class="mt-4" style="display: none;">
+                        <h3 class="h6 mb-3">Generated Assets</h3>
+                        <div class="table-responsive">
+                            <table class="table table-striped table-xs align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Component</th>
+                                        <th scope="col">Duration</th>
+                                        <th scope="col">Size</th>
+                                        <th scope="col" class="text-center">Download</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="componentTableBody"></tbody>
+                            </table>
+                        </div>
+                        <div class="mt-3 d-flex flex-wrap gap-2" id="componentActions"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="workflow-card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h2 class="h5 mb-0"><i class="fas fa-archive me-2 text-danger"></i>Recent Manual Activations</h2>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-secondary" type="button" id="refreshActivations">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                        <button class="btn btn-outline-danger" type="button" id="purgeActivations">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="activationsStatus" class="text-muted small mb-2"></div>
+                    <div class="table-responsive" style="max-height: 360px; overflow-y: auto;">
+                        <table class="table table-hover table-xs align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th scope="col" class="text-nowrap">Created</th>
+                                    <th scope="col">Event</th>
+                                    <th scope="col" class="text-nowrap">SAME Header</th>
+                                    <th scope="col" class="text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="activationsTableBody">
+                                <tr><td colspan="4" class="activity-empty">No manual activations recorded yet.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="workflow-card">
+                <div class="card-header">
+                    <h2 class="h5 mb-0"><i class="fas fa-headphones me-2 text-success"></i>Recent Automatic Captures</h2>
+                </div>
+                <div class="card-body">
+                    {% if eas_recent_messages %}
+                        <ul class="list-group list-group-flush">
+                            {% for message in eas_recent_messages %}
+                            {% set audio_url = url_for('eas_message_audio', message_id=message.id) %}
+                            {% if message.text_payload %}
+                                {% set summary_url = url_for('eas_message_summary', message_id=message.id) %}
+                            {% else %}
+                                {% set summary_url = url_for('static', filename=eas_web_subdir ~ '/' ~ message.text_filename) %}
+                            {% endif %}
+                            {% set detail_url = url_for('audio_detail', message_id=message.id) %}
+                            <li class="list-group-item px-0">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <div class="fw-semibold">{{ message.metadata_payload.event | default('Unknown Event') }}</div>
+                                        <div class="text-muted small">{{ message.created_at|default('') }}</div>
+                                    </div>
+                                    <div class="btn-group btn-group-sm">
+                                        <a class="btn btn-outline-primary" href="{{ audio_url }}" target="_blank" rel="noopener">Play</a>
+                                        {% if summary_url %}
+                                        <a class="btn btn-outline-info" href="{{ summary_url }}" target="_blank" rel="noopener">Summary</a>
+                                        {% endif %}
+                                        <a class="btn btn-outline-secondary" href="{{ detail_url }}" target="_blank" rel="noopener">Details</a>
+                                    </div>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <div class="activity-empty">
+                            No automatic SAME captures are available yet.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const DEFAULT_SAME_CODES = {{ eas_default_same_codes|tojson }};
+const EVENT_LOOKUP = {{ eas_event_codes|tojson }}.reduce((map, item) => {
+    map[item.code] = item.name;
+    return map;
+}, {});
+const ORIGINATOR_LABELS = {{ eas_originator_descriptions|tojson }};
+
+function formatDateTime(isoString) {
+    if (!isoString) return '—';
+    try {
+        const dt = new Date(isoString);
+        return dt.toLocaleString();
+    } catch (error) {
+        return isoString;
+    }
+}
+
+function updateEventName() {
+    const select = document.getElementById('eventCodeSelect');
+    const target = document.getElementById('eventNameInput');
+    const code = select.value;
+    target.value = EVENT_LOOKUP[code] || target.value;
+}
+
+function applyDefaultCodes() {
+    const textarea = document.getElementById('sameCodesInput');
+    if (!DEFAULT_SAME_CODES || DEFAULT_SAME_CODES.length === 0) {
+        alert('No default SAME codes are configured.');
+        return;
+    }
+    const unique = new Set((textarea.value || '').split(/[^0-9]+/).filter(Boolean));
+    DEFAULT_SAME_CODES.forEach(code => unique.add(code));
+    textarea.value = Array.from(unique).join(', ');
+}
+
+function generateIdentifier() {
+    const input = document.getElementById('identifierInput');
+    const now = new Date();
+    const pad = (value) => value.toString().padStart(2, '0');
+    const id = `MANUAL-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    input.value = id;
+}
+
+function setStatus(message, type = 'info') {
+    const banner = document.getElementById('generationStatus');
+    if (!banner) return;
+    banner.className = `status-banner ${type}`;
+    banner.textContent = message;
+    banner.style.display = message ? 'block' : 'none';
+}
+
+function renderComponents(components, activation) {
+    const tableBody = document.getElementById('componentTableBody');
+    const actionRow = document.getElementById('componentActions');
+    tableBody.innerHTML = '';
+    actionRow.innerHTML = '';
+
+    const entries = Object.entries(components || {});
+    if (entries.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="4" class="text-muted">No audio assets were generated.</td></tr>';
+    } else {
+        for (const [name, component] of entries) {
+            const duration = (component.duration_seconds ?? 0).toFixed(2);
+            const size = component.size_bytes ? `${component.size_bytes.toLocaleString()} bytes` : '—';
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="text-uppercase fw-semibold">${name}</td>
+                <td>${duration}s</td>
+                <td>${size}</td>
+                <td class="text-center">
+                    ${component.download_url ? `<a class="btn btn-sm btn-outline-primary" href="${component.download_url}" target="_blank" rel="noopener">Download</a>` : '—'}
+                </td>
+            `;
+            tableBody.appendChild(row);
+        }
+    }
+
+    if (activation?.print_url) {
+        const printBtn = document.createElement('a');
+        printBtn.className = 'btn btn-outline-secondary';
+        printBtn.href = activation.print_url;
+        printBtn.target = '_blank';
+        printBtn.rel = 'noopener';
+        printBtn.innerHTML = '<i class="fas fa-print me-1"></i> Print Summary';
+        actionRow.appendChild(printBtn);
+    }
+
+    if (activation?.export_url) {
+        const exportBtn = document.createElement('a');
+        exportBtn.className = 'btn btn-outline-primary';
+        exportBtn.href = activation.export_url;
+        exportBtn.target = '_blank';
+        exportBtn.rel = 'noopener';
+        exportBtn.innerHTML = '<i class="fas fa-file-export me-1"></i> Download JSON';
+        actionRow.appendChild(exportBtn);
+    }
+
+    document.getElementById('generationResults').style.display = 'block';
+}
+
+async function submitManualActivation(event) {
+    event.preventDefault();
+    const formStatus = document.getElementById('formStatus');
+    formStatus.textContent = 'Submitting…';
+    setStatus('Generating manual package…', 'info');
+
+    const payload = {
+        identifier: document.getElementById('identifierInput').value.trim(),
+        originator: document.getElementById('originatorSelect').value,
+        station_id: document.getElementById('stationIdInput').value.trim(),
+        event_code: document.getElementById('eventCodeSelect').value,
+        event_name: document.getElementById('eventNameInput').value.trim(),
+        same_codes: document.getElementById('sameCodesInput').value,
+        duration_minutes: document.getElementById('durationInput').value,
+        tone_profile: document.getElementById('toneProfileSelect').value,
+        tone_seconds: document.getElementById('toneSecondsInput').value,
+        status: document.getElementById('statusSelect').value,
+        message_type: document.getElementById('messageTypeSelect').value,
+        headline: document.getElementById('headlineInput').value,
+        message: document.getElementById('messageInput').value,
+        instruction: document.getElementById('instructionInput').value,
+        sample_rate: document.getElementById('sampleRateInput').value,
+        include_tts: document.getElementById('includeTtsToggle').checked,
+    };
+
+    try {
+        const response = await fetch('/eas/manual/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+            setStatus(`❌ ${result.error || 'Manual generation failed.'}`, 'error');
+            formStatus.textContent = result.error || 'Manual generation failed.';
+            return;
+        }
+
+        setStatus('✅ Manual EAS package generated successfully.', 'success');
+        formStatus.textContent = '';
+        renderComponents(result.components, result.activation);
+        await loadManualActivations();
+    } catch (error) {
+        console.error('Manual generation failed', error);
+        setStatus('❌ Unexpected error during manual generation.', 'error');
+        formStatus.textContent = 'Unexpected error during manual generation.';
+    }
+}
+
+function renderActivationRow(item) {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+        <td class="text-nowrap">${formatDateTime(item.created_at)}</td>
+        <td>
+            <strong>${item.event_code} — ${item.event_name || ''}</strong><br>
+            <small class="text-muted">${item.identifier}</small>
+        </td>
+        <td class="text-break"><code>${item.same_header || ''}</code></td>
+        <td class="text-center">
+            <div class="btn-group btn-group-sm" role="group">
+                ${item.print_url ? `<a class="btn btn-outline-secondary" href="${item.print_url}" target="_blank" rel="noopener">Print</a>` : ''}
+                ${item.export_url ? `<a class="btn btn-outline-primary" href="${item.export_url}" target="_blank" rel="noopener">JSON</a>` : ''}
+                <button type="button" class="btn btn-outline-danger" data-id="${item.id}" title="Delete activation">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </td>
+    `;
+    row.querySelector('button.btn-outline-danger')?.addEventListener('click', () => deleteActivation(item.id));
+    return row;
+}
+
+async function loadManualActivations() {
+    const status = document.getElementById('activationsStatus');
+    const tableBody = document.getElementById('activationsTableBody');
+    status.textContent = 'Loading…';
+    tableBody.innerHTML = '<tr><td colspan="4" class="activity-empty">Loading manual activations…</td></tr>';
+
+    try {
+        const response = await fetch('/eas/manual/events?limit=50');
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'Unable to load manual activations.');
+        }
+
+        tableBody.innerHTML = '';
+        if (!data.events || data.events.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="4" class="activity-empty">No manual activations recorded yet.</td></tr>';
+            status.textContent = '';
+            return;
+        }
+
+        data.events.forEach(item => tableBody.appendChild(renderActivationRow(item)));
+        const total = data.total ?? data.events.length;
+        status.textContent = `Showing ${data.events.length} of ${total} manual activations.`;
+    } catch (error) {
+        console.error('Failed to load manual activations', error);
+        status.textContent = 'Unable to load manual activations.';
+        tableBody.innerHTML = '<tr><td colspan="4" class="activity-empty text-danger">Unable to load manual activations.</td></tr>';
+    }
+}
+
+async function deleteActivation(id) {
+    if (!confirm('Delete this manual EAS activation? This action cannot be undone.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/eas/manual/events/${id}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to delete manual activation.');
+        }
+        await loadManualActivations();
+        setStatus('Manual activation deleted.', 'info');
+    } catch (error) {
+        console.error('Failed to delete manual activation', error);
+        setStatus(error.message || 'Failed to delete manual activation.', 'error');
+    }
+}
+
+async function purgeActivations() {
+    const days = prompt('Delete manual activations older than how many days? Enter 0 to purge all activations.', '30');
+    if (days === null) {
+        return;
+    }
+
+    const payload = {};
+    const parsed = parseInt(days, 10);
+    if (Number.isFinite(parsed)) {
+        payload.older_than_days = parsed;
+    }
+
+    try {
+        const response = await fetch('/eas/manual/events/purge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to purge manual activations.');
+        }
+        setStatus(data.message || 'Manual activations purged.', 'info');
+        await loadManualActivations();
+    } catch (error) {
+        console.error('Failed to purge manual activations', error);
+        setStatus(error.message || 'Failed to purge manual activations.', 'error');
+    }
+}
+
+function initialiseWorkflow() {
+    document.getElementById('eventCodeSelect').addEventListener('change', updateEventName);
+    document.getElementById('loadDefaultCodes').addEventListener('click', applyDefaultCodes);
+    document.getElementById('generateIdentifier').addEventListener('click', generateIdentifier);
+    document.getElementById('manualActivationForm').addEventListener('submit', submitManualActivation);
+    document.getElementById('refreshActivations').addEventListener('click', loadManualActivations);
+    document.getElementById('purgeActivations').addEventListener('click', purgeActivations);
+
+    updateEventName();
+    if (!document.getElementById('identifierInput').value) {
+        generateIdentifier();
+    }
+    loadManualActivations();
+}
+
+document.addEventListener('DOMContentLoaded', initialiseWorkflow);
+</script>
+{% endblock %}

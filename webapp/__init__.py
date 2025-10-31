@@ -9,6 +9,7 @@ from flask import Flask
 
 from . import (
     routes_admin,
+    routes_eas,
     routes_debug,
     routes_exports,
     routes_settings_radio,
@@ -18,6 +19,7 @@ from . import (
     template_helpers,
 )
 from .routes import alert_verification, eas_compliance
+from . import eas
 
 
 @dataclass(frozen=True)
@@ -37,10 +39,12 @@ def iter_route_modules() -> Iterable[RouteModule]:
     yield RouteModule("routes_monitoring", routes_monitoring.register)
     yield RouteModule("routes_alert_verification", alert_verification.register)
     yield RouteModule("routes_eas_compliance", eas_compliance.register)
+    yield RouteModule("routes_eas_workflow", eas.register)
     yield RouteModule("routes_settings_radio", routes_settings_radio.register)
     yield RouteModule("routes_exports", routes_exports.register)
     yield RouteModule("routes_led", routes_led.register)
     yield RouteModule("routes_debug", routes_debug.register)
+    yield RouteModule("routes_eas", routes_eas.register)
     yield RouteModule("routes_admin", routes_admin.register)
 
 

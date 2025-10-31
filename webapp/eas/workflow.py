@@ -1,4 +1,4 @@
-"""Manual EAS generation and archival management routes."""
+"""Routes backing the EAS workflow area."""
 
 from __future__ import annotations
 
@@ -11,43 +11,102 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
-from flask import abort, g, jsonify, redirect, render_template, request, send_file, url_for
+from flask import (
+    current_app,
+    g,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    url_for,
+)
 
 from app_core.extensions import db
-from app_core.models import AdminUser, ManualEASActivation, SystemLog
+from app_core.models import AdminUser, EASMessage, ManualEASActivation, SystemLog
 from app_utils.eas import (
     EASAudioGenerator,
+    ORIGINATOR_DESCRIPTIONS,
+    P_DIGIT_MEANINGS,
     PRIMARY_ORIGINATORS,
+    SAME_HEADER_FIELD_DESCRIPTIONS,
     build_same_header,
     describe_same_header,
+    manual_default_same_codes,
     samples_to_wav_bytes,
 )
 from app_utils.event_codes import EVENT_CODE_REGISTRY
 from app_utils.fips_codes import get_same_lookup, get_us_state_county_tree
 
 
-def _remove_manual_eas_files(activation: ManualEASActivation, output_root: str, logger) -> None:
-    """Delete manual EAS directory and all contained files."""
-    if not activation.storage_path:
-        return
+def register_workflow_routes(bp, logger, eas_config) -> None:
+    """Register HTML and API routes for the EAS workflow blueprint."""
 
-    try:
-        full_path = os.path.join(output_root, activation.storage_path)
-        if os.path.exists(full_path) and os.path.isdir(full_path):
-            shutil.rmtree(full_path)
-            logger.debug(f"Deleted manual EAS directory: {full_path}")
-    except OSError as exc:
-        logger.warning(f"Failed to delete manual EAS directory {full_path}: {exc}")
+    workflow_logger = logger.getChild('workflow')
 
-
-def register_manual_routes(app, logger, eas_config) -> None:
-    """Register manual EAS management endpoints."""
-
-    @app.route('/admin/eas/manual_generate', methods=['POST'])
-    def admin_manual_eas_generate():
+    def _auth_redirect(json_mode: bool = False):
         creating_first_user = AdminUser.query.count() == 0
         if g.current_user is None and not creating_first_user:
-            return jsonify({'error': 'Authentication required.'}), 401
+            if json_mode:
+                return jsonify({'error': 'Authentication required.'}), 401
+            return redirect(url_for('login', next=request.url))
+        return None
+
+    @bp.route('/')
+    def workflow_home():
+        """Render the consolidated EAS workflow console."""
+
+        auth_response = _auth_redirect()
+        if auth_response is not None:
+            return auth_response
+
+        manual_same_defaults = manual_default_same_codes()
+
+        event_options = [
+            {'code': code, 'name': entry.get('name', code)}
+            for code, entry in EVENT_CODE_REGISTRY.items()
+            if '?' not in code
+        ]
+        event_options.sort(key=lambda option: option['code'])
+
+        originator_choices = [
+            {
+                'code': code,
+                'description': ORIGINATOR_DESCRIPTIONS.get(code, ''),
+            }
+            for code in PRIMARY_ORIGINATORS
+        ]
+
+        state_tree = get_us_state_county_tree()
+        same_lookup = get_same_lookup()
+
+        recent_messages: List[EASMessage] = (
+            EASMessage.query.order_by(EASMessage.created_at.desc()).limit(10).all()
+        )
+
+        return render_template(
+            'eas/workflow.html',
+            eas_event_codes=event_options,
+            eas_originator_choices=originator_choices,
+            eas_originator=eas_config.get('originator', 'WXR'),
+            eas_station_id=eas_config.get('station_id', 'EASNODES'),
+            eas_attention_seconds=eas_config.get('attention_tone_seconds', 8),
+            eas_sample_rate=eas_config.get('sample_rate', 44100),
+            eas_default_same_codes=manual_same_defaults,
+            eas_header_fields=SAME_HEADER_FIELD_DESCRIPTIONS,
+            eas_p_digit_meanings=P_DIGIT_MEANINGS,
+            eas_fips_states=state_tree,
+            eas_fips_lookup=same_lookup,
+            eas_originator_descriptions=ORIGINATOR_DESCRIPTIONS,
+            eas_recent_messages=recent_messages,
+            eas_web_subdir=current_app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages'),
+        )
+
+    @bp.route('/manual/generate', methods=['POST'])
+    def manual_eas_generate():
+        auth_response = _auth_redirect(json_mode=True)
+        if auth_response is not None:
+            return auth_response
 
         payload = request.get_json(silent=True) or {}
 
@@ -146,8 +205,8 @@ def register_manual_routes(app, logger, eas_config) -> None:
         manual_config['enabled'] = True
         manual_config['originator'] = originator[:3].upper()
         manual_config['station_id'] = station_id.upper().ljust(8)[:8]
-        manual_config['attention_tone_seconds'] = tone_seconds if tone_seconds is not None else manual_config.get(
-            'attention_tone_seconds', 8
+        manual_config['attention_tone_seconds'] = (
+            tone_seconds if tone_seconds is not None else manual_config.get('attention_tone_seconds', 8)
         )
         manual_config['sample_rate'] = sample_rate
 
@@ -185,18 +244,25 @@ def register_manual_routes(app, logger, eas_config) -> None:
                 manual_config,
                 location_settings=None,
             )
-            generator = EASAudioGenerator(manual_config, logger)
+        except Exception as exc:
+            workflow_logger.error('Failed to build manual SAME header: %s', exc)
+            return jsonify({'error': 'Unable to build SAME header.'}), 500
+
+        generator = EASAudioGenerator(manual_config, logger=workflow_logger)
+
+        try:
             components = generator.build_manual_components(
-                alert_object,
                 header,
-                repeats=3,
-                tone_profile=tone_profile,
-                tone_duration=tone_seconds,
+                alert_object,
+                formatted_locations,
                 include_tts=include_tts,
             )
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.error(f"Failed to build manual EAS package: {exc}")
-            return jsonify({'error': 'Unable to generate EAS audio components.'}), 500
+        except Exception as exc:
+            workflow_logger.error('Manual EAS generation failed: %s', exc)
+            return jsonify({'error': 'Failed to generate manual EAS package.'}), 500
+
+        if not components:
+            return jsonify({'error': 'Manual EAS package contained no audio components.'}), 500
 
         def _safe_base(value: str) -> str:
             cleaned = re.sub(r'[^A-Za-z0-9]+', '_', value).strip('_')
@@ -205,9 +271,9 @@ def register_manual_routes(app, logger, eas_config) -> None:
         base_name = _safe_base(identifier)
         sample_rate = components.get('sample_rate', sample_rate)
 
-        output_root = str(manual_config.get('output_dir') or app.config.get('EAS_OUTPUT_DIR') or '').strip()
+        output_root = str(manual_config.get('output_dir') or current_app.config.get('EAS_OUTPUT_DIR') or '').strip()
         if not output_root:
-            logger.error('Manual EAS output directory is not configured.')
+            workflow_logger.error('Manual EAS output directory is not configured.')
             return jsonify({'error': 'Manual EAS output directory is not configured.'}), 500
 
         manual_root = os.path.join(output_root, 'manual')
@@ -218,7 +284,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
         event_dir = os.path.join(manual_root, slug)
         os.makedirs(event_dir, exist_ok=True)
         storage_root = '/'.join(part for part in ['manual', slug] if part)
-        web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+        web_prefix = current_app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
 
         def _package_audio(samples: List[int], suffix: str) -> Optional[Dict[str, Any]]:
             if not samples:
@@ -242,7 +308,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
                 'storage_subpath': storage_subpath,
                 'duration_seconds': duration,
                 'size_bytes': len(wav_bytes),
-                'wav_bytes': wav_bytes,  # Include raw bytes for database storage
+                'wav_bytes': wav_bytes,
             }
 
         state_tree = get_us_state_county_tree()
@@ -268,7 +334,6 @@ def register_manual_routes(app, logger, eas_config) -> None:
             'composite': composite_component,
         }
 
-        # Create response-safe components without wav_bytes (not JSON serializable)
         response_components = {
             key: {k: v for k, v in value.items() if k != 'wav_bytes'}
             for key, value in stored_components.items()
@@ -383,7 +448,6 @@ def register_manual_routes(app, logger, eas_config) -> None:
                 'web_prefix': web_prefix,
                 'includes_tts': bool(tts_component),
             },
-            # Store audio binary data in database
             composite_audio_data=composite_component.get('wav_bytes') if composite_component else None,
             same_audio_data=same_component.get('wav_bytes') if same_component else None,
             attention_audio_data=attention_component.get('wav_bytes') if attention_component else None,
@@ -398,7 +462,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
                 SystemLog(
                     level='INFO',
                     message='Manual EAS package generated',
-                    module='admin',
+                    module='eas',
                     details={
                         'identifier': identifier,
                         'event_code': resolved_event_code,
@@ -406,19 +470,20 @@ def register_manual_routes(app, logger, eas_config) -> None:
                         'tone_profile': response_payload['tone_profile'],
                         'tts_included': bool(tts_component),
                         'manual_activation_id': activation_record.id,
+                        'generated_by': getattr(g.current_user, 'username', 'system'),
                     },
                 )
             )
             db.session.commit()
         except Exception as exc:
             db.session.rollback()
-            logger.error('Failed to persist manual EAS activation: %s', exc)
+            workflow_logger.error('Failed to persist manual EAS activation: %s', exc)
             return jsonify({'error': 'Unable to persist manual activation details.'}), 500
 
         response_payload['activation'] = {
             'id': activation_record.id,
             'created_at': activation_record.created_at.isoformat() if activation_record.created_at else None,
-            'print_url': url_for('manual_eas_print', event_id=activation_record.id),
+            'print_url': url_for('eas.manual_eas_print', event_id=activation_record.id),
             'export_url': summary_url,
             'components': {
                 key: {
@@ -432,11 +497,11 @@ def register_manual_routes(app, logger, eas_config) -> None:
 
         return jsonify(response_payload)
 
-    @app.route('/admin/eas/manual_events', methods=['GET'])
-    def admin_manual_eas_events():
-        creating_first_user = AdminUser.query.count() == 0
-        if g.current_user is None and not creating_first_user:
-            return jsonify({'error': 'Authentication required.'}), 401
+    @bp.route('/manual/events', methods=['GET'])
+    def manual_eas_events():
+        auth_response = _auth_redirect(json_mode=True)
+        if auth_response is not None:
+            return auth_response
 
         try:
             limit = request.args.get('limit', type=int) or 100
@@ -448,7 +513,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
                 .all()
             )
 
-            web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+            web_prefix = current_app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
             items = []
 
             for event in events:
@@ -475,43 +540,45 @@ def register_manual_routes(app, logger, eas_config) -> None:
                         part for part in [event.storage_path, event.summary_filename] if part
                     )
                 export_url = (
-                    url_for('manual_eas_export', event_id=event.id)
+                    url_for('eas.manual_eas_export', event_id=event.id)
                     if summary_subpath
                     else None
                 )
 
-                items.append({
-                    'id': event.id,
-                    'identifier': event.identifier,
-                    'event_code': event.event_code,
-                    'event_name': event.event_name,
-                    'status': event.status,
-                    'message_type': event.message_type,
-                    'same_header': event.same_header,
-                    'created_at': event.created_at.isoformat() if event.created_at else None,
-                    'archived_at': event.archived_at.isoformat() if event.archived_at else None,
-                    'print_url': url_for('manual_eas_print', event_id=event.id),
-                    'export_url': export_url,
-                    'components': {
-                        key: _component_with_url(meta)
-                        for key, meta in components_payload.items()
-                    },
-                })
+                items.append(
+                    {
+                        'id': event.id,
+                        'identifier': event.identifier,
+                        'event_code': event.event_code,
+                        'event_name': event.event_name,
+                        'status': event.status,
+                        'message_type': event.message_type,
+                        'same_header': event.same_header,
+                        'created_at': event.created_at.isoformat() if event.created_at else None,
+                        'archived_at': event.archived_at.isoformat() if event.archived_at else None,
+                        'print_url': url_for('eas.manual_eas_print', event_id=event.id),
+                        'export_url': export_url,
+                        'components': {
+                            key: _component_with_url(meta)
+                            for key, meta in components_payload.items()
+                        },
+                    }
+                )
 
             return jsonify({'events': items, 'total': total})
         except Exception as exc:
-            logger.error('Failed to list manual EAS activations: %s', exc)
+            workflow_logger.error('Failed to list manual EAS activations: %s', exc)
             return jsonify({'error': 'Unable to load manual activations.'}), 500
 
-    @app.route('/admin/eas/manual_events/<int:event_id>/print')
+    @bp.route('/manual/events/<int:event_id>/print')
     def manual_eas_print(event_id: int):
-        creating_first_user = AdminUser.query.count() == 0
-        if g.current_user is None and not creating_first_user:
-            return redirect(url_for('login'))
+        auth_response = _auth_redirect()
+        if auth_response is not None:
+            return auth_response
 
         event = ManualEASActivation.query.get_or_404(event_id)
         components_payload = event.components_payload or {}
-        web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+        web_prefix = current_app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
 
         def _component_with_url(meta: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
             if not meta:
@@ -524,14 +591,9 @@ def register_manual_routes(app, logger, eas_config) -> None:
                 'filename': meta.get('filename'),
                 'duration_seconds': meta.get('duration_seconds'),
                 'size_bytes': meta.get('size_bytes'),
+                'storage_subpath': storage_subpath,
                 'download_url': download_url,
             }
-
-        components: Dict[str, Dict[str, Any]] = {}
-        for key, meta in components_payload.items():
-            component_value = _component_with_url(meta)
-            if component_value:
-                components[key] = component_value
 
         state_tree = get_us_state_county_tree()
         state_index = {
@@ -542,33 +604,43 @@ def register_manual_routes(app, logger, eas_config) -> None:
         same_lookup = get_same_lookup()
         header_detail = describe_same_header(event.same_header, lookup=same_lookup, state_index=state_index)
 
+        summary_url = None
+        if event.summary_filename:
+            summary_subpath = '/'.join(
+                part for part in [event.storage_path, event.summary_filename] if part
+            )
+            if summary_subpath:
+                web_parts = [web_prefix, summary_subpath] if web_prefix else [summary_subpath]
+                summary_url = url_for('static', filename='/'.join(web_parts))
+
         return render_template(
             'manual_eas_print.html',
             event=event,
-            components=components,
+            components={
+                key: _component_with_url(meta)
+                for key, meta in components_payload.items()
+            },
             header_detail=header_detail,
-            summary_url=url_for('manual_eas_export', event_id=event.id)
-            if event.summary_filename
-            else None,
+            summary_url=summary_url,
         )
 
-    @app.route('/admin/eas/manual_events/<int:event_id>/export')
+    @bp.route('/manual/events/<int:event_id>/export')
     def manual_eas_export(event_id: int):
-        creating_first_user = AdminUser.query.count() == 0
-        if g.current_user is None and not creating_first_user:
-            return abort(401)
+        auth_response = _auth_redirect()
+        if auth_response is not None:
+            return auth_response
 
         event = ManualEASActivation.query.get_or_404(event_id)
         if not event.summary_filename:
-            return abort(404)
+            return jsonify({'error': 'No export summary is available for this activation.'}), 404
 
-        output_root = str(app.config.get('EAS_OUTPUT_DIR') or '').strip()
+        output_root = str(current_app.config.get('EAS_OUTPUT_DIR') or '').strip()
         if not output_root:
-            return abort(404)
+            return jsonify({'error': 'EAS output directory is not configured.'}), 500
 
         file_path = os.path.join(output_root, event.storage_path or '', event.summary_filename)
         if not os.path.exists(file_path):
-            return abort(404)
+            return jsonify({'error': 'The export file is no longer available on disk.'}), 404
 
         return send_file(
             file_path,
@@ -577,17 +649,18 @@ def register_manual_routes(app, logger, eas_config) -> None:
             mimetype='application/json',
         )
 
-    @app.route('/admin/eas/manual_events/<int:event_id>', methods=['DELETE'])
-    def admin_delete_manual_eas(event_id: int):
-        if g.current_user is None:
-            return jsonify({'error': 'Authentication required.'}), 401
+    @bp.route('/manual/events/<int:event_id>', methods=['DELETE'])
+    def manual_eas_delete(event_id: int):
+        auth_response = _auth_redirect(json_mode=True)
+        if auth_response is not None:
+            return auth_response
 
         activation = ManualEASActivation.query.get_or_404(event_id)
-        output_root = str(app.config.get('EAS_OUTPUT_DIR') or '').strip()
+        output_root = str(current_app.config.get('EAS_OUTPUT_DIR') or '').strip()
 
         try:
             if output_root:
-                _remove_manual_eas_files(activation, output_root, logger)
+                _remove_manual_eas_files(activation, output_root, workflow_logger)
 
             db.session.delete(activation)
             db.session.add(
@@ -604,16 +677,17 @@ def register_manual_routes(app, logger, eas_config) -> None:
             )
             db.session.commit()
         except Exception as exc:
-            logger.error('Failed to delete manual EAS activation %s: %s', event_id, exc)
+            workflow_logger.error('Failed to delete manual EAS activation %s: %s', event_id, exc)
             db.session.rollback()
             return jsonify({'error': 'Failed to delete manual EAS activation.'}), 500
 
         return jsonify({'message': 'Manual EAS activation deleted.', 'id': event_id})
 
-    @app.route('/admin/eas/manual_events/purge', methods=['POST'])
-    def admin_purge_manual_eas():
-        if g.current_user is None:
-            return jsonify({'error': 'Authentication required.'}), 401
+    @bp.route('/manual/events/purge', methods=['POST'])
+    def manual_eas_purge():
+        auth_response = _auth_redirect(json_mode=True)
+        if auth_response is not None:
+            return auth_response
 
         payload = request.get_json(silent=True) or {}
         ids = payload.get('ids')
@@ -657,13 +731,13 @@ def register_manual_routes(app, logger, eas_config) -> None:
         if not activations:
             return jsonify({'message': 'No manual EAS activations matched the purge criteria.', 'deleted': 0})
 
-        output_root = str(app.config.get('EAS_OUTPUT_DIR') or '').strip()
+        output_root = str(current_app.config.get('EAS_OUTPUT_DIR') or '').strip()
         deleted_ids: List[int] = []
 
         for activation in activations:
             deleted_ids.append(activation.id)
             if output_root:
-                _remove_manual_eas_files(activation, output_root, logger)
+                _remove_manual_eas_files(activation, output_root, workflow_logger)
             db.session.delete(activation)
 
         try:
@@ -680,7 +754,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
             )
             db.session.commit()
         except Exception as exc:
-            logger.error('Failed to purge manual EAS activations: %s', exc)
+            workflow_logger.error('Failed to purge manual EAS activations: %s', exc)
             db.session.rollback()
             return jsonify({'error': 'Failed to purge manual EAS activations.'}), 500
 
@@ -691,3 +765,18 @@ def register_manual_routes(app, logger, eas_config) -> None:
                 'ids': deleted_ids,
             }
         )
+
+
+def _remove_manual_eas_files(activation: ManualEASActivation, output_root: str, logger) -> None:
+    """Delete manual EAS directory and contained files from disk."""
+
+    if not activation.storage_path:
+        return
+
+    try:
+        full_path = os.path.join(output_root, activation.storage_path)
+        if os.path.exists(full_path) and os.path.isdir(full_path):
+            shutil.rmtree(full_path)
+            logger.debug('Deleted manual EAS directory: %s', full_path)
+    except OSError as exc:
+        logger.warning('Failed to delete manual EAS directory %s: %s', full_path, exc)
