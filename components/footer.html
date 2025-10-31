@@ -36,7 +36,7 @@
                     <li><a href="/stats"><i class="fas fa-chart-bar"></i> Statistics & Reports</a></li>
                     <li><a href="/admin"><i class="fas fa-cog"></i> System Administration</a></li>
                     <li><a href="/health"><i class="fas fa-heartbeat"></i> System Health Monitor</a></li>
-                    <li><a href="/api/docs"><i class="fas fa-code"></i> API Documentation</a></li>
+                    <li><a href="/debug/ipaws"><i class="fas fa-bug"></i> IPAWS Debug</a></li>
                 </ul>
             </div>
 
@@ -46,8 +46,8 @@
                 <ul class="footer-links">
                     <li><a href="https://www.weather.gov/" target="_blank"><i class="fas fa-external-link-alt"></i> National Weather Service</a></li>
                     <li><a href="https://www.ready.gov/" target="_blank"><i class="fas fa-shield-alt"></i> Ready.gov Emergency Guide</a></li>
-                    <li><a href="/help"><i class="fas fa-question-circle"></i> Help & Documentation</a></li>
-                    <li><a href="/contact"><i class="fas fa-envelope"></i> Contact Support</a></li>
+                    <li><a href="{{ url_for('help_page') }}"><i class="fas fa-question-circle"></i> Help & Documentation</a></li>
+                    <li><a href="{{ url_for('about_page') }}"><i class="fas fa-info-circle"></i> About EAS Station</a></li>
                 </ul>
 
                 <!-- Social/External Links -->
@@ -57,9 +57,6 @@
                     </a>
                     <a href="mailto:support@kr8mer.com" class="social-link" title="Email Support">
                         <i class="fas fa-envelope"></i>
-                    </a>
-                    <a href="/rss" class="social-link" title="RSS Feed">
-                        <i class="fas fa-rss"></i>
                     </a>
                 </div>
             </div>
@@ -104,10 +101,7 @@
                 </p>
 
                 <div class="footer-meta">
-                    <a href="/privacy">Privacy Policy</a>
-                    <a href="/terms">Terms of Service</a>
-                    <a href="/disclaimer">Disclaimer</a>
-                    <a href="/accessibility">Accessibility</a>
+                    <!-- Future links for legal pages -->
                 </div>
             </div>
 
@@ -196,41 +190,33 @@ function updateTimestamp() {
 }
 
 function updateFooterStatus() {
-    // Update alert count
-    fetch('/api/alert-count')
-        .then(response => response.json())
-        .then(data => {
-            const countElement = document.getElementById('footer-alert-count');
-            if (countElement) {
-                countElement.textContent = data.count || 0;
-            }
-        })
-        .catch(() => {
-            // Silently handle errors
-        });
+    // Update alert count - placeholder until API is implemented
+    const countElement = document.getElementById('footer-alert-count');
+    if (countElement) {
+        // Get count from page context if available
+        countElement.textContent = '—';
+    }
 
-    // Update system status
-    fetch('/api/system-status')
+    // Update system status - use correct endpoint with underscore
+    fetch('/api/system_status')
         .then(response => response.json())
         .then(data => {
             const dotElement = document.getElementById('footer-status-dot');
             const textElement = document.getElementById('footer-status-text');
 
             if (dotElement && textElement) {
-                dotElement.className = `status-dot ${data.status === 'ok' ? '' : 'status-warning'}`;
-                textElement.textContent = data.message || 'System Status Unknown';
+                const statusKey = (data.status || '').toString().toLowerCase();
+                const isHealthy = statusKey === 'healthy' || statusKey === 'online';
+                dotElement.className = `status-dot ${isHealthy ? '' : 'status-warning'}`;
+                textElement.textContent = data.status_summary || data.message || 'System Status Unknown';
             }
 
-            // Update other metrics
-            if (data.activeUsers) {
-                const usersElement = document.getElementById('active-users');
-                if (usersElement) usersElement.textContent = data.activeUsers;
-            }
+            // Active users and data sources - placeholder values
+            const usersElement = document.getElementById('active-users');
+            if (usersElement) usersElement.textContent = '—';
 
-            if (data.dataSources) {
-                const sourcesElement = document.getElementById('data-source-count');
-                if (sourcesElement) sourcesElement.textContent = data.dataSources;
-            }
+            const sourcesElement = document.getElementById('data-source-count');
+            if (sourcesElement) sourcesElement.textContent = '3';
         })
         .catch(() => {
             // Handle errors gracefully
@@ -242,20 +228,11 @@ function updateFooterStatus() {
 }
 
 function checkEmergencyAlerts() {
-    fetch('/api/severe-alerts')
-        .then(response => response.json())
-        .then(data => {
-            const emergencySection = document.getElementById('emergency-section');
-            if (emergencySection) {
-                if (data.hasSevereAlerts) {
-                    emergencySection.style.display = 'block';
-                } else {
-                    emergencySection.style.display = 'none';
-                }
-            }
-        })
-        .catch(() => {
-            // Silently handle errors
-        });
+    // Placeholder - API endpoint not yet implemented
+    // Keep emergency section hidden by default
+    const emergencySection = document.getElementById('emergency-section');
+    if (emergencySection) {
+        emergencySection.style.display = 'none';
+    }
 }
 </script>
