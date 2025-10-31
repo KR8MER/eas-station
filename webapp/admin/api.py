@@ -619,25 +619,79 @@ def register_api_routes(app, logger):
             current_utc = utc_now()
             current_local = local_now()
 
+            status = 'healthy'
+            status_reasons = []
+
+            def _record_status(level: str, message: str) -> None:
+                nonlocal status
+                status_reasons.append({'level': level, 'message': message})
+                if level == 'critical':
+                    status = 'critical'
+                elif level == 'warning' and status != 'critical':
+                    status = 'warning'
+
+            if cpu >= 90:
+                _record_status('critical', 'CPU usage exceeds 90%.')
+            elif cpu >= 75:
+                _record_status('warning', 'CPU usage is above 75%.')
+
+            if memory.percent >= 92:
+                _record_status('critical', 'Memory usage exceeds 92%.')
+            elif memory.percent >= 80:
+                _record_status('warning', 'Memory usage is above 80%.')
+
+            if disk.percent >= 95:
+                _record_status('critical', 'Disk usage exceeds 95%.')
+            elif disk.percent >= 85:
+                _record_status('warning', 'Disk usage is above 85%.')
+
+            poll_snapshot = None
             location_tz = get_location_timezone()
+            if last_poll:
+                poll_timestamp = last_poll.timestamp
+                if poll_timestamp.tzinfo is None:
+                    poll_timestamp = poll_timestamp.replace(tzinfo=UTC_TZ)
+                poll_age_minutes = (current_utc - poll_timestamp).total_seconds() / 60.0
+                if poll_age_minutes >= 60:
+                    _record_status('critical', f'Last poll was {poll_age_minutes:.0f} minutes ago.')
+                elif poll_age_minutes >= 15:
+                    _record_status('warning', f'Last poll was {poll_age_minutes:.0f} minutes ago.')
+
+                poll_status = (last_poll.status or '').strip().lower()
+                if poll_status and poll_status not in {'success', 'ok', 'completed'}:
+                    level = 'critical' if poll_status in {'failed', 'error'} else 'warning'
+                    _record_status(level, f'Last poll reported status: {last_poll.status}.')
+
+                poll_snapshot = {
+                    'timestamp': poll_timestamp.isoformat(),
+                    'local_timestamp': poll_timestamp.astimezone(location_tz).isoformat(),
+                    'status': last_poll.status,
+                    'alerts_fetched': last_poll.alerts_fetched or 0,
+                    'alerts_new': last_poll.alerts_new or 0,
+                }
+            else:
+                _record_status('warning', 'No poll activity has been recorded yet.')
+
+            status_summary = 'All systems operational.'
+            if status_reasons:
+                summary_source = next(
+                    (reason for reason in status_reasons if reason['level'] == status),
+                    status_reasons[0],
+                )
+                status_summary = summary_source['message']
+
             return jsonify(
                 {
-                    'status': 'online',
+                    'status': status,
+                    'status_summary': status_summary,
+                    'status_reasons': status_reasons,
                     'timestamp': current_utc.isoformat(),
                     'local_timestamp': current_local.isoformat(),
                     'timezone': get_location_timezone_name(),
                     'boundaries_count': total_boundaries,
                     'active_alerts_count': active_alerts,
                     'database_status': 'connected',
-                    'last_poll': {
-                        'timestamp': last_poll.timestamp.isoformat() if last_poll else None,
-                        'local_timestamp': last_poll.timestamp.astimezone(location_tz).isoformat() if last_poll else None,
-                        'status': last_poll.status if last_poll else None,
-                        'alerts_fetched': last_poll.alerts_fetched if last_poll else 0,
-                        'alerts_new': last_poll.alerts_new if last_poll else 0,
-                    }
-                    if last_poll
-                    else None,
+                    'last_poll': poll_snapshot,
                     'system_resources': {
                         'cpu_usage_percent': cpu,
                         'memory_usage_percent': memory.percent,
