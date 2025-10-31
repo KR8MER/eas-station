@@ -7,7 +7,7 @@ import sqlalchemy as sa
 
 
 revision = "20240718_expand_decoded_audio_segments"
-down_revision = "20240510_eas_audio_decodes"
+down_revision = "20240717_expand_alembic_version"
 branch_labels = None
 depends_on = None
 
