@@ -119,7 +119,7 @@ EAS Station is not just an alert monitor—it's a **complete emergency broadcast
 
 ## 🏛️ Governance & Contributions
 
-- **License:** Source code is provided under the [MIT License](LICENSE); copyright remains with Timothy Kramer (K8R8MER).
+- **License:** Source code is provided under the [MIT License](LICENSE); copyright remains with Timothy Kramer (KR8MER).
 - **Contribution workflow:** All commits must include a Developer Certificate of Origin sign-off (`Signed-off-by`) as described in the [CONTRIBUTING guide](CONTRIBUTING.md).
 - **Legal notices:** Review the [Terms of Use](TERMS_OF_USE.md) and [Privacy Policy](PRIVACY_POLICY.md) before deploying test systems or sharing data.
 
