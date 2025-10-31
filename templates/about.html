@@ -12,6 +12,15 @@
                         <h1 class="display-5 fw-bold mb-3">About EAS Station</h1>
                         <p class="lead text-muted">Professional Emergency Alert System monitoring, processing, and distribution platform</p>
                     </div>
+                    <div class="alert alert-warning d-flex align-items-start" role="alert">
+                        <i class="fas fa-triangle-exclamation fa-lg me-3"></i>
+                        <div>
+                            <strong>Development-Only Notice:</strong> EAS Station is an experimental project cross-checked
+                            against community tools like multimon-ng. It is <em>not</em> FCC-certified, is <em>not</em> ready for
+                            production deployment, and must never be relied upon for life-or-death decision making or regulatory
+                            compliance.
+                        </div>
+                    </div>
                     <hr class="my-4">
                     <p class="fs-5">EAS Station is a comprehensive, open-source emergency alert processing system designed for broadcasters, emergency communications professionals, and public safety organizations. It integrates CAP (Common Alerting Protocol) feeds, SAME (Specific Area Message Encoding) audio generation, and multi-channel alert distribution to provide real-time emergency notifications.</p>
                 </div>
@@ -505,6 +514,25 @@
                         Special thanks to NOAA, NWS, and FEMA for providing public CAP feeds.<br>
                         SAME/EAS decoder algorithm inspired by <a href="https://github.com/EliasOenal/multimon-ng" target="_blank" rel="noopener" class="text-muted text-decoration-underline">multimon-ng</a>, used for testing and debugging our Python implementation.
                     </p>
+                </div>
+            </div>
+
+            <!-- Safety & Legal Notice -->
+            <div class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3 text-center">
+                        <i class="fas fa-user-shield text-primary me-2"></i>Safety & Legal Notice
+                    </h2>
+                    <p class="mb-3">EAS Station is provided without warranty as a community research project. It does not
+                        satisfy FCC certification requirements and must remain disconnected from live transmitter plants,
+                        dispatch systems, or other life-safety infrastructure. Use only in lab environments where failures do
+                        not endanger people or property.</p>
+                    <div class="alert alert-secondary mb-0" role="alert">
+                        <i class="fas fa-file-contract me-2"></i>
+                        Review the <a href="{{ url_for('terms_page') }}" class="alert-link">Terms of Use</a> and
+                        <a href="{{ url_for('privacy_page') }}" class="alert-link">Privacy Policy</a> before sharing data or
+                        inviting collaborators.
+                    </div>
                 </div>
             </div>
 

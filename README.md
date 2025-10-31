@@ -26,6 +26,20 @@
 
 ---
 
+## ⚠️ Important Safety Notice
+
+- **Development-phase software.** EAS Station is an experimental research project validated against open-source tools such as
+  [multimon-ng](https://github.com/EliasOenal/multimon-ng) for decoder parity. The remainder of the platform and all generated
+  content are original and community-maintained.
+- **Not FCC-certified equipment.** Do not treat this repository as a drop-in replacement for commercial Emergency Alert System
+  encoders or other hardware approved by the Federal Communications Commission.
+- **No life-safety reliance.** Never use this codebase, or any outputs it produces, for real-world emergency alerting, public
+  warning, or life-or-death decision making. Operate it strictly in lab and training environments.
+- **Read the legal docs.** Review the [Terms of Use](TERMS_OF_USE.md) and [Privacy Policy](PRIVACY_POLICY.md) before sharing data
+  or inviting collaborators to test deployments.
+
+---
+
 ## 🎯 What is EAS Station?
 
 EAS Station transforms Common Alerting Protocol (CAP) data from NOAA and IPAWS into FCC-compliant SAME/EAS broadcasts. Unlike simple alert monitors, it provides:
@@ -52,38 +66,41 @@ EAS Station transforms Common Alerting Protocol (CAP) data from NOAA and IPAWS i
 EAS Station is not just an alert monitor—it's a **complete emergency broadcast platform** that automates the entire CAP-to-EAS workflow:
 
 ### 🎙️ Broadcast & Encoding
-- **FCC-Compliant SAME Encoding** - Generates proper SAME headers at 520⅔ baud with 3-burst transmission per §11.31
-- **Automatic EAS Audio Generation** - Complete WAV packages with attention tones, TTS narration, and EOM bursts
-- **GPIO Relay Control** - Hardware transmitter automation with configurable hold times
-- **Manual Broadcast Builder** - Full encoder interface with hierarchical SAME code picker and live header preview
-- **Quick Test Templates** - One-click RWT/RMT generation for compliance testing
+- **FCC-Compliant SAME Encoding** – Generates proper SAME headers at 520⅔ baud with 3-burst transmission per § 11.31.
+- **Automatic EAS Audio Generation** – Produces complete WAV packages with attention tones, narration, and EOM bursts from the workflow UI in `webapp/eas/workflow.py`.
+- **GPIO Relay Control** – Hardware transmitter automation with configurable pre/post hold times powered by helpers in `app_utils/eas.py`.
+- **Manual Broadcast Builder** – Full encoder interface with hierarchical SAME code picker and live header preview, plus presets for routine RWT/RMT activations.
 
 ### 📡 Multi-Source Aggregation
-- **NOAA Weather Service** - Continuous polling of NWS CAP feeds with configurable intervals
-- **IPAWS/FEMA Integration** - Dedicated poller for Integrated Public Alert & Warning System feeds
-- **Manual CAP Injection** - CLI tools for importing CAP XML files for drills and exercises
-- **Intelligent Deduplication** - Cross-feed alert matching by identifier with source tracking
-- **Alert Provenance** - Clear labeling of NOAA vs. IPAWS vs. manual origins throughout the UI
+- **NOAA Weather Service** – Continuous polling of NWS CAP feeds with configurable intervals handled by the poller services under `poller/`.
+- **IPAWS/FEMA Integration** – Dedicated poller modes translate IPAWS payloads into the shared storage pipeline (`app_core/alerts.py`).
+- **Manual CAP Injection** – CLI helpers such as `manual_eas_event.py` and `tools/generate_sample_audio.py` support drills and operator-crafted scenarios.
+- **Intelligent Deduplication** – Cross-feed alert matching by identifier with source tracking across the dashboard and exports.
 
 ### 🗺️ Geographic Intelligence
-- **PostGIS Spatial Queries** - Real-time alert-boundary intersection calculations with polygon geometry
-- **Multi-Layer Boundary Support** - Counties, townships, fire districts, EMS zones, utilities, waterways, and custom polygons
-- **Interactive Map Dashboard** - Real-time Leaflet visualization with color-coded alert severity
-- **Automated Geometry Processing** - Converts CAP polygons and circles to PostGIS-compatible formats
+- **PostGIS Spatial Queries** – Real-time alert-boundary intersection calculations with polygon geometry in `app_core/boundaries.py` and `app_core/location.py`.
+- **Multi-Layer Boundary Support** – Counties, townships, fire districts, EMS zones, utilities, waterways, and custom polygons remain first-class citizens in the admin UI.
+- **Interactive Map Dashboard** – Real-time Leaflet visualization with color-coded alert severity.
+- **Automated Geometry Processing** – Converts CAP polygons and circles to PostGIS-compatible formats for downstream analytics.
 
-### 📻 Verification & Compliance
-- **Multi-SDR Orchestration** - Automatic IQ/PCM capture from RTL2832U and Airspy receivers during SAME events
-- **Audio Decode Verification** - Extract SAME headers from received broadcasts with confidence scoring (algorithm inspired by [multimon-ng](https://github.com/EliasOenal/multimon-ng))
-- **Delivery Analytics** - Track received vs. relayed alerts with per-originator trending
-- **Compliance Exports** - CSV/PDF reports for FCC and state emergency management audits
-- **Complete Audit Trail** - Timestamped logs of all ingestions, broadcasts, and manual activations
+### 🎛️ Radio & Capture Orchestration
+- **Radio Manager Abstractions** – `app_core/radio/manager.py` coordinates multiple receivers, normalises status telemetry, and issues synchronized capture requests.
+- **Extensible SDR Drivers** – Built-in SoapySDR-backed drivers in `app_core/radio/drivers.py` support RTL2832U and Airspy hardware with IQ or PCM output.
+- **Database-Backed Configuration** – Receiver inventory, health history, and capture paths persist via `RadioReceiver` and `RadioReceiverStatus` models in `app_core/models.py`.
+- **Operator Controls** – The `/settings/radio` UI and `/api/radio/receivers` endpoints in `webapp/routes_settings_radio.py` expose CRUD management, auto-start toggles, and live status readouts.
+
+### 📊 Compliance & Verification
+- **Compliance Dashboard** – `/admin/compliance` summarises received vs. relayed alerts, weekly tests, receiver health, and audio path status using `app_core/eas_storage.py` and `app_core/system_health.py`.
+- **Delivery Analytics** – The alert verification portal (`/admin/alert-verification`) correlates CAP ingestion with downstream playout, highlighting latency and per-target results.
+- **Audio Decode Laboratory** – Operators can upload WAV/MP3 captures for SAME decoding, store the results, and review generated segments through `webapp/routes/alert_verification.py`.
+- **Regulatory Exports** – CSV and PDF log exports provide FCC-ready documentation directly from the compliance view.
 
 ### 🖥️ Operations & Control
-- **LED Signage Synchronization** - Alpha Protocol display control with priority queuing and per-line formatting
-- **Real-Time System Health** - CPU, memory, disk, network, temperature monitoring with live dashboards
-- **Session-Based Admin Portal** - User authentication, boundary management, and broadcast controls
-- **Searchable Alert Archive** - Filter by severity, status, date, and geographic impact
-- **RESTful API** - JSON endpoints for external integration and automation
+- **LED Signage Synchronization** – Alpha Protocol display control with priority queuing and per-line formatting lives under `led_sign_controller.py` and `webapp/routes_led.py`.
+- **Real-Time System Health** – CPU, memory, disk, network, temperature, receiver, and audio pipeline metrics aggregate through `app_core/system_health.py`.
+- **Session-Based Admin Portal** – User authentication, boundary management, and broadcast controls reside in Flask blueprints within `webapp/`.
+- **Searchable Alert Archive** – Filter by severity, status, date, and geographic impact across the admin dashboard.
+- **RESTful API** – JSON endpoints surface inventory, status, and export data for external integration.
 
 ### 🔧 Deployment & Infrastructure
 - **Docker-First Architecture** - Single-command deployment with automatic database migrations
@@ -98,6 +115,9 @@ EAS Station is not just an alert monitor—it's a **complete emergency broadcast
 
 - [ℹ️ About the Project](ABOUT.md) – Overview of the mission, core services, and full software stack powering the system.
 - [🆘 Help Guide](HELP.md) – Day-to-day operations, troubleshooting workflows, and reference commands for operators.
+- [⚖️ Terms of Use](TERMS_OF_USE.md) – Development-only license terms, acceptable use, and critical safety disclaimers.
+- [🛡️ Privacy Policy](PRIVACY_POLICY.md) – Guidance for handling configuration data, test records, and optional integrations.
+- [🗂️ Master Implementation Roadmap](docs/master_todo.md) – High-level priorities with implementation plans that map the path to production readiness.
 - In-app versions of both guides are reachable from the navigation bar via the new <strong>About</strong> and <strong>Help</strong> pages for quick operator reference.
 
 ---
@@ -198,36 +218,7 @@ docker compose up -d --force-recreate
 
 ## 🏗️ System Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                       EAS Station Platform                          │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │
-│  │   Flask App  │  │  NOAA Poller │  │ IPAWS Poller │             │
-│  │  (Gunicorn)  │  │ (Background) │  │ (Background) │             │
-│  │   Port 5000  │  │   Continuous │  │   120 sec    │             │
-│  └──────────────┘  └──────────────┘  └──────────────┘             │
-│         │                 │                   │                    │
-│         │                 └───────┬───────────┘                    │
-│         ▼                         ▼                                │
-│  ┌────────────────────────────────────────────────────────┐        │
-│  │            PostgreSQL + PostGIS Database               │        │
-│  │   (Alerts, Boundaries, EAS Messages, SDR Config)       │        │
-│  └────────────────────────────────────────────────────────┘        │
-│         │                                                           │
-│         └────────┬──────────┬──────────┬──────────┐                │
-│                  ▼          ▼          ▼          ▼                │
-│           ┌──────────┐ ┌────────┐ ┌────────┐ ┌─────────┐          │
-│           │   SAME   │ │  GPIO  │ │  SDR   │ │   LED   │          │
-│           │  Encoder │ │  Relay │ │ Capture│ │ Display │          │
-│           └──────────┘ └────────┘ └────────┘ └─────────┘          │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-         │                          │
-         ▼                          ▼
-  Operators/Web UI         NOAA & IPAWS CAP Feeds
-```
+![High-level architecture diagram for the EAS Station lab deployment.](static/docs/eas-station-architecture.svg)
 
 ### Service Components
 
