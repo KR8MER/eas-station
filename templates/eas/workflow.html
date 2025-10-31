@@ -349,6 +349,7 @@
                                         <th scope="col">Component</th>
                                         <th scope="col">Duration</th>
                                         <th scope="col">Size</th>
+                                        <th scope="col" class="text-center">Preview</th>
                                         <th scope="col" class="text-center">Download</th>
                                     </tr>
                                 </thead>
@@ -927,16 +928,21 @@ function renderComponents(components, activation) {
 
     const entries = Object.entries(components || {});
     if (entries.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="4" class="text-muted">No audio assets were generated.</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="5" class="text-muted">No audio assets were generated.</td></tr>';
     } else {
         for (const [name, component] of entries) {
             const duration = (component.duration_seconds ?? 0).toFixed(2);
             const size = component.size_bytes ? `${component.size_bytes.toLocaleString()} bytes` : '—';
+            const playbackUrl = component.stream_url || component.data_url || component.download_url || '';
+            const previewCell = playbackUrl
+                ? `<audio class="w-100" controls preload="none" src="${playbackUrl}"></audio>`
+                : '—';
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td class="text-uppercase fw-semibold">${name}</td>
                 <td>${duration}s</td>
                 <td>${size}</td>
+                <td class="text-center">${previewCell}</td>
                 <td class="text-center">
                     ${component.download_url ? `<a class="btn btn-sm btn-outline-primary" href="${component.download_url}" target="_blank" rel="noopener">Download</a>` : '—'}
                 </td>

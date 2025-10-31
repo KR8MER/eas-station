@@ -299,26 +299,35 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('eas.workflow_home') }}" {% if current_user is not defined or not current_user.is_authenticated %}title="Sign in required to access the manual EAS workflow."{% endif %}>
+                            <i class="fas fa-broadcast-tower"></i> EAS Workflow
+                            {% if current_user is not defined or not current_user.is_authenticated %}
+                            <i class="fas fa-lock small ms-1"></i>
+                            {% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('compliance_dashboard') }}" {% if current_user is not defined or not current_user.is_authenticated %}title="Sign in required to review compliance dashboards."{% endif %}>
+                            <i class="fas fa-clipboard-check"></i> Compliance
+                            {% if current_user is not defined or not current_user.is_authenticated %}
+                            <i class="fas fa-lock small ms-1"></i>
+                            {% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('alert_verification') }}" {% if current_user is not defined or not current_user.is_authenticated %}title="Sign in required to access alert validation tools."{% endif %}>
+                            <i class="fas fa-shield-check"></i> Validation
+                            {% if current_user is not defined or not current_user.is_authenticated %}
+                            <i class="fas fa-lock small ms-1"></i>
+                            {% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('led_control') }}">
                             <i class="fas fa-tv"></i> LED Control
                         </a>
                     </li>
                     {% if current_user is defined and current_user.is_authenticated %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('eas.workflow_home') }}">
-                            <i class="fas fa-broadcast-tower"></i> EAS Workflow
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('compliance_dashboard') }}">
-                            <i class="fas fa-clipboard-check"></i> Compliance
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('alert_verification') }}">
-                            <i class="fas fa-shield-check"></i> Verification
-                        </a>
-                    </li>
                     <li class="nav-item">
                         <span class="nav-link disabled text-nowrap">
                             <i class="fas fa-user-shield"></i> {{ current_user.username }}
