@@ -65,6 +65,37 @@
                         <source src="{{ audio_url }}" type="audio/wav">
                         Your browser does not support the audio element.
                     </audio>
+                    {% if segment_entries %}
+                    <div class="mb-3">
+                        <h6 class="text-muted text-uppercase small mb-2">Component Segments</h6>
+                        <div class="list-group list-group-flush">
+                            {% for segment in segment_entries %}
+                            <div class="list-group-item px-0">
+                                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                    <div>
+                                        <strong>{{ segment.label }}</strong>
+                                        {% if segment.duration_seconds is not none %}
+                                            <span class="text-muted small">· {{ '%.2f'|format(segment.duration_seconds) }}s</span>
+                                        {% endif %}
+                                        {% if segment.size_bytes is not none %}
+                                            <span class="text-muted small">· {{ segment.size_bytes }} bytes</span>
+                                        {% endif %}
+                                    </div>
+                                    <div>
+                                        <a class="btn btn-sm btn-outline-primary" href="{{ segment.url }}?download=1">
+                                            <i class="fas fa-download"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                                <audio class="w-100 mt-2" controls>
+                                    <source src="{{ segment.url }}" type="audio/wav">
+                                    Your browser does not support the audio element.
+                                </audio>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
                     {% else %}
                     <div class="alert alert-warning">
                         <i class="fas fa-exclamation-circle"></i> Audio file is not available for download.

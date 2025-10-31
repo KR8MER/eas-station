@@ -309,21 +309,27 @@ def _build_manual_message_entries(
         )
         eom_subpath = metadata.get('eom_subpath') or _component_subpath('eom')
 
-        audio_url = (
-            url_for('static', filename=_manual_path(audio_subpath))
-            if audio_subpath
-            else None
-        )
+        if event.composite_audio_data:
+            audio_url = url_for('manual_eas_audio', event_id=event.id, component='composite')
+        else:
+            audio_url = (
+                url_for('static', filename=_manual_path(audio_subpath))
+                if audio_subpath
+                else None
+            )
         summary_url = (
             url_for('static', filename=_manual_path(summary_subpath))
             if summary_subpath
             else None
         )
-        eom_url = (
-            url_for('static', filename=_manual_path(eom_subpath))
-            if eom_subpath
-            else None
-        )
+        if event.eom_audio_data:
+            eom_url = url_for('manual_eas_audio', event_id=event.id, component='eom')
+        else:
+            eom_url = (
+                url_for('static', filename=_manual_path(eom_subpath))
+                if eom_subpath
+                else None
+            )
 
         messages.append(
             {

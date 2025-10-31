@@ -576,8 +576,13 @@ class EASAudioGenerator:
         _ensure_directory(self.output_dir)
         self.tts_engine = TTSEngine(config, logger, self.sample_rate)
 
-    def build_files(self, alert: object, payload: Dict[str, object], header: str,
-                    location_codes: List[str]) -> Tuple[str, str, str]:
+    def build_files(
+        self,
+        alert: object,
+        payload: Dict[str, object],
+        header: str,
+        location_codes: List[str],
+    ) -> Tuple[str, str, str, bytes, Dict[str, object], Dict[str, Dict[str, object]]]:
         identifier = getattr(alert, 'identifier', None) or payload.get('identifier') or 'alert'
         timestamp = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
         base_name = _clean_identifier(f"{identifier}_{timestamp}")
@@ -599,13 +604,27 @@ class EASAudioGenerator:
         )
 
         samples: List[int] = []
+        segment_samples: Dict[str, List[int]] = {
+            'same': [],
+            'attention': [],
+            'buffer': [],
+        }
+
         for burst_index in range(3):
             samples.extend(header_samples)
-            samples.extend(_generate_silence(1.0, self.sample_rate))
+            segment_samples['same'].extend(header_samples)
+            silence = _generate_silence(1.0, self.sample_rate)
+            samples.extend(silence)
+            segment_samples['same'].extend(silence)
 
         tone_duration = float(self.config.get('attention_tone_seconds', 8) or 8)
-        samples.extend(_generate_tone((853.0, 960.0), tone_duration, self.sample_rate, amplitude))
-        samples.extend(_generate_silence(1.0, self.sample_rate))
+        attention_samples = _generate_tone((853.0, 960.0), tone_duration, self.sample_rate, amplitude)
+        samples.extend(attention_samples)
+        segment_samples['attention'].extend(attention_samples)
+
+        post_tone_silence = _generate_silence(1.0, self.sample_rate)
+        samples.extend(post_tone_silence)
+        segment_samples['buffer'].extend(post_tone_silence)
 
         message_text = _compose_message_text(alert)
         if message_text:
@@ -613,16 +632,42 @@ class EASAudioGenerator:
             self.logger.debug('Alert narration preview: %s', preview[:240])
 
         voice_samples = self.tts_engine.generate(message_text)
+        tts_segment: List[int] = []
         if voice_samples:
-            samples.extend(_generate_silence(1.0, self.sample_rate))
+            pre_voice_silence = _generate_silence(1.0, self.sample_rate)
+            samples.extend(pre_voice_silence)
+            segment_samples['buffer'].extend(pre_voice_silence)
             samples.extend(voice_samples)
+            tts_segment = list(voice_samples)
 
-        samples.extend(_generate_silence(1.0, self.sample_rate))
+        trailing_silence = _generate_silence(1.0, self.sample_rate)
+        samples.extend(trailing_silence)
+        segment_samples['buffer'].extend(trailing_silence)
 
         wav_bytes = samples_to_wav_bytes(samples, self.sample_rate)
         with open(audio_path, 'wb') as handle:
             handle.write(wav_bytes)
         self.logger.info(f"Generated SAME audio at {audio_path}")
+
+        segment_payload: Dict[str, Dict[str, object]] = {}
+
+        for key, segment in segment_samples.items():
+            if not segment:
+                continue
+            segment_wav = samples_to_wav_bytes(segment, self.sample_rate)
+            segment_payload[key] = {
+                'wav_bytes': segment_wav,
+                'duration_seconds': round(len(segment) / self.sample_rate, 6),
+                'size_bytes': len(segment_wav),
+            }
+
+        if tts_segment:
+            tts_wav = samples_to_wav_bytes(tts_segment, self.sample_rate)
+            segment_payload['tts'] = {
+                'wav_bytes': tts_wav,
+                'duration_seconds': round(len(tts_segment) / self.sample_rate, 6),
+                'size_bytes': len(tts_wav),
+            }
 
         text_body = {
             'identifier': identifier,
@@ -642,7 +687,7 @@ class EASAudioGenerator:
             json.dump(text_body, handle, indent=2)
         self.logger.info(f"Wrote alert summary at {text_path}")
 
-        return audio_filename, text_filename, message_text, wav_bytes, text_body
+        return audio_filename, text_filename, message_text, wav_bytes, text_body, segment_payload
 
     def build_eom_file(self) -> Tuple[str, bytes]:
         header = build_eom_header(self.config)
@@ -883,6 +928,7 @@ class EASBroadcaster:
             message_text,
             audio_bytes,
             text_payload,
+            segment_payload,
         ) = self.audio_generator.build_files(alert, payload, header, location_codes)
 
         try:
@@ -925,6 +971,15 @@ class EASBroadcaster:
                 except Exception as exc:
                     self.logger.warning(f"GPIO release failed: {exc}")
 
+        segment_metadata = {
+            key: {
+                'duration_seconds': value.get('duration_seconds'),
+                'size_bytes': value.get('size_bytes'),
+            }
+            for key, value in segment_payload.items()
+            if value
+        }
+
         record = self.model_cls(
             cap_alert_id=getattr(alert, 'id', None),
             same_header=header,
@@ -932,6 +987,10 @@ class EASBroadcaster:
             text_filename=text_filename,
             audio_data=audio_bytes,
             eom_audio_data=eom_bytes,
+            same_audio_data=(segment_payload.get('same') or {}).get('wav_bytes'),
+            attention_audio_data=(segment_payload.get('attention') or {}).get('wav_bytes'),
+            tts_audio_data=(segment_payload.get('tts') or {}).get('wav_bytes'),
+            buffer_audio_data=(segment_payload.get('buffer') or {}).get('wav_bytes'),
             text_payload=text_payload,
             created_at=datetime.now(timezone.utc),
             metadata_payload={
@@ -942,6 +1001,8 @@ class EASBroadcaster:
                 'message_type': getattr(alert, 'message_type', ''),
                 'locations': location_codes,
                 'eom_filename': eom_filename,
+                'segments': segment_metadata,
+                'has_tts': bool(segment_payload.get('tts')),
             },
         )
 
