@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Dict, Optional
 
 from flask import flash, redirect, render_template, url_for
 
@@ -19,6 +19,13 @@ def register_detail_routes(app, logger) -> None:
             message = EASMessage.query.get_or_404(message_id)
             alert = CAPAlert.query.get(message.cap_alert_id) if message.cap_alert_id else None
             metadata = dict(message.metadata_payload or {})
+            segment_metadata: Dict[str, Dict[str, object]] = {}
+            if isinstance(metadata.get('segments'), dict):
+                segment_metadata = {
+                    str(key): value
+                    for key, value in metadata['segments'].items()
+                    if isinstance(value, dict)
+                }
 
             event_name = (alert.event if alert and alert.event else metadata.get('event')) or 'Unknown Event'
             severity = alert.severity if alert and alert.severity else metadata.get('severity')
@@ -50,6 +57,29 @@ def register_detail_routes(app, logger) -> None:
 
             summary_data = load_or_cache_summary_payload(message)
 
+            component_map = {
+                'same': ('same_audio_data', 'SAME Header Bursts'),
+                'attention': ('attention_audio_data', 'Attention Tone'),
+                'tts': ('tts_audio_data', 'Narration / TTS'),
+                'buffer': ('buffer_audio_data', 'Silence Buffer'),
+            }
+
+            segment_entries = []
+            for key, (attr, label) in component_map.items():
+                blob = getattr(message, attr)
+                if not blob:
+                    continue
+                metrics = segment_metadata.get(key, {})
+                segment_entries.append(
+                    {
+                        'key': key,
+                        'label': label,
+                        'url': url_for('eas_message_audio', message_id=message.id, variant=key),
+                        'duration_seconds': metrics.get('duration_seconds'),
+                        'size_bytes': metrics.get('size_bytes'),
+                    }
+                )
+
             return render_template(
                 'audio_detail.html',
                 message=message,
@@ -63,6 +93,7 @@ def register_detail_routes(app, logger) -> None:
                 severity=severity,
                 status=status,
                 locations=locations,
+                segment_entries=segment_entries,
             )
         except Exception as exc:
             logger.error('Error loading audio detail %s: %s', message_id, exc)

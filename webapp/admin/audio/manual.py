@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
 import os
 import re
@@ -422,7 +423,11 @@ def register_manual_routes(app, logger, eas_config) -> None:
             'export_url': summary_url,
             'components': {
                 key: {
-                    'download_url': value['download_url'],
+                    'download_url': (
+                        url_for('manual_eas_audio', event_id=activation_record.id, component=key)
+                        if value.get('wav_bytes')
+                        else value.get('download_url')
+                    ),
                     'filename': value['filename'],
                 }
                 for key, value in stored_components.items()
@@ -453,6 +458,14 @@ def register_manual_routes(app, logger, eas_config) -> None:
 
             for event in events:
                 components_payload = event.components_payload or {}
+                column_map = {
+                    'composite': 'composite_audio_data',
+                    'same': 'same_audio_data',
+                    'attention': 'attention_audio_data',
+                    'tts': 'tts_audio_data',
+                    'buffer': 'buffer_audio_data',
+                    'eom': 'eom_audio_data',
+                }
 
                 def _component_with_url(meta: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
                     if not meta:
@@ -460,7 +473,12 @@ def register_manual_routes(app, logger, eas_config) -> None:
                     storage_subpath = meta.get('storage_subpath')
                     web_parts = [web_prefix, storage_subpath] if storage_subpath else []
                     web_path = '/'.join(part for part in web_parts if part)
-                    download_url = url_for('static', filename=web_path) if storage_subpath else None
+                    component_key = meta.get('component') if isinstance(meta.get('component'), str) else None
+                    download_url = None
+                    if component_key and column_map.get(component_key) and getattr(event, column_map[component_key]):
+                        download_url = url_for('manual_eas_audio', event_id=event.id, component=component_key)
+                    elif storage_subpath:
+                        download_url = url_for('static', filename=web_path) if storage_subpath else None
                     return {
                         'filename': meta.get('filename'),
                         'duration_seconds': meta.get('duration_seconds'),
@@ -493,7 +511,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
                     'print_url': url_for('manual_eas_print', event_id=event.id),
                     'export_url': export_url,
                     'components': {
-                        key: _component_with_url(meta)
+                        key: _component_with_url({**meta, 'component': key})
                         for key, meta in components_payload.items()
                     },
                 })
@@ -512,6 +530,14 @@ def register_manual_routes(app, logger, eas_config) -> None:
         event = ManualEASActivation.query.get_or_404(event_id)
         components_payload = event.components_payload or {}
         web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+        column_map = {
+            'composite': 'composite_audio_data',
+            'same': 'same_audio_data',
+            'attention': 'attention_audio_data',
+            'tts': 'tts_audio_data',
+            'buffer': 'buffer_audio_data',
+            'eom': 'eom_audio_data',
+        }
 
         def _component_with_url(meta: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
             if not meta:
@@ -519,7 +545,12 @@ def register_manual_routes(app, logger, eas_config) -> None:
             storage_subpath = meta.get('storage_subpath')
             web_parts = [web_prefix, storage_subpath] if storage_subpath else []
             web_path = '/'.join(part for part in web_parts if part)
-            download_url = url_for('static', filename=web_path) if storage_subpath else None
+            component_key = meta.get('component') if isinstance(meta.get('component'), str) else None
+            download_url = None
+            if component_key and column_map.get(component_key) and getattr(event, column_map[component_key]):
+                download_url = url_for('manual_eas_audio', event_id=event.id, component=component_key)
+            elif storage_subpath:
+                download_url = url_for('static', filename=web_path) if storage_subpath else None
             return {
                 'filename': meta.get('filename'),
                 'duration_seconds': meta.get('duration_seconds'),
@@ -529,7 +560,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
 
         components: Dict[str, Dict[str, Any]] = {}
         for key, meta in components_payload.items():
-            component_value = _component_with_url(meta)
+            component_value = _component_with_url({**meta, 'component': key})
             if component_value:
                 components[key] = component_value
 
@@ -576,6 +607,50 @@ def register_manual_routes(app, logger, eas_config) -> None:
             download_name=event.summary_filename,
             mimetype='application/json',
         )
+
+    @app.route('/admin/eas/manual_events/<int:event_id>/audio/<string:component>', methods=['GET'])
+    def manual_eas_audio(event_id: int, component: str):
+        creating_first_user = AdminUser.query.count() == 0
+        if g.current_user is None and not creating_first_user:
+            return abort(401)
+
+        component_key = (component or '').strip().lower()
+        column_map = {
+            'composite': ('composite_audio_data', 'full'),
+            'same': ('same_audio_data', 'same'),
+            'attention': ('attention_audio_data', 'attention'),
+            'tts': ('tts_audio_data', 'tts'),
+            'buffer': ('buffer_audio_data', 'buffer'),
+            'eom': ('eom_audio_data', 'eom'),
+        }
+
+        if component_key not in column_map:
+            abort(400, description='Unsupported audio component.')
+
+        column_name, suffix = column_map[component_key]
+        activation = ManualEASActivation.query.get_or_404(event_id)
+        payload = getattr(activation, column_name)
+        if not payload:
+            abort(404, description='Audio component not available.')
+
+        download = (request.args.get('download') or '').strip().lower()
+        as_attachment = download in {'1', 'true', 'yes', 'download'}
+
+        filename = f"manual_eas_{activation.id}_{suffix}.wav"
+        file_obj = io.BytesIO(payload)
+        file_obj.seek(0)
+
+        response = send_file(
+            file_obj,
+            mimetype='audio/wav',
+            as_attachment=as_attachment,
+            download_name=filename,
+            max_age=0,
+        )
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
 
     @app.route('/admin/eas/manual_events/<int:event_id>', methods=['DELETE'])
     def admin_delete_manual_eas(event_id: int):
