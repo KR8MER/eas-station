@@ -127,7 +127,7 @@ def register_dashboard_routes(app, logger, eas_config):
                 eas_originator=eas_config.get('originator', 'WXR'),
                 eas_station_id=eas_config.get('station_id', 'EASNODES'),
                 eas_attention_seconds=eas_config.get('attention_tone_seconds', 8),
-                eas_sample_rate=eas_config.get('sample_rate', 44100),
+                eas_sample_rate=eas_config.get('sample_rate', 16000),
                 eas_tts_provider=(eas_config.get('tts_provider') or '').strip().lower(),
                 eas_fips_states=eas_state_tree,
                 eas_fips_lookup=eas_lookup,

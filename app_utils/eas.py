@@ -76,7 +76,7 @@ def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
         'gpio_pin': os.getenv('EAS_GPIO_PIN'),
         'gpio_active_state': os.getenv('EAS_GPIO_ACTIVE_STATE', 'HIGH').upper(),
         'gpio_hold_seconds': float(os.getenv('EAS_GPIO_HOLD_SECONDS', '5') or 5),
-        'sample_rate': int(os.getenv('EAS_SAMPLE_RATE', '44100') or 44100),
+        'sample_rate': int(os.getenv('EAS_SAMPLE_RATE', '16000') or 16000),
         'tts_provider': (os.getenv('EAS_TTS_PROVIDER') or '').strip().lower(),
         'azure_speech_key': os.getenv('AZURE_SPEECH_KEY'),
         'azure_speech_region': os.getenv('AZURE_SPEECH_REGION'),
@@ -571,7 +571,7 @@ class EASAudioGenerator:
     def __init__(self, config: Dict[str, object], logger) -> None:
         self.config = config
         self.logger = logger
-        self.sample_rate = int(config.get('sample_rate', 44100))
+        self.sample_rate = int(config.get('sample_rate', 16000))
         self.output_dir = str(config.get('output_dir'))
         _ensure_directory(self.output_dir)
         self.tts_engine = TTSEngine(config, logger, self.sample_rate)

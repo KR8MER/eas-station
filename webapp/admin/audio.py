@@ -713,7 +713,7 @@ def register_audio_routes(app, logger, eas_config):
         message_type = (payload.get('message_type') or 'Alert').strip() or 'Alert'
 
         try:
-            sample_rate = int(payload.get('sample_rate') or eas_config.get('sample_rate', 44100) or 44100)
+            sample_rate = int(payload.get('sample_rate') or eas_config.get('sample_rate', 16000) or 16000)
         except (TypeError, ValueError):
             return _validation_error('Sample rate must be an integer value.')
         if sample_rate < 8000 or sample_rate > 48000:
