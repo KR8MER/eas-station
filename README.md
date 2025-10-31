@@ -148,6 +148,14 @@ EAS Station is not just an alert monitor—it's a **complete emergency broadcast
 - **Roadmap alignment:** Issues and pull requests should call out which drop-in replacement requirement from [`docs/master_todo.md`](docs/master_todo.md) they advance to keep hardware parity measurable.
 - **Legal notices:** Review the [Terms of Use](TERMS_OF_USE.md) and [Privacy Policy](PRIVACY_POLICY.md) before deploying test systems or sharing data.
 
+## 🧾 Release Integrity & Audit Trails
+
+- **Version numbering is mandatory.** Every deployable build must set `APP_BUILD_VERSION` (surfaced in the UI footer) so operators and auditors can immediately identify what is running. Bumping that version goes hand in hand with publishing a `CHANGELOG` entry.
+- **CHANGELOG-first pull requests.** Any change that alters behaviour—no matter how small—should append a note under the `[Unreleased]` section of [`CHANGELOG.md`](CHANGELOG.md) summarising the impact and highlighting regression testing that protects previously working workflows.
+- **Regression checks before merge.** Contributors are expected to confirm that critical features (alert ingest, SAME generation, GPIO triggers, audio playout) still function. Document manual or automated verification in the PR description so upgrade decisions can be audited later.
+- **Git history is the audit trail.** Keep commits focused and well described; reference issue numbers where applicable and avoid force-pushes to shared branches so the trail remains trustworthy.
+- **Post-upgrade validation.** Every deployment should run the operator verification checklist (alert ingest, SAME playback, GPIO relay test, audio monitoring) immediately after `tools/inplace_upgrade.py` completes so you can roll back before lab exercises resume.
+
 ## 📚 Additional Documentation
 
 - [ℹ️ About the Project](ABOUT.md) – Overview of the mission, core services, and full software stack powering the system.
@@ -219,16 +227,16 @@ docker compose up -d --build
   docker compose up -d --build
   ```
 
-### Quick Update (Pull Latest Changes)
+### In-Place Upgrades (Keep Containers Running)
 
 ```bash
-git pull origin
-docker compose build --pull
-docker compose up -d --force-recreate
-# Include the embedded database overlay when you want Compose to refresh the bundled
-# PostGIS container at the same time:
-# docker compose -f docker-compose.yml -f docker-compose.embedded-db.yml up -d --force-recreate
+# Ensure your worktree is clean, then run:
+python tools/inplace_upgrade.py --checkout v2.3.0
+
+# Skip --checkout to stay on the current branch.
 ```
+
+The helper performs a `git fetch`, optionally checks out a tag/branch, fast-forwards the repository, rebuilds the Docker image, reapplies the stack with `docker compose up -d --build`, runs Alembic migrations, and restarts the pollers—without destroying volumes or replacing containers unnecessarily. Pass `--skip-migrations` if you only need to refresh static assets, and combine it with `tools/create_backup.py` for a pre-flight snapshot before every upgrade.
 
 ### IPAWS Poller Configuration
 
@@ -543,28 +551,32 @@ The system automatically creates the following tables:
 
 ### Backup and Restore
 
-**Create Backup:**
-```bash
-# Dump entire database
-docker compose exec postgresql pg_dump -U postgres alerts > backup_$(date +%Y%m%d_%H%M%S).sql
+**Recommended snapshot workflow:**
 
-# Backup with compression
-docker compose exec postgresql pg_dump -U postgres alerts | gzip > backup.sql.gz
+```bash
+# Create a timestamped backup folder under ./backups/
+python tools/create_backup.py --label pre-upgrade
 ```
 
-**Restore from Backup:**
-```bash
-# From plain SQL
-cat backup_20250128_120000.sql | docker compose exec -T postgresql psql -U postgres -d alerts
+The helper copies your `.env` and compose files, runs `pg_dump` against the configured database (via the running container when available), and writes a `metadata.json` manifest capturing the git revision and app version for audit trails.
 
-# From compressed backup
-gunzip -c backup.sql.gz | docker compose exec -T postgresql psql -U postgres -d alerts
+**Manual database dump (fallback):**
+
+```bash
+docker compose exec alerts-db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > backup_$(date +%Y%m%d_%H%M%S).sql
 ```
 
-**Reset Database (WARNING: Deletes all data):**
+**Restore from backup:**
+
 ```bash
-docker compose down -v  # Removes volumes
-docker compose up -d    # Recreates fresh database
+cat backup_20250128_120000.sql | docker compose exec -T alerts-db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+```
+
+**Reset database (WARNING: deletes all data):**
+
+```bash
+docker compose down -v
+docker compose up -d
 ```
 
 ### Enable PostGIS Extension (if needed)

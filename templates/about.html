@@ -550,6 +550,23 @@
                 </div>
             </div>
 
+            <!-- Release Management -->
+            <div class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-clipboard-check text-primary me-2"></i>Release Management &amp; Audit Trails
+                    </h2>
+                    <p class="mb-3">EAS Station treats every deployment like regulated equipment. Follow these guardrails before promoting changes:</p>
+                    <ul class="mb-0">
+                        <li class="mb-2"><strong>Version numbering matters.</strong> Set <code>APP_BUILD_VERSION</code> for every build so the footer and health endpoints report the running release.</li>
+                        <li class="mb-2"><strong>CHANGELOG-first workflow.</strong> Document behaviour changes under the <code>[Unreleased]</code> heading and call out how regressions were prevented.</li>
+                        <li class="mb-2"><strong>Snapshot before upgrades.</strong> Run <code>python tools/create_backup.py</code> to capture the configuration, database dump, and git revision metadata.</li>
+                        <li class="mb-2"><strong>Upgrade in place.</strong> Apply updates with <code>python tools/inplace_upgrade.py</code> to rebuild containers, run migrations, and restart services without wiping volumes.</li>
+                        <li class="mb-0"><strong>Validate immediately.</strong> After the upgrade completes, spot-check ingest, SAME generation, GPIO relays, and audio playout so regressions are caught before lab exercises.</li>
+                    </ul>
+                </div>
+            </div>
+
             <!-- Project Resources -->
             <div class="card shadow-sm mb-4 border-0 bg-primary text-white">
                 <div class="card-body p-4">

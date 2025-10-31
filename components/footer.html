@@ -101,7 +101,13 @@
                 </p>
 
                 <div class="footer-meta">
-                    <!-- Future links for legal pages -->
+                    <a href="https://github.com/KR8MER/eas-station/blob/main/CHANGELOG.md" class="footer-meta-link" target="_blank" rel="noopener">
+                        <i class="fas fa-history me-1"></i>Changelog
+                    </a>
+                    <span class="mx-2 text-muted">•</span>
+                    <a href="https://github.com/KR8MER/eas-station#-%F0%9F%A7%BE-release-integrity--audit-trails" class="footer-meta-link" target="_blank" rel="noopener">
+                        <i class="fas fa-tasks me-1"></i>Release Policy
+                    </a>
                 </div>
             </div>
 
@@ -155,6 +161,18 @@
 .alert-success { border-left-color: var(--success); }
 .alert-warning { border-left-color: var(--warning); }
 .alert-error { border-left-color: var(--danger); }
+
+.footer-meta-link {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    text-decoration: none;
+}
+
+.footer-meta-link:hover,
+.footer-meta-link:focus {
+    color: var(--accent-primary);
+    text-decoration: underline;
+}
 
 .btn-close {
     background: none;

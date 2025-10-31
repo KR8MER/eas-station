@@ -14,6 +14,7 @@ To match the expectations of purpose-built EAS appliances, the project must deli
 7. **Regulatory Compliance Support** – Reporting, analytics, and verification that prove the system is performing required weekly/monthly tasks.
 8. **Unified Documentation** – Repository and web UI content that keeps operators aligned on safety boundaries and configuration changes.
 9. **Certification Readiness** – Repeatable test harnesses, evidence collection, and configuration baselines that support an FCC Part 11 certification bid for the Raspberry Pi-based build.
+10. **Release Governance & Audit Trails** – Enforce version numbering, changelog discipline, and upgrade/backup automation so deployments remain traceable.
 
 Each roadmap item below references the requirement(s) it unlocks so contributors can tie deliverables directly to hardware parity.
 
@@ -98,6 +99,15 @@ Each roadmap item below references the requirement(s) it unlocks so contributors
   2. Develop `docs/certification/readiness_checklist.md` outlining required measurements (audio levels, timing tolerances, relay response) and evidence capture procedures.
   3. Integrate long-duration reliability soak tests into CI or scheduled workflows, storing telemetry and fault reports for review.
   4. Assemble a Part 11 compliance dossier (schematics, BOM, firmware/software versions) and version it alongside release candidates.
+
+## 10. Release Governance & Audit Trails (Requirement 10)
+- **Goal**: Guarantee every deployment is identifiable, auditable, and recoverable without destroying infrastructure.
+- **Status**: Manual guidelines existed; scripts for in-place upgrades and snapshots now land in `tools/`, but enforcement remains ad-hoc.
+- **Plan**:
+  1. Wire CI checks that fail builds lacking an `[Unreleased]` changelog entry or updated `APP_BUILD_VERSION` when code paths change.
+  2. Expose an `/api/release-manifest` endpoint that reports the running version, git hash, and migration level to aid audits.
+  3. Expand `tools/create_backup.py` into a scheduled task (systemd timer or cron example) and document automated retention/rotation in `docs/runbooks/backup_strategy.md`.
+  4. Publish an operator-facing upgrade checklist referencing `tools/inplace_upgrade.py`, verification tests, and rollback procedures.
 
 ---
 

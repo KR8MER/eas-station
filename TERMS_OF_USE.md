@@ -38,6 +38,7 @@ _Last updated: January 30, 2025_
 - These terms may change as the project evolves.
 - Continued use of the repository or website after an update constitutes acceptance of the revised terms.
 - Significant changes will be documented in the project changelog or release notes.
+- Operators evaluating new builds must review the published changelog, confirm the advertised `APP_BUILD_VERSION`, and verify that critical workflows (alert ingest, SAME generation, GPIO control, audio playout) still function before relying on the update for lab exercises.
 
 ## 8. Contact
 - Questions about these terms can be directed through the GitHub issue tracker.
