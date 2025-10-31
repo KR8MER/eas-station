@@ -1239,7 +1239,7 @@ def _create_segment(
     )
 
 
-def decode_same_audio(path: str, *, sample_rate: int = 22050) -> SAMEAudioDecodeResult:
+def decode_same_audio(path: str, *, sample_rate: int = 16000) -> SAMEAudioDecodeResult:
     """Decode SAME headers from a WAV or MP3 file located at ``path``."""
 
     if not os.path.exists(path):
