@@ -47,7 +47,7 @@ def upgrade() -> None:
                 UPDATE location_settings
                 SET fips_codes = CAST(:fips_default AS jsonb)
                 WHERE fips_codes IS NULL
-                   OR jsonb_array_length(fips_codes) = 0
+                   OR jsonb_array_length(CAST(fips_codes AS jsonb)) = 0
                 """
             ).bindparams(bindparam("fips_default", value=default_json, type_=sa.String))
         )
