@@ -24,6 +24,12 @@
 
 **Built for:** Amateur Radio Emergency Communications (KR8MER) | Putnam County, Ohio
 
+### About the Maintainer
+
+Timothy Kramer (KR8MER) is an amateur radio operator and public-safety technologist based in Putnam County, Ohio. First licensed in 2004 and upgraded to General Class in 2025, he combines two decades of field experience with a passion for resilient communications. Kramer previously spent 17 years as a deputy sheriff, where mission-critical Motorola land-mobile radio systems were part of his daily toolkit. He now works as a full-time electrical panel electrician with a focus on keeping complex infrastructure reliable and safe.
+
+Outside of the day job, Kramer is an active Skywarn spotter and maintains a diverse bench of professional-grade radios, trunked monitoring infrastructure, SDR capture nodes, and digital paging systems. His interests extend to RF engineering, SDRTrunk operations, ADS-B and APRS telemetry, drone operations, Ubiquiti networking, Raspberry Pi experimentation, 3D printing, and hands-on Emergency Alert System integration. He created EAS Station to explore modern, open emergency communications workflows that blend amateur radio ingenuity with professional broadcast practices.
+
 ---
 
 ## ⚠️ Important Safety Notice
@@ -110,6 +116,12 @@ EAS Station is not just an alert monitor—it's a **complete emergency broadcast
 - **Dark/Light Theme** - Consistent UI across all pages with persistent user preferences
 
 ---
+
+## 🏛️ Governance & Contributions
+
+- **License:** Source code is provided under the [MIT License](LICENSE); copyright remains with Timothy Kramer (KR8MER).
+- **Contribution workflow:** All commits must include a Developer Certificate of Origin sign-off (`Signed-off-by`) as described in the [CONTRIBUTING guide](CONTRIBUTING.md).
+- **Legal notices:** Review the [Terms of Use](TERMS_OF_USE.md) and [Privacy Policy](PRIVACY_POLICY.md) before deploying test systems or sharing data.
 
 ## 📚 Additional Documentation
 
