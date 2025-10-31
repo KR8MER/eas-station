@@ -8,11 +8,13 @@ import shutil
 import subprocess
 from array import array
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from .eas import describe_same_header
+from .eas import ORIGINATOR_DESCRIPTIONS, describe_same_header
 from .eas_fsk import SAME_BAUD, SAME_MARK_FREQ, SAME_SPACE_FREQ
 from .fips_codes import get_same_lookup
+from app_utils.event_codes import EVENT_CODE_REGISTRY
 
 
 class AudioDecodeError(RuntimeError):
@@ -26,13 +28,178 @@ class SAMEHeaderDetails:
     header: str
     fields: Dict[str, object] = field(default_factory=dict)
     confidence: float = 0.0
+    summary: Optional[str] = None
 
     def to_dict(self) -> Dict[str, object]:
-        return {
+        payload = {
             "header": self.header,
             "fields": dict(self.fields),
             "confidence": float(self.confidence),
         }
+        if self.summary:
+            payload["summary"] = self.summary
+        return payload
+
+
+def _select_article(phrase: str) -> str:
+    cleaned = (phrase or "").strip().lower()
+    if not cleaned:
+        return "A"
+    return "An" if cleaned[0] in {"a", "e", "i", "o", "u"} else "A"
+
+
+def _parse_issue_datetime(fields: Dict[str, object]) -> Optional[datetime]:
+    value = fields.get("issue_time_iso") if isinstance(fields, dict) else None
+    if isinstance(value, str) and value:
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            if value.endswith("Z"):
+                try:
+                    return datetime.fromisoformat(value[:-1] + "+00:00")
+                except ValueError:
+                    pass
+
+    components = fields.get("issue_components") if isinstance(fields, dict) else None
+    if isinstance(components, dict):
+        try:
+            ordinal = int(components.get("day_of_year"))
+            hour = int(components.get("hour", 0))
+            minute = int(components.get("minute", 0))
+        except (TypeError, ValueError):
+            return None
+
+        base_year = datetime.now(timezone.utc).year
+        try:
+            return datetime(base_year, 1, 1, tzinfo=timezone.utc) + timedelta(
+                days=ordinal - 1,
+                hours=hour,
+                minutes=minute,
+            )
+        except ValueError:
+            return None
+
+    return None
+
+
+def _format_clock(value: datetime) -> str:
+    formatted = value.strftime("%I:%M %p")
+    return formatted.lstrip("0") if formatted else ""
+
+
+def _format_date(value: datetime) -> str:
+    return value.strftime("%b %d, %Y").upper()
+
+
+def _build_locations_list(fields: Dict[str, object]) -> List[str]:
+    locations = []
+    raw_locations = fields.get("locations") if isinstance(fields, dict) else None
+    if not isinstance(raw_locations, list):
+        return locations
+
+    for item in raw_locations:
+        if not isinstance(item, dict):
+            continue
+        description = (item.get("description") or "").strip()
+        state = (item.get("state_abbr") or item.get("state_name") or "").strip()
+        if description:
+            label = description
+            if state and state not in description:
+                label = f"{label}, {state}"
+        else:
+            code = (item.get("code") or "").strip()
+            if code and state:
+                label = f"{code} ({state})"
+            else:
+                label = code or state
+        label = label.strip()
+        if label:
+            locations.append(label)
+
+    return locations
+
+
+def _clean_originator_label(fields: Dict[str, object]) -> str:
+    description = (fields.get("originator_description") or "").strip()
+    if description:
+        if "/" in description:
+            description = description.split("/", 1)[0].strip()
+        return description
+
+    code = (fields.get("originator") or "").strip()
+    if code:
+        mapping = ORIGINATOR_DESCRIPTIONS.get(code)
+        if mapping:
+            if "/" in mapping:
+                return mapping.split("/", 1)[0].strip()
+            return mapping
+        return f"originator {code}"
+
+    return "the originator"
+
+
+def _format_event_phrase(fields: Dict[str, object]) -> str:
+    code = (fields.get("event_code") or "").strip().upper()
+    entry = EVENT_CODE_REGISTRY.get(code)
+
+    if entry:
+        event_name = entry.get("name") or code
+        article = _select_article(event_name)
+        phrase = f"{article} {event_name.upper()}"
+        if code:
+            phrase += f" ({code})"
+        return phrase
+
+    if code:
+        return f"an alert with event code {code}"
+
+    return "an alert"
+
+
+def build_plain_language_summary(header: str, fields: Dict[str, object]) -> Optional[str]:
+    if not header:
+        return None
+
+    originator_label = _clean_originator_label(fields)
+    originator_article = _select_article(originator_label)
+    originator_phrase = f"{originator_article} {originator_label}"
+
+    event_phrase = _format_event_phrase(fields)
+
+    summary = f"{originator_phrase} has issued {event_phrase}"
+
+    locations = _build_locations_list(fields)
+    if locations:
+        summary += f" for the following counties/areas: {'; '.join(locations)}"
+    else:
+        summary += " for the specified area"
+
+    issue_dt = _parse_issue_datetime(fields)
+    if issue_dt:
+        issue_dt = issue_dt.astimezone(timezone.utc)
+        summary += f" at {_format_clock(issue_dt)} on {_format_date(issue_dt)}"
+
+    summary += "."
+
+    purge_minutes = fields.get("purge_minutes")
+    if isinstance(purge_minutes, (int, float)) and purge_minutes > 0 and issue_dt:
+        try:
+            expire_dt = issue_dt + timedelta(minutes=float(purge_minutes))
+            expire_dt = expire_dt.astimezone(timezone.utc)
+            expiry_phrase = _format_clock(expire_dt)
+            if expire_dt.date() != issue_dt.date():
+                expiry_phrase += f" on {_format_date(expire_dt)}"
+            summary += f" Effective until {expiry_phrase}."
+        except Exception:
+            pass
+    elif isinstance(purge_minutes, (int, float)) and purge_minutes == 0:
+        summary += " Effective immediately."
+
+    station = (fields.get("station_identifier") or "").strip()
+    if station:
+        summary += f" Message from {station}."
+
+    return summary
 
 
 @dataclass
@@ -844,11 +1011,15 @@ def decode_same_audio(path: str, *, sample_rate: int = 22050) -> SAMEAudioDecode
                     # Get FIPS code lookup for county names
                     fips_lookup = get_same_lookup()
 
+                    header_fields = describe_same_header(decoded_header, lookup=fips_lookup)
                     headers = [
                         SAMEHeaderDetails(
                             header=decoded_header,
-                            fields=describe_same_header(decoded_header, lookup=fips_lookup),
+                            fields=header_fields,
                             confidence=confidence,
+                            summary=build_plain_language_summary(
+                                decoded_header, header_fields
+                            ),
                         )
                     ]
 
@@ -876,11 +1047,13 @@ def decode_same_audio(path: str, *, sample_rate: int = 22050) -> SAMEAudioDecode
                 # Get FIPS code lookup for county names
                 fips_lookup = get_same_lookup()
 
+                header_fields = describe_same_header(decoded_header, lookup=fips_lookup)
                 headers = [
                     SAMEHeaderDetails(
                         header=decoded_header,
-                        fields=describe_same_header(decoded_header, lookup=fips_lookup),
+                        fields=header_fields,
                         confidence=confidence,
+                        summary=build_plain_language_summary(decoded_header, header_fields),
                     )
                 ]
 
@@ -913,11 +1086,13 @@ def decode_same_audio(path: str, *, sample_rate: int = 22050) -> SAMEAudioDecode
 
     headers: List[SAMEHeaderDetails] = []
     for header in metadata["headers"]:
+        header_fields = describe_same_header(header, lookup=fips_lookup)
         headers.append(
             SAMEHeaderDetails(
                 header=header,
-                fields=describe_same_header(header, lookup=fips_lookup),
+                fields=header_fields,
                 confidence=average_confidence,
+                summary=build_plain_language_summary(header, header_fields),
             )
         )
 
