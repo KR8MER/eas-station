@@ -298,7 +298,7 @@ If you forget all credentials, run the CLI command again to create another admin
 
 ### SAME / EAS Broadcast Integration
 
-When enabled, the poller generates full SAME header bursts, raises an optional GPIO-controlled relay, and stores the alert audio alongside a JSON summary that can be downloaded from the **EAS Output** tab in the admin console.
+When enabled, the poller generates full SAME header bursts, raises an optional GPIO-controlled relay, and stores the alert audio alongside a JSON summary that can be reviewed from the dedicated **EAS Workflow** console (available from the top navigation after signing in).
 
 1. **Enable the broadcaster** by adding the following to your `.env` file (a sample configuration is provided in `.env.example`):
    ```ini
@@ -322,13 +322,13 @@ When enabled, the poller generates full SAME header bursts, raises an optional G
    - A matching `*.txt` file stores the JSON metadata (identifier, timestamps, SAME header, and narrative).
    - The admin console lists the most recent transmissions, allowing operators to play audio or download the summary directly from the browser.
 
-#### Build practice activations from the admin console
+#### Build practice activations from the workflow console
 
-The **Manual Broadcast Builder** on the EAS Output tab mirrors the workflow of a commercial encoder:
+The **Manual Broadcast Builder** in the EAS Workflow console mirrors the workflow of a commercial encoder:
 
-1. Open **Admin → EAS Output** and build your SAME target list with the hierarchical picker: choose a state or territory, select the county or statewide PSSCCC entry, and click **Add Location**. The textarea still accepts pasted codes for bulk entry, and the running list is de-duplicated automatically with a hard stop at the 31-code SAME limit.
+1. Open the **EAS Workflow** console from the top navigation (visible once you are authenticated) and build your SAME target list with the hierarchical picker: choose a state or territory, select the county or statewide PSSCCC entry, and click **Add Location**. The textarea still accepts pasted codes for bulk entry, and the running list is de-duplicated automatically with a hard stop at the 31-code SAME limit.
 2. Confirm the ORG, EEE, purge time (TTTT), and station identifier (LLLLLLLL). The originator selector now reflects the four production codes (EAS, CIV, WXR, PEP), the event dropdown hides the legacy `??*` placeholders, and the live header preview renders the complete `ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-` sequence so you can verify every field before you transmit.
-3. Need a test in a hurry? Tap **Quick Weekly Test** to preload the Required Weekly Test template: the tool drops in the configured SAME counties, forces the alert into `Test` status, seeds the headline/message, and omits the attention signal (FCC does not require tones for RWTs). Switch the attention selector if you need to add it back in.
+3. Need a test in a hurry? Tap **Quick Weekly Test** to preload the Required Weekly Test template: the tool drops in the configured SAME counties, forces the alert into `Test` status, seeds the headline/message, and omits the attention signal (FCC does not require tones for RWTs). A confirmation dialog appears before the workflow automatically generates the new activation. Switch the attention selector if you need to add it back in.
 4. Click **Generate Package** to produce discrete WAV files for the SAME bursts, attention signal (dual-tone, 1050 Hz, or omit entirely), optional narration, and the EOM burst. A composite file is also produced so you can audition the full activation end-to-end. SAME headers always transmit in three bursts automatically per the FCC specification, with one-second guard intervals between each section.
 
 The header breakdown card reiterates the commercial nomenclature (preamble, ORG, EEE, PSSCCC, +TTTT, -JJJHHMM, -LLLLLLLL-, and the trailing `NNNN` EOM burst) and includes the FCC/FEMA guidance for each field so operators and trainees can cross-check the encoding rules.

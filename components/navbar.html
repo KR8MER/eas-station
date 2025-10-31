@@ -51,12 +51,14 @@
                     Admin
                 </a>
             </li>
+            {% if current_user is defined and current_user.is_authenticated %}
             <li class="nav-item">
                 <a href="{{ url_for('eas.workflow_home') }}" class="nav-link {{ 'active' if request.endpoint and request.endpoint.startswith('eas.') }}">
                     <i class="fas fa-broadcast-tower"></i>
                     EAS Workflow
                 </a>
             </li>
+            {% endif %}
             <li class="nav-item">
                 <a href="{{ url_for('logs') if url_for('logs') else '/logs' }}" class="nav-link {{ 'active' if request.endpoint == 'logs' }}">
                     <i class="fas fa-file-alt"></i>

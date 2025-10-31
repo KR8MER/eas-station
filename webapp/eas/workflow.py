@@ -141,14 +141,22 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             raw_codes = []
 
         location_codes: List[str] = []
+        seen_codes = set()
         for code in raw_codes:
             digits = ''.join(ch for ch in str(code) if ch.isdigit())
             if not digits:
                 continue
-            location_codes.append(digits.zfill(6)[:6])
+            normalized = digits.zfill(6)[:6]
+            if normalized in seen_codes:
+                continue
+            seen_codes.add(normalized)
+            location_codes.append(normalized)
 
         if not location_codes:
             return _validation_error('At least one SAME/FIPS location code is required.')
+
+        if len(location_codes) > 31:
+            return _validation_error('The SAME specification allows at most 31 location codes per activation.')
 
         try:
             duration_minutes = float(payload.get('duration_minutes', 15) or 15)
