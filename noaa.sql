@@ -208,6 +208,7 @@ CREATE TABLE IF NOT EXISTS location_settings (
     county_name VARCHAR(255) NOT NULL,
     state_code CHAR(2) NOT NULL,
     timezone VARCHAR(64) NOT NULL,
+    fips_codes JSONB NOT NULL DEFAULT '[]'::jsonb,
     zone_codes JSONB NOT NULL DEFAULT '[]'::jsonb,
     area_terms JSONB NOT NULL DEFAULT '[]'::jsonb,
     map_center_lat DOUBLE PRECISION NOT NULL,

@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import threading
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytz
 from flask import current_app, has_app_context
 
-from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS, ensure_list, normalise_upper
+from app_utils.location_settings import (
+    DEFAULT_LOCATION_SETTINGS,
+    ensure_list,
+    normalise_upper,
+    sanitize_fips_codes,
+)
 from app_utils import set_location_timezone
 
 from .extensions import db
@@ -18,9 +23,42 @@ _location_settings_cache: Optional[Dict[str, Any]] = None
 _location_settings_lock = threading.Lock()
 
 
+def _default_fips_codes() -> List[str]:
+    codes, _ = sanitize_fips_codes(DEFAULT_LOCATION_SETTINGS.get("fips_codes"))
+    if codes:
+        return codes
+    fallback, _ = sanitize_fips_codes(["039137"])
+    return fallback or ["039137"]
+
+
+_DEFAULT_FIPS_CODES = _default_fips_codes()
+
+
 def _log_warning(message: str) -> None:
     if has_app_context():
         current_app.logger.warning(message)
+
+
+def _resolve_fips_codes(values: Any, fallback: Any) -> Tuple[List[str], List[str]]:
+    valid, invalid = sanitize_fips_codes(values)
+    if valid:
+        return valid, invalid
+
+    fallback_valid, _ = sanitize_fips_codes(fallback)
+    if fallback_valid:
+        return fallback_valid, invalid
+
+    return list(_DEFAULT_FIPS_CODES), invalid
+
+
+def _prepare_settings_dict(settings: Dict[str, Any]) -> Dict[str, Any]:
+    prepared = dict(settings)
+    fips_codes, _ = sanitize_fips_codes(prepared.get("fips_codes"))
+    if not fips_codes:
+        fips_codes = list(_DEFAULT_FIPS_CODES)
+    prepared["fips_codes"] = fips_codes
+    prepared["same_codes"] = list(fips_codes)
+    return prepared
 
 
 def _ensure_location_settings_record() -> LocationSettings:
@@ -56,9 +94,9 @@ def get_location_settings(force_reload: bool = False) -> Dict[str, Any]:
 
         if _location_settings_cache is None:
             record = _ensure_location_settings_record()
-            _location_settings_cache = record.to_dict()
+            _location_settings_cache = _prepare_settings_dict(record.to_dict())
             set_location_timezone(_location_settings_cache["timezone"])
-        return dict(_location_settings_cache)
+        return _prepare_settings_dict(_location_settings_cache)
 
 
 def update_location_settings(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -82,6 +120,28 @@ def update_location_settings(data: Dict[str, Any]) -> Dict[str, Any]:
             or record.timezone
             or DEFAULT_LOCATION_SETTINGS["timezone"]
         ).strip()
+
+        existing_fips_source = record.fips_codes or DEFAULT_LOCATION_SETTINGS.get("fips_codes")
+        requested_fips = data.get("fips_codes")
+        if requested_fips is None:
+            fips_codes, invalid_fips = _resolve_fips_codes(
+                existing_fips_source or _DEFAULT_FIPS_CODES,
+                _DEFAULT_FIPS_CODES,
+            )
+            log_invalid = False
+        else:
+            fips_codes, invalid_fips = _resolve_fips_codes(
+                requested_fips,
+                existing_fips_source or _DEFAULT_FIPS_CODES,
+            )
+            log_invalid = True
+
+        if log_invalid and invalid_fips:
+            ignored = sorted({str(item).strip() for item in invalid_fips if str(item).strip()})
+            if ignored:
+                _log_warning(
+                    "Ignoring unrecognized location FIPS codes: %s" % ", ".join(ignored)
+                )
 
         zone_codes = normalise_upper(
             data.get("zone_codes")
@@ -131,6 +191,7 @@ def update_location_settings(data: Dict[str, Any]) -> Dict[str, Any]:
         record.county_name = county_name
         record.state_code = state_code
         record.timezone = timezone_name
+        record.fips_codes = fips_codes
         record.zone_codes = zone_codes
         record.area_terms = area_terms
         record.led_default_lines = led_lines
@@ -141,10 +202,10 @@ def update_location_settings(data: Dict[str, Any]) -> Dict[str, Any]:
         db.session.add(record)
         db.session.commit()
 
-        _location_settings_cache = record.to_dict()
+        _location_settings_cache = _prepare_settings_dict(record.to_dict())
         set_location_timezone(_location_settings_cache["timezone"])
 
-        return dict(_location_settings_cache)
+        return _prepare_settings_dict(_location_settings_cache)
 
 
 __all__ = [

@@ -79,7 +79,12 @@ def register_dashboard_routes(app, logger, eas_config):
             )
             manual_same_defaults = manual_default_same_codes()
             location_settings_view: Dict[str, List[str]] = dict(location_settings)
-            location_settings_view.setdefault('same_codes', manual_same_defaults)
+            fips_defaults = list(location_settings_view.get('fips_codes') or [])
+            if fips_defaults:
+                location_settings_view['same_codes'] = list(fips_defaults)
+            else:
+                location_settings_view.setdefault('same_codes', manual_same_defaults)
+            location_settings_view.setdefault('fips_codes', fips_defaults)
 
             eas_enabled = app.config.get('EAS_BROADCAST_ENABLED', False)
             total_eas_messages = 0

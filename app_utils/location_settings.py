@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import os
-from typing import Iterable, List, Sequence
+from typing import Iterable, List, Sequence, Tuple
 
+from app_utils.fips_codes import ALL_US_FIPS_CODES
 DEFAULT_TIMEZONE = os.getenv("DEFAULT_TIMEZONE", "America/New_York")
 DEFAULT_COUNTY_NAME = os.getenv("DEFAULT_COUNTY_NAME", "Putnam County")
 DEFAULT_STATE_CODE = os.getenv("DEFAULT_STATE_CODE", "OH")
 DEFAULT_ZONE_CODES = os.getenv("DEFAULT_ZONE_CODES", "OHZ016,OHC137")
+DEFAULT_FIPS_CODES = os.getenv("DEFAULT_FIPS_CODES", "039137")
 DEFAULT_AREA_TERMS = os.getenv(
     "DEFAULT_AREA_TERMS",
     "PUTNAM COUNTY,PUTNAM CO,OTTAWA,LEIPSIC,PANDORA,GLANDORF,KALIDA,FORT JENNINGS,"
@@ -35,11 +37,49 @@ def ensure_list(value: Iterable[str] | Sequence[str] | str | None) -> List[str]:
     return [str(item).strip() for item in value if str(item).strip()]
 
 
+def sanitize_fips_codes(values: Iterable[str] | Sequence[str] | str | None) -> Tuple[List[str], List[str]]:
+    """Return valid SAME/FIPS codes and the entries that were rejected."""
+
+    raw_values = ensure_list(values)
+    valid: List[str] = []
+    invalid: List[str] = []
+    seen = set()
+
+    for item in raw_values:
+        digits = "".join(ch for ch in str(item) if ch.isdigit())
+        if not digits:
+            if item:
+                invalid.append(str(item))
+            continue
+        code = digits.zfill(6)[:6]
+        if code in ALL_US_FIPS_CODES:
+            if code not in seen:
+                valid.append(code)
+                seen.add(code)
+        else:
+            invalid.append(str(item))
+
+    return valid, invalid
+
+
+def normalise_fips_codes(values: Iterable[str] | Sequence[str] | str | None) -> List[str]:
+    """Return the valid SAME/FIPS codes in canonical order."""
+
+    valid, _ = sanitize_fips_codes(values)
+    return valid
+
+
+_default_fips_codes = normalise_fips_codes(DEFAULT_FIPS_CODES)
+if not _default_fips_codes:
+    _default_fips_codes = ["039137"]
+
+
 DEFAULT_LOCATION_SETTINGS = {
     "county_name": DEFAULT_COUNTY_NAME,
     "state_code": DEFAULT_STATE_CODE,
     "timezone": DEFAULT_TIMEZONE,
     "zone_codes": ensure_list(DEFAULT_ZONE_CODES),
+    "fips_codes": list(_default_fips_codes),
     "area_terms": ensure_list(DEFAULT_AREA_TERMS),
     "map_center_lat": DEFAULT_MAP_CENTER_LAT,
     "map_center_lng": DEFAULT_MAP_CENTER_LNG,

@@ -434,6 +434,11 @@ class LocationSettings(db.Model):
         nullable=False,
         default=DEFAULT_LOCATION_SETTINGS["timezone"],
     )
+    fips_codes = db.Column(
+        db.JSON,
+        nullable=False,
+        default=lambda: list(DEFAULT_LOCATION_SETTINGS["fips_codes"]),
+    )
     zone_codes = db.Column(
         db.JSON,
         nullable=False,
@@ -476,12 +481,14 @@ class LocationSettings(db.Model):
             "county_name": self.county_name,
             "state_code": self.state_code,
             "timezone": self.timezone,
+            "fips_codes": list(self.fips_codes or []),
             "zone_codes": list(self.zone_codes or []),
             "area_terms": list(self.area_terms or []),
             "map_center_lat": self.map_center_lat,
             "map_center_lng": self.map_center_lng,
             "map_default_zoom": self.map_default_zoom,
             "led_default_lines": list(self.led_default_lines or []),
+            "same_codes": list(self.fips_codes or []),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 

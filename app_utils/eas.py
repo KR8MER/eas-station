@@ -21,6 +21,7 @@ except Exception:  # pragma: no cover - gracefully handle non-RPi environments
     RPiGPIO = None
 
 from app_utils.event_codes import EVENT_CODE_REGISTRY, resolve_event_code
+from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS
 
 from .eas_fsk import (
     SAME_BAUD,
@@ -38,6 +39,15 @@ def _clean_identifier(value: str) -> str:
     value = value.strip().replace(' ', '_')
     value = re.sub(r'[^A-Za-z0-9_.-]+', '_', value)
     return value[:96] or 'alert'
+
+
+def _normalise_same_codes(values: Iterable[str]) -> List[str]:
+    normalised: List[str] = []
+    for value in values:
+        digits = ''.join(ch for ch in str(value) if ch.isdigit())
+        if digits:
+            normalised.append(digits.zfill(6))
+    return normalised
 
 
 def _ensure_directory(path: str) -> str:
@@ -411,19 +421,36 @@ def build_same_header(alert: object, payload: Dict[str, object], config: Dict[st
                 same_codes.append(str(values).strip())
     same_codes = [code for code in same_codes if code and code != 'None']
 
-    if not same_codes and location_settings:
-        fallback_same = location_settings.get('same_codes') or []
-        same_codes = [str(code).strip() for code in fallback_same if code]
+    zone_codes: List[str] = []
+    if location_settings:
+        zone_codes = location_settings.get('zone_codes') or []
 
     if not same_codes and location_settings:
-        zone_codes = location_settings.get('zone_codes') or []
+        fallback_same_raw = (
+            location_settings.get('same_codes')
+            or location_settings.get('fips_codes')
+            or []
+        )
+        fallback_same = [str(code).strip() for code in fallback_same_raw if str(code).strip()]
+        default_fips = [
+            str(code).strip()
+            for code in DEFAULT_LOCATION_SETTINGS.get('fips_codes', [])
+            if str(code).strip()
+        ]
+        fallback_normalised = _normalise_same_codes(fallback_same)
+        default_normalised = _normalise_same_codes(default_fips)
+        fallback_matches_default = (
+            bool(fallback_normalised)
+            and fallback_normalised == default_normalised
+            and bool(zone_codes)
+        )
+        if fallback_same and not fallback_matches_default:
+            same_codes = fallback_same
+
+    if not same_codes and zone_codes:
         same_codes = [code.replace('O', '').upper().replace(' ', '') for code in zone_codes]
 
-    formatted_locations = []
-    for code in same_codes:
-        digits = ''.join(ch for ch in code if ch.isdigit())
-        if digits:
-            formatted_locations.append(digits.zfill(6))
+    formatted_locations = _normalise_same_codes(same_codes)
 
     if not formatted_locations:
         formatted_locations = ['000000']
