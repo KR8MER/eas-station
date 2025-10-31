@@ -18,6 +18,7 @@ from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS
 
 from .extensions import db
 from sqlalchemy.engine.url import make_url
+from sqlalchemy.dialects.postgresql import JSONB
 
 
 def _spatial_backend_supports_geometry() -> bool:
@@ -435,17 +436,17 @@ class LocationSettings(db.Model):
         default=DEFAULT_LOCATION_SETTINGS["timezone"],
     )
     fips_codes = db.Column(
-        db.JSON,
+        JSONB,
         nullable=False,
         default=lambda: list(DEFAULT_LOCATION_SETTINGS["fips_codes"]),
     )
     zone_codes = db.Column(
-        db.JSON,
+        JSONB,
         nullable=False,
         default=lambda: list(DEFAULT_LOCATION_SETTINGS["zone_codes"]),
     )
     area_terms = db.Column(
-        db.JSON,
+        JSONB,
         nullable=False,
         default=lambda: list(DEFAULT_LOCATION_SETTINGS["area_terms"]),
     )
@@ -465,7 +466,7 @@ class LocationSettings(db.Model):
         default=DEFAULT_LOCATION_SETTINGS["map_default_zoom"],
     )
     led_default_lines = db.Column(
-        db.JSON,
+        JSONB,
         nullable=False,
         default=lambda: list(DEFAULT_LOCATION_SETTINGS["led_default_lines"]),
     )
