@@ -207,6 +207,11 @@ class EASDecodedAudio(db.Model):
     raw_text = db.Column(db.Text)
     same_headers = db.Column(db.JSON, default=list)
     quality_metrics = db.Column(db.JSON, default=dict)
+    segment_metadata = db.Column(db.JSON, default=dict)
+    header_audio_data = db.Column(db.LargeBinary)
+    message_audio_data = db.Column(db.LargeBinary)
+    eom_audio_data = db.Column(db.LargeBinary)
+    buffer_audio_data = db.Column(db.LargeBinary)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -217,6 +222,11 @@ class EASDecodedAudio(db.Model):
             "raw_text": self.raw_text,
             "same_headers": list(self.same_headers or []),
             "quality_metrics": dict(self.quality_metrics or {}),
+            "segment_metadata": dict(self.segment_metadata or {}),
+            "has_header_audio": self.header_audio_data is not None,
+            "has_message_audio": self.message_audio_data is not None,
+            "has_eom_audio": self.eom_audio_data is not None,
+            "has_buffer_audio": self.buffer_audio_data is not None,
         }
 
 

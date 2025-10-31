@@ -50,6 +50,9 @@ def record_audio_decode_result(
     safe_filename = (filename or "").strip()[:255] or None
     safe_type = (content_type or "").strip()[:128] or None
 
+    segments = decode_payload.segments
+    segment_metadata = decode_payload.segment_metadata
+
     record = EASDecodedAudio(
         original_filename=safe_filename,
         content_type=safe_type,
@@ -63,7 +66,19 @@ def record_audio_decode_result(
             "sample_rate": decode_payload.sample_rate,
             "bit_confidence": decode_payload.bit_confidence,
             "min_bit_confidence": decode_payload.min_bit_confidence,
+            "segment_count": len(segments),
         },
+        segment_metadata=segment_metadata,
+        header_audio_data=(
+            segments.get("header").wav_bytes if "header" in segments else None
+        ),
+        message_audio_data=(
+            segments.get("message").wav_bytes if "message" in segments else None
+        ),
+        eom_audio_data=(segments.get("eom").wav_bytes if "eom" in segments else None),
+        buffer_audio_data=(
+            segments.get("buffer").wav_bytes if "buffer" in segments else None
+        ),
     )
 
     try:
@@ -99,6 +114,11 @@ def load_recent_audio_decodes(limit: int = 5) -> List[Dict[str, Any]]:
                 "raw_text": row.raw_text,
                 "same_headers": list(row.same_headers or []),
                 "quality_metrics": dict(row.quality_metrics or {}),
+                "segment_metadata": dict(row.segment_metadata or {}),
+                "has_header_audio": row.header_audio_data is not None,
+                "has_message_audio": row.message_audio_data is not None,
+                "has_eom_audio": row.eom_audio_data is not None,
+                "has_buffer_audio": row.buffer_audio_data is not None,
             }
         )
 

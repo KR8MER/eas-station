@@ -86,6 +86,22 @@
                         </div>
                     {% endif %}
 
+                    {% if decode_result.segments %}
+                        <div class="mb-3">
+                            <label class="form-label">Extracted audio segments</label>
+                            <ul class="list-unstyled small mb-0">
+                                {% for name, segment in decode_result.segments.items() %}
+                                    <li>
+                                        <strong>{{ name|capitalize }}</strong>
+                                        · {{ '%.2f'|format(segment.duration_seconds) }}s
+                                        ({{ '%.2f'|format(segment.start_seconds) }}s –
+                                        {{ '%.2f'|format(segment.end_seconds) }}s)
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+
                     {% if decode_result.headers %}
                         <div class="row g-3">
                             {% for header in decode_result.headers %}
@@ -150,6 +166,7 @@
                                 <th scope="col">Source File</th>
                                 <th scope="col">Headers</th>
                                 <th scope="col">Confidence</th>
+                                <th scope="col">Segments</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -186,6 +203,22 @@
                                             {{ '%.1f'|format(metrics.bit_confidence * 100) }}%
                                         {% else %}
                                             <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if decode.segment_metadata %}
+                                            <ul class="list-unstyled mb-0 small">
+                                                {% for key, meta in decode.segment_metadata.items() %}
+                                                    <li>
+                                                        {{ key|capitalize }}
+                                                        {% if meta.duration_seconds is defined %}
+                                                            · {{ '%.2f'|format(meta.duration_seconds) }}s
+                                                        {% endif %}
+                                                    </li>
+                                                {% endfor %}
+                                            </ul>
+                                        {% else %}
+                                            <span class="text-muted small">None</span>
                                         {% endif %}
                                     </td>
                                 </tr>
