@@ -55,6 +55,50 @@
         font-size: 0.85rem;
     }
 
+    .same-chip button {
+        background: transparent;
+        border: none;
+        color: var(--danger-color);
+        display: inline-flex;
+        align-items: center;
+        padding: 0;
+        cursor: pointer;
+    }
+
+    .same-chip button:hover {
+        opacity: 0.8;
+    }
+
+    .same-chip-label {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.1rem;
+    }
+
+    .same-selector-card {
+        border: 1px dashed var(--border-color);
+        border-radius: 12px;
+        background: rgba(0, 0, 0, 0.02);
+        padding: 1.25rem;
+    }
+
+    [data-theme="dark"] .same-selector-card {
+        background: rgba(255, 255, 255, 0.03);
+    }
+
+    #selectedSameCodes {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        min-height: 2.25rem;
+    }
+
+    .same-empty {
+        color: var(--secondary-color);
+        font-size: 0.9rem;
+    }
+
     .table-xs td,
     .table-xs th {
         padding: 0.5rem 0.75rem;
@@ -85,6 +129,12 @@
         background: rgba(220, 53, 69, 0.12);
         border-color: rgba(220, 53, 69, 0.3);
         color: var(--danger-color);
+    }
+
+    .status-banner.warning {
+        background: rgba(255, 193, 7, 0.15);
+        border-color: rgba(255, 193, 7, 0.35);
+        color: var(--warning-color);
     }
 
     .status-banner.info {
@@ -131,14 +181,19 @@
     <div class="row g-4">
         <div class="col-lg-7">
             <div class="workflow-card h-100">
-                <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="card-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
                     <div>
                         <h2 class="h5 mb-1"><i class="fas fa-tools me-2 text-primary"></i>Manual Activation Builder</h2>
                         <p class="text-muted mb-0">Generate SAME headers, tones, narration, and export packages.</p>
                     </div>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" id="loadDefaultCodes">
-                        <i class="fas fa-map-marker-alt me-1"></i> Load Default SAME Codes
-                    </button>
+                    <div class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-outline-secondary" id="loadDefaultCodes">
+                            <i class="fas fa-map-marker-alt me-1"></i> Load Default Codes
+                        </button>
+                        <button type="button" class="btn btn-outline-warning" id="quickRwtButton">
+                            <i class="fas fa-bolt me-1"></i> Quick RWT
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body">
                     <form id="manualActivationForm" class="row g-3" autocomplete="off">
@@ -177,9 +232,49 @@
                             <input type="text" id="eventNameInput" class="form-control" placeholder="Tornado Warning" required>
                         </div>
                         <div class="col-12">
-                            <label for="sameCodesInput" class="form-label">SAME / FIPS Location Codes</label>
-                            <textarea id="sameCodesInput" class="form-control" rows="3" placeholder="039137, 039069"></textarea>
-                            <div class="form-text">Enter PSSCCC values separated by commas, spaces, or new lines.</div>
+                            <label class="form-label">SAME / FIPS Locations</label>
+                            <div class="same-selector-card">
+                                <div class="row g-3 align-items-end">
+                                    <div class="col-md-4">
+                                        <label for="sameStateSelect" class="form-label text-uppercase small text-muted">State / Territory</label>
+                                        <select id="sameStateSelect" class="form-select"></select>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label for="sameCountySelect" class="form-label text-uppercase small text-muted">County or Statewide</label>
+                                        <select id="sameCountySelect" class="form-select" disabled></select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label for="samePortionSelect" class="form-label text-uppercase small text-muted">Region</label>
+                                        <select id="samePortionSelect" class="form-select" disabled></select>
+                                    </div>
+                                    <div class="col-md-1 d-grid">
+                                        <button type="button" class="btn btn-outline-primary" id="addSameCodeBtn" title="Add SAME location">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mt-3">
+                                    <div class="fw-semibold">Selected Locations <span class="badge bg-secondary" id="sameCodeCounter">0/31</span></div>
+                                    <button type="button" class="btn btn-link text-danger p-0" id="clearSameCodeBtn">
+                                        <i class="fas fa-trash-alt me-1"></i>Clear All
+                                    </button>
+                                </div>
+                                <div id="selectedSameCodes" class="mt-2"></div>
+                                <div class="mt-3">
+                                    <label for="manualSameInput" class="form-label">Manual Entry</label>
+                                    <div class="input-group">
+                                        <input type="text" id="manualSameInput" class="form-control" placeholder="Paste codes such as 039137,039069">
+                                        <button class="btn btn-outline-secondary" type="button" id="applyManualSameCodes">
+                                            <i class="fas fa-check"></i> Apply
+                                        </button>
+                                        <button class="btn btn-outline-danger" type="button" id="clearManualSameCodes" title="Clear manual input">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                    <div class="form-text">Codes are deduplicated automatically. The SAME specification limits entries to 31 locations.</div>
+                                </div>
+                            </div>
+                            <input type="hidden" id="sameCodesInput" />
                         </div>
                         <div class="col-md-4">
                             <label for="durationInput" class="form-label">Duration (minutes)</label>
@@ -350,6 +445,419 @@ const EVENT_LOOKUP = {{ eas_event_codes|tojson }}.reduce((map, item) => {
     return map;
 }, {});
 const ORIGINATOR_LABELS = {{ eas_originator_descriptions|tojson }};
+const EAS_FIPS_TREE = {{ eas_fips_states|tojson }};
+const EAS_FIPS_LOOKUP = {{ eas_fips_lookup|tojson }};
+const EAS_P_DIGIT_MEANINGS = {{ eas_p_digit_meanings|tojson }};
+const DEFAULT_ORIGINATOR = {{ eas_originator|tojson }};
+const DEFAULT_TONE_SECONDS = {{ eas_attention_seconds|tojson }};
+const DEFAULT_SAMPLE_RATE = {{ eas_sample_rate|tojson }};
+const MAX_SAME_CODES = 31;
+
+const STATE_INDEX_BY_ABBR = {};
+const STATE_INDEX_BY_FIPS = {};
+(Array.isArray(EAS_FIPS_TREE) ? EAS_FIPS_TREE : []).forEach((state) => {
+    if (!state || !state.abbr) {
+        return;
+    }
+    STATE_INDEX_BY_ABBR[state.abbr] = state;
+    if (state.state_fips) {
+        STATE_INDEX_BY_FIPS[state.state_fips] = state;
+    }
+});
+
+let selectedSameCodes = [];
+
+function normalizeSameCode(value) {
+    if (value === undefined || value === null) {
+        return '';
+    }
+    const digits = String(value).replace(/[^0-9]/g, '');
+    if (!digits) {
+        return '';
+    }
+    return digits.padStart(6, '0').slice(0, 6);
+}
+
+function getSameCodeDetails(code) {
+    const normalized = normalizeSameCode(code);
+    if (!normalized) {
+        return null;
+    }
+    const pDigit = normalized[0];
+    const stateFips = normalized.slice(1, 3);
+    const countyFips = normalized.slice(3);
+    const state = STATE_INDEX_BY_FIPS[stateFips] || {};
+    const isStatewide = countyFips === '000';
+    const lookupLabel = EAS_FIPS_LOOKUP ? EAS_FIPS_LOOKUP[normalized] : null;
+    return {
+        code: normalized,
+        description: lookupLabel || (isStatewide ? `All Areas, ${state.abbr || stateFips}` : normalized),
+        stateAbbr: state.abbr || stateFips,
+        stateName: state.name || state.abbr || stateFips,
+        stateFips,
+        countyFips,
+        isStatewide,
+        pDigit,
+        pMeaning: EAS_P_DIGIT_MEANINGS?.[pDigit] || null,
+    };
+}
+
+function updateSelectedSameCodesDisplay() {
+    const container = document.getElementById('selectedSameCodes');
+    const hiddenInput = document.getElementById('sameCodesInput');
+    const counter = document.getElementById('sameCodeCounter');
+    if (hiddenInput) {
+        hiddenInput.value = selectedSameCodes.join(', ');
+    }
+    if (counter) {
+        counter.textContent = `${selectedSameCodes.length}/${MAX_SAME_CODES}`;
+    }
+    if (!container) {
+        return;
+    }
+    if (!selectedSameCodes.length) {
+        container.innerHTML = '<div class="same-empty">No SAME / FIPS locations selected yet.</div>';
+        return;
+    }
+    container.innerHTML = selectedSameCodes
+        .map((code) => {
+            const detail = getSameCodeDetails(code) || { code, description: code };
+            const label = detail.description || detail.code;
+            const metaParts = [];
+            if (detail.stateName) {
+                metaParts.push(detail.stateName);
+            }
+            if (detail.isStatewide) {
+                metaParts.push('Statewide');
+            } else if (detail.countyFips) {
+                metaParts.push(`FIPS ${detail.countyFips}`);
+            }
+            if (detail.pMeaning) {
+                metaParts.push(detail.pMeaning);
+            }
+            const metaLabel = metaParts.length
+                ? `<small class="text-muted d-block">${metaParts.join(' · ')}</small>`
+                : '';
+            return `
+                <span class="same-chip">
+                    <code>${detail.code}</code>
+                    <span class="same-chip-label">
+                        ${label}
+                        ${metaLabel}
+                    </span>
+                    <button type="button" data-remove-code="${detail.code}" aria-label="Remove ${detail.code}">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </span>
+            `;
+        })
+        .join('');
+}
+
+function setSelectedSameCodes(codes) {
+    const normalized = [];
+    (Array.isArray(codes) ? codes : []).forEach((code) => {
+        const value = normalizeSameCode(code);
+        if (!value || normalized.includes(value)) {
+            return;
+        }
+        if (normalized.length >= MAX_SAME_CODES) {
+            return;
+        }
+        normalized.push(value);
+    });
+    if (Array.isArray(codes) && codes.length > normalized.length && normalized.length === MAX_SAME_CODES) {
+        setStatus('Only the first 31 SAME locations are retained per FCC specifications.', 'warning');
+    }
+    selectedSameCodes = normalized;
+    updateSelectedSameCodesDisplay();
+
+    const stateSelect = document.getElementById('sameStateSelect');
+    if (!stateSelect) {
+        return;
+    }
+    if (!selectedSameCodes.length) {
+        stateSelect.value = '';
+        populateCountyOptions('');
+        return;
+    }
+    const lastDetail = getSameCodeDetails(selectedSameCodes[selectedSameCodes.length - 1]);
+    if (lastDetail && lastDetail.stateAbbr) {
+        stateSelect.value = lastDetail.stateAbbr;
+        populateCountyOptions(lastDetail.stateAbbr, lastDetail.code);
+    } else {
+        populateCountyOptions('');
+    }
+}
+
+function addSameCodes(codes) {
+    const stateSelect = document.getElementById('sameStateSelect');
+    let lastDetail = null;
+    let limitReached = false;
+    (Array.isArray(codes) ? codes : []).forEach((code) => {
+        const normalized = normalizeSameCode(code);
+        if (!normalized || selectedSameCodes.includes(normalized)) {
+            return;
+        }
+        if (selectedSameCodes.length >= MAX_SAME_CODES) {
+            limitReached = true;
+            return;
+        }
+        selectedSameCodes.push(normalized);
+        lastDetail = getSameCodeDetails(normalized) || lastDetail;
+    });
+    if (limitReached) {
+        setStatus('Maximum of 31 SAME locations reached; additional entries were ignored.', 'warning');
+    }
+    updateSelectedSameCodesDisplay();
+    if (lastDetail && stateSelect) {
+        stateSelect.value = lastDetail.stateAbbr || '';
+        populateCountyOptions(lastDetail.stateAbbr || '', lastDetail.code);
+    }
+}
+
+function removeSameCode(code) {
+    const normalized = normalizeSameCode(code);
+    if (!normalized) {
+        return;
+    }
+    selectedSameCodes = selectedSameCodes.filter((item) => item !== normalized);
+    setSelectedSameCodes(selectedSameCodes);
+}
+
+function clearSelectedSameCodes() {
+    selectedSameCodes = [];
+    setSelectedSameCodes([]);
+}
+
+function populatePortionOptions() {
+    const portionSelect = document.getElementById('samePortionSelect');
+    if (!portionSelect) {
+        return;
+    }
+    portionSelect.innerHTML = '';
+    const digits = Object.keys(EAS_P_DIGIT_MEANINGS || {}).length
+        ? Object.keys(EAS_P_DIGIT_MEANINGS).sort((a, b) => Number(a) - Number(b))
+        : ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    digits.forEach((digit) => {
+        const option = document.createElement('option');
+        option.value = digit;
+        const meaning = EAS_P_DIGIT_MEANINGS?.[digit];
+        option.textContent = meaning ? `${digit} — ${meaning}` : digit;
+        portionSelect.appendChild(option);
+    });
+    portionSelect.value = '0';
+    portionSelect.disabled = true;
+}
+
+function populateStateOptions() {
+    const stateSelect = document.getElementById('sameStateSelect');
+    if (!stateSelect) {
+        return;
+    }
+    stateSelect.innerHTML = '<option value="">Select state or territory…</option>';
+    const fragment = document.createDocumentFragment();
+    (Array.isArray(EAS_FIPS_TREE) ? EAS_FIPS_TREE : []).forEach((state) => {
+        if (!state || !state.abbr) {
+            return;
+        }
+        const option = document.createElement('option');
+        option.value = state.abbr;
+        option.textContent = state.abbr === 'US'
+            ? `${state.name || state.abbr} (Nationwide)`
+            : `${state.name || state.abbr} (${state.abbr})`;
+        fragment.appendChild(option);
+    });
+    stateSelect.appendChild(fragment);
+}
+
+function populateCountyOptions(stateAbbr, selectedCode = '') {
+    const countySelect = document.getElementById('sameCountySelect');
+    const portionSelect = document.getElementById('samePortionSelect');
+    if (!countySelect) {
+        return;
+    }
+    const normalizedAbbr = stateAbbr ? String(stateAbbr).toUpperCase() : '';
+    countySelect.innerHTML = '';
+    countySelect.disabled = true;
+    if (portionSelect) {
+        portionSelect.value = '0';
+        portionSelect.disabled = true;
+    }
+
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = normalizedAbbr ? 'Select county or parish…' : 'Select a state first…';
+    countySelect.appendChild(placeholder);
+
+    if (!normalizedAbbr) {
+        return;
+    }
+
+    const state = STATE_INDEX_BY_ABBR[normalizedAbbr];
+    if (!state) {
+        return;
+    }
+
+    if (state.statewide_code) {
+        const statewideOption = document.createElement('option');
+        statewideOption.value = state.statewide_code;
+        statewideOption.textContent = `Entire ${state.name || state.abbr} (${state.statewide_code})`;
+        countySelect.appendChild(statewideOption);
+    }
+
+    (Array.isArray(state.counties) ? state.counties : []).forEach((county) => {
+        if (!county || !county.code) {
+            return;
+        }
+        const option = document.createElement('option');
+        option.value = county.code;
+        option.textContent = `${county.name || county.code} (${county.code})`;
+        countySelect.appendChild(option);
+    });
+
+    countySelect.disabled = false;
+    if (portionSelect) {
+        portionSelect.disabled = false;
+    }
+
+    if (selectedCode) {
+        const normalized = normalizeSameCode(selectedCode);
+        if (normalized) {
+            const baseCode = `0${normalized.slice(1)}`;
+            countySelect.value = baseCode;
+            if (portionSelect) {
+                portionSelect.value = normalized[0] || '0';
+            }
+        }
+    }
+}
+
+function handleAddSameCode() {
+    const stateSelect = document.getElementById('sameStateSelect');
+    const countySelect = document.getElementById('sameCountySelect');
+    const portionSelect = document.getElementById('samePortionSelect');
+    if (!stateSelect || !countySelect) {
+        return;
+    }
+    const stateAbbr = stateSelect.value;
+    const countyCode = countySelect.value;
+    if (!stateAbbr || !countyCode) {
+        setStatus('Select a state and county before adding a location code.', 'warning');
+        return;
+    }
+    const normalizedCounty = normalizeSameCode(countyCode);
+    if (!normalizedCounty) {
+        setStatus('Unable to determine the SAME code for the selected area.', 'error');
+        return;
+    }
+    let portionValue = portionSelect ? portionSelect.value : '0';
+    if (!/^[0-9]$/.test(portionValue)) {
+        portionValue = '0';
+    }
+    if (normalizedCounty.slice(3) === '000') {
+        portionValue = '0';
+        if (portionSelect) {
+            portionSelect.value = '0';
+        }
+    }
+    const combinedCode = `${portionValue}${normalizedCounty.slice(1)}`;
+    addSameCodes([combinedCode]);
+}
+
+function applyManualSameCodes() {
+    const manualInput = document.getElementById('manualSameInput');
+    if (!manualInput) {
+        return;
+    }
+    const codes = manualInput.value
+        .split(/[^0-9]+/)
+        .map((item) => normalizeSameCode(item))
+        .filter(Boolean);
+    if (!codes.length) {
+        manualInput.value = '';
+        return;
+    }
+    addSameCodes(codes);
+    manualInput.value = '';
+}
+
+function gatherAllSameCodes() {
+    return selectedSameCodes.slice(0, MAX_SAME_CODES);
+}
+
+function initialiseSameCodeSelector() {
+    populatePortionOptions();
+    populateStateOptions();
+    populateCountyOptions('');
+    updateSelectedSameCodesDisplay();
+
+    const stateSelect = document.getElementById('sameStateSelect');
+    if (stateSelect) {
+        stateSelect.addEventListener('change', (event) => {
+            const value = event?.target?.value || '';
+            populateCountyOptions(value);
+        });
+    }
+
+    const addButton = document.getElementById('addSameCodeBtn');
+    if (addButton) {
+        addButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            handleAddSameCode();
+        });
+    }
+
+    const clearButton = document.getElementById('clearSameCodeBtn');
+    if (clearButton) {
+        clearButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            clearSelectedSameCodes();
+        });
+    }
+
+    const manualApply = document.getElementById('applyManualSameCodes');
+    if (manualApply) {
+        manualApply.addEventListener('click', (event) => {
+            event.preventDefault();
+            applyManualSameCodes();
+        });
+    }
+
+    const manualInput = document.getElementById('manualSameInput');
+    if (manualInput) {
+        manualInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                applyManualSameCodes();
+            }
+        });
+    }
+
+    const manualClear = document.getElementById('clearManualSameCodes');
+    if (manualClear) {
+        manualClear.addEventListener('click', (event) => {
+            event.preventDefault();
+            if (manualInput) {
+                manualInput.value = '';
+                manualInput.focus();
+            }
+        });
+    }
+
+    const selectedContainer = document.getElementById('selectedSameCodes');
+    if (selectedContainer) {
+        selectedContainer.addEventListener('click', (event) => {
+            const target = event?.target?.closest('[data-remove-code]');
+            if (target) {
+                const code = target.getAttribute('data-remove-code');
+                removeSameCode(code);
+            }
+        });
+    }
+
+    setSelectedSameCodes(DEFAULT_SAME_CODES || []);
+}
 
 function formatDateTime(isoString) {
     if (!isoString) return '—';
@@ -369,21 +877,18 @@ function updateEventName() {
 }
 
 function applyDefaultCodes() {
-    const textarea = document.getElementById('sameCodesInput');
-    if (!DEFAULT_SAME_CODES || DEFAULT_SAME_CODES.length === 0) {
-        alert('No default SAME codes are configured.');
+    if (!Array.isArray(DEFAULT_SAME_CODES) || DEFAULT_SAME_CODES.length === 0) {
+        setStatus('No default SAME codes are configured.', 'warning');
         return;
     }
-    const unique = new Set((textarea.value || '').split(/[^0-9]+/).filter(Boolean));
-    DEFAULT_SAME_CODES.forEach(code => unique.add(code));
-    textarea.value = Array.from(unique).join(', ');
+    addSameCodes(DEFAULT_SAME_CODES);
 }
 
-function generateIdentifier() {
+function generateIdentifier(prefix = 'MANUAL') {
     const input = document.getElementById('identifierInput');
     const now = new Date();
     const pad = (value) => value.toString().padStart(2, '0');
-    const id = `MANUAL-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const id = `${prefix}-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
     input.value = id;
 }
 
@@ -393,6 +898,25 @@ function setStatus(message, type = 'info') {
     banner.className = `status-banner ${type}`;
     banner.textContent = message;
     banner.style.display = message ? 'block' : 'none';
+}
+
+function updateToneControls() {
+    const toneSelect = document.getElementById('toneProfileSelect');
+    const toneSecondsInput = document.getElementById('toneSecondsInput');
+    if (!toneSelect || !toneSecondsInput) {
+        return;
+    }
+    const profile = (toneSelect.value || '').toLowerCase();
+    const omitTone = profile === 'none';
+    toneSecondsInput.disabled = omitTone;
+    toneSecondsInput.readOnly = omitTone;
+    toneSecondsInput.classList.toggle('bg-light', omitTone);
+    toneSecondsInput.classList.toggle('text-muted', omitTone);
+    if (omitTone) {
+        toneSecondsInput.value = '0';
+    } else if (!toneSecondsInput.value || Number(toneSecondsInput.value) <= 0) {
+        toneSecondsInput.value = DEFAULT_TONE_SECONDS || '8';
+    }
 }
 
 function renderComponents(components, activation) {
@@ -444,11 +968,41 @@ function renderComponents(components, activation) {
     document.getElementById('generationResults').style.display = 'block';
 }
 
+async function postManualGeneration(payload) {
+    const response = await fetch('/eas/manual/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    let result = {};
+    try {
+        result = await response.json();
+    } catch (error) {
+        result = {};
+    }
+    if (!response.ok) {
+        const message = result.error || 'Manual generation failed.';
+        throw new Error(message);
+    }
+    return result;
+}
+
 async function submitManualActivation(event) {
     event.preventDefault();
     const formStatus = document.getElementById('formStatus');
     formStatus.textContent = 'Submitting…';
-    setStatus('Generating manual package…', 'info');
+    const sameCodes = gatherAllSameCodes();
+    if (!sameCodes.length) {
+        setStatus('Select at least one SAME / FIPS location before generating a package.', 'error');
+        formStatus.textContent = 'Select at least one SAME / FIPS location.';
+        return;
+    }
+
+    const toneProfile = document.getElementById('toneProfileSelect').value;
+    let toneSeconds = document.getElementById('toneSecondsInput').value;
+    if (toneProfile === 'none') {
+        toneSeconds = 0;
+    }
 
     const payload = {
         identifier: document.getElementById('identifierInput').value.trim(),
@@ -456,41 +1010,153 @@ async function submitManualActivation(event) {
         station_id: document.getElementById('stationIdInput').value.trim(),
         event_code: document.getElementById('eventCodeSelect').value,
         event_name: document.getElementById('eventNameInput').value.trim(),
-        same_codes: document.getElementById('sameCodesInput').value,
+        same_codes: sameCodes,
         duration_minutes: document.getElementById('durationInput').value,
-        tone_profile: document.getElementById('toneProfileSelect').value,
-        tone_seconds: document.getElementById('toneSecondsInput').value,
+        tone_profile: toneProfile,
+        tone_seconds: toneSeconds,
         status: document.getElementById('statusSelect').value,
         message_type: document.getElementById('messageTypeSelect').value,
         headline: document.getElementById('headlineInput').value,
         message: document.getElementById('messageInput').value,
         instruction: document.getElementById('instructionInput').value,
-        sample_rate: document.getElementById('sampleRateInput').value,
+        sample_rate: document.getElementById('sampleRateInput').value || DEFAULT_SAMPLE_RATE,
         include_tts: document.getElementById('includeTtsToggle').checked,
     };
 
     try {
-        const response = await fetch('/eas/manual/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-
-        const result = await response.json();
-        if (!response.ok) {
-            setStatus(`❌ ${result.error || 'Manual generation failed.'}`, 'error');
-            formStatus.textContent = result.error || 'Manual generation failed.';
-            return;
-        }
-
+        setStatus('Generating manual package…', 'info');
+        const result = await postManualGeneration(payload);
         setStatus('✅ Manual EAS package generated successfully.', 'success');
         formStatus.textContent = '';
         renderComponents(result.components, result.activation);
         await loadManualActivations();
     } catch (error) {
         console.error('Manual generation failed', error);
-        setStatus('❌ Unexpected error during manual generation.', 'error');
-        formStatus.textContent = 'Unexpected error during manual generation.';
+        setStatus(`❌ ${error.message || 'Manual generation failed.'}`, 'error');
+        formStatus.textContent = error.message || 'Manual generation failed.';
+    }
+}
+
+function applyQuickRwtTemplate() {
+    const eventSelect = document.getElementById('eventCodeSelect');
+    if (eventSelect) {
+        let desired = 'RWT';
+        const hasDesired = Array.from(eventSelect.options || []).some((option) => option.value === desired);
+        if (!hasDesired && eventSelect.options.length) {
+            desired = eventSelect.options[0].value;
+        }
+        eventSelect.value = desired;
+        eventSelect.dispatchEvent(new Event('change'));
+    }
+
+    const statusSelect = document.getElementById('statusSelect');
+    if (statusSelect) {
+        statusSelect.value = 'Test';
+    }
+
+    const toneProfileSelect = document.getElementById('toneProfileSelect');
+    if (toneProfileSelect) {
+        toneProfileSelect.value = 'none';
+    }
+    const toneSecondsInput = document.getElementById('toneSecondsInput');
+    if (toneSecondsInput) {
+        toneSecondsInput.value = '0';
+    }
+    updateToneControls();
+
+    const originatorSelect = document.getElementById('originatorSelect');
+    if (originatorSelect && originatorSelect.options.length) {
+        const desiredOriginator = (DEFAULT_ORIGINATOR || 'WXR').toUpperCase();
+        const hasDesired = Array.from(originatorSelect.options).some((option) => option.value === desiredOriginator);
+        originatorSelect.value = hasDesired ? desiredOriginator : originatorSelect.options[0].value;
+    }
+
+    const stationInput = document.getElementById('stationIdInput');
+    if (stationInput && !stationInput.value) {
+        stationInput.value = 'EASNODES';
+    }
+
+    const headlineInput = document.getElementById('headlineInput');
+    if (headlineInput) {
+        headlineInput.value = 'This is a Required Weekly Test.';
+    }
+
+    const messageInput = document.getElementById('messageInput');
+    if (messageInput) {
+        messageInput.value = 'This is a test of the Emergency Alert System. No action is required.';
+    }
+
+    const instructionInput = document.getElementById('instructionInput');
+    if (instructionInput) {
+        instructionInput.value = '';
+    }
+
+    const messageTypeSelect = document.getElementById('messageTypeSelect');
+    if (messageTypeSelect) {
+        messageTypeSelect.value = 'Alert';
+    }
+
+    setSelectedSameCodes(DEFAULT_SAME_CODES || []);
+    generateIdentifier('RWT');
+    updateEventName();
+}
+
+async function handleQuickRwt() {
+    applyQuickRwtTemplate();
+    const sameCodes = gatherAllSameCodes();
+    if (!sameCodes.length) {
+        setStatus('Configure default SAME codes before running a Quick RWT.', 'warning');
+        return;
+    }
+
+    const confirmationMessage = `Send a Required Weekly Test to ${sameCodes.length} location${sameCodes.length === 1 ? '' : 's'}?`;
+    if (!window.confirm(confirmationMessage)) {
+        return;
+    }
+
+    const identifierInput = document.getElementById('identifierInput');
+    const originatorSelect = document.getElementById('originatorSelect');
+    const stationInput = document.getElementById('stationIdInput');
+    const formStatus = document.getElementById('formStatus');
+
+    const payload = {
+        identifier: identifierInput ? identifierInput.value.trim() : '',
+        originator: originatorSelect ? originatorSelect.value : (DEFAULT_ORIGINATOR || 'WXR'),
+        station_id: stationInput ? stationInput.value.trim() : 'EASNODES',
+        event_code: 'RWT',
+        event_name: 'Required Weekly Test',
+        same_codes: sameCodes,
+        duration_minutes: 15,
+        tone_profile: 'none',
+        tone_seconds: 0,
+        status: 'Test',
+        message_type: document.getElementById('messageTypeSelect')?.value || 'Alert',
+        headline: document.getElementById('headlineInput')?.value || 'This is a Required Weekly Test.',
+        message: document.getElementById('messageInput')?.value || 'This is a test of the Emergency Alert System. No action is required.',
+        instruction: document.getElementById('instructionInput')?.value || '',
+        sample_rate: document.getElementById('sampleRateInput')?.value || DEFAULT_SAMPLE_RATE,
+        include_tts: document.getElementById('includeTtsToggle')?.checked ?? true,
+    };
+
+    if (formStatus) {
+        formStatus.textContent = 'Sending Quick RWT…';
+    }
+    setStatus('Generating Required Weekly Test…', 'info');
+
+    try {
+        const result = await postManualGeneration(payload);
+        setStatus('✅ Required Weekly Test generated successfully.', 'success');
+        if (formStatus) {
+            formStatus.textContent = '';
+        }
+        renderComponents(result.components, result.activation);
+        await loadManualActivations();
+    } catch (error) {
+        console.error('Quick RWT failed', error);
+        setStatus(`❌ ${error.message || 'Quick RWT failed.'}`, 'error');
+        if (formStatus) {
+            formStatus.textContent = error.message || 'Quick RWT failed.';
+        }
     }
 }
 
@@ -597,14 +1263,59 @@ async function purgeActivations() {
 }
 
 function initialiseWorkflow() {
-    document.getElementById('eventCodeSelect').addEventListener('change', updateEventName);
-    document.getElementById('loadDefaultCodes').addEventListener('click', applyDefaultCodes);
-    document.getElementById('generateIdentifier').addEventListener('click', generateIdentifier);
-    document.getElementById('manualActivationForm').addEventListener('submit', submitManualActivation);
-    document.getElementById('refreshActivations').addEventListener('click', loadManualActivations);
-    document.getElementById('purgeActivations').addEventListener('click', purgeActivations);
+    initialiseSameCodeSelector();
+
+    const eventSelect = document.getElementById('eventCodeSelect');
+    if (eventSelect) {
+        eventSelect.addEventListener('change', updateEventName);
+    }
+
+    const loadDefaultsBtn = document.getElementById('loadDefaultCodes');
+    if (loadDefaultsBtn) {
+        loadDefaultsBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            applyDefaultCodes();
+        });
+    }
+
+    const identifierButton = document.getElementById('generateIdentifier');
+    if (identifierButton) {
+        identifierButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            generateIdentifier();
+        });
+    }
+
+    const manualForm = document.getElementById('manualActivationForm');
+    if (manualForm) {
+        manualForm.addEventListener('submit', submitManualActivation);
+    }
+
+    const refreshButton = document.getElementById('refreshActivations');
+    if (refreshButton) {
+        refreshButton.addEventListener('click', loadManualActivations);
+    }
+
+    const purgeButton = document.getElementById('purgeActivations');
+    if (purgeButton) {
+        purgeButton.addEventListener('click', purgeActivations);
+    }
+
+    const toneProfileSelect = document.getElementById('toneProfileSelect');
+    if (toneProfileSelect) {
+        toneProfileSelect.addEventListener('change', updateToneControls);
+    }
+
+    const quickRwtButton = document.getElementById('quickRwtButton');
+    if (quickRwtButton) {
+        quickRwtButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            handleQuickRwt();
+        });
+    }
 
     updateEventName();
+    updateToneControls();
     if (!document.getElementById('identifierInput').value) {
         generateIdentifier();
     }
