@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import wave
+from datetime import datetime, timedelta, timezone
 from array import array
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -703,9 +704,15 @@ def _extract_bytes_from_bits(
             i += 1
             continue
 
-        # Extract data bits (7 or 8 bits depending on position)
-        # For preamble: 8 bits, for message: 7 bits
-        data_bits = bits[i + 1 : i + 9]
+        # Extract 7-bit ASCII payload and parity bit
+        data_bits = bits[i + 1 : i + 8]
+        parity_bit = bits[i + 8]
+
+        # Validate even parity – SAME frames use 7 data bits plus even parity
+        ones_total = sum(data_bits) + parity_bit
+        if ones_total % 2 != 0:
+            i += 1
+            continue
 
         value = 0
         for position, bit in enumerate(data_bits):
@@ -904,7 +911,10 @@ def _bits_to_text(bits: List[int]) -> Dict[str, object]:
 
     if len(burst_positions) >= 2:
         burst_bytes: List[List[int]] = []
-        for burst_start in burst_positions[:3]:
+        typical_length = burst_positions[1] - burst_positions[0]
+        if typical_length <= 0:
+            typical_length = len(encode_same_bits("ZCZC", include_preamble=True))
+        for index, burst_start in enumerate(burst_positions[:3]):
             bytes_in_burst, positions = _extract_bytes_from_bits(
                 bits, burst_start, max_bytes=200, confidence_threshold=0.3
             )
@@ -918,7 +928,13 @@ def _bits_to_text(bits: List[int]) -> Dict[str, object]:
             if trimmed_positions:
                 start_bit = trimmed_positions[0]
                 end_bit = trimmed_positions[-1] + 10
-                burst_bit_ranges.append((start_bit, end_bit))
+            else:
+                start_bit = burst_start
+                if index + 1 < len(burst_positions):
+                    end_bit = burst_positions[index + 1]
+                else:
+                    end_bit = burst_start + typical_length
+            burst_bit_ranges.append((start_bit, end_bit))
 
         voted_bytes = _vote_on_bytes(burst_bytes)
 
@@ -937,7 +953,10 @@ def _bits_to_text(bits: List[int]) -> Dict[str, object]:
                 raw_text,
                 len(voted_bytes),
                 0,
-                extra_metadata={"burst_bit_ranges": burst_bit_ranges},
+                extra_metadata={
+                    "burst_bit_ranges": burst_bit_ranges,
+                    "burst_positions": burst_positions,
+                },
             )
 
     characters = []
@@ -1017,7 +1036,10 @@ def _bits_to_text(bits: List[int]) -> Dict[str, object]:
         raw_text,
         frame_count,
         frame_errors,
-        extra_metadata={"burst_bit_ranges": burst_bit_ranges},
+        extra_metadata={
+            "burst_bit_ranges": burst_bit_ranges,
+            "burst_positions": burst_positions,
+        },
     )
     metadata["char_bit_positions"] = list(char_positions)
     return metadata
@@ -1236,6 +1258,9 @@ def decode_same_audio(path: str, *, sample_rate: int = 22050) -> SAMEAudioDecode
 
                     raw_text = decoded_header + "\r"
                     fips_lookup = get_same_lookup()
+                    header_fields = describe_same_header(
+                        decoded_header, lookup=fips_lookup
+                    )
                     correlation_headers = [
                         SAMEHeaderDetails(
                             header=decoded_header,
@@ -1273,8 +1298,7 @@ def decode_same_audio(path: str, *, sample_rate: int = 22050) -> SAMEAudioDecode
             )
         raise
 
-    raw_text = str(metadata.get("text") or correlation_raw_text or "")
-
+    metadata_text = str(metadata.get("text") or "")
     metadata_headers = [str(item) for item in metadata.get("headers") or []]
     header_confidence = (
         correlation_confidence if correlation_confidence is not None else average_confidence
@@ -1289,8 +1313,10 @@ def decode_same_audio(path: str, *, sample_rate: int = 22050) -> SAMEAudioDecode
             )
             for header in metadata_headers
         ]
+        raw_text = metadata_text or correlation_raw_text or ""
     else:
         headers = correlation_headers or []
+        raw_text = correlation_raw_text or metadata_text or ""
 
     bit_confidence = average_confidence
     min_bit_confidence = minimum_confidence
@@ -1304,15 +1330,84 @@ def decode_same_audio(path: str, *, sample_rate: int = 22050) -> SAMEAudioDecode
     header_ranges_bits: Sequence[Tuple[int, int]] = metadata.get("burst_bit_ranges") or []
     header_sample_ranges: List[Tuple[int, int]] = []
     header_last_bit: Optional[int] = None
-    for start_bit, end_bit in header_ranges_bits:
-        start_bit = int(start_bit)
-        end_bit = int(end_bit)
-        header_last_bit = max(header_last_bit or start_bit, end_bit)
-        sample_range = _bit_range_to_sample_range(
-            (start_bit, end_bit), bit_sample_ranges, sample_count
+
+    burst_positions_bits: List[int] = [
+        int(pos) for pos in metadata.get("burst_positions") or []
+    ]
+    burst_positions_bits.sort()
+    if burst_positions_bits and bit_sample_ranges:
+        samples_per_bit = float(
+            getattr(_extract_bits, "samples_per_bit", sample_rate / float(SAME_BAUD))
         )
-        if sample_range:
-            header_sample_ranges.append(sample_range)
+        estimated_bits = len(encode_same_bits("ZCZC", include_preamble=True))
+        typical_bits = estimated_bits
+        typical_samples = int(samples_per_bit * estimated_bits)
+
+        if len(burst_positions_bits) >= 2:
+            delta_bits = burst_positions_bits[1] - burst_positions_bits[0]
+            if delta_bits > 0:
+                typical_bits = delta_bits
+                typical_samples = max(
+                    1,
+                    bit_sample_ranges[burst_positions_bits[1]][0]
+                    - bit_sample_ranges[burst_positions_bits[0]][0],
+                )
+
+        normalized_bits: List[int] = []
+        normalized_samples: List[int] = []
+
+        first_bit = burst_positions_bits[0]
+        if 0 <= first_bit < len(bit_sample_ranges):
+            normalized_bits.append(first_bit)
+            normalized_samples.append(bit_sample_ranges[first_bit][0])
+
+        index = 1
+        while len(normalized_bits) < 3:
+            expected_bit = (
+                normalized_bits[-1] + typical_bits if normalized_bits else typical_bits
+            )
+            expected_sample = (
+                normalized_samples[-1] + typical_samples
+                if normalized_samples
+                else typical_samples
+            )
+
+            candidate_bit = None
+            candidate_sample = None
+            if index < len(burst_positions_bits):
+                raw_bit = burst_positions_bits[index]
+                if 0 <= raw_bit < len(bit_sample_ranges):
+                    candidate_bit = raw_bit
+                    candidate_sample = bit_sample_ranges[raw_bit][0]
+                index += 1
+
+            if (
+                candidate_bit is not None
+                and abs(candidate_bit - expected_bit) <= max(5, typical_bits * 0.75)
+            ):
+                normalized_bits.append(candidate_bit)
+                normalized_samples.append(candidate_sample or expected_sample)
+            else:
+                normalized_bits.append(int(expected_bit))
+                normalized_samples.append(int(expected_sample))
+
+        for bit_position, start_sample in zip(normalized_bits, normalized_samples):
+            end_sample = start_sample + typical_samples
+            end_sample = min(end_sample, sample_count)
+            end_sample = max(start_sample, end_sample)
+            header_sample_ranges.append((start_sample, end_sample))
+            header_last_bit = max(header_last_bit or bit_position, bit_position + typical_bits)
+
+    if not header_sample_ranges:
+        for start_bit, end_bit in header_ranges_bits:
+            start_bit = int(start_bit)
+            end_bit = int(end_bit)
+            header_last_bit = max(header_last_bit or start_bit, end_bit)
+            sample_range = _bit_range_to_sample_range(
+                (start_bit, end_bit), bit_sample_ranges, sample_count
+            )
+            if sample_range:
+                header_sample_ranges.append(sample_range)
 
     header_segment = None
     if header_sample_ranges:
@@ -1346,7 +1441,10 @@ def decode_same_audio(path: str, *, sample_rate: int = 22050) -> SAMEAudioDecode
             )
 
     message_start = header_segment.end_sample if header_segment else 0
-    message_end = eom_segment.start_sample if eom_segment else sample_count
+    if eom_segment and eom_segment.start_sample > message_start:
+        message_end = eom_segment.start_sample
+    else:
+        message_end = sample_count
     message_segment = _create_segment(
         "message",
         message_start,
