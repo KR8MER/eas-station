@@ -49,7 +49,8 @@ def upgrade() -> None:
                 WHERE fips_codes IS NULL
                    OR jsonb_array_length(fips_codes) = 0
                 """
-            ).bindparams(fips_default=default_json)
+            ),
+            {"fips_default": default_json}
         )
 
 
