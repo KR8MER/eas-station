@@ -50,11 +50,13 @@
     <style>
         :root {
             --primary-color: #204885; /* Aegean Blue */
+            --primary-soft: #2f5fa4;
             --secondary-color: #872a96; /* Plum Crazy */
-            --accent-color: #ff8c42; /* Vibrant orange contrast */
+            --secondary-soft: #9d5bb1;
+            --accent-color: #4f6fb3;
             --success-color: #2eb08d;
             --danger-color: #e05263;
-            --warning-color: #ffb347;
+            --warning-color: #f6b968;
             --info-color: #2f5aa1;
             --light-color: #f4f5fb;
             --dark-color: #19263a;
@@ -66,13 +68,15 @@
         }
 
         [data-theme="dark"] {
-            --primary-color: #3c66c1;
-            --secondary-color: #b069c7;
-            --accent-color: #ff9f57;
+            --primary-color: #3f63b6;
+            --primary-soft: #2f4f99;
+            --secondary-color: #a86cc7;
+            --secondary-soft: #c289dd;
+            --accent-color: #7f9be8;
             --success-color: #47d3b1;
             --danger-color: #ff7a8a;
-            --warning-color: #ffc76b;
-            --info-color: #6ca0ff;
+            --warning-color: #ffca7d;
+            --info-color: #7da9ff;
             --light-color: #2a3245;
             --dark-color: #0b1220;
             --bg-color: #101628;
@@ -130,7 +134,7 @@
         }
 
         .table th {
-            background: linear-gradient(135deg, var(--secondary-color), var(--accent-color));
+            background: linear-gradient(120deg, var(--primary-soft), var(--secondary-soft));
             border-top: none;
             color: #fff;
         }
@@ -146,7 +150,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, var(--accent-color), var(--secondary-color));
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
             color: #fff;
             border: none;
             box-shadow: 0 4px 12px var(--shadow-color);
@@ -159,7 +163,7 @@
         }
 
         .footer {
-            background: linear-gradient(120deg, var(--primary-color), var(--secondary-color));
+            background: linear-gradient(120deg, var(--primary-soft), var(--secondary-soft));
             color: #f8f9ff;
             padding: 20px 0;
             margin-top: 50px;
