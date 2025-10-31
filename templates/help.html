@@ -17,37 +17,219 @@
             <div class="card shadow-sm mb-4 border-0 bg-light">
                 <div class="card-body p-4">
                     <h2 class="h5 mb-3"><i class="fas fa-compass me-2"></i>Quick Navigation</h2>
-                    <div class="row g-2">
-                        <div class="col-md-4">
-                            <a href="#installation" class="btn btn-outline-primary w-100 text-start">
-                                <i class="fas fa-download me-2"></i>Installation
+                    <div class="row g-2 g-lg-3">
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="#ui-overview" class="btn btn-outline-primary w-100 text-start d-flex align-items-center"
+                               data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top"
+                               title="Tour the operator interface and learn where to find key features">
+                                <i class="fas fa-route me-2"></i>
+                                <span>Interface Tour</span>
                             </a>
                         </div>
-                        <div class="col-md-4">
-                            <a href="#daily-operations" class="btn btn-outline-primary w-100 text-start">
-                                <i class="fas fa-tasks me-2"></i>Daily Operations
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="#workflow-overview" class="btn btn-outline-primary w-100 text-start d-flex align-items-center"
+                               data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top"
+                               title="Review the end-to-end workflow from monitoring to follow-up">
+                                <i class="fas fa-project-diagram me-2"></i>
+                                <span>Primary Workflows</span>
                             </a>
                         </div>
-                        <div class="col-md-4">
-                            <a href="#alert-handling" class="btn btn-outline-primary w-100 text-start">
-                                <i class="fas fa-exclamation-triangle me-2"></i>Alert Handling
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="#contextual-help" class="btn btn-outline-primary w-100 text-start d-flex align-items-center"
+                               data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top"
+                               title="Jump to page-specific quick tips and contextual guidance">
+                                <i class="fas fa-comment-dots me-2"></i>
+                                <span>Contextual Tips</span>
                             </a>
                         </div>
-                        <div class="col-md-4">
-                            <a href="#configuration" class="btn btn-outline-primary w-100 text-start">
-                                <i class="fas fa-cog me-2"></i>Configuration
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="#installation" class="btn btn-outline-primary w-100 text-start d-flex align-items-center"
+                               data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top"
+                               title="Step-by-step environment setup and configuration">
+                                <i class="fas fa-download me-2"></i>
+                                <span>Installation</span>
                             </a>
                         </div>
-                        <div class="col-md-4">
-                            <a href="#troubleshooting" class="btn btn-outline-primary w-100 text-start">
-                                <i class="fas fa-wrench me-2"></i>Troubleshooting
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="#daily-operations" class="btn btn-outline-primary w-100 text-start d-flex align-items-center"
+                               data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top"
+                               title="Daily status checks, dashboard usage, and monitoring tasks">
+                                <i class="fas fa-tasks me-2"></i>
+                                <span>Daily Operations</span>
                             </a>
                         </div>
-                        <div class="col-md-4">
-                            <a href="#compliance" class="btn btn-outline-primary w-100 text-start">
-                                <i class="fas fa-clipboard-check me-2"></i>Compliance
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="#alert-handling" class="btn btn-outline-primary w-100 text-start d-flex align-items-center"
+                               data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top"
+                               title="Understand how alerts flow through review, verification, and playback">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <span>Alert Handling</span>
                             </a>
                         </div>
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="#configuration" class="btn btn-outline-primary w-100 text-start d-flex align-items-center"
+                               data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top"
+                               title="Configure station profiles, receivers, and notification channels">
+                                <i class="fas fa-cog me-2"></i>
+                                <span>Configuration</span>
+                            </a>
+                        </div>
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="#troubleshooting" class="btn btn-outline-primary w-100 text-start d-flex align-items-center"
+                               data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top"
+                               title="Diagnose common issues using health and logging tools">
+                                <i class="fas fa-wrench me-2"></i>
+                                <span>Troubleshooting</span>
+                            </a>
+                        </div>
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="#compliance" class="btn btn-outline-primary w-100 text-start d-flex align-items-center"
+                               data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top"
+                               title="Maintain audit logs and meet FCC/IPAWS compliance requirements">
+                                <i class="fas fa-clipboard-check me-2"></i>
+                                <span>Compliance</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Interface Overview -->
+            <div id="ui-overview" class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-route text-primary me-2"></i>Interface Overview
+                    </h2>
+                    <p class="text-muted mb-4">Get oriented with the major screens and controls you will use most often while operating EAS Station.</p>
+                    <div class="row g-4">
+                        <div class="col-md-4">
+                            <div class="border rounded-3 h-100 p-3 bg-light">
+                                <span class="badge bg-primary-subtle text-primary fw-semibold mb-2">
+                                    <i class="fas fa-bars me-1"></i>Navigation Bar
+                                </span>
+                                <p class="mb-2">The persistent top navigation keeps critical areas one click away:</p>
+                                <ul class="small ps-3 mb-0">
+                                    <li><a href="{{ url_for('index') }}" class="link-primary">Dashboard</a> — situational map, live alerts, and status widgets.</li>
+                                    <li><a href="{{ url_for('audio_history') }}" class="link-primary">Audio Archive</a> — review recorded EAS audio and transcriptions.</li>
+                                    <li><a href="{{ url_for('about_page') }}" class="link-primary">About</a> &amp; <a href="{{ url_for('help_page') }}" class="link-primary">Help</a> — station documentation and support resources.</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="border rounded-3 h-100 p-3 bg-light">
+                                <span class="badge bg-info-subtle text-info fw-semibold mb-2">
+                                    <i class="fas fa-chart-line me-1"></i>Dashboards
+                                </span>
+                                <p class="mb-2">Dashboards summarize overall system health and alert pipelines:</p>
+                                <ul class="small ps-3 mb-0">
+                                    <li><strong>System Health widget:</strong> real-time radio status, storage usage, and service uptime.</li>
+                                    <li><strong>Active alerts list:</strong> highlight CAP messages awaiting review or action.</li>
+                                    <li><strong>Compliance dashboard:</strong> available at <a href="{{ url_for('compliance_dashboard') }}" class="link-primary">Compliance</a> for audit-ready summaries.</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="border rounded-3 h-100 p-3 bg-light">
+                                <span class="badge bg-success-subtle text-success fw-semibold mb-2">
+                                    <i class="fas fa-bell me-1"></i>Status &amp; Notifications
+                                </span>
+                                <p class="mb-2">Visual indicators call attention to workflow changes:</p>
+                                <ul class="small ps-3 mb-0">
+                                    <li><strong>Header badges:</strong> unread alerts and pending verifications show count bubbles.</li>
+                                    <li><strong>Toast notifications:</strong> appear after configuration changes or manual activations.</li>
+                                    <li><strong>Theme toggle:</strong> accessible in the lower-right floating action button for bright/dark environments.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="alert alert-info mt-4 d-flex align-items-center" role="alert">
+                        <i class="fas fa-circle-question fa-lg me-3"></i>
+                        <div>Hover over the compass shortcuts above or the icons throughout this page to reveal quick tips tailored to each feature.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Workflow Overview -->
+            <div id="workflow-overview" class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-project-diagram text-primary me-2"></i>Primary Workflows
+                    </h2>
+                    <p class="text-muted mb-4">Use these guided steps to keep operations consistent from shift to shift.</p>
+                    <div class="row g-4">
+                        <div class="col-lg-6">
+                            <div class="border rounded-3 h-100 p-4">
+                                <h3 class="h6 text-uppercase text-primary fw-bold mb-3">Routine Monitoring</h3>
+                                <ol class="ps-3 small mb-0">
+                                    <li class="mb-2">Open the <a href="{{ url_for('index') }}" class="link-primary">Dashboard</a> and confirm the system health widget is green.</li>
+                                    <li class="mb-2">Check <a href="{{ url_for('stats') }}" class="link-primary">Statistics</a> for anomalous alert patterns or receiver inactivity.</li>
+                                    <li class="mb-2">Review recent audio captures under <a href="{{ url_for('audio_history') }}" class="link-primary">Audio History</a> for quality control.</li>
+                                    <li>Verify receivers and LED signage connectivity in <a href="{{ url_for('radio_settings') }}" class="link-primary">Radio Settings</a> and <a href="{{ url_for('led_control') }}" class="link-primary">LED Control</a>.</li>
+                                </ol>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="border rounded-3 h-100 p-4">
+                                <h3 class="h6 text-uppercase text-primary fw-bold mb-3">Alert Response</h3>
+                                <ol class="ps-3 small mb-0">
+                                    <li class="mb-2">Monitor <strong>Active Alerts</strong> for new CAP messages requiring acknowledgement.</li>
+                                    <li class="mb-2">Use <a href="{{ url_for('alert_verification') }}" class="link-primary">Alert Verification</a> to confirm polygons, audio, and text are valid.</li>
+                                    <li class="mb-2">Escalate to manual activation from the <a href="{{ url_for('admin') }}" class="link-primary">Admin Panel</a> if the broadcast chain needs to be triggered.</li>
+                                    <li>Document the action and archive supporting media in the <a href="{{ url_for('compliance_dashboard') }}" class="link-primary">Compliance</a> area.</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="alert alert-success mt-4" role="alert">
+                        <strong>Tip:</strong> Keep the <a href="{{ url_for('help_page') }}#contextual-help" class="alert-link">Contextual Tips</a> section open in a second tab when onboarding new operators for at-a-glance reminders.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contextual Guidance -->
+            <div id="contextual-help" class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-comment-dots text-primary me-2"></i>Contextual Guidance
+                    </h2>
+                    <p class="text-muted">Each entry links to the relevant page and highlights the actions most operators ask about.</p>
+                    <div class="list-group list-group-flush">
+                        <a class="list-group-item list-group-item-action d-flex align-items-start" href="{{ url_for('index') }}">
+                            <span class="me-3" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-trigger="hover focus" title="Find alert cards, geo maps, and system status widgets">
+                                <i class="fas fa-map-marked-alt text-primary fa-lg"></i>
+                            </span>
+                            <div>
+                                <div class="fw-semibold">Dashboard Overview</div>
+                                <small class="text-muted">Use filters above the map to focus on specific event codes or time ranges. Click a card to expand alert metadata without leaving the page.</small>
+                            </div>
+                        </a>
+                        <a class="list-group-item list-group-item-action d-flex align-items-start" href="{{ url_for('admin') }}">
+                            <span class="me-3" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-trigger="hover focus" title="Access manual tools, channel status, and automation controls">
+                                <i class="fas fa-sliders-h text-primary fa-lg"></i>
+                            </span>
+                            <div>
+                                <div class="fw-semibold">Admin Panel Shortcuts</div>
+                                <small class="text-muted">Keyboard hints in the panel footer (Alt+1-8, Alt+H) let you swap tabs quickly. Use the <em>Manual Tools</em> tab for end-to-end EAS tests with locally queued audio.</small>
+                            </div>
+                        </a>
+                        <a class="list-group-item list-group-item-action d-flex align-items-start" href="{{ url_for('radio_settings') }}">
+                            <span class="me-3" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-trigger="hover focus" title="Configure receivers, confidence checks, and monitoring schedules">
+                                <i class="fas fa-broadcast-tower text-primary fa-lg"></i>
+                            </span>
+                            <div>
+                                <div class="fw-semibold">Receiver Configuration</div>
+                                <small class="text-muted">Toggle USB passthrough or change demodulator inputs without restarting the service. Save changes to prompt the background job to reload radios safely.</small>
+                            </div>
+                        </a>
+                        <a class="list-group-item list-group-item-action d-flex align-items-start" href="{{ url_for('compliance_dashboard') }}">
+                            <span class="me-3" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-trigger="hover focus" title="Download audit packets and verify logging completeness">
+                                <i class="fas fa-clipboard-check text-primary fa-lg"></i>
+                            </span>
+                            <div>
+                                <div class="fw-semibold">Compliance &amp; Reporting</div>
+                                <small class="text-muted">Export CSV reports for monthly tests or upload supporting documents. The status timeline shows when FEMA or state tests were last acknowledged.</small>
+                            </div>
+                        </a>
                     </div>
                 </div>
             </div>
@@ -833,4 +1015,16 @@ docker-compose exec app flask test-led</code></pre>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+                new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        });
+    </script>
 {% endblock %}
