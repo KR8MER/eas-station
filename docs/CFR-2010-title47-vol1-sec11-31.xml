@@ -1,0 +1,648 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="cfr.xsl"?>
+<CFRGRANULE xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="CFRMergedXML.xsd">
+  <FDSYS>
+    <CFRTITLE>47</CFRTITLE>
+    <CFRTITLETEXT>Telecommunication</CFRTITLETEXT>
+    <VOL>1</VOL>
+    <DATE>2010-10-01</DATE>
+    <ORIGINALDATE>2010-10-01</ORIGINALDATE>
+    <COVERONLY>false</COVERONLY>
+    <TITLE>EAS protocol.</TITLE>
+    <GRANULENUM>11.31</GRANULENUM>
+    <HEADING>Section 11.31</HEADING>
+    <ANCESTORS>
+      <PARENT HEADING="Title 47" SEQ="4">Telecommunication</PARENT>
+      <PARENT HEADING="CHAPTER I" SEQ="3">FEDERAL COMMUNICATIONS COMMISSION</PARENT>
+      <PARENT HEADING="SUBCHAPTER A" SEQ="2">GENERAL</PARENT>
+      <PARENT HEADING="PART 11" SEQ="1">EMERGENCY ALERT SYSTEM (EAS)</PARENT>
+      <PARENT HEADING="Subpart B" SEQ="0">Equipment Requirements</PARENT>
+    </ANCESTORS>
+  </FDSYS>
+  <SECTION>
+    <SECTNO>§ 11.31</SECTNO>
+    <SUBJECT>EAS protocol.</SUBJECT>
+    <P>(a) The EAS uses a four part message for an emergency activation of the EAS. The four parts are: Preamble and EAS Header Codes; audio Attention Signal; message; and, Preamble and EAS End Of Message (EOM) Codes.</P>
+    <P>(1) The Preamble and EAS Codes must use Audio Frequency Shift Keying at a rate of 520.83 bits per second to transmit the codes. Mark frequency is 2083.3 Hz and space frequency is 1562.5 Hz. Mark and space time must be 1.92 milliseconds. Characters are ASCII seven bit characters as defined in ANSI X3.4-1977 ending with an eighth null bit (either 0 or 1) to constitute a full eight-bit byte.</P>
+    <P>(2) The Attention Signal must be made up of the fundamental frequencies of 853 and 960 Hz. The two tones must be transmitted simultaneously. The Attention Signal must be transmitted after the EAS header codes.</P>
+    <P>(3) The message may be audio, video or text.</P>
+    <P>(b) The ASCII dash and plus symbols are required and may not be used for any other purpose. Unused characters must be ASCII space characters. FM or TV call signs must use a slash ASCII character number 47 (/) in lieu of a dash.</P>
+    <P>(c) The EAS protocol, including any codes, must not be amended, extended or abridged without FCC authorization. The EAS protocol and message format are specified in the following representation.</P>
+    <FP>Examples are provided in FCC Public Notices.</FP>
+    
+    <EXTRACT>
+      <FP SOURCE="FP-1">[PREAMBLE]ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-(one second pause)</FP>
+      <FP SOURCE="FP-1">[PREAMBLE]ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-(one second pause)</FP>
+      <FP SOURCE="FP-1">[PREAMBLE]ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-(at least a one second pause)</FP>
+      <FP SOURCE="FP-1">(transmission of 8 to 25 seconds of Attention Signal)</FP>
+      <FP SOURCE="FP-1">(transmission of audio, video or text messages)</FP>
+      <FP SOURCE="FP-1">(at least a one second pause)</FP>
+      <FP SOURCE="FP-1">[PREAMBLE]NNNN (one second pause)</FP>
+      <FP SOURCE="FP-1">[PREAMBLE]NNNN (one second pause)</FP>
+      <FP SOURCE="FP-1">[PREAMBLE]NNNN (at least one second pause)</FP>
+      
+      <P>[PREAMBLE] This is a consecutive string of bits (sixteen bytes of AB hexadecimal [8 bit byte 10101011]) sent to clear the system, set AGC and set asynchronous decoder clocking cycles. The preamble must be transmitted before each header and End Of Message code.</P>
+      <P>ZCZC—This is the identifier, sent as ASCII characters ZCZC to indicate the start of ASCII code.</P>
+      <P>ORG—This is the Originator code and indicates who originally initiated the activation of the EAS. These codes are specified in paragraph (d) of this section.</P>
+      <P>EEE—This is the Event code and indicates the nature of the EAS activation. The codes are specified in paragraph (e) of this section. The Event codes must be compatible with the codes used by the NWS Weather Radio Specific Area Message Encoder (WRSAME).</P>
+
+      <P>PSSCCC—This the Location code and indicates the geographic area affected by the EAS alert. There may be 31 Location codes in an EAS alert. The Location code uses the Federal Information Processing Standard (FIPS) numbers as described by the U.S. Department of Commerce in National Institute of Standards and Technology publication FIPS PUB 6-4. Each state is assigned an SS number as specified in paragraph (f) of this section. Each county and some cities are assigned a CCC number. A CCC number of 000 refers to an entire State or Territory. P defines county subdivisions as follows: 0 = all or an unspecified portion of a county, 1 = Northwest, 2 = North, 3 = Northeast, 4 = West, 5 = Central, 6 = East, 7 = Southwest, 8 = South, 9 = Southeast. Other numbers may be designated later for special applications. <PRTPAGE P="726"/>The use of county subdivisions will probably be rare and generally for oddly shaped or unusually large counties. Any subdivisions must be defined and agreed to by the local officials prior to use.</P>
+      <P>+TTTT—This indicates the valid time period of a message in 15 minute segments up to one hour and then in 30 minute segments beyond one hour; i.e., +0015, +0030, +0045, +0100, +0430 and +0600.</P>
+      <P>JJJHHMM—This is the day in Julian Calendar days (JJJ) of the year and the time in hours and minutes (HHMM) when the message was initially released by the originator using 24 hour Universal Coordinated Time (UTC).</P>
+      <P>LLLLLLLL—This is the identification of the EAS Participant, NWS office, etc., transmitting or retransmitting the message. These codes will be automatically affixed to all outgoing messages by the EAS encoder.</P>
+      <P>NNNN—This is the End of Message (EOM) code sent as a string of four ASCII N characters.</P>
+    </EXTRACT>
+    
+    <P>(d) The only originator codes are:</P>
+    <GPOTABLE CDEF="s50,xs36" COLS="2" OPTS="L2,tp0">
+      <BOXHD>
+        <CHED H="1">Originator</CHED>
+        <CHED H="1">ORG code</CHED>
+      </BOXHD>
+      <ROW>
+        <ENT I="01">EAS Participant</ENT>
+        <ENT>EAS</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Civil authorities</ENT>
+        <ENT>CIV</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">National Weather Service</ENT>
+        <ENT>WXR</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Primary Entry Point System</ENT>
+        <ENT>PEP</ENT>
+      </ROW>
+    </GPOTABLE>
+    <P>(e) The following Event (EEE) codes are presently authorized:</P>
+    <GPOTABLE CDEF="s50,xls20" COLS="2" OPTS="L2,tp0,i1">
+      <BOXHD>
+        <CHED H="1">Nature of Activation</CHED>
+        <CHED H="1">Event Codes</CHED>
+      </BOXHD>
+      <ROW>
+        <ENT I="11">National Codes (Required):</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Emergency Action Notification (National only)</ENT>
+        <ENT>EAN</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Emergency Action Termination (National only)</ENT>
+        <ENT>EAT</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">National Information Center</ENT>
+        <ENT>NIC</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">National Periodic Test</ENT>
+        <ENT>NPT</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Required Monthly Test</ENT>
+        <ENT>RMT</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Required Weekly Test</ENT>
+        <ENT>RWT</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="22">State and Local Codes (Optional):</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Administrative Message</ENT>
+        <ENT>ADR</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Avalanche Warning</ENT>
+        <ENT>AVW <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Avalanche Watch</ENT>
+        <ENT>AVA <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Blizzard Warning</ENT>
+        <ENT>BZW</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Child Abduction Emergency</ENT>
+        <ENT>CAE <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Civil Danger Warning</ENT>
+        <ENT>CDW <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Civil Emergency Message</ENT>
+        <ENT>CEM</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Coastal Flood Warning</ENT>
+        <ENT>CFW <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Coastal Flood Watch</ENT>
+        <ENT>CFA <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Dust Storm Warning</ENT>
+        <ENT>DSW <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Earthquake Warning</ENT>
+        <ENT>EQW <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Evacuation Immediate</ENT>
+        <ENT>EVI</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Fire Warning</ENT>
+        <ENT>FRW <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Flash Flood Warning</ENT>
+        <ENT>FFW</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Flash Flood Watch</ENT>
+        <ENT>FFA</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Flash Flood Statement</ENT>
+        <ENT>FFS</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Flood Warning</ENT>
+        <ENT>FLW</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Flood Watch</ENT>
+        <ENT>FLA</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Flood Statement</ENT>
+        <ENT>FLS</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Hazardous Materials Warning</ENT>
+        <ENT>HMW <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">High Wind Warning</ENT>
+        <ENT>HWW</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">High Wind Watch</ENT>
+        <ENT>HWA</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Hurricane Warning</ENT>
+        <ENT>HUW</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Hurricane Watch</ENT>
+        <ENT>HUA</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Hurricane Statement</ENT>
+        <ENT>HLS</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Law Enforcement Warning</ENT>
+        <ENT>LEW <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Local Area Emergency</ENT>
+        <ENT>LAE <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Network Message Notification</ENT>
+        <ENT>NMN <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">911 Telephone Outage Emergency</ENT>
+        <ENT>TOE <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Nuclear Power Plant Warning</ENT>
+        <ENT>NUW <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Practice/Demo Warning</ENT>
+        <ENT>DMO</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Radiological Hazard Warning</ENT>
+        <ENT>RHW <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Severe Thunderstorm Warning</ENT>
+        <ENT>SVR</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Severe Thunderstorm Watch</ENT>
+        <ENT>SVA</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Severe Weather Statement</ENT>
+        <ENT>SVS</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Shelter in Place Warning</ENT>
+        <ENT>SPW <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Special Marine Warning</ENT>
+        <ENT>SMW <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Special Weather Statement</ENT>
+        <ENT>SPS</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Tornado Warning</ENT>
+        <ENT>TOR</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Tornado Watch</ENT>
+        <ENT>TOA</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Tropical Storm Warning</ENT>
+        <ENT>TRW <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Tropical Storm Watch</ENT>
+        <ENT>TRA <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Tsunami Warning</ENT>
+        <ENT>TSW</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Tsunami Watch</ENT>
+        <ENT>TSA</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Volcano Warning</ENT>
+        <ENT>VOW <SU>1</SU>
+        </ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Winter Storm Warning</ENT>
+        <ENT>WSW</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="01">Winter Storm Watch</ENT>
+        <ENT>WSA</ENT>
+      </ROW>
+      <TNOTE>
+        <SU>1</SU> Effective May 16, 2002, analog radio and television broadcast stations, analog cable systems and wireless cable systems may upgrade their existing EAS equipment to add these event codes on a voluntary basis until the equipment is replaced. All models of EAS equipment manufactured after August 1, 2003 must be capable of receiving and transmitting these event codes. EAS Participants that install or replace their EAS equipment after February 1, 2004 must install equipment that is capable of receiving and transmitting these event codes.</TNOTE>
+    </GPOTABLE>
+    <P>(f) The State, Territory and Offshore (Marine Area) FIPS number codes (SS) are as follows. County FIPS numbers (CCC) are contained in the State EAS Mapbook.</P>
+    <GPOTABLE CDEF="s40,6" COLS="2" OPTS="L2,tp0,i1">
+      <BOXHD>
+        <CHED H="1"/>
+        <CHED H="1">FIPS#</CHED>
+      </BOXHD>
+      <ROW>
+        <ENT I="11">State:</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">AL</ENT>
+        <ENT>01</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">AK</ENT>
+        <ENT>02</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">AZ</ENT>
+        <ENT>04</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">AR</ENT>
+        <ENT>05</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">CA</ENT>
+        <ENT>06</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">CO</ENT>
+        <ENT>08</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">CT</ENT>
+        <ENT>09</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">DE</ENT>
+        <ENT>10</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">DC</ENT>
+        <ENT>11</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">FL</ENT>
+        <ENT>12</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">GA</ENT>
+        <ENT>13</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">HI</ENT>
+        <ENT>15</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">ID</ENT>
+        <ENT>16</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">IL</ENT>
+        <ENT>17</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">IN</ENT>
+        <ENT>18</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">IA</ENT>
+        <ENT>19</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">KS</ENT>
+        <ENT>20</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">KY</ENT>
+        <ENT>21</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">LA</ENT>
+        <ENT>22</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">ME</ENT>
+        <ENT>23</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">MD</ENT>
+        <ENT>24</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">MA</ENT>
+        <ENT>25</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">MI</ENT>
+        <ENT>26</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">MN</ENT>
+        <ENT>27</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">MS</ENT>
+        <ENT>28</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">MO</ENT>
+        <ENT>29</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">MT</ENT>
+        <ENT>30</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">NE</ENT>
+        <ENT>31</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">NV</ENT>
+        <ENT>32</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">NH</ENT>
+        <ENT>33</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">NJ</ENT>
+        <ENT>34</ENT>
+      </ROW>
+      <ROW>
+        <PRTPAGE P="727"/>
+        <ENT I="02">NM</ENT>
+        <ENT>35</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">NY</ENT>
+        <ENT>36</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">NC</ENT>
+        <ENT>37</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">ND</ENT>
+        <ENT>38</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">OH</ENT>
+        <ENT>39</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">OK</ENT>
+        <ENT>40</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">OR</ENT>
+        <ENT>41</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">PA</ENT>
+        <ENT>42</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">RI</ENT>
+        <ENT>44</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">SC</ENT>
+        <ENT>45</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">SD</ENT>
+        <ENT>46</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">TN</ENT>
+        <ENT>47</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">TX</ENT>
+        <ENT>48</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">UT</ENT>
+        <ENT>49</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">VT</ENT>
+        <ENT>50</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">VA</ENT>
+        <ENT>51</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">WA</ENT>
+        <ENT>53</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">WV</ENT>
+        <ENT>54</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">WI</ENT>
+        <ENT>55</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">WY</ENT>
+        <ENT>56</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="11">Terr.:</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">AS</ENT>
+        <ENT>60</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">FM</ENT>
+        <ENT>64</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">GU</ENT>
+        <ENT>66</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">MH</ENT>
+        <ENT>68</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">MH</ENT>
+        <ENT>68</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">PR</ENT>
+        <ENT>72</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">PW</ENT>
+        <ENT>70</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">UM</ENT>
+        <ENT>74</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">VI</ENT>
+        <ENT>78</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="11">Offshore (Marine Areas) <SU>1</SU>:</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">Eastern North Pacific Ocean, and along U.S. West Coast from Canadian border to Mexican border</ENT>
+        <ENT>57</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">North Pacific Ocean near Alaska, and along Alaska coastline, including the Bering Sea and the Gulf of Alaska</ENT>
+        <ENT>58</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">Central Pacific Ocean, including Hawaiian waters</ENT>
+        <ENT>59</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">South Central Pacific Ocean, including American Samoa waters</ENT>
+        <ENT>61</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">Western Pacific Ocean, including Mariana Island waters</ENT>
+        <ENT>65</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">Western North Atlantic Ocean, and along U.S. East Coast, from Canadian border south to Currituck Beach Light, N.C</ENT>
+        <ENT>73</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">Western North Atlantic Ocean, and along U.S. East Coast, south of Currituck Beach Light, N.C., following the coastline into Gulf of Mexico to Bonita Beach, FL., including the Caribbean</ENT>
+        <ENT>75</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">Gulf of Mexico, and along the U.S. Gulf Coast from the Mexican border to Bonita Beach, FL</ENT>
+        <ENT>77</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">Lake Superior</ENT>
+        <ENT>91</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">Lake Michigan</ENT>
+        <ENT>92</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">Lake Huron</ENT>
+        <ENT>93</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">Lake St. Clair</ENT>
+        <ENT>94</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">Lake Erie</ENT>
+        <ENT>96</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">Lake Ontario</ENT>
+        <ENT>97</ENT>
+      </ROW>
+      <ROW>
+        <ENT I="02">St. Lawrence River above St. Regis</ENT>
+        <ENT>98</ENT>
+      </ROW>
+      <TNOTE>
+        <SU>1</SU> Effective May 16, 2002, analog radio and television broadcast stations, analog cable systems and wireless cable systems may upgrade their existing EAS equipment to add these marine area location codes on a voluntary basis until the equipment is replaced. All models of EAS equipment manufactured after August 1, 2003, must be capable of receiving and transmitting these marine area location codes. EAS Participants that install or replace their EAS equipment after February 1, 2004, must install equipment that is capable of receiving and transmitting these location codes.</TNOTE>
+    </GPOTABLE>
+    <CITA>[59 FR 67092, Dec. 28, 1994, as amended at 60 FR 55999, Nov. 6, 1995; 61 FR 54952, Oct. 23, 1996; 63 FR 29663, June 1, 1998; 67 FR 18508, Apr. 16, 2002; 67 FR 77174, Dec. 17, 2002; 69 FR 72031, Dec. 10, 2004; 70 FR 71033, Nov. 25, 2005]</CITA>
+  </SECTION>
+</CFRGRANULE>
