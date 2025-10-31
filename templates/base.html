@@ -65,6 +65,23 @@
             --text-color: #1c2233;
             --border-color: #ced7ea;
             --shadow-color: rgba(32, 72, 133, 0.12);
+
+            /* Additional variables for consistency */
+            --accent-primary: #4f6fb3;
+            --bg-card: #ffffff;
+            --text-secondary: #5a6c8f;
+            --text-muted: #8892a6;
+            --info: #2f5aa1;
+            --success: #2eb08d;
+            --warning: #f6b968;
+            --danger: #e05263;
+            --shadow: rgba(32, 72, 133, 0.12);
+            --radius-sm: 6px;
+            --radius-md: 8px;
+            --spacing-xs: 0.5rem;
+            --spacing-sm: 0.75rem;
+            --spacing-md: 1rem;
+            --spacing-lg: 1.5rem;
         }
 
         [data-theme="dark"] {
@@ -84,6 +101,17 @@
             --text-color: #f5f6fa;
             --border-color: #2f3a54;
             --shadow-color: rgba(0, 0, 0, 0.4);
+
+            /* Additional variables for consistency */
+            --accent-primary: #7f9be8;
+            --bg-card: #1b2335;
+            --text-secondary: #a0aac0;
+            --text-muted: #7a8599;
+            --info: #7da9ff;
+            --success: #47d3b1;
+            --warning: #ffca7d;
+            --danger: #ff7a8a;
+            --shadow: rgba(0, 0, 0, 0.4);
         }
 
         body {
@@ -403,6 +431,20 @@
                         <a class="nav-link" href="/admin">
                             <i class="fas fa-cog"></i> Admin
                         </a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="debugDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-bug"></i> Debug
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="debugDropdown">
+                            <li><a class="dropdown-item" href="/debug/ipaws"><i class="fas fa-satellite"></i> IPAWS Debug</a></li>
+                            <li><a class="dropdown-item" href="/health"><i class="fas fa-heartbeat"></i> System Health</a></li>
+                            <li><a class="dropdown-item" href="/version"><i class="fas fa-info-circle"></i> Version Info</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/export/alerts"><i class="fas fa-download"></i> Export Alerts</a></li>
+                            <li><a class="dropdown-item" href="/export/boundaries"><i class="fas fa-download"></i> Export Boundaries</a></li>
+                            <li><a class="dropdown-item" href="/export/statistics"><i class="fas fa-download"></i> Export Statistics</a></li>
+                        </ul>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('eas.workflow_home') }}" {% if current_user is not defined or not current_user.is_authenticated %}title="Sign in required to access the manual EAS workflow."{% endif %}>
