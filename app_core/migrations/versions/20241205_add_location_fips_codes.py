@@ -45,11 +45,11 @@ def upgrade() -> None:
             text(
                 """
                 UPDATE location_settings
-                SET fips_codes = :default::jsonb
+                SET fips_codes = :fips_default::jsonb
                 WHERE fips_codes IS NULL
                    OR jsonb_array_length(fips_codes) = 0
                 """
-            ).bindparams(default=default_json)
+            ).bindparams(fips_default=default_json)
         )
 
 
