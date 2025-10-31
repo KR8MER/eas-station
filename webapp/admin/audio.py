@@ -1065,6 +1065,48 @@ def register_audio_routes(app, logger, eas_config):
             logger.error('Failed to list manual EAS activations: %s', exc)
             return jsonify({'error': 'Unable to load manual activations.'}), 500
 
+    @app.route('/manual_eas/<int:event_id>/audio/<string:component>', methods=['GET'])
+    def manual_eas_audio(event_id: int, component: str):
+        component_key = (component or '').strip().lower()
+        component_map = {
+            'composite': 'composite_audio_data',
+            'full': 'composite_audio_data',
+            'primary': 'composite_audio_data',
+            'same': 'same_audio_data',
+            'attention': 'attention_audio_data',
+            'tts': 'tts_audio_data',
+            'narration': 'tts_audio_data',
+            'eom': 'eom_audio_data',
+        }
+
+        attr_name = component_map.get(component_key)
+        if not attr_name:
+            abort(404, description='Unsupported manual audio component.')
+
+        activation = ManualEASActivation.query.get_or_404(event_id)
+        blob = getattr(activation, attr_name, None)
+        if not blob:
+            abort(404, description='Audio not available for this component.')
+
+        download_flag = (request.args.get('download') or '').strip().lower()
+        as_attachment = download_flag in {'1', 'true', 'yes', 'download'}
+
+        filename = f'manual_eas_{activation.id}_{component_key or "audio"}.wav'
+
+        file_obj = io.BytesIO(blob)
+        file_obj.seek(0)
+        response = send_file(
+            file_obj,
+            mimetype='audio/wav',
+            as_attachment=as_attachment,
+            download_name=filename,
+            max_age=0,
+        )
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+
     @app.route('/admin/eas/manual_events/<int:event_id>/print')
     def manual_eas_print(event_id: int):
         creating_first_user = AdminUser.query.count() == 0
