@@ -21,6 +21,23 @@
         </div>
     {% endif %}
 
+    {% if debug_runs %}
+        <div class="alert alert-secondary border-start border-4 border-primary small shadow-sm">
+            <div class="fw-semibold mb-1">How to read this table</div>
+            <div class="d-flex flex-column flex-lg-row gap-2">
+                <div class="d-flex flex-wrap gap-2">
+                    <span class="badge rounded-pill text-bg-success">New + Saved</span>
+                    <span class="badge rounded-pill text-bg-info text-dark">Saved (existing)</span>
+                    <span class="badge rounded-pill text-bg-warning text-dark">Filtered</span>
+                    <span class="badge rounded-pill text-bg-danger">Parse issue</span>
+                </div>
+                <div class="text-muted">
+                    Rows inherit these highlight colors. Expand details to inspect captured payloads and geometry.
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
     {% for run in debug_runs %}
         <div class="card mb-4 shadow-sm">
             <div class="card-header bg-light">
@@ -41,8 +58,11 @@
             </div>
             <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover align-middle">
-                        <thead class="table-light">
+                    <table class="table table-hover table-bordered align-middle mb-0">
+                        <caption class="caption-top text-muted small">
+                            Detailed alert outcomes for this poll cycle.
+                        </caption>
+                        <thead class="table-light position-sticky top-0" style="z-index: 1;">
                             <tr>
                                 <th scope="col">Event</th>
                                 <th scope="col">Identifier</th>
@@ -65,15 +85,15 @@
                                 {% elif alert.was_saved %}
                                     {% set row_class = 'table-info' %}
                                 {% endif %}
-                                <tr class="{{ row_class }}">
-                                    <td>
+                                <tr class="{{ row_class }} align-top">
+                                    <td class="text-break">
                                         <div class="fw-semibold">{{ alert.alert_event or 'Unknown event' }}</div>
                                         <div class="text-muted small">{{ alert.source or 'Unknown source' }}</div>
                                         {% if alert.area_desc %}
-                                            <div class="small">{{ alert.area_desc }}</div>
+                                            <div class="small text-muted">{{ alert.area_desc }}</div>
                                         {% endif %}
                                     </td>
-                                    <td>
+                                    <td class="text-break">
                                         <div class="font-monospace small">{{ alert.alert_identifier or alert.identifier or 'n/a' }}</div>
                                         {% if alert.raw_xml_present %}
                                             <span class="badge bg-secondary mt-1">Raw XML</span>
@@ -82,7 +102,7 @@
                                             <div class="small text-muted">UGC: {{ alert.ugc_codes|join(', ') }}</div>
                                         {% endif %}
                                     </td>
-                                    <td>
+                                    <td class="text-break">
                                         {% if alert.is_relevant %}
                                             <span class="badge bg-success">Accepted</span>
                                         {% else %}
@@ -93,15 +113,17 @@
                                             <div class="small">{{ alert.relevance_matches|join(', ') }}</div>
                                         {% endif %}
                                     </td>
-                                    <td>
-                                        {% if alert.was_saved %}
-                                            <span class="badge bg-info text-dark">Saved</span>
-                                        {% else %}
-                                            <span class="badge bg-secondary">Not saved</span>
-                                        {% endif %}
-                                        {% if alert.was_new %}
-                                            <span class="badge bg-success ms-1">New</span>
-                                        {% endif %}
+                                    <td class="text-break">
+                                        <div class="d-flex flex-wrap gap-1">
+                                            {% if alert.was_saved %}
+                                                <span class="badge bg-info text-dark">Saved</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">Not saved</span>
+                                            {% endif %}
+                                            {% if alert.was_new %}
+                                                <span class="badge bg-success">New</span>
+                                            {% endif %}
+                                        </div>
                                         {% if alert.alert_db_id %}
                                             <div class="small text-muted">DB ID {{ alert.alert_db_id }}</div>
                                         {% endif %}
@@ -109,35 +131,33 @@
                                             <div class="text-danger small">{{ alert.parse_error }}</div>
                                         {% endif %}
                                     </td>
-                                    <td>
+                                    <td class="text-break">
                                         <div class="small">{{ alert.geometry_type or 'None' }}{% if alert.polygon_count %} ({{ alert.polygon_count }}){% endif %}</div>
                                         {% if alert.geometry_preview %}
                                             <details class="small mt-1">
-                                                <summary>Preview</summary>
-                                                <pre class="small bg-dark text-light p-2 rounded">{{ alert.geometry_preview | tojson(indent=2) }}</pre>
+                                                <summary class="fw-semibold">Preview</summary>
+                                                <pre class="small bg-dark text-light p-2 rounded overflow-auto">{{ alert.geometry_preview | tojson(indent=2) }}</pre>
                                             </details>
                                         {% endif %}
                                         {% if alert.geometry_geojson %}
                                             <details class="small mt-2">
-                                                <summary>GeoJSON</summary>
-                                                <pre class="small bg-dark text-light p-2 rounded">{{ alert.geometry_geojson | tojson(indent=2) }}</pre>
+                                                <summary class="fw-semibold">GeoJSON</summary>
+                                                <pre class="small bg-dark text-light p-2 rounded overflow-auto">{{ alert.geometry_geojson | tojson(indent=2) }}</pre>
                                             </details>
                                         {% endif %}
                                     </td>
-                                    <td>
+                                    <td class="text-break">
                                         <div class="small">Sent: {{ alert.alert_sent_display or 'Unknown' }}</div>
                                         <div class="text-muted small">Captured: {{ alert.created_at_display or 'Unknown' }}</div>
                                     </td>
-                                    <td>
+                                    <td class="text-break">
                                         {% set note_text = alert.notes or '' %}
                                         {% if note_text %}
-                                            {% for line in note_text.split('\n') %}
-                                                <div class="small text-muted">{{ line }}</div>
-                                            {% endfor %}
+                                            <div class="small text-muted" style="white-space: pre-line;">{{ note_text }}</div>
                                         {% endif %}
                                         <details class="small mt-2">
-                                            <summary>Raw properties</summary>
-                                            <pre class="small bg-light border rounded p-2">{{ alert.raw_properties | tojson(indent=2) }}</pre>
+                                            <summary class="fw-semibold">Raw properties</summary>
+                                            <pre class="small bg-light border rounded p-2 overflow-auto">{{ alert.raw_properties | tojson(indent=2) }}</pre>
                                         </details>
                                     </td>
                                 </tr>
