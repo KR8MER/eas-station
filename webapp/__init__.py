@@ -9,7 +9,6 @@ from flask import Flask
 
 from . import (
     routes_admin,
-    routes_eas,
     routes_debug,
     routes_exports,
     routes_settings_radio,
