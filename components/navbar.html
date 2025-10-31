@@ -40,6 +40,12 @@
                 </a>
             </li>
             <li class="nav-item">
+                <a href="{{ url_for('eas.eas_workflow') }}" class="nav-link {{ 'active' if request.endpoint == 'eas.eas_workflow' }}">
+                    <i class="fas fa-broadcast-tower"></i>
+                    EAS Workflow
+                </a>
+            </li>
+            <li class="nav-item">
                 <a href="{{ url_for('admin') if url_for('admin') else '/admin' }}" class="nav-link {{ 'active' if request.endpoint == 'admin' }}">
                     <i class="fas fa-cog"></i>
                     Admin

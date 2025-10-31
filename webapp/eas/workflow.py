@@ -11,15 +11,29 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
-from flask import abort, g, jsonify, redirect, render_template, request, send_file, url_for
+from flask import (
+    abort,
+    current_app,
+    g,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    url_for,
+)
 
 from app_core.extensions import db
-from app_core.models import AdminUser, ManualEASActivation, SystemLog
+from app_core.models import AdminUser, EASMessage, ManualEASActivation, SystemLog
 from app_utils.eas import (
     EASAudioGenerator,
+    ORIGINATOR_DESCRIPTIONS,
+    P_DIGIT_MEANINGS,
     PRIMARY_ORIGINATORS,
+    SAME_HEADER_FIELD_DESCRIPTIONS,
     build_same_header,
     describe_same_header,
+    manual_default_same_codes,
     samples_to_wav_bytes,
 )
 from app_utils.event_codes import EVENT_CODE_REGISTRY
@@ -40,11 +54,11 @@ def _remove_manual_eas_files(activation: ManualEASActivation, output_root: str, 
         logger.warning(f"Failed to delete manual EAS directory {full_path}: {exc}")
 
 
-def register_manual_routes(app, logger, eas_config) -> None:
-    """Register manual EAS management endpoints."""
+def register_manual_routes(bp, logger, eas_config) -> None:
+    """Register manual EAS management endpoints on the blueprint."""
 
-    @app.route('/admin/eas/manual_generate', methods=['POST'])
-    def admin_manual_eas_generate():
+    @bp.route('/manual/generate', methods=['POST'])
+    def manual_eas_generate():
         creating_first_user = AdminUser.query.count() == 0
         if g.current_user is None and not creating_first_user:
             return jsonify({'error': 'Authentication required.'}), 401
@@ -205,7 +219,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
         base_name = _safe_base(identifier)
         sample_rate = components.get('sample_rate', sample_rate)
 
-        output_root = str(manual_config.get('output_dir') or app.config.get('EAS_OUTPUT_DIR') or '').strip()
+        output_root = str(manual_config.get('output_dir') or current_app.config.get('EAS_OUTPUT_DIR') or '').strip()
         if not output_root:
             logger.error('Manual EAS output directory is not configured.')
             return jsonify({'error': 'Manual EAS output directory is not configured.'}), 500
@@ -218,7 +232,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
         event_dir = os.path.join(manual_root, slug)
         os.makedirs(event_dir, exist_ok=True)
         storage_root = '/'.join(part for part in ['manual', slug] if part)
-        web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+        web_prefix = current_app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
 
         def _package_audio(samples: List[int], suffix: str) -> Optional[Dict[str, Any]]:
             if not samples:
@@ -398,7 +412,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
                 SystemLog(
                     level='INFO',
                     message='Manual EAS package generated',
-                    module='admin',
+                    module='eas',
                     details={
                         'identifier': identifier,
                         'event_code': resolved_event_code,
@@ -418,7 +432,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
         response_payload['activation'] = {
             'id': activation_record.id,
             'created_at': activation_record.created_at.isoformat() if activation_record.created_at else None,
-            'print_url': url_for('manual_eas_print', event_id=activation_record.id),
+            'print_url': url_for('.manual_eas_print', event_id=activation_record.id),
             'export_url': summary_url,
             'components': {
                 key: {
@@ -432,7 +446,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
 
         return jsonify(response_payload)
 
-    @app.route('/admin/eas/manual_events', methods=['GET'])
+    @bp.route('/manual/events', methods=['GET'])
     def admin_manual_eas_events():
         creating_first_user = AdminUser.query.count() == 0
         if g.current_user is None and not creating_first_user:
@@ -448,7 +462,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
                 .all()
             )
 
-            web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+            web_prefix = current_app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
             items = []
 
             for event in events:
@@ -475,7 +489,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
                         part for part in [event.storage_path, event.summary_filename] if part
                     )
                 export_url = (
-                    url_for('manual_eas_export', event_id=event.id)
+                    url_for('.manual_eas_export', event_id=event.id)
                     if summary_subpath
                     else None
                 )
@@ -490,7 +504,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
                     'same_header': event.same_header,
                     'created_at': event.created_at.isoformat() if event.created_at else None,
                     'archived_at': event.archived_at.isoformat() if event.archived_at else None,
-                    'print_url': url_for('manual_eas_print', event_id=event.id),
+                    'print_url': url_for('.manual_eas_print', event_id=event.id),
                     'export_url': export_url,
                     'components': {
                         key: _component_with_url(meta)
@@ -503,7 +517,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
             logger.error('Failed to list manual EAS activations: %s', exc)
             return jsonify({'error': 'Unable to load manual activations.'}), 500
 
-    @app.route('/admin/eas/manual_events/<int:event_id>/print')
+    @bp.route('/manual/events/<int:event_id>/print')
     def manual_eas_print(event_id: int):
         creating_first_user = AdminUser.query.count() == 0
         if g.current_user is None and not creating_first_user:
@@ -511,7 +525,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
 
         event = ManualEASActivation.query.get_or_404(event_id)
         components_payload = event.components_payload or {}
-        web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+        web_prefix = current_app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
 
         def _component_with_url(meta: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
             if not meta:
@@ -547,12 +561,12 @@ def register_manual_routes(app, logger, eas_config) -> None:
             event=event,
             components=components,
             header_detail=header_detail,
-            summary_url=url_for('manual_eas_export', event_id=event.id)
+            summary_url=url_for('.manual_eas_export', event_id=event.id)
             if event.summary_filename
             else None,
         )
 
-    @app.route('/admin/eas/manual_events/<int:event_id>/export')
+    @bp.route('/manual/events/<int:event_id>/export')
     def manual_eas_export(event_id: int):
         creating_first_user = AdminUser.query.count() == 0
         if g.current_user is None and not creating_first_user:
@@ -562,7 +576,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
         if not event.summary_filename:
             return abort(404)
 
-        output_root = str(app.config.get('EAS_OUTPUT_DIR') or '').strip()
+        output_root = str(current_app.config.get('EAS_OUTPUT_DIR') or '').strip()
         if not output_root:
             return abort(404)
 
@@ -577,13 +591,13 @@ def register_manual_routes(app, logger, eas_config) -> None:
             mimetype='application/json',
         )
 
-    @app.route('/admin/eas/manual_events/<int:event_id>', methods=['DELETE'])
+    @bp.route('/manual/events/<int:event_id>', methods=['DELETE'])
     def admin_delete_manual_eas(event_id: int):
         if g.current_user is None:
             return jsonify({'error': 'Authentication required.'}), 401
 
         activation = ManualEASActivation.query.get_or_404(event_id)
-        output_root = str(app.config.get('EAS_OUTPUT_DIR') or '').strip()
+        output_root = str(current_app.config.get('EAS_OUTPUT_DIR') or '').strip()
 
         try:
             if output_root:
@@ -610,7 +624,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
 
         return jsonify({'message': 'Manual EAS activation deleted.', 'id': event_id})
 
-    @app.route('/admin/eas/manual_events/purge', methods=['POST'])
+    @bp.route('/manual/events/purge', methods=['POST'])
     def admin_purge_manual_eas():
         if g.current_user is None:
             return jsonify({'error': 'Authentication required.'}), 401
@@ -657,7 +671,7 @@ def register_manual_routes(app, logger, eas_config) -> None:
         if not activations:
             return jsonify({'message': 'No manual EAS activations matched the purge criteria.', 'deleted': 0})
 
-        output_root = str(app.config.get('EAS_OUTPUT_DIR') or '').strip()
+        output_root = str(current_app.config.get('EAS_OUTPUT_DIR') or '').strip()
         deleted_ids: List[int] = []
 
         for activation in activations:
@@ -690,4 +704,68 @@ def register_manual_routes(app, logger, eas_config) -> None:
                 'deleted': len(deleted_ids),
                 'ids': deleted_ids,
             }
+        )
+
+
+def register_page_routes(bp, logger, eas_config) -> None:
+    """Register the interactive workflow console."""
+
+    @bp.route('/workflow', methods=['GET'])
+    def eas_workflow():
+        creating_first_user = AdminUser.query.count() == 0
+        if g.current_user is None and not creating_first_user:
+            return redirect(url_for('login', next=request.full_path if request.query_string else request.path))
+
+        setup_mode = getattr(g, 'admin_setup_mode', None)
+        if setup_mode is None:
+            try:
+                setup_mode = AdminUser.query.count() == 0
+            except Exception:  # pragma: no cover - defensive fallback
+                setup_mode = False
+
+        eas_enabled = current_app.config.get('EAS_BROADCAST_ENABLED', False)
+        total_eas_messages = EASMessage.query.count() if eas_enabled else 0
+        recent_eas_messages: List[EASMessage] = []
+        if eas_enabled:
+            recent_eas_messages = (
+                EASMessage.query.order_by(EASMessage.created_at.desc()).limit(10).all()
+            )
+
+        event_options = [
+            {'code': code, 'name': entry.get('name', code)}
+            for code, entry in EVENT_CODE_REGISTRY.items()
+            if '?' not in code
+        ]
+        event_options.sort(key=lambda item: item['code'])
+
+        originator_choices = [
+            {
+                'code': code,
+                'description': ORIGINATOR_DESCRIPTIONS.get(code, ''),
+            }
+            for code in PRIMARY_ORIGINATORS
+        ]
+
+        manual_same_defaults = manual_default_same_codes()
+
+        return render_template(
+            'eas/workflow.html',
+            setup_mode=setup_mode,
+            eas_enabled=eas_enabled,
+            eas_total_messages=total_eas_messages,
+            eas_recent_messages=recent_eas_messages,
+            eas_web_subdir=current_app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages'),
+            eas_event_codes=event_options,
+            eas_originator=eas_config.get('originator', 'WXR'),
+            eas_station_id=eas_config.get('station_id', 'EASNODES'),
+            eas_attention_seconds=eas_config.get('attention_tone_seconds', 8),
+            eas_sample_rate=eas_config.get('sample_rate', 44100),
+            eas_tts_provider=(eas_config.get('tts_provider') or '').strip().lower(),
+            eas_fips_states=get_us_state_county_tree(),
+            eas_fips_lookup=get_same_lookup(),
+            eas_originator_descriptions=ORIGINATOR_DESCRIPTIONS,
+            eas_originator_choices=originator_choices,
+            eas_header_fields=SAME_HEADER_FIELD_DESCRIPTIONS,
+            eas_p_digit_meanings=P_DIGIT_MEANINGS,
+            eas_default_same_codes=manual_same_defaults,
         )

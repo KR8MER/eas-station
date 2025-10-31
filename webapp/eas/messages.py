@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from flask import g, jsonify, request, url_for
+from flask import current_app, g, jsonify, request, url_for
 
 from app_core.extensions import db
 from app_core.models import EASMessage, SystemLog
@@ -13,12 +13,12 @@ from app_core.eas_storage import get_eas_static_prefix, remove_eas_files
 from app_utils import utc_now
 
 
-def register_message_admin_routes(app, logger) -> None:
-    """Register administrative endpoints for audio messages."""
+def register_message_routes(bp, logger) -> None:
+    """Register endpoints for managing generated EAS messages."""
 
-    @app.route('/admin/eas_messages', methods=['GET'])
-    def admin_eas_messages():
-        eas_enabled = app.config.get('EAS_BROADCAST_ENABLED', False)
+    @bp.route('/messages', methods=['GET'])
+    def list_eas_messages():
+        eas_enabled = current_app.config.get('EAS_BROADCAST_ENABLED', False)
 
         try:
             limit = request.args.get('limit', type=int) or 50
@@ -50,8 +50,8 @@ def register_message_admin_routes(app, logger) -> None:
             logger.error('Failed to list EAS messages: %s', exc)
             return jsonify({'error': 'Unable to load EAS messages'}), 500
 
-    @app.route('/admin/eas_messages/<int:message_id>', methods=['DELETE'])
-    def admin_delete_eas_message(message_id: int):
+    @bp.route('/messages/<int:message_id>', methods=['DELETE'])
+    def delete_eas_message(message_id: int):
         message = EASMessage.query.get_or_404(message_id)
 
         try:
@@ -76,8 +76,8 @@ def register_message_admin_routes(app, logger) -> None:
 
         return jsonify({'message': 'EAS message deleted.', 'id': message_id})
 
-    @app.route('/admin/eas_messages/purge', methods=['POST'])
-    def admin_purge_eas_messages():
+    @bp.route('/messages/purge', methods=['POST'])
+    def purge_eas_messages():
         if g.current_user is None:
             return jsonify({'error': 'Authentication required.'}), 401
 

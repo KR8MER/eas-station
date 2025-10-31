@@ -104,17 +104,28 @@ def _build_locations_list(fields: Dict[str, object]) -> List[str]:
         if not isinstance(item, dict):
             continue
         description = (item.get("description") or "").strip()
-        state = (item.get("state_abbr") or item.get("state_name") or "").strip()
+        state_abbr = (item.get("state_abbr") or "").strip()
+        state_name = (item.get("state_name") or "").strip()
+        state_label = state_abbr or state_name
+        code = (item.get("code") or "").strip()
+
         if description:
             label = description
-            if state and state not in description:
-                label = f"{label}, {state}"
+            if state_label and state_label not in description:
+                label = f"{label}, {state_label}"
         else:
-            code = (item.get("code") or "").strip()
-            if code and state:
-                label = f"{code} ({state})"
+            if code and state_label:
+                label = f"{state_label} ({code})"
             else:
-                label = code or state
+                label = code or state_label
+
+        if code:
+            normalised_code = code
+            if normalised_code not in label:
+                if normalised_code.isdigit():
+                    label = f"{label} (FIPS {normalised_code})"
+                else:
+                    label = f"{label} ({normalised_code})"
         label = label.strip()
         if label:
             locations.append(label)
@@ -147,8 +158,8 @@ def _format_event_phrase(fields: Dict[str, object]) -> str:
 
     if entry:
         event_name = entry.get("name") or code
-        article = _select_article(event_name)
-        phrase = f"{article} {event_name.upper()}"
+        article = _select_article(event_name).lower()
+        phrase = f"{article} {event_name}"
         if code:
             phrase += f" ({code})"
         return phrase
@@ -164,8 +175,13 @@ def build_plain_language_summary(header: str, fields: Dict[str, object]) -> Opti
         return None
 
     originator_label = _clean_originator_label(fields)
-    originator_article = _select_article(originator_label)
-    originator_phrase = f"{originator_article} {originator_label}"
+    cleaned_originator = originator_label.strip()
+    if cleaned_originator.lower().startswith("the "):
+        originator_phrase = cleaned_originator[0].upper() + cleaned_originator[1:]
+    elif cleaned_originator:
+        originator_phrase = f"The {cleaned_originator}"
+    else:
+        originator_phrase = "The originator"
 
     event_phrase = _format_event_phrase(fields)
 
