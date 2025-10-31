@@ -504,6 +504,17 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             },
         }
 
+        for key, value in stored_components.items():
+            if not value:
+                continue
+            stream_url = url_for('manual_eas_audio', event_id=activation_record.id, component=key)
+            activation_component = response_payload['activation']['components'].get(key)
+            if activation_component is not None:
+                activation_component['stream_url'] = stream_url
+            component_payload = response_payload['components'].get(key)
+            if component_payload is not None:
+                component_payload['stream_url'] = stream_url
+
         return jsonify(response_payload)
 
     @bp.route('/manual/events', methods=['GET'])
@@ -528,7 +539,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             for event in events:
                 components_payload = event.components_payload or {}
 
-                def _component_with_url(meta: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+                def _component_with_url(component_key: str, meta: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
                     if not meta:
                         return None
                     storage_subpath = meta.get('storage_subpath')
@@ -541,6 +552,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                         'size_bytes': meta.get('size_bytes'),
                         'storage_subpath': storage_subpath,
                         'download_url': download_url,
+                        'stream_url': url_for('manual_eas_audio', event_id=event.id, component=component_key),
                     }
 
                 summary_subpath = None
@@ -568,7 +580,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                         'print_url': url_for('eas.manual_eas_print', event_id=event.id),
                         'export_url': export_url,
                         'components': {
-                            key: _component_with_url(meta)
+                            key: _component_with_url(key, meta)
                             for key, meta in components_payload.items()
                         },
                     }
@@ -589,7 +601,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
         components_payload = event.components_payload or {}
         web_prefix = current_app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
 
-        def _component_with_url(meta: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        def _component_with_url(component_key: str, meta: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
             if not meta:
                 return None
             storage_subpath = meta.get('storage_subpath')
@@ -602,6 +614,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                 'size_bytes': meta.get('size_bytes'),
                 'storage_subpath': storage_subpath,
                 'download_url': download_url,
+                'stream_url': url_for('manual_eas_audio', event_id=event.id, component=component_key),
             }
 
         state_tree = get_us_state_county_tree()
@@ -626,7 +639,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             'manual_eas_print.html',
             event=event,
             components={
-                key: _component_with_url(meta)
+                key: _component_with_url(key, meta)
                 for key, meta in components_payload.items()
             },
             header_detail=header_detail,
