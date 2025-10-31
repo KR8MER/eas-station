@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import io
 import math
 import os
 import shutil
 import subprocess
+import wave
 from array import array
+from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .eas import describe_same_header
-from .eas_fsk import SAME_BAUD, SAME_MARK_FREQ, SAME_SPACE_FREQ
+from .eas_fsk import SAME_BAUD, SAME_MARK_FREQ, SAME_SPACE_FREQ, encode_same_bits
 from .fips_codes import get_same_lookup
 
 
@@ -36,6 +39,45 @@ class SAMEHeaderDetails:
 
 
 @dataclass
+class SAMEAudioSegment:
+    """Represents an extracted audio segment from a decoded SAME payload."""
+
+    label: str
+    start_sample: int
+    end_sample: int
+    sample_rate: int
+    wav_bytes: bytes = field(repr=False)
+
+    @property
+    def duration_seconds(self) -> float:
+        return max(0.0, (self.end_sample - self.start_sample) / float(self.sample_rate))
+
+    @property
+    def start_seconds(self) -> float:
+        return self.start_sample / float(self.sample_rate)
+
+    @property
+    def end_seconds(self) -> float:
+        return self.end_sample / float(self.sample_rate)
+
+    @property
+    def byte_length(self) -> int:
+        return len(self.wav_bytes)
+
+    def to_metadata(self) -> Dict[str, object]:
+        return {
+            "label": self.label,
+            "start_sample": self.start_sample,
+            "end_sample": self.end_sample,
+            "sample_rate": self.sample_rate,
+            "start_seconds": self.start_seconds,
+            "end_seconds": self.end_seconds,
+            "duration_seconds": self.duration_seconds,
+            "byte_length": self.byte_length,
+        }
+
+
+@dataclass
 class SAMEAudioDecodeResult:
     """Container holding the outcome of decoding an audio payload."""
 
@@ -48,6 +90,7 @@ class SAMEAudioDecodeResult:
     sample_rate: int
     bit_confidence: float
     min_bit_confidence: float
+    segments: Dict[str, SAMEAudioSegment] = field(default_factory=OrderedDict)
 
     def to_dict(self) -> Dict[str, object]:
         return {
@@ -60,6 +103,15 @@ class SAMEAudioDecodeResult:
             "sample_rate": self.sample_rate,
             "bit_confidence": self.bit_confidence,
             "min_bit_confidence": self.min_bit_confidence,
+            "segments": {
+                name: segment.to_metadata() for name, segment in self.segments.items()
+            },
+        }
+
+    @property
+    def segment_metadata(self) -> Dict[str, Dict[str, object]]:
+        return {
+            name: segment.to_metadata() for name, segment in self.segments.items()
         }
 
 
@@ -128,38 +180,41 @@ def _resample_with_scipy(samples: List[float], orig_rate: int, target_rate: int)
         )
 
 
-def _read_audio_samples(path: str, sample_rate: int) -> List[float]:
-    """Return normalised PCM samples from an arbitrary audio file."""
+def _read_audio_samples(path: str, sample_rate: int) -> Tuple[List[float], bytes]:
+    """Return normalised PCM samples and raw PCM bytes from an audio file."""
 
     try:
-        import wave
-
         with wave.open(path, "rb") as handle:
             params = handle.getparams()
             native_rate = params.framerate
 
-            # Read the raw PCM data
             if params.nchannels == 1 and params.sampwidth == 2:
                 pcm = handle.readframes(params.nframes)
                 if pcm:
                     samples = _convert_pcm_to_floats(pcm)
-
-                    # If sample rates match, return as-is
                     if native_rate == sample_rate:
-                        return samples
+                        return samples, pcm
 
-                    # Try scipy resampling first as it's faster and more reliable
                     try:
-                        return _resample_with_scipy(samples, native_rate, sample_rate)
+                        resampled = _resample_with_scipy(samples, native_rate, sample_rate)
+                        return resampled, _floats_to_pcm_bytes(resampled)
                     except (ImportError, AudioDecodeError):
-                        # Fall back to ffmpeg if scipy isn't available
                         pass
     except Exception:
         pass
 
-    # Fall back to ffmpeg for non-WAV files or if resampling failed
     pcm_bytes = _run_ffmpeg_decode(path, sample_rate)
-    return _convert_pcm_to_floats(pcm_bytes)
+    return _convert_pcm_to_floats(pcm_bytes), pcm_bytes
+
+
+def _floats_to_pcm_bytes(samples: Sequence[float]) -> bytes:
+    """Convert floating point samples in range [-1, 1) back to PCM bytes."""
+
+    pcm = array("h")
+    for sample in samples:
+        clamped = max(-1.0, min(1.0, float(sample)))
+        pcm.append(int(clamped * 32767.0))
+    return pcm.tobytes()
 
 
 def _convert_pcm_to_floats(payload: bytes) -> List[float]:
@@ -404,6 +459,7 @@ def _extract_bits(
 
     bits: List[int] = []
     bit_confidences: List[float] = []
+    bit_sample_ranges: List[Tuple[int, int]] = []
 
     bit_rate = float(bit_rate)
     if bit_rate <= 0:
@@ -423,6 +479,7 @@ def _extract_bits(
         if end > len(samples):
             break
 
+        start_index = index
         chunk = samples[index:end]
         mark_power = _goertzel(chunk, sample_rate, SAME_MARK_FREQ)
         space_power = _goertzel(chunk, sample_rate, SAME_SPACE_FREQ)
@@ -434,6 +491,7 @@ def _extract_bits(
         else:
             confidence = 0.0
         bit_confidences.append(confidence)
+        bit_sample_ranges.append((start_index, end))
 
         index = end
 
@@ -445,6 +503,8 @@ def _extract_bits(
     _extract_bits.last_confidence = average_confidence  # type: ignore[attr-defined]
     _extract_bits.min_confidence = minimum_confidence  # type: ignore[attr-defined]
     _extract_bits.bit_confidences = list(bit_confidences)  # type: ignore[attr-defined]
+    _extract_bits.bit_sample_ranges = list(bit_sample_ranges)  # type: ignore[attr-defined]
+    _extract_bits.samples_per_bit = float(samples_per_bit)  # type: ignore[attr-defined]
 
     return bits, average_confidence, minimum_confidence
 
@@ -527,7 +587,45 @@ def _find_same_bursts(bits: List[int]) -> List[int]:
     return burst_positions
 
 
-def _process_decoded_text(raw_text: str, frame_count: int, frame_errors: int) -> Dict[str, object]:
+def _find_pattern_positions(
+    bits: List[int], pattern: str, *, max_mismatches: Optional[int] = None
+) -> List[int]:
+    """Locate approximate occurrences of ``pattern`` within the decoded bit stream."""
+
+    pattern_bits = encode_same_bits(pattern, include_preamble=False)
+    if not pattern_bits:
+        return []
+
+    pattern_length = len(pattern_bits)
+    if max_mismatches is None:
+        max_mismatches = max(4, pattern_length // 5)
+
+    positions: List[int] = []
+    i = 0
+    limit = len(bits) - pattern_length
+
+    while i <= limit:
+        mismatches = 0
+        for j in range(pattern_length):
+            if bits[i + j] != pattern_bits[j]:
+                mismatches += 1
+                if mismatches > max_mismatches:
+                    break
+        if mismatches <= max_mismatches:
+            positions.append(i)
+            i += pattern_length
+        else:
+            i += 1
+
+    return positions
+
+
+def _process_decoded_text(
+    raw_text: str,
+    frame_count: int,
+    frame_errors: int,
+    extra_metadata: Optional[Dict[str, object]] = None,
+) -> Dict[str, object]:
     """Process decoded text to extract and clean SAME headers."""
 
     trimmed_text = raw_text
@@ -576,12 +674,17 @@ def _process_decoded_text(raw_text: str, frame_count: int, frame_errors: int) ->
     if headers:
         trimmed_text = "\r".join(headers) + "\r"
 
-    return {
+    metadata: Dict[str, object] = {
         "text": trimmed_text,
         "headers": headers,
         "frame_count": frame_count,
         "frame_errors": frame_errors,
     }
+
+    if extra_metadata:
+        metadata.update(extra_metadata)
+
+    return metadata
 
 
 def _vote_on_bytes(burst_bytes: List[List[int]]) -> List[int]:
@@ -630,28 +733,32 @@ def _vote_on_bytes(burst_bytes: List[List[int]]) -> List[int]:
 def _bits_to_text(bits: List[int]) -> Dict[str, object]:
     """Convert mark/space bits into ASCII SAME text and headers with 2-of-3 voting."""
 
-    # First, try to find the three SAME bursts
     burst_positions = _find_same_bursts(bits)
+    burst_bit_ranges: List[Tuple[int, int]] = []
 
-    # If we found multiple bursts, use voting
     if len(burst_positions) >= 2:
         burst_bytes: List[List[int]] = []
-
-        for burst_start in burst_positions[:3]:  # Use up to 3 bursts
-            # burst_start now points to the start of ZCZC (no preamble skip needed)
-            bytes_in_burst, _ = _extract_bytes_from_bits(
+        for burst_start in burst_positions[:3]:
+            bytes_in_burst, positions = _extract_bytes_from_bits(
                 bits, burst_start, max_bytes=200, confidence_threshold=0.3
             )
             burst_bytes.append(bytes_in_burst)
+            trimmed_positions = positions
+            if positions and bytes_in_burst:
+                for idx, value in enumerate(bytes_in_burst):
+                    if (value & 0x7F) == 0x0D:  # carriage return
+                        trimmed_positions = positions[: idx + 1]
+                        break
+            if trimmed_positions:
+                start_bit = trimmed_positions[0]
+                end_bit = trimmed_positions[-1] + 10
+                burst_bit_ranges.append((start_bit, end_bit))
 
-        # Perform voting
         voted_bytes = _vote_on_bytes(burst_bytes)
 
-        # Convert voted bytes to characters
         characters: List[str] = []
         for byte_val in voted_bytes:
             try:
-                # Mask to 7 bits for ASCII
                 char = chr(byte_val & 0x7F)
                 characters.append(char)
             except ValueError:
@@ -659,17 +766,19 @@ def _bits_to_text(bits: List[int]) -> Dict[str, object]:
 
         raw_text = "".join(characters)
 
-        # If voting produced a valid result, use it
         if "ZCZC" in raw_text.upper() or "NNNN" in raw_text.upper():
-            return _process_decoded_text(raw_text, len(voted_bytes), 0)
+            return _process_decoded_text(
+                raw_text,
+                len(voted_bytes),
+                0,
+                extra_metadata={"burst_bit_ranges": burst_bit_ranges},
+            )
 
-    # Fallback to original single-pass decode if voting didn't work
-    characters: List[str] = []
+    characters = []
     char_positions: List[int] = []
     error_positions: List[int] = []
-
     confidences: List[float] = list(getattr(_extract_bits, "bit_confidences", []))
-    confidence_threshold = 0.6  # Empirically high enough to isolate real SAME bursts
+    confidence_threshold = 0.6
 
     i = 0
     while i + 10 <= len(bits):
@@ -710,7 +819,22 @@ def _bits_to_text(bits: List[int]) -> Dict[str, object]:
 
     raw_text = "".join(characters)
 
-    # Calculate frame errors for fallback
+    if not burst_bit_ranges and burst_positions:
+        for burst_start in burst_positions[:3]:
+            bytes_in_burst, positions = _extract_bytes_from_bits(
+                bits, burst_start, max_bytes=200, confidence_threshold=0.3
+            )
+            trimmed_positions = positions
+            if positions and bytes_in_burst:
+                for idx, value in enumerate(bytes_in_burst):
+                    if (value & 0x7F) == 0x0D:
+                        trimmed_positions = positions[: idx + 1]
+                        break
+            if trimmed_positions:
+                start_bit = trimmed_positions[0]
+                end_bit = trimmed_positions[-1] + 10
+                burst_bit_ranges.append((start_bit, end_bit))
+
     if char_positions:
         first_bit = char_positions[0]
         last_bit = char_positions[-1]
@@ -723,7 +847,14 @@ def _bits_to_text(bits: List[int]) -> Dict[str, object]:
     frame_errors = len(relevant_errors)
     frame_count = len(characters) + frame_errors
 
-    return _process_decoded_text(raw_text, frame_count, frame_errors)
+    metadata = _process_decoded_text(
+        raw_text,
+        frame_count,
+        frame_errors,
+        extra_metadata={"burst_bit_ranges": burst_bit_ranges},
+    )
+    metadata["char_bit_positions"] = list(char_positions)
+    return metadata
 
 
 def _score_candidate(metadata: Dict[str, object]) -> float:
@@ -767,6 +898,8 @@ def _decode_with_candidate_rates(
     best_minimum: float = 0.0
     best_score: Optional[float] = None
     best_rate: Optional[float] = None
+    best_bit_sample_ranges: Optional[List[Tuple[int, int]]] = None
+    best_bit_confidences: Optional[List[float]] = None
 
     for offset in candidate_offsets:
         bit_rate = base_rate * (1.0 + offset)
@@ -779,6 +912,8 @@ def _decode_with_candidate_rates(
 
         metadata = _bits_to_text(bits)
         score = _score_candidate(metadata)
+        bit_sample_ranges = list(getattr(_extract_bits, "bit_sample_ranges", []))
+        bit_confidences = list(getattr(_extract_bits, "bit_confidences", []))
 
         if best_score is None or score > best_score + 1e-6:
             best_bits = bits
@@ -787,6 +922,8 @@ def _decode_with_candidate_rates(
             best_minimum = minimum_confidence
             best_score = score
             best_rate = bit_rate
+            best_bit_sample_ranges = bit_sample_ranges
+            best_bit_confidences = bit_confidences
         elif (
             best_score is not None
             and abs(score - best_score) <= 1e-6
@@ -798,11 +935,99 @@ def _decode_with_candidate_rates(
             best_average = average_confidence
             best_minimum = minimum_confidence
             best_rate = bit_rate
+            best_bit_sample_ranges = bit_sample_ranges
+            best_bit_confidences = bit_confidences
 
     if best_bits is None or best_metadata is None:
         raise AudioDecodeError("The audio payload did not contain detectable SAME bursts.")
 
+    if best_bit_sample_ranges is not None:
+        _extract_bits.bit_sample_ranges = list(best_bit_sample_ranges)  # type: ignore[attr-defined]
+    if best_bit_confidences is not None:
+        _extract_bits.bit_confidences = list(best_bit_confidences)  # type: ignore[attr-defined]
+
     return best_bits, best_metadata, best_average, best_minimum
+
+
+def _bit_range_to_sample_range(
+    bit_range: Tuple[int, int],
+    bit_sample_ranges: Sequence[Tuple[int, int]],
+    total_samples: int,
+) -> Optional[Tuple[int, int]]:
+    if not bit_sample_ranges:
+        return None
+
+    start_bit, end_bit = bit_range
+    if start_bit >= len(bit_sample_ranges):
+        return None
+
+    if end_bit <= start_bit:
+        end_bit = start_bit + 1
+
+    start_index = max(0, min(start_bit, len(bit_sample_ranges) - 1))
+    end_index = max(0, min(end_bit - 1, len(bit_sample_ranges) - 1))
+
+    start_sample = bit_sample_ranges[start_index][0]
+    end_sample = bit_sample_ranges[end_index][1]
+    end_sample = min(end_sample, total_samples)
+    start_sample = max(0, min(start_sample, end_sample))
+
+    if end_sample <= start_sample:
+        return None
+
+    return start_sample, end_sample
+
+
+def _clamp_sample_range(start: int, end: int, total: int) -> Tuple[int, int]:
+    start = max(0, min(start, total))
+    end = max(start, min(end, total))
+    return start, end
+
+
+def _render_wav_segment(
+    pcm_bytes: bytes, sample_rate: int, start_sample: int, end_sample: int
+) -> bytes:
+    start_sample, end_sample = _clamp_sample_range(start_sample, end_sample, len(pcm_bytes) // 2)
+    if end_sample <= start_sample:
+        return b""
+
+    start_byte = start_sample * 2
+    end_byte = end_sample * 2
+    segment_pcm = pcm_bytes[start_byte:end_byte]
+
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(segment_pcm)
+
+    return buffer.getvalue()
+
+
+def _create_segment(
+    label: str,
+    start_sample: int,
+    end_sample: int,
+    *,
+    sample_rate: int,
+    pcm_bytes: bytes,
+) -> Optional[SAMEAudioSegment]:
+    start_sample, end_sample = _clamp_sample_range(start_sample, end_sample, len(pcm_bytes) // 2)
+    if end_sample <= start_sample:
+        return None
+
+    wav_bytes = _render_wav_segment(pcm_bytes, sample_rate, start_sample, end_sample)
+    if not wav_bytes:
+        return None
+
+    return SAMEAudioSegment(
+        label=label,
+        start_sample=start_sample,
+        end_sample=end_sample,
+        sample_rate=sample_rate,
+        wav_bytes=wav_bytes,
+    )
 
 
 def decode_same_audio(path: str, *, sample_rate: int = 22050) -> SAMEAudioDecodeResult:
@@ -811,131 +1036,195 @@ def decode_same_audio(path: str, *, sample_rate: int = 22050) -> SAMEAudioDecode
     if not os.path.exists(path):
         raise AudioDecodeError(f"Audio file does not exist: {path}")
 
-    samples = _read_audio_samples(path, sample_rate)
-    duration_seconds = len(samples) / float(sample_rate)
+    samples, pcm_bytes = _read_audio_samples(path, sample_rate)
+    sample_count = len(samples)
+    if sample_count == 0:
+        raise AudioDecodeError("Audio payload contained no PCM samples to decode.")
+    duration_seconds = sample_count / float(sample_rate)
 
-    # Try the new correlation-based decoder first (multimon-ng style)
+    correlation_headers: Optional[List[SAMEHeaderDetails]] = None
+    correlation_raw_text: Optional[str] = None
+    correlation_confidence: Optional[float] = None
+
     try:
         messages, confidence = _correlate_and_decode_with_dll(samples, sample_rate)
 
         if messages:
-            # Perform 2-of-3 message-level voting
             from collections import Counter
 
-            # Filter to only ZCZC messages (not NNNN)
-            zczc_messages = [msg for msg in messages if 'ZCZC' in msg]
-
-            if len(zczc_messages) >= 2:
-                # Count identical messages
+            zczc_messages = [msg for msg in messages if "ZCZC" in msg]
+            if zczc_messages:
                 counter = Counter(zczc_messages)
                 most_common = counter.most_common(1)[0]
 
-                # If at least 2 out of 3 agree, use that message
+                decoded_header: Optional[str] = None
                 if most_common[1] >= 2:
                     decoded_header = most_common[0]
+                elif len(zczc_messages) == 1:
+                    decoded_header = zczc_messages[0]
 
-                    # Clean up the header
-                    if 'ZCZC' in decoded_header:
-                        zczc_idx = decoded_header.find('ZCZC')
+                if decoded_header:
+                    if "ZCZC" in decoded_header:
+                        zczc_idx = decoded_header.find("ZCZC")
                         decoded_header = decoded_header[zczc_idx:]
 
-                    raw_text = decoded_header + '\r'
-
-                    # Get FIPS code lookup for county names
+                    raw_text = decoded_header + "\r"
                     fips_lookup = get_same_lookup()
-
-                    headers = [
+                    correlation_headers = [
                         SAMEHeaderDetails(
                             header=decoded_header,
                             fields=describe_same_header(decoded_header, lookup=fips_lookup),
                             confidence=confidence,
                         )
                     ]
-
-                    return SAMEAudioDecodeResult(
-                        raw_text=raw_text,
-                        headers=headers,
-                        bit_count=len(samples) // int(sample_rate / float(SAME_BAUD)),
-                        frame_count=len(decoded_header),
-                        frame_errors=0,
-                        duration_seconds=duration_seconds,
-                        sample_rate=sample_rate,
-                        bit_confidence=confidence,
-                        min_bit_confidence=confidence,
-                    )
-            elif len(zczc_messages) == 1:
-                # Got exactly one message - use it
-                decoded_header = zczc_messages[0]
-
-                if 'ZCZC' in decoded_header:
-                    zczc_idx = decoded_header.find('ZCZC')
-                    decoded_header = decoded_header[zczc_idx:]
-
-                raw_text = decoded_header + '\r'
-
-                # Get FIPS code lookup for county names
-                fips_lookup = get_same_lookup()
-
-                headers = [
-                    SAMEHeaderDetails(
-                        header=decoded_header,
-                        fields=describe_same_header(decoded_header, lookup=fips_lookup),
-                        confidence=confidence,
-                    )
-                ]
-
-                return SAMEAudioDecodeResult(
-                    raw_text=raw_text,
-                    headers=headers,
-                    bit_count=len(samples) // int(sample_rate / float(SAME_BAUD)),
-                    frame_count=len(decoded_header),
-                    frame_errors=0,
-                    duration_seconds=duration_seconds,
-                    sample_rate=sample_rate,
-                    bit_confidence=confidence,
-                    min_bit_confidence=confidence,
-                )
+                    correlation_raw_text = raw_text
+                    correlation_confidence = confidence
 
     except Exception:
-        # Correlation decoder failed, fall back to legacy method
         pass
 
-    # Fallback to legacy Goertzel-based decoder
     base_rate = float(SAME_BAUD)
-    bits, metadata, average_confidence, minimum_confidence = _decode_with_candidate_rates(
-        samples, sample_rate, base_rate=base_rate
+    try:
+        bits, metadata, average_confidence, minimum_confidence = _decode_with_candidate_rates(
+            samples, sample_rate, base_rate=base_rate
+        )
+    except AudioDecodeError:
+        if correlation_headers:
+            return SAMEAudioDecodeResult(
+                raw_text=correlation_raw_text or "",
+                headers=correlation_headers,
+                bit_count=0,
+                frame_count=0,
+                frame_errors=0,
+                duration_seconds=duration_seconds,
+                sample_rate=sample_rate,
+                bit_confidence=correlation_confidence or 0.0,
+                min_bit_confidence=correlation_confidence or 0.0,
+                segments=OrderedDict(),
+            )
+        raise
+
+    raw_text = str(metadata.get("text") or correlation_raw_text or "")
+
+    metadata_headers = [str(item) for item in metadata.get("headers") or []]
+    header_confidence = (
+        correlation_confidence if correlation_confidence is not None else average_confidence
     )
-
-    raw_text = metadata["text"]
-
-    # Get FIPS code lookup for county names
-    fips_lookup = get_same_lookup()
-
-    headers: List[SAMEHeaderDetails] = []
-    for header in metadata["headers"]:
-        headers.append(
+    if metadata_headers:
+        fips_lookup = get_same_lookup()
+        headers = [
             SAMEHeaderDetails(
                 header=header,
                 fields=describe_same_header(header, lookup=fips_lookup),
-                confidence=average_confidence,
+                confidence=header_confidence,
             )
+            for header in metadata_headers
+        ]
+    else:
+        headers = correlation_headers or []
+
+    bit_confidence = average_confidence
+    min_bit_confidence = minimum_confidence
+    if correlation_confidence is not None:
+        bit_confidence = max(bit_confidence, correlation_confidence)
+        min_bit_confidence = min(min_bit_confidence, correlation_confidence)
+
+    bit_sample_ranges: Sequence[Tuple[int, int]] = list(
+        getattr(_extract_bits, "bit_sample_ranges", [])
+    )
+    header_ranges_bits: Sequence[Tuple[int, int]] = metadata.get("burst_bit_ranges") or []
+    header_sample_ranges: List[Tuple[int, int]] = []
+    header_last_bit: Optional[int] = None
+    for start_bit, end_bit in header_ranges_bits:
+        start_bit = int(start_bit)
+        end_bit = int(end_bit)
+        header_last_bit = max(header_last_bit or start_bit, end_bit)
+        sample_range = _bit_range_to_sample_range(
+            (start_bit, end_bit), bit_sample_ranges, sample_count
         )
+        if sample_range:
+            header_sample_ranges.append(sample_range)
+
+    header_segment = None
+    if header_sample_ranges:
+        header_start = min(start for start, _ in header_sample_ranges)
+        header_end = max(end for _, end in header_sample_ranges)
+        header_segment = _create_segment(
+            "header",
+            header_start,
+            header_end,
+            sample_rate=sample_rate,
+            pcm_bytes=pcm_bytes,
+        )
+
+    eom_segment = None
+    eom_positions = _find_pattern_positions(bits, "NNNN")
+    if header_last_bit is not None:
+        eom_positions = [pos for pos in eom_positions if pos >= header_last_bit] or eom_positions
+    if eom_positions:
+        eom_length_bits = len(encode_same_bits("NNNN", include_preamble=False))
+        first_eom = eom_positions[0]
+        eom_sample_range = _bit_range_to_sample_range(
+            (first_eom, first_eom + eom_length_bits), bit_sample_ranges, sample_count
+        )
+        if eom_sample_range:
+            eom_segment = _create_segment(
+                "eom",
+                eom_sample_range[0],
+                eom_sample_range[1],
+                sample_rate=sample_rate,
+                pcm_bytes=pcm_bytes,
+            )
+
+    message_start = header_segment.end_sample if header_segment else 0
+    message_end = eom_segment.start_sample if eom_segment else sample_count
+    message_segment = _create_segment(
+        "message",
+        message_start,
+        message_end,
+        sample_rate=sample_rate,
+        pcm_bytes=pcm_bytes,
+    )
+
+    buffer_samples = min(sample_count, int(sample_rate * 120))
+    buffer_segment = _create_segment(
+        "buffer",
+        0,
+        buffer_samples,
+        sample_rate=sample_rate,
+        pcm_bytes=pcm_bytes,
+    )
+
+    segments: Dict[str, SAMEAudioSegment] = OrderedDict()
+    if header_segment:
+        segments["header"] = header_segment
+    if message_segment:
+        segments["message"] = message_segment
+    if eom_segment:
+        segments["eom"] = eom_segment
+    if buffer_segment:
+        segments["buffer"] = buffer_segment
+
+    frame_count = int(metadata.get("frame_count") or 0)
+    frame_errors = int(metadata.get("frame_errors") or 0)
 
     return SAMEAudioDecodeResult(
         raw_text=raw_text,
         headers=headers,
         bit_count=len(bits),
-        frame_count=metadata["frame_count"],
-        frame_errors=metadata["frame_errors"],
+        frame_count=frame_count,
+        frame_errors=frame_errors,
         duration_seconds=duration_seconds,
         sample_rate=sample_rate,
-        bit_confidence=average_confidence,
-        min_bit_confidence=minimum_confidence,
+        bit_confidence=bit_confidence,
+        min_bit_confidence=min_bit_confidence,
+        segments=segments,
     )
 
 
 __all__ = [
     "AudioDecodeError",
+    "SAMEAudioSegment",
     "SAMEAudioDecodeResult",
     "SAMEHeaderDetails",
     "decode_same_audio",
