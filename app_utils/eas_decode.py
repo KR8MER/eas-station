@@ -216,6 +216,7 @@ def _bits_to_text(bits: List[int]) -> Dict[str, object]:
         if i + 10 <= len(confidences):
             frame_confidence = sum(confidences[i:i + 10]) / 10.0
         if frame_confidence < confidence_threshold:
+            error_positions.append(i)
             i += 1
             continue
 
@@ -289,18 +290,22 @@ def _bits_to_text(bits: List[int]) -> Dict[str, object]:
         if candidate:
             headers.append(candidate)
 
+    valid_frame_count = len(trimmed_characters)
+
     if headers:
         raw_text = "\r".join(headers) + "\r"
-        frame_count_value = len(raw_text)
-    else:
-        frame_count_value = len(trimmed_characters)
 
     if trimmed_positions:
         first_bit = trimmed_positions[0]
         last_bit = trimmed_positions[-1]
-        frame_errors = sum(1 for pos in error_positions if first_bit <= pos <= last_bit)
+        relevant_errors = [
+            pos for pos in error_positions if first_bit <= pos <= last_bit
+        ]
     else:
-        frame_errors = len(error_positions)
+        relevant_errors = list(error_positions)
+
+    frame_errors = len(relevant_errors)
+    frame_count_value = valid_frame_count + frame_errors
 
     return {
         "text": raw_text,
