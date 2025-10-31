@@ -1,6 +1,6 @@
 # ⚖️ Terms of Use
 
-_Last updated: January 15, 2025_
+_Last updated: January 30, 2025_
 
 > **Critical Safety Notice:** EAS Station is experimental software. It must not be used for life-safety, mission-critical, or FCC-mandated alerting. Commercially certified EAS equipment remains the only acceptable solution for regulatory compliance.
 
@@ -28,11 +28,16 @@ _Last updated: January 15, 2025_
 - Comparisons to third-party projects (e.g., multimon-ng) are for feature parity checks only.
 - Those projects are governed by their respective licenses and are not endorsed by, nor affiliated with, EAS Station.
 
-## 6. Updates
+## 6. Licensing & Contributions
+- The EAS Station source code is released under the [MIT License](LICENSE). Copyright remains with Timothy Kramer (K8R8MER).
+- By submitting code, documentation, or other content, contributors agree that their work is provided under the MIT License.
+- All commits must include a Developer Certificate of Origin (DCO) sign-off line (`Signed-off-by`) affirming that the contributor has the right to submit the work under the project license. Instructions are provided in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## 7. Updates
 - These terms may change as the project evolves.
 - Continued use of the repository or website after an update constitutes acceptance of the revised terms.
 - Significant changes will be documented in the project changelog or release notes.
 
-## 7. Contact
+## 8. Contact
 - Questions about these terms can be directed through the GitHub issue tracker.
 - Do **not** submit emergency requests, personal data, or public warning content through that channel.
