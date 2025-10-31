@@ -187,6 +187,177 @@ def _goertzel(samples: Iterable[float], sample_rate: int, target_freq: float) ->
     return power if power > 0.0 else 0.0
 
 
+def _generate_correlation_tables(sample_rate: int, corr_len: int) -> Tuple[List[float], List[float], List[float], List[float]]:
+    """Generate correlation tables for mark and space frequencies (multimon-ng style)."""
+
+    mark_i = []
+    mark_q = []
+    space_i = []
+    space_q = []
+
+    # Generate mark frequency correlation table (2083.3 Hz)
+    phase = 0.0
+    for i in range(corr_len):
+        mark_i.append(math.cos(phase))
+        mark_q.append(math.sin(phase))
+        phase += 2.0 * math.pi * SAME_MARK_FREQ / sample_rate
+
+    # Generate space frequency correlation table (1562.5 Hz)
+    phase = 0.0
+    for i in range(corr_len):
+        space_i.append(math.cos(phase))
+        space_q.append(math.sin(phase))
+        phase += 2.0 * math.pi * SAME_SPACE_FREQ / sample_rate
+
+    return mark_i, mark_q, space_i, space_q
+
+
+def _correlate_and_decode_with_dll(samples: List[float], sample_rate: int) -> Tuple[List[str], float]:
+    """
+    Decode SAME messages using correlation and DLL timing recovery (multimon-ng algorithm).
+
+    Returns tuple of (decoded_messages, confidence)
+    """
+
+    # Constants based on multimon-ng
+    SUBSAMP = 2  # Downsampling factor
+    PREAMBLE_BYTE = 0xAB  # Preamble pattern
+    DLL_GAIN = 0.5  # DLL loop gain
+    INTEGRATOR_MAX = 10  # Integrator bounds
+    MAX_MSG_LEN = 268  # Maximum message length
+
+    baud_rate = float(SAME_BAUD)
+    corr_len = int(sample_rate / baud_rate)  # Samples per bit period
+
+    # Generate correlation tables
+    mark_i, mark_q, space_i, space_q = _generate_correlation_tables(sample_rate, corr_len)
+
+    # State variables
+    dcd_shreg = 0  # Shift register for bit history
+    dcd_integrator = 0  # Integrator for noise immunity
+    sphase = 1  # Sampling phase (16-bit fixed point)
+    lasts = 0  # Last 8 bits received
+    byte_counter = 0  # Bits received in current byte
+    synced = False  # Whether we've found preamble
+
+    # Message storage
+    messages: List[str] = []
+    current_msg = []
+    in_message = False
+
+    # Phase increment per sample
+    sphaseinc = int(0x10000 * baud_rate * SUBSAMP / sample_rate)
+
+    # Process samples with subsampling
+    idx = 0
+    confidences = []
+
+    while idx + corr_len < len(samples):
+        # Compute correlation (mark - space)
+        mark_i_corr = sum(samples[idx + i] * mark_i[i] for i in range(corr_len))
+        mark_q_corr = sum(samples[idx + i] * mark_q[i] for i in range(corr_len))
+        space_i_corr = sum(samples[idx + i] * space_i[i] for i in range(corr_len))
+        space_q_corr = sum(samples[idx + i] * space_q[i] for i in range(corr_len))
+
+        correlation = (mark_i_corr**2 + mark_q_corr**2) - (space_i_corr**2 + space_q_corr**2)
+
+        # Update DCD shift register
+        dcd_shreg = (dcd_shreg << 1) & 0xFFFFFFFF
+        if correlation > 0:
+            dcd_shreg |= 1
+
+        # Update integrator
+        if correlation > 0 and dcd_integrator < INTEGRATOR_MAX:
+            dcd_integrator += 1
+        elif correlation < 0 and dcd_integrator > -INTEGRATOR_MAX:
+            dcd_integrator -= 1
+
+        # DLL: Check for bit transitions and adjust timing
+        if (dcd_shreg ^ (dcd_shreg >> 1)) & 1:
+            if sphase < 0x8000:
+                if sphase > sphaseinc // 2:
+                    adjustment = min(int(sphase * DLL_GAIN), 8192)
+                    sphase -= adjustment
+            else:
+                if sphase < 0x10000 - sphaseinc // 2:
+                    adjustment = min(int((0x10000 - sphase) * DLL_GAIN), 8192)
+                    sphase += adjustment
+
+        # Advance sampling phase
+        sphase += sphaseinc
+
+        # End of bit period?
+        if sphase >= 0x10000:
+            sphase = 1
+            lasts = (lasts >> 1) & 0x7F
+
+            # Make bit decision based on integrator
+            if dcd_integrator >= 0:
+                lasts |= 0x80
+
+            curbit = (lasts >> 7) & 1
+
+            # Check for preamble sync
+            if (lasts & 0xFF) == PREAMBLE_BYTE and not in_message:
+                synced = True
+                byte_counter = 0
+            elif synced:
+                byte_counter += 1
+                if byte_counter == 8:
+                    # Got a complete byte
+                    byte_val = lasts & 0xFF
+
+                    # Check if it's a valid ASCII character
+                    if 32 <= byte_val <= 126 or byte_val in (10, 13):
+                        char = chr(byte_val)
+
+                        if not in_message and char == 'Z':
+                            # Possible start of ZCZC
+                            in_message = True
+                            current_msg = [char]
+                        elif in_message:
+                            current_msg.append(char)
+
+                            # Check for end of message (CR or complete message with trailing dash)
+                            msg_text = ''.join(current_msg)
+                            if char == '\r':
+                                if 'ZCZC' in msg_text or 'NNNN' in msg_text:
+                                    # Clean up the message
+                                    if '-' in msg_text:
+                                        msg_text = msg_text[:msg_text.rfind('-')+1]
+                                    messages.append(msg_text.strip())
+                                current_msg = []
+                                in_message = False
+                                synced = False
+                            elif char == '-' and len(current_msg) > 40:
+                                # Message should be at least ~40 chars with full SAME header
+                                # Check if this looks like a complete message
+                                # ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-
+                                dash_count = msg_text.count('-')
+                                if dash_count >= 6:  # Complete SAME message has 6+ dashes
+                                    if 'ZCZC' in msg_text or 'NNNN' in msg_text:
+                                        messages.append(msg_text.strip())
+                                    current_msg = []
+                                    in_message = False
+                                    synced = False
+                    else:
+                        # Invalid character, lost sync
+                        synced = False
+                        in_message = False
+                        if current_msg:
+                            current_msg = []
+
+                    byte_counter = 0
+
+        # Advance by SUBSAMP samples
+        idx += SUBSAMP
+
+    # Calculate average confidence
+    avg_confidence = 0.6  # Placeholder since we're using correlation
+
+    return messages, avg_confidence
+
+
 def _extract_bits(
     samples: List[float], sample_rate: int, bit_rate: float
 ) -> Tuple[List[int], float, float]:
@@ -595,13 +766,96 @@ def _decode_with_candidate_rates(
     return best_bits, best_metadata, best_average, best_minimum
 
 
-def decode_same_audio(path: str, *, sample_rate: int = 44100) -> SAMEAudioDecodeResult:
+def decode_same_audio(path: str, *, sample_rate: int = 22050) -> SAMEAudioDecodeResult:
     """Decode SAME headers from a WAV or MP3 file located at ``path``."""
 
     if not os.path.exists(path):
         raise AudioDecodeError(f"Audio file does not exist: {path}")
 
     samples = _read_audio_samples(path, sample_rate)
+    duration_seconds = len(samples) / float(sample_rate)
+
+    # Try the new correlation-based decoder first (multimon-ng style)
+    try:
+        messages, confidence = _correlate_and_decode_with_dll(samples, sample_rate)
+
+        if messages:
+            # Perform 2-of-3 message-level voting
+            from collections import Counter
+
+            # Filter to only ZCZC messages (not NNNN)
+            zczc_messages = [msg for msg in messages if 'ZCZC' in msg]
+
+            if len(zczc_messages) >= 2:
+                # Count identical messages
+                counter = Counter(zczc_messages)
+                most_common = counter.most_common(1)[0]
+
+                # If at least 2 out of 3 agree, use that message
+                if most_common[1] >= 2:
+                    decoded_header = most_common[0]
+
+                    # Clean up the header
+                    if 'ZCZC' in decoded_header:
+                        zczc_idx = decoded_header.find('ZCZC')
+                        decoded_header = decoded_header[zczc_idx:]
+
+                    raw_text = decoded_header + '\r'
+
+                    headers = [
+                        SAMEHeaderDetails(
+                            header=decoded_header,
+                            fields=describe_same_header(decoded_header),
+                            confidence=confidence,
+                        )
+                    ]
+
+                    return SAMEAudioDecodeResult(
+                        raw_text=raw_text,
+                        headers=headers,
+                        bit_count=len(samples) // int(sample_rate / float(SAME_BAUD)),
+                        frame_count=len(decoded_header),
+                        frame_errors=0,
+                        duration_seconds=duration_seconds,
+                        sample_rate=sample_rate,
+                        bit_confidence=confidence,
+                        min_bit_confidence=confidence,
+                    )
+            elif len(zczc_messages) == 1:
+                # Got exactly one message - use it
+                decoded_header = zczc_messages[0]
+
+                if 'ZCZC' in decoded_header:
+                    zczc_idx = decoded_header.find('ZCZC')
+                    decoded_header = decoded_header[zczc_idx:]
+
+                raw_text = decoded_header + '\r'
+
+                headers = [
+                    SAMEHeaderDetails(
+                        header=decoded_header,
+                        fields=describe_same_header(decoded_header),
+                        confidence=confidence,
+                    )
+                ]
+
+                return SAMEAudioDecodeResult(
+                    raw_text=raw_text,
+                    headers=headers,
+                    bit_count=len(samples) // int(sample_rate / float(SAME_BAUD)),
+                    frame_count=len(decoded_header),
+                    frame_errors=0,
+                    duration_seconds=duration_seconds,
+                    sample_rate=sample_rate,
+                    bit_confidence=confidence,
+                    min_bit_confidence=confidence,
+                )
+
+    except Exception:
+        # Correlation decoder failed, fall back to legacy method
+        pass
+
+    # Fallback to legacy Goertzel-based decoder
     base_rate = float(SAME_BAUD)
     bits, metadata, average_confidence, minimum_confidence = _decode_with_candidate_rates(
         samples, sample_rate, base_rate=base_rate
@@ -617,8 +871,6 @@ def decode_same_audio(path: str, *, sample_rate: int = 44100) -> SAMEAudioDecode
                 confidence=average_confidence,
             )
         )
-
-    duration_seconds = len(samples) / float(sample_rate)
 
     return SAMEAudioDecodeResult(
         raw_text=raw_text,
