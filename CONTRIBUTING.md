@@ -34,7 +34,7 @@ If you contribute on behalf of an organization, ensure you have the necessary au
 1. **Fork the repository** and create a topic branch (`feature/...`, `fix/...`, or `docs/...`).
 2. **Follow the development guidelines** in [`AGENTS.md`](AGENTS.md) and existing code patterns.
 3. **Add tests or documentation** that cover your changes when possible.
-4. **Update [`CHANGELOG.md`](CHANGELOG.md)** under the `[Unreleased]` heading to record what changed and why.
+4. **Update release metadata.** Append notes under the `[Unreleased]` heading in [`CHANGELOG.md`](CHANGELOG.md) and bump the root [`VERSION`](VERSION) file (plus `.env.example`) when behaviour changes. The guardrail test `tests/test_release_metadata.py` enforces this alignment.
 5. **Run the test suite or targeted regression checks** (alert ingest, SAME generation, GPIO control, audio playout) before opening a pull request so reviewers know nothing critical regressed.
 6. **Submit a pull request** describing the change, its motivation, and any verification steps performed.
 

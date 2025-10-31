@@ -151,6 +151,7 @@ EAS Station is not just an alert monitor—it's a **complete emergency broadcast
 ## 🧾 Release Integrity & Audit Trails
 
 - **Version numbering is mandatory.** Every deployable build must set `APP_BUILD_VERSION` (surfaced in the UI footer) so operators and auditors can immediately identify what is running. Bumping that version goes hand in hand with publishing a `CHANGELOG` entry.
+- **Single source of truth for releases.** Bump the root [`VERSION`](VERSION) file and mirror the value in `.env.example` whenever behaviour changes. The guardrail test (`pytest tests/test_release_metadata.py`) fails fast if the version, changelog, or template drift out of sync.
 - **CHANGELOG-first pull requests.** Any change that alters behaviour—no matter how small—should append a note under the `[Unreleased]` section of [`CHANGELOG.md`](CHANGELOG.md) summarising the impact and highlighting regression testing that protects previously working workflows.
 - **Regression checks before merge.** Contributors are expected to confirm that critical features (alert ingest, SAME generation, GPIO triggers, audio playout) still function. Document manual or automated verification in the PR description so upgrade decisions can be audited later.
 - **Git history is the audit trail.** Keep commits focused and well described; reference issue numbers where applicable and avoid force-pushes to shared branches so the trail remains trustworthy.

@@ -104,7 +104,7 @@ Each roadmap item below references the requirement(s) it unlocks so contributors
 - **Goal**: Guarantee every deployment is identifiable, auditable, and recoverable without destroying infrastructure.
 - **Status**: Manual guidelines existed; scripts for in-place upgrades and snapshots now land in `tools/`, but enforcement remains ad-hoc.
 - **Plan**:
-  1. Wire CI checks that fail builds lacking an `[Unreleased]` changelog entry or updated `APP_BUILD_VERSION` when code paths change.
+  1. ✅ Add `tests/test_release_metadata.py` to fail builds lacking an `[Unreleased]` changelog entry or up-to-date version metadata; wire it into CI alongside the existing test suite.
   2. Expose an `/api/release-manifest` endpoint that reports the running version, git hash, and migration level to aid audits.
   3. Expand `tools/create_backup.py` into a scheduled task (systemd timer or cron example) and document automated retention/rotation in `docs/runbooks/backup_strategy.md`.
   4. Publish an operator-facing upgrade checklist referencing `tools/inplace_upgrade.py`, verification tests, and rollback procedures.

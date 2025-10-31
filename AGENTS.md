@@ -528,6 +528,7 @@ Before committing code, verify:
 - [ ] Follows Python PEP 8 style (4-space indentation)
 - [ ] Uses existing logger, not new logger instance
 - [ ] Includes proper error handling with specific exceptions
+- [ ] Bump `VERSION`, mirror `.env.example`, and update `[Unreleased]` in `CHANGELOG.md` for any behavioural change (see `tests/test_release_metadata.py`)
 - [ ] Touched files remain within recommended size guidelines or were refactored into smaller units
 - [ ] No secrets or credentials in code
 - [ ] No `.env` file committed (check git status)
