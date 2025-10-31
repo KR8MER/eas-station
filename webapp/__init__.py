@@ -44,7 +44,6 @@ def iter_route_modules() -> Iterable[RouteModule]:
     yield RouteModule("routes_exports", routes_exports.register)
     yield RouteModule("routes_led", routes_led.register)
     yield RouteModule("routes_debug", routes_debug.register)
-    yield RouteModule("routes_eas", routes_eas.register)
     yield RouteModule("routes_admin", routes_admin.register)
 
 
