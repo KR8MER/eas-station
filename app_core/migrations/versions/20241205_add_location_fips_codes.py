@@ -6,7 +6,7 @@ import json
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, text, bindparam
 
 from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS
 
@@ -45,11 +45,11 @@ def upgrade() -> None:
             text(
                 """
                 UPDATE location_settings
-                SET fips_codes = :fips_default::jsonb
+                SET fips_codes = CAST(:fips_default AS jsonb)
                 WHERE fips_codes IS NULL
                    OR jsonb_array_length(fips_codes) = 0
                 """
-            ).bindparams(fips_default=default_json)
+            ).bindparams(bindparam("fips_default", value=default_json, type_=sa.String))
         )
 
 
