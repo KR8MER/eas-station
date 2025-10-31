@@ -218,7 +218,7 @@ docker compose up -d --force-recreate
 
 ## 🏗️ System Architecture
 
-![EAS Station Platform architecture diagram showing CAP feeds, pollers, core services, and operator interfaces.](static/docs/eas-station-architecture.svg)
+![High-level architecture diagram for the EAS Station lab deployment.](static/docs/eas-station-architecture.svg)
 
 ### Service Components
 
