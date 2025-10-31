@@ -12,6 +12,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from .eas import describe_same_header
 from .eas_fsk import SAME_BAUD, SAME_MARK_FREQ, SAME_SPACE_FREQ
+from .fips_codes import get_same_lookup
 
 
 class AudioDecodeError(RuntimeError):
@@ -318,11 +319,12 @@ def _correlate_and_decode_with_dll(samples: List[float], sample_rate: int) -> Tu
                         elif in_message:
                             current_msg.append(char)
 
-                            # Check for end of message (CR or complete message with trailing dash)
+                            # Check for end of message
                             msg_text = ''.join(current_msg)
-                            if char == '\r':
+                            if char == '\r' or char == '\n':
+                                # Carriage return or line feed terminates message
                                 if 'ZCZC' in msg_text or 'NNNN' in msg_text:
-                                    # Clean up the message
+                                    # Clean up the message - include trailing dash
                                     if '-' in msg_text:
                                         msg_text = msg_text[:msg_text.rfind('-')+1]
                                     messages.append(msg_text.strip())
@@ -330,16 +332,25 @@ def _correlate_and_decode_with_dll(samples: List[float], sample_rate: int) -> Tu
                                 in_message = False
                                 synced = False
                             elif char == '-' and len(current_msg) > 40:
-                                # Message should be at least ~40 chars with full SAME header
-                                # Check if this looks like a complete message
-                                # ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-
+                                # Complete SAME message format: ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-
+                                # Counting dashes: ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-
+                                #                      1   2   3+location dashes  N   N+1     N+2 (final)
+                                # With 3 location codes: 1+1+1+3+1+1+1 = 9 dashes total
+                                # The 8th dash comes after station ID, which is what we want
                                 dash_count = msg_text.count('-')
-                                if dash_count >= 6:  # Complete SAME message has 6+ dashes
+                                if dash_count >= 8:  # 8 dashes includes station ID field
                                     if 'ZCZC' in msg_text or 'NNNN' in msg_text:
                                         messages.append(msg_text.strip())
                                     current_msg = []
                                     in_message = False
                                     synced = False
+                            elif len(current_msg) > MAX_MSG_LEN:
+                                # Safety: prevent runaway messages
+                                if 'ZCZC' in msg_text or 'NNNN' in msg_text:
+                                    messages.append(msg_text.strip())
+                                current_msg = []
+                                in_message = False
+                                synced = False
                     else:
                         # Invalid character, lost sync
                         synced = False
@@ -802,10 +813,13 @@ def decode_same_audio(path: str, *, sample_rate: int = 22050) -> SAMEAudioDecode
 
                     raw_text = decoded_header + '\r'
 
+                    # Get FIPS code lookup for county names
+                    fips_lookup = get_same_lookup()
+
                     headers = [
                         SAMEHeaderDetails(
                             header=decoded_header,
-                            fields=describe_same_header(decoded_header),
+                            fields=describe_same_header(decoded_header, lookup=fips_lookup),
                             confidence=confidence,
                         )
                     ]
@@ -831,10 +845,13 @@ def decode_same_audio(path: str, *, sample_rate: int = 22050) -> SAMEAudioDecode
 
                 raw_text = decoded_header + '\r'
 
+                # Get FIPS code lookup for county names
+                fips_lookup = get_same_lookup()
+
                 headers = [
                     SAMEHeaderDetails(
                         header=decoded_header,
-                        fields=describe_same_header(decoded_header),
+                        fields=describe_same_header(decoded_header, lookup=fips_lookup),
                         confidence=confidence,
                     )
                 ]
@@ -862,12 +879,16 @@ def decode_same_audio(path: str, *, sample_rate: int = 22050) -> SAMEAudioDecode
     )
 
     raw_text = metadata["text"]
+
+    # Get FIPS code lookup for county names
+    fips_lookup = get_same_lookup()
+
     headers: List[SAMEHeaderDetails] = []
     for header in metadata["headers"]:
         headers.append(
             SAMEHeaderDetails(
                 header=header,
-                fields=describe_same_header(header),
+                fields=describe_same_header(header, lookup=fips_lookup),
                 confidence=average_confidence,
             )
         )
