@@ -42,6 +42,25 @@ def _write_same_audio(path: str, header: str, *, sample_rate: int = 44100, scale
         wav.writeframes(b"".join(struct.pack("<h", sample) for sample in samples))
 
 
+def test_encode_same_bits_uses_even_parity() -> None:
+    header = "CZ"
+    bits = encode_same_bits(header, include_preamble=False)
+
+    chars = len(header) + 1  # Include terminating carriage return
+    assert len(bits) == chars * 10
+
+    for index in range(chars):
+        chunk = bits[index * 10 : (index + 1) * 10]
+        assert chunk[0] == 0
+        assert chunk[9] == 1
+
+        data_bits = chunk[1:8]
+        parity_bit = chunk[8]
+
+        total_ones = sum(data_bits) + parity_bit
+        assert total_ones % 2 == 0
+
+
 def test_decode_same_audio_handles_slightly_slow_baud(tmp_path) -> None:
     header = "ZCZC-ABC-DEF-123456-000001-"
     path = tmp_path / "slow.wav"
