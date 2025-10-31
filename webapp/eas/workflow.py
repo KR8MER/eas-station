@@ -260,9 +260,10 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
 
         try:
             components = generator.build_manual_components(
-                header,
                 alert_object,
-                formatted_locations,
+                header,
+                tone_profile=tone_profile,
+                tone_duration=tone_seconds,
                 include_tts=include_tts,
             )
         except Exception as exc:
