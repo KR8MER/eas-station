@@ -390,6 +390,7 @@ def register_maintenance_routes(app, logger):
                     "county_name": payload.get("county_name"),
                     "state_code": payload.get("state_code"),
                     "timezone": payload.get("timezone"),
+                    "fips_codes": payload.get("fips_codes"),
                     "zone_codes": payload.get("zone_codes"),
                     "area_terms": payload.get("area_terms"),
                     "led_default_lines": payload.get("led_default_lines"),

@@ -42,8 +42,16 @@
                             <div class="text-muted small">Timezone: {{ location.timezone or '—' }}</div>
                         </div>
                     </div>
+                    {% if location.fips_codes %}
+                    <p class="small text-muted mb-2">Monitored SAME Counties</p>
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        {% for code in location.fips_codes %}
+                        <span class="badge bg-light text-dark border">{{ code }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
                     {% if location.zone_codes %}
-                    <p class="small text-muted mb-2">SAME / FIPS Zones</p>
+                    <p class="small text-muted mb-2">Monitored NOAA Zones</p>
                     <div class="d-flex flex-wrap gap-2 mb-3">
                         {% for code in location.zone_codes %}
                         <span class="badge bg-light text-dark border">{{ code }}</span>

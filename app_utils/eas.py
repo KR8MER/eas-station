@@ -412,7 +412,11 @@ def build_same_header(alert: object, payload: Dict[str, object], config: Dict[st
     same_codes = [code for code in same_codes if code and code != 'None']
 
     if not same_codes and location_settings:
-        fallback_same = location_settings.get('same_codes') or []
+        fallback_same = (
+            location_settings.get('same_codes')
+            or location_settings.get('fips_codes')
+            or []
+        )
         same_codes = [str(code).strip() for code in fallback_same if code]
 
     if not same_codes and location_settings:

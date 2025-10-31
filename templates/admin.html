@@ -873,6 +873,33 @@
                                 <input type="text" class="form-control" id="locationTimezone" name="timezone" value="{{ location_settings.timezone | default('America/New_York') }}" required>
                                 <small class="text-muted">Example: America/New_York, America/Chicago</small>
                             </div>
+                            <div class="col-12">
+                                <label class="form-label fw-bold">SAME / FIPS Counties</label>
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-md-4">
+                                        <label for="locationFipsState" class="form-label small text-muted mb-1">State or Territory</label>
+                                        <select class="form-select" id="locationFipsState">
+                                            <option value="">Select state or territory…</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label for="locationFipsCounty" class="form-label small text-muted mb-1">County / Area</label>
+                                        <select class="form-select" id="locationFipsCounty" disabled>
+                                            <option value="">Select a state first…</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <button type="button" class="btn btn-outline-primary w-100" id="locationAddFipsBtn">
+                                            <i class="fas fa-plus"></i> Add County
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="mt-3" id="locationSelectedFips">
+                                    <p class="text-muted small mb-0">No SAME / FIPS counties selected yet.</p>
+                                </div>
+                                <input type="hidden" id="locationFipsCodes" name="fips_codes">
+                                <small class="text-muted d-block mt-2">Select up to 31 SAME location codes to monitor.</small>
+                            </div>
                             <div class="col-md-6">
                                 <label for="locationZoneCodes" class="form-label fw-bold">NOAA Zone / UGC Codes</label>
                                 <textarea class="form-control" id="locationZoneCodes" name="zone_codes" rows="3" placeholder="One code per line">{{ (location_settings.zone_codes or []) | join('\n') }}</textarea>
@@ -1490,6 +1517,7 @@
         const EAS_ORIGINATOR_DESCRIPTIONS = {{ eas_originator_descriptions|tojson }};
         const EAS_P_DIGIT_MEANINGS = {{ eas_p_digit_meanings|tojson }};
         const MAX_SAME_CODES = 31;
+        const LOCATION_FIPS_MAX = 31;
         const EAS_STATE_BY_ABBR = {};
         const EAS_STATE_BY_FIPS = {};
         (Array.isArray(EAS_FIPS_TREE) ? EAS_FIPS_TREE : []).forEach((state) => {
@@ -1515,6 +1543,7 @@
         let locationSettingsCache = window.APP_LOCATION ? { ...window.APP_LOCATION } : null;
         let easLastResponse = null;
         let selectedSameCodes = [];
+        let locationFipsSelection = [];
 
         const sanitizeBoundaryTypeInput = (value) => {
             if (!value) {
@@ -3777,6 +3806,224 @@
                 .filter((item) => item.length > 0);
         }
 
+        function normalizeFipsCode(value) {
+            return normalizeSameCode(value);
+        }
+
+        function getFipsCodeDetails(code) {
+            return getSameCodeDetails(code);
+        }
+
+        function renderLocationFipsSelection() {
+            const container = document.getElementById('locationSelectedFips');
+            const hiddenInput = document.getElementById('locationFipsCodes');
+            if (hiddenInput) {
+                hiddenInput.value = (locationFipsSelection || []).join('\n');
+            }
+            if (!container) {
+                return;
+            }
+            if (!locationFipsSelection.length) {
+                container.innerHTML = '<p class="text-muted small mb-0">No SAME / FIPS counties selected yet.</p>';
+                return;
+            }
+            const items = locationFipsSelection.map((code) => {
+                const detail = getFipsCodeDetails(code);
+                const normalized = detail ? detail.code : normalizeFipsCode(code);
+                const label = detail ? detail.description : normalized;
+                const subtitle = (() => {
+                    if (!detail) {
+                        return normalized;
+                    }
+                    const parts = [];
+                    if (detail.stateAbbr || detail.stateName) {
+                        parts.push(detail.stateAbbr || detail.stateName);
+                    }
+                    if (detail.code) {
+                        parts.push(detail.code);
+                    }
+                    return parts.join(' • ') || normalized;
+                })();
+                return `
+                    <div class="border rounded-3 p-2 bg-body-secondary bg-opacity-25 d-flex align-items-center justify-content-between mb-2 gap-3">
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold">${escapeHtml(label)}</div>
+                            <div class="small text-muted mb-0">${escapeHtml(subtitle)}</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger" data-remove-fips="${escapeHtml(normalized)}">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                `;
+            }).join('');
+            container.innerHTML = items;
+        }
+
+        function setLocationFipsSelection(codes) {
+            const normalized = Array.isArray(codes) ? codes.map(normalizeFipsCode).filter(Boolean) : [];
+            const unique = [];
+            normalized.forEach((code) => {
+                if (!unique.includes(code)) {
+                    unique.push(code);
+                }
+            });
+            if (unique.length > LOCATION_FIPS_MAX) {
+                updateLocationSettingsStatus('Maximum of 31 SAME counties supported; extras were ignored.', 'warning');
+            }
+            locationFipsSelection = unique.slice(0, LOCATION_FIPS_MAX);
+            renderLocationFipsSelection();
+            if (locationSettingsCache) {
+                locationSettingsCache.fips_codes = locationFipsSelection.slice();
+                locationSettingsCache.same_codes = locationFipsSelection.slice();
+            }
+            if (window.APP_LOCATION) {
+                window.APP_LOCATION.fips_codes = locationFipsSelection.slice();
+                window.APP_LOCATION.same_codes = locationFipsSelection.slice();
+            }
+        }
+
+        function addLocationFipsCode(code) {
+            const normalized = normalizeFipsCode(code);
+            if (!normalized || locationFipsSelection.includes(normalized)) {
+                return;
+            }
+            if (locationFipsSelection.length >= LOCATION_FIPS_MAX) {
+                updateLocationSettingsStatus('Maximum of 31 SAME counties supported; extras were ignored.', 'warning');
+                return;
+            }
+            locationFipsSelection.push(normalized);
+            renderLocationFipsSelection();
+            if (locationSettingsCache) {
+                locationSettingsCache.fips_codes = locationFipsSelection.slice();
+                locationSettingsCache.same_codes = locationFipsSelection.slice();
+            }
+            if (window.APP_LOCATION) {
+                window.APP_LOCATION.fips_codes = locationFipsSelection.slice();
+                window.APP_LOCATION.same_codes = locationFipsSelection.slice();
+            }
+        }
+
+        function removeLocationFipsCode(code) {
+            const normalized = normalizeFipsCode(code);
+            if (!normalized) {
+                return;
+            }
+            locationFipsSelection = locationFipsSelection.filter((entry) => entry !== normalized);
+            renderLocationFipsSelection();
+            if (locationSettingsCache) {
+                locationSettingsCache.fips_codes = locationFipsSelection.slice();
+                locationSettingsCache.same_codes = locationFipsSelection.slice();
+            }
+            if (window.APP_LOCATION) {
+                window.APP_LOCATION.fips_codes = locationFipsSelection.slice();
+                window.APP_LOCATION.same_codes = locationFipsSelection.slice();
+            }
+        }
+
+        function populateLocationFipsStateOptions() {
+            const select = document.getElementById('locationFipsState');
+            if (!select) {
+                return;
+            }
+            select.innerHTML = '<option value="">Select state or territory…</option>';
+            const fragment = document.createDocumentFragment();
+            (Array.isArray(EAS_FIPS_TREE) ? EAS_FIPS_TREE : []).forEach((state) => {
+                if (!state || !state.abbr) {
+                    return;
+                }
+                const option = document.createElement('option');
+                option.value = state.abbr;
+                if (state.abbr === 'US') {
+                    option.textContent = `${state.name || state.abbr} (Nationwide)`;
+                } else {
+                    option.textContent = `${state.name || state.abbr} (${state.abbr})`;
+                }
+                fragment.appendChild(option);
+            });
+            select.appendChild(fragment);
+        }
+
+        function populateLocationFipsCountyOptions(stateAbbr) {
+            const select = document.getElementById('locationFipsCounty');
+            if (!select) {
+                return;
+            }
+            select.innerHTML = '';
+            select.disabled = true;
+
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = stateAbbr ? 'Select county or parish…' : 'Select a state first…';
+            select.appendChild(placeholder);
+
+            if (!stateAbbr) {
+                return;
+            }
+
+            const state = EAS_STATE_BY_ABBR[stateAbbr];
+            if (!state) {
+                return;
+            }
+
+            if (state.statewide_code) {
+                const statewide = document.createElement('option');
+                statewide.value = state.statewide_code;
+                statewide.textContent = `Entire ${state.name || state.abbr} (${state.statewide_code})`;
+                select.appendChild(statewide);
+            }
+
+            (Array.isArray(state.counties) ? state.counties : []).forEach((county) => {
+                if (!county || !county.code) {
+                    return;
+                }
+                const option = document.createElement('option');
+                option.value = county.code;
+                option.textContent = `${county.name || county.code} (${county.code})`;
+                select.appendChild(option);
+            });
+
+            select.disabled = false;
+        }
+
+        function initializeLocationFipsControls() {
+            populateLocationFipsStateOptions();
+            populateLocationFipsCountyOptions('');
+            renderLocationFipsSelection();
+
+            const stateSelect = document.getElementById('locationFipsState');
+            if (stateSelect) {
+                stateSelect.addEventListener('change', (event) => {
+                    const abbr = event?.target?.value || '';
+                    populateLocationFipsCountyOptions(abbr);
+                });
+            }
+
+            const addButton = document.getElementById('locationAddFipsBtn');
+            if (addButton) {
+                addButton.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    const countySelect = document.getElementById('locationFipsCounty');
+                    const selected = countySelect ? countySelect.value : '';
+                    if (!selected) {
+                        updateLocationSettingsStatus('Select a state and county before adding.', 'warning');
+                        return;
+                    }
+                    addLocationFipsCode(selected);
+                });
+            }
+
+            const selectedContainer = document.getElementById('locationSelectedFips');
+            if (selectedContainer) {
+                selectedContainer.addEventListener('click', (event) => {
+                    const target = event.target ? event.target.closest('[data-remove-fips]') : null;
+                    if (target) {
+                        const code = target.getAttribute('data-remove-fips');
+                        removeLocationFipsCode(code);
+                    }
+                });
+            }
+        }
+
         function populateLocationSettingsForm(settings) {
             if (!settings) {
                 return;
@@ -3796,6 +4043,7 @@
             if (countyField) countyField.value = settings.county_name || '';
             if (stateField) stateField.value = settings.state_code || '';
             if (timezoneField) timezoneField.value = settings.timezone || '';
+            setLocationFipsSelection(settings.fips_codes || settings.same_codes || []);
             if (zoneField) zoneField.value = (settings.zone_codes || []).join('\n');
             if (areaField) areaField.value = (settings.area_terms || []).join('\n');
             if (latField) latField.value = settings.map_center_lat ?? '';
@@ -3811,6 +4059,7 @@
                 county_name: document.getElementById('locationCountyName')?.value.trim() || '',
                 state_code: document.getElementById('locationStateCode')?.value.trim().toUpperCase() || '',
                 timezone: document.getElementById('locationTimezone')?.value.trim() || '',
+                fips_codes: locationFipsSelection.slice(),
                 zone_codes: parseListInput(document.getElementById('locationZoneCodes')?.value),
                 area_terms: parseListInput(document.getElementById('locationAreaTerms')?.value),
                 map_center_lat: document.getElementById('locationMapLat')?.value,
@@ -3827,6 +4076,7 @@
                 if (response.ok && result.settings) {
                     locationSettingsCache = { ...result.settings };
                     window.APP_LOCATION = { ...result.settings };
+                    setLocationFipsSelection(result.settings.fips_codes || result.settings.same_codes || []);
                     if (force) {
                         populateLocationSettingsForm(result.settings);
                     }
@@ -3877,6 +4127,8 @@
             if (!form) {
                 return;
             }
+
+            initializeLocationFipsControls();
 
             form.addEventListener('submit', saveLocationSettings);
 
