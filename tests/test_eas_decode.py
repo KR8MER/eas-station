@@ -18,7 +18,14 @@ from app_utils.eas_fsk import (
 )
 
 
-def _write_same_audio(path: str, header: str, *, sample_rate: int = 44100, scale: float = 1.0) -> None:
+def _write_same_audio(
+    path: str,
+    header: str,
+    *,
+    sample_rate: int = 44100,
+    scale: float = 1.0,
+    leading_pad: int = 0,
+) -> None:
     bits = encode_same_bits(header, include_preamble=True)
     base_rate = float(SAME_BAUD)
     bit_rate = base_rate * scale
@@ -37,6 +44,8 @@ def _write_same_audio(path: str, header: str, *, sample_rate: int = 44100, scale
         wav.setnchannels(1)
         wav.setsampwidth(2)
         wav.setframerate(sample_rate)
+        if leading_pad > 0:
+            wav.writeframes(b"\x00\x00" * leading_pad)
         wav.writeframes(b"".join(struct.pack("<h", sample) for sample in samples))
 
 
@@ -54,6 +63,18 @@ def test_decode_same_audio_handles_slightly_fast_baud(tmp_path) -> None:
     header = "ZCZC-ABC-DEF-123456-000001-"
     path = tmp_path / "fast.wav"
     _write_same_audio(str(path), header, scale=1.04)
+
+    result = decode_same_audio(str(path))
+
+    assert any(item.header == header for item in result.headers)
+
+
+def test_decode_same_audio_handles_leading_offset(tmp_path) -> None:
+    header = "ZCZC-ABC-DEF-123456-000001-"
+    path = tmp_path / "offset.wav"
+    # Pad the start of the audio by half a bit to simulate imperfect capture alignment.
+    leading_pad = 15
+    _write_same_audio(str(path), header, leading_pad=leading_pad)
 
     result = decode_same_audio(str(path))
 
