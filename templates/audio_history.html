@@ -193,9 +193,29 @@
                                     </td>
                                     <td class="text-center">
                                         {% if message.audio_url %}
-                                        <a class="btn btn-sm btn-outline-primary" href="{{ message.audio_url }}" target="_blank" rel="noopener">
-                                            <i class="fas fa-play"></i> Play
-                                        </a>
+                                        <div class="d-flex flex-column align-items-center gap-2">
+                                            <audio controls preload="none" class="w-100" style="max-width: 220px;">
+                                                <source src="{{ message.audio_url }}" type="audio/wav">
+                                                Your browser does not support audio playback.
+                                            </audio>
+                                            <div class="d-flex gap-2 flex-wrap justify-content-center">
+                                                <a class="btn btn-sm btn-outline-primary" href="{{ message.audio_url }}" target="_blank" rel="noopener">
+                                                    <i class="fas fa-external-link-alt"></i> Open
+                                                </a>
+                                                <a class="btn btn-sm btn-outline-secondary" href="{{ message.audio_url }}?download=1">
+                                                    <i class="fas fa-download"></i> Download
+                                                </a>
+                                            </div>
+                                            {% if message.eom_url %}
+                                            <div class="w-100">
+                                                <div class="small text-muted">EOM Burst</div>
+                                                <audio controls preload="none" class="w-100" style="max-width: 220px;">
+                                                    <source src="{{ message.eom_url }}" type="audio/wav">
+                                                    Your browser does not support audio playback.
+                                                </audio>
+                                            </div>
+                                            {% endif %}
+                                        </div>
                                         {% else %}
                                         <span class="text-muted">Unavailable</span>
                                         {% endif %}
