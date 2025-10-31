@@ -2,6 +2,16 @@
 
 > A complete Emergency Alert System (EAS) platform for ingesting, broadcasting, and verifying NOAA and IPAWS Common Alerting Protocol (CAP) alerts. Features FCC-compliant SAME encoding, multi-source aggregation, PostGIS spatial intelligence, SDR verification, and integrated LED signage.
 
+## Vision: A Software Drop-In Replacement
+
+Commercial EAS decoders are expensive, power-hungry appliances that demand rack space and proprietary maintenance. EAS Station is being engineered as a software-first, off-the-shelf alternative that can fulfill the same duties on commodity hardware. The roadmap focuses on delivering:
+
+- **Functional Parity** – Automated alert ingestion, SAME generation, playout, verification, and compliance logging equivalent to a certified encoder/decoder pair.
+- **Operational Resilience** – High availability, watchdog services, failover-ready storage, and verifiable audit trails so the platform can stand in for purpose-built hardware.
+- **Accessible Deployment** – Containerized services, reproducible images, and minimal peripheral requirements so integrators can assemble a station with readily available parts.
+
+This vision guides the feature backlog, documentation, and governance decisions captured throughout the repository.
+
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://www.docker.com/)
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-blue?logo=python)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-2.3-green?logo=flask)](https://flask.palletsprojects.com/)
@@ -24,6 +34,12 @@
 
 **Built for:** Amateur Radio Emergency Communications (KR8MER) | Putnam County, Ohio
 
+### About the Maintainer
+
+Timothy Kramer (KR8MER) is an amateur radio operator and public-safety technologist based in Putnam County, Ohio. First licensed in 2004 and upgraded to General Class in 2025, he combines two decades of field experience with a passion for resilient communications. Kramer previously spent 17 years as a deputy sheriff, where mission-critical Motorola land-mobile radio systems were part of his daily toolkit. He now works as a full-time electrical panel electrician with a focus on keeping complex infrastructure reliable and safe.
+
+Outside of the day job, Kramer is an active Skywarn spotter and maintains a diverse bench of professional-grade radios, trunked monitoring infrastructure, SDR capture nodes, and digital paging systems. His interests extend to RF engineering, SDRTrunk operations, ADS-B and APRS telemetry, drone operations, Ubiquiti networking, Raspberry Pi experimentation, 3D printing, and hands-on Emergency Alert System integration. He created EAS Station to prove that a disciplined software stack running on commodity hardware can cover the entire alerting workflow traditionally reserved for specialized rack units.
+
 ---
 
 ## ⚠️ Important Safety Notice
@@ -31,10 +47,10 @@
 - **Development-phase software.** EAS Station is an experimental research project validated against open-source tools such as
   [multimon-ng](https://github.com/EliasOenal/multimon-ng) for decoder parity. The remainder of the platform and all generated
   content are original and community-maintained.
-- **Not FCC-certified equipment.** Do not treat this repository as a drop-in replacement for commercial Emergency Alert System
-  encoders or other hardware approved by the Federal Communications Commission.
-- **No life-safety reliance.** Never use this codebase, or any outputs it produces, for real-world emergency alerting, public
-  warning, or life-or-death decision making. Operate it strictly in lab and training environments.
+- **Certification pending.** The goal is to satisfy every functional requirement of commercial Emergency Alert System encoders
+  and decoders; however, the software is **not yet** FCC-certified and must not be deployed where certified hardware is mandated.
+- **No life-safety reliance—yet.** Until the roadmap items in [`docs/master_todo.md`](docs/master_todo.md) are completed and the
+  system is validated, keep operations confined to lab and training environments.
 - **Read the legal docs.** Review the [Terms of Use](TERMS_OF_USE.md) and [Privacy Policy](PRIVACY_POLICY.md) before sharing data
   or inviting collaborators to test deployments.
 
@@ -111,13 +127,20 @@ EAS Station is not just an alert monitor—it's a **complete emergency broadcast
 
 ---
 
+## 🏛️ Governance & Contributions
+
+- **License:** Source code is provided under the [MIT License](LICENSE); copyright remains with Timothy Kramer (K8R8MER).
+- **Contribution workflow:** All commits must include a Developer Certificate of Origin sign-off (`Signed-off-by`) as described in the [CONTRIBUTING guide](CONTRIBUTING.md).
+- **Roadmap alignment:** Issues and pull requests should call out which drop-in replacement requirement from [`docs/master_todo.md`](docs/master_todo.md) they advance to keep hardware parity measurable.
+- **Legal notices:** Review the [Terms of Use](TERMS_OF_USE.md) and [Privacy Policy](PRIVACY_POLICY.md) before deploying test systems or sharing data.
+
 ## 📚 Additional Documentation
 
 - [ℹ️ About the Project](ABOUT.md) – Overview of the mission, core services, and full software stack powering the system.
 - [🆘 Help Guide](HELP.md) – Day-to-day operations, troubleshooting workflows, and reference commands for operators.
 - [⚖️ Terms of Use](TERMS_OF_USE.md) – Development-only license terms, acceptable use, and critical safety disclaimers.
 - [🛡️ Privacy Policy](PRIVACY_POLICY.md) – Guidance for handling configuration data, test records, and optional integrations.
-- [🗂️ Master Implementation Roadmap](docs/master_todo.md) – High-level priorities with implementation plans that map the path to production readiness.
+- [🗂️ Master Implementation Roadmap](docs/master_todo.md) – Drop-in replacement requirements with implementation plans that map the path to hardware parity and production readiness.
 - In-app versions of both guides are reachable from the navigation bar via the new <strong>About</strong> and <strong>Help</strong> pages for quick operator reference.
 
 ---
