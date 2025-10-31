@@ -264,17 +264,37 @@ def get_eas_static_prefix() -> str:
 def load_or_cache_audio_data(message, *, variant: str = "primary") -> Optional[bytes]:
     """Return audio bytes for an ``EASMessage``, populating the database if needed."""
 
-    if variant == "eom":
-        data = message.eom_audio_data
-        filename = (message.metadata_payload or {}).get("eom_filename") if message.metadata_payload else None
-    else:
-        data = message.audio_data
-        filename = message.audio_filename
+    normalized = (variant or "primary").strip().lower()
+    metadata = message.metadata_payload or {}
+
+    column_map = {
+        "primary": "audio_data",
+        "eom": "eom_audio_data",
+        "same": "same_audio_data",
+        "attention": "attention_audio_data",
+        "tts": "tts_audio_data",
+        "buffer": "buffer_audio_data",
+    }
+
+    if normalized not in column_map:
+        return None
+
+    column_name = column_map[normalized]
+    data = getattr(message, column_name)
+
+    fallback_filename: Optional[str] = None
+    if normalized == "primary":
+        fallback_filename = message.audio_filename
+    elif normalized == "eom":
+        fallback_filename = metadata.get("eom_filename") if isinstance(metadata, dict) else None
 
     if data:
         return data
 
-    disk_path = resolve_eas_disk_path(filename)
+    if not fallback_filename:
+        return None
+
+    disk_path = resolve_eas_disk_path(fallback_filename)
     if not disk_path:
         return None
 
@@ -287,10 +307,7 @@ def load_or_cache_audio_data(message, *, variant: str = "primary") -> Optional[b
     if not data:
         return None
 
-    if variant == "eom":
-        message.eom_audio_data = data
-    else:
-        message.audio_data = data
+    setattr(message, column_name, data)
 
     try:
         db.session.add(message)
@@ -370,6 +387,10 @@ def ensure_eas_audio_columns(logger) -> bool:
     column_definitions = {
         "audio_data": "BYTEA",
         "eom_audio_data": "BYTEA",
+        "same_audio_data": "BYTEA",
+        "attention_audio_data": "BYTEA",
+        "tts_audio_data": "BYTEA",
+        "buffer_audio_data": "BYTEA",
         "text_payload": "JSONB",
     }
 

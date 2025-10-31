@@ -86,7 +86,12 @@ def main() -> None:
 
     header, location_codes, _ = build_same_header(alert, payload, config)
     generator = EASAudioGenerator(config, logger)
-    audio_filename, text_filename, _, _, _ = generator.build_files(alert, payload, header, location_codes)
+    audio_filename, text_filename, _, _, _, _ = generator.build_files(
+        alert,
+        payload,
+        header,
+        location_codes,
+    )
 
     output_dir = Path(generator.output_dir)
     audio_path = output_dir / audio_filename
