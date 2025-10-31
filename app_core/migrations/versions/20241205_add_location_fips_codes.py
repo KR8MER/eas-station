@@ -6,7 +6,7 @@ import json
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS
 
@@ -18,18 +18,27 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Get database connection and inspector
+    conn = op.get_bind()
+    inspector = inspect(conn)
+
+    # Check existing columns
+    existing_columns = {col['name'] for col in inspector.get_columns('location_settings')}
+
     default_codes = DEFAULT_LOCATION_SETTINGS.get("fips_codes", [])
     default_json = json.dumps(default_codes)
 
-    with op.batch_alter_table("location_settings", schema=None) as batch:
-        batch.add_column(
-            sa.Column(
-                "fips_codes",
-                sa.JSON(),
-                nullable=False,
-                server_default=sa.text("'[]'::jsonb"),
+    # Only add the column if it doesn't exist
+    if 'fips_codes' not in existing_columns:
+        with op.batch_alter_table("location_settings", schema=None) as batch:
+            batch.add_column(
+                sa.Column(
+                    "fips_codes",
+                    sa.JSON(),
+                    nullable=False,
+                    server_default=sa.text("'[]'::jsonb"),
+                )
             )
-        )
 
     if default_json:
         op.execute(
