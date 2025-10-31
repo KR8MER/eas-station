@@ -595,33 +595,9 @@
 
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
-            initializeUserManagement();
-
-            if (ADMIN_SETUP_MODE) {
-                return;
+            if (typeof initializeEasPanel === 'function') {
+                initializeEasPanel();
             }
-
-            const confirmationModalElement = document.getElementById('confirmationModal');
-            if (confirmationModalElement) {
-                confirmationModal = new bootstrap.Modal(confirmationModalElement);
-            }
-
-            const editAlertModalElement = document.getElementById('editAlertModal');
-            if (editAlertModalElement) {
-                editAlertModal = new bootstrap.Modal(editAlertModalElement);
-            }
-
-            loadBoundaries();
-            loadSystemHealth();
-            setupKeyboardShortcuts();
-            initializeAlertManagement();
-            initializeLocationSettings();
-            initializeEasPanel();
-            initializeCustomTypeControls();
-
-            setInterval(() => {
-                loadSystemHealth();
-            }, 30000);
         });
 
         // Keyboard shortcuts
