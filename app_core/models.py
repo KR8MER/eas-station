@@ -162,6 +162,12 @@ class AdminUser(db.Model):
             "last_login_at": self.last_login_at.isoformat() if self.last_login_at else None,
         }
 
+    @property
+    def is_authenticated(self) -> bool:
+        """Flask-style authentication flag used by templates."""
+
+        return bool(self.is_active)
+
 
 class EASMessage(db.Model):
     __tablename__ = "eas_messages"
