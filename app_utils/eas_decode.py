@@ -8,7 +8,7 @@ import shutil
 import subprocess
 from array import array
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from .eas import describe_same_header
 from .eas_fsk import SAME_BAUD, SAME_MARK_FREQ, SAME_SPACE_FREQ
@@ -149,13 +149,18 @@ def _goertzel(samples: Iterable[float], sample_rate: int, target_freq: float) ->
     return power if power > 0.0 else 0.0
 
 
-def _extract_bits(samples: List[float], sample_rate: int) -> List[int]:
+def _extract_bits(
+    samples: List[float], sample_rate: int, bit_rate: float
+) -> Tuple[List[int], float, float]:
     """Slice PCM audio into SAME bit periods and detect mark/space symbols."""
 
     bits: List[int] = []
     bit_confidences: List[float] = []
 
-    bit_rate = float(SAME_BAUD)
+    bit_rate = float(bit_rate)
+    if bit_rate <= 0:
+        raise AudioDecodeError("Bit rate must be positive when decoding SAME audio.")
+
     samples_per_bit = sample_rate / bit_rate
     carry = 0.0
     index = 0
@@ -193,7 +198,7 @@ def _extract_bits(samples: List[float], sample_rate: int) -> List[int]:
     _extract_bits.min_confidence = minimum_confidence  # type: ignore[attr-defined]
     _extract_bits.bit_confidences = list(bit_confidences)  # type: ignore[attr-defined]
 
-    return bits
+    return bits, average_confidence, minimum_confidence
 
 
 def _bits_to_text(bits: List[int]) -> Dict[str, object]:
@@ -315,6 +320,85 @@ def _bits_to_text(bits: List[int]) -> Dict[str, object]:
     }
 
 
+def _score_candidate(metadata: Dict[str, object]) -> float:
+    """Return a quality score for decoded SAME metadata."""
+
+    headers = metadata.get("headers") or []
+    text = metadata.get("text") or ""
+    frame_count = int(metadata.get("frame_count") or 0)
+    frame_errors = int(metadata.get("frame_errors") or 0)
+
+    score = float(frame_count - frame_errors)
+    score -= float(frame_errors * 2)
+
+    if headers:
+        score += 500.0 * len(headers)
+        uppercase_headers = [header.upper() for header in headers]
+        score += 200.0 * sum(1 for header in uppercase_headers if header.startswith("ZCZC"))
+        score += 100.0 * sum(1 for header in uppercase_headers if header.startswith("NNNN"))
+
+    if isinstance(text, str):
+        score += 50.0 * text.upper().count("ZCZC")
+
+    return score
+
+
+def _decode_with_candidate_rates(
+    samples: List[float],
+    sample_rate: int,
+    *,
+    base_rate: float,
+) -> Tuple[List[int], Dict[str, object], float, float]:
+    """Try decoding SAME bits using a range of baud rates."""
+
+    candidate_offsets = [0.0]
+    for step in (0.005, 0.01, 0.015, 0.02, 0.025, 0.03, 0.035, 0.04):
+        candidate_offsets.extend((-step, step))
+
+    best_bits: Optional[List[int]] = None
+    best_metadata: Optional[Dict[str, object]] = None
+    best_average: float = 0.0
+    best_minimum: float = 0.0
+    best_score: Optional[float] = None
+    best_rate: Optional[float] = None
+
+    for offset in candidate_offsets:
+        bit_rate = base_rate * (1.0 + offset)
+        try:
+            bits, average_confidence, minimum_confidence = _extract_bits(
+                samples, sample_rate, bit_rate
+            )
+        except AudioDecodeError:
+            continue
+
+        metadata = _bits_to_text(bits)
+        score = _score_candidate(metadata)
+
+        if best_score is None or score > best_score + 1e-6:
+            best_bits = bits
+            best_metadata = metadata
+            best_average = average_confidence
+            best_minimum = minimum_confidence
+            best_score = score
+            best_rate = bit_rate
+        elif (
+            best_score is not None
+            and abs(score - best_score) <= 1e-6
+            and best_rate is not None
+            and abs(bit_rate - base_rate) < abs(best_rate - base_rate)
+        ):
+            best_bits = bits
+            best_metadata = metadata
+            best_average = average_confidence
+            best_minimum = minimum_confidence
+            best_rate = bit_rate
+
+    if best_bits is None or best_metadata is None:
+        raise AudioDecodeError("The audio payload did not contain detectable SAME bursts.")
+
+    return best_bits, best_metadata, best_average, best_minimum
+
+
 def decode_same_audio(path: str, *, sample_rate: int = 44100) -> SAMEAudioDecodeResult:
     """Decode SAME headers from a WAV or MP3 file located at ``path``."""
 
@@ -322,8 +406,10 @@ def decode_same_audio(path: str, *, sample_rate: int = 44100) -> SAMEAudioDecode
         raise AudioDecodeError(f"Audio file does not exist: {path}")
 
     samples = _read_audio_samples(path, sample_rate)
-    bits = _extract_bits(samples, sample_rate)
-    metadata = _bits_to_text(bits)
+    base_rate = float(SAME_BAUD)
+    bits, metadata, average_confidence, minimum_confidence = _decode_with_candidate_rates(
+        samples, sample_rate, base_rate=base_rate
+    )
 
     raw_text = metadata["text"]
     headers: List[SAMEHeaderDetails] = []
@@ -332,13 +418,11 @@ def decode_same_audio(path: str, *, sample_rate: int = 44100) -> SAMEAudioDecode
             SAMEHeaderDetails(
                 header=header,
                 fields=describe_same_header(header),
-                confidence=float(getattr(_extract_bits, "last_confidence", 0.0)),
+                confidence=average_confidence,
             )
         )
 
     duration_seconds = len(samples) / float(sample_rate)
-    average_confidence = float(getattr(_extract_bits, "last_confidence", 0.0))
-    min_confidence = float(getattr(_extract_bits, "min_confidence", 0.0))
 
     return SAMEAudioDecodeResult(
         raw_text=raw_text,
@@ -349,7 +433,7 @@ def decode_same_audio(path: str, *, sample_rate: int = 44100) -> SAMEAudioDecode
         duration_seconds=duration_seconds,
         sample_rate=sample_rate,
         bit_confidence=average_confidence,
-        min_bit_confidence=min_confidence,
+        min_bit_confidence=minimum_confidence,
     )
 
 
