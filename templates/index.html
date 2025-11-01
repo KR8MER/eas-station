@@ -505,6 +505,21 @@
             font-size: 1.35rem;
         }
     }
+
+.dashboard-sidebar {
+    display: flex;
+    flex-direction: column;
+}
+
+.dashboard-sidebar > .card + .card {
+    margin-top: var(--spacing-lg);
+}
+
+@media (max-width: 991px) {
+    .dashboard-sidebar > .card + .card {
+        margin-top: var(--spacing-md);
+    }
+}
 </style>
 {% endblock %}
 
@@ -580,7 +595,7 @@
     </div>
 
     <div class="row g-4 align-items-start">
-        <div class="col-lg-4 col-xxl-3 order-2 order-lg-1 d-flex flex-column gap-4">
+        <div class="col-lg-4 col-xxl-3 order-2 order-lg-1 dashboard-sidebar">
             <div class="card control-card sticky-card">
                 <div class="card-header">
                     <h5 class="card-title mb-1 d-flex align-items-center gap-2">
