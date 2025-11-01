@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flask import flash, jsonify, redirect, render_template, request, url_for
+from flask import flash, g, jsonify, redirect, render_template, request, url_for
 
 from app_utils.setup_wizard import (
     WIZARD_FIELDS,
@@ -34,6 +34,15 @@ def register(app, logger):
             for reason in setup_reasons
         ]
         setup_active = app.config.get("SETUP_MODE", False)
+        current_user = getattr(g, "current_user", None)
+        is_authenticated = bool(current_user and current_user.is_authenticated)
+
+        if not setup_active and not is_authenticated:
+            next_url = request.full_path if request.query_string else request.path
+            if request.method == "GET":
+                flash("Please sign in to access the setup wizard.")
+                return redirect(url_for("login", next=next_url))
+            return jsonify({"error": "Authentication required"}), 401
 
         try:
             state = load_wizard_state()
@@ -97,6 +106,13 @@ def register(app, logger):
 
     @app.route("/setup/generate-secret", methods=["POST"])
     def setup_generate_secret():
+        setup_active = app.config.get("SETUP_MODE", False)
+        current_user = getattr(g, "current_user", None)
+        is_authenticated = bool(current_user and current_user.is_authenticated)
+
+        if not setup_active and not is_authenticated:
+            return jsonify({"error": "Authentication required"}), 401
+
         token = generate_secret_key()
         return jsonify({"secret_key": token})
 
