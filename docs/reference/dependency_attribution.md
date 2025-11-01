@@ -26,7 +26,7 @@ The EAS Station application is built entirely on open-source libraries. The tabl
 | python-dotenv 1.0.1 | Saurabh Kumar & python-dotenv contributors | BSD-3-Clause | Loads configuration values from the `.env` file during startup and CLI utilities. |
 | pytz 2024.2 | Stuart Bishop | MIT | Provides the IANA time zone database for accurate scheduling and timestamps. |
 | requests 2.32.3 | Kenneth Reitz & Requests contributors | Apache-2.0 | Fetches CAP feeds, remote APIs, and supporting metadata over HTTP(S). |
-| SciPy 1.11.4 | SciPy community | BSD-3-Clause | Supplies signal-processing helpers for audio resampling when ffmpeg is unavailable. |
+| SciPy 1.14.1 | SciPy community | BSD-3-Clause | Supplies signal-processing helpers for audio resampling when ffmpeg is unavailable. |
 | SQLAlchemy 2.0.44 | SQLAlchemy authors (led by Mike Bayer) | MIT | Object-relational mapper used for database models, queries, and migrations. |
 | typing-extensions 4.15.0 | Python Software Foundation | PSF-2.0 | Backports modern typing features used throughout the codebase. |
 | urllib3 2.5.0 | urllib3 maintainers (Seth Michael Larson & contributors) | MIT | Low-level HTTP client powering requests’ connection pooling and TLS handling. |
