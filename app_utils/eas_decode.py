@@ -119,13 +119,6 @@ def _build_locations_list(fields: Dict[str, object]) -> List[str]:
             else:
                 label = code or state_label
 
-        if code:
-            normalised_code = code
-            if normalised_code not in label:
-                if normalised_code.isdigit():
-                    label = f"{label} (FIPS {normalised_code})"
-                else:
-                    label = f"{label} ({normalised_code})"
         label = label.strip()
         if label:
             locations.append(label)
@@ -1389,14 +1382,17 @@ def decode_same_audio(path: str, *, sample_rate: Optional[int] = None) -> SAMEAu
     )
     if metadata_headers:
         fips_lookup = get_same_lookup()
-        headers = [
-            SAMEHeaderDetails(
-                header=header,
-                fields=describe_same_header(header, lookup=fips_lookup),
-                confidence=header_confidence,
+        headers: List[SAMEHeaderDetails] = []
+        for header in metadata_headers:
+            fields = describe_same_header(header, lookup=fips_lookup)
+            headers.append(
+                SAMEHeaderDetails(
+                    header=header,
+                    fields=fields,
+                    confidence=header_confidence,
+                    summary=build_plain_language_summary(header, fields),
+                )
             )
-            for header in metadata_headers
-        ]
         raw_text = metadata_text or correlation_raw_text or ""
     else:
         headers = correlation_headers or []
