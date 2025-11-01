@@ -943,6 +943,29 @@
                                 <textarea class="form-control" id="locationAreaTerms" name="area_terms" rows="3" placeholder="Names that indicate a relevant alert">{{ (location_settings.area_terms or []) | join('\n') }}</textarea>
                                 <small class="text-muted">Used to match alerts that list multiple counties.</small>
                             </div>
+                            <div class="col-12">
+                                <div class="card border-secondary-subtle shadow-sm mt-2" id="locationReferenceCard">
+                                    <div class="card-body">
+                                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                                            <div>
+                                                <h5 class="card-title mb-1">Location Reference Data</h5>
+                                                <p class="card-subtitle text-muted small mb-0">
+                                                    Review the NOAA zone catalog entries, SAME / FIPS codes, and area keywords saved for alert filtering.
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" id="refreshLocationReference">
+                                                    <i class="fas fa-sync-alt"></i> Refresh
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <p class="small mt-3 mb-0 text-muted" id="locationReferenceStatus"></p>
+                                        <div class="mt-3" id="locationReferenceContent">
+                                            <p class="text-muted small mb-0">Saved location details will appear here.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="col-md-4">
                                 <label for="locationMapLat" class="form-label fw-bold">Map Center Latitude</label>
                                 <input type="number" step="0.0001" class="form-control" id="locationMapLat" name="map_center_lat" value="{{ location_settings.map_center_lat | default('0') }}">
@@ -1170,6 +1193,7 @@
         let alertSearchTimeout = null;
         let editingAlertId = null;
         let locationSettingsCache = window.APP_LOCATION ? { ...window.APP_LOCATION } : null;
+        let locationReferenceCache = null;
         let easLastResponse = null;
         let selectedSameCodes = [];
         let locationFipsSelection = [];
@@ -3658,6 +3682,308 @@
             }
         }
 
+        function describeSameSubdivision(subdivision) {
+            const mapping = {
+                '0': 'Entire area',
+                '1': 'Northwest',
+                '2': 'North Central',
+                '3': 'Northeast',
+                '4': 'West Central',
+                '5': 'Central',
+                '6': 'East Central',
+                '7': 'Southwest',
+                '8': 'South Central',
+                '9': 'Southeast',
+            };
+            return mapping[subdivision] || 'Custom area';
+        }
+
+        function updateLocationReferenceStatus(message, tone = 'muted') {
+            const statusEl = document.getElementById('locationReferenceStatus');
+            if (!statusEl) {
+                return;
+            }
+            const tones = {
+                danger: 'text-danger',
+                success: 'text-success',
+                warning: 'text-warning',
+                info: 'text-info',
+                muted: 'text-muted',
+            };
+            const toneClass = tones[tone] || tones.muted;
+            statusEl.className = `small mt-3 mb-0 ${toneClass}`;
+            statusEl.textContent = message || '';
+        }
+
+        function formatDegree(value, isLatitude) {
+            const number = Number(value);
+            if (!Number.isFinite(number)) {
+                return '—';
+            }
+            const suffix = isLatitude
+                ? (number >= 0 ? 'N' : 'S')
+                : (number >= 0 ? 'E' : 'W');
+            return `${Math.abs(number).toFixed(2)}° ${suffix}`;
+        }
+
+        function formatLatLon(lat, lng) {
+            const latLabel = formatDegree(lat, true);
+            const lngLabel = formatDegree(lng, false);
+            if (latLabel === '—' && lngLabel === '—') {
+                return '—';
+            }
+            if (latLabel === '—') {
+                return lngLabel;
+            }
+            if (lngLabel === '—') {
+                return latLabel;
+            }
+            return `${latLabel} / ${lngLabel}`;
+        }
+
+        function renderLocationReference(data) {
+            const container = document.getElementById('locationReferenceContent');
+            if (!container) {
+                return;
+            }
+            if (!data) {
+                container.innerHTML = '<p class="text-muted small mb-0">Reference data unavailable.</p>';
+                return;
+            }
+
+            locationReferenceCache = data;
+
+            const location = data.location || {};
+            const locationParts = [];
+            if (location.county_name) {
+                locationParts.push(escapeHtml(location.county_name));
+            }
+            if (location.state_code) {
+                locationParts.push(escapeHtml(location.state_code));
+            }
+            const timezoneLabel = location.timezone ? ` · ${escapeHtml(location.timezone)}` : '';
+            const locationIntro = locationParts.length
+                ? `<p class="small text-muted mb-2">Saved configuration for <strong>${locationParts.join(', ')}</strong>${timezoneLabel}.</p>`
+                : '';
+
+            const referenceSources = Array.isArray(data.sources) ? data.sources : [];
+            const referenceItems = referenceSources.map((source) => {
+                const labelText = source?.label || source?.url || source?.path || 'Reference material';
+                const linkLabel = escapeHtml(labelText);
+                let anchor = linkLabel;
+                if (source?.url) {
+                    anchor = `<a href="${escapeHtml(source.url)}" target="_blank" rel="noopener">${linkLabel}</a>`;
+                }
+                const notes = [];
+                if (source?.description) {
+                    notes.push(`<div class="small text-muted">${escapeHtml(source.description)}</div>`);
+                }
+                if (source?.path) {
+                    notes.push(`<div class="small text-muted"><code>${escapeHtml(source.path)}</code></div>`);
+                }
+                const detail = notes.join('');
+                return `<li class="mb-1">${anchor}${detail}</li>`;
+            }).join('');
+            const referenceSection = referenceItems
+                ? `<div class="mb-4">
+                        <h6 class="fw-bold mb-1">Reference Materials</h6>
+                        <p class="small text-muted mb-2">These resources inform the zone and SAME metadata.</p>
+                        <ul class="list-unstyled mb-0">${referenceItems}</ul>
+                    </div>`
+                : '';
+
+            const zones = Array.isArray(data.zones?.known) ? data.zones.known : [];
+            const zoneRows = zones.map((zone) => {
+                const detailParts = [];
+                if (zone.zone_type) {
+                    detailParts.push(`Type ${escapeHtml(zone.zone_type)}`);
+                }
+                if (zone.zone_number) {
+                    detailParts.push(`Zone ${escapeHtml(zone.zone_number)}`);
+                }
+                if (zone.cwa) {
+                    detailParts.push(`WFO ${escapeHtml(zone.cwa)}`);
+                }
+                if (zone.fe_area) {
+                    detailParts.push(`Area ${escapeHtml(zone.fe_area)}`);
+                }
+                const detail = detailParts.length ? detailParts.join(' · ') : '—';
+                const coords = formatLatLon(zone.latitude, zone.longitude);
+                const timeZone = zone.time_zone ? escapeHtml(zone.time_zone) : '—';
+                const stateCode = zone.state_code ? escapeHtml(zone.state_code) : '—';
+                const name = zone.name || zone.short_name || zone.code;
+                return `
+                    <tr>
+                        <td><code>${escapeHtml(zone.code)}</code></td>
+                        <td>
+                            <div class="fw-semibold">${escapeHtml(name || '')}</div>
+                            <div class="small text-muted">${detail}</div>
+                        </td>
+                        <td>${stateCode}</td>
+                        <td>${timeZone}</td>
+                        <td>${escapeHtml(coords)}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            const zoneTable = zoneRows
+                ? `<div class="table-responsive">
+                        <table class="table table-sm align-middle mb-2">
+                            <thead class="table-light">
+                                <tr>
+                                    <th scope="col">UGC</th>
+                                    <th scope="col">Name</th>
+                                    <th scope="col">State</th>
+                                    <th scope="col">TZ</th>
+                                    <th scope="col">Coords</th>
+                                </tr>
+                            </thead>
+                            <tbody>${zoneRows}</tbody>
+                        </table>
+                    </div>`
+                : '<p class="text-muted small mb-0">No NOAA zone codes saved.</p>';
+
+            const missingZones = Array.isArray(data.zones?.missing) ? data.zones.missing : [];
+            const missingZoneNote = missingZones.length
+                ? `<p class="text-warning small mb-0">Metadata not found for ${missingZones.map((code) => `<code>${escapeHtml(code)}</code>`).join(', ')}. Keep the catalog updated to include these zones.</p>`
+                : '';
+
+            const totalZones = typeof data.zones?.total_catalog === 'number' ? data.zones.total_catalog : null;
+            const zoneSummaryCount = zones.length;
+            const zoneSummaryLabel = totalZones !== null
+                ? `Matching ${zoneSummaryCount} of ${totalZones} catalogued zones.`
+                : `Matching ${zoneSummaryCount} saved zone${zoneSummaryCount === 1 ? '' : 's'}.`;
+
+            const fipsEntries = Array.isArray(data.fips?.known) ? data.fips.known : [];
+            const fipsRows = fipsEntries.map((entry) => {
+                const subdivision = entry.same_subdivision ? describeSameSubdivision(entry.same_subdivision) : '';
+                const subtitleParts = [];
+                if (entry.is_nationwide) {
+                    subtitleParts.push('Entire United States');
+                } else if (entry.is_statewide) {
+                    const stateLabel = entry.state_name || entry.state || 'Statewide';
+                    subtitleParts.push(`All areas in ${stateLabel}`);
+                } else if (subdivision) {
+                    subtitleParts.push(subdivision);
+                }
+                if (entry.state_fips) {
+                    subtitleParts.push(`State FIPS ${entry.state_fips}`);
+                }
+                if (!entry.is_statewide && !entry.is_nationwide && entry.county_fips) {
+                    subtitleParts.push(`County FIPS ${entry.county_fips}`);
+                }
+                const subtitle = subtitleParts.length ? subtitleParts.join(' · ') : '';
+                let scopeLabel = '';
+                if (entry.is_nationwide) {
+                    scopeLabel = 'Nationwide';
+                } else if (entry.is_statewide) {
+                    scopeLabel = 'Statewide';
+                } else if (subdivision) {
+                    scopeLabel = subdivision;
+                } else if (entry.state) {
+                    scopeLabel = `${entry.state} county`;
+                } else {
+                    scopeLabel = 'County';
+                }
+                return `
+                    <tr>
+                        <td><code>${escapeHtml(entry.code)}</code></td>
+                        <td>
+                            <div class="fw-semibold">${escapeHtml(entry.label || entry.code)}</div>
+                            <div class="small text-muted">${escapeHtml(subtitle || '—')}</div>
+                        </td>
+                        <td>${escapeHtml(scopeLabel)}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            const fipsTable = fipsRows
+                ? `<div class="table-responsive">
+                        <table class="table table-sm align-middle mb-2">
+                            <thead class="table-light">
+                                <tr>
+                                    <th scope="col">SAME</th>
+                                    <th scope="col">Area</th>
+                                    <th scope="col">Scope</th>
+                                </tr>
+                            </thead>
+                            <tbody>${fipsRows}</tbody>
+                        </table>
+                    </div>`
+                : '<p class="text-muted small mb-0">No SAME / FIPS codes saved.</p>';
+
+            const missingFips = Array.isArray(data.fips?.missing) ? data.fips.missing : [];
+            const missingFipsNote = missingFips.length
+                ? `<p class="text-warning small mb-0">Unknown SAME codes: ${missingFips.map((code) => `<code>${escapeHtml(code)}</code>`).join(', ')}.</p>`
+                : '';
+
+            const totalFips = typeof data.fips?.total_catalog === 'number' ? data.fips.total_catalog : null;
+            const fipsSummaryLabel = totalFips !== null
+                ? `Matching ${fipsEntries.length} of ${totalFips} authorised SAME entries.`
+                : `Matching ${fipsEntries.length} saved SAME code${fipsEntries.length === 1 ? '' : 's'}.`;
+
+            const areaTerms = Array.isArray(data.area_terms) ? data.area_terms : [];
+            const areaTermsContent = areaTerms.length
+                ? `<div class="d-flex flex-wrap gap-2">${areaTerms.map((term) => `<span class="badge bg-secondary-subtle text-secondary-emphasis">${escapeHtml(term)}</span>`).join('')}</div>`
+                : '<p class="text-muted small mb-0">No area match keywords configured.</p>';
+
+            container.innerHTML = `
+                ${locationIntro}
+                ${referenceSection}
+                <div class="mb-4">
+                    <h6 class="fw-bold mb-1">NOAA Zone Codes</h6>
+                    <p class="small text-muted mb-2">Used to match CAP products that target public forecast zones (UGC codes).</p>
+                    <p class="small text-muted mb-2">${escapeHtml(zoneSummaryLabel)}</p>
+                    ${zoneTable}
+                    ${missingZoneNote}
+                </div>
+                <div class="mb-4">
+                    <h6 class="fw-bold mb-1">SAME / FIPS Codes</h6>
+                    <p class="small text-muted mb-2">Used for SAME header generation and to authorise CAP alerts covering the configured counties.</p>
+                    <p class="small text-muted mb-2">${escapeHtml(fipsSummaryLabel)}</p>
+                    ${fipsTable}
+                    ${missingFipsNote}
+                </div>
+                <div>
+                    <h6 class="fw-bold mb-1">Area Match Keywords</h6>
+                    <p class="small text-muted mb-2">CAP alerts mentioning these names in the area description are considered relevant even without matching codes.</p>
+                    ${areaTermsContent}
+                </div>
+            `;
+        }
+
+        async function loadLocationReference(forceRefresh = false) {
+            const container = document.getElementById('locationReferenceContent');
+            if (!container) {
+                return;
+            }
+            if (forceRefresh || !locationReferenceCache) {
+                container.innerHTML = '<p class="text-muted small mb-0">Loading reference data…</p>';
+            }
+            updateLocationReferenceStatus(forceRefresh ? 'Refreshing reference data…' : 'Loading reference data…', 'info');
+            try {
+                const response = await fetch('/admin/location_reference');
+                const result = await response.json();
+                if (response.ok) {
+                    renderLocationReference(result);
+                    const timestamp = new Date();
+                    updateLocationReferenceStatus(`Last refreshed at ${timestamp.toLocaleTimeString()}. Saved values are shown.`, 'muted');
+                } else {
+                    const errorMessage = result?.error || 'Unable to load reference data.';
+                    if (!locationReferenceCache) {
+                        container.innerHTML = `<p class="text-danger small mb-0">${escapeHtml(errorMessage)}</p>`;
+                    }
+                    updateLocationReferenceStatus(errorMessage, 'danger');
+                }
+            } catch (error) {
+                console.error('Failed to load location reference data', error);
+                if (!locationReferenceCache) {
+                    container.innerHTML = '<p class="text-danger small mb-0">Failed to load reference data.</p>';
+                }
+                updateLocationReferenceStatus(`Failed to load reference data: ${error.message}`, 'danger');
+            }
+        }
+
         function populateLocationSettingsForm(settings) {
             if (!settings) {
                 return;
@@ -3715,6 +4041,11 @@
                         populateLocationSettingsForm(result.settings);
                     }
                     updateLocationSettingsStatus('Configuration synced.', 'muted');
+                    if (force) {
+                        loadLocationReference(true);
+                    } else if (!locationReferenceCache) {
+                        loadLocationReference(false);
+                    }
                 } else if (result.error) {
                     updateLocationSettingsStatus(result.error, 'danger');
                 }
@@ -3743,6 +4074,7 @@
                         populateLocationSettingsForm(result.settings);
                         window.APP_LOCATION = { ...result.settings };
                     }
+                    loadLocationReference(true);
                     updateLocationSettingsStatus('Saved at ' + new Date().toLocaleTimeString(), 'success');
                 } else {
                     const errorMessage = result.error || 'Failed to update settings.';
@@ -3765,6 +4097,14 @@
             initializeLocationFipsControls();
 
             form.addEventListener('submit', saveLocationSettings);
+
+            const refreshReferenceButton = document.getElementById('refreshLocationReference');
+            if (refreshReferenceButton) {
+                refreshReferenceButton.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    loadLocationReference(true);
+                });
+            }
 
             const resetButton = document.getElementById('resetLocationSettings');
             if (resetButton) {

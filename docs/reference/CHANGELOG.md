@@ -6,6 +6,9 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 ### Added
+- Added an admin location reference view that summarises the saved NOAA zone catalog
+  entries, SAME/FIPS codes, and keyword matches so operators can understand how
+  the configuration drives alert filtering.
 - Added a public forecast zone catalog loader that ingests the bundled
   `assets/z_05mr24.dbf` file into a dedicated reference table, exposes a
   `tools/sync_zone_catalog.py` helper, and validates admin-supplied zone codes
@@ -149,6 +152,18 @@ tracks releases under the 2.x series.
   file label so frames no longer begin with an invalid "AAA" sequence that the manual forbids.
 - Prevented the LED fallback initializer from raising a `NameError` when the optional
   controller module is missing so deployments without sign hardware continue to boot.
+
+## [2.3.7] - 2025-11-02
+### Changed
+- Linked the admin location reference summary and API responses to the bundled
+  SAME location code directory (`assets/pd01005007curr.pdf`) and NOAA Public
+  Forecast Zones catalog so operators see the authoritative data sources.
+
+## [2.3.6] - 2025-11-02
+### Added
+- Added an admin location reference API and dashboard card that surfaces the saved
+  NOAA zones, SAME/FIPS counties, and keyword filters so operators can review
+  their configuration and confirm catalog coverage.
 
 ## [2.3.5] - 2025-11-01
 ### Fixed

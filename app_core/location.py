@@ -8,6 +8,11 @@ from typing import Any, Dict, List, Optional, Tuple
 import pytz
 from flask import current_app, has_app_context
 
+from app_utils.fips_codes import (
+    NATIONWIDE_SAME_CODE,
+    STATE_ABBR_NAMES,
+    get_same_lookup,
+)
 from app_utils.location_settings import (
     DEFAULT_LOCATION_SETTINGS,
     ensure_list,
@@ -235,7 +240,134 @@ def update_location_settings(data: Dict[str, Any]) -> Dict[str, Any]:
         return _prepare_settings_dict(_location_settings_cache)
 
 
+def describe_location_reference(
+    settings: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Return a structured summary of the stored zone and SAME/FIPS metadata."""
+
+    snapshot = dict(settings or get_location_settings())
+
+    zone_lookup = get_zone_lookup() or {}
+    known_zones: List[Dict[str, Any]] = []
+    missing_zones: List[str] = []
+    for raw_code in snapshot.get("zone_codes", []) or []:
+        code = (str(raw_code) or "").strip().upper()
+        if not code:
+            continue
+        info = zone_lookup.get(code)
+        if not info:
+            missing_zones.append(code)
+            continue
+        known_zones.append(
+            {
+                "code": info.code,
+                "state_code": info.state_code,
+                "zone_number": info.zone_number,
+                "zone_type": info.zone_type,
+                "name": info.name,
+                "short_name": info.short_name,
+                "label": info.formatted_label(),
+                "cwa": info.cwa,
+                "time_zone": info.time_zone,
+                "fe_area": info.fe_area,
+                "latitude": info.latitude,
+                "longitude": info.longitude,
+            }
+        )
+
+    same_lookup = get_same_lookup()
+    known_fips: List[Dict[str, Any]] = []
+    missing_fips: List[str] = []
+    for raw_code in snapshot.get("fips_codes", []) or []:
+        code = (str(raw_code) or "").strip()
+        if not code:
+            continue
+        label = same_lookup.get(code)
+        if not label:
+            missing_fips.append(code)
+            continue
+
+        if "," in label:
+            county_name, state_abbr = [
+                part.strip() for part in label.rsplit(",", maxsplit=1)
+            ]
+        elif code == NATIONWIDE_SAME_CODE:
+            county_name = label
+            state_abbr = "US"
+        else:
+            county_name = label
+            state_abbr = ""
+
+        state_name = STATE_ABBR_NAMES.get(state_abbr, state_abbr)
+        state_fips = code[1:3] if len(code) == 6 else ""
+        county_fips = code[3:6] if len(code) == 6 else ""
+        known_fips.append(
+            {
+                "code": code,
+                "label": label,
+                "county": county_name,
+                "state": state_abbr,
+                "state_name": state_name,
+                "state_fips": state_fips,
+                "county_fips": county_fips,
+                "same_subdivision": code[0] if code else "",
+                "is_statewide": code.endswith("000") and code != NATIONWIDE_SAME_CODE,
+                "is_nationwide": code == NATIONWIDE_SAME_CODE,
+            }
+        )
+
+    area_terms: List[str] = []
+    for term in snapshot.get("area_terms", []) or []:
+        if not isinstance(term, str):
+            continue
+        stripped = term.strip()
+        if stripped:
+            area_terms.append(stripped)
+
+    sources = [
+        {
+            "label": "SAME Location Codes Directory",
+            "description": (
+                "Authoritative FEMA/NOAA listing aligning SAME location codes with county "
+                "and subdivision FIPS identifiers."
+            ),
+            "path": "assets/pd01005007curr.pdf",
+            "source_type": "local_asset",
+        },
+        {
+            "label": "NOAA Public Forecast Zones",
+            "description": (
+                "Official NOAA catalog of public forecast zone boundaries that informs the "
+                "zone metadata bundled with EAS Station."
+            ),
+            "url": "https://www.weather.gov/gis/PublicZones",
+            "source_type": "external",
+        },
+    ]
+
+    return {
+        "location": {
+            "county_name": snapshot.get("county_name", ""),
+            "state_code": snapshot.get("state_code", ""),
+            "timezone": snapshot.get("timezone", ""),
+        },
+        "zones": {
+            "known": known_zones,
+            "missing": missing_zones,
+            "total_catalog": len(zone_lookup),
+        },
+        "fips": {
+            "known": known_fips,
+            "missing": missing_fips,
+            "total_catalog": len(same_lookup),
+        },
+        "area_terms": area_terms,
+        "sources": sources,
+    }
+
+
 __all__ = [
     "get_location_settings",
     "update_location_settings",
+    "describe_location_reference",
 ]
