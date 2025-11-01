@@ -368,6 +368,153 @@
                 </div>
             </div>
 
+            <!-- Open-Source Dependencies -->
+            <div class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4">
+                    <h2 class="h4 mb-3">
+                        <i class="fas fa-heart text-danger me-2"></i>Open-Source Libraries
+                    </h2>
+                    <p class="mb-4">Every core feature of EAS Station relies on open-source projects. We gratefully acknowledge the maintainers behind the libraries that power the platform.</p>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Library</th>
+                                    <th scope="col">Maintainers</th>
+                                    <th scope="col">License</th>
+                                    <th scope="col">Purpose</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <th scope="row">Flask 3.0.3</th>
+                                    <td>Pallets Projects (Armin Ronacher &amp; team)</td>
+                                    <td>BSD-3-Clause</td>
+                                    <td>Primary web framework for the operator dashboard and REST API.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Flask-SQLAlchemy 3.1.1</th>
+                                    <td>Pallets Projects</td>
+                                    <td>BSD-3-Clause</td>
+                                    <td>Bridges SQLAlchemy sessions into the Flask application context.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Werkzeug 3.0.6</th>
+                                    <td>Pallets Projects</td>
+                                    <td>BSD-3-Clause</td>
+                                    <td>WSGI utilities that handle request routing, responses, and security helpers.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">SQLAlchemy 2.0.44</th>
+                                    <td>SQLAlchemy community (led by Mike Bayer)</td>
+                                    <td>MIT</td>
+                                    <td>ORM and query toolkit driving database models, relationships, and migrations.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">psycopg2-binary 2.9.10</th>
+                                    <td>Psycopg Project</td>
+                                    <td>LGPL-3.0 w/ linking exception</td>
+                                    <td>PostgreSQL/PostGIS driver for database connectivity.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">GeoAlchemy2 0.15.2</th>
+                                    <td>GeoAlchemy maintainers</td>
+                                    <td>MIT</td>
+                                    <td>Spatial column types and functions for PostGIS-backed geometry queries.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Alembic 1.14.0</th>
+                                    <td>Mike Bayer &amp; SQLAlchemy contributors</td>
+                                    <td>MIT</td>
+                                    <td>Migration engine that versions schema changes alongside application updates.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">requests 2.32.3</th>
+                                    <td>Kenneth Reitz &amp; contributors</td>
+                                    <td>Apache-2.0</td>
+                                    <td>Fetches NOAA, IPAWS, and auxiliary CAP feeds over HTTP(S).</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">pytz 2024.2</th>
+                                    <td>Stuart Bishop</td>
+                                    <td>MIT</td>
+                                    <td>Provides authoritative IANA timezone data for alert scheduling.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">psutil 6.1.1</th>
+                                    <td>Giampaolo Rodolà &amp; contributors</td>
+                                    <td>BSD-3-Clause</td>
+                                    <td>Collects CPU, memory, disk, and network metrics for the system health view.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">python-dotenv 1.0.1</th>
+                                    <td>Saurabh Kumar &amp; community</td>
+                                    <td>BSD-3-Clause</td>
+                                    <td>Loads configuration from the <code>.env</code> file for the web app and CLI tools.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">gunicorn 23.0.0</th>
+                                    <td>Benoît Chesneau &amp; maintainers</td>
+                                    <td>MIT</td>
+                                    <td>Production WSGI HTTP server that runs the Flask application.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">pyttsx3 2.90</th>
+                                    <td>Natesh M Bhat &amp; contributors</td>
+                                    <td>BSD-3-Clause</td>
+                                    <td>Offline text-to-speech engine for narrated alert audio.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">SciPy 1.11.4</th>
+                                    <td>SciPy community</td>
+                                    <td>BSD-3-Clause</td>
+                                    <td>Signal processing utilities used for audio resampling when ffmpeg is unavailable.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Optional Library</th>
+                                    <th scope="col">Maintainers</th>
+                                    <th scope="col">License</th>
+                                    <th scope="col">Optional Feature</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <th scope="row">json5 0.9.14</th>
+                                    <td>JSON5 community</td>
+                                    <td>MIT</td>
+                                    <td>Parsing JSON5 configuration files when environments require relaxed JSON syntax.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">python-dateutil 2.8.2</th>
+                                    <td>python-dateutil maintainers</td>
+                                    <td>BSD-3-Clause</td>
+                                    <td>Enhanced datetime parsing for integrations that emit ISO8601 variations.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">azure-cognitiveservices-speech 1.38.0</th>
+                                    <td>Microsoft Azure Cognitive Services</td>
+                                    <td>MIT</td>
+                                    <td>Neural cloud narration provider for optional Azure-based voiceovers.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">flask-debugtoolbar 0.13.1</th>
+                                    <td>Flask DebugToolbar maintainers</td>
+                                    <td>BSD-3-Clause</td>
+                                    <td>Development-only diagnostics overlay for local debugging.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="small text-muted mb-0">All listed packages are published under OSI-approved licenses. Please include appropriate attribution when redistributing EAS Station binaries or container images.</p>
+                </div>
+            </div>
+
             <!-- Key Features -->
             <div class="card shadow-sm mb-4 border-0">
                 <div class="card-body p-4">

@@ -164,6 +164,7 @@ EAS Station is not just an alert monitor—it's a **complete emergency broadcast
 - [⚖️ Terms of Use](TERMS_OF_USE.md) – Development-only license terms, acceptable use, and critical safety disclaimers.
 - [🛡️ Privacy Policy](PRIVACY_POLICY.md) – Guidance for handling configuration data, test records, and optional integrations.
 - [🗂️ Master Implementation Roadmap](docs/master_todo.md) – Drop-in replacement requirements with implementation plans that map the path to hardware parity and production readiness.
+- [📦 Open-Source Dependency Attribution](docs/dependency_attribution.md) – Maintainer, license, and usage overview for every Python library bundled with the project.
 - In-app versions of both guides are reachable from the navigation bar via the new <strong>About</strong> and <strong>Help</strong> pages for quick operator reference.
 
 ---

@@ -47,6 +47,8 @@ tracks releases under the 2.x series.
 - Distributed a `docker-compose.embedded-db.yml` overlay so application services
   can either rely on the bundled `alerts-db` PostGIS container or connect to an
   existing deployment without editing the primary compose file.
+- Documented open-source dependency attributions in the docs and surfaced
+  maintainers, licenses, and usage details on the in-app About page.
 ### Changed
 - Documented the release governance workflow across the README, ABOUT page, Terms of Use, master roadmap, and site footer so version numbering, changelog discipline, and regression verification remain mandatory for every contribution.
 - Suppressed automatic EAS generation for Special Weather Statements and Dense Fog Advisories to align with standard activation practices.
