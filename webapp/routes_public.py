@@ -298,7 +298,7 @@ def register(app: Flask, logger) -> None:
         except Exception as exc:  # pragma: no cover - fallback content
             route_logger.error("Error rendering about page: %s", exc)
             return (
-                "<h1>About</h1><p>Project documentation is available in ABOUT.md on the server.</p>"
+                "<h1>About</h1><p>Project documentation is available in docs/reference/ABOUT.md on the server.</p>"
             )
 
     @app.route("/help")
@@ -308,7 +308,7 @@ def register(app: Flask, logger) -> None:
         except Exception as exc:  # pragma: no cover - fallback content
             route_logger.error("Error rendering help page: %s", exc)
             return (
-                "<h1>Help</h1><p>Refer to HELP.md in the repository for the full operations guide.</p>"
+                "<h1>Help</h1><p>Refer to docs/guides/HELP.md in the repository for the full operations guide.</p>"
             )
 
     @app.route("/terms")
@@ -318,7 +318,7 @@ def register(app: Flask, logger) -> None:
         except Exception as exc:  # pragma: no cover - fallback content
             route_logger.error("Error rendering terms page: %s", exc)
             return (
-                "<h1>Terms of Use</h1><p>Refer to TERMS_OF_USE.md in the repository for the full terms.</p>"
+                "<h1>Terms of Use</h1><p>Refer to docs/policies/TERMS_OF_USE.md in the repository for the full terms.</p>"
             )
 
     @app.route("/privacy")
@@ -328,7 +328,7 @@ def register(app: Flask, logger) -> None:
         except Exception as exc:  # pragma: no cover - fallback content
             route_logger.error("Error rendering privacy page: %s", exc)
             return (
-                "<h1>Privacy Policy</h1><p>Refer to PRIVACY_POLICY.md in the repository for the full policy.</p>"
+                "<h1>Privacy Policy</h1><p>Refer to docs/policies/PRIVACY_POLICY.md in the repository for the full policy.</p>"
             )
 
     @app.route("/system_health")

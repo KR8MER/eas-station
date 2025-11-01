@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION_FILE = ROOT / "VERSION"
-CHANGELOG_FILE = ROOT / "CHANGELOG.md"
+CHANGELOG_FILE = ROOT / "docs" / "reference" / "CHANGELOG.md"
 ENV_TEMPLATE = ROOT / ".env.example"
 
 

@@ -92,8 +92,8 @@ This PR addresses critical security vulnerabilities, performance issues, and con
 
 ## 📚 Documentation Added
 
-- `ENV_MIGRATION_GUIDE.md` - Step-by-step migration instructions
-- `DATABASE_CONSISTENCY_FIXES.md` - Detailed analysis of database connection fixes
+- `docs/guides/ENV_MIGRATION_GUIDE.md` - Step-by-step migration instructions
+- `docs/guides/DATABASE_CONSISTENCY_FIXES.md` - Detailed analysis of database connection fixes
 - Updated `.env.example` with comprehensive inline documentation
 
 ## ✅ Testing
