@@ -50,6 +50,9 @@ tracks releases under the 2.x series.
 - Documented open-source dependency attributions in the docs and surfaced
   maintainers, licenses, and usage details on the in-app About page.
 ### Changed
+- Documented why the platform remains on Python 3.12 instead of the new Python 3.13 release across the README and About surfaces,
+  highlighting missing Linux/ARM64 wheels for SciPy and pyttsx3 and the security patch workflow for the current runtime.
+- Documented Debian 14 (Trixie) 64-bit as the validated Raspberry Pi host OS while clarifying that the container image continues to ship on Debian Bookworm via the `python:3.12-slim-bookworm` base.
 - Documented the release governance workflow across the README, ABOUT page, Terms of Use, master roadmap, and site footer so version numbering, changelog discipline, and regression verification remain mandatory for every contribution.
 - Suppressed automatic EAS generation for Special Weather Statements and Dense Fog Advisories to align with standard activation practices.
 - Clarified in the README and dependency notes that PostgreSQL with PostGIS must run in a dedicated container separate from the application services.

@@ -952,7 +952,14 @@ curl http://localhost:5000/health
 ### Infrastructure
 - **Docker Engine 24+** - Containerization platform
 - **Docker Compose V2** - Multi-container orchestration
-- **Debian Bookworm slim** - Base image provided by `python:3.12-slim-bookworm`
+- **Debian 14 (Trixie) host** - Validated on Raspberry Pi 5 builds running Debian 14.2.0-19 with 64-bit kernel/userspace.
+- **Debian Bookworm slim base image** - Container runtime provided by `python:3.12-slim-bookworm` for reproducible multi-arch builds.
+
+### Python Release Strategy
+
+- **Latest CPython release:** Python 3.13.0 is the newest upstream stable version.
+- **Why we remain on 3.12 for now:** Critical runtime dependencies such as `scipy==1.14.1` and `pyttsx3==2.90` (see [`requirements.txt`](requirements.txt)) still rely on pre-built wheels for Linux/ARM64. Those wheels have not been published for Python 3.13, so attempting to upgrade forces multi-hour source builds that require large toolchains (Fortran, Rust, and voice synthesis headers) and routinely exhaust Raspberry Pi 5 systems.
+- **Security posture:** The Docker base image tracks Python 3.12 patch releases, and dependency pins are refreshed as security advisories are disclosed. This keeps the runtime on the fully-supported CPython branch without sacrificing reproducible builds on Raspberry Pi hardware.
 
 ---
 

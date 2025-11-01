@@ -98,6 +98,7 @@
                     <i class="fas fa-microchip text-danger me-2"></i>Reference Raspberry Pi Hardware Stack
                 </h2>
                 <p class="mb-3">The roadmap targets a reproducible build assembled entirely from commodity parts so integrators can swap in software for the rack-mount black boxes sold today:</p>
+                <p class="mb-3 text-muted"><i class="fas fa-circle-check me-2"></i>Validated on Debian&nbsp;14 (Trixie) 64-bit images—specifically 14.2.0-19—while the container image continues to ship on Debian Bookworm via the multi-arch <code>python:3.12-slim-bookworm</code> base.</p>
                 <div class="row g-3">
                     <div class="col-md-6">
                         <div class="d-flex align-items-start">
@@ -292,6 +293,23 @@
                         <i class="fas fa-code text-primary me-2"></i>Technology Stack
                     </h2>
                     <p class="mb-4">Built on proven, production-ready technologies:</p>
+
+                    <div class="alert alert-info border-start border-3 border-info shadow-sm">
+                        <div class="d-flex align-items-start">
+                            <i class="fas fa-python fa-lg text-info me-3 mt-1"></i>
+                            <div>
+                                <h3 class="h6 fw-bold mb-1 text-info">Python release cadence</h3>
+                                <p class="mb-0 small text-muted">
+                                    Python <strong>3.13.0</strong> is the latest upstream release, but EAS Station remains on
+                                    <strong>Python 3.12</strong> because critical dependencies such as <code>scipy==1.14.1</code>
+                                    and <code>pyttsx3==2.90</code> do not yet ship Linux/ARM64 wheels for CPython&nbsp;3.13. Upgrading
+                                    today would require compiling large Fortran and voice-synthesis toolchains on Raspberry Pi&nbsp;5
+                                    hardware, which routinely fails or takes hours. We instead track every Python&nbsp;3.12 patch
+                                    release inside the Docker base image so security fixes land without sacrificing reproducible builds.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
 
                     <div class="row g-4">
                         <div class="col-md-6">
