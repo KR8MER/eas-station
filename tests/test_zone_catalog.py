@@ -224,9 +224,9 @@ def test_zone_code_normalisation_and_lookup(app_context) -> None:
     assert invalid == ["BADCODE"]
 
     known, unknown = split_catalog_members(["ALZ019", "OHC137"])
-    assert known == ["ALZ019"]
-    assert unknown == ["OHC137"]
+    assert known == ["ALZ019", "OHC137"]
+    assert unknown == []
 
     formatted = format_zone_code_list(["ALZ019", "OHC137"])
     assert formatted[0].startswith("ALZ019 – Calhoun")
-    assert formatted[1] == "OHC137"
+    assert formatted[1].startswith("OHC137 – Putnam County")

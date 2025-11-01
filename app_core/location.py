@@ -258,22 +258,37 @@ def describe_location_reference(
         if not info:
             missing_zones.append(code)
             continue
-        known_zones.append(
-            {
-                "code": info.code,
-                "state_code": info.state_code,
-                "zone_number": info.zone_number,
-                "zone_type": info.zone_type,
-                "name": info.name,
-                "short_name": info.short_name,
-                "label": info.formatted_label(),
-                "cwa": info.cwa,
-                "time_zone": info.time_zone,
-                "fe_area": info.fe_area,
-                "latitude": info.latitude,
-                "longitude": info.longitude,
-            }
-        )
+        zone_details = {
+            "code": info.code,
+            "state_code": info.state_code,
+            "zone_number": info.zone_number,
+            "zone_type": info.zone_type,
+            "name": info.name,
+            "short_name": info.short_name,
+            "label": info.formatted_label(),
+            "cwa": info.cwa,
+            "time_zone": info.time_zone,
+            "fe_area": info.fe_area,
+            "latitude": info.latitude,
+            "longitude": info.longitude,
+        }
+
+        if info.zone_type == "C":
+            same_code = info.same_code or ""
+            fips_code = info.fips_code or (same_code[1:] if len(same_code) == 6 else "")
+            state_fips = info.state_fips or (same_code[1:3] if len(same_code) == 6 else "")
+            county_fips = info.county_fips or (same_code[-3:] if len(same_code) == 6 else "")
+
+            zone_details.update(
+                {
+                    "same_code": same_code,
+                    "fips_code": fips_code,
+                    "state_fips": state_fips,
+                    "county_fips": county_fips,
+                }
+            )
+
+        known_zones.append(zone_details)
 
     same_lookup = get_same_lookup()
     known_fips: List[Dict[str, Any]] = []
