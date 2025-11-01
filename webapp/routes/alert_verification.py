@@ -76,6 +76,7 @@ def register(app: Flask, logger) -> None:
         with tempfile.NamedTemporaryFile(suffix=extension) as temp_file:
             upload.save(temp_file.name)
             try:
+                # Auto-detect sample rate from the WAV file header
                 decode_result = decode_same_audio(temp_file.name)
             except AudioDecodeError as exc:
                 errors.append(str(exc))

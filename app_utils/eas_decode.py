@@ -1239,11 +1239,24 @@ def _create_segment(
     )
 
 
-def decode_same_audio(path: str, *, sample_rate: int = 16000) -> SAMEAudioDecodeResult:
-    """Decode SAME headers from a WAV or MP3 file located at ``path``."""
+def decode_same_audio(path: str, *, sample_rate: Optional[int] = None) -> SAMEAudioDecodeResult:
+    """Decode SAME headers from a WAV or MP3 file located at ``path``.
+
+    If sample_rate is not provided, it will be auto-detected from the audio file.
+    This is the recommended approach as it prevents sample rate mismatch issues.
+    """
 
     if not os.path.exists(path):
         raise AudioDecodeError(f"Audio file does not exist: {path}")
+
+    # Auto-detect sample rate from WAV file if not provided
+    if sample_rate is None:
+        try:
+            with wave.open(path, "rb") as handle:
+                sample_rate = handle.getframerate()
+        except Exception:
+            # If we can't read it as a WAV, fall back to default
+            sample_rate = 16000
 
     samples, pcm_bytes = _read_audio_samples(path, sample_rate)
     sample_count = len(samples)
