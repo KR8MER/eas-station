@@ -755,12 +755,17 @@ def _find_same_bursts(bits: List[int]) -> List[int]:
 
     burst_positions: List[int] = []
 
-    # Define character patterns (LSB first, 7 bits, framed)
-    # 'Z' = 0x5A = 0101101 (7 bits) -> LSB first = 0101101 -> framed: 0 + 0101101 + 0 + 1
+    # Define character patterns (LSB first, 7 bits, framed with even parity)
+    # 'Z' = 0x5A = 01011010 -> LSB 7 bits: 0,1,0,1,1,0,1 (4 ones) -> parity: 0 (even)
+    # Frame: [start=0][7 data bits][parity][stop=1]
     Z_pattern = [0, 0, 1, 0, 1, 1, 0, 1, 0, 1]
-    C_pattern = [0, 1, 1, 0, 0, 0, 1, 1, 0, 1]  # 'C' = 0x43 = 1000011 -> LSB = 1100001
+    # 'C' = 0x43 = 01000011 -> LSB 7 bits: 1,1,0,0,0,0,1 (3 ones) -> parity: 1 (even)
+    C_pattern = [0, 1, 1, 0, 0, 0, 1, 1, 1, 1]  # Fixed: parity bit was 0, should be 1
 
-    i = 0
+    # Skip the preamble (16 bytes of 0xAB * 10 bits per byte = 160 bits)
+    # The preamble can cause false matches, so start searching after it
+    preamble_bits = 160
+    i = min(preamble_bits, len(bits) // 4)  # Start after preamble or 25% into bits
     while i < len(bits) - 40:  # Need at least 4 * 10 bits for ZCZC
         # Check for ZCZC pattern
         z1_matches = sum(1 for j in range(10) if i+j < len(bits) and bits[i+j] == Z_pattern[j])
@@ -1074,14 +1079,52 @@ def _score_candidate(metadata: Dict[str, object]) -> float:
     frame_count = int(metadata.get("frame_count") or 0)
     frame_errors = int(metadata.get("frame_errors") or 0)
 
-    score = float(frame_count - frame_errors)
-    score -= float(frame_errors * 2)
+    # Validate headers for corruption (control characters)
+    valid_headers = []
+    for header in headers:
+        is_valid = True
+        for char in str(header):
+            code = ord(char)
+            # Reject headers with control characters (except CR/LF)
+            if code < 32 and code not in (10, 13):
+                is_valid = False
+                break
+        if is_valid:
+            valid_headers.append(header)
 
-    if headers:
-        score += 500.0 * len(headers)
-        uppercase_headers = [header.upper() for header in headers]
-        score += 200.0 * sum(1 for header in uppercase_headers if header.startswith("ZCZC"))
-        score += 100.0 * sum(1 for header in uppercase_headers if header.startswith("NNNN"))
+    # Count valid ZCZC headers
+    uppercase_headers = [header.upper() for header in valid_headers]
+    zczc_count = sum(1 for header in uppercase_headers if header.startswith("ZCZC"))
+    nnnn_count = sum(1 for header in uppercase_headers if header.startswith("NNNN"))
+
+    # Start score based on frame quality
+    # If we have valid ZCZC headers, frame errors matter less (bit rate sync issues)
+    if zczc_count >= 1:
+        # Reduce frame error penalty when we have valid headers
+        score = float(frame_count - frame_errors)
+        score -= float(frame_errors * 0.5)  # Much lower penalty
+    else:
+        # Full penalty when no valid headers
+        score = float(frame_count - frame_errors)
+        score -= float(frame_errors * 2)
+
+    # Heavily penalize corrupted headers
+    corrupted_count = len(headers) - len(valid_headers)
+    if corrupted_count > 0:
+        score -= 10000.0 * corrupted_count
+
+    # Reward valid headers
+    if valid_headers:
+        score += 500.0 * len(valid_headers)
+        score += 200.0 * zczc_count
+        score += 100.0 * nnnn_count
+
+        # Large bonus for having 3 ZCZC headers (standard SAME format)
+        if zczc_count == 3:
+            score += 5000.0
+        # Bonus for having at least 1 valid ZCZC header
+        elif zczc_count >= 1:
+            score += 1000.0
 
     if isinstance(text, str):
         score += 50.0 * text.upper().count("ZCZC")
