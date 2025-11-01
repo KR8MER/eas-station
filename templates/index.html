@@ -10,141 +10,309 @@
     #map {
         height: 600px;
         width: 100%;
-        border-radius: 8px;
+        border-radius: var(--radius-md);
         border: 1px solid var(--border-color);
-        box-shadow: 0 2px 10px var(--shadow-color);
+        box-shadow: 0 12px 30px rgba(32, 72, 133, 0.16);
+        overflow: hidden;
     }
 
-    .map-controls {
-        background: var(--bg-color);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 15px;
-        margin-bottom: 20px;
-        box-shadow: 0 2px 10px var(--shadow-color);
+    .page-shell {
+        padding-top: 1rem;
+        padding-bottom: 2.5rem;
     }
 
-    .status-panel {
-        background: var(--bg-color);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 15px;
-        margin-bottom: 20px;
-        box-shadow: 0 2px 10px var(--shadow-color);
-    }
-
-    .status-item {
+    .page-header {
+        background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+        border-radius: var(--radius-md);
+        color: #fff;
+        padding: var(--spacing-lg);
         display: flex;
+        align-items: flex-start;
         justify-content: space-between;
-        margin-bottom: 8px;
-        padding: 5px 0;
-        border-bottom: 1px solid var(--border-color);
+        flex-wrap: wrap;
+        gap: var(--spacing-md);
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 18px 40px rgba(32, 72, 133, 0.28);
     }
 
-    .status-item:last-child {
-        border-bottom: none;
+    .page-header::after {
+        content: "";
+        position: absolute;
+        inset: auto -40% -70% auto;
+        width: 360px;
+        height: 360px;
+        background: radial-gradient(circle at center, rgba(255, 255, 255, 0.25), transparent 70%);
+        transform: rotate(-12deg);
+        pointer-events: none;
     }
 
-    .status-value {
+    .page-header .header-content {
+        max-width: 620px;
+        position: relative;
+        z-index: 1;
+    }
+
+    .page-header .eyebrow {
+        font-size: 0.75rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        opacity: 0.7;
+        display: block;
+        margin-bottom: 0.35rem;
+    }
+
+    .page-header .page-title {
+        font-size: 1.9rem;
         font-weight: 600;
-        color: var(--primary-color);
+        margin-bottom: 0.35rem;
+        letter-spacing: 0.01em;
     }
 
-    .alert-summary {
-        background: var(--light-color);
-        border-radius: 5px;
-        padding: 15px;
-        margin-top: 15px;
+    .page-header .page-subtitle {
+        font-size: 1rem;
+        opacity: 0.82;
+        margin-bottom: 0;
     }
 
-    .layer-group {
-        margin-bottom: 15px;
+    .page-header-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        position: relative;
+        z-index: 1;
     }
 
-    .layer-group h6 {
-        color: var(--text-color);
-        margin-bottom: 10px;
+    .page-header-actions .btn {
+        border-radius: var(--radius-sm);
+        padding: 0.6rem 1.3rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
         font-weight: 600;
+        box-shadow: 0 14px 28px rgba(12, 20, 38, 0.22);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .page-header-actions .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 18px 36px rgba(12, 20, 38, 0.28);
+    }
+
+    .summary-metrics .metric-card {
+        background: var(--surface-color);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: var(--spacing-md);
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--spacing-sm);
+        box-shadow: 0 12px 26px var(--shadow-color);
+        min-height: 100%;
     }
 
-    .form-check {
-        margin-bottom: 8px;
+    .metric-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.35rem;
+        color: #fff;
+    }
+
+    .metric-icon.metric-alert { background: #e05263; }
+    .metric-icon.metric-boundary { background: #2eb08d; }
+    .metric-icon.metric-clock { background: #f6b968; color: #1c2233; }
+    .metric-icon.metric-map { background: #2f5aa1; }
+
+    .metric-label {
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--text-muted);
+        margin-bottom: 0.35rem;
+    }
+
+    .metric-value {
+        font-size: 1.6rem;
+        font-weight: 600;
+        color: var(--text-color);
+        line-height: 1.1;
+    }
+
+    .metric-value small {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: var(--text-muted);
+        display: block;
+        margin-top: 0.35rem;
+    }
+
+    .sticky-card {
+        position: sticky;
+        top: 96px;
+    }
+
+    .control-card .card-header,
+    .insight-card .card-header,
+    .quick-actions-card .card-header,
+    .legend-card .card-header {
+        border: none;
+        background: transparent;
+        padding-bottom: 0;
+    }
+
+    .control-card .card-title,
+    .insight-card .card-title,
+    .quick-actions-card .card-title,
+    .legend-card .card-title {
+        font-size: 1rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+    }
+
+    .card-subtitle {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+    }
+
+    .control-card .card-body {
+        display: flex;
+        flex-direction: column;
+        gap: 1.2rem;
+    }
+
+    .layer-section {
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-sm);
+        padding: 1rem;
+        background: var(--surface-color);
+        box-shadow: 0 6px 16px rgba(32, 72, 133, 0.12);
+    }
+
+    .layer-section:not(:last-child) {
+        margin-bottom: 0.5rem;
+    }
+
+    .layer-heading {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        font-weight: 600;
+        font-size: 0.95rem;
+        margin-bottom: 0.75rem;
+        color: var(--text-color);
     }
 
     .layer-options {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 0.6rem;
+    }
+
+    .layer-options .form-check {
+        margin-bottom: 0;
+        padding: 0.25rem 0;
+        display: flex;
+        align-items: center;
+    }
+
+    .layer-options .form-check-label {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        width: 100%;
+        font-weight: 500;
+    }
+
+    .layer-options .form-check-label .ms-auto {
+        margin-left: auto;
+        font-size: 0.85rem;
+        color: var(--text-muted);
     }
 
     .layer-swatch {
         display: inline-block;
         width: 14px;
         height: 14px;
-        border-radius: 3px;
+        border-radius: 4px;
         border: 1px solid var(--border-color);
-    }
-
-    .layer-options .form-check-label {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        width: 100%;
-    }
-
-    .layer-options .form-check-label .ms-auto {
-        margin-left: auto;
     }
 
     .layer-options .empty-placeholder {
         font-style: italic;
-        color: var(--secondary-color);
+        color: var(--text-muted);
         font-size: 0.9rem;
     }
 
     .form-check-input:checked {
         background-color: var(--primary-color);
         border-color: var(--primary-color);
+        box-shadow: none;
     }
 
-    .legend {
-        background: var(--bg-color);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 15px;
-        margin-top: 20px;
+    #date-filters {
+        background: var(--light-color);
+        border-radius: var(--radius-sm);
+        padding: 1rem;
+        border: 1px dashed var(--border-color);
+        margin-top: 0.75rem;
     }
 
-    .legend h6 {
-        color: var(--primary-color);
-        margin-bottom: 15px;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        gap: 8px;
+    #date-filters .form-label {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-muted);
     }
 
-    .legend-item {
-        display: flex;
-        align-items: center;
-        margin-bottom: 8px;
-    }
-
-    .legend-dynamic {
+    .insight-card .card-body {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 0.75rem;
     }
 
-    .legend-color {
-        width: 20px;
-        height: 20px;
-        border-radius: 4px;
-        margin-right: 10px;
+    .alert-summary-panel {
+        background: var(--light-color);
+        border-radius: var(--radius-sm);
+        padding: 1rem;
         border: 1px solid var(--border-color);
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+
+    .quick-actions-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 0.75rem;
+    }
+
+    .quick-actions-grid .btn {
+        justify-content: center;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.55rem 0.75rem;
+        border-radius: var(--radius-sm);
+    }
+
+    .quick-actions-grid .btn i {
+        font-size: 0.95rem;
+    }
+
+    .map-card .card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+
+    .map-card .card-body {
+        padding: 0;
+        overflow: hidden;
     }
 
     .loading-message {
@@ -152,19 +320,19 @@
         justify-content: center;
         align-items: center;
         height: 600px;
-        color: var(--secondary-color);
+        color: var(--text-muted);
         flex-direction: column;
         background: var(--light-color);
-        border-radius: 8px;
-        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        border: 1px dashed var(--border-color);
     }
 
     .spinner {
         border: 3px solid var(--border-color);
         border-top: 3px solid var(--primary-color);
         border-radius: 50%;
-        width: 40px;
-        height: 40px;
+        width: 44px;
+        height: 44px;
         animation: spin 1s linear infinite;
         margin-bottom: 15px;
     }
@@ -179,35 +347,57 @@
         color: var(--danger-color);
         padding: 40px;
         background: var(--light-color);
-        border-radius: 8px;
+        border-radius: var(--radius-md);
         border: 1px solid var(--danger-color);
+    }
+
+    .legend-card .card-body {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .legend {
+        margin: 0;
+    }
+
+    .legend h6 {
+        color: var(--text-color);
+        margin-bottom: 0.75rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+    }
+
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+    }
+
+    .legend-dynamic {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .legend-color {
+        width: 18px;
+        height: 18px;
+        border-radius: 4px;
+        border: 1px solid var(--border-color);
     }
 
     .historical-badge {
         background: linear-gradient(45deg, #6c757d, #495057);
-        color: white;
+        color: #fff;
         font-size: 0.7em;
         padding: 2px 6px;
         border-radius: 8px;
         margin-left: 5px;
-    }
-
-    #date-filters {
-        background: var(--light-color);
-        border-radius: 6px;
-        padding: 15px;
-        border: 1px solid var(--border-color);
-        margin-top: 10px;
-    }
-
-    .btn-outline-success:hover {
-        background-color: var(--success-color);
-        border-color: var(--success-color);
-    }
-
-    .btn-outline-primary:hover {
-        background-color: var(--primary-color);
-        border-color: var(--primary-color);
     }
 
     .alert-active {
@@ -252,200 +442,293 @@
     .severity-moderate { background: #ffc107; color: black; }
     .severity-minor { background: #17a2b8; color: white; }
     .severity-unknown { background: #6c757d; color: white; }
+
+    @media (max-width: 991px) {
+        .sticky-card {
+            position: static;
+        }
+
+        .page-header {
+            padding: var(--spacing-md);
+        }
+
+        .page-header .page-title {
+            font-size: 1.6rem;
+        }
+
+        .page-header-actions .btn {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+
+    @media (max-width: 576px) {
+        #map,
+        .loading-message {
+            height: 420px;
+        }
+
+        .summary-metrics .metric-card {
+            padding: var(--spacing-sm);
+        }
+
+        .metric-value {
+            font-size: 1.35rem;
+        }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-3">
-    <div class="row">
-        <!-- Control Panel -->
-        <div class="col-md-3">
-            <!-- Map Controls -->
-            <div class="status-panel">
-                <h5 class="mb-3">
-                    <i class="fas fa-layer-group"></i> Map Layers
-                </h5>
+<div class="container-fluid page-shell">
+    {% set county_name = location_settings.county_name if location_settings is defined and location_settings and location_settings.county_name else 'your area' %}
+    {% set state_code = location_settings.state_code if location_settings is defined and location_settings and location_settings.state_code else '' %}
+    <div class="page-header">
+        <div class="header-content">
+            <span class="eyebrow">Operations Dashboard</span>
+            <h1 class="page-title">Interactive Emergency Alert Map</h1>
+            <p class="page-subtitle">Stay aware of CAP activity across {{ county_name }}{% if state_code %}, {{ state_code }}{% endif %}.</p>
+        </div>
+        <div class="page-header-actions">
+            <button class="btn btn-light text-primary d-inline-flex align-items-center" onclick="refreshData()">
+                <i class="fas fa-sync-alt" id="refresh-icon"></i>
+                <span>Refresh Map</span>
+            </button>
+            <a href="/alerts" class="btn btn-outline-light d-inline-flex align-items-center">
+                <i class="fas fa-history"></i>
+                <span>View Alerts</span>
+            </a>
+        </div>
+    </div>
 
-                <!-- Alert Layers -->
-                <div class="layer-group">
-                    <h6><i class="fas fa-exclamation-triangle"></i> Alert Types</h6>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="show-active" checked>
-                        <label class="form-check-label" for="show-active">
-                            <i class="fas fa-circle text-danger"></i> Active Alerts
-                        </label>
+    <div class="row g-3 summary-metrics my-4">
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="metric-card">
+                <div class="metric-icon metric-alert">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div>
+                    <span class="metric-label">Active Alerts</span>
+                    <div class="metric-value" id="active-alert-count">Loading...</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="metric-card">
+                <div class="metric-icon metric-boundary">
+                    <i class="fas fa-draw-polygon"></i>
+                </div>
+                <div>
+                    <span class="metric-label">Boundary Layers</span>
+                    <div class="metric-value" id="boundary-count">Loading...</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="metric-card">
+                <div class="metric-icon metric-clock">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <div>
+                    <span class="metric-label">Last Update</span>
+                    <div class="metric-value" id="last-update">--</div>
+                    <small>Local time</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="metric-card">
+                <div class="metric-icon metric-map">
+                    <i class="fas fa-map"></i>
+                </div>
+                <div>
+                    <span class="metric-label">Map Status</span>
+                    <div class="metric-value" id="map-status">Initializing...</div>
+                    <small>Leaflet renderer</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 align-items-start">
+        <div class="col-lg-4 col-xxl-3 order-2 order-lg-1 d-flex flex-column gap-4">
+            <div class="card control-card sticky-card">
+                <div class="card-header">
+                    <h5 class="card-title mb-1 d-flex align-items-center gap-2">
+                        <i class="fas fa-layer-group text-primary"></i>
+                        <span>Map Layers</span>
+                    </h5>
+                    <p class="card-subtitle mb-0">Toggle overlays to compare coverage across your service area.</p>
+                </div>
+                <div class="card-body">
+                    <div class="layer-section">
+                        <div class="layer-heading"><i class="fas fa-exclamation-triangle text-danger"></i><span>Alert Types</span></div>
+                        <div class="layer-options">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="show-active" checked>
+                                <label class="form-check-label" for="show-active">
+                                    <i class="fas fa-circle text-danger"></i> Active Alerts
+                                </label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="show-expired">
+                                <label class="form-check-label" for="show-expired">
+                                    <i class="fas fa-circle text-secondary"></i> Historical Alerts
+                                </label>
+                            </div>
+                        </div>
+                        <div id="date-filters" style="display: none;">
+                            <div class="mb-2">
+                                <label for="start-date" class="form-label">From</label>
+                                <input type="date" class="form-control form-control-sm" id="start-date">
+                            </div>
+                            <div class="mb-2">
+                                <label for="end-date" class="form-label">To</label>
+                                <input type="date" class="form-control form-control-sm" id="end-date">
+                            </div>
+                            <button class="btn btn-primary btn-sm w-100" onclick="loadHistoricalAlerts()">
+                                <i class="fas fa-search"></i> Apply Filter
+                            </button>
+                        </div>
                     </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="show-expired">
-                        <label class="form-check-label" for="show-expired">
-                            <i class="fas fa-circle text-secondary"></i> Historical Alerts
-                        </label>
+
+                    <div class="layer-section">
+                        <div class="layer-heading"><i class="fas fa-map-marked-alt text-primary"></i><span>Geographic Boundaries</span></div>
+                        <div id="layer-group-geographic" class="layer-options"></div>
                     </div>
-                </div>
 
-                <!-- Boundary Layers -->
-                <div class="layer-group">
-                    <h6><i class="fas fa-map-marked-alt"></i> Geographic Boundaries</h6>
-                    <div id="layer-group-geographic" class="layer-options"></div>
-                </div>
-
-                <!-- Service Boundaries -->
-                <div class="layer-group">
-                    <h6><i class="fas fa-shield-alt"></i> Service Boundaries</h6>
-                    <div id="layer-group-service" class="layer-options"></div>
-                </div>
-
-                <!-- Infrastructure Boundaries -->
-                <div class="layer-group">
-                    <h6><i class="fas fa-tools"></i> Infrastructure</h6>
-                    <div id="layer-group-infrastructure" class="layer-options"></div>
-                </div>
-
-                <!-- Water Features -->
-                <div class="layer-group">
-                    <h6><i class="fas fa-water"></i> Water Features</h6>
-                    <div id="layer-group-hydrography" class="layer-options"></div>
-                </div>
-
-                <!-- Custom Layers -->
-                <div class="layer-group">
-                    <h6><i class="fas fa-layer-group"></i> Custom Layers</h6>
-                    <div id="layer-group-custom" class="layer-options"></div>
-                </div>
-
-                <!-- Date Filters for Historical -->
-                <div id="date-filters" style="display: none;">
-                    <h6><i class="fas fa-calendar-alt"></i> Date Range</h6>
-                    <div class="mb-2">
-                        <label for="start-date" class="form-label small">From:</label>
-                        <input type="date" class="form-control form-control-sm" id="start-date">
+                    <div class="layer-section">
+                        <div class="layer-heading"><i class="fas fa-shield-alt text-success"></i><span>Service Boundaries</span></div>
+                        <div id="layer-group-service" class="layer-options"></div>
                     </div>
-                    <div class="mb-2">
-                        <label for="end-date" class="form-label small">To:</label>
-                        <input type="date" class="form-control form-control-sm" id="end-date">
+
+                    <div class="layer-section">
+                        <div class="layer-heading"><i class="fas fa-tools text-secondary"></i><span>Infrastructure</span></div>
+                        <div id="layer-group-infrastructure" class="layer-options"></div>
                     </div>
-                    <button class="btn btn-primary btn-sm w-100" onclick="loadHistoricalAlerts()">
-                        <i class="fas fa-search"></i> Apply Filter
-                    </button>
+
+                    <div class="layer-section">
+                        <div class="layer-heading"><i class="fas fa-water text-info"></i><span>Water Features</span></div>
+                        <div id="layer-group-hydrography" class="layer-options"></div>
+                    </div>
+
+                    <div class="layer-section">
+                        <div class="layer-heading"><i class="fas fa-layer-group text-warning"></i><span>Custom Layers</span></div>
+                        <div id="layer-group-custom" class="layer-options"></div>
+                    </div>
                 </div>
             </div>
 
-            <!-- System Status -->
-            <div class="status-panel">
-                <h5 class="mb-3">
-                    <i class="fas fa-info-circle"></i> System Status
-                </h5>
-                <div class="status-item">
-                    <span><i class="fas fa-exclamation-triangle"></i> Active Alerts:</span>
-                    <span class="status-value" id="active-alert-count">Loading...</span>
+            <div class="card insight-card">
+                <div class="card-header">
+                    <h5 class="card-title mb-1 d-flex align-items-center gap-2">
+                        <i class="fas fa-chart-pie text-primary"></i>
+                        <span>Active Alert Breakdown</span>
+                    </h5>
+                    <p class="card-subtitle mb-0">Auto-updates when new alerts stream in.</p>
                 </div>
-                <div class="status-item">
-                    <span><i class="fas fa-map-marked"></i> Boundaries:</span>
-                    <span class="status-value" id="boundary-count">Loading...</span>
-                </div>
-                <div class="status-item">
-                    <span><i class="fas fa-clock"></i> Last Update:</span>
-                    <span class="status-value" id="last-update">Loading...</span>
-                </div>
-                <div class="status-item">
-                    <span><i class="fas fa-map"></i> Map Status:</span>
-                    <span class="status-value" id="map-status">Initializing...</span>
-                </div>
-
-                <div id="alert-summary" class="alert-summary" style="display: none;">
-                    <!-- Alert summary will be populated by JavaScript -->
+                <div class="card-body">
+                    <div id="alert-summary" class="alert-summary-panel" style="display: none;"></div>
+                    <p class="text-muted small mb-0" id="alert-summary-placeholder">Alert types will appear after the next data refresh.</p>
                 </div>
             </div>
 
-            <!-- Quick Actions -->
-            <div class="status-panel">
-                <h5 class="mb-3">
-                    <i class="fas fa-bolt"></i> Quick Actions
-                </h5>
-                <div class="d-grid gap-2">
-                    <button class="btn btn-outline-success btn-sm" onclick="refreshData()">
-                        <i class="fas fa-sync-alt" id="refresh-icon"></i> Refresh Map
-                    </button>
-                    <a href="/alerts" class="btn btn-outline-primary btn-sm">
-                        <i class="fas fa-history"></i> View History
-                    </a>
-                    <a href="{{ url_for('audio_history') }}" class="btn btn-outline-warning btn-sm">
-                        <i class="fas fa-headphones"></i> Audio Archive
-                    </a>
-                    <a href="/stats" class="btn btn-outline-info btn-sm">
-                        <i class="fas fa-chart-bar"></i> Statistics
-                    </a>
-                    <a href="/admin" class="btn btn-outline-secondary btn-sm">
-                        <i class="fas fa-cog"></i> Admin Panel
-                    </a>
-                    <button class="btn btn-outline-warning btn-sm" onclick="centerOnConfiguredLocation()">
-                        <i class="fas fa-crosshairs"></i> Center on {{ location_settings.county_name }}
-                    </button>
-                    <button class="btn btn-outline-info btn-sm" onclick="inspectBoundaries()">
-                        <i class="fas fa-search"></i> Inspect Boundaries
-                    </button>
+            <div class="card quick-actions-card">
+                <div class="card-header">
+                    <h5 class="card-title mb-1 d-flex align-items-center gap-2">
+                        <i class="fas fa-bolt text-warning"></i>
+                        <span>Quick Actions</span>
+                    </h5>
+                    <p class="card-subtitle mb-0">Jump into frequently used tools.</p>
+                </div>
+                <div class="card-body">
+                    <div class="quick-actions-grid">
+                        <a href="{{ url_for('audio_history') }}" class="btn btn-outline-primary">
+                            <i class="fas fa-headphones"></i> Audio Archive
+                        </a>
+                        <a href="/stats" class="btn btn-outline-info">
+                            <i class="fas fa-chart-bar"></i> Statistics
+                        </a>
+                        <a href="/admin" class="btn btn-outline-secondary">
+                            <i class="fas fa-cog"></i> Admin Panel
+                        </a>
+                        <button class="btn btn-outline-warning" onclick="centerOnConfiguredLocation()">
+                            <i class="fas fa-crosshairs"></i> Center on {{ county_name }}
+                        </button>
+                        <button class="btn btn-outline-success" onclick="inspectBoundaries()">
+                            <i class="fas fa-search"></i> Inspect Boundaries
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Map Column -->
-        <div class="col-md-9">
-            <div class="card">
+        <div class="col-lg-8 col-xxl-9 order-1 order-lg-2 d-flex flex-column gap-4">
+            <div class="card map-card shadow-sm">
                 <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="fas fa-map"></i> Interactive Emergency Alert Map
-                        <span class="badge bg-success ms-2" id="map-status-badge">Loading...</span>
+                    <h5 class="mb-0 d-flex align-items-center gap-2">
+                        <i class="fas fa-map text-primary"></i>
+                        <span>Interactive Emergency Alert Map</span>
                     </h5>
+                    <span class="badge bg-success" id="map-status-badge">Loading...</span>
                 </div>
-                <div class="card-body p-0">
+                <div class="card-body">
                     <div id="map">
                         <div class="loading-message">
                             <div class="spinner"></div>
                             <div><strong>Loading Interactive Map...</strong></div>
-                            <div class="text-muted">Initializing Leaflet map for {{ location_settings.county_name }}, {{ location_settings.state_code }}</div>
+                            <div class="text-muted">Initializing Leaflet map for {{ county_name }}{% if state_code %}, {{ state_code }}{% endif %}</div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Map Legend -->
-            <div class="legend">
-                <h6><i class="fas fa-list"></i> Map Legend</h6>
-                <div class="row">
-                    <div class="col-md-4">
-                        <strong>Alert Severity:</strong>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #dc3545;"></div>
-                            <span>Extreme</span>
+            <div class="card legend-card">
+                <div class="card-header">
+                    <h6 class="card-title mb-0 d-flex align-items-center gap-2">
+                        <i class="fas fa-list text-primary"></i>
+                        <span>Map Legend</span>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="legend">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <p class="text-uppercase small text-muted fw-semibold mb-2">Alert Severity</p>
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background-color: #dc3545;"></div>
+                                    <span>Extreme</span>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background-color: #fd7e14;"></div>
+                                    <span>Severe</span>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background-color: #ffc107;"></div>
+                                    <span>Moderate</span>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background-color: #17a2b8;"></div>
+                                    <span>Minor</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <p class="text-uppercase small text-muted fw-semibold mb-2">Alert Status</p>
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background-color: #28a745;"></div>
+                                    <span>Active Alerts</span>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background: repeating-linear-gradient(45deg, #6c757d, #6c757d 3px, transparent 3px, transparent 6px);"></div>
+                                    <span>Historical Alerts</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <p class="text-uppercase small text-muted fw-semibold mb-2">Boundaries & Layers</p>
+                                <div id="legend-boundary-layers" class="legend-dynamic"></div>
+                                <div id="legend-boundary-empty" class="text-muted small">Layers will appear when data is loaded.</div>
+                            </div>
                         </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #fd7e14;"></div>
-                            <span>Severe</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #ffc107;"></div>
-                            <span>Moderate</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #17a2b8;"></div>
-                            <span>Minor</span>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <strong>Alert Status:</strong>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #28a745;"></div>
-                            <span>Active Alerts</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background: repeating-linear-gradient(45deg, #6c757d, #6c757d 3px, transparent 3px, transparent 6px);"></div>
-                            <span>Historical Alerts</span>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <strong>Boundaries & Layers:</strong>
-                        <div id="legend-boundary-layers" class="legend-dynamic"></div>
-                        <div id="legend-boundary-empty" class="text-muted small">Layers will appear when data is loaded.</div>
                     </div>
                 </div>
             </div>
@@ -1039,7 +1322,20 @@ function updateBoundaryCount(count) {
 
 function updateAlertSummary(alerts) {
     const summaryElement = document.getElementById('alert-summary');
-    if (!summaryElement || !alerts || alerts.length === 0) return;
+    const placeholder = document.getElementById('alert-summary-placeholder');
+
+    if (!summaryElement) {
+        return;
+    }
+
+    if (!alerts || alerts.length === 0) {
+        summaryElement.innerHTML = '';
+        summaryElement.style.display = 'none';
+        if (placeholder) {
+            placeholder.style.display = 'block';
+        }
+        return;
+    }
 
     const activeCounts = {};
     alerts.forEach(alert => {
@@ -1051,8 +1347,12 @@ function updateAlertSummary(alerts) {
         .map(([event, count]) => `<div><strong>${event}:</strong> ${count}</div>`)
         .join('');
 
-    summaryElement.innerHTML = `<h6>Active Alerts by Type:</h6>${summaryHtml}`;
+    summaryElement.innerHTML = `<h6 class="mb-2">Active Alerts by Type</h6>${summaryHtml}`;
     summaryElement.style.display = 'block';
+
+    if (placeholder) {
+        placeholder.style.display = 'none';
+    }
 }
 
 async function updateSystemStatus() {
