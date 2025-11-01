@@ -17,8 +17,8 @@
     }
 
     .page-shell {
-        padding-top: 1rem;
-        padding-bottom: 2.5rem;
+        padding-top: 0.5rem;
+        padding-bottom: 2rem;
     }
 
     .page-header {
@@ -218,6 +218,35 @@
         padding: 0.25rem 0;
         display: flex;
         align-items: center;
+        gap: 0.75rem;
+    }
+
+    .layer-options .form-check.form-switch {
+        padding-left: 0;
+    }
+
+    .layer-options .form-check.form-switch .form-check-input {
+        margin-left: 0;
+        margin-right: 0.5rem;
+        width: 2.6rem;
+        height: 1.3rem;
+        background-color: var(--light-color);
+        border: 1px solid var(--border-color);
+        transition: background-color var(--transition-fast), border-color var(--transition-fast);
+    }
+
+    .layer-options .form-check.form-switch .form-check-input:focus {
+        box-shadow: 0 0 0 0.15rem rgba(47, 90, 161, 0.25);
+    }
+
+    .layer-options .form-check.form-switch .form-check-input:checked {
+        background-color: var(--primary-color);
+        border-color: var(--primary-color);
+    }
+
+    .layer-options .form-check.form-switch .form-check-label {
+        margin-left: 0;
+        flex: 1;
     }
 
     .layer-options .form-check-label {
@@ -1124,13 +1153,15 @@ function renderBoundaryControls() {
         const isChecked = layerVisibility[meta.key] !== false;
 
         const wrapper = document.createElement('div');
-        wrapper.className = 'form-check';
+        wrapper.className = 'form-check form-switch layer-toggle';
 
         const checkbox = document.createElement('input');
         checkbox.className = 'form-check-input';
         checkbox.type = 'checkbox';
         checkbox.id = checkboxId;
         checkbox.checked = isChecked;
+        checkbox.setAttribute('role', 'switch');
+        checkbox.setAttribute('aria-checked', String(isChecked));
 
         const label = document.createElement('label');
         label.className = 'form-check-label';
@@ -1156,6 +1187,7 @@ function renderBoundaryControls() {
         container.appendChild(wrapper);
 
         checkbox.addEventListener('change', function() {
+            this.setAttribute('aria-checked', String(this.checked));
             layerVisibility[meta.key] = this.checked;
             if (this.checked) {
                 if (boundaryLayers[meta.key]) {
