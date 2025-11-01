@@ -367,9 +367,25 @@
         /* Toast notifications */
         .toast-container {
             position: fixed;
-            top: 80px;
+            top: 88px;
             right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            align-items: flex-end;
+            width: min(360px, calc(100vw - 40px));
             z-index: 9999;
+        }
+
+        .toast-container .toast {
+            width: 100%;
+            max-width: 360px;
+            box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.2);
+            word-wrap: break-word;
+        }
+
+        .toast-container .toast .toast-body {
+            word-break: break-word;
         }
 
         /* Responsive design */

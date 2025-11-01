@@ -409,28 +409,48 @@ async function executePurge() {
     }
 
     try {
-        const response = await fetch('/admin/eas_messages/purge', {
+        const response = await fetch('/eas/messages/purge', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
             },
             body: JSON.stringify(payload)
         });
 
-        const result = await response.json();
-
-        if (response.ok) {
-            showToast(`Successfully deleted ${result.deleted} audio messages`, 'success');
-            // Hide modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('purgeModal'));
-            modal.hide();
-            // Reload page after a short delay
-            setTimeout(() => {
-                window.location.reload();
-            }, 2000);
-        } else {
-            showToast(result.error || 'Failed to purge audio messages', 'error');
+        let result = {};
+        try {
+            result = await response.json();
+        } catch (parseError) {
+            console.error('Failed to parse purge response:', parseError);
         }
+
+        if (!response.ok) {
+            const errorMessage = result.error || 'Failed to purge audio messages';
+            showToast(errorMessage, 'error');
+            return;
+        }
+
+        const deletedCount = typeof result.deleted === 'number'
+            ? result.deleted
+            : Array.isArray(result.ids)
+                ? result.ids.length
+                : 0;
+        const message = result.message
+            || (deletedCount === 0
+                ? 'No audio messages matched the purge criteria.'
+                : `Successfully deleted ${deletedCount} audio messages.`);
+        const toastType = deletedCount === 0 ? 'info' : 'success';
+        showToast(message, toastType);
+
+        const modalElement = document.getElementById('purgeModal');
+        const modal = modalElement ? bootstrap.Modal.getInstance(modalElement) : null;
+        if (modal) {
+            modal.hide();
+        }
+        setTimeout(() => {
+            window.location.reload();
+        }, 1500);
     } catch (error) {
         console.error('Purge failed:', error);
         showToast('Failed to purge audio messages', 'error');
