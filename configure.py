@@ -61,6 +61,9 @@ class Config:
     NOAA_CAP_POLL_INTERVAL = int(os.environ.get('CAP_POLL_INTERVAL', 300))  # 5 minutes
     NOAA_CAP_TIMEOUT = int(os.environ.get('CAP_TIMEOUT', 30))  # 30 seconds
 
+    # NOAA zone catalog
+    NWS_ZONE_DBF_PATH = os.environ.get('NWS_ZONE_DBF_PATH', 'assets/z_05mr24.dbf')
+
     # Logging settings
     LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
     LOG_FILE = os.environ.get('LOG_FILE', 'logs/noaa_alerts.log')

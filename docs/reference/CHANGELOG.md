@@ -6,6 +6,10 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 ### Added
+- Added a public forecast zone catalog loader that ingests the bundled
+  `assets/z_05mr24.dbf` file into a dedicated reference table, exposes a
+  `tools/sync_zone_catalog.py` helper, and validates admin-supplied zone codes
+  against the synchronized metadata.
 - Added an interactive `.env` setup wizard available at `/setup`, with a CLI
   companion (`tools/setup_wizard.py`), so operators can generate secrets,
   database credentials, and location defaults before first launch without
@@ -251,6 +255,11 @@ tracks releases under the 2.x series.
   `poll_history.data_source` columns during application or poller start-up.
 - Surfaced poll provenance in the statistics dashboard, including the observed feed sources
   for the most recent runs.
+
+## [2.3.4]
+### Added
+- Documented the public forecast zone catalog synchronisation workflow and
+  prepared release metadata for the 2.3.4 build.
 
 ## [2.3.0] - 2025-10-30
 ### Changed
