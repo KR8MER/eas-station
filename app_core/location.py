@@ -18,6 +18,7 @@ from app_utils import set_location_timezone
 
 from .extensions import db
 from .models import LocationSettings
+from .zones import get_zone_lookup, normalise_zone_codes
 
 _location_settings_cache: Optional[Dict[str, Any]] = None
 _location_settings_lock = threading.Lock()
@@ -143,13 +144,39 @@ def update_location_settings(data: Dict[str, Any]) -> Dict[str, Any]:
                     "Ignoring unrecognized location FIPS codes: %s" % ", ".join(ignored)
                 )
 
-        zone_codes = normalise_upper(
-            data.get("zone_codes")
+        zone_input = data.get("zone_codes")
+        raw_zone_codes = normalise_upper(
+            zone_input
             or record.zone_codes
             or DEFAULT_LOCATION_SETTINGS["zone_codes"]
         )
+        zone_codes, invalid_zone_codes = normalise_zone_codes(raw_zone_codes)
+        if zone_input is not None and invalid_zone_codes:
+            ignored = sorted(
+                {code for code in invalid_zone_codes if code}
+            )
+            if ignored:
+                _log_warning(
+                    "Ignoring malformed NOAA zone identifiers: %s"
+                    % ", ".join(ignored)
+                )
         if not zone_codes:
-            zone_codes = list(DEFAULT_LOCATION_SETTINGS["zone_codes"])
+            defaults = DEFAULT_LOCATION_SETTINGS["zone_codes"]
+            zone_codes, _ = normalise_zone_codes(defaults)
+            if not zone_codes:
+                zone_codes = list(defaults)
+
+        if zone_input is not None:
+            lookup = get_zone_lookup()
+            if lookup:
+                unknown_zones = sorted(
+                    {code for code in zone_codes if code not in lookup}
+                )
+                if unknown_zones:
+                    _log_warning(
+                        "Zone catalog does not include: %s; keeping provided values"
+                        % ", ".join(unknown_zones)
+                    )
 
         area_terms = normalise_upper(
             data.get("area_terms")

@@ -63,6 +63,7 @@ from app_core.eas_storage import (
 from app_core.system_health import get_system_health, start_health_alert_worker
 from app_core.poller_debug import ensure_poll_debug_table
 from app_core.radio import ensure_radio_tables
+from app_core.zones import ensure_zone_catalog
 from webapp import register_routes
 from webapp.admin.boundaries import (
     ensure_alert_source_columns,
@@ -795,6 +796,11 @@ def initialize_database():
             if not ensure_radio_tables(logger):
                 _db_initialization_error = RuntimeError(
                     "Radio receiver tables could not be ensured"
+                )
+                return False
+            if not ensure_zone_catalog(logger):
+                _db_initialization_error = RuntimeError(
+                    "NWS zone catalog could not be ensured"
                 )
                 return False
             backfill_eas_message_payloads(logger)

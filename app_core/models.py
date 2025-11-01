@@ -55,6 +55,29 @@ def _log_warning(message: str) -> None:
         current_app.logger.warning(message)
 
 
+class NWSZone(db.Model):
+    """Reference table containing NOAA public forecast zone metadata."""
+
+    __tablename__ = "nws_zones"
+
+    id = db.Column(db.Integer, primary_key=True)
+    zone_code = db.Column(db.String(6), nullable=False, unique=True)
+    state_code = db.Column(db.String(2), nullable=False, index=True)
+    zone_number = db.Column(db.String(3), nullable=False)
+    zone_type = db.Column(db.String(1), nullable=False, default="Z")
+    cwa = db.Column(db.String(9), nullable=False, index=True)
+    time_zone = db.Column(db.String(2))
+    fe_area = db.Column(db.String(4))
+    name = db.Column(db.String(255), nullable=False)
+    short_name = db.Column(db.String(64))
+    state_zone = db.Column(db.String(5), nullable=False, index=True)
+    longitude = db.Column(db.Float)
+    latitude = db.Column(db.Float)
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging helper
+        return f"<NWSZone {self.zone_code} {self.name}>"
+
+
 class Boundary(db.Model):
     __tablename__ = "boundaries"
 
