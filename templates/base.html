@@ -148,8 +148,15 @@
             display: flex;
             flex-wrap: wrap;
             align-items: center;
+            justify-content: flex-start;
             gap: 0.75rem;
             min-width: 0;
+        }
+
+        @media (min-width: 992px) {
+            .navbar .container-fluid {
+                flex-wrap: nowrap;
+            }
         }
 
         .navbar .navbar-brand,
@@ -225,37 +232,45 @@
 
         .navbar-sections {
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
+            align-items: center;
+            justify-content: flex-start;
+            flex-wrap: wrap;
             width: 100%;
-            gap: 0.75rem;
+            gap: 1.25rem;
         }
 
         .primary-nav,
         .utility-nav {
-            width: 100%;
+            width: auto;
         }
 
         .primary-nav {
+            flex: 1 1 auto;
             justify-content: flex-start;
         }
 
         .utility-nav {
-            justify-content: flex-start;
+            flex: 0 0 auto;
+            justify-content: flex-end;
+            margin-left: auto;
         }
 
-        @media (min-width: 992px) {
+        @media (max-width: 991.98px) {
             .navbar-sections {
-                flex-direction: row;
-                align-items: center;
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.75rem;
             }
 
-            .primary-nav {
-                flex: 1 1 auto;
-            }
-
+            .primary-nav,
             .utility-nav {
-                flex: 0 0 auto;
-                justify-content: flex-end;
+                width: 100%;
+                justify-content: flex-start;
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.35rem;
+                margin-left: 0;
             }
         }
 
