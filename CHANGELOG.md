@@ -6,6 +6,10 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 ### Added
+- Added an interactive `.env` setup wizard available at `/setup`, with a CLI
+  companion (`tools/setup_wizard.py`), so operators can generate secrets,
+  database credentials, and location defaults before first launch without
+  editing text files by hand.
 - Added a repository `VERSION` manifest, shared resolver, and `tests/test_release_metadata.py` guardrail so version bumps and changelog updates stay synchronised for audit trails.
 - Added `tools/inplace_upgrade.py` for in-place upgrades that pull, rebuild, migrate, and restart services without destroying volumes, plus `tools/create_backup.py` to snapshot `.env`, compose files, and a Postgres dump with audit metadata before changes.
 - Introduced a compliance dashboard with CSV/PDF exports and automated
@@ -136,6 +140,13 @@ tracks releases under the 2.x series.
   file label so frames no longer begin with an invalid "AAA" sequence that the manual forbids.
 - Prevented the LED fallback initializer from raising a `NameError` when the optional
   controller module is missing so deployments without sign hardware continue to boot.
+
+## [2.3.2] - 2025-11-02
+### Changed
+- The web server now falls back to a guarded setup mode when critical
+  configuration is missing or the database is unreachable, redirecting all
+  requests to `/setup` so operators can repair the environment without editing
+  `.env` manually first.
 
 ## [2.3.1] - 2025-11-01
 ### Added
