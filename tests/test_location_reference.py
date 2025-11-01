@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import pytest
 from flask import Flask
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.compiler import compiles
 
 from app_core.extensions import db
-from app_core.location import describe_location_reference
-from app_core.models import NWSZone
+from app_core.location import describe_location_reference, update_location_settings
+from app_core.models import LocationSettings, NWSZone
 from app_core.zones import clear_zone_lookup_cache
+
+
+@compiles(JSONB, "sqlite")
+def _compile_jsonb_sqlite(element, compiler, **kw):
+    return "TEXT"
 
 
 @pytest.fixture
@@ -21,10 +28,12 @@ def app_context(tmp_path):
     with app.app_context():
         engine = db.engine
         NWSZone.__table__.create(bind=engine)
+        LocationSettings.__table__.create(bind=engine)
         clear_zone_lookup_cache()
         yield app
         db.session.remove()
         NWSZone.__table__.drop(bind=engine)
+        LocationSettings.__table__.drop(bind=engine)
     clear_zone_lookup_cache()
 
 
@@ -90,6 +99,31 @@ def test_describe_location_reference_includes_zone_and_fips_details(app_context)
         sources = snapshot.get("sources", [])
         assert any(item.get("path") == "assets/pd01005007curr.pdf" for item in sources)
         assert any(item.get("url") == "https://www.weather.gov/gis/PublicZones" for item in sources)
+
+
+def test_update_location_settings_infers_county_zones(app_context):
+    with app_context.app_context():
+        clear_zone_lookup_cache()
+
+        result = update_location_settings(
+            {
+                "county_name": "Allen County",
+                "state_code": "OH",
+                "timezone": "America/New_York",
+                "fips_codes": ["039003", "039137"],
+                "zone_codes": [],
+                "area_terms": ["ALLEN COUNTY"],
+            }
+        )
+
+        assert "OHC003" in result["zone_codes"]
+        assert "OHC137" in result["zone_codes"]
+        assert result["zone_codes"].count("OHC137") == 1
+
+        stored = LocationSettings.query.first()
+        assert stored is not None
+        assert "OHC003" in stored.zone_codes
+        assert "OHC137" in stored.zone_codes
 
 
 def test_describe_location_reference_flags_unknown_zones(app_context):

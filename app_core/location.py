@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import threading
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import pytz
 from flask import current_app, has_app_context
@@ -12,6 +12,7 @@ from app_utils.fips_codes import (
     NATIONWIDE_SAME_CODE,
     STATE_ABBR_NAMES,
     get_same_lookup,
+    get_us_state_county_tree,
 )
 from app_utils.location_settings import (
     DEFAULT_LOCATION_SETTINGS,
@@ -40,9 +41,46 @@ def _default_fips_codes() -> List[str]:
 _DEFAULT_FIPS_CODES = _default_fips_codes()
 
 
+_STATE_FIPS_TO_ABBR = {
+    str(state.get("state_fips") or "").zfill(2): str(state.get("abbr") or "").upper()
+    for state in get_us_state_county_tree()
+    if state.get("state_fips")
+}
+
+
 def _log_warning(message: str) -> None:
     if has_app_context():
         current_app.logger.warning(message)
+
+
+def _derive_county_zone_codes_from_fips(
+    fips_codes: Sequence[str],
+    zone_lookup: Optional[Dict[str, "ZoneInfo"]] = None,
+) -> List[str]:
+    derived: List[str] = []
+    seen: Set[str] = set()
+    for raw_code in fips_codes:
+        digits = "".join(ch for ch in str(raw_code) if ch.isdigit())
+        if len(digits) != 6 or digits.endswith("000"):
+            continue
+
+        state_fips = digits[1:3]
+        county_suffix = digits[3:]
+        state_abbr = _STATE_FIPS_TO_ABBR.get(state_fips)
+        if not state_abbr or len(state_abbr) != 2:
+            continue
+
+        zone_code = f"{state_abbr}C{county_suffix}"
+        normalized = zone_code.upper()
+        if normalized in seen:
+            continue
+        if zone_lookup is not None and normalized not in zone_lookup:
+            continue
+
+        seen.add(normalized)
+        derived.append(normalized)
+
+    return derived
 
 
 def _resolve_fips_codes(values: Any, fallback: Any) -> Tuple[List[str], List[str]]:
@@ -155,6 +193,7 @@ def update_location_settings(data: Dict[str, Any]) -> Dict[str, Any]:
             or record.zone_codes
             or DEFAULT_LOCATION_SETTINGS["zone_codes"]
         )
+        zone_lookup = get_zone_lookup()
         zone_codes, invalid_zone_codes = normalise_zone_codes(raw_zone_codes)
         if zone_input is not None and invalid_zone_codes:
             ignored = sorted(
@@ -171,17 +210,29 @@ def update_location_settings(data: Dict[str, Any]) -> Dict[str, Any]:
             if not zone_codes:
                 zone_codes = list(defaults)
 
-        if zone_input is not None:
-            lookup = get_zone_lookup()
-            if lookup:
-                unknown_zones = sorted(
-                    {code for code in zone_codes if code not in lookup}
+        if zone_input is not None and zone_lookup:
+            unknown_zones = sorted(
+                {code for code in zone_codes if code not in zone_lookup}
+            )
+            if unknown_zones:
+                _log_warning(
+                    "Zone catalog does not include: %s; keeping provided values"
+                    % ", ".join(unknown_zones)
                 )
-                if unknown_zones:
-                    _log_warning(
-                        "Zone catalog does not include: %s; keeping provided values"
-                        % ", ".join(unknown_zones)
-                    )
+
+        derived_zone_codes = _derive_county_zone_codes_from_fips(
+            fips_codes, zone_lookup
+        )
+        if derived_zone_codes:
+            existing = set(zone_codes)
+            appended = False
+            for code in derived_zone_codes:
+                if code not in existing:
+                    zone_codes.append(code)
+                    existing.add(code)
+                    appended = True
+            if appended and zone_input is None:
+                zone_codes = normalise_upper(zone_codes)
 
         area_terms = normalise_upper(
             data.get("area_terms")
