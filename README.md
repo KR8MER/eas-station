@@ -144,7 +144,7 @@ EAS Station is not just an alert monitor—it's a **complete emergency broadcast
 
 ## 🏛️ Governance & Contributions
 
-- **License:** Source code is provided under the [MIT License](LICENSE); copyright remains with Timothy Kramer (K8R8MER).
+- **License:** Source code is provided under the [MIT License](LICENSE); copyright remains with Timothy Kramer (KR8MER).
 - **Contribution workflow:** All commits must include a Developer Certificate of Origin sign-off (`Signed-off-by`) as described in the [CONTRIBUTING guide](docs/process/CONTRIBUTING.md).
 - **Roadmap alignment:** Issues and pull requests should call out which drop-in replacement requirement from [`docs/roadmap/master_todo.md`](docs/roadmap/master_todo.md) they advance to keep hardware parity measurable.
 - **Legal notices:** Review the [Terms of Use](docs/policies/TERMS_OF_USE.md) and [Privacy Policy](docs/policies/PRIVACY_POLICY.md) before deploying test systems or sharing data.

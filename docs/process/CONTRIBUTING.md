@@ -8,7 +8,7 @@ Be respectful and constructive. EAS Station is maintained by volunteers supporti
 
 ## Licensing and Copyright
 
-- The EAS Station source code is released under the [MIT License](../../LICENSE). Timothy Kramer (K8R8MER) retains the project copyright.
+- The EAS Station source code is released under the [MIT License](../../LICENSE). Timothy Kramer (KR8MER) retains the project copyright.
 - By contributing, you agree that your submissions will be licensed under the MIT License and may be redistributed under those terms.
 
 ## Developer Certificate of Origin (DCO)
