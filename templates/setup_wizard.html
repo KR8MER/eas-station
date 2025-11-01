@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Setup Wizard - EAS Station{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8 col-xl-7">
+            <div class="card shadow border-0">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <div>
+                        <h3 class="mb-0"><i class="fas fa-satellite-dish me-2"></i>Initial Configuration</h3>
+                        <small class="text-white-50">Generate your .env file without leaving the browser.</small>
+                    </div>
+                    <span class="badge bg-light text-primary fw-semibold">Setup Wizard</span>
+                </div>
+                <div class="card-body p-4">
+                    {% if not env_exists %}
+                    <div class="alert alert-warning" role="alert">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        No existing <code>.env</code> file was detected. Completing this wizard will create one using
+                        the template defaults.
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info" role="alert">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Updating the form will rewrite <code>.env</code>. Enable the backup toggle below to keep a
+                        timestamped copy of the current file.
+                    </div>
+                    {% endif %}
+                    <form method="post" class="mt-4">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        {% for field in env_fields %}
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold" for="field-{{ field.key }}">
+                                {{ field.label }}
+                                {% if field.required %}<span class="text-danger" title="Required">*</span>{% endif %}
+                            </label>
+                            {% if field.widget == 'textarea' %}
+                            <textarea class="form-control {% if errors.get(field.key) %}is-invalid{% endif %}"
+                                      id="field-{{ field.key }}"
+                                      name="{{ field.key }}"
+                                      rows="4"
+                                      placeholder="{{ field.placeholder or '' }}">{{ form_data.get(field.key, '') }}</textarea>
+                            {% else %}
+                            <div class="input-group">
+                                <input type="{{ field.input_type }}" class="form-control {% if errors.get(field.key) %}is-invalid{% endif %}"
+                                       id="field-{{ field.key }}"
+                                       name="{{ field.key }}"
+                                       value="{{ form_data.get(field.key, '') }}"
+                                       placeholder="{{ field.placeholder or '' }}">
+                                {% if field.key == 'SECRET_KEY' %}
+                                <button class="btn btn-outline-secondary" type="button" id="generate-secret">
+                                    <i class="fas fa-magic me-1"></i> Generate
+                                </button>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                            {% if errors.get(field.key) %}
+                            <div class="invalid-feedback d-block">
+                                {{ errors.get(field.key) }}
+                            </div>
+                            {% endif %}
+                            <small class="form-text text-muted">{{ field.description }}</small>
+                        </div>
+                        {% endfor %}
+                        <div class="form-check form-switch mb-4">
+                            <input class="form-check-input" type="checkbox" role="switch" id="backup-switch" name="create_backup" value="yes" checked>
+                            <label class="form-check-label" for="backup-switch">Create a timestamped backup before writing</label>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <a class="btn btn-outline-secondary" href="{{ url_for('login') }}">
+                                <i class="fas fa-arrow-left me-2"></i>Return to login
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>Save configuration
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <p class="text-muted text-center mt-3 mb-0">
+                Changes take effect after restarting the Docker services or reloading the Flask process.
+            </p>
+        </div>
+    </div>
+</div>
+
+<script>
+const secretButton = document.getElementById('generate-secret');
+if (secretButton) {
+    secretButton.addEventListener('click', async () => {
+        secretButton.disabled = true;
+        secretButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Generating';
+        try {
+            const response = await fetch('{{ url_for('setup_generate_secret') }}', { method: 'POST' });
+            if (!response.ok) {
+                throw new Error('Failed to generate secret key.');
+            }
+            const data = await response.json();
+            const target = document.getElementById('field-SECRET_KEY');
+            if (target) {
+                target.value = data.secret_key;
+                target.classList.remove('is-invalid');
+            }
+        } catch (error) {
+            alert(error.message || 'Unable to generate a secret key.');
+        } finally {
+            secretButton.disabled = false;
+            secretButton.innerHTML = '<i class="fas fa-magic me-1"></i> Generate';
+        }
+    });
+}
+</script>
+{% endblock %}
