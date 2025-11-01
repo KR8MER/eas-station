@@ -20,6 +20,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ENV_TEMPLATE_PATH = PROJECT_ROOT / ".env.example"
 ENV_OUTPUT_PATH = PROJECT_ROOT / ".env"
 
+# Known placeholder values that should never be persisted as SECRET_KEY.
+PLACEHOLDER_SECRET_VALUES = {
+    "dev-key-change-in-production",
+    "replace-with-a-long-random-string",
+}
+
 
 class SetupWizardError(Exception):
     """Base exception for setup wizard problems."""
@@ -124,6 +130,8 @@ def _normalise_led_lines(value: str) -> str:
 def _validate_secret_key(value: str) -> str:
     if len(value) < 32:
         raise ValueError("SECRET_KEY should be at least 32 characters long.")
+    if value in PLACEHOLDER_SECRET_VALUES:
+        raise ValueError("SECRET_KEY must be replaced with a securely generated value.")
     return value
 
 
@@ -296,6 +304,7 @@ def clean_submission(raw_form: Dict[str, str]) -> Dict[str, str]:
 __all__ = [
     "ENV_OUTPUT_PATH",
     "ENV_TEMPLATE_PATH",
+    "PLACEHOLDER_SECRET_VALUES",
     "WizardField",
     "WizardState",
     "WIZARD_FIELDS",

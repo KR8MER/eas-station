@@ -57,11 +57,16 @@
                                       placeholder="{{ field.placeholder or '' }}">{{ form_data.get(field.key, '') }}</textarea>
                             {% else %}
                             <div class="input-group">
+                                {% set placeholder = field.placeholder or '' %}
+                                {% if field.key == 'SECRET_KEY' and secret_present %}
+                                    {% set placeholder = 'Leave blank to keep the existing secret key' %}
+                                {% endif %}
                                 <input type="{{ field.input_type }}" class="form-control {% if errors.get(field.key) %}is-invalid{% endif %}"
                                        id="field-{{ field.key }}"
                                        name="{{ field.key }}"
                                        value="{{ form_data.get(field.key, '') }}"
-                                       placeholder="{{ field.placeholder or '' }}">
+                                       placeholder="{{ placeholder }}"
+                                       {% if field.key == 'SECRET_KEY' %}autocomplete="new-password"{% endif %}>
                                 {% if field.key == 'SECRET_KEY' %}
                                 <button class="btn btn-outline-secondary" type="button" id="generate-secret">
                                     <i class="fas fa-magic me-1"></i> Generate
@@ -74,7 +79,12 @@
                                 {{ errors.get(field.key) }}
                             </div>
                             {% endif %}
-                            <small class="form-text text-muted">{{ field.description }}</small>
+                            <small class="form-text text-muted">
+                                {{ field.description }}
+                                {% if field.key == 'SECRET_KEY' and secret_present %}
+                                    <br>Existing secrets are hidden for security. Leave the field blank to keep the current value or generate a new key to rotate it.
+                                {% endif %}
+                            </small>
                         </div>
                         {% endfor %}
                         <div class="form-check form-switch mb-4">
