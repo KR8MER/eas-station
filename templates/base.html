@@ -65,6 +65,7 @@
             --text-color: #1c2233;
             --border-color: #ced7ea;
             --shadow-color: rgba(32, 72, 133, 0.12);
+            --critical-color: #ff4f8b;
 
             /* Additional variables for consistency */
             --accent-primary: #4f6fb3;
@@ -105,6 +106,7 @@
             --text-color: #f5f6fa;
             --border-color: #2f3a54;
             --shadow-color: rgba(0, 0, 0, 0.4);
+            --critical-color: #ff7ba8;
 
             /* Additional variables for consistency */
             --accent-primary: #7f9be8;
@@ -302,27 +304,77 @@
             color: #fff;
         }
 
-        .btn-theme-toggle {
-            position: fixed;
-            top: 70px;
-            right: 20px;
-            z-index: 1000;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
+        .theme-toggle-nav-item {
             display: flex;
             align-items: center;
-            justify-content: center;
-            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-            color: #fff;
-            border: none;
-            box-shadow: 0 4px 12px var(--shadow-color);
-            transition: all 0.3s ease;
         }
 
-        .btn-theme-toggle:hover {
-            transform: scale(1.1);
-            box-shadow: 0 6px 20px var(--shadow-color);
+        .theme-toggle-button {
+            border: none;
+            background: transparent;
+            color: #f7f8ff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            width: 2.5rem;
+            height: 2.5rem;
+            transition: background-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+        }
+
+        .theme-toggle-button:hover,
+        .theme-toggle-button:focus {
+            background-color: rgba(255, 255, 255, 0.18);
+            color: #ffffff;
+            transform: translateY(-1px);
+        }
+
+        .theme-toggle-button:active {
+            transform: translateY(0);
+        }
+
+        .theme-toggle-button i {
+            font-size: 1.05rem;
+        }
+
+        .navbar-nav .theme-toggle-button {
+            padding: 0;
+        }
+
+        @media (min-width: 992px) {
+            .theme-toggle-nav-item {
+                margin-left: 0.5rem;
+            }
+        }
+
+        @media (max-width: 991.98px) {
+            .theme-toggle-nav-item {
+                justify-content: flex-start;
+                padding: 0.25rem 1rem;
+            }
+
+            .navbar-nav .theme-toggle-button {
+                width: 100%;
+                height: auto;
+                justify-content: flex-start;
+                gap: 0.75rem;
+                color: var(--text-color);
+                border-radius: var(--radius-md);
+                padding: 0.6rem 0.75rem;
+            }
+
+            .theme-toggle-button:hover,
+            .theme-toggle-button:focus {
+                background-color: rgba(0, 0, 0, 0.08);
+                color: var(--text-color);
+                transform: none;
+            }
+
+            [data-theme="dark"] .theme-toggle-button:hover,
+            [data-theme="dark"] .theme-toggle-button:focus {
+                background-color: rgba(255, 255, 255, 0.08);
+                color: #ffffff;
+            }
         }
 
         .footer {
@@ -463,9 +515,11 @@
             gap: 0.5rem;
             font-size: 0.85em;
             padding: 0.15rem 0.5rem;
-            background-color: rgba(0, 0, 0, 0.18);
+            background-color: rgba(255, 255, 255, 0.16);
             border-radius: 999px;
             min-width: 0;
+            color: #f7f8ff;
+            backdrop-filter: blur(6px);
         }
 
         .health-label {
@@ -494,9 +548,24 @@
             }
         }
 
+        .health-indicator.status-healthy {
+            background-color: rgba(255, 255, 255, 0.16);
+        }
+
+        .health-indicator.status-warning {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(246, 185, 104, 0.35));
+            color: #ffffff;
+        }
+
+        .health-indicator.status-critical {
+            background: linear-gradient(135deg, var(--critical-color), var(--secondary-color));
+            color: #ffffff;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+        }
+
         .health-good { background-color: var(--success-color); }
         .health-warning { background-color: var(--warning-color); }
-        .health-critical { background-color: var(--danger-color); }
+        .health-critical { background-color: var(--critical-color); }
 
         .system-status-banner {
             border: none;
@@ -598,7 +667,7 @@
 
         /* Print styles */
         @media print {
-            .navbar, .btn-theme-toggle, .footer {
+            .navbar, .theme-toggle-button, .footer {
                 display: none !important;
             }
 
@@ -612,11 +681,6 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <!-- Theme Toggle Button -->
-    <button class="btn-theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
-        <i id="theme-icon" class="fas fa-moon"></i>
-    </button>
-
     <!-- Toast Container -->
     <div class="toast-container"></div>
 
@@ -631,7 +695,7 @@
                 </span>
             </a>
 
-            <div class="health-indicator" id="system-health-indicator" role="status" aria-live="polite" title="System OK">
+            <div class="health-indicator status-healthy" id="system-health-indicator" role="status" aria-live="polite" title="System OK">
                 <span class="health-label">Status</span>
                 <span class="health-dot health-good" id="system-health-dot"></span>
                 <span class="health-text" id="system-health-text">System OK</span>
@@ -780,6 +844,12 @@
                             </a>
                         </li>
                         {% endif %}
+                        <li class="nav-item theme-toggle-nav-item">
+                            <button class="theme-toggle-button" type="button" onclick="toggleTheme()" aria-label="Toggle dark or light mode">
+                                <i id="theme-icon" class="fas fa-moon" aria-hidden="true"></i>
+                                <span class="visually-hidden">Toggle theme</span>
+                            </button>
+                        </li>
                     </ul>
                 </div>
             </div>
@@ -1070,6 +1140,16 @@
                         const indicatorMessage = summary || displayText;
                         indicator.setAttribute('title', indicatorMessage);
                         indicator.setAttribute('aria-label', `System status: ${indicatorMessage}`);
+
+                        indicator.classList.remove('status-healthy', 'status-warning', 'status-critical');
+                        const indicatorState = statusKey === 'critical'
+                            ? 'status-critical'
+                            : statusKey === 'warning'
+                                ? 'status-warning'
+                                : ['healthy', 'online'].includes(statusKey)
+                                    ? 'status-healthy'
+                                    : 'status-warning';
+                        indicator.classList.add(indicatorState);
                     }
 
                     updateSystemStatusBanner(statusKey, summary, style.label);
@@ -1086,6 +1166,8 @@
                     if (indicator) {
                         indicator.setAttribute('title', fallbackText);
                         indicator.setAttribute('aria-label', `System status: ${fallbackText}`);
+                        indicator.classList.remove('status-healthy', 'status-warning', 'status-critical');
+                        indicator.classList.add('status-warning');
                     }
                 }
                 updateSystemStatusBanner('warning', 'Unable to contact the system status service.', 'Warning');
