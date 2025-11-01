@@ -136,16 +136,119 @@
             box-shadow: 0 4px 14px var(--shadow-color);
         }
 
+        .navbar .container-fluid {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.75rem;
+            min-width: 0;
+        }
+
         .navbar .navbar-brand,
         .navbar .nav-link,
         .navbar .navbar-toggler {
             color: #f7f8ff !important;
         }
 
+        .navbar .navbar-brand {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            min-width: 0;
+        }
+
+        .brand-text {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+            min-width: 0;
+        }
+
+        .brand-title {
+            font-size: 1.05rem;
+            letter-spacing: 0.03em;
+        }
+
+        .brand-subtitle {
+            font-size: 0.75rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            opacity: 0.75;
+        }
+
         .navbar .nav-link:hover,
         .navbar .nav-link:focus,
         .navbar .nav-link.active {
             color: var(--accent-color) !important;
+        }
+
+        .navbar-nav {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .navbar-nav .nav-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            border-radius: var(--radius-sm);
+            padding: 0.35rem 0.75rem;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+
+        .navbar-nav .nav-link:hover,
+        .navbar-nav .nav-link:focus {
+            background-color: rgba(255, 255, 255, 0.12);
+        }
+
+        .navbar-nav .dropdown-menu {
+            border-radius: var(--radius-sm);
+            box-shadow: 0 0.75rem 1.25rem rgba(0, 0, 0, 0.25);
+        }
+
+        .navbar-nav .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .navbar-sections {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            gap: 0.75rem;
+        }
+
+        .primary-nav,
+        .utility-nav {
+            width: 100%;
+        }
+
+        .primary-nav {
+            justify-content: flex-start;
+        }
+
+        .utility-nav {
+            justify-content: flex-start;
+        }
+
+        @media (min-width: 992px) {
+            .navbar-sections {
+                flex-direction: row;
+                align-items: center;
+            }
+
+            .primary-nav {
+                flex: 1 1 auto;
+            }
+
+            .utility-nav {
+                flex: 0 0 auto;
+                justify-content: flex-end;
+            }
         }
 
         .card {
@@ -313,7 +416,7 @@
         }
 
         .brand-icon {
-            font-size: 1.5em;
+            font-size: 1.6em;
         }
 
         .status-indicator {
@@ -334,20 +437,92 @@
         .health-indicator {
             display: inline-flex;
             align-items: center;
-            font-size: 0.8em;
-            margin-left: 0.5rem;
+            gap: 0.5rem;
+            font-size: 0.85em;
+            padding: 0.15rem 0.5rem;
+            background-color: rgba(0, 0, 0, 0.18);
+            border-radius: 999px;
+            min-width: 0;
+        }
+
+        .health-label {
+            text-transform: uppercase;
+            font-size: 0.7rem;
+            letter-spacing: 0.05em;
+            opacity: 0.85;
         }
 
         .health-dot {
-            width: 6px;
-            height: 6px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
-            margin-right: 4px;
+        }
+
+        .health-text {
+            max-width: 180px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        @media (min-width: 1200px) {
+            .health-text {
+                max-width: 240px;
+            }
         }
 
         .health-good { background-color: var(--success-color); }
         .health-warning { background-color: var(--warning-color); }
         .health-critical { background-color: var(--danger-color); }
+
+        .system-status-banner {
+            border: none;
+            border-radius: 0;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .system-status-banner .banner-content {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .system-status-banner .banner-icon {
+            font-size: 1.25rem;
+        }
+
+        .system-status-banner .banner-message {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+
+        .system-status-banner .banner-title {
+            font-weight: 600;
+        }
+
+        .system-status-banner .banner-text {
+            font-size: 0.95rem;
+        }
+
+        .system-status-banner .btn-close {
+            filter: invert(1);
+        }
+
+        @media (max-width: 767.98px) {
+            .system-status-banner {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .system-status-banner .btn-close {
+                align-self: flex-end;
+            }
+        }
 
         @keyframes pulse {
             0%, 100% { opacity: 1; }
@@ -427,124 +602,177 @@
         <div class="container-fluid">
             <a class="navbar-brand" href="/">
                 <i class="fas fa-broadcast-tower brand-icon"></i>
-                EAS Station
-                <div class="health-indicator" id="system-health-indicator" title="System OK">
-                    <div class="health-dot health-good" id="system-health-dot"></div>
-                    <span id="system-health-text">System OK</span>
-                </div>
+                <span class="brand-text">
+                    <span class="brand-title">EAS Station</span>
+                    <span class="brand-subtitle">Emergency Alert Platform</span>
+                </span>
             </a>
 
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <div class="health-indicator" id="system-health-indicator" role="status" aria-live="polite" title="System OK">
+                <span class="health-label">Status</span>
+                <span class="health-dot health-good" id="system-health-dot"></span>
+                <span class="health-text" id="system-health-text">System OK</span>
+            </div>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
 
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/">
-                            <i class="fas fa-map"></i> Interactive Map
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/alerts">
-                            <i class="fas fa-history"></i> Alerts History
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('audio_history') }}">
-                            <i class="fas fa-headphones"></i> Audio Archive
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/stats">
-                            <i class="fas fa-chart-bar"></i> Statistics
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('about_page') }}">
-                            <i class="fas fa-circle-info"></i> About
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('help_page') }}">
-                            <i class="fas fa-circle-question"></i> Help
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('radio_settings') }}">
-                            <i class="fas fa-satellite-dish"></i> Radio
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/admin">
-                            <i class="fas fa-cog"></i> Admin
-                        </a>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="debugDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="fas fa-bug"></i> Debug
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="debugDropdown">
-                            <li><a class="dropdown-item" href="/debug/ipaws"><i class="fas fa-satellite"></i> IPAWS Debug</a></li>
-                            <li><a class="dropdown-item" href="/health"><i class="fas fa-heartbeat"></i> System Health</a></li>
-                            <li><a class="dropdown-item" href="/version"><i class="fas fa-info-circle"></i> Version Info</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="/export/alerts"><i class="fas fa-download"></i> Export Alerts</a></li>
-                            <li><a class="dropdown-item" href="/export/boundaries"><i class="fas fa-download"></i> Export Boundaries</a></li>
-                            <li><a class="dropdown-item" href="/export/statistics"><i class="fas fa-download"></i> Export Statistics</a></li>
-                        </ul>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('eas.workflow_home') }}" {% if current_user is not defined or not current_user.is_authenticated %}title="Sign in required to access the manual EAS workflow."{% endif %}>
-                            <i class="fas fa-broadcast-tower"></i> EAS Workflow
-                            {% if current_user is not defined or not current_user.is_authenticated %}
-                            <i class="fas fa-lock small ms-1"></i>
-                            {% endif %}
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('compliance_dashboard') }}" {% if current_user is not defined or not current_user.is_authenticated %}title="Sign in required to review compliance dashboards."{% endif %}>
-                            <i class="fas fa-clipboard-check"></i> Compliance
-                            {% if current_user is not defined or not current_user.is_authenticated %}
-                            <i class="fas fa-lock small ms-1"></i>
-                            {% endif %}
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('alert_verification') }}" {% if current_user is not defined or not current_user.is_authenticated %}title="Sign in required to access alert validation tools."{% endif %}>
-                            <i class="fas fa-shield-check"></i> Validation
-                            {% if current_user is not defined or not current_user.is_authenticated %}
-                            <i class="fas fa-lock small ms-1"></i>
-                            {% endif %}
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('led_control') }}">
-                            <i class="fas fa-tv"></i> LED Control
-                        </a>
-                    </li>
-                    {% if current_user is defined and current_user.is_authenticated %}
-                    <li class="nav-item">
-                        <span class="nav-link disabled text-nowrap">
-                            <i class="fas fa-user-shield"></i> {{ current_user.username }}
-                        </span>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('logout') }}">
-                            <i class="fas fa-sign-out-alt"></i> Logout
-                        </a>
-                    </li>
-                    {% else %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('login') }}">
-                            <i class="fas fa-sign-in-alt"></i> Login
-                        </a>
-                    </li>
-                    {% endif %}
-                </ul>
+                <div class="navbar-sections">
+                    <ul class="navbar-nav primary-nav">
+                        <li class="nav-item">
+                            <a class="nav-link" href="/">
+                                <i class="fas fa-map"></i>
+                                <span>Interactive Map</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/alerts">
+                                <i class="fas fa-history"></i>
+                                <span>Alerts History</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('audio_history') }}">
+                                <i class="fas fa-headphones"></i>
+                                <span>Audio Archive</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/stats">
+                                <i class="fas fa-chart-bar"></i>
+                                <span>Statistics</span>
+                            </a>
+                        </li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="resourcesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-book"></i>
+                                <span>Resources</span>
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="resourcesDropdown">
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('about_page') }}">
+                                        <i class="fas fa-circle-info"></i> About
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('help_page') }}">
+                                        <i class="fas fa-circle-question"></i> Help
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+                    </ul>
+
+                    <ul class="navbar-nav utility-nav">
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="operationsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-briefcase"></i>
+                                <span>Operations</span>
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="operationsDropdown">
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('eas.workflow_home') }}" {% if current_user is not defined or not current_user.is_authenticated %}title="Sign in required to access the manual EAS workflow."{% endif %}>
+                                        <i class="fas fa-broadcast-tower"></i> EAS Workflow
+                                        {% if current_user is not defined or not current_user.is_authenticated %}
+                                        <i class="fas fa-lock small ms-1 text-warning"></i>
+                                        {% endif %}
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('compliance_dashboard') }}" {% if current_user is not defined or not current_user.is_authenticated %}title="Sign in required to review compliance dashboards."{% endif %}>
+                                        <i class="fas fa-clipboard-check"></i> Compliance
+                                        {% if current_user is not defined or not current_user.is_authenticated %}
+                                        <i class="fas fa-lock small ms-1 text-warning"></i>
+                                        {% endif %}
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('alert_verification') }}" {% if current_user is not defined or not current_user.is_authenticated %}title="Sign in required to access alert validation tools."{% endif %}>
+                                        <i class="fas fa-shield-check"></i> Validation
+                                        {% if current_user is not defined or not current_user.is_authenticated %}
+                                        <i class="fas fa-lock small ms-1 text-warning"></i>
+                                        {% endif %}
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="systemsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-satellite-dish"></i>
+                                <span>Systems</span>
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="systemsDropdown">
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('radio_settings') }}">
+                                        <i class="fas fa-signal"></i> Radio Settings
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('led_control') }}">
+                                        <i class="fas fa-tv"></i> LED Control
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="debugDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-bug"></i>
+                                <span>Debug</span>
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="debugDropdown">
+                                <li><a class="dropdown-item" href="/debug/ipaws"><i class="fas fa-satellite"></i> IPAWS Debug</a></li>
+                                <li><a class="dropdown-item" href="/health"><i class="fas fa-heartbeat"></i> System Health</a></li>
+                                <li><a class="dropdown-item" href="/version"><i class="fas fa-info-circle"></i> Version Info</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="/export/alerts"><i class="fas fa-download"></i> Export Alerts</a></li>
+                                <li><a class="dropdown-item" href="/export/boundaries"><i class="fas fa-download"></i> Export Boundaries</a></li>
+                                <li><a class="dropdown-item" href="/export/statistics"><i class="fas fa-download"></i> Export Statistics</a></li>
+                            </ul>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin">
+                                <i class="fas fa-cog"></i>
+                                <span>Admin</span>
+                            </a>
+                        </li>
+                        {% if current_user is defined and current_user.is_authenticated %}
+                        <li class="nav-item">
+                            <span class="nav-link disabled text-nowrap">
+                                <i class="fas fa-user-shield"></i> {{ current_user.username }}
+                            </span>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('logout') }}">
+                                <i class="fas fa-sign-out-alt"></i>
+                                <span>Logout</span>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('login') }}">
+                                <i class="fas fa-sign-in-alt"></i>
+                                <span>Login</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
             </div>
         </div>
     </nav>
+
+    <div id="system-status-banner" class="system-status-banner alert alert-warning d-none" role="alert" aria-live="polite">
+        <div class="banner-content">
+            <i class="fas fa-triangle-exclamation banner-icon"></i>
+            <div class="banner-message">
+                <span class="banner-title" id="system-status-banner-title">System Warning</span>
+                <span class="banner-text" id="system-status-banner-text">System status updates will appear here.</span>
+            </div>
+        </div>
+        <button type="button" class="btn-close" id="system-status-banner-close" aria-label="Dismiss system status alert"></button>
+    </div>
 
     <!-- Flash Messages -->
     {% with messages = get_flashed_messages() %}
@@ -605,6 +833,12 @@
 
     <!-- 2. Base JavaScript functions -->
     <script>
+        let systemStatusBannerState = {
+            message: null,
+            severity: null,
+            dismissed: false,
+        };
+
         // Global utility functions
         function updateCurrentTime() {
             const now = new Date();
@@ -737,6 +971,48 @@
             URL.revokeObjectURL(url);
         }
 
+        function updateSystemStatusBanner(severity, summary, label) {
+            const banner = document.getElementById('system-status-banner');
+            const bannerTitle = document.getElementById('system-status-banner-title');
+            const bannerText = document.getElementById('system-status-banner-text');
+
+            if (!banner || !bannerTitle || !bannerText) {
+                return;
+            }
+
+            const normalizedSeverity = (severity || '').toString().toLowerCase();
+
+            if (!normalizedSeverity || ['healthy', 'online'].includes(normalizedSeverity)) {
+                banner.classList.add('d-none');
+                banner.classList.remove('alert-warning', 'alert-danger');
+                systemStatusBannerState.message = null;
+                systemStatusBannerState.severity = null;
+                systemStatusBannerState.dismissed = false;
+                return;
+            }
+
+            const displaySeverity = normalizedSeverity === 'critical' ? 'critical' : 'warning';
+            const message = (summary || label || 'System status update').toString();
+
+            if (
+                systemStatusBannerState.dismissed &&
+                systemStatusBannerState.message === message &&
+                systemStatusBannerState.severity === displaySeverity
+            ) {
+                return;
+            }
+
+            banner.classList.remove('alert-warning', 'alert-danger');
+            banner.classList.add(displaySeverity === 'critical' ? 'alert-danger' : 'alert-warning');
+            bannerTitle.textContent = displaySeverity === 'critical' ? 'Critical System Notice' : 'System Warning';
+            bannerText.textContent = message;
+            banner.classList.remove('d-none');
+
+            systemStatusBannerState.message = message;
+            systemStatusBannerState.severity = displaySeverity;
+            systemStatusBannerState.dismissed = false;
+        }
+
         // System health check
         async function checkSystemHealth() {
             try {
@@ -762,18 +1038,18 @@
 
                     healthDot.className = style.className;
 
-                    let displayText = style.label;
-                    if (statusKey === 'healthy') {
-                        displayText = summary || 'System OK';
-                    } else if (summary) {
-                        displayText = `${style.label} · ${summary}`;
-                    }
+                    const isHealthy = ['healthy', 'online'].includes(statusKey);
+                    const displayText = isHealthy ? (summary || 'System OK') : style.label;
 
                     healthText.textContent = displayText;
 
                     if (indicator) {
-                        indicator.setAttribute('title', summary || displayText);
+                        const indicatorMessage = summary || displayText;
+                        indicator.setAttribute('title', indicatorMessage);
+                        indicator.setAttribute('aria-label', `System status: ${indicatorMessage}`);
                     }
+
+                    updateSystemStatusBanner(statusKey, summary, style.label);
                 }
             } catch (error) {
                 console.warn('Could not check system health:', error);
@@ -786,8 +1062,10 @@
                     healthText.textContent = fallbackText;
                     if (indicator) {
                         indicator.setAttribute('title', fallbackText);
+                        indicator.setAttribute('aria-label', `System status: ${fallbackText}`);
                     }
                 }
+                updateSystemStatusBanner('warning', 'Unable to contact the system status service.', 'Warning');
             }
         }
 
@@ -838,6 +1116,17 @@
             // Check system health immediately and then every 30 seconds
             checkSystemHealth();
             setInterval(checkSystemHealth, 30000);
+
+            const bannerCloseButton = document.getElementById('system-status-banner-close');
+            if (bannerCloseButton) {
+                bannerCloseButton.addEventListener('click', function() {
+                    const banner = document.getElementById('system-status-banner');
+                    if (banner) {
+                        banner.classList.add('d-none');
+                    }
+                    systemStatusBannerState.dismissed = true;
+                });
+            }
 
             console.log('Base template initialization complete');
         });
