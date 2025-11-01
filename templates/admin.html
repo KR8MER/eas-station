@@ -1197,6 +1197,7 @@
         let easLastResponse = null;
         let selectedSameCodes = [];
         let locationFipsSelection = [];
+        let locationDerivedZoneCodes = new Set();
 
         const sanitizeBoundaryTypeInput = (value) => {
             if (!value) {
@@ -2417,6 +2418,79 @@
             };
         }
 
+        function normalizeZoneCode(value) {
+            if (value === undefined || value === null) {
+                return '';
+            }
+            const trimmed = value.toString().trim().toUpperCase();
+            if (!trimmed) {
+                return '';
+            }
+            return trimmed.replace(/[^A-Z0-9]/g, '');
+        }
+
+        function deriveCountyZoneCodes(fipsCodes) {
+            const derived = new Set();
+            if (!Array.isArray(fipsCodes)) {
+                return Array.from(derived);
+            }
+            fipsCodes.forEach((code) => {
+                const details = getSameCodeDetails(code);
+                if (!details || !details.stateAbbr || !details.countyFips || details.isStatewide) {
+                    return;
+                }
+                const suffix = details.countyFips.replace(/[^0-9]/g, '').padStart(3, '0').slice(-3);
+                if (!suffix || suffix === '000') {
+                    return;
+                }
+                const stateAbbr = (details.stateAbbr || '').toUpperCase();
+                if (!/^[A-Z]{2}$/.test(stateAbbr)) {
+                    return;
+                }
+                derived.add(`${stateAbbr}C${suffix}`);
+            });
+            return Array.from(derived).sort();
+        }
+
+        function syncZoneCodeFieldWithDerived() {
+            const field = document.getElementById('locationZoneCodes');
+            if (!field) {
+                return;
+            }
+            const existingTokens = parseListInput(field.value);
+            const normalizedDerived = new Set(Array.from(locationDerivedZoneCodes).map(normalizeZoneCode).filter(Boolean));
+            const manualTokens = [];
+            const seenManual = new Set();
+
+            existingTokens.forEach((token) => {
+                const normalized = normalizeZoneCode(token);
+                if (!normalized || normalizedDerived.has(normalized)) {
+                    return;
+                }
+                if (!seenManual.has(normalized)) {
+                    seenManual.add(normalized);
+                    manualTokens.push(normalized);
+                }
+            });
+
+            const derivedTokens = Array.from(normalizedDerived).sort();
+            const combined = manualTokens.concat(derivedTokens);
+            field.value = combined.join('\n');
+
+            if (locationSettingsCache) {
+                locationSettingsCache.zone_codes = combined.slice();
+            }
+            if (window.APP_LOCATION) {
+                window.APP_LOCATION.zone_codes = combined.slice();
+            }
+        }
+
+        function refreshDerivedZoneCodesFromSelection() {
+            const derived = deriveCountyZoneCodes(locationFipsSelection);
+            locationDerivedZoneCodes = new Set(derived.map(normalizeZoneCode).filter(Boolean));
+            syncZoneCodeFieldWithDerived();
+        }
+
         function populatePortionOptions() {
             const portionSelect = document.getElementById('easPortionSelect');
             if (!portionSelect) {
@@ -3538,6 +3612,7 @@
                 window.APP_LOCATION.fips_codes = locationFipsSelection.slice();
                 window.APP_LOCATION.same_codes = locationFipsSelection.slice();
             }
+            refreshDerivedZoneCodesFromSelection();
         }
 
         function addLocationFipsCode(code) {
@@ -3559,6 +3634,7 @@
                 window.APP_LOCATION.fips_codes = locationFipsSelection.slice();
                 window.APP_LOCATION.same_codes = locationFipsSelection.slice();
             }
+            refreshDerivedZoneCodesFromSelection();
         }
 
         function removeLocationFipsCode(code) {
@@ -3576,6 +3652,7 @@
                 window.APP_LOCATION.fips_codes = locationFipsSelection.slice();
                 window.APP_LOCATION.same_codes = locationFipsSelection.slice();
             }
+            refreshDerivedZoneCodesFromSelection();
         }
 
         function populateLocationFipsStateOptions() {
@@ -4011,6 +4088,7 @@
             if (zoomField) zoomField.value = settings.map_default_zoom ?? '';
             if (ledField) ledField.value = (settings.led_default_lines || []).join('\n');
 
+            refreshDerivedZoneCodesFromSelection();
             updateLocationSettingsStatus('Loaded current configuration.', 'muted');
         }
 
