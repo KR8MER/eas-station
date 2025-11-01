@@ -6,6 +6,10 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 ### Added
+- Added an interactive `.env` setup wizard available at `/setup`, with a CLI
+  companion (`tools/setup_wizard.py`), so operators can generate secrets,
+  database credentials, and location defaults before first launch without
+  editing text files by hand.
 - Added a repository `VERSION` manifest, shared resolver, and `tests/test_release_metadata.py` guardrail so version bumps and changelog updates stay synchronised for audit trails.
 - Added `tools/inplace_upgrade.py` for in-place upgrades that pull, rebuild, migrate, and restart services without destroying volumes, plus `tools/create_backup.py` to snapshot `.env`, compose files, and a Postgres dump with audit metadata before changes.
 - Introduced a compliance dashboard with CSV/PDF exports and automated

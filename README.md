@@ -206,6 +206,26 @@ docker compose up -d --build
 
 ### Configuration Before First Run
 
+You can configure the environment through the browser, fall back to the CLI wizard, or edit the file manually.
+
+#### Option A – Use the in-browser setup wizard (recommended)
+
+1. Start the containers with `docker compose up -d --build` if they are not already running.
+2. Visit [http://localhost:5000/setup](http://localhost:5000/setup) from your browser.
+3. Fill in the required secrets and database credentials, then click **Save configuration**.
+
+The page writes a fresh `.env` using `.env.example` as a template and will create a timestamped backup when updating an existing file.
+
+#### Option B – Run the CLI wizard
+
+```bash
+python tools/setup_wizard.py
+```
+
+The CLI wrapper prompts for the same values as the browser flow and produces identical output, which is useful in headless deployments.
+
+#### Option C – Configure manually
+
 1. **Copy and review the environment template:**
    Run `cp .env.example .env` (already done in the quick start commands above)
    and treat the result as your local configuration. The defaults mirror the
@@ -220,13 +240,13 @@ docker compose up -d --build
 3. **Edit `.env` and update:**
    - `SECRET_KEY` - Use the generated value
    - `POSTGRES_PASSWORD` - Change from defaults (the application builds `DATABASE_URL` automatically from the `POSTGRES_*` values)
-  - `POSTGRES_HOST` - Point at your existing PostGIS host (hostname or IP)
-  - `TZ`, `WATCHTOWER_*`, or other infrastructure metadata as needed
+   - `POSTGRES_HOST` - Point at your existing PostGIS host (hostname or IP)
+   - `TZ`, `WATCHTOWER_*`, or other infrastructure metadata as needed
 
 4. **Start the system:**
-  ```bash
-  docker compose up -d --build
-  ```
+   ```bash
+   docker compose up -d --build
+   ```
 
 ### In-Place Upgrades (Keep Containers Running)
 
