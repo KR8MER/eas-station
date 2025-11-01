@@ -13,6 +13,7 @@ from app_core.extensions import db
 from app_core.models import AdminUser, Boundary, CAPAlert, EASMessage, SystemLog
 from app_core.alerts import get_active_alerts_query, get_expired_alerts_query
 from app_core.location import get_location_settings
+from app_core.zones import build_county_forecast_zone_map
 from app_utils.eas import (
     ORIGINATOR_DESCRIPTIONS,
     PRIMARY_ORIGINATORS,
@@ -116,6 +117,12 @@ def register_dashboard_routes(app, logger, eas_config):
                 for code in PRIMARY_ORIGINATORS
             ]
 
+            county_zone_map = safe_db_operation(
+                'build county-to-forecast zone index',
+                {},
+                build_county_forecast_zone_map,
+            )
+
             return render_template(
                 'admin.html',
                 total_boundaries=total_boundaries,
@@ -141,6 +148,7 @@ def register_dashboard_routes(app, logger, eas_config):
                 eas_header_fields=SAME_HEADER_FIELD_DESCRIPTIONS,
                 eas_p_digit_meanings=P_DIGIT_MEANINGS,
                 eas_default_same_codes=manual_same_defaults,
+                eas_county_zone_map=county_zone_map,
                 setup_mode=setup_mode,
             )
         except Exception as exc:  # pragma: no cover - defensive logging

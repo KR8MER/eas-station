@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import pytest
 from flask import Flask
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.compiler import compiles
 
 from app_core.extensions import db
-from app_core.location import describe_location_reference
-from app_core.models import NWSZone
+from app_core.location import describe_location_reference, update_location_settings
+from app_core.models import LocationSettings, NWSZone
 from app_core.zones import clear_zone_lookup_cache
+
+
+@compiles(JSONB, "sqlite")
+def _compile_jsonb_sqlite(element, compiler, **kw):
+    return "TEXT"
 
 
 @pytest.fixture
@@ -21,10 +28,12 @@ def app_context(tmp_path):
     with app.app_context():
         engine = db.engine
         NWSZone.__table__.create(bind=engine)
+        LocationSettings.__table__.create(bind=engine)
         clear_zone_lookup_cache()
         yield app
         db.session.remove()
         NWSZone.__table__.drop(bind=engine)
+        LocationSettings.__table__.drop(bind=engine)
     clear_zone_lookup_cache()
 
 
@@ -53,7 +62,7 @@ def test_describe_location_reference_includes_zone_and_fips_details(app_context)
             "state_code": "OH",
             "timezone": "America/New_York",
             "fips_codes": ["039137"],
-            "zone_codes": ["OHZ016"],
+            "zone_codes": ["OHZ016", "OHC137"],
             "area_terms": ["PUTNAM COUNTY", "OTTAWA"],
         }
 
@@ -63,10 +72,19 @@ def test_describe_location_reference_includes_zone_and_fips_details(app_context)
         assert snapshot["location"]["state_code"] == "OH"
 
         zones = snapshot["zones"]["known"]
-        assert len(zones) == 1
-        assert zones[0]["code"] == "OHZ016"
-        assert zones[0]["cwa"] == "CLE"
-        assert zones[0]["label"].startswith("OHZ016")
+        assert len(zones) == 2
+        zone_lookup = {zone["code"]: zone for zone in zones}
+
+        assert zone_lookup["OHZ016"]["cwa"] == "CLE"
+        assert zone_lookup["OHZ016"]["label"].startswith("OHZ016")
+
+        county_zone = zone_lookup["OHC137"]
+        assert county_zone["zone_type"] == "C"
+        assert county_zone["same_code"] == "039137"
+        assert county_zone["fips_code"] == "39137"
+        assert county_zone["state_fips"] == "39"
+        assert county_zone["county_fips"] == "137"
+        assert county_zone["label"].startswith("OHC137 – Putnam County")
 
         fips_entries = snapshot["fips"]["known"]
         assert len(fips_entries) == 1
@@ -81,6 +99,66 @@ def test_describe_location_reference_includes_zone_and_fips_details(app_context)
         sources = snapshot.get("sources", [])
         assert any(item.get("path") == "assets/pd01005007curr.pdf" for item in sources)
         assert any(item.get("url") == "https://www.weather.gov/gis/PublicZones" for item in sources)
+
+
+def test_update_location_settings_infers_county_zones(app_context):
+    with app_context.app_context():
+        clear_zone_lookup_cache()
+        zone_allen = NWSZone(
+            zone_code="OHZ025",
+            state_code="OH",
+            zone_number="025",
+            zone_type="Z",
+            cwa="IWX",
+            time_zone="E",
+            fe_area="WC",
+            name="Allen",
+            short_name="Allen",
+            state_zone="OH025",
+            longitude=-84.1057,
+            latitude=40.7715,
+        )
+        zone_putnam = NWSZone(
+            zone_code="OHZ016",
+            state_code="OH",
+            zone_number="016",
+            zone_type="Z",
+            cwa="IWX",
+            time_zone="E",
+            fe_area="WC",
+            name="Putnam",
+            short_name="Putnam",
+            state_zone="OH016",
+            longitude=-84.1317,
+            latitude=41.0221,
+        )
+        db.session.add_all([zone_allen, zone_putnam])
+        db.session.commit()
+        clear_zone_lookup_cache()
+
+        result = update_location_settings(
+            {
+                "county_name": "Allen County",
+                "state_code": "OH",
+                "timezone": "America/New_York",
+                "fips_codes": ["039003", "039137"],
+                "zone_codes": [],
+                "area_terms": ["ALLEN COUNTY"],
+            }
+        )
+
+        assert "OHZ025" in result["zone_codes"]
+        assert "OHZ016" in result["zone_codes"]
+        assert "OHC003" in result["zone_codes"]
+        assert "OHC137" in result["zone_codes"]
+        assert result["zone_codes"].count("OHC137") == 1
+
+        stored = LocationSettings.query.first()
+        assert stored is not None
+        assert "OHZ025" in stored.zone_codes
+        assert "OHZ016" in stored.zone_codes
+        assert "OHC003" in stored.zone_codes
+        assert "OHC137" in stored.zone_codes
 
 
 def test_describe_location_reference_flags_unknown_zones(app_context):

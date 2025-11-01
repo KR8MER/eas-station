@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from flask import current_app, has_app_context
 
+from app_utils.fips_codes import NATIONWIDE_SAME_CODE, US_FIPS_COUNTIES
 from app_utils.zone_catalog import (
     ZoneSyncResult,
     iter_zone_records,
@@ -35,6 +37,10 @@ class ZoneInfo:
     fe_area: str
     latitude: Optional[float]
     longitude: Optional[float]
+    same_code: Optional[str] = None
+    fips_code: Optional[str] = None
+    state_fips: Optional[str] = None
+    county_fips: Optional[str] = None
 
     def formatted_label(self) -> str:
         label = self.name or self.short_name or self.code
@@ -44,7 +50,176 @@ class ZoneInfo:
 
 
 _ZONE_LOOKUP_CACHE: Dict[str, ZoneInfo] | None = None
+_FORECAST_ZONE_NAME_INDEX: Dict[Tuple[str, str], Tuple[str, ...]] | None = None
 _ZONE_CODE_PATTERN = re.compile(r"^[A-Z]{2}[A-Z][0-9]{3}$")
+
+
+def _strip_diacritics(value: str) -> str:
+    return "".join(
+        ch for ch in unicodedata.normalize("NFKD", value) if not unicodedata.combining(ch)
+    )
+
+
+def _normalise_geo_name(value: str) -> str:
+    if not value:
+        return ""
+    cleaned = _strip_diacritics(value).upper()
+    cleaned = re.sub(r"\([^)]*\)", " ", cleaned)
+    replacements = {
+        "SAINTE": "SAINT",
+        "ST.": "ST",
+        "SAINT": "ST",
+        "STE": "ST",
+        "MUNICIPALITY OF": "",
+        "MUNICIPIO DE": "",
+        " MUNICIPIO": "",
+        " MUNICIPALITY": "",
+        " CITY AND BOROUGH": "",
+        " CITY": "",
+        " COUNTY": "",
+        " PARISH": "",
+        " BOROUGH": "",
+        " CENSUS AREA": "",
+        " CENSUS SUBAREA": "",
+        " DISTRICT": "",
+    }
+    for token, replacement in replacements.items():
+        cleaned = cleaned.replace(token, replacement)
+    cleaned = cleaned.replace("&", " AND ")
+    cleaned = re.sub(r"[^A-Z0-9]", "", cleaned)
+    return cleaned
+
+
+def _build_county_zone_lookup() -> Dict[str, ZoneInfo]:
+    """Return derived county-based zone definitions using the FIPS catalog."""
+
+    lookup: Dict[str, ZoneInfo] = {}
+    for same_code, label in US_FIPS_COUNTIES.items():
+        if not same_code or same_code == NATIONWIDE_SAME_CODE:
+            continue
+
+        digits = "".join(ch for ch in same_code if ch.isdigit())
+        if len(digits) != 6 or digits.endswith("000"):
+            continue
+
+        if "," in label:
+            county_name, state_abbr = [part.strip() for part in label.rsplit(",", maxsplit=1)]
+        else:
+            county_name = label.strip()
+            state_abbr = ""
+
+        if len(state_abbr) != 2:
+            continue
+
+        county_suffix = digits[-3:]
+        zone_code = f"{state_abbr}C{county_suffix}"
+        # FIPS county code is the last five digits of the SAME identifier.
+        fips_code = digits[1:]
+        state_fips = digits[1:3]
+
+        lookup[zone_code] = ZoneInfo(
+            code=zone_code,
+            state_code=state_abbr,
+            zone_number=county_suffix,
+            zone_type="C",
+            name=county_name,
+            short_name=county_name,
+            cwa="",
+            time_zone="",
+            fe_area=state_abbr,
+            latitude=None,
+            longitude=None,
+            same_code=digits,
+            fips_code=fips_code,
+            state_fips=state_fips,
+            county_fips=county_suffix,
+        )
+
+    return lookup
+
+
+_COUNTY_ZONE_LOOKUP: Dict[str, ZoneInfo] = _build_county_zone_lookup()
+
+
+def _build_forecast_zone_name_index(
+    zone_lookup: Dict[str, ZoneInfo]
+) -> Dict[Tuple[str, str], Tuple[str, ...]]:
+    index: Dict[Tuple[str, str], Set[str]] = {}
+    for info in zone_lookup.values():
+        if info.zone_type != "Z":
+            continue
+        state = (info.state_code or "").upper()
+        if len(state) != 2:
+            continue
+        candidates = {info.name, info.short_name}
+        for candidate in candidates:
+            key = _normalise_geo_name(candidate or "")
+            if not key:
+                continue
+            index.setdefault((state, key), set()).add(info.code)
+
+    return {key: tuple(sorted(values)) for key, values in index.items()}
+
+
+def _get_forecast_zone_name_index(
+    zone_lookup: Optional[Dict[str, ZoneInfo]] = None,
+) -> Dict[Tuple[str, str], Tuple[str, ...]]:
+    global _FORECAST_ZONE_NAME_INDEX
+    if _FORECAST_ZONE_NAME_INDEX is None:
+        if zone_lookup is None:
+            zone_lookup = get_zone_lookup()
+        _FORECAST_ZONE_NAME_INDEX = _build_forecast_zone_name_index(zone_lookup)
+    return _FORECAST_ZONE_NAME_INDEX
+
+
+def forecast_zones_for_county(
+    state_abbr: str, county_name: str, zone_lookup: Optional[Dict[str, ZoneInfo]] = None
+) -> List[str]:
+    key = (state_abbr or "").upper(), _normalise_geo_name(county_name or "")
+    if len(key[0]) != 2 or not key[1]:
+        return []
+    index = _get_forecast_zone_name_index(zone_lookup)
+    return list(index.get(key, ()))
+
+
+def forecast_zones_for_same_code(
+    same_code: str, zone_lookup: Optional[Dict[str, ZoneInfo]] = None
+) -> List[str]:
+    digits = "".join(ch for ch in str(same_code) if ch.isdigit())
+    if not digits:
+        return []
+    if len(digits) == 5:
+        digits = f"0{digits}"
+    if len(digits) != 6 or digits.endswith("000"):
+        return []
+
+    label = US_FIPS_COUNTIES.get(digits)
+    if not label or "," not in label:
+        return []
+    county_name, state_abbr = [part.strip() for part in label.rsplit(",", maxsplit=1)]
+    if len(state_abbr) != 2:
+        return []
+    return forecast_zones_for_county(state_abbr, county_name, zone_lookup)
+
+
+def build_county_forecast_zone_map(
+    zone_lookup: Optional[Dict[str, ZoneInfo]] = None,
+) -> Dict[str, List[str]]:
+    mapping: Dict[str, List[str]] = {}
+    index = _get_forecast_zone_name_index(zone_lookup)
+    for same_code, label in US_FIPS_COUNTIES.items():
+        if not same_code or same_code == NATIONWIDE_SAME_CODE:
+            continue
+        if "," not in label:
+            continue
+        county_name, state_abbr = [part.strip() for part in label.rsplit(",", maxsplit=1)]
+        key = (state_abbr.upper(), _normalise_geo_name(county_name))
+        if len(key[0]) != 2 or not key[1]:
+            continue
+        codes = index.get(key)
+        if codes:
+            mapping[same_code] = list(codes)
+    return mapping
 
 
 def _resolve_zone_catalog_path(source_path: str | Path | None) -> Path:
@@ -77,7 +252,9 @@ def clear_zone_lookup_cache() -> None:
     """Invalidate the in-memory zone lookup cache."""
 
     global _ZONE_LOOKUP_CACHE
+    global _FORECAST_ZONE_NAME_INDEX
     _ZONE_LOOKUP_CACHE = None
+    _FORECAST_ZONE_NAME_INDEX = None
 
 
 def _build_zone_info(model: NWSZone) -> ZoneInfo:
@@ -105,6 +282,8 @@ def get_zone_lookup() -> Dict[str, ZoneInfo]:
             zone.zone_code: _build_zone_info(zone)
             for zone in NWSZone.query.all()
         }
+        for code, info in _COUNTY_ZONE_LOOKUP.items():
+            _ZONE_LOOKUP_CACHE.setdefault(code, info)
     return dict(_ZONE_LOOKUP_CACHE)
 
 

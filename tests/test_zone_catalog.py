@@ -9,7 +9,9 @@ from flask import Flask
 from app_core.extensions import db
 from app_core.models import NWSZone
 from app_core.zones import (
+    build_county_forecast_zone_map,
     clear_zone_lookup_cache,
+    forecast_zones_for_same_code,
     format_zone_code_list,
     normalise_zone_codes,
     split_catalog_members,
@@ -224,9 +226,37 @@ def test_zone_code_normalisation_and_lookup(app_context) -> None:
     assert invalid == ["BADCODE"]
 
     known, unknown = split_catalog_members(["ALZ019", "OHC137"])
-    assert known == ["ALZ019"]
-    assert unknown == ["OHC137"]
+    assert known == ["ALZ019", "OHC137"]
+    assert unknown == []
 
     formatted = format_zone_code_list(["ALZ019", "OHC137"])
     assert formatted[0].startswith("ALZ019 – Calhoun")
-    assert formatted[1] == "OHC137"
+    assert formatted[1].startswith("OHC137 – Putnam County")
+
+
+def test_forecast_zone_lookup_matches_county_names(app_context) -> None:
+    with app_context.app_context():
+        clear_zone_lookup_cache()
+        zone = NWSZone(
+            zone_code="OHZ025",
+            state_code="OH",
+            zone_number="025",
+            zone_type="Z",
+            cwa="IWX",
+            time_zone="E",
+            fe_area="WC",
+            name="Allen",
+            short_name="Allen",
+            state_zone="OH025",
+            longitude=-84.1057,
+            latitude=40.7715,
+        )
+        db.session.add(zone)
+        db.session.commit()
+        clear_zone_lookup_cache()
+
+        mapping = build_county_forecast_zone_map()
+        assert mapping.get("039003") == ["OHZ025"]
+
+        codes = forecast_zones_for_same_code("039003")
+        assert codes == ["OHZ025"]

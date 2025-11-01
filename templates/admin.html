@@ -1166,6 +1166,7 @@
         };
         const EAS_FIPS_TREE = {{ eas_fips_states|tojson }};
         const EAS_FIPS_LOOKUP = {{ eas_fips_lookup|tojson }};
+        const EAS_COUNTY_FORECAST_ZONES = {{ eas_county_zone_map|tojson }};
         const EAS_ORIGINATOR_DESCRIPTIONS = {{ eas_originator_descriptions|tojson }};
         const EAS_P_DIGIT_MEANINGS = {{ eas_p_digit_meanings|tojson }};
         const MAX_SAME_CODES = 31;
@@ -1197,6 +1198,8 @@
         let easLastResponse = null;
         let selectedSameCodes = [];
         let locationFipsSelection = [];
+        let locationDerivedZoneList = [];
+        let locationDerivedZoneCodes = new Set();
 
         const sanitizeBoundaryTypeInput = (value) => {
             if (!value) {
@@ -2417,6 +2420,100 @@
             };
         }
 
+        function normalizeZoneCode(value) {
+            if (value === undefined || value === null) {
+                return '';
+            }
+            const trimmed = value.toString().trim().toUpperCase();
+            if (!trimmed) {
+                return '';
+            }
+            return trimmed.replace(/[^A-Z0-9]/g, '');
+        }
+
+        function deriveCountyZoneCodes(fipsCodes) {
+            const derived = [];
+            const seen = new Set();
+            if (!Array.isArray(fipsCodes)) {
+                return derived;
+            }
+
+            const addCode = (value) => {
+                const normalized = normalizeZoneCode(value);
+                if (!normalized || seen.has(normalized)) {
+                    return;
+                }
+                seen.add(normalized);
+                derived.push(normalized);
+            };
+
+            fipsCodes.forEach((code) => {
+                const details = getSameCodeDetails(code);
+                if (!details || !details.stateAbbr || !details.countyFips || details.isStatewide) {
+                    return;
+                }
+                const suffix = details.countyFips.replace(/[^0-9]/g, '').padStart(3, '0').slice(-3);
+                if (!suffix || suffix === '000') {
+                    return;
+                }
+                const stateAbbr = (details.stateAbbr || '').toUpperCase();
+                if (!/^[A-Z]{2}$/.test(stateAbbr)) {
+                    return;
+                }
+
+                const normalizedSame = details.code;
+                if (normalizedSame && Array.isArray(EAS_COUNTY_FORECAST_ZONES?.[normalizedSame])) {
+                    EAS_COUNTY_FORECAST_ZONES[normalizedSame].forEach((zone) => addCode(zone));
+                }
+
+                addCode(`${stateAbbr}C${suffix}`);
+            });
+
+            return derived;
+        }
+
+        function syncZoneCodeFieldWithDerived() {
+            const field = document.getElementById('locationZoneCodes');
+            if (!field) {
+                return;
+            }
+            const existingTokens = parseListInput(field.value);
+            const derivedTokens = locationDerivedZoneList
+                .map((token) => normalizeZoneCode(token))
+                .filter(Boolean);
+            const normalizedDerived = new Set(derivedTokens);
+            const manualTokens = [];
+            const seenManual = new Set();
+
+            existingTokens.forEach((token) => {
+                const normalized = normalizeZoneCode(token);
+                if (!normalized || normalizedDerived.has(normalized)) {
+                    return;
+                }
+                if (!seenManual.has(normalized)) {
+                    seenManual.add(normalized);
+                    manualTokens.push(normalized);
+                }
+            });
+
+            const combined = manualTokens.concat(derivedTokens);
+            field.value = combined.join('\n');
+
+            if (locationSettingsCache) {
+                locationSettingsCache.zone_codes = combined.slice();
+            }
+            if (window.APP_LOCATION) {
+                window.APP_LOCATION.zone_codes = combined.slice();
+            }
+        }
+
+        function refreshDerivedZoneCodesFromSelection() {
+            const derived = deriveCountyZoneCodes(locationFipsSelection);
+            locationDerivedZoneList = derived.slice();
+            locationDerivedZoneCodes = new Set(derived.map(normalizeZoneCode).filter(Boolean));
+            syncZoneCodeFieldWithDerived();
+        }
+
         function populatePortionOptions() {
             const portionSelect = document.getElementById('easPortionSelect');
             if (!portionSelect) {
@@ -3538,6 +3635,7 @@
                 window.APP_LOCATION.fips_codes = locationFipsSelection.slice();
                 window.APP_LOCATION.same_codes = locationFipsSelection.slice();
             }
+            refreshDerivedZoneCodesFromSelection();
         }
 
         function addLocationFipsCode(code) {
@@ -3559,6 +3657,7 @@
                 window.APP_LOCATION.fips_codes = locationFipsSelection.slice();
                 window.APP_LOCATION.same_codes = locationFipsSelection.slice();
             }
+            refreshDerivedZoneCodesFromSelection();
         }
 
         function removeLocationFipsCode(code) {
@@ -3576,6 +3675,7 @@
                 window.APP_LOCATION.fips_codes = locationFipsSelection.slice();
                 window.APP_LOCATION.same_codes = locationFipsSelection.slice();
             }
+            refreshDerivedZoneCodesFromSelection();
         }
 
         function populateLocationFipsStateOptions() {
@@ -4011,6 +4111,7 @@
             if (zoomField) zoomField.value = settings.map_default_zoom ?? '';
             if (ledField) ledField.value = (settings.led_default_lines || []).join('\n');
 
+            refreshDerivedZoneCodesFromSelection();
             updateLocationSettingsStatus('Loaded current configuration.', 'muted');
         }
 
