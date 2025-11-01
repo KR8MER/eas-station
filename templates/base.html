@@ -7,8 +7,11 @@
     <title>{% block title %}EAS Station - Emergency Alert System{% endblock %}</title>
 
     <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
-    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/eas-station-logo.svg') }}">
+    <link rel="shortcut icon" href="{{ url_for('static', filename='img/eas-station-logo.svg') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/eas-station-logo.svg') }}">
+    <link rel="mask-icon" href="{{ url_for('static', filename='img/eas-station-logo.svg') }}" color="#204885">
+    <meta name="theme-color" content="#204885">
 
     <!-- Bootstrap CSS -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
@@ -495,11 +498,15 @@
             font-weight: bold;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
         }
 
-        .brand-icon {
-            font-size: 1.6em;
+        .brand-logo {
+            width: 42px;
+            height: 42px;
+            display: block;
+            border-radius: 12px;
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
         }
 
         .status-indicator {
@@ -697,7 +704,7 @@
         <div class="container-fluid">
             <div class="navbar-brand-group">
                 <a class="navbar-brand" href="/">
-                    <i class="fas fa-broadcast-tower brand-icon"></i>
+                    <img src="{{ url_for('static', filename='img/eas-station-logo.svg') }}" alt="EAS Station" class="brand-logo" width="42" height="42" loading="lazy">
                     <span class="brand-text">
                         <span class="brand-title">EAS Station</span>
                         <span class="brand-subtitle">Emergency Alert Platform</span>
