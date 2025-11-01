@@ -119,13 +119,6 @@ def _build_locations_list(fields: Dict[str, object]) -> List[str]:
             else:
                 label = code or state_label
 
-        if code:
-            normalised_code = code
-            if normalised_code not in label:
-                if normalised_code.isdigit():
-                    label = f"{label} (FIPS {normalised_code})"
-                else:
-                    label = f"{label} ({normalised_code})"
         label = label.strip()
         if label:
             locations.append(label)
