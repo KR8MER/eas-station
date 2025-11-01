@@ -47,6 +47,22 @@ _ZONE_LOOKUP_CACHE: Dict[str, ZoneInfo] | None = None
 _ZONE_CODE_PATTERN = re.compile(r"^[A-Z]{2}[A-Z][0-9]{3}$")
 
 
+def _resolve_zone_catalog_path(source_path: str | Path | None) -> Path:
+    """Return the path to the zone catalog, respecting config defaults."""
+
+    if source_path:
+        return Path(source_path)
+
+    config_path: str | Path | None = None
+    if has_app_context():
+        config_path = current_app.config.get("NWS_ZONE_DBF_PATH")
+
+    if config_path:
+        return Path(config_path)
+
+    return Path("assets/z_05mr24.dbf")
+
+
 def _log_info(message: str) -> None:
     if has_app_context():
         current_app.logger.info(message)
@@ -149,9 +165,7 @@ def format_zone_code_list(codes: Sequence[str]) -> List[str]:
 def ensure_zone_catalog(logger=None, source_path: str | Path | None = None) -> bool:
     """Ensure the zone catalog table matches the bundled DBF file."""
 
-    path = Path(source_path) if source_path else Path(
-        (current_app.config.get("NWS_ZONE_DBF_PATH") if has_app_context() else "assets/z_05mr24.dbf")
-    )
+    path = _resolve_zone_catalog_path(source_path)
     if not path.exists():
         _log_warning(f"NOAA zone catalog not found at {path}")
         return False
@@ -181,9 +195,7 @@ def synchronise_zone_catalog(
 ) -> ZoneSyncResult:
     """Synchronise the zone catalog, optionally in dry-run mode."""
 
-    path = Path(source_path) if source_path else Path(
-        current_app.config.get("NWS_ZONE_DBF_PATH", "assets/z_05mr24.dbf")
-    )
+    path = _resolve_zone_catalog_path(source_path)
     records = load_zone_records(path)
     if dry_run:
         return ZoneSyncResult(source_path=path, total=len(records), inserted=0, updated=0, removed=0)

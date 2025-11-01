@@ -8,7 +8,7 @@ from sqlalchemy import inspect
 
 
 revision = "20241112_add_eas_message_segments"
-down_revision = "20240718_expand_decoded_audio_segments"
+down_revision = "20241031_convert_location_json_to_jsonb"
 branch_labels = None
 depends_on = None
 
