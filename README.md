@@ -26,6 +26,7 @@ While the codebase remains hardware-agnostic, the following Raspberry Pi-based s
 
 All documentation and tooling emphasise a guided setup process so integrators can reproduce the build with off-the-shelf components instead of bespoke rack units.
 
+[![CI status](https://github.com/KR8MER/eas-station/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/KR8MER/eas-station/actions/workflows/build.yml)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://www.docker.com/)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-blue?logo=python)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-2.3-green?logo=flask)](https://flask.palletsprojects.com/)
@@ -165,6 +166,7 @@ EAS Station is not just an alert monitor—it's a **complete emergency broadcast
 - [🛡️ Privacy Policy](docs/policies/PRIVACY_POLICY.md) – Guidance for handling configuration data, test records, and optional integrations.
 - [🗂️ Master Implementation Roadmap](docs/roadmap/master_todo.md) – Drop-in replacement requirements with implementation plans that map the path to hardware parity and production readiness.
 - [📦 Open-Source Dependency Attribution](docs/reference/dependency_attribution.md) – Maintainer, license, and usage overview for every Python library bundled with the project.
+- [🔄 One-Button Upgrade Guide](docs/guides/one_button_upgrade.md) – Connect the CI badge to a single-action Docker refresh workflow for lab and field stations.
 - In-app versions of both guides are reachable from the navigation bar via the new <strong>About</strong> and <strong>Help</strong> pages for quick operator reference.
 
 ---
