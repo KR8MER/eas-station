@@ -213,23 +213,32 @@ def sync_zone_catalog(
         zone.zone_code: zone for zone in session.query(NWSZone).all()
     }
 
+    managed: Dict[str, NWSZone] = {}
+    orphan_codes = set(existing.keys())
+    updated_codes: set[str] = set()
+
     inserted = 0
-    updated = 0
 
     for record in records:
-        zone = existing.pop(record.zone_code, None)
+        zone = managed.get(record.zone_code)
         if zone is None:
-            zone = NWSZone()
-            _apply_to_model(zone, record)
-            session.add(zone)
-            inserted += 1
-            continue
-        if _apply_to_model(zone, record):
-            updated += 1
+            zone = existing.get(record.zone_code)
+            if zone is None:
+                zone = NWSZone()
+                session.add(zone)
+                inserted += 1
+            else:
+                orphan_codes.discard(record.zone_code)
+            managed[record.zone_code] = zone
+
+        if _apply_to_model(zone, record) and record.zone_code in existing:
+            updated_codes.add(record.zone_code)
+
+    updated = len(updated_codes)
 
     removed = 0
-    for orphan in existing.values():
-        session.delete(orphan)
+    for zone_code in orphan_codes:
+        session.delete(existing[zone_code])
         removed += 1
 
     if commit:

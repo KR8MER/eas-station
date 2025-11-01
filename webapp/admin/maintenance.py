@@ -23,7 +23,11 @@ from app_core.alerts import (
 )
 from app_core.extensions import db
 from app_core.led import ensure_led_tables
-from app_core.location import get_location_settings, update_location_settings
+from app_core.location import (
+    describe_location_reference,
+    get_location_settings,
+    update_location_settings,
+)
 from app_core.models import (
     CAPAlert,
     Intersection,
@@ -611,6 +615,22 @@ def register_maintenance_routes(app, logger):
         except Exception as exc:
             logger.error("Error processing location settings update: %s", exc)
             return jsonify({"error": f"Failed to process location settings: {exc}"}), 500
+
+    @app.route("/admin/location_reference", methods=["GET"])
+    def admin_location_reference():
+        try:
+            summary = describe_location_reference()
+            return jsonify(summary)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.error("Failed to load location reference data: %s", exc)
+            return (
+                jsonify(
+                    {
+                        "error": "Failed to load location reference data.",
+                    }
+                ),
+                500,
+            )
 
     @app.route("/admin/import_alert", methods=["POST"])
     def import_specific_alert():
