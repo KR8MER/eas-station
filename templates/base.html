@@ -155,6 +155,14 @@
             min-width: 0;
         }
 
+        .navbar-brand-group {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.35rem;
+            min-width: 0;
+        }
+
         @media (min-width: 992px) {
             .navbar .container-fluid {
                 flex-wrap: nowrap;
@@ -687,18 +695,20 @@
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container-fluid">
-            <a class="navbar-brand" href="/">
-                <i class="fas fa-broadcast-tower brand-icon"></i>
-                <span class="brand-text">
-                    <span class="brand-title">EAS Station</span>
-                    <span class="brand-subtitle">Emergency Alert Platform</span>
-                </span>
-            </a>
+            <div class="navbar-brand-group">
+                <a class="navbar-brand" href="/">
+                    <i class="fas fa-broadcast-tower brand-icon"></i>
+                    <span class="brand-text">
+                        <span class="brand-title">EAS Station</span>
+                        <span class="brand-subtitle">Emergency Alert Platform</span>
+                    </span>
+                </a>
 
-            <div class="health-indicator status-healthy" id="system-health-indicator" role="status" aria-live="polite" title="System OK">
-                <span class="health-label">Status</span>
-                <span class="health-dot health-good" id="system-health-dot"></span>
-                <span class="health-text" id="system-health-text">System OK</span>
+                <div class="health-indicator status-healthy" id="system-health-indicator" role="status" aria-live="polite" title="System OK">
+                    <span class="health-label">Status</span>
+                    <span class="health-dot health-good" id="system-health-dot"></span>
+                    <span class="health-text" id="system-health-text">System OK</span>
+                </div>
             </div>
 
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
