@@ -561,8 +561,8 @@
                         <li class="mb-2"><strong>Version numbering matters.</strong> Set <code>APP_BUILD_VERSION</code> for every build so the footer and health endpoints report the running release.</li>
                         <li class="mb-2"><strong>Guardrails in tests.</strong> The release metadata check (<code>pytest tests/test_release_metadata.py</code>) fails if the <code>VERSION</code> file, changelog, or environment template drift apart—fix them before requesting review.</li>
                         <li class="mb-2"><strong>CHANGELOG-first workflow.</strong> Document behaviour changes under the <code>[Unreleased]</code> heading and call out how regressions were prevented.</li>
-                        <li class="mb-2"><strong>Snapshot before upgrades.</strong> Run <code>python tools/create_backup.py</code> to capture the configuration, database dump, and git revision metadata.</li>
-                        <li class="mb-2"><strong>Upgrade in place.</strong> Apply updates with <code>python tools/inplace_upgrade.py</code> to rebuild containers, run migrations, and restart services without wiping volumes.</li>
+                        <li class="mb-2"><strong>Snapshot before upgrades.</strong> Run <code>python tools/create_backup.py</code> to capture the configuration, database dump, and git revision metadata. The Admin → System Operations panel now includes a “Run Backup” control that triggers the same helper from the web UI.</li>
+                        <li class="mb-2"><strong>Upgrade in place.</strong> Apply updates with <code>python tools/inplace_upgrade.py</code> to rebuild containers, run migrations, and restart services without wiping volumes. You can also launch this workflow from the Admin → System Operations “Run Upgrade” button, which reports progress in the dashboard.</li>
                         <li class="mb-0"><strong>Validate immediately.</strong> After the upgrade completes, spot-check ingest, SAME generation, GPIO relays, and audio playout so regressions are caught before lab exercises.</li>
                     </ul>
                 </div>

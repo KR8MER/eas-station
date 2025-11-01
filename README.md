@@ -238,6 +238,7 @@ python tools/inplace_upgrade.py --checkout v2.3.0
 ```
 
 The helper performs a `git fetch`, optionally checks out a tag/branch, fast-forwards the repository, rebuilds the Docker image, reapplies the stack with `docker compose up -d --build`, runs Alembic migrations, and restarts the pollers—without destroying volumes or replacing containers unnecessarily. Pass `--skip-migrations` if you only need to refresh static assets, and combine it with `tools/create_backup.py` for a pre-flight snapshot before every upgrade.
+Operators can trigger the same workflow from **Admin → System Operations** using the “Run Upgrade” button, which launches the helper asynchronously and reports the last run status in the dashboard.
 
 ### IPAWS Poller Configuration
 
@@ -559,7 +560,7 @@ The system automatically creates the following tables:
 python tools/create_backup.py --label pre-upgrade
 ```
 
-The helper copies your `.env` and compose files, runs `pg_dump` against the configured database (via the running container when available), and writes a `metadata.json` manifest capturing the git revision and app version for audit trails.
+The helper copies your `.env` and compose files, runs `pg_dump` against the configured database (via the running container when available), and writes a `metadata.json` manifest capturing the git revision and app version for audit trails. The Admin console mirrors this workflow under **Admin → System Operations** with a “Run Backup” button that triggers the helper asynchronously and surfaces the latest run status.
 
 **Manual database dump (fallback):**
 
