@@ -50,6 +50,9 @@ tracks releases under the 2.x series.
 - Documented open-source dependency attributions in the docs and surfaced
   maintainers, licenses, and usage details on the in-app About page.
 ### Changed
+- Documented why the platform remains on Python 3.12 instead of the new Python 3.13 release across the README and About surfaces,
+  highlighting missing Linux/ARM64 wheels for SciPy and pyttsx3 and the security patch workflow for the current runtime.
+- Documented Debian 14 (Trixie) 64-bit as the validated Raspberry Pi host OS while clarifying that the container image continues to ship on Debian Bookworm via the `python:3.12-slim-bookworm` base.
 - Documented the release governance workflow across the README, ABOUT page, Terms of Use, master roadmap, and site footer so version numbering, changelog discipline, and regression verification remain mandatory for every contribution.
 - Suppressed automatic EAS generation for Special Weather Statements and Dense Fog Advisories to align with standard activation practices.
 - Clarified in the README and dependency notes that PostgreSQL with PostGIS must run in a dedicated container separate from the application services.
@@ -142,6 +145,11 @@ tracks releases under the 2.x series.
   file label so frames no longer begin with an invalid "AAA" sequence that the manual forbids.
 - Prevented the LED fallback initializer from raising a `NameError` when the optional
   controller module is missing so deployments without sign hardware continue to boot.
+
+## [2.3.3] - 2025-11-13
+### Changed
+- Rebased the container on the `python:3.12-slim-bookworm` image, added security upgrades during build, and refreshed pinned Python dependencies (including SciPy 1.14.1) to address Docker Hub vulnerability scans.
+- Documented Raspberry Pi 5 (4 GB RAM) as the reference platform across the README, policy documents, and in-app help/about pages while noting continued Raspberry Pi 4 compatibility.
 
 ## [2.3.2] - 2025-11-02
 ### Changed

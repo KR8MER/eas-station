@@ -98,12 +98,13 @@
                     <i class="fas fa-microchip text-danger me-2"></i>Reference Raspberry Pi Hardware Stack
                 </h2>
                 <p class="mb-3">The roadmap targets a reproducible build assembled entirely from commodity parts so integrators can swap in software for the rack-mount black boxes sold today:</p>
+                <p class="mb-3 text-muted"><i class="fas fa-circle-check me-2"></i>Validated on Debian&nbsp;14 (Trixie) 64-bit images—specifically 14.2.0-19—while the container image continues to ship on Debian Bookworm via the multi-arch <code>python:3.12-slim-bookworm</code> base.</p>
                 <div class="row g-3">
                     <div class="col-md-6">
                         <div class="d-flex align-items-start">
                             <i class="fas fa-raspberry-pi text-success me-2 mt-1"></i>
                             <div>
-                                <strong>Compute:</strong> Raspberry Pi&nbsp;4 Model&nbsp;B (4&nbsp;GB/8&nbsp;GB) with active cooling and UPS-backed power.
+                                <strong>Compute:</strong> Raspberry Pi&nbsp;5 (4&nbsp;GB RAM baseline, 8&nbsp;GB recommended) with active cooling and UPS-backed power. Raspberry Pi&nbsp;4 builds remain supported with reduced performance headroom.
                             </div>
                         </div>
                     </div>
@@ -293,13 +294,30 @@
                     </h2>
                     <p class="mb-4">Built on proven, production-ready technologies:</p>
 
+                    <div class="alert alert-info border-start border-3 border-info shadow-sm">
+                        <div class="d-flex align-items-start">
+                            <i class="fas fa-python fa-lg text-info me-3 mt-1"></i>
+                            <div>
+                                <h3 class="h6 fw-bold mb-1 text-info">Python release cadence</h3>
+                                <p class="mb-0 small text-muted">
+                                    Python <strong>3.13.0</strong> is the latest upstream release, but EAS Station remains on
+                                    <strong>Python 3.12</strong> because critical dependencies such as <code>scipy==1.14.1</code>
+                                    and <code>pyttsx3==2.90</code> do not yet ship Linux/ARM64 wheels for CPython&nbsp;3.13. Upgrading
+                                    today would require compiling large Fortran and voice-synthesis toolchains on Raspberry Pi&nbsp;5
+                                    hardware, which routinely fails or takes hours. We instead track every Python&nbsp;3.12 patch
+                                    release inside the Docker base image so security fixes land without sacrificing reproducible builds.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="row g-4">
                         <div class="col-md-6">
                             <h3 class="h6 fw-bold text-primary mb-3">
                                 <i class="fas fa-server me-2"></i>Backend & Core Services
                             </h3>
                             <ul class="list-unstyled">
-                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Python 3.11+</strong> - Core application language</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Python 3.12+</strong> - Core application language</li>
                                 <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Flask 3.x</strong> - Web framework with Werkzeug WSGI</li>
                                 <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Gunicorn</strong> - Production WSGI HTTP server</li>
                                 <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>SQLAlchemy 2.x</strong> - Database ORM and query builder</li>
@@ -656,7 +674,7 @@
                                     </h3>
                                     <p class="small mb-2">Perfect for broadcast facilities with modest requirements:</p>
                                     <ul class="small mb-0">
-                                        <li>Raspberry Pi 4 (4GB+ RAM recommended)</li>
+                                        <li>Raspberry Pi 5 (4GB RAM baseline, 8GB ideal for narration)</li>
                                         <li>SSD storage via USB 3.0 for reliability</li>
                                         <li>Direct GPIO access for relay control</li>
                                         <li>Low power consumption (~10W)</li>

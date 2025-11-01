@@ -331,7 +331,7 @@ docker-compose up -d</code></pre>
                                 <div class="accordion-body">
                                     <p><strong>Recommended Hardware:</strong></p>
                                     <ul class="mb-3">
-                                        <li>Raspberry Pi 4 Model B (4GB or 8GB RAM)</li>
+                                        <li>Raspberry Pi 5 (4GB RAM baseline, 8GB recommended)</li>
                                         <li>High-endurance microSD card (32GB+) or USB SSD</li>
                                         <li>Official power supply (3A USB-C)</li>
                                         <li>Ethernet connection (preferred for reliability)</li>
@@ -339,7 +339,7 @@ docker-compose up -d</code></pre>
 
                                     <p><strong>Setup Steps:</strong></p>
                                     <ol class="mb-3">
-                                        <li>Install Raspberry Pi OS (64-bit recommended)</li>
+                                        <li>Install Debian&nbsp;14 (Trixie) 64-bit or Raspberry Pi OS Bookworm (64-bit)</li>
                                         <li>Enable SSH and set hostname</li>
                                         <li>Install Docker: <code>curl -fsSL https://get.docker.com | sh</code></li>
                                         <li>Add user to docker group: <code>sudo usermod -aG docker $USER</code></li>

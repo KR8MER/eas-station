@@ -4,7 +4,7 @@
 
 ## Vision: A Software Drop-In Replacement
 
-Commercial EAS decoders are expensive, power-hungry appliances that demand rack space and proprietary maintenance. EAS Station is being engineered as a software-first, off-the-shelf alternative that can fulfill the same duties on commodity hardware. The target build centers on a Raspberry Pi 4 paired with HATs that expose dry-contact GPIO relays, RS-232 control, broadcast-quality audio input/output, and HDMI program confidence monitoring—backed by one or more SDR front-ends for verification. With disciplined software integration, repeatable setup, and demonstrable reliability in place, the project can pursue FCC Part 11 certification as a credible drop-in replacement. The roadmap focuses on delivering:
+Commercial EAS decoders are expensive, power-hungry appliances that demand rack space and proprietary maintenance. EAS Station is being engineered as a software-first, off-the-shelf alternative that can fulfill the same duties on commodity hardware. The target build now centers on a Raspberry Pi 5 (4 GB RAM) paired with HATs that expose dry-contact GPIO relays, RS-232 control, broadcast-quality audio input/output, and HDMI program confidence monitoring—backed by one or more SDR front-ends for verification. Raspberry Pi 4 systems remain supported for labs and legacy deployments, but the Pi 5 is the documented baseline moving forward. With disciplined software integration, repeatable setup, and demonstrable reliability in place, the project can pursue FCC Part 11 certification as a credible drop-in replacement. The roadmap focuses on delivering:
 
 - **Functional Parity** – Automated alert ingestion, SAME generation, playout, verification, and compliance logging equivalent to a certified encoder/decoder pair.
 - **Operational Resilience** – High availability, watchdog services, failover-ready storage, and verifiable audit trails so the platform can stand in for purpose-built hardware.
@@ -17,7 +17,7 @@ This vision guides the feature backlog, documentation, and governance decisions 
 
 While the codebase remains hardware-agnostic, the following Raspberry Pi-based stack is the reference platform the roadmap optimises around:
 
-- **Compute:** Raspberry Pi 4 Model B (4 GB or 8 GB) with active cooling to survive 24/7 service.
+- **Compute:** Raspberry Pi 5 (4 GB RAM baseline, 8 GB recommended for heavy narration workloads) with active cooling to survive 24/7 service. Raspberry Pi 4 builds remain viable with reduced headroom.
 - **Dry-Contact Control:** Multi-relay GPIO HAT supplying normally-open and normally-closed contacts for transmitter keying.
 - **Serial Automation:** RS-232 HAT or USB interface to drive legacy EAS peripherals and studio controllers.
 - **Audio I/O:** Pi-compatible sound card (balanced line in/out) or USB audio interface for program and monitor buses.
@@ -27,7 +27,7 @@ While the codebase remains hardware-agnostic, the following Raspberry Pi-based s
 All documentation and tooling emphasise a guided setup process so integrators can reproduce the build with off-the-shelf components instead of bespoke rack units.
 
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://www.docker.com/)
-[![Python 3.11](https://img.shields.io/badge/Python-3.11-blue?logo=python)](https://www.python.org/)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue?logo=python)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-2.3-green?logo=flask)](https://flask.palletsprojects.com/)
 [![Gunicorn](https://img.shields.io/badge/Gunicorn-21.2-green?logo=gunicorn)](https://gunicorn.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue?logo=postgresql)](https://www.postgresql.org/)
@@ -293,8 +293,8 @@ Operators can trigger the same workflow from **Admin → System Operations** usi
 | Service | Purpose | Technology |
 |---------|---------|------------|
 | **app** | Web UI & REST API | Flask 2.3, Gunicorn, Bootstrap 5 |
-| **poller** | Background NOAA alert polling | Python 3.11, continuous daemon |
-| **ipaws-poller** | Dedicated IPAWS CAP feed polling | Python 3.11, continuous daemon |
+| **poller** | Background NOAA alert polling | Python 3.12, continuous daemon |
+| **ipaws-poller** | Dedicated IPAWS CAP feed polling | Python 3.12, continuous daemon |
 | *(external service)* | Spatial database | PostgreSQL/PostGIS |
 
 > **Deployment Note:** Host the PostgreSQL/PostGIS database outside of these containers (managed service, dedicated VM, or standalone container). Update the connection variables in `.env` so the application can reach it.
@@ -930,7 +930,7 @@ curl http://localhost:5000/health
 ## 📦 Technology Stack
 
 ### Backend
-- **Python 3.11** - Core programming language
+- **Python 3.12** - Core programming language
 - **Flask 2.3** - Web framework
 - **SQLAlchemy 2.0** - ORM and database toolkit
 - **GeoAlchemy2** - Spatial database extensions for SQLAlchemy
@@ -952,7 +952,14 @@ curl http://localhost:5000/health
 ### Infrastructure
 - **Docker Engine 24+** - Containerization platform
 - **Docker Compose V2** - Multi-container orchestration
-- **Alpine Linux** - Minimal base image for containers
+- **Debian 14 (Trixie) host** - Validated on Raspberry Pi 5 builds running Debian 14.2.0-19 with 64-bit kernel/userspace.
+- **Debian Bookworm slim base image** - Container runtime provided by `python:3.12-slim-bookworm` for reproducible multi-arch builds.
+
+### Python Release Strategy
+
+- **Latest CPython release:** Python 3.13.0 is the newest upstream stable version.
+- **Why we remain on 3.12 for now:** Critical runtime dependencies such as `scipy==1.14.1` and `pyttsx3==2.90` (see [`requirements.txt`](requirements.txt)) still rely on pre-built wheels for Linux/ARM64. Those wheels have not been published for Python 3.13, so attempting to upgrade forces multi-hour source builds that require large toolchains (Fortran, Rust, and voice synthesis headers) and routinely exhaust Raspberry Pi 5 systems.
+- **Security posture:** The Docker base image tracks Python 3.12 patch releases, and dependency pins are refreshed as security advisories are disclosed. This keeps the runtime on the fully-supported CPython branch without sacrificing reproducible builds on Raspberry Pi hardware.
 
 ---
 
