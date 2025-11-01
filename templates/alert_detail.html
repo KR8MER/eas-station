@@ -270,6 +270,25 @@
         position: sticky;
         top: 20px;
     }
+
+    .alert-audio-player {
+        background: linear-gradient(135deg, rgba(13, 110, 253, 0.08), rgba(13, 110, 253, 0.03));
+        border: 1px solid rgba(13, 110, 253, 0.2);
+        border-radius: 12px;
+        padding: 20px;
+    }
+
+    .alert-audio-player .audio-meta span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-right: 16px;
+        margin-bottom: 6px;
+    }
+
+    .alert-audio-player .badge {
+        font-size: 0.75rem;
+    }
 </style>
 {% endblock %}
 
@@ -379,6 +398,93 @@
                             {% if alert.headline %}
                             <div class="alert alert-{% if alert.severity == 'Extreme' %}danger{% elif alert.severity == 'Severe' %}warning{% elif alert.severity == 'Moderate' %}info{% else %}secondary{% endif %}" role="alert">
                                 <h5 class="alert-heading">{{ alert.headline }}</h5>
+                            </div>
+                            {% endif %}
+
+                            {% if primary_audio_entry %}
+                            {% set primary_meta = primary_audio_entry.metadata or {} %}
+                            <div class="alert-audio-player mb-4">
+                                <div class="d-flex flex-column flex-lg-row gap-3 align-items-start">
+                                    <div class="flex-grow-1 w-100">
+                                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                            <h6 class="text-muted text-uppercase mb-0">
+                                                <i class="fas fa-headphones"></i> Broadcast Audio
+                                            </h6>
+                                            <div class="d-flex gap-2 flex-wrap">
+                                                {% if primary_audio_entry.detail_url %}
+                                                <a class="btn btn-sm btn-outline-primary" href="{{ primary_audio_entry.detail_url }}">
+                                                    <i class="fas fa-wave-square"></i> View Details
+                                                </a>
+                                                {% endif %}
+                                                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('audio_history') }}">
+                                                    <i class="fas fa-folder-open"></i> Archive
+                                                </a>
+                                                {% if primary_audio_entry.text_url %}
+                                                <a class="btn btn-sm btn-outline-info" href="{{ primary_audio_entry.text_url }}" target="_blank" rel="noopener">
+                                                    <i class="fas fa-file-alt"></i> Summary
+                                                </a>
+                                                {% endif %}
+                                                {% if primary_audio_entry.eom_url %}
+                                                <a class="btn btn-sm btn-outline-warning" href="{{ primary_audio_entry.eom_url }}" target="_blank" rel="noopener">
+                                                    <i class="fas fa-broadcast-tower"></i> EOM
+                                                </a>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        {% if primary_audio_entry.audio_url %}
+                                        <audio controls preload="none" class="w-100 mb-3">
+                                            <source src="{{ primary_audio_entry.audio_url }}" type="audio/wav">
+                                            Your browser does not support the audio element.
+                                        </audio>
+                                        {% else %}
+                                        <div class="alert alert-warning mb-3 small">
+                                            <i class="fas fa-exclamation-triangle"></i> Audio file is unavailable for this recording.
+                                        </div>
+                                        {% endif %}
+                                        <div class="audio-meta d-flex flex-wrap text-muted small">
+                                            <span>
+                                                <i class="fas fa-clock"></i>
+                                                {{ primary_audio_entry.created_at | format_local_datetime(false) if primary_audio_entry.created_at else 'Unknown time' }}
+                                            </span>
+                                            {% if primary_audio_entry.same_header %}
+                                            <span>
+                                                <i class="fas fa-code"></i>
+                                                <code class="m-0">{{ primary_audio_entry.same_header }}</code>
+                                            </span>
+                                            {% endif %}
+                                            {% if primary_meta.get('event_code') %}
+                                            <span>
+                                                <i class="fas fa-bolt"></i>
+                                                {{ primary_meta.get('event_code') }}
+                                            </span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% if primary_meta %}
+                                <div class="mt-3 d-flex flex-wrap align-items-center gap-2">
+                                    <strong>{{ primary_meta.get('event', alert.event) or alert.event }}</strong>
+                                    {% if primary_meta.get('severity') or alert.severity %}
+                                    <span class="badge bg-danger">{{ primary_meta.get('severity', alert.severity) }}</span>
+                                    {% endif %}
+                                    {% if primary_meta.get('status') or alert.status %}
+                                    <span class="badge bg-secondary">{{ primary_meta.get('status', alert.status) }}</span>
+                                    {% endif %}
+                                    {% set locations_meta = primary_meta.get('locations') %}
+                                    {% if locations_meta %}
+                                    <span class="small text-muted">
+                                        <i class="fas fa-map-pin"></i>
+                                        {% if locations_meta is string %}
+                                            {{ locations_meta }}
+                                        {% elif locations_meta is iterable %}
+                                            {{ locations_meta | join(', ') }}
+                                        {% else %}
+                                            {{ locations_meta }}
+                                        {% endif %}
+                                    </span>
+                                    {% endif %}
+                                </div>
+                                {% endif %}
                             </div>
                             {% endif %}
 
@@ -895,7 +1001,7 @@
                         </div>
                     </div>
 
-                    {% if audio_entries %}
+                    {% if primary_audio_entry %}
                     <div class="card mt-4">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h5 class="mb-0">
@@ -906,6 +1012,7 @@
                             </a>
                         </div>
                         <div class="card-body">
+                            {% if additional_audio_entries %}
                             <div class="table-responsive">
                                 <table class="table table-sm align-middle mb-0">
                                     <thead class="table-light">
@@ -917,7 +1024,7 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {% for entry in audio_entries %}
+                                        {% for entry in additional_audio_entries %}
                                         {% set meta = entry.metadata or {} %}
                                         <tr>
                                             <td class="text-nowrap">
@@ -982,6 +1089,11 @@
                                     </tbody>
                                 </table>
                             </div>
+                            {% else %}
+                            <p class="text-muted small mb-0">
+                                <i class="fas fa-info-circle"></i> No additional archived recordings for this alert yet.
+                            </p>
+                            {% endif %}
                         </div>
                     </div>
                     {% endif %}

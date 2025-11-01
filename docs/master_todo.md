@@ -35,6 +35,7 @@ Each roadmap item below references the requirement(s) it unlocks so contributors
   2. Spin up a dedicated service (e.g., `components/audio_output_service.py`) that can target monitor/program buses through ALSA/JACK.
   3. Encode precedence logic in `app_core/eas_storage.py` so overlapping alerts follow FCC ordering.
   4. Update triggering scripts and APIs (`manual_eas_event.py`, `/api/manual-alert`) to report playout status and retention artifacts.
+  5. Extend CAP ingestion (e.g., `app_core/alerts.py`, `poller/`) so inbound NOAA/IPAWS messages can auto-generate broadcast-ready alerts with operator review and audit logging.
 
 ## 3. GPIO & External Control Hardening (Requirement 3)
 - **Goal**: Provide reliable control over transmitters and peripherals with auditability.

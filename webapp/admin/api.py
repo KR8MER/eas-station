@@ -312,6 +312,11 @@ def register_api_routes(app, logger):
                     audio_error,
                 )
 
+            primary_audio_entry: Optional[Dict[str, Any]] = audio_entries[0] if audio_entries else None
+            additional_audio_entries: List[Dict[str, Any]] = (
+                audio_entries[1:] if len(audio_entries) > 1 else []
+            )
+
             return render_template(
                 'alert_detail.html',
                 alert=alert,
@@ -320,6 +325,8 @@ def register_api_routes(app, logger):
                 is_actually_county_wide=is_actually_county_wide,
                 coverage_data=coverage_data,
                 audio_entries=audio_entries,
+                primary_audio_entry=primary_audio_entry,
+                additional_audio_entries=additional_audio_entries,
                 boundary_summary=boundary_summary,
                 suppress_boundary_details=suppress_boundary_details,
             )

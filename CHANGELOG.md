@@ -48,6 +48,7 @@ tracks releases under the 2.x series.
   can either rely on the bundled `alerts-db` PostGIS container or connect to an
   existing deployment without editing the primary compose file.
 ### Changed
+- Reworked the alert detail page so archived recordings play inline when available and the audio archive table focuses on additional captures.
 - Documented the release governance workflow across the README, ABOUT page, Terms of Use, master roadmap, and site footer so version numbering, changelog discipline, and regression verification remain mandatory for every contribution.
 - Suppressed automatic EAS generation for Special Weather Statements and Dense Fog Advisories to align with standard activation practices.
 - Clarified in the README and dependency notes that PostgreSQL with PostGIS must run in a dedicated container separate from the application services.
