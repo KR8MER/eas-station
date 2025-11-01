@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Sequence, Tuple
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 
@@ -202,6 +203,11 @@ def sync_zone_catalog(
     source_path: str | Path | None = None,
 ) -> ZoneSyncResult:
     from app_core.models import NWSZone  # Imported lazily to avoid circular import
+
+    bind = session.get_bind()
+    if bind is not None and bind.dialect.name == "postgresql":
+        # Ensure only one worker performs the catalog synchronisation at a time.
+        session.execute(text("LOCK TABLE nws_zones IN SHARE ROW EXCLUSIVE MODE"))
 
     existing: Dict[str, NWSZone] = {
         zone.zone_code: zone for zone in session.query(NWSZone).all()
