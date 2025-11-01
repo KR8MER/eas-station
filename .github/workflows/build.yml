@@ -1,4 +1,4 @@
-name: ci
+name: eas-station
 on:
   push:
     branches: ["main"]
