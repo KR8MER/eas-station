@@ -1166,6 +1166,7 @@
         };
         const EAS_FIPS_TREE = {{ eas_fips_states|tojson }};
         const EAS_FIPS_LOOKUP = {{ eas_fips_lookup|tojson }};
+        const EAS_COUNTY_FORECAST_ZONES = {{ eas_county_zone_map|tojson }};
         const EAS_ORIGINATOR_DESCRIPTIONS = {{ eas_originator_descriptions|tojson }};
         const EAS_P_DIGIT_MEANINGS = {{ eas_p_digit_meanings|tojson }};
         const MAX_SAME_CODES = 31;
@@ -1197,6 +1198,7 @@
         let easLastResponse = null;
         let selectedSameCodes = [];
         let locationFipsSelection = [];
+        let locationDerivedZoneList = [];
         let locationDerivedZoneCodes = new Set();
 
         const sanitizeBoundaryTypeInput = (value) => {
@@ -2430,10 +2432,21 @@
         }
 
         function deriveCountyZoneCodes(fipsCodes) {
-            const derived = new Set();
+            const derived = [];
+            const seen = new Set();
             if (!Array.isArray(fipsCodes)) {
-                return Array.from(derived);
+                return derived;
             }
+
+            const addCode = (value) => {
+                const normalized = normalizeZoneCode(value);
+                if (!normalized || seen.has(normalized)) {
+                    return;
+                }
+                seen.add(normalized);
+                derived.push(normalized);
+            };
+
             fipsCodes.forEach((code) => {
                 const details = getSameCodeDetails(code);
                 if (!details || !details.stateAbbr || !details.countyFips || details.isStatewide) {
@@ -2447,9 +2460,16 @@
                 if (!/^[A-Z]{2}$/.test(stateAbbr)) {
                     return;
                 }
-                derived.add(`${stateAbbr}C${suffix}`);
+
+                const normalizedSame = details.code;
+                if (normalizedSame && Array.isArray(EAS_COUNTY_FORECAST_ZONES?.[normalizedSame])) {
+                    EAS_COUNTY_FORECAST_ZONES[normalizedSame].forEach((zone) => addCode(zone));
+                }
+
+                addCode(`${stateAbbr}C${suffix}`);
             });
-            return Array.from(derived).sort();
+
+            return derived;
         }
 
         function syncZoneCodeFieldWithDerived() {
@@ -2458,7 +2478,10 @@
                 return;
             }
             const existingTokens = parseListInput(field.value);
-            const normalizedDerived = new Set(Array.from(locationDerivedZoneCodes).map(normalizeZoneCode).filter(Boolean));
+            const derivedTokens = locationDerivedZoneList
+                .map((token) => normalizeZoneCode(token))
+                .filter(Boolean);
+            const normalizedDerived = new Set(derivedTokens);
             const manualTokens = [];
             const seenManual = new Set();
 
@@ -2473,7 +2496,6 @@
                 }
             });
 
-            const derivedTokens = Array.from(normalizedDerived).sort();
             const combined = manualTokens.concat(derivedTokens);
             field.value = combined.join('\n');
 
@@ -2487,6 +2509,7 @@
 
         function refreshDerivedZoneCodesFromSelection() {
             const derived = deriveCountyZoneCodes(locationFipsSelection);
+            locationDerivedZoneList = derived.slice();
             locationDerivedZoneCodes = new Set(derived.map(normalizeZoneCode).filter(Boolean));
             syncZoneCodeFieldWithDerived();
         }

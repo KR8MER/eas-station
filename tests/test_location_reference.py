@@ -104,6 +104,37 @@ def test_describe_location_reference_includes_zone_and_fips_details(app_context)
 def test_update_location_settings_infers_county_zones(app_context):
     with app_context.app_context():
         clear_zone_lookup_cache()
+        zone_allen = NWSZone(
+            zone_code="OHZ025",
+            state_code="OH",
+            zone_number="025",
+            zone_type="Z",
+            cwa="IWX",
+            time_zone="E",
+            fe_area="WC",
+            name="Allen",
+            short_name="Allen",
+            state_zone="OH025",
+            longitude=-84.1057,
+            latitude=40.7715,
+        )
+        zone_putnam = NWSZone(
+            zone_code="OHZ016",
+            state_code="OH",
+            zone_number="016",
+            zone_type="Z",
+            cwa="IWX",
+            time_zone="E",
+            fe_area="WC",
+            name="Putnam",
+            short_name="Putnam",
+            state_zone="OH016",
+            longitude=-84.1317,
+            latitude=41.0221,
+        )
+        db.session.add_all([zone_allen, zone_putnam])
+        db.session.commit()
+        clear_zone_lookup_cache()
 
         result = update_location_settings(
             {
@@ -116,12 +147,16 @@ def test_update_location_settings_infers_county_zones(app_context):
             }
         )
 
+        assert "OHZ025" in result["zone_codes"]
+        assert "OHZ016" in result["zone_codes"]
         assert "OHC003" in result["zone_codes"]
         assert "OHC137" in result["zone_codes"]
         assert result["zone_codes"].count("OHC137") == 1
 
         stored = LocationSettings.query.first()
         assert stored is not None
+        assert "OHZ025" in stored.zone_codes
+        assert "OHZ016" in stored.zone_codes
         assert "OHC003" in stored.zone_codes
         assert "OHC137" in stored.zone_codes
 

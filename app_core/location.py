@@ -24,7 +24,11 @@ from app_utils import set_location_timezone
 
 from .extensions import db
 from .models import LocationSettings
-from .zones import get_zone_lookup, normalise_zone_codes
+from .zones import (
+    forecast_zones_for_same_code,
+    get_zone_lookup,
+    normalise_zone_codes,
+)
 
 _location_settings_cache: Optional[Dict[str, Any]] = None
 _location_settings_lock = threading.Lock()
@@ -69,6 +73,16 @@ def _derive_county_zone_codes_from_fips(
         state_abbr = _STATE_FIPS_TO_ABBR.get(state_fips)
         if not state_abbr or len(state_abbr) != 2:
             continue
+
+        same_code = digits
+        for forecast_code in forecast_zones_for_same_code(same_code, zone_lookup):
+            normalized_forecast = forecast_code.upper()
+            if normalized_forecast in seen:
+                continue
+            if zone_lookup is not None and normalized_forecast not in zone_lookup:
+                continue
+            seen.add(normalized_forecast)
+            derived.append(normalized_forecast)
 
         zone_code = f"{state_abbr}C{county_suffix}"
         normalized = zone_code.upper()
