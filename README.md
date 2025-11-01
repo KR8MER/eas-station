@@ -214,7 +214,7 @@ You can configure the environment through the browser, fall back to the CLI wiza
 2. Visit [http://localhost:5000/setup](http://localhost:5000/setup) from your browser.
 3. Fill in the required secrets and database credentials, then click **Save configuration**.
 
-The page writes a fresh `.env` using `.env.example` as a template and will create a timestamped backup when updating an existing file.
+The application now enters **setup mode** automatically whenever critical values like `SECRET_KEY` are missing or the database connection fails during startup. In that state every request (including `/`) redirects to the wizard so you can recover without manually editing `.env` first. The page writes a fresh `.env` using `.env.example` as a template and will create a timestamped backup when updating an existing file.
 
 #### Option B – Run the CLI wizard
 

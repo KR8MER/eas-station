@@ -153,6 +153,8 @@ logger = logging.getLogger(__name__)
 # Create Flask app
 app = Flask(__name__)
 
+_setup_mode_reasons: List[str] = []
+
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 
 raw_secure_flag = os.environ.get('SESSION_COOKIE_SECURE')
@@ -240,11 +242,18 @@ CSRF_EXEMPT_PATHS = {'/login', '/logout'}
 app.config['CSRF_SESSION_KEY'] = CSRF_SESSION_KEY
 
 # Require SECRET_KEY to be explicitly set (fail fast if missing or using default)
+_placeholder_secrets = {
+    '',
+    'dev-key-change-in-production',
+    'replace-with-a-long-random-string',
+}
 secret_key = os.environ.get('SECRET_KEY', '')
-if not secret_key or secret_key == 'dev-key-change-in-production':
-    raise ValueError(
-        "SECRET_KEY environment variable must be set to a secure random string. "
-        "Generate one with: python -c 'import secrets; print(secrets.token_hex(32))'"
+if secret_key in _placeholder_secrets or len(secret_key) < 32:
+    _setup_mode_reasons.append('secret-key')
+    secret_key = secrets.token_hex(32)
+    logger.warning(
+        'SECRET_KEY is missing or using a placeholder value. '
+        'Using a temporary key while setup mode is active.'
     )
 app.secret_key = secret_key
 
@@ -441,6 +450,16 @@ if _check_database_connectivity():
     logger.info("Database connectivity check succeeded.")
 else:
     logger.error("Database connectivity check failed; application may not operate correctly.")
+    if 'database' not in _setup_mode_reasons:
+        _setup_mode_reasons.append('database')
+
+app.config['SETUP_MODE'] = bool(_setup_mode_reasons)
+app.config['SETUP_MODE_REASONS'] = tuple(_setup_mode_reasons)
+if app.config['SETUP_MODE']:
+    logger.warning(
+        'Setup mode enabled due to: %s. Visit /setup to complete configuration.',
+        ', '.join(_setup_mode_reasons),
+    )
 
 
 def ensure_postgis_extension() -> bool:
@@ -484,7 +503,10 @@ logger.info("NOAA Alerts System startup")
 register_routes(app, logger)
 
 # Start background health monitoring alerts
-start_health_alert_worker(app, logger)
+if app.config.get('SETUP_MODE'):
+    logger.info('Skipping health alert worker while setup mode is active.')
+else:
+    start_health_alert_worker(app, logger)
 
 # =============================================================================
 # BOUNDARY TYPE METADATA
@@ -565,7 +587,14 @@ def bad_request_error(error):
 @app.context_processor
 def inject_global_vars():
     """Inject global variables into all templates"""
-    location_settings = get_location_settings()
+    setup_mode_active = app.config.get('SETUP_MODE', False)
+    location_settings = {}
+    if not setup_mode_active:
+        try:
+            location_settings = get_location_settings()
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.warning('Failed to load location settings; continuing without defaults: %s', exc)
+            location_settings = {}
     return {
         'current_utc_time': utc_now(),
         'current_local_time': local_now(),
@@ -578,6 +607,8 @@ def inject_global_vars():
         'current_user': getattr(g, 'current_user', None),
         'eas_broadcast_enabled': app.config.get('EAS_BROADCAST_ENABLED', False),
         'eas_output_web_subdir': app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages'),
+        'setup_mode': setup_mode_active,
+        'setup_mode_reasons': app.config.get('SETUP_MODE_REASONS', ()),
         'csrf_token': generate_csrf_token(),
     }
 
@@ -593,23 +624,38 @@ def before_request():
     if request.path.startswith('/api/') and request.method in ['POST', 'PUT', 'DELETE']:
         logger.info(f"{request.method} {request.path} from {request.remote_addr}")
 
-    # Ensure the database schema exists before handling the request.
-    initialize_database()
+    setup_mode_active = app.config.get('SETUP_MODE', False)
 
-    # Load the current user from the session for downstream use.
     g.current_user = None
-    user_id = session.get('user_id')
-    if user_id is not None:
-        user = AdminUser.query.get(user_id)
-        if user and user.is_active:
-            g.current_user = user
-        else:
-            session.pop('user_id', None)
+    g.admin_setup_mode = False
 
-    try:
-        g.admin_setup_mode = AdminUser.query.count() == 0
-    except Exception:
-        g.admin_setup_mode = False
+    if setup_mode_active:
+        session.pop('user_id', None)
+        allowed_endpoints = {'setup_wizard', 'setup_generate_secret', 'static'}
+        allowed_paths = {'/setup', '/setup/generate-secret'}
+        is_allowed_endpoint = request.endpoint in allowed_endpoints if request.endpoint else False
+        is_allowed_path = request.path in allowed_paths or request.path.startswith('/static/')
+        if not (is_allowed_endpoint or is_allowed_path):
+            if request.path.startswith('/api/') or request.is_json or 'application/json' in request.headers.get('Accept', ''):
+                return jsonify({'error': 'Setup required'}), 503
+            return redirect(url_for('setup_wizard'))
+    else:
+        # Ensure the database schema exists before handling the request.
+        initialize_database()
+
+        # Load the current user from the session for downstream use.
+        user_id = session.get('user_id')
+        if user_id is not None:
+            user = AdminUser.query.get(user_id)
+            if user and user.is_active:
+                g.current_user = user
+            else:
+                session.pop('user_id', None)
+
+        try:
+            g.admin_setup_mode = AdminUser.query.count() == 0
+        except Exception:
+            g.admin_setup_mode = False
 
     # Allow authentication endpoints without CSRF or other checks.
     if (request.endpoint in CSRF_EXEMPT_ENDPOINTS) or (request.path in CSRF_EXEMPT_PATHS):
@@ -646,19 +692,20 @@ def before_request():
         ):
             return
 
-    protected_prefixes = ('/admin', '/logs', '/api', '/eas')
-    if any(request.path.startswith(prefix) for prefix in protected_prefixes):
-        if g.current_user is None:
-            if request.path.startswith('/api/'):
-                return jsonify({'error': 'Authentication required'}), 401
-            if g.admin_setup_mode and request.endpoint in {'admin', 'admin_users'}:
-                if request.method == 'GET' or (request.method == 'POST' and request.endpoint == 'admin_users'):
-                    return
-            accept_header = request.headers.get('Accept', '')
-            next_url = request.full_path if request.query_string else request.path
-            if request.method != 'GET' or 'application/json' in accept_header or request.is_json:
-                return jsonify({'error': 'Authentication required'}), 401
-            return redirect(url_for('login', next=next_url))
+    if not setup_mode_active:
+        protected_prefixes = ('/admin', '/logs', '/api', '/eas')
+        if any(request.path.startswith(prefix) for prefix in protected_prefixes):
+            if g.current_user is None:
+                if request.path.startswith('/api/'):
+                    return jsonify({'error': 'Authentication required'}), 401
+                if g.admin_setup_mode and request.endpoint in {'admin', 'admin_users'}:
+                    if request.method == 'GET' or (request.method == 'POST' and request.endpoint == 'admin_users'):
+                        return
+                accept_header = request.headers.get('Accept', '')
+                next_url = request.full_path if request.query_string else request.path
+                if request.method != 'GET' or 'application/json' in accept_header or request.is_json:
+                    return jsonify({'error': 'Authentication required'}), 401
+                return redirect(url_for('login', next=next_url))
 
 
 @app.after_request

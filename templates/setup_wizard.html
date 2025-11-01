@@ -15,6 +15,19 @@
                     <span class="badge bg-light text-primary fw-semibold">Setup Wizard</span>
                 </div>
                 <div class="card-body p-4">
+                    {% if setup_active %}
+                    <div class="alert alert-danger" role="alert">
+                        <i class="fas fa-plug-circle-exclamation me-2"></i>
+                        The application is running in setup mode. Complete the wizard below to finish configuration.
+                        {% if setup_reasons %}
+                        <ul class="mt-2 mb-0 ps-3">
+                            {% for reason in setup_reasons %}
+                            <li>{{ reason }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                     {% if not env_exists %}
                     <div class="alert alert-warning" role="alert">
                         <i class="fas fa-exclamation-triangle me-2"></i>

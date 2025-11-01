@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flask import flash, jsonify, redirect, render_template, request, url_for
+from flask import flash, g, jsonify, redirect, render_template, request, url_for
 
 from app_utils.setup_wizard import (
     WIZARD_FIELDS,
@@ -15,6 +15,12 @@ from app_utils.setup_wizard import (
 )
 
 
+SETUP_REASON_MESSAGES = {
+    "secret-key": "SECRET_KEY is missing or using a placeholder value.",
+    "database": "The application could not connect to the configured database.",
+}
+
+
 def register(app, logger):
     """Register setup wizard routes on the Flask app."""
 
@@ -22,6 +28,22 @@ def register(app, logger):
 
     @app.route("/setup", methods=["GET", "POST"])
     def setup_wizard():
+        setup_reasons = app.config.get("SETUP_MODE_REASONS", ())
+        reason_messages = [
+            SETUP_REASON_MESSAGES.get(reason, reason.replace('-', ' '))
+            for reason in setup_reasons
+        ]
+        setup_active = app.config.get("SETUP_MODE", False)
+        current_user = getattr(g, "current_user", None)
+        is_authenticated = bool(current_user and current_user.is_authenticated)
+
+        if not setup_active and not is_authenticated:
+            next_url = request.full_path if request.query_string else request.path
+            if request.method == "GET":
+                flash("Please sign in to access the setup wizard.")
+                return redirect(url_for("login", next=next_url))
+            return jsonify({"error": "Authentication required"}), 401
+
         try:
             state = load_wizard_state()
         except FileNotFoundError as exc:
@@ -32,6 +54,8 @@ def register(app, logger):
                 form_data={},
                 errors={},
                 env_exists=False,
+                setup_reasons=reason_messages,
+                setup_active=setup_active,
             )
 
         defaults = {
@@ -76,10 +100,19 @@ def register(app, logger):
             form_data=form_data,
             errors=errors,
             env_exists=state.env_exists,
+            setup_reasons=reason_messages,
+            setup_active=setup_active,
         )
 
     @app.route("/setup/generate-secret", methods=["POST"])
     def setup_generate_secret():
+        setup_active = app.config.get("SETUP_MODE", False)
+        current_user = getattr(g, "current_user", None)
+        is_authenticated = bool(current_user and current_user.is_authenticated)
+
+        if not setup_active and not is_authenticated:
+            return jsonify({"error": "Authentication required"}), 401
+
         token = generate_secret_key()
         return jsonify({"secret_key": token})
 
