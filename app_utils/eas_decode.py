@@ -1268,48 +1268,55 @@ def decode_same_audio(path: str, *, sample_rate: Optional[int] = None) -> SAMEAu
     correlation_raw_text: Optional[str] = None
     correlation_confidence: Optional[float] = None
 
-    try:
-        messages, confidence = _correlate_and_decode_with_dll(samples, sample_rate)
+    # Temporarily disable correlation decoder due to frame validation issues
+    # The correlation/DLL decoder doesn't properly validate SAME frame structure
+    # (start bit, 7 data bits, parity bit, stop bit) which causes byte misalignment
+    # and character corruption. Use Goertzel decoder instead which has proper validation.
+    USE_CORRELATION_DECODER = False
 
-        if messages:
-            from collections import Counter
+    if USE_CORRELATION_DECODER:
+        try:
+            messages, confidence = _correlate_and_decode_with_dll(samples, sample_rate)
 
-            zczc_messages = [msg for msg in messages if "ZCZC" in msg]
-            if zczc_messages:
-                counter = Counter(zczc_messages)
-                most_common = counter.most_common(1)[0]
+            if messages:
+                from collections import Counter
 
-                decoded_header: Optional[str] = None
-                if most_common[1] >= 2:
-                    decoded_header = most_common[0]
-                elif len(zczc_messages) == 1:
-                    decoded_header = zczc_messages[0]
+                zczc_messages = [msg for msg in messages if "ZCZC" in msg]
+                if zczc_messages:
+                    counter = Counter(zczc_messages)
+                    most_common = counter.most_common(1)[0]
 
-                if decoded_header:
-                    if "ZCZC" in decoded_header:
-                        zczc_idx = decoded_header.find("ZCZC")
-                        decoded_header = decoded_header[zczc_idx:]
+                    decoded_header: Optional[str] = None
+                    if most_common[1] >= 2:
+                        decoded_header = most_common[0]
+                    elif len(zczc_messages) == 1:
+                        decoded_header = zczc_messages[0]
 
-                    raw_text = decoded_header + "\r"
-                    fips_lookup = get_same_lookup()
-                    header_fields = describe_same_header(
-                        decoded_header, lookup=fips_lookup
-                    )
-                    correlation_headers = [
-                        SAMEHeaderDetails(
-                            header=decoded_header,
-                            fields=header_fields,
-                            confidence=confidence,
-                            summary=build_plain_language_summary(
-                                decoded_header, header_fields
-                            ),
+                    if decoded_header:
+                        if "ZCZC" in decoded_header:
+                            zczc_idx = decoded_header.find("ZCZC")
+                            decoded_header = decoded_header[zczc_idx:]
+
+                        raw_text = decoded_header + "\r"
+                        fips_lookup = get_same_lookup()
+                        header_fields = describe_same_header(
+                            decoded_header, lookup=fips_lookup
                         )
-                    ]
-                    correlation_raw_text = raw_text
-                    correlation_confidence = confidence
+                        correlation_headers = [
+                            SAMEHeaderDetails(
+                                header=decoded_header,
+                                fields=header_fields,
+                                confidence=confidence,
+                                summary=build_plain_language_summary(
+                                    decoded_header, header_fields
+                                ),
+                            )
+                        ]
+                        correlation_raw_text = raw_text
+                        correlation_confidence = confidence
 
-    except Exception:
-        pass
+        except Exception:
+            pass
 
     base_rate = float(SAME_BAUD)
     try:
