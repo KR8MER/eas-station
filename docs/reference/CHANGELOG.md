@@ -153,6 +153,12 @@ tracks releases under the 2.x series.
 - Prevented the LED fallback initializer from raising a `NameError` when the optional
   controller module is missing so deployments without sign hardware continue to boot.
 
+## [2.3.8] - 2025-11-02
+### Fixed
+- Backfilled missing plain-language SAME header summaries when loading existing
+  audio decodes so the alert verification and audio history pages regain their
+  readable sentences.
+
 ## [2.3.7] - 2025-11-02
 ### Changed
 - Linked the admin location reference summary and API responses to the bundled
