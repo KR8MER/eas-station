@@ -9,6 +9,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from flask import current_app, has_app_context
 
+from app_utils.fips_codes import NATIONWIDE_SAME_CODE, US_FIPS_COUNTIES
 from app_utils.zone_catalog import (
     ZoneSyncResult,
     iter_zone_records,
@@ -35,6 +36,10 @@ class ZoneInfo:
     fe_area: str
     latitude: Optional[float]
     longitude: Optional[float]
+    same_code: Optional[str] = None
+    fips_code: Optional[str] = None
+    state_fips: Optional[str] = None
+    county_fips: Optional[str] = None
 
     def formatted_label(self) -> str:
         label = self.name or self.short_name or self.code
@@ -45,6 +50,57 @@ class ZoneInfo:
 
 _ZONE_LOOKUP_CACHE: Dict[str, ZoneInfo] | None = None
 _ZONE_CODE_PATTERN = re.compile(r"^[A-Z]{2}[A-Z][0-9]{3}$")
+
+
+def _build_county_zone_lookup() -> Dict[str, ZoneInfo]:
+    """Return derived county-based zone definitions using the FIPS catalog."""
+
+    lookup: Dict[str, ZoneInfo] = {}
+    for same_code, label in US_FIPS_COUNTIES.items():
+        if not same_code or same_code == NATIONWIDE_SAME_CODE:
+            continue
+
+        digits = "".join(ch for ch in same_code if ch.isdigit())
+        if len(digits) != 6 or digits.endswith("000"):
+            continue
+
+        if "," in label:
+            county_name, state_abbr = [part.strip() for part in label.rsplit(",", maxsplit=1)]
+        else:
+            county_name = label.strip()
+            state_abbr = ""
+
+        if len(state_abbr) != 2:
+            continue
+
+        county_suffix = digits[-3:]
+        zone_code = f"{state_abbr}C{county_suffix}"
+        # FIPS county code is the last five digits of the SAME identifier.
+        fips_code = digits[1:]
+        state_fips = digits[1:3]
+
+        lookup[zone_code] = ZoneInfo(
+            code=zone_code,
+            state_code=state_abbr,
+            zone_number=county_suffix,
+            zone_type="C",
+            name=county_name,
+            short_name=county_name,
+            cwa="",
+            time_zone="",
+            fe_area=state_abbr,
+            latitude=None,
+            longitude=None,
+            same_code=digits,
+            fips_code=fips_code,
+            state_fips=state_fips,
+            county_fips=county_suffix,
+        )
+
+    return lookup
+
+
+_COUNTY_ZONE_LOOKUP: Dict[str, ZoneInfo] = _build_county_zone_lookup()
 
 
 def _resolve_zone_catalog_path(source_path: str | Path | None) -> Path:
@@ -105,6 +161,8 @@ def get_zone_lookup() -> Dict[str, ZoneInfo]:
             zone.zone_code: _build_zone_info(zone)
             for zone in NWSZone.query.all()
         }
+        for code, info in _COUNTY_ZONE_LOOKUP.items():
+            _ZONE_LOOKUP_CACHE.setdefault(code, info)
     return dict(_ZONE_LOOKUP_CACHE)
 
 

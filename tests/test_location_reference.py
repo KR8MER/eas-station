@@ -53,7 +53,7 @@ def test_describe_location_reference_includes_zone_and_fips_details(app_context)
             "state_code": "OH",
             "timezone": "America/New_York",
             "fips_codes": ["039137"],
-            "zone_codes": ["OHZ016"],
+            "zone_codes": ["OHZ016", "OHC137"],
             "area_terms": ["PUTNAM COUNTY", "OTTAWA"],
         }
 
@@ -63,10 +63,19 @@ def test_describe_location_reference_includes_zone_and_fips_details(app_context)
         assert snapshot["location"]["state_code"] == "OH"
 
         zones = snapshot["zones"]["known"]
-        assert len(zones) == 1
-        assert zones[0]["code"] == "OHZ016"
-        assert zones[0]["cwa"] == "CLE"
-        assert zones[0]["label"].startswith("OHZ016")
+        assert len(zones) == 2
+        zone_lookup = {zone["code"]: zone for zone in zones}
+
+        assert zone_lookup["OHZ016"]["cwa"] == "CLE"
+        assert zone_lookup["OHZ016"]["label"].startswith("OHZ016")
+
+        county_zone = zone_lookup["OHC137"]
+        assert county_zone["zone_type"] == "C"
+        assert county_zone["same_code"] == "039137"
+        assert county_zone["fips_code"] == "39137"
+        assert county_zone["state_fips"] == "39"
+        assert county_zone["county_fips"] == "137"
+        assert county_zone["label"].startswith("OHC137 – Putnam County")
 
         fips_entries = snapshot["fips"]["known"]
         assert len(fips_entries) == 1
