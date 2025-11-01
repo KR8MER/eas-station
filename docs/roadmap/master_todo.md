@@ -86,10 +86,10 @@ Each roadmap item below references the requirement(s) it unlocks so contributors
 - **Goal**: Keep all safety disclaimers, legal notices, and operating guides synchronized between the repository and web UI.
 - **Status**: Legal notices exist, but the roadmap and operator guides are spread across multiple documents without a central index.
 - **Plan**:
-  1. Maintain this master roadmap alongside `docs/eas_todo.md` to reflect tactical progress.
+  1. Maintain this master roadmap alongside `docs/roadmap/eas_todo.md` to reflect tactical progress.
   2. Cross-link README, ABOUT, and HELP pages to the latest disclaimers (Terms of Use, Privacy Policy) and roadmap status.
   3. Schedule periodic documentation audits to ensure web templates (`templates/*.html`) match repository markdown content.
-  4. Capture release notes in `CHANGELOG.md` summarizing roadmap milestones.
+  4. Capture release notes in `docs/reference/CHANGELOG.md` summarizing roadmap milestones.
 
 ## 9. Certification Evidence & Reliability Trials (Requirement 9)
 - **Goal**: Produce the engineering artifacts, soak tests, and configuration baselines required to seek FCC Part 11 certification for the Raspberry Pi-based build.
