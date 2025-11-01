@@ -5,6 +5,7 @@ from __future__ import annotations
 from flask import flash, g, jsonify, redirect, render_template, request, url_for
 
 from app_utils.setup_wizard import (
+    PLACEHOLDER_SECRET_VALUES,
     WIZARD_FIELDS,
     SetupValidationError,
     clean_submission,
@@ -56,12 +57,21 @@ def register(app, logger):
                 env_exists=False,
                 setup_reasons=reason_messages,
                 setup_active=setup_active,
+                secret_present=False,
             )
 
         defaults = {
             key: (value or "")
             for key, value in state.defaults.items()
         }
+        existing_secret = state.current_values.get("SECRET_KEY", "").strip()
+        has_valid_secret = (
+            bool(existing_secret)
+            and existing_secret not in PLACEHOLDER_SECRET_VALUES
+            and len(existing_secret) >= 32
+        )
+        if has_valid_secret:
+            defaults["SECRET_KEY"] = ""
         defaults["DEFAULT_LED_LINES"] = format_led_lines_for_display(
             defaults.get("DEFAULT_LED_LINES", "")
         )
@@ -77,6 +87,9 @@ def register(app, logger):
             submitted = dict(form_data)
             if "DEFAULT_LED_LINES" in submitted:
                 submitted["DEFAULT_LED_LINES"] = submitted["DEFAULT_LED_LINES"].replace("\r", "")
+
+            if has_valid_secret and not submitted["SECRET_KEY"].strip():
+                submitted["SECRET_KEY"] = existing_secret
 
             try:
                 cleaned = clean_submission(submitted)
@@ -102,6 +115,7 @@ def register(app, logger):
             env_exists=state.env_exists,
             setup_reasons=reason_messages,
             setup_active=setup_active,
+            secret_present=has_valid_secret,
         )
 
     @app.route("/setup/generate-secret", methods=["POST"])
