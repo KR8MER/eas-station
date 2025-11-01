@@ -1,4 +1,4 @@
-# 📡 EAS Station
+# <img src="static/img/eas-station-logo.svg" alt="EAS Station logo" width="48" height="48" style="vertical-align: middle;"> EAS Station
 
 > A complete Emergency Alert System (EAS) platform for ingesting, broadcasting, and verifying NOAA and IPAWS Common Alerting Protocol (CAP) alerts. Features FCC-compliant SAME encoding, multi-source aggregation, PostGIS spatial intelligence, SDR verification, and integrated LED signage.
 

@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">EAS Station Logo</title>
+  <desc id="desc">Stylized emergency broadcast badge with layered concentric waves and lightning bolt.</desc>
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#204885" />
+      <stop offset="50%" stop-color="#4f6fb3" />
+      <stop offset="100%" stop-color="#872a96" />
+    </linearGradient>
+    <radialGradient id="innerGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f4f5fb" stop-opacity="0.95" />
+      <stop offset="55%" stop-color="#d9def4" stop-opacity="0.75" />
+      <stop offset="100%" stop-color="#b3c0e6" stop-opacity="0.1" />
+    </radialGradient>
+    <linearGradient id="boltGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffe56b" />
+      <stop offset="100%" stop-color="#ff9a6b" />
+    </linearGradient>
+  </defs>
+  <g fill="none" fill-rule="evenodd">
+    <circle cx="256" cy="256" r="240" fill="url(#bgGradient)" />
+    <circle cx="256" cy="256" r="190" fill="url(#innerGlow)" />
+    <circle cx="256" cy="256" r="150" fill="none" stroke="rgba(32,72,133,0.2)" stroke-width="20" />
+    <circle cx="256" cy="256" r="215" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="16" stroke-dasharray="40 22" />
+    <circle cx="256" cy="256" r="110" fill="none" stroke="rgba(135,42,150,0.45)" stroke-width="18" stroke-dasharray="32 18" />
+    <path d="M160 322c34-42 65-63 96-63s62 21 96 63" stroke="#4f6fb3" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" opacity="0.55" />
+    <path d="M176 352c30-36 58-54 80-54s50 18 80 54" stroke="#872a96" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" opacity="0.6" />
+    <path d="M196 378c24-28 44-42 60-42s36 14 60 42" stroke="#f6b968" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" opacity="0.85" />
+    <path d="M256 128c-16 34-48 64-48 96 0 38 24 68 24 92 0 17-12 36-36 56 32-12 55-18 68-18 13 0 36 6 68 18-24-20-36-39-36-56 0-24 24-54 24-92 0-32-32-62-48-96z" fill="#204885" opacity="0.3" />
+    <path d="M286 112l-66 128h64l-32 116 94-148h-68l32-96z" fill="url(#boltGradient)" stroke="#ffe56b" stroke-width="6" stroke-linejoin="round" />
+    <circle cx="256" cy="256" r="34" fill="#204885" opacity="0.75" />
+    <circle cx="256" cy="256" r="16" fill="#f4f5fb" />
+  </g>
+</svg>
