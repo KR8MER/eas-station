@@ -106,6 +106,103 @@ def test_sync_zone_catalog_upserts(app_context) -> None:
     assert stored.name == "Calhoun County"
 
 
+def test_sync_zone_catalog_handles_duplicate_records(app_context) -> None:
+    first = ZoneRecord(
+        zone_code="ALZ019",
+        state_code="AL",
+        zone_number="019",
+        cwa="BMX",
+        time_zone="C",
+        fe_area="EC",
+        name="Calhoun",
+        state_zone="AL019",
+        longitude=-85.8261,
+        latitude=33.7714,
+        short_name="Calhoun",
+    )
+    duplicate = ZoneRecord(
+        zone_code="ALZ019",
+        state_code="AL",
+        zone_number="019",
+        cwa="BMX",
+        time_zone="C",
+        fe_area="EC",
+        name="Calhoun County",
+        state_zone="AL019",
+        longitude=-85.8261,
+        latitude=33.7714,
+        short_name="Calhoun",
+    )
+
+    result = sync_zone_catalog(
+        db.session, [first, duplicate], source_path="test.dbf"
+    )
+    assert result.inserted == 1
+    assert result.updated == 0
+    assert result.removed == 0
+
+    stored = NWSZone.query.one()
+    assert stored.zone_code == "ALZ019"
+    assert stored.name == "Calhoun County"
+
+
+def test_sync_zone_catalog_updates_once_for_duplicates(app_context) -> None:
+    original = ZoneRecord(
+        zone_code="ALZ019",
+        state_code="AL",
+        zone_number="019",
+        cwa="BMX",
+        time_zone="C",
+        fe_area="EC",
+        name="Calhoun",
+        state_zone="AL019",
+        longitude=-85.8261,
+        latitude=33.7714,
+        short_name="Calhoun",
+    )
+    sync_zone_catalog(db.session, [original], source_path="test.dbf")
+
+    duplicate_records = [
+        ZoneRecord(
+            zone_code="ALZ019",
+            state_code="AL",
+            zone_number="019",
+            cwa="BMX",
+            time_zone="C",
+            fe_area="EC",
+            name="Calhoun",
+            state_zone="AL019",
+            longitude=-85.8261,
+            latitude=33.7714,
+            short_name="Calhoun",
+        ),
+        ZoneRecord(
+            zone_code="ALZ019",
+            state_code="AL",
+            zone_number="019",
+            cwa="BMX",
+            time_zone="C",
+            fe_area="EC",
+            name="Calhoun County",
+            state_zone="AL019",
+            longitude=-85.8261,
+            latitude=33.7714,
+            short_name="Calhoun",
+        ),
+    ]
+
+    result = sync_zone_catalog(
+        db.session, duplicate_records, source_path="test.dbf"
+    )
+    assert result.inserted == 0
+    assert result.updated == 1
+    assert result.removed == 0
+
+    stored = NWSZone.query.one()
+    assert stored.zone_code == "ALZ019"
+    assert stored.name == "Calhoun County"
+
+
 def test_zone_code_normalisation_and_lookup(app_context) -> None:
     record = ZoneRecord(
         zone_code="ALZ019",
