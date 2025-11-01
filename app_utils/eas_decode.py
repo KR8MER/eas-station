@@ -755,12 +755,17 @@ def _find_same_bursts(bits: List[int]) -> List[int]:
 
     burst_positions: List[int] = []
 
-    # Define character patterns (LSB first, 7 bits, framed)
-    # 'Z' = 0x5A = 0101101 (7 bits) -> LSB first = 0101101 -> framed: 0 + 0101101 + 0 + 1
+    # Define character patterns (LSB first, 7 bits, framed with even parity)
+    # 'Z' = 0x5A = 01011010 -> LSB 7 bits: 0,1,0,1,1,0,1 (4 ones) -> parity: 0 (even)
+    # Frame: [start=0][7 data bits][parity][stop=1]
     Z_pattern = [0, 0, 1, 0, 1, 1, 0, 1, 0, 1]
-    C_pattern = [0, 1, 1, 0, 0, 0, 1, 1, 0, 1]  # 'C' = 0x43 = 1000011 -> LSB = 1100001
+    # 'C' = 0x43 = 01000011 -> LSB 7 bits: 1,1,0,0,0,0,1 (3 ones) -> parity: 1 (even)
+    C_pattern = [0, 1, 1, 0, 0, 0, 1, 1, 1, 1]  # Fixed: parity bit was 0, should be 1
 
-    i = 0
+    # Skip the preamble (16 bytes of 0xAB * 10 bits per byte = 160 bits)
+    # The preamble can cause false matches, so start searching after it
+    preamble_bits = 160
+    i = min(preamble_bits, len(bits) // 4)  # Start after preamble or 25% into bits
     while i < len(bits) - 40:  # Need at least 4 * 10 bits for ZCZC
         # Check for ZCZC pattern
         z1_matches = sum(1 for j in range(10) if i+j < len(bits) and bits[i+j] == Z_pattern[j])
