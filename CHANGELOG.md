@@ -137,6 +137,10 @@ tracks releases under the 2.x series.
 - Prevented the LED fallback initializer from raising a `NameError` when the optional
   controller module is missing so deployments without sign hardware continue to boot.
 
+## [2.3.1] - 2025-11-01
+### Added
+- Added one-click backup and upgrade controls to the Admin System Operations panel, wrapping the existing CLI helpers in background tasks with status reporting.
+
 ## [2.1.9] - 2025-10-31
 ### Added
 - Delivered a WYSIWYG LED message designer with content-editable line cards, live colour/effect previews,

@@ -624,6 +624,44 @@
                         </div>
 
                         <div class="operation-card">
+                            <i class="fas fa-hdd fa-2x text-success mb-3"></i>
+                            <h6>One-Button Backup</h6>
+                            <p class="text-muted small">Snapshot the configuration and database using the backup helper.</p>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold" for="backupLabel">Optional label</label>
+                                <input type="text" class="form-control" id="backupLabel" maxlength="48" placeholder="e.g. pre-upgrade">
+                                <div class="form-text">The label is appended to the timestamped backup folder.</div>
+                            </div>
+                            <button id="backupButton" onclick="runOneClickBackup()" class="btn btn-custom btn-success w-100">
+                                <i class="fas fa-save"></i> Run Backup
+                            </button>
+                            <div id="backupStatus" class="small text-muted mt-2">No backups run yet.</div>
+                        </div>
+
+                        <div class="operation-card">
+                            <i class="fas fa-level-up-alt fa-2x text-primary mb-3"></i>
+                            <h6>One-Button Upgrade</h6>
+                            <p class="text-muted small">Fetch updates, rebuild containers, and restart services in place.</p>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold" for="upgradeCheckout">Checkout ref (optional)</label>
+                                <input type="text" class="form-control" id="upgradeCheckout" placeholder="e.g. v2.3.1">
+                                <div class="form-text">Leave blank to stay on the current branch.</div>
+                            </div>
+                            <div class="form-check form-switch text-start mb-2">
+                                <input class="form-check-input" type="checkbox" id="upgradeSkipMigrations">
+                                <label class="form-check-label small" for="upgradeSkipMigrations">Skip database migrations</label>
+                            </div>
+                            <div class="form-check form-switch text-start mb-3">
+                                <input class="form-check-input" type="checkbox" id="upgradeAllowDirty">
+                                <label class="form-check-label small" for="upgradeAllowDirty">Allow dirty git worktree</label>
+                            </div>
+                            <button id="upgradeButton" onclick="runOneClickUpgrade()" class="btn btn-custom btn-primary w-100">
+                                <i class="fas fa-sync-alt"></i> Run Upgrade
+                            </button>
+                            <div id="upgradeStatus" class="small text-muted mt-2">No upgrades run yet.</div>
+                        </div>
+
+                        <div class="operation-card">
                             <i class="fas fa-history fa-2x text-secondary mb-3"></i>
                             <h6>Import Archived Alert</h6>
                             <p class="text-muted small">Query NOAA for specific alerts (including expired) and store them locally.</p>
@@ -1093,6 +1131,7 @@
         const BOUNDARY_TYPE_CONFIG = window.BOUNDARY_TYPE_CONFIG || {};
         const DEFAULT_BOUNDARY_TYPES = new Set(Object.keys(BOUNDARY_TYPE_CONFIG));
         const ADMIN_SETUP_MODE = {{ 'true' if setup_mode else 'false' }};
+        let latestOperationStatus = {};
         const EAS_EVENT_CODES = {{ eas_event_codes|tojson }};
         const EAS_DEFAULTS = {
             originator: {{ eas_originator|tojson }},
@@ -1299,6 +1338,9 @@
             initializeLocationSettings();
             initializeEasPanel();
             initializeCustomTypeControls();
+
+            refreshOperationStatus();
+            setInterval(refreshOperationStatus, 15000);
 
             // Auto-refresh every 30 seconds
             setInterval(() => {
@@ -4651,6 +4693,156 @@
                     showStatus(`✅ ${result.message}`, 'success');
                 } else {
                     showStatus(`❌ ${result.error}`, 'danger');
+                }
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, 'danger');
+            }
+        }
+
+        function truncate(value, maxLength = 180) {
+            if (!value || typeof value !== 'string') {
+                return '';
+            }
+            if (value.length <= maxLength) {
+                return value;
+            }
+            return `${value.slice(0, maxLength - 1)}…`;
+        }
+
+        function formatOperationTimestamp(value) {
+            if (!value) {
+                return null;
+            }
+            const parsed = new Date(value);
+            if (Number.isNaN(parsed.getTime())) {
+                return null;
+            }
+            return parsed.toLocaleString();
+        }
+
+        function setOperationIndicator(name, state) {
+            const statusElement = document.getElementById(`${name}Status`);
+            const buttonElement = document.getElementById(`${name}Button`);
+            if (!statusElement) {
+                return;
+            }
+            if (buttonElement) {
+                buttonElement.disabled = !!(state && state.running);
+            }
+            if (!state) {
+                statusElement.textContent = 'Status unavailable.';
+                return;
+            }
+            if (state.running) {
+                const started = formatOperationTimestamp(state.last_started_at) || 'just now';
+                statusElement.textContent = `⏳ Running (started ${started})`;
+                return;
+            }
+            if (!state.last_status) {
+                statusElement.textContent = 'No runs recorded yet.';
+                return;
+            }
+            const finished = formatOperationTimestamp(state.last_finished_at);
+            const message = state.last_message ? escapeHtml(state.last_message) : '';
+            if (state.last_status === 'success') {
+                const summary = finished ? `✅ Completed ${finished}` : '✅ Completed';
+                statusElement.innerHTML = message ? `${summary}<br><span class="text-muted">${message}</span>` : summary;
+                return;
+            }
+            if (state.last_status === 'failed') {
+                const summary = finished ? `❌ Failed ${finished}` : '❌ Failed';
+                let details = message;
+                if (!details && state.last_error_output) {
+                    details = escapeHtml(truncate(state.last_error_output, 180));
+                }
+                statusElement.innerHTML = details ? `${summary}<br><span class="text-muted">${details}</span>` : summary;
+                return;
+            }
+            statusElement.textContent = message || 'Status unknown.';
+        }
+
+        function updateOperationStatusIndicators(operations) {
+            if (!operations || typeof operations !== 'object') {
+                return;
+            }
+            latestOperationStatus = { ...latestOperationStatus, ...operations };
+            setOperationIndicator('backup', latestOperationStatus.backup);
+            setOperationIndicator('upgrade', latestOperationStatus.upgrade);
+        }
+
+        async function refreshOperationStatus() {
+            try {
+                const response = await fetch('/admin/operations/status');
+                if (!response.ok) {
+                    throw new Error('Failed to load operation status');
+                }
+                const result = await response.json();
+                updateOperationStatusIndicators(result.operations);
+            } catch (error) {
+                console.warn('Unable to refresh operation status', error);
+            }
+        }
+
+        async function runOneClickBackup() {
+            const labelInput = document.getElementById('backupLabel');
+            const payload = {};
+            if (labelInput && labelInput.value.trim()) {
+                payload.label = labelInput.value.trim();
+            }
+            try {
+                showStatus('💾 Starting backup…', 'info');
+                const response = await fetch('/admin/operations/backup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const result = await response.json();
+                if (result.operation) {
+                    updateOperationStatusIndicators({ backup: result.operation });
+                } else {
+                    refreshOperationStatus();
+                }
+                if (response.ok) {
+                    showStatus(`✅ ${result.message || 'Backup started.'}`, 'success');
+                } else {
+                    showStatus(`❌ ${result.error || 'Backup request failed.'}`, 'danger');
+                }
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, 'danger');
+            }
+        }
+
+        async function runOneClickUpgrade() {
+            const payload = {};
+            const checkoutInput = document.getElementById('upgradeCheckout');
+            if (checkoutInput && checkoutInput.value.trim()) {
+                payload.checkout = checkoutInput.value.trim();
+            }
+            const skipMigrationsInput = document.getElementById('upgradeSkipMigrations');
+            if (skipMigrationsInput && skipMigrationsInput.checked) {
+                payload.skip_migrations = true;
+            }
+            const allowDirtyInput = document.getElementById('upgradeAllowDirty');
+            if (allowDirtyInput && allowDirtyInput.checked) {
+                payload.allow_dirty = true;
+            }
+            try {
+                showStatus('⬆️ Starting upgrade…', 'info');
+                const response = await fetch('/admin/operations/upgrade', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const result = await response.json();
+                if (result.operation) {
+                    updateOperationStatusIndicators({ upgrade: result.operation });
+                } else {
+                    refreshOperationStatus();
+                }
+                if (response.ok) {
+                    showStatus(`✅ ${result.message || 'Upgrade started.'}`, 'success', 8000);
+                } else {
+                    showStatus(`❌ ${result.error || 'Upgrade request failed.'}`, 'danger');
                 }
             } catch (error) {
                 showStatus(`❌ Error: ${error.message}`, 'danger');

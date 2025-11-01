@@ -842,6 +842,7 @@ SELECT COUNT(*) FROM cap_alerts;
 -- Check PostGIS version
 SELECT PostGIS_version();</code></pre>
 
+                                    <p class="mt-3">Prefer clicks? Use the Admin → System Operations tab to launch the same <code>Run Backup</code> and <code>Run Upgrade</code> helpers directly from the web interface.</p>
                                     <p class="mt-3"><strong>Backup and restore:</strong></p>
                                     <pre class="bg-dark text-white p-3 rounded mb-0"><code># Backup
 docker-compose exec alerts-db pg_dump -U postgres alerts > backup.sql
