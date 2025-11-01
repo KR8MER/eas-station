@@ -1079,14 +1079,52 @@ def _score_candidate(metadata: Dict[str, object]) -> float:
     frame_count = int(metadata.get("frame_count") or 0)
     frame_errors = int(metadata.get("frame_errors") or 0)
 
-    score = float(frame_count - frame_errors)
-    score -= float(frame_errors * 2)
+    # Validate headers for corruption (control characters)
+    valid_headers = []
+    for header in headers:
+        is_valid = True
+        for char in str(header):
+            code = ord(char)
+            # Reject headers with control characters (except CR/LF)
+            if code < 32 and code not in (10, 13):
+                is_valid = False
+                break
+        if is_valid:
+            valid_headers.append(header)
 
-    if headers:
-        score += 500.0 * len(headers)
-        uppercase_headers = [header.upper() for header in headers]
-        score += 200.0 * sum(1 for header in uppercase_headers if header.startswith("ZCZC"))
-        score += 100.0 * sum(1 for header in uppercase_headers if header.startswith("NNNN"))
+    # Count valid ZCZC headers
+    uppercase_headers = [header.upper() for header in valid_headers]
+    zczc_count = sum(1 for header in uppercase_headers if header.startswith("ZCZC"))
+    nnnn_count = sum(1 for header in uppercase_headers if header.startswith("NNNN"))
+
+    # Start score based on frame quality
+    # If we have valid ZCZC headers, frame errors matter less (bit rate sync issues)
+    if zczc_count >= 1:
+        # Reduce frame error penalty when we have valid headers
+        score = float(frame_count - frame_errors)
+        score -= float(frame_errors * 0.5)  # Much lower penalty
+    else:
+        # Full penalty when no valid headers
+        score = float(frame_count - frame_errors)
+        score -= float(frame_errors * 2)
+
+    # Heavily penalize corrupted headers
+    corrupted_count = len(headers) - len(valid_headers)
+    if corrupted_count > 0:
+        score -= 10000.0 * corrupted_count
+
+    # Reward valid headers
+    if valid_headers:
+        score += 500.0 * len(valid_headers)
+        score += 200.0 * zczc_count
+        score += 100.0 * nnnn_count
+
+        # Large bonus for having 3 ZCZC headers (standard SAME format)
+        if zczc_count == 3:
+            score += 5000.0
+        # Bonus for having at least 1 valid ZCZC header
+        elif zczc_count >= 1:
+            score += 1000.0
 
     if isinstance(text, str):
         score += 50.0 * text.upper().count("ZCZC")
