@@ -63,9 +63,9 @@ Outside of the day job, Kramer is an active Skywarn spotter and maintains a dive
   content are original and community-maintained.
 - **Certification pending.** The goal is to satisfy every functional requirement of commercial Emergency Alert System encoders
   and decoders; however, the software is **not yet** FCC-certified and must not be deployed where certified hardware is mandated.
-- **No life-safety reliance—yet.** Until the roadmap items in [`docs/master_todo.md`](docs/master_todo.md) are completed and the
+- **No life-safety reliance—yet.** Until the roadmap items in [`docs/roadmap/master_todo.md`](docs/roadmap/master_todo.md) are completed and the
   system is validated, keep operations confined to lab and training environments.
-- **Read the legal docs.** Review the [Terms of Use](TERMS_OF_USE.md) and [Privacy Policy](PRIVACY_POLICY.md) before sharing data
+- **Read the legal docs.** Review the [Terms of Use](docs/policies/TERMS_OF_USE.md) and [Privacy Policy](docs/policies/PRIVACY_POLICY.md) before sharing data
   or inviting collaborators to test deployments.
 
 ---
@@ -144,27 +144,27 @@ EAS Station is not just an alert monitor—it's a **complete emergency broadcast
 ## 🏛️ Governance & Contributions
 
 - **License:** Source code is provided under the [MIT License](LICENSE); copyright remains with Timothy Kramer (K8R8MER).
-- **Contribution workflow:** All commits must include a Developer Certificate of Origin sign-off (`Signed-off-by`) as described in the [CONTRIBUTING guide](CONTRIBUTING.md).
-- **Roadmap alignment:** Issues and pull requests should call out which drop-in replacement requirement from [`docs/master_todo.md`](docs/master_todo.md) they advance to keep hardware parity measurable.
-- **Legal notices:** Review the [Terms of Use](TERMS_OF_USE.md) and [Privacy Policy](PRIVACY_POLICY.md) before deploying test systems or sharing data.
+- **Contribution workflow:** All commits must include a Developer Certificate of Origin sign-off (`Signed-off-by`) as described in the [CONTRIBUTING guide](docs/process/CONTRIBUTING.md).
+- **Roadmap alignment:** Issues and pull requests should call out which drop-in replacement requirement from [`docs/roadmap/master_todo.md`](docs/roadmap/master_todo.md) they advance to keep hardware parity measurable.
+- **Legal notices:** Review the [Terms of Use](docs/policies/TERMS_OF_USE.md) and [Privacy Policy](docs/policies/PRIVACY_POLICY.md) before deploying test systems or sharing data.
 
 ## 🧾 Release Integrity & Audit Trails
 
 - **Version numbering is mandatory.** Every deployable build must set `APP_BUILD_VERSION` (surfaced in the UI footer) so operators and auditors can immediately identify what is running. Bumping that version goes hand in hand with publishing a `CHANGELOG` entry.
 - **Single source of truth for releases.** Bump the root [`VERSION`](VERSION) file and mirror the value in `.env.example` whenever behaviour changes. The guardrail test (`pytest tests/test_release_metadata.py`) fails fast if the version, changelog, or template drift out of sync.
-- **CHANGELOG-first pull requests.** Any change that alters behaviour—no matter how small—should append a note under the `[Unreleased]` section of [`CHANGELOG.md`](CHANGELOG.md) summarising the impact and highlighting regression testing that protects previously working workflows.
+- **CHANGELOG-first pull requests.** Any change that alters behaviour—no matter how small—should append a note under the `[Unreleased]` section of [`CHANGELOG.md`](docs/reference/CHANGELOG.md) summarising the impact and highlighting regression testing that protects previously working workflows.
 - **Regression checks before merge.** Contributors are expected to confirm that critical features (alert ingest, SAME generation, GPIO triggers, audio playout) still function. Document manual or automated verification in the PR description so upgrade decisions can be audited later.
 - **Git history is the audit trail.** Keep commits focused and well described; reference issue numbers where applicable and avoid force-pushes to shared branches so the trail remains trustworthy.
 - **Post-upgrade validation.** Every deployment should run the operator verification checklist (alert ingest, SAME playback, GPIO relay test, audio monitoring) immediately after `tools/inplace_upgrade.py` completes so you can roll back before lab exercises resume.
 
 ## 📚 Additional Documentation
 
-- [ℹ️ About the Project](ABOUT.md) – Overview of the mission, core services, and full software stack powering the system.
-- [🆘 Help Guide](HELP.md) – Day-to-day operations, troubleshooting workflows, and reference commands for operators.
-- [⚖️ Terms of Use](TERMS_OF_USE.md) – Development-only license terms, acceptable use, and critical safety disclaimers.
-- [🛡️ Privacy Policy](PRIVACY_POLICY.md) – Guidance for handling configuration data, test records, and optional integrations.
-- [🗂️ Master Implementation Roadmap](docs/master_todo.md) – Drop-in replacement requirements with implementation plans that map the path to hardware parity and production readiness.
-- [📦 Open-Source Dependency Attribution](docs/dependency_attribution.md) – Maintainer, license, and usage overview for every Python library bundled with the project.
+- [ℹ️ About the Project](docs/reference/ABOUT.md) – Overview of the mission, core services, and full software stack powering the system.
+- [🆘 Help Guide](docs/guides/HELP.md) – Day-to-day operations, troubleshooting workflows, and reference commands for operators.
+- [⚖️ Terms of Use](docs/policies/TERMS_OF_USE.md) – Development-only license terms, acceptable use, and critical safety disclaimers.
+- [🛡️ Privacy Policy](docs/policies/PRIVACY_POLICY.md) – Guidance for handling configuration data, test records, and optional integrations.
+- [🗂️ Master Implementation Roadmap](docs/roadmap/master_todo.md) – Drop-in replacement requirements with implementation plans that map the path to hardware parity and production readiness.
+- [📦 Open-Source Dependency Attribution](docs/reference/dependency_attribution.md) – Maintainer, license, and usage overview for every Python library bundled with the project.
 - In-app versions of both guides are reachable from the navigation bar via the new <strong>About</strong> and <strong>Help</strong> pages for quick operator reference.
 
 ---

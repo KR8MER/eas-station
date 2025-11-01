@@ -388,7 +388,7 @@
                             <tbody>
                                 <tr>
                                     <th scope="row">Flask 3.0.3</th>
-                                    <td>Pallets Projects (Armin Ronacher &amp; team)</td>
+                                    <td>Pallets Projects</td>
                                     <td>BSD-3-Clause</td>
                                     <td>Primary web framework for the operator dashboard and REST API.</td>
                                 </tr>
@@ -399,58 +399,40 @@
                                     <td>Bridges SQLAlchemy sessions into the Flask application context.</td>
                                 </tr>
                                 <tr>
-                                    <th scope="row">Werkzeug 3.0.6</th>
-                                    <td>Pallets Projects</td>
-                                    <td>BSD-3-Clause</td>
-                                    <td>WSGI utilities that handle request routing, responses, and security helpers.</td>
-                                </tr>
-                                <tr>
-                                    <th scope="row">SQLAlchemy 2.0.44</th>
-                                    <td>SQLAlchemy community (led by Mike Bayer)</td>
-                                    <td>MIT</td>
-                                    <td>ORM and query toolkit driving database models, relationships, and migrations.</td>
-                                </tr>
-                                <tr>
-                                    <th scope="row">psycopg2-binary 2.9.10</th>
-                                    <td>Psycopg Project</td>
-                                    <td>LGPL-3.0 w/ linking exception</td>
-                                    <td>PostgreSQL/PostGIS driver for database connectivity.</td>
-                                </tr>
-                                <tr>
-                                    <th scope="row">GeoAlchemy2 0.15.2</th>
-                                    <td>GeoAlchemy maintainers</td>
-                                    <td>MIT</td>
-                                    <td>Spatial column types and functions for PostGIS-backed geometry queries.</td>
-                                </tr>
-                                <tr>
                                     <th scope="row">Alembic 1.14.0</th>
                                     <td>Mike Bayer &amp; SQLAlchemy contributors</td>
                                     <td>MIT</td>
                                     <td>Migration engine that versions schema changes alongside application updates.</td>
                                 </tr>
                                 <tr>
-                                    <th scope="row">requests 2.32.3</th>
-                                    <td>Kenneth Reitz &amp; contributors</td>
-                                    <td>Apache-2.0</td>
-                                    <td>Fetches NOAA, IPAWS, and auxiliary CAP feeds over HTTP(S).</td>
+                                    <th scope="row">certifi 2025.10.5</th>
+                                    <td>Kenneth Reitz &amp; Mozilla maintainers</td>
+                                    <td>MPL-2.0</td>
+                                    <td>Bundles trusted Certificate Authorities for secure HTTPS requests.</td>
                                 </tr>
                                 <tr>
-                                    <th scope="row">pytz 2024.2</th>
-                                    <td>Stuart Bishop</td>
+                                    <th scope="row">charset-normalizer 3.4.4</th>
+                                    <td>Ahmed TAHRI CHERIF &amp; contributors</td>
                                     <td>MIT</td>
-                                    <td>Provides authoritative IANA timezone data for alert scheduling.</td>
+                                    <td>Detects and normalises text encodings when parsing HTTP payloads.</td>
                                 </tr>
                                 <tr>
-                                    <th scope="row">psutil 6.1.1</th>
-                                    <td>Giampaolo Rodolà &amp; contributors</td>
+                                    <th scope="row">click 8.2.1</th>
+                                    <td>Armin Ronacher &amp; Pallets team</td>
                                     <td>BSD-3-Clause</td>
-                                    <td>Collects CPU, memory, disk, and network metrics for the system health view.</td>
+                                    <td>Provides command-line tooling used by Flask and project utilities.</td>
                                 </tr>
                                 <tr>
-                                    <th scope="row">python-dotenv 1.0.1</th>
-                                    <td>Saurabh Kumar &amp; community</td>
-                                    <td>BSD-3-Clause</td>
-                                    <td>Loads configuration from the <code>.env</code> file for the web app and CLI tools.</td>
+                                    <th scope="row">GeoAlchemy2 0.15.2</th>
+                                    <td>GeoAlchemy maintainers</td>
+                                    <td>MIT</td>
+                                    <td>Adds spatial column types and functions for PostGIS-backed geometry queries.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">greenlet 3.2.4</th>
+                                    <td>Armin Ronacher &amp; contributors</td>
+                                    <td>MIT</td>
+                                    <td>Implements lightweight coroutines leveraged by SQLAlchemy.</td>
                                 </tr>
                                 <tr>
                                     <th scope="row">gunicorn 23.0.0</th>
@@ -459,16 +441,112 @@
                                     <td>Production WSGI HTTP server that runs the Flask application.</td>
                                 </tr>
                                 <tr>
+                                    <th scope="row">idna 3.11</th>
+                                    <td>Kim Davies &amp; contributors</td>
+                                    <td>BSD-3-Clause</td>
+                                    <td>Handles Internationalized Domain Names for outbound HTTP calls.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">itsdangerous 2.2.0</th>
+                                    <td>Pallets Projects</td>
+                                    <td>BSD-3-Clause</td>
+                                    <td>Provides signed token helpers that secure session data and password resets.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Jinja2 3.1.6</th>
+                                    <td>Pallets Projects</td>
+                                    <td>BSD-3-Clause</td>
+                                    <td>Template engine that renders the operator web experience.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Mako 1.3.10</th>
+                                    <td>Mike Bayer &amp; contributors</td>
+                                    <td>MIT</td>
+                                    <td>Renders dynamic Alembic migration scripts.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">MarkupSafe 3.0.3</th>
+                                    <td>Armin Ronacher &amp; contributors</td>
+                                    <td>BSD-3-Clause</td>
+                                    <td>Escapes HTML inside templates to prevent injection vulnerabilities.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">numpy 1.26.4</th>
+                                    <td>NumPy developers</td>
+                                    <td>BSD-3-Clause</td>
+                                    <td>Delivers vectorised math primitives backing SciPy audio processing.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">packaging 25.0</th>
+                                    <td>Python Packaging Authority</td>
+                                    <td>Apache-2.0 OR BSD-2-Clause</td>
+                                    <td>Parses and validates version specifiers for dependency checks.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">psycopg2-binary 2.9.10</th>
+                                    <td>Psycopg Project</td>
+                                    <td>LGPL-3.0 w/ linking exception</td>
+                                    <td>PostgreSQL/PostGIS driver for database connectivity.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">psutil 6.1.1</th>
+                                    <td>Giampaolo Rodolà &amp; contributors</td>
+                                    <td>BSD-3-Clause</td>
+                                    <td>Collects CPU, memory, disk, and network metrics for the system health view.</td>
+                                </tr>
+                                <tr>
                                     <th scope="row">pyttsx3 2.90</th>
                                     <td>Natesh M Bhat &amp; contributors</td>
                                     <td>BSD-3-Clause</td>
                                     <td>Offline text-to-speech engine for narrated alert audio.</td>
                                 </tr>
                                 <tr>
+                                    <th scope="row">python-dotenv 1.0.1</th>
+                                    <td>Saurabh Kumar &amp; community</td>
+                                    <td>BSD-3-Clause</td>
+                                    <td>Loads configuration from the <code>.env</code> file for the web app and CLI tools.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">pytz 2024.2</th>
+                                    <td>Stuart Bishop</td>
+                                    <td>MIT</td>
+                                    <td>Provides authoritative IANA timezone data for alert scheduling.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">requests 2.32.3</th>
+                                    <td>Kenneth Reitz &amp; contributors</td>
+                                    <td>Apache-2.0</td>
+                                    <td>Fetches NOAA, IPAWS, and auxiliary CAP feeds over HTTP(S).</td>
+                                </tr>
+                                <tr>
                                     <th scope="row">SciPy 1.11.4</th>
                                     <td>SciPy community</td>
                                     <td>BSD-3-Clause</td>
                                     <td>Signal processing utilities used for audio resampling when ffmpeg is unavailable.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">SQLAlchemy 2.0.44</th>
+                                    <td>SQLAlchemy community (led by Mike Bayer)</td>
+                                    <td>MIT</td>
+                                    <td>ORM and query toolkit driving database models, relationships, and migrations.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">typing-extensions 4.15.0</th>
+                                    <td>Python Software Foundation</td>
+                                    <td>PSF-2.0</td>
+                                    <td>Backports modern typing helpers used throughout the codebase.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">urllib3 2.5.0</th>
+                                    <td>Seth Michael Larson &amp; urllib3 maintainers</td>
+                                    <td>MIT</td>
+                                    <td>Provides low-level HTTP connection pooling beneath requests.</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Werkzeug 3.0.6</th>
+                                    <td>Pallets Projects</td>
+                                    <td>BSD-3-Clause</td>
+                                    <td>WSGI utilities that handle request routing, responses, and security helpers.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -730,7 +808,7 @@
                                 <li><a href="https://github.com/KR8MER/eas-station" class="text-white text-decoration-underline" target="_blank" rel="noopener">GitHub Repository</a> - Source code and issue tracking</li>
                                 <li><a href="{{ url_for('help_page') }}" class="text-white text-decoration-underline">Help & Operations Guide</a> - Day-to-day operations</li>
                                 <li><code>README.md</code> - Installation and quick start</li>
-                                <li><code>CHANGELOG.md</code> - Version history and updates</li>
+                                <li><code>docs/reference/CHANGELOG.md</code> - Version history and updates</li>
                             </ul>
                         </div>
                         <div class="col-md-6">
