@@ -9,7 +9,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 
 revision = "20241031_convert_location_json_to_jsonb"
-down_revision = "20241205_add_location_fips_codes"
+down_revision = "20240718_expand_decoded_audio_segments"
 branch_labels = None
 depends_on = None
 
