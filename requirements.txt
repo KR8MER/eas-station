@@ -46,4 +46,4 @@ gunicorn==23.0.0
 pyttsx3==2.90  # Offline text-to-speech engine for the pyttsx3 provider
 
 # Audio processing for EAS decoding
-scipy==1.11.4  # Required for audio resampling when ffmpeg is not available
+scipy==1.14.1  # Required for audio resampling when ffmpeg is not available

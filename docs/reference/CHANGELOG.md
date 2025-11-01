@@ -143,6 +143,11 @@ tracks releases under the 2.x series.
 - Prevented the LED fallback initializer from raising a `NameError` when the optional
   controller module is missing so deployments without sign hardware continue to boot.
 
+## [2.3.3] - 2025-11-13
+### Changed
+- Rebased the container on the `python:3.12-slim-bookworm` image, added security upgrades during build, and refreshed pinned Python dependencies (including SciPy 1.14.1) to address Docker Hub vulnerability scans.
+- Documented Raspberry Pi 5 (4 GB RAM) as the reference platform across the README, policy documents, and in-app help/about pages while noting continued Raspberry Pi 4 compatibility.
+
 ## [2.3.2] - 2025-11-02
 ### Changed
 - The web server now falls back to a guarded setup mode when critical
