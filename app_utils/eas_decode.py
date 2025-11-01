@@ -91,7 +91,8 @@ def _format_clock(value: datetime) -> str:
 
 
 def _format_date(value: datetime) -> str:
-    return value.strftime("%b %d, %Y").upper()
+    month = value.strftime("%b").upper()
+    return f"{month} {value.day}, {value.year}"
 
 
 def _build_locations_list(fields: Dict[str, object]) -> List[str]:
@@ -103,23 +104,22 @@ def _build_locations_list(fields: Dict[str, object]) -> List[str]:
     for item in raw_locations:
         if not isinstance(item, dict):
             continue
+
         description = (item.get("description") or "").strip()
         state_abbr = (item.get("state_abbr") or "").strip()
         state_name = (item.get("state_name") or "").strip()
-        state_label = state_abbr or state_name
         code = (item.get("code") or "").strip()
 
         if description:
             label = description
-            if state_label and state_label not in description:
-                label = f"{label}, {state_label}"
+        elif state_name:
+            label = state_name
+        elif state_abbr:
+            label = state_abbr
         else:
-            if code and state_label:
-                label = f"{state_label} ({code})"
-            else:
-                label = code or state_label
+            label = code
 
-        label = label.strip()
+        label = (label or "").strip()
         if label:
             locations.append(label)
 
@@ -150,12 +150,11 @@ def _format_event_phrase(fields: Dict[str, object]) -> str:
     entry = EVENT_CODE_REGISTRY.get(code)
 
     if entry:
-        event_name = entry.get("name") or code
-        article = _select_article(event_name).lower()
-        phrase = f"{article} {event_name}"
-        if code:
-            phrase += f" ({code})"
-        return phrase
+        event_name = (entry.get("name") or code or "").strip()
+        if not event_name:
+            return "an alert"
+        article = _select_article(event_name)
+        return f"{article} {event_name.upper()}"
 
     if code:
         return f"an alert with event code {code}"
@@ -187,7 +186,7 @@ def build_plain_language_summary(header: str, fields: Dict[str, object]) -> Opti
 
     locations = _build_locations_list(fields)
     if locations:
-        summary += f" for the following counties/areas: {'; '.join(locations)}"
+        summary += f" for the following counties/areas: {'; '.join(locations)};"
     else:
         summary += " for the specified area"
 
@@ -196,7 +195,10 @@ def build_plain_language_summary(header: str, fields: Dict[str, object]) -> Opti
         issue_dt = issue_dt.astimezone(timezone.utc)
         summary += f" at {_format_clock(issue_dt)} on {_format_date(issue_dt)}"
 
-    summary += "."
+    if summary.endswith(";") and not issue_dt:
+        summary = summary[:-1] + "."
+    elif not issue_dt and not summary.endswith("."):
+        summary += "."
 
     purge_minutes = fields.get("purge_minutes")
     if isinstance(purge_minutes, (int, float)) and purge_minutes > 0 and issue_dt:
@@ -211,6 +213,8 @@ def build_plain_language_summary(header: str, fields: Dict[str, object]) -> Opti
             pass
     elif isinstance(purge_minutes, (int, float)) and purge_minutes == 0:
         summary += " Effective immediately."
+    elif not summary.endswith("."):
+        summary += "."
 
     station = (fields.get("station_identifier") or "").strip()
     if station:

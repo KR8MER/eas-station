@@ -153,6 +153,12 @@ tracks releases under the 2.x series.
 - Prevented the LED fallback initializer from raising a `NameError` when the optional
   controller module is missing so deployments without sign hardware continue to boot.
 
+## [2.3.10] - 2025-11-03
+### Changed
+- Reformatted SAME plain-language summaries to omit appended FIPS and state code
+  suffixes, adopt the FCC county listing punctuation, and present the event
+  description in the expected uppercase style.
+
 ## [2.3.9] - 2025-11-03
 ### Changed
 - Display the per-location FIPS identifiers and state codes on the Audio Archive
