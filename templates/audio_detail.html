@@ -118,7 +118,39 @@
                         <dt class="col-sm-4">Event Code</dt>
                         <dd class="col-sm-8">{{ metadata.get('event_code') }}</dd>
                         {% endif %}
-                        {% if locations %}
+                        {% if location_details %}
+                        <dt class="col-sm-4">Locations</dt>
+                        <dd class="col-sm-8">
+                            <ul class="list-unstyled small mb-0">
+                                {% for location in location_details %}
+                                <li class="mb-2">
+                                    <div>
+                                        <code>{{ location.code }}</code>
+                                        {% if location.description %}
+                                        <span class="ms-1">{{ location.description }}</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="text-muted">
+                                        {% if location.state_abbr %}
+                                            State {{ location.state_abbr }}
+                                            {% if location.state_fips %}
+                                                ({{ location.state_fips }})
+                                            {% endif %}
+                                        {% elif location.state_fips %}
+                                            State FIPS {{ location.state_fips }}
+                                        {% endif %}
+                                        {% if location.scope %}
+                                            · {{ location.scope }}
+                                        {% endif %}
+                                        {% if location.portion %}
+                                            · {{ location.portion }}
+                                        {% endif %}
+                                    </div>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </dd>
+                        {% elif locations %}
                         <dt class="col-sm-4">Locations</dt>
                         <dd class="col-sm-8">{{ locations | join(', ') }}</dd>
                         {% endif %}

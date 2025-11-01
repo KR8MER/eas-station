@@ -10,7 +10,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
-from app_utils.eas_decode import decode_same_audio
+from app_utils.eas_decode import build_plain_language_summary, decode_same_audio
 from app_utils.eas_fsk import (
     SAME_BAUD,
     SAME_MARK_FREQ,
@@ -141,3 +141,34 @@ def test_decode_same_audio_extracts_segments(tmp_path) -> None:
     assert result.segments["eom"].duration_seconds > 0.0
     assert result.segments["message"].duration_seconds >= 0.9
     assert result.segments["buffer"].duration_seconds <= 120.0
+
+
+def test_plain_summary_omits_codes_and_formats_locations() -> None:
+    fields = {
+        "originator_description": "EAS Participant",
+        "event_code": "RWT",
+        "locations": [
+            {"description": "Essex"},
+            {"description": "Gloucester"},
+            {"description": "King and Queen"},
+            {"description": "Lancaster"},
+            {"description": "Mathews"},
+            {"description": "Middlesex"},
+            {"description": "New Kent"},
+            {"description": "Northumberland"},
+            {"description": "Richmond (county), VA"},
+        ],
+        "issue_time_iso": "2025-11-01T18:12:00+00:00",
+        "purge_minutes": 60,
+        "station_identifier": "WKWI/FM",
+    }
+
+    summary = build_plain_language_summary("ZCZC-TEST", fields)
+
+    expected = (
+        "An EAS Participant has issued A REQUIRED WEEKLY TEST for the following counties/areas: "
+        "Essex; Gloucester; King and Queen; Lancaster; Mathews; Middlesex; New Kent; Northumberland; "
+        "Richmond (county), VA; at 6:12 PM on NOV 1, 2025 Effective until 7:12 PM. Message from WKWI/FM."
+    )
+
+    assert summary == expected

@@ -23,7 +23,10 @@ from app_core.models import (
     ManualEASActivation,
 )
 from app_utils import ALERT_SOURCE_UNKNOWN
-from app_utils.eas_decode import SAMEAudioDecodeResult
+from app_utils.eas_decode import (
+    SAMEAudioDecodeResult,
+    build_plain_language_summary,
+)
 from app_utils.time import format_local_datetime, utc_now
 
 
@@ -37,6 +40,30 @@ TEST_EVENT_KEYWORDS = (
 DELIVERED_EVENT_STATUSES = {"delivered", "completed", "success", "ok", "played"}
 FAILED_EVENT_STATUSES = {"failed", "error", "timeout", "aborted"}
 PENDING_EVENT_STATUSES = {"pending", "queued", "waiting", "scheduled"}
+
+
+def _ensure_header_summary(header: Any) -> Any:
+    """Ensure legacy SAME header payloads include a summary string."""
+
+    if not isinstance(header, dict):
+        return header
+
+    if header.get("summary"):
+        return header
+
+    header_text = header.get("header")
+    fields = header.get("fields")
+    if isinstance(header_text, str) and isinstance(fields, dict):
+        try:
+            summary = build_plain_language_summary(header_text, fields)
+        except Exception:  # pragma: no cover - defensive fallback
+            summary = None
+        if summary:
+            enriched = dict(header)
+            enriched["summary"] = summary
+            return enriched
+
+    return header
 
 
 def record_audio_decode_result(
@@ -53,11 +80,18 @@ def record_audio_decode_result(
     segments = decode_payload.segments
     segment_metadata = decode_payload.segment_metadata
 
+    same_headers = []
+    for header in decode_payload.headers:
+        payload = header.to_dict()
+        if not payload.get("summary"):
+            payload = _ensure_header_summary(payload)
+        same_headers.append(payload)
+
     record = EASDecodedAudio(
         original_filename=safe_filename,
         content_type=safe_type,
         raw_text=decode_payload.raw_text,
-        same_headers=[header.to_dict() for header in decode_payload.headers],
+        same_headers=same_headers,
         quality_metrics={
             "bit_count": decode_payload.bit_count,
             "frame_count": decode_payload.frame_count,
@@ -112,7 +146,10 @@ def load_recent_audio_decodes(limit: int = 5) -> List[Dict[str, Any]]:
                 "original_filename": row.original_filename,
                 "content_type": row.content_type,
                 "raw_text": row.raw_text,
-                "same_headers": list(row.same_headers or []),
+                "same_headers": [
+                    _ensure_header_summary(header)
+                    for header in list(row.same_headers or [])
+                ],
                 "quality_metrics": dict(row.quality_metrics or {}),
                 "segment_metadata": dict(row.segment_metadata or {}),
                 "has_header_audio": row.header_audio_data is not None,
