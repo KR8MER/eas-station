@@ -189,6 +189,8 @@ EAS Station is not just an alert monitor—it's a **complete emergency broadcast
 
 ## 🚀 Quick Start
 
+> 🐳 **Using Portainer?** See the [**Portainer Deployment Guide**](docs/guides/PORTAINER_DEPLOYMENT.md) for complete instructions on deploying, maintaining, and updating EAS Station through the Portainer web interface.
+
 ### Prerequisites
 - **Docker Engine 24+** with Docker Compose V2
 - **Git** for cloning the repository
