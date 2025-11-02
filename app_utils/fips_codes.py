@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict, FrozenSet, List, Tuple
 
 
 STATE_ABBR_NAMES: Dict[str, str] = {
@@ -3227,10 +3227,20 @@ def _to_same_county_code(code: str) -> str:
 
 def _build_county_index() -> Dict[str, str]:
     mapping: Dict[str, str] = {}
+    state_labels: Dict[str, Tuple[str, str]] = {}
     for line in US_FIPS_COUNTY_TABLE.strip().splitlines():
         code, state_abbr, county_name = line.split('|')
         same_code = _to_same_county_code(code)
         mapping[same_code] = f"{county_name}, {state_abbr}"
+
+        state_fips = code[:2]
+        state_name = STATE_ABBR_NAMES.get(state_abbr, state_abbr)
+        state_labels.setdefault(state_fips, (state_abbr, state_name))
+
+    for state_fips, (state_abbr, state_name) in state_labels.items():
+        statewide_code = f"0{state_fips}000"
+        mapping.setdefault(statewide_code, f"Entire {state_name}, {state_abbr}")
+
     mapping.setdefault(NATIONWIDE_SAME_CODE, NATIONWIDE_LABEL)
     return mapping
 
@@ -3286,13 +3296,27 @@ def _build_same_lookup(states: List[Dict[str, object]]) -> Dict[str, str]:
             continue
         if statewide_code == NATIONWIDE_SAME_CODE:
             mapping[statewide_code] = NATIONWIDE_LABEL
-        else:
-            mapping.setdefault(statewide_code, f"All Areas, {state['abbr']}")
+            continue
+
+        state_name = str(state.get('name') or state.get('abbr') or '').strip()
+        state_abbr = str(state.get('abbr') or '').strip()
+        if not state_name:
+            state_name = state_abbr
+
+        mapping.setdefault(
+            statewide_code,
+            f"Entire {state_name}, {state_abbr}" if state_abbr else f"Entire {state_name}",
+        )
     mapping[NATIONWIDE_SAME_CODE] = NATIONWIDE_LABEL
     return mapping
 
 
 US_STATE_COUNTY_TREE: List[Dict[str, object]] = _build_state_tree()
+STATEWIDE_SAME_CODES: FrozenSet[str] = frozenset(
+    state.get('statewide_code')
+    for state in US_STATE_COUNTY_TREE
+    if isinstance(state.get('statewide_code'), str) and state.get('statewide_code')
+)
 US_FIPS_LOOKUP: Dict[str, str] = _build_same_lookup(US_STATE_COUNTY_TREE)
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Iterable, List, Sequence, Tuple
 
-from app_utils.fips_codes import ALL_US_FIPS_CODES
+from app_utils.fips_codes import ALL_US_FIPS_CODES, STATEWIDE_SAME_CODES
 DEFAULT_TIMEZONE = os.getenv("DEFAULT_TIMEZONE", "America/New_York")
 DEFAULT_COUNTY_NAME = os.getenv("DEFAULT_COUNTY_NAME", "Putnam County")
 DEFAULT_STATE_CODE = os.getenv("DEFAULT_STATE_CODE", "OH")
@@ -23,6 +23,9 @@ DEFAULT_LED_LINES = os.getenv(
     "DEFAULT_LED_LINES",
     "PUTNAM COUNTY,EMERGENCY MGMT,NO ALERTS,SYSTEM READY",
 )
+
+
+VALID_SAME_CODES = ALL_US_FIPS_CODES | STATEWIDE_SAME_CODES
 
 
 def _split_csv(value: str) -> List[str]:
@@ -52,7 +55,7 @@ def sanitize_fips_codes(values: Iterable[str] | Sequence[str] | str | None) -> T
                 invalid.append(str(item))
             continue
         code = digits.zfill(6)[:6]
-        if code in ALL_US_FIPS_CODES:
+        if code in VALID_SAME_CODES:
             if code not in seen:
                 valid.append(code)
                 seen.add(code)
