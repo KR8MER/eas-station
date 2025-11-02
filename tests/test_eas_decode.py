@@ -42,7 +42,14 @@ def _write_same_audio(path: str, header: str, *, sample_rate: int = 44100, scale
         wav.writeframes(b"".join(struct.pack("<h", sample) for sample in samples))
 
 
-def test_encode_same_bits_uses_even_parity() -> None:
+def test_encode_same_bits_uses_8n1_framing() -> None:
+    """Test that encode_same_bits uses proper 8N1 framing (8 data bits, no parity, 1 stop).
+
+    Per FCC 47 CFR §11.31: "Characters are ASCII seven bit characters ending with
+    an eighth null bit (either 0 or 1) to constitute a full eight-bit byte."
+
+    Frame format: start(0) + 7 data bits + null bit(0) + stop(1)
+    """
     header = "CZ"
     bits = encode_same_bits(header, include_preamble=False)
 
@@ -51,14 +58,16 @@ def test_encode_same_bits_uses_even_parity() -> None:
 
     for index in range(chars):
         chunk = bits[index * 10 : (index + 1) * 10]
-        assert chunk[0] == 0
-        assert chunk[9] == 1
+        assert chunk[0] == 0, "Start bit must be 0"
+        assert chunk[9] == 1, "Stop bit must be 1"
 
+        # In 8N1 format:
+        # - Bits 1-7 are the 7-bit ASCII character (LSB first)
+        # - Bit 8 is the null bit (should be 0 per spec)
         data_bits = chunk[1:8]
-        parity_bit = chunk[8]
+        null_bit = chunk[8]
 
-        total_ones = sum(data_bits) + parity_bit
-        assert total_ones % 2 == 0
+        assert null_bit == 0, "Eighth bit (null bit) must be 0 per FCC regulation"
 
 
 def test_decode_same_audio_handles_slightly_slow_baud(tmp_path) -> None:

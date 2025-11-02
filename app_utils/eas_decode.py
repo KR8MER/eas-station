@@ -722,15 +722,10 @@ def _extract_bytes_from_bits(
             i += 1
             continue
 
-        # Extract 7-bit ASCII payload and parity bit
+        # Extract 7-bit ASCII payload (8N1 format: 7 data bits + null bit)
+        # Per FCC 47 CFR §11.31: 7-bit ASCII + eighth null bit
         data_bits = bits[i + 1 : i + 8]
-        parity_bit = bits[i + 8]
-
-        # Validate even parity – SAME frames use 7 data bits plus even parity
-        ones_total = sum(data_bits) + parity_bit
-        if ones_total % 2 != 0:
-            i += 1
-            continue
+        # Bit 8 (position i+8) is the null bit, which we ignore
 
         value = 0
         for position, bit in enumerate(data_bits):
@@ -752,12 +747,13 @@ def _find_same_bursts(bits: List[int]) -> List[int]:
 
     burst_positions: List[int] = []
 
-    # Define character patterns (LSB first, 7 bits, framed with even parity)
-    # 'Z' = 0x5A = 01011010 -> LSB 7 bits: 0,1,0,1,1,0,1 (4 ones) -> parity: 0 (even)
-    # Frame: [start=0][7 data bits][parity][stop=1]
+    # Define character patterns using 8N1 framing (8 data bits, no parity, 1 stop)
+    # Per FCC 47 CFR §11.31: 7-bit ASCII + eighth null bit
+    # 'Z' = 0x5A = 0b01011010 -> LSB first: 0,1,0,1,1,0,1 + null(0)
+    # Frame: [start=0][7 data bits LSB first][null bit=0][stop=1]
     Z_pattern = [0, 0, 1, 0, 1, 1, 0, 1, 0, 1]
-    # 'C' = 0x43 = 01000011 -> LSB 7 bits: 1,1,0,0,0,0,1 (3 ones) -> parity: 1 (even)
-    C_pattern = [0, 1, 1, 0, 0, 0, 1, 1, 1, 1]  # Fixed: parity bit was 0, should be 1
+    # 'C' = 0x43 = 0b01000011 -> LSB first: 1,1,0,0,0,0,1 + null(0)
+    C_pattern = [0, 1, 1, 0, 0, 0, 0, 1, 0, 1]
 
     # Skip the preamble (16 bytes of 0xAB * 10 bits per byte = 160 bits)
     # The preamble can cause false matches, so start searching after it
@@ -1008,6 +1004,8 @@ def _bits_to_text(bits: List[int]) -> Dict[str, object]:
             i += 1
             continue
 
+        # Extract 7-bit ASCII payload (8N1 format: 7 data bits + null bit)
+        # Bit 8 is the null bit per FCC spec, which we ignore
         data_bits = bits[i + 1 : i + 8]
 
         value = 0

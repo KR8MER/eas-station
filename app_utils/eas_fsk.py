@@ -28,7 +28,18 @@ def same_preamble_bits(repeats: int = SAME_PREAMBLE_REPETITIONS) -> List[int]:
 
 
 def encode_same_bits(message: str, *, include_preamble: bool = False) -> List[int]:
-    """Encode an ASCII SAME header using NRZ AFSK framing."""
+    """Encode an ASCII SAME header using 8N1 serial framing (8 data bits, no parity, 1 stop bit).
+
+    Per FCC 47 CFR §11.31: "Characters are ASCII seven bit characters as defined in
+    ANSI X3.4-1977 ending with an eighth null bit (either 0 or 1) to constitute a
+    full eight-bit byte."
+
+    Frame format:
+    - 1 start bit (0)
+    - 7 data bits (LSB first, ASCII character)
+    - 1 null bit (0) - eighth bit to make full byte
+    - 1 stop bit (1)
+    """
 
     bits: List[int] = []
     if include_preamble:
@@ -37,16 +48,13 @@ def encode_same_bits(message: str, *, include_preamble: bool = False) -> List[in
     for char in message + "\r":
         ascii_code = ord(char) & 0x7F
 
-        char_bits: List[int] = [0]
-        ones_count = 0
+        # 8N1 framing: start bit + 7 data bits + null bit + stop bit
+        char_bits: List[int] = [0]  # Start bit
         for i in range(7):
             bit = (ascii_code >> i) & 1
-            ones_count += bit
             char_bits.append(bit)
-
-        parity_bit = ones_count & 1
-        char_bits.append(parity_bit)
-        char_bits.append(1)
+        char_bits.append(0)  # Eighth null bit (per FCC regulation)
+        char_bits.append(1)  # Stop bit
         bits.extend(char_bits)
 
     return bits
