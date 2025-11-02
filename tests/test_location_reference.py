@@ -161,6 +161,38 @@ def test_update_location_settings_infers_county_zones(app_context):
         assert "OHC137" in stored.zone_codes
 
 
+def test_update_location_settings_accepts_statewide_same_code(app_context):
+    with app_context.app_context():
+        clear_zone_lookup_cache()
+
+        result = update_location_settings(
+            {
+                "county_name": "Putnam County",
+                "state_code": "OH",
+                "timezone": "America/New_York",
+                "fips_codes": ["039000", "039137"],
+                "zone_codes": [],
+                "area_terms": [],
+            }
+        )
+
+        assert "039000" in result["fips_codes"]
+
+        stored = LocationSettings.query.first()
+        assert stored is not None
+        assert "039000" in stored.fips_codes
+
+        snapshot = describe_location_reference(result)
+        statewide_entry = {
+            entry["code"]: entry for entry in snapshot["fips"]["known"]
+        }.get("039000")
+
+        assert statewide_entry is not None
+        assert statewide_entry["is_statewide"]
+        assert statewide_entry["state"] == "OH"
+        assert statewide_entry["county"].startswith("Entire Ohio")
+
+
 def test_describe_location_reference_flags_unknown_zones(app_context):
     with app_context.app_context():
         clear_zone_lookup_cache()

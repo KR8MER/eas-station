@@ -124,6 +124,7 @@ tracks releases under the 2.x series.
   unclassified alerts.
 ### Fixed
 - Corrected SAME/RTTY generation to follow 47 CFR §11.31 framing (seven LSB-first ASCII bits, trailing null bit, and precise 520 5⁄6 baud timing) so the AFSK bursts decode at the proper pitch and speed.
+- Fixed admin location settings so statewide SAME/FIPS codes remain saved when operators select entire states.
 - Corrected the generated End Of Message burst to prepend the sixteen 0xAB preamble bytes so decoders reliably synchronise with the termination header.
 - Trimmed the manual and UI event selector to the authorised 47 CFR §11.31(d–e) code tables and removed placeholder `??*` entries.
 - Eliminated `service "app" depends on undefined service "alerts-db"` errors by removing the optional compose overlay, deleting the unused service definition, and updating documentation to assume an external database.
@@ -152,6 +153,10 @@ tracks releases under the 2.x series.
   file label so frames no longer begin with an invalid "AAA" sequence that the manual forbids.
 - Prevented the LED fallback initializer from raising a `NameError` when the optional
   controller module is missing so deployments without sign hardware continue to boot.
+
+## [2.3.11] - 2025-11-14
+### Fixed
+- Fixed admin location settings so statewide SAME/FIPS codes remain saved when operators select entire states.
 
 ## [2.3.10] - 2025-11-03
 ### Changed
