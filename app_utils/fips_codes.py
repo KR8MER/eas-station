@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 
 STATE_ABBR_NAMES: Dict[str, str] = {
@@ -3227,10 +3227,20 @@ def _to_same_county_code(code: str) -> str:
 
 def _build_county_index() -> Dict[str, str]:
     mapping: Dict[str, str] = {}
+    state_labels: Dict[str, Tuple[str, str]] = {}
     for line in US_FIPS_COUNTY_TABLE.strip().splitlines():
         code, state_abbr, county_name = line.split('|')
         same_code = _to_same_county_code(code)
         mapping[same_code] = f"{county_name}, {state_abbr}"
+
+        state_fips = code[:2]
+        state_name = STATE_ABBR_NAMES.get(state_abbr, state_abbr)
+        state_labels.setdefault(state_fips, (state_abbr, state_name))
+
+    for state_fips, (state_abbr, state_name) in state_labels.items():
+        statewide_code = f"0{state_fips}000"
+        mapping.setdefault(statewide_code, f"Entire {state_name}, {state_abbr}")
+
     mapping.setdefault(NATIONWIDE_SAME_CODE, NATIONWIDE_LABEL)
     return mapping
 
