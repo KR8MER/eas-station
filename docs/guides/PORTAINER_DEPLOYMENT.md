@@ -73,24 +73,33 @@ Before deploying EAS Station in Portainer, ensure you have:
 
 ### Preparing the Environment File
 
-Before creating the stack in Portainer, you need to prepare your environment variables:
+Before creating the stack in Portainer, understand the environment configuration:
 
-1. **Download or view the `.env.example` file** from the repository:
-   ```
-   https://github.com/KR8MER/eas-station/blob/main/.env.example
-   ```
+**If deploying from Git (recommended):**
+- Portainer automatically loads `stack.env` from the repository with default values
+- You only need to override critical variables (SECRET_KEY, database credentials, location)
+- See [Stack Configuration](#stack-configuration) section below
 
-2. **Generate a secure SECRET_KEY:**
+**If using Web Editor method:**
+- You'll need to configure all environment variables manually
+- Download `.env.example` from the repository as a reference:
+  ```
+  https://github.com/KR8MER/eas-station/blob/main/.env.example
+  ```
+
+**Required preparation (both methods):**
+
+1. **Generate a secure SECRET_KEY:**
    ```bash
    python3 -c "import secrets; print(secrets.token_hex(32))"
    ```
    Save this value - you'll need it for the Portainer environment configuration.
 
-3. **Prepare your database credentials:**
+2. **Prepare your database credentials:**
    - If using external PostgreSQL: note your host, port, database name, user, and password
    - If using embedded PostgreSQL: decide on a strong password for the database
 
-4. **Note your deployment preferences:**
+3. **Note your deployment preferences:**
    - Timezone (e.g., `America/New_York`)
    - Default location (county, state, SAME codes)
    - Whether you want EAS broadcasting enabled
@@ -124,7 +133,11 @@ If using Git Repository:
    - For external database: `docker-compose.yml`
    - For embedded database: `docker-compose.embedded-db.yml`
 4. **Authentication:** None required (public repository)
-5. Enable **Automatic updates** (optional):
+5. **Environment file (automatic):**
+   - Portainer will automatically detect and load `stack.env` from the repository
+   - This file contains default values for all environment variables
+   - You can override any values in the Portainer UI (see next section)
+6. Enable **Automatic updates** (optional):
    - Check "Enable webhook" to allow automatic redeployment
    - Set a poll interval (e.g., 5 minutes) to check for updates
 
@@ -142,7 +155,9 @@ If you prefer to paste the compose file directly:
 
 ### Environment Variables
 
-In the Portainer stack configuration, scroll down to **Environment variables**. You have two options:
+> 💡 **Note:** When deploying from Git, Portainer automatically loads the `stack.env` file from the repository, which provides sensible defaults for all environment variables. You only need to override the variables that require customization (e.g., `SECRET_KEY`, `POSTGRES_PASSWORD`, location settings).
+
+In the Portainer stack configuration, scroll down to **Environment variables**. You have three options:
 
 #### Option A: Advanced Mode (Recommended)
 
@@ -190,6 +205,19 @@ WATCHTOWER_LABEL_ENABLE=true
 #### Option B: Simple Mode
 
 Click "+ Add environment variable" for each setting and enter them individually.
+
+#### Option C: Use Auto-Loaded Defaults (Easiest)
+
+If deploying from Git, Portainer automatically loads `stack.env`. You only need to override critical variables:
+
+1. Click "+ Add environment variable"
+2. Add only the variables you need to change:
+   - `SECRET_KEY` - Your generated secure key
+   - `POSTGRES_HOST` - Your database hostname
+   - `POSTGRES_PASSWORD` - Your database password
+   - `DEFAULT_COUNTY_NAME` - Your county
+   - `DEFAULT_STATE_CODE` - Your state
+3. All other variables use the defaults from `stack.env`
 
 ### Critical Variables to Set
 

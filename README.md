@@ -714,14 +714,18 @@ Similarly, the full SAME event registry in `app_utils/event_codes.py` mirrors th
 
 ## 🔧 Configuration Reference
 
-### Environment Variables (.env)
+### Environment Variables (.env / stack.env)
 
+**For Docker Compose deployments:**
 Create your `.env` file from the provided template:
 
 ```bash
 cp .env.example .env
 nano .env  # or use your preferred editor
 ```
+
+**For Portainer deployments:**
+The repository includes `stack.env` which is automatically detected and loaded by Portainer when deploying from Git. You can override any values through the Portainer UI. See the [Portainer Deployment Guide](docs/guides/PORTAINER_DEPLOYMENT.md) for details.
 
 #### Flask Application
 
