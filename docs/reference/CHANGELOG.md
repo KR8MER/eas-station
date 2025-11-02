@@ -154,6 +154,10 @@ tracks releases under the 2.x series.
 - Prevented the LED fallback initializer from raising a `NameError` when the optional
   controller module is missing so deployments without sign hardware continue to boot.
 
+## [2.3.12] - 2025-11-15
+### Fixed
+- Hardened admin location validation so statewide SAME/FIPS codes are always accepted and labelled consistently when saving.
+
 ## [2.3.11] - 2025-11-14
 ### Fixed
 - Fixed admin location settings so statewide SAME/FIPS codes remain saved when operators select entire states.

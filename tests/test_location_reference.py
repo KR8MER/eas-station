@@ -9,6 +9,7 @@ from app_core.extensions import db
 from app_core.location import describe_location_reference, update_location_settings
 from app_core.models import LocationSettings, NWSZone
 from app_core.zones import clear_zone_lookup_cache
+from app_utils.location_settings import sanitize_fips_codes
 
 
 @compiles(JSONB, "sqlite")
@@ -191,6 +192,13 @@ def test_update_location_settings_accepts_statewide_same_code(app_context):
         assert statewide_entry["is_statewide"]
         assert statewide_entry["state"] == "OH"
         assert statewide_entry["county"].startswith("Entire Ohio")
+
+
+def test_sanitize_fips_codes_allows_statewide_entries():
+    valid, invalid = sanitize_fips_codes(["039000", "039137", "039000", "bad-code"])
+
+    assert valid == ["039000", "039137"]
+    assert invalid == ["bad-code"]
 
 
 def test_describe_location_reference_flags_unknown_zones(app_context):
