@@ -6,10 +6,16 @@ FROM python:3.11-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+# Allow callers to limit which SoapySDR hardware drivers are installed
+# (comma-separated list such as "rtlsdr" or "rtlsdr,airspy").
+ARG SOAPYSDR_DRIVERS="rtlsdr,airspy"
+
 # Install system dependencies required for psycopg2, GeoAlchemy, and SoapySDR
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        build-essential \
+RUN --mount=type=cache,target=/var/lib/apt \
+    --mount=type=cache,target=/var/cache/apt \
+    set -eux; \
+    apt-get update; \
+    set -- build-essential \
         libpq-dev \
         ffmpeg \
         espeak \
@@ -18,11 +24,20 @@ RUN apt-get update \
         libusb-1.0-0 \
         libusb-1.0-0-dev \
         python3-soapysdr \
-        soapysdr-module-rtlsdr \
-        soapysdr-module-airspy \
-        soapysdr-tools \
-    && update-ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+        soapysdr-tools; \
+    if [ -n "$SOAPYSDR_DRIVERS" ]; then \
+        IFS=','; \
+        for driver in $SOAPYSDR_DRIVERS; do \
+            driver="$(printf '%s' "$driver" | tr -d '[:space:]')"; \
+            if [ -n "$driver" ]; then \
+                set -- "$@" "soapysdr-module-$driver"; \
+            fi; \
+        done; \
+        unset IFS; \
+    fi; \
+    apt-get install -y --no-install-recommends "$@"; \
+    update-ca-certificates; \
+    rm -rf /var/lib/apt/lists/*
 
 # Create and set working directory
 WORKDIR /app

@@ -148,10 +148,23 @@ For detailed configuration instructions, see:
 The Dockerfile now includes:
 - `libusb-1.0-0` and `libusb-1.0-0-dev` - USB device support
 - `python3-soapysdr` - SoapySDR Python bindings
-- `soapysdr-module-rtlsdr` - RTL-SDR driver
-- `soapysdr-module-airspy` - Airspy driver
+- `soapysdr-module-*` drivers defined by the `SOAPYSDR_DRIVERS` build argument
+  (defaults to `rtlsdr,airspy`)
 - `soapysdr-tools` - Command-line utilities (SoapySDRUtil, etc.)
 - `numpy` - Signal processing (in requirements.txt)
+
+#### Speeding up Docker builds
+
+Portainer rebuilds can be slow if you include hardware drivers you do not use.
+Edit `stack.env` (or your `.env`) and set:
+
+```env
+SOAPYSDR_DRIVERS=rtlsdr
+```
+
+This keeps RTL-SDR support but skips Airspy packages, which shortens the `apt`
+step dramatically. Provide a comma-separated list (for example
+`rtlsdr,airspy`) whenever you need multiple drivers.
 
 ### Docker Compose Configuration
 
