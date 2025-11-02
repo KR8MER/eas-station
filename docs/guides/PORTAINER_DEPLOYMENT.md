@@ -116,46 +116,240 @@ Before creating the stack in Portainer, understand the environment configuration
 3. Navigate to **Stacks** in the left sidebar
 4. Click **+ Add stack**
 
-### Step 2: Name Your Stack
+### Step 2: Stack Name
 
-1. Enter a stack name: `eas-station`
-2. Choose **Git Repository** as the build method (recommended) or **Web editor**
+**Field:** Name
+**Value:** `eas-station` (or your preferred name)
 
-### Step 3: Configure Git Repository (Recommended Method)
+**Guidelines:**
+- Use lowercase letters, numbers, hyphens, and underscores only
+- Must be unique within your Portainer environment
+- Suggestion: `eas-station` or `eas-station-prod`
 
-If using Git Repository:
+> 💡 **Tip:** The stack name becomes part of container names (e.g., `eas-station_app_1`)
 
-1. **Repository URL:** `https://github.com/KR8MER/eas-station`
-2. **Repository reference:**
-   - Leave blank for `main` branch (latest stable)
-   - Or specify a tag like `v2.3.12` for a specific version
-3. **Compose path:**
-   - For external database: `docker-compose.yml`
-   - For embedded database: `docker-compose.embedded-db.yml`
-4. **Authentication:** None required (public repository)
-5. **Environment file (automatic):**
-   - Portainer will automatically detect and load `stack.env` from the repository
-   - This file contains default values for all environment variables
-   - You can override any values in the Portainer UI (see next section)
-6. Enable **Automatic updates** (optional):
-   - Check "Enable webhook" to allow automatic redeployment
-   - Set a poll interval (e.g., 5 minutes) to check for updates
+---
 
-### Step 4: Alternative - Web Editor Method
+### Step 3: Build Method
 
-If you prefer to paste the compose file directly:
+**Field:** Build method
+**Recommended:** Git Repository
 
-1. Copy the contents of `docker-compose.yml` from the repository
+**Options:**
+
+| Method | When to Use | Pros | Cons |
+|--------|-------------|------|------|
+| **Git Repository** ✅ | Standard deployment | Easy updates, version control, auto-loads `stack.env` | Requires internet access |
+| **Web editor** | Quick testing, custom modifications | No external dependencies | Manual updates required |
+| **Upload** | Offline deployments | Works without Git | Must manually upload files |
+| **Custom template** | Reusable configurations | Standardized deployments | Initial setup complexity |
+
+**Recommendation:** Use **Git Repository** for production deployments.
+
+---
+
+### Step 4: Git Repository Configuration
+
+#### 4.1 Authentication
+
+**Field:** Authentication
+**Value:** Leave unchecked (public repository)
+
+If you fork the repository and make it private:
+- Check **Authentication**
+- Enter your GitHub username
+- Generate and enter a Personal Access Token (not your password)
+
+#### 4.2 Repository URL
+
+**Field:** Repository URL
+**Value:** `https://github.com/KR8MER/eas-station`
+
+**Important:**
+- ✅ Use HTTPS URL (not SSH)
+- ✅ Ensure you can access this URL from your browser
+- ✅ Double-check for typos
+
+#### 4.3 Skip TLS Verification
+
+**Field:** Skip TLS Verification
+**Value:** Leave unchecked
+
+Only check this if:
+- You're using a private Git server with self-signed certificates
+- You understand the security implications
+
+#### 4.4 Repository Reference
+
+**Field:** Repository reference
+**Value:** `refs/heads/main` (recommended)
+
+**Format:** `refs/heads/<branch>` or `refs/tags/<tag>`
+
+**Common Values:**
+
+| Value | Description | When to Use |
+|-------|-------------|-------------|
+| `refs/heads/main` | Latest stable code | Production (recommended) |
+| *(leave blank)* | Same as `refs/heads/main` | Also acceptable |
+| `refs/tags/v2.3.12` | Specific version | Pin to exact version |
+| `refs/heads/develop` | Development branch | Testing new features |
+
+**Examples:**
+```
+refs/heads/main           # Track main branch
+refs/tags/v2.3.12         # Pin to version 2.3.12
+refs/heads/feature-branch # Track specific branch
+```
+
+> 🔒 **Production Tip:** Use tagged releases (e.g., `refs/tags/v2.3.12`) for production to prevent unexpected changes.
+
+#### 4.5 Compose Path
+
+**Field:** Compose path
+**Value:** `docker-compose.yml` OR `docker-compose.embedded-db.yml`
+
+**Which one to use:**
+
+| File | Database | When to Use |
+|------|----------|-------------|
+| `docker-compose.yml` | External | You have existing PostgreSQL/PostGIS (recommended) |
+| `docker-compose.embedded-db.yml` | Embedded | All-in-one stack with database included |
+
+**Path Format:**
+- Relative to repository root
+- Must include file extension (`.yml` or `.yaml`)
+- Case-sensitive on Linux systems
+
+**Examples:**
+```
+docker-compose.yml                    # Standard
+docker-compose.embedded-db.yml        # With embedded database
+docker-compose.production.yml         # Custom production file (if you create one)
+```
+
+#### 4.6 Additional Paths (Optional)
+
+**Field:** Additional paths
+**Value:** Leave empty (not needed for EAS Station)
+
+This field is for including additional compose files to override or extend the main file. For example:
+```
+docker-compose.override.yml
+```
+
+---
+
+### Step 5: GitOps Updates (Formerly "Automatic Updates")
+
+**Field:** GitOps updates
+**Recommended:** Enable for automatic updates
+
+#### What is GitOps Updates?
+
+GitOps updates automatically redeploy your stack when the Git repository changes. This keeps your deployment synchronized with your repository without manual intervention.
+
+#### Configuration Options
+
+**Option 1: Webhook Method (Recommended)**
+
+1. ✅ Check **GitOps updates**
+2. Select **Webhook** mechanism
+3. Click **Show webhook URL** (appears after enabling)
+4. Copy the webhook URL
+5. In GitHub:
+   - Go to repository **Settings** → **Webhooks** → **Add webhook**
+   - Paste webhook URL as **Payload URL**
+   - Content type: `application/json`
+   - Select **Just the push event**
+   - Click **Add webhook**
+
+**Result:** Stack automatically redeploys on every push to the branch.
+
+**Option 2: Polling Method**
+
+1. ✅ Check **GitOps updates**
+2. Select **Polling** mechanism
+3. Set polling interval:
+   - **5 minutes** - Frequent updates (uses more resources)
+   - **15 minutes** - Balanced (recommended)
+   - **60 minutes** - Minimal resource usage
+
+**Result:** Portainer checks repository every N minutes and redeploys if changes detected.
+
+**Option 3: Disabled (Manual Updates)**
+
+1. ⬜ Leave **GitOps updates** unchecked
+2. You must manually click "Pull and redeploy" to update
+
+**Recommendation for EAS Station:**
+
+| Environment | GitOps Setting | Reason |
+|-------------|----------------|--------|
+| **Production** | Polling (15-60 min) | Controlled, predictable updates |
+| **Staging** | Webhook | Immediate testing of changes |
+| **Development** | Disabled | Manual control over deployments |
+
+> ⚠️ **Warning:** Automatic updates will restart your stack. For critical systems, test updates in staging first.
+
+---
+
+### Step 6: Enable Relative Path Volumes
+
+**Field:** Enable relative path volumes
+**Value:** Leave unchecked (not needed)
+
+This option allows volume paths relative to the compose file location. EAS Station uses absolute paths and named volumes, so this isn't required.
+
+---
+
+### Step 7: Alternative - Web Editor Method
+
+If you chose **Web editor** instead of Git Repository:
+
+1. Copy the contents of `docker-compose.yml` from the repository:
+   ```
+   https://github.com/KR8MER/eas-station/blob/main/docker-compose.yml
+   ```
 2. Paste into the **Web editor** in Portainer
 3. Modify as needed for your environment
+4. Note: You won't get automatic `stack.env` loading - must configure all variables manually
 
 ---
 
 ## Stack Configuration
 
-### Environment Variables
+### Step 8: Environment Variables
 
-> 💡 **Note:** When deploying from Git, Portainer automatically loads the `stack.env` file from the repository, which provides sensible defaults for all environment variables. You only need to override the variables that require customization (e.g., `SECRET_KEY`, `POSTGRES_PASSWORD`, location settings).
+#### Understanding stack.env File Operation
+
+**Important:** The behavior of `stack.env` differs based on deployment method:
+
+| Deployment Method | stack.env Behavior |
+|-------------------|-------------------|
+| **Git Repository** | File must already exist in the Git repo (✅ it does!) |
+| **Web editor** | Auto-created from what you configure below |
+| **Upload** | Auto-created from what you configure below |
+| **Custom template** | Auto-created from what you configure below |
+
+**For Git Repository deployments (recommended):**
+- ✅ Portainer automatically loads `stack.env` from the repository
+- ✅ All default values are already set
+- ✅ You only override critical variables
+
+**What variables are already set in stack.env:**
+- All Flask application settings
+- Default database connection parameters
+- CAP poller configuration
+- Logging settings
+- Location defaults
+- EAS broadcast settings (disabled by default)
+- TTS provider settings
+- Docker/infrastructure metadata
+
+> 💡 **Key Point:** When deploying from Git, you only need to override 5-7 variables. Everything else uses sensible defaults from `stack.env`!
+
+#### Configuration Options
 
 In the Portainer stack configuration, scroll down to **Environment variables**. You have three options:
 
@@ -206,20 +400,63 @@ WATCHTOWER_LABEL_ENABLE=true
 
 Click "+ Add environment variable" for each setting and enter them individually.
 
-#### Option C: Use Auto-Loaded Defaults (Easiest)
+#### Option C: Use Auto-Loaded Defaults (Easiest) ✅ Recommended for Git Deployments
 
 If deploying from Git, Portainer automatically loads `stack.env`. You only need to override critical variables:
 
-1. Click "+ Add environment variable"
-2. Add only the variables you need to change:
-   - `SECRET_KEY` - Your generated secure key
-   - `POSTGRES_HOST` - Your database hostname
-   - `POSTGRES_PASSWORD` - Your database password
-   - `DEFAULT_COUNTY_NAME` - Your county
-   - `DEFAULT_STATE_CODE` - Your state
-3. All other variables use the defaults from `stack.env`
+**Step-by-step:**
 
-### Critical Variables to Set
+1. **Leave the advanced mode OFF** - stay in simple mode
+2. **Click "+ Add environment variable"** for each variable below
+3. **Add only these essential variables:**
+
+| Name | Value | Example |
+|------|-------|---------|
+| `SECRET_KEY` | Your generated secret | `9d821419d2b70c5a5572cd8e73f1e1d0f7ac4b65b6ac77684c517106c8079498` |
+| `POSTGRES_HOST` | Database hostname | `host.docker.internal` or `alerts-db` or `postgres.example.com` |
+| `POSTGRES_PASSWORD` | Database password | `your-secure-password` |
+| `POSTGRES_DB` | Database name | `alerts` (or your preferred name) |
+| `POSTGRES_USER` | Database username | `postgres` (or your preferred user) |
+
+**Optional overrides** (add only if different from defaults):
+
+| Name | Value | Example |
+|------|-------|---------|
+| `DEFAULT_COUNTY_NAME` | Your county | `Putnam County` |
+| `DEFAULT_STATE_CODE` | Your state | `OH` |
+| `DEFAULT_TIMEZONE` | Your timezone | `America/New_York` |
+| `DEFAULT_ZONE_CODES` | NOAA zones | `OHZ016,OHC137` |
+
+4. **Do NOT add:** Variables you want to keep at their defaults - `stack.env` handles them automatically!
+
+**Example configuration:**
+
+```
+Name: SECRET_KEY
+Value: 9d821419d2b70c5a5572cd8e73f1e1d0f7ac4b65b6ac77684c517106c8079498
+
+Name: POSTGRES_HOST
+Value: host.docker.internal
+
+Name: POSTGRES_PASSWORD
+Value: casaos
+
+Name: POSTGRES_DB
+Value: casaos
+
+Name: POSTGRES_USER
+Value: casaos
+
+Name: DEFAULT_COUNTY_NAME
+Value: Your County Name
+
+Name: DEFAULT_STATE_CODE
+Value: OH
+```
+
+> ✅ **Result:** You configure 5-7 variables instead of 40+. The rest use defaults from `stack.env`.
+
+### Critical Variables Reference
 
 **Must configure:**
 - `SECRET_KEY` - Generated secure random string
@@ -236,6 +473,96 @@ If deploying from Git, Portainer automatically loads `stack.env`. You only need 
 - `EAS_BROADCAST_ENABLED` - Set to `true` if you want audio generation
 - `LED_SIGN_IP` - If you have an LED sign
 - `IPAWS_CAP_FEED_URLS` - If using IPAWS feeds
+
+---
+
+### Step 9: Registries
+
+**Field:** Registries
+**Value:** None (leave empty)
+
+#### What are Registries?
+
+Registries are Docker container registries where images are stored (e.g., Docker Hub, GitHub Container Registry, private registries).
+
+#### For EAS Station:
+
+- ✅ **No registry selection needed**
+- Images pull from Docker Hub (public)
+- The Dockerfile builds the image locally from the git repository
+
+#### When to Configure Registries:
+
+You would configure registries if:
+- You're using a private Docker registry
+- You're pulling from GitHub Container Registry (ghcr.io)
+- You need authentication to pull images
+- You're in an air-gapped environment with a local registry
+
+**For standard EAS Station deployment:** Leave this field empty.
+
+---
+
+### Step 10: Access Control
+
+**Field:** Enable access control
+**Recommended:** Enable for multi-user Portainer installations
+
+#### Option 1: Administrators Only (Recommended)
+
+✅ **Check "Enable access control"**
+✅ **Select "Restrict to administrators only"**
+
+**Effect:**
+- Only Portainer administrators can view/manage this stack
+- Regular users won't see the stack
+- Best for production deployments
+
+**When to use:**
+- Production EAS Station deployments
+- Sensitive emergency alert systems
+- Multi-tenant Portainer environments
+
+#### Option 2: Specific Users/Teams
+
+✅ **Check "Enable access control"**
+✅ **Select "Restrict to a set of users and/or teams"**
+
+**Configuration:**
+1. Select users from dropdown
+2. Select teams from dropdown
+3. Choose access level for each:
+   - **View** - Read-only access
+   - **Manage** - Can restart, update, view logs
+   - **Full control** - Can delete and reconfigure
+
+**When to use:**
+- Team-based management
+- Training environments
+- Shared emergency management operations
+
+#### Option 3: No Restrictions
+
+⬜ **Leave "Enable access control" unchecked**
+
+**Effect:**
+- All Portainer users can view and manage the stack
+- Suitable for single-user installations
+
+**When to use:**
+- Personal/home labs
+- Single-administrator Portainer setups
+- Development environments
+
+#### Recommendation for EAS Station:
+
+| Environment | Access Control | Setting |
+|-------------|----------------|---------|
+| **Production** | ✅ Enabled | Administrators only |
+| **Staging** | ✅ Enabled | Specific operations team |
+| **Development** | ⬜ Optional | No restrictions OK |
+
+> 🔒 **Security Tip:** Always enable access control for production emergency alerting systems to prevent unauthorized modifications.
 
 ---
 
@@ -317,26 +644,74 @@ This activates the `alerts-db` service defined in the compose file.
 
 ---
 
+### Step 11: Actions (Final Review)
+
+**Field:** Actions section at the bottom of the form
+
+Before clicking "Deploy the stack," take a moment to review what you've configured:
+
+#### Pre-Deployment Checklist
+
+✅ **Stack name** is set correctly
+✅ **Git Repository** method selected (or your chosen method)
+✅ **Repository URL** is correct: `https://github.com/KR8MER/eas-station`
+✅ **Repository reference** is set: `refs/heads/main` (or your chosen ref)
+✅ **Compose path** is correct: `docker-compose.yml` or `docker-compose.embedded-db.yml`
+✅ **GitOps updates** configured (if desired)
+✅ **Environment variables** are set:
+   - `SECRET_KEY` - secure random value
+   - `POSTGRES_HOST` - database hostname
+   - `POSTGRES_PASSWORD` - secure password
+   - Database credentials (DB, USER)
+   - Location settings (optional overrides)
+✅ **Access control** configured (if multi-user)
+
+#### Available Actions
+
+At the bottom of the form, you'll see:
+
+1. **🗑️ Cancel** - Discard changes and return to stacks list
+2. **📋 Copy** - Copy configuration to clipboard (useful for backup)
+3. **🚀 Deploy the stack** - Create and start the stack
+
+---
+
 ## Deploying the Stack
 
-### Step 1: Review Configuration
+### Step 1: Click Deploy the Stack Button
 
-Before deploying:
+Once you've completed all configuration steps and reviewed the checklist above:
 
-1. ✅ Verify all required environment variables are set
-2. ✅ Confirm `SECRET_KEY` is a secure random value
-3. ✅ Verify database connection details are correct
-4. ✅ Check compose file path is correct
-5. ✅ Review resource limits if you added any
+1. **Scroll to the bottom** of the form
+2. **Click the green "Deploy the stack" button**
+3. **Wait** - do not close the browser window
 
-### Step 2: Deploy
+> 💡 **Pro Tip:** Before clicking deploy, use the **Copy** button to save your configuration to a text file for your records.
 
-1. Click **Deploy the stack** at the bottom of the page
-2. Portainer will:
-   - Pull the repository (if using Git method)
-   - Build the Docker image (first time only)
-   - Create and start all containers
-   - Set up networking and volumes
+### Step 2: Monitor Initial Deployment
+
+Portainer will now:
+
+1. **Pull the repository** (if using Git method)
+   - Clones the Git repository
+   - Loads the compose file
+   - Reads `stack.env` automatically
+
+2. **Load environment variables**
+   - Combines `stack.env` with your overrides
+   - Validates variable substitutions
+
+3. **Pull/Build Docker image**
+   - First deployment: Builds image from Dockerfile (may take 5-10 minutes)
+   - Subsequent deployments: Rebuilds only if code changed
+
+4. **Create containers**
+   - Creates: `app`, `poller`, `ipaws-poller` containers
+   - Also creates `alerts-db` if using embedded database
+
+5. **Set up networking and volumes**
+   - Creates default bridge network
+   - Creates named volumes (if using embedded DB)
 
 ### Step 3: Monitor Deployment
 
