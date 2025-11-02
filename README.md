@@ -319,6 +319,163 @@ Operators can trigger the same workflow from **Admin → System Operations** usi
 
 ---
 
+## 📻 SAME Protocol Specification
+
+EAS Station implements the **Specific Area Message Encoding (SAME)** protocol as mandated by FCC regulations for Emergency Alert System broadcasts. This section documents the technical specifications and our standards-compliant implementation.
+
+### Regulatory Authority
+
+The SAME protocol is defined in **47 CFR §11.31 - EAS protocol** (Code of Federal Regulations, Title 47, Part 11, Section 31). All EAS equipment must comply with these specifications to ensure interoperability across the national emergency alerting infrastructure.
+
+### Audio Frequency Shift Keying (AFSK) Parameters
+
+EAS Station generates SAME headers using precise AFSK encoding:
+
+| Parameter | Value | Specification |
+|-----------|-------|---------------|
+| **Baud Rate** | 520 5/6 baud (520.83̄ baud) | 3125/6 bits per second (exact fraction) |
+| **Mark Frequency** | 2083 1/3 Hz | Represents binary '1' |
+| **Space Frequency** | 1562.5 Hz | Represents binary '0' |
+| **Mark/Space Duration** | 1.92 milliseconds | Per bit timing |
+| **Preamble Byte** | 0xAB (10101011) | Sixteen consecutive bytes |
+
+**Implementation:** `app_utils/eas_fsk.py` maintains these values as exact fractions (`Fraction(3125, 6)`) to prevent cumulative timing drift across long transmissions.
+
+### Character Framing: 8N1 Serial Format
+
+Per **47 CFR §11.31(a)(1)**:
+
+> "Characters are ASCII seven bit characters as defined in ANSI X3.4-1977 ending with an **eighth null bit** (either 0 or 1) to constitute a full eight-bit byte."
+
+Each SAME character is transmitted using **8N1 serial framing** (8 data bits, no parity, 1 stop bit):
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Frame Structure (10 bits total per character)               │
+├─────────────────────────────────────────────────────────────┤
+│  Bit 0:     Start bit (always 0)                             │
+│  Bits 1-7:  7-bit ASCII character (LSB first)                │
+│  Bit 8:     Null bit (always 0 per FCC specification)        │
+│  Bit 9:     Stop bit (always 1)                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Critical Implementation Note:** Early versions of this software incorrectly used **7E1 framing** (7 data bits + even parity + 1 stop bit) instead of the standards-compliant **8N1 format**. This caused generated files to be incompatible with certified commercial EAS equipment. The protocol violation was corrected in commit `e9fa983` (2025-11-02).
+
+**Current Implementation:**
+- **Encoder:** `app_utils/eas_fsk.py:encode_same_bits()` generates proper 8N1 frames
+- **Decoder:** `app_utils/eas_decode.py:_extract_bytes_from_bits()` validates 8N1 framing
+- **Tests:** `tests/test_eas_decode.py:test_encode_same_bits_uses_8n1_framing()` verifies compliance
+
+### SAME Message Structure
+
+A complete SAME transmission consists of four parts:
+
+#### 1. Preamble (16 bytes)
+
+```
+AB AB AB AB AB AB AB AB AB AB AB AB AB AB AB AB
+```
+
+The preamble clears the decoder's internal buffers, sets automatic gain control (AGC) levels, and synchronizes the asynchronous decoder's clock recovery circuits. Each 0xAB byte alternates bits (10101011) to establish timing.
+
+#### 2. Header Code (transmitted 3 times)
+
+```
+ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-
+```
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `ZCZC` | Start code identifier | `ZCZC` |
+| `ORG` | Originator code (3 chars) | `WXR` (National Weather Service) |
+| `EEE` | Event code (3 chars) | `TOR` (Tornado Warning) |
+| `PSSCCC` | Location code (6 chars, up to 31 codes) | `039137` (Putnam County, OH) |
+| `+TTTT` | Purge time in 15-min increments | `+0015` (15 minutes) |
+| `JJJHHMM` | Issue time (Julian day + UTC) | `3042020` (Day 304 at 20:20 UTC) |
+| `LLLLLLLL` | Station identifier (8 chars) | `KR8MER  ` |
+| `-` | Dash separator (terminates header) | `-` |
+
+**Repetition:** Each header is preceded by a 16-byte preamble and transmitted **three times** with a **one-second pause** between each burst. This redundancy ensures reliable reception under adverse RF conditions.
+
+#### 3. Attention Signal (8-25 seconds)
+
+Dual-tone audio consisting of:
+- **853 Hz** and **960 Hz** transmitted simultaneously
+- Configurable duration (`EAS_ATTENTION_TONE_SECONDS` in `.env`)
+- **Not required** for weekly/monthly tests per FCC guidance
+
+#### 4. End of Message (transmitted 3 times)
+
+```
+[PREAMBLE]NNNN
+```
+
+The EOM code `NNNN` (four ASCII 'N' characters) signals the end of the alert. Like headers, EOM bursts are each preceded by a 16-byte preamble and transmitted three times with one-second guard intervals.
+
+### Originator Codes (ORG)
+
+Per **47 CFR §11.31(d)**, only four originator codes are authorized:
+
+| Code | Originator |
+|------|------------|
+| `EAS` | EAS Participant (broadcaster) |
+| `CIV` | Civil authorities |
+| `WXR` | National Weather Service |
+| `PEP` | Primary Entry Point System |
+
+### Event Codes (EEE)
+
+The system supports all FCC-authorized event codes defined in **47 CFR §11.31(e)**. National-level required codes include:
+
+| Code | Event | Status |
+|------|-------|--------|
+| `EAN` | Emergency Action Notification | National only |
+| `NPT` | National Periodic Test | Required |
+| `RMT` | Required Monthly Test | Required |
+| `RWT` | Required Weekly Test | Required |
+
+State and local codes (e.g., `TOR`, `SVR`, `FFW`, `CAE`) are optional but supported. The complete event registry is maintained in `app_utils/event_codes.py` with descriptions, activation criteria, and FCC authorization dates.
+
+### Location Codes (PSSCCC)
+
+Location codes use **FIPS** (Federal Information Processing Standard) county identifiers:
+
+- `P`: County subdivision (0 = entire county)
+- `SS`: State FIPS code (01-78)
+- `CCC`: County FIPS code (000 = entire state)
+
+**Example:** `039137` = Putnam County, Ohio (state 39, county 137)
+
+Up to **31 location codes** may be included in a single SAME header. The nationwide FIPS registry is available in `app_utils/fips_codes.py`.
+
+### Compliance Testing
+
+To verify your SAME implementation:
+
+1. **Generate a test broadcast:**
+   ```bash
+   python tools/generate_sample_audio.py --output-dir /tmp
+   ```
+
+2. **Decode with a certified tool** (e.g., [multimon-ng](https://github.com/EliasOenal/multimon-ng)):
+   ```bash
+   multimon-ng -a EAS -t wav /tmp/SAMPLE-*.wav
+   ```
+
+3. **Verify output** matches the expected header exactly
+
+All generated files now use proper 8N1 framing and are compatible with commercial EAS decoders.
+
+### References
+
+- **FCC Regulations:** [47 CFR §11.31 - EAS protocol](docs/reference/CFR-2010-title47-vol1-sec11-31.xml)
+- **ANSI X3.4-1977:** 7-bit ASCII character encoding standard
+- **Implementation:** See `app_utils/eas_fsk.py` and `app_utils/eas_decode.py`
+- **Protocol Analysis:** [Analysis tool](analyze_bit_framing.py) demonstrates compliance verification
+
+---
+
 ## 📖 Usage Guide
 
 ### Starting and Stopping Services
