@@ -3,6 +3,14 @@
 from .drivers import AirspyReceiver, RTLSDRReceiver, register_builtin_drivers
 from .manager import ReceiverInterface, ReceiverConfig, RadioManager, ReceiverStatus
 from .schema import ensure_radio_tables
+from .discovery import (
+    enumerate_devices,
+    get_device_capabilities,
+    check_soapysdr_installation,
+    get_recommended_settings,
+    NOAA_WEATHER_FREQUENCIES,
+    SDR_PRESETS,
+)
 
 __all__ = [
     "ReceiverInterface",
@@ -13,4 +21,10 @@ __all__ = [
     "AirspyReceiver",
     "RTLSDRReceiver",
     "register_builtin_drivers",
+    "enumerate_devices",
+    "get_device_capabilities",
+    "check_soapysdr_installation",
+    "get_recommended_settings",
+    "NOAA_WEATHER_FREQUENCIES",
+    "SDR_PRESETS",
 ]
