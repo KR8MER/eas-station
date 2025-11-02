@@ -35,6 +35,23 @@ class ZoneRecord:
 
 
 @dataclass(frozen=True)
+class CountySubdivisionRecord:
+    """A partial county definition sourced from the FEMA SAME catalog."""
+
+    state_code: str
+    cwa: str
+    county_name: str
+    fips: str
+    time_zone: str
+    fe_area: str
+    longitude: Optional[float]
+    latitude: Optional[float]
+    entire_same: str
+    area_same: str
+    area_name: str
+
+
+@dataclass(frozen=True)
 class ZoneSyncResult:
     """Summary information returned after synchronising the catalog."""
 
@@ -168,6 +185,62 @@ def iter_zone_records(path: str | Path) -> Iterator[ZoneRecord]:
             )
 
 
+def iter_county_subdivision_records(path: str | Path) -> Iterator[CountySubdivisionRecord]:
+    """Yield :class:`CountySubdivisionRecord` entries from a FEMA SAME DBF dump."""
+
+    dbf_path = Path(path)
+    with dbf_path.open("rb") as handle:
+        header, fields = _read_header(handle)
+        handle.seek(header.header_length)
+
+        field_map: Dict[str, _DBFField] = {field.name.upper(): field for field in fields}
+        required = [
+            "STATE",
+            "CWA",
+            "COUNTYNAME",
+            "FIPS",
+            "TIME_ZONE",
+            "FE_AREA",
+            "LON",
+            "LAT",
+            "ENTIRESAME",
+            "AREA_SAME",
+            "AREA_NAME",
+        ]
+        missing = [name for name in required if name not in field_map]
+        if missing:
+            raise ValueError(
+                f"DBF is missing required fields: {', '.join(missing)}"
+            )
+
+        for _ in range(header.record_count):
+            record_bytes = handle.read(header.record_length)
+            if not record_bytes or len(record_bytes) < header.record_length:
+                break
+            if record_bytes[0] == 0x2A:
+                continue
+            offset = 1
+            values: Dict[str, bytes] = {}
+            for field in fields:
+                field_data = record_bytes[offset : offset + field.length]
+                offset += field.length
+                values[field.name.upper()] = field_data
+
+            yield CountySubdivisionRecord(
+                state_code=_decode_string(values["STATE"]).upper(),
+                cwa=_decode_string(values["CWA"]).upper(),
+                county_name=_decode_string(values["COUNTYNAME"]),
+                fips=_decode_string(values["FIPS"]),
+                time_zone=_decode_string(values["TIME_ZONE"]).upper(),
+                fe_area=_decode_string(values["FE_AREA"]).upper(),
+                longitude=_decode_float(values["LON"]),
+                latitude=_decode_float(values["LAT"]),
+                entire_same=_decode_string(values["ENTIRESAME"]),
+                area_same=_decode_string(values["AREA_SAME"]),
+                area_name=_decode_string(values["AREA_NAME"]),
+            )
+
+
 def load_zone_records(path: str | Path) -> List[ZoneRecord]:
     return list(iter_zone_records(path))
 
@@ -260,9 +333,11 @@ def sync_zone_catalog(
 
 
 __all__ = [
+    "CountySubdivisionRecord",
     "ZoneRecord",
     "ZoneSyncResult",
     "iter_zone_records",
+    "iter_county_subdivision_records",
     "load_zone_records",
     "sync_zone_catalog",
 ]
