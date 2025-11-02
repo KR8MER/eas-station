@@ -4,13 +4,13 @@ EAS Station is a complete Emergency Alert System platform that automates the ing
 
 The long-term vision is to deliver a software-driven, off-the-shelf drop-in replacement for commercial encoder/decoder appliances. Every subsystem is being designed so commodity compute, SDR front-ends, and readily available interfaces can fulfill the same mission as the traditional rack units.
 
-EAS Station’s reference build centers on a Raspberry Pi 5 (4 GB RAM baseline, 8 GB recommended when narration and SDR verification share the host) with HATs that expose dry-contact GPIO relays, RS-232 automation ports, and balanced audio interfaces. HDMI confidence monitoring and paired SDR receivers complete the package, proving that inexpensive, fan-less hardware can shoulder the same responsibilities as the utilitarian “black boxes” sold today. Raspberry Pi 4 systems remain compatible for labs but no longer represent the documented baseline. Deployments are validated on Debian 14 (Trixie) 64-bit builds—specifically 14.2.0-19. The container image remains anchored to Debian Bookworm (`python:3.12-slim-bookworm`) for reproducible multi-architecture builds. The remaining gap is disciplined software integration, a predictable setup experience, long-haul reliability, and the evidence required to pursue FCC certification.
+EAS Station’s reference build centers on a Raspberry Pi 5 (4 GB RAM baseline, 8 GB recommended when narration and SDR verification share the host) with HATs that expose dry-contact GPIO relays, RS-232 automation ports, and balanced audio interfaces. HDMI confidence monitoring and paired SDR receivers complete the package, proving that inexpensive, fan-less hardware can shoulder the same responsibilities as the utilitarian “black boxes” sold today. Raspberry Pi 4 systems remain compatible for labs but no longer represent the documented baseline. Deployments are validated on Debian 14 (Trixie) 64-bit builds—specifically 14.2.0-19. The container image uses Debian Bookworm (`python:3.11-slim-bookworm`) for reproducible multi-architecture builds with native SoapySDR compatibility. The remaining gap is disciplined software integration, a predictable setup experience, long-haul reliability, and the evidence required to pursue FCC certification.
 
 ### Python Release Strategy
 
 - **Upstream status:** Python 3.13.0 is the newest general-availability CPython release.
-- **Current runtime:** The stack stays on Python 3.12 because key audio and narration dependencies (`scipy==1.14.1`, `pyttsx3==2.90`) only publish Linux/ARM64 wheels for CPython 3.12 and earlier. Attempting to upgrade forces from-source builds that pull heavy Fortran and speech synthesis toolchains, routinely exhausting Raspberry Pi 5 hosts.
-- **Mitigation:** The Docker base image is rebuilt whenever Python 3.12 patch releases land, and pinned dependencies are updated alongside security advisories so we keep receiving CVE fixes without destabilizing the hardware-specific build pipeline.
+- **Current runtime:** The stack uses Python 3.11 to maintain compatibility with Debian bookworm's pre-compiled SoapySDR bindings (`python3-soapysdr`). All key dependencies including `scipy==1.14.1` and `pyttsx3==2.90` provide Linux/ARM64 wheels for Python 3.11, avoiding from-source builds that would pull heavy Fortran and speech synthesis toolchains and exhaust Raspberry Pi 5 hosts.
+- **Mitigation:** The Docker base image is rebuilt whenever Python 3.11 patch releases land, and pinned dependencies are updated alongside security advisories so we keep receiving CVE fixes without destabilizing the hardware-specific build pipeline or SDR functionality.
 
 ## Safety Notice
 - **Development status:** The project remains experimental and has only been cross-checked against community tools like [multimon-ng](https://github.com/EliasOenal/multimon-ng) for decoding parity. All other implementations, workflows, and documentation are original and subject to change.
@@ -32,7 +32,7 @@ EAS Station’s reference build centers on a Raspberry Pi 5 (4 GB RAM baseli
 The application combines open-source tooling and optional cloud integrations. Versions below match the pinned dependencies in `requirements.txt` unless noted otherwise.
 
 ### Application Framework
-- Python 3.12 runtime
+- Python 3.11 runtime (compatible with Debian bookworm SoapySDR bindings)
 - Flask 3.0.3 web framework
 - Werkzeug 3.0.6 WSGI utilities
 - Flask-SQLAlchemy 3.1.1 ORM integration

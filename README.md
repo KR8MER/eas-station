@@ -28,7 +28,7 @@ All documentation and tooling emphasise a guided setup process so integrators ca
 
 [![CI status](https://github.com/KR8MER/eas-station/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/KR8MER/eas-station/actions/workflows/build.yml)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://www.docker.com/)
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue?logo=python)](https://www.python.org/)
+[![Python 3.11](https://img.shields.io/badge/Python-3.11-blue?logo=python)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-2.3-green?logo=flask)](https://flask.palletsprojects.com/)
 [![Gunicorn](https://img.shields.io/badge/Gunicorn-21.2-green?logo=gunicorn)](https://gunicorn.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue?logo=postgresql)](https://www.postgresql.org/)
@@ -311,8 +311,8 @@ Operators can trigger the same workflow from **Admin → System Operations** usi
 | Service | Purpose | Technology |
 |---------|---------|------------|
 | **app** | Web UI & REST API | Flask 2.3, Gunicorn, Bootstrap 5 |
-| **poller** | Background NOAA alert polling | Python 3.12, continuous daemon |
-| **ipaws-poller** | Dedicated IPAWS CAP feed polling | Python 3.12, continuous daemon |
+| **poller** | Background NOAA alert polling | Python 3.11, continuous daemon |
+| **ipaws-poller** | Dedicated IPAWS CAP feed polling | Python 3.11, continuous daemon |
 | *(external service)* | Spatial database | PostgreSQL/PostGIS |
 
 > **Deployment Note:** Host the PostgreSQL/PostGIS database outside of these containers (managed service, dedicated VM, or standalone container). Update the connection variables in `.env` so the application can reach it.
@@ -1148,7 +1148,7 @@ curl http://localhost:5000/health
 ## 📦 Technology Stack
 
 ### Backend
-- **Python 3.12** - Core programming language
+- **Python 3.11** - Core programming language (compatible with Debian bookworm SoapySDR bindings)
 - **Flask 2.3** - Web framework
 - **SQLAlchemy 2.0** - ORM and database toolkit
 - **GeoAlchemy2** - Spatial database extensions for SQLAlchemy
@@ -1171,13 +1171,13 @@ curl http://localhost:5000/health
 - **Docker Engine 24+** - Containerization platform
 - **Docker Compose V2** - Multi-container orchestration
 - **Debian 14 (Trixie) host** - Validated on Raspberry Pi 5 builds running Debian 14.2.0-19 with 64-bit kernel/userspace.
-- **Debian Bookworm slim base image** - Container runtime provided by `python:3.12-slim-bookworm` for reproducible multi-arch builds.
+- **Debian Bookworm slim base image** - Container runtime provided by `python:3.11-slim-bookworm` for reproducible multi-arch builds.
 
 ### Python Release Strategy
 
 - **Latest CPython release:** Python 3.13.0 is the newest upstream stable version.
-- **Why we remain on 3.12 for now:** Critical runtime dependencies such as `scipy==1.14.1` and `pyttsx3==2.90` (see [`requirements.txt`](requirements.txt)) still rely on pre-built wheels for Linux/ARM64. Those wheels have not been published for Python 3.13, so attempting to upgrade forces multi-hour source builds that require large toolchains (Fortran, Rust, and voice synthesis headers) and routinely exhaust Raspberry Pi 5 systems.
-- **Security posture:** The Docker base image tracks Python 3.12 patch releases, and dependency pins are refreshed as security advisories are disclosed. This keeps the runtime on the fully-supported CPython branch without sacrificing reproducible builds on Raspberry Pi hardware.
+- **Why we use Python 3.11:** The application uses Python 3.11 to maintain compatibility with Debian bookworm's pre-compiled SoapySDR bindings (`python3-soapysdr`). All critical dependencies including `scipy==1.14.1` and `pyttsx3==2.90` provide pre-built wheels for Python 3.11 on Linux/ARM64, avoiding multi-hour source builds that would require large toolchains (Fortran, Rust, and voice synthesis headers) and exhaust Raspberry Pi 5 systems.
+- **Security posture:** The Docker base image tracks Python 3.11 patch releases, and dependency pins are refreshed as security advisories are disclosed. This keeps the runtime on a fully-supported CPython branch without sacrificing reproducible builds or SDR functionality on Raspberry Pi hardware.
 
 ---
 
