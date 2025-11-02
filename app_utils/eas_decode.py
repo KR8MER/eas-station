@@ -1370,11 +1370,10 @@ def decode_same_audio(path: str, *, sample_rate: Optional[int] = None) -> SAMEAu
     correlation_raw_text: Optional[str] = None
     correlation_confidence: Optional[float] = None
 
-    # Temporarily disable correlation decoder due to frame validation issues
-    # The correlation/DLL decoder doesn't properly validate SAME frame structure
-    # (start bit, 7 data bits, parity bit, stop bit) which causes byte misalignment
-    # and character corruption. Use Goertzel decoder instead which has proper validation.
-    USE_CORRELATION_DECODER = False
+    # Enable correlation decoder to handle external files with timing variations
+    # The correlation/DLL decoder uses a different approach that may work better
+    # for files that don't match the exact timing of internally-generated files.
+    USE_CORRELATION_DECODER = True
 
     if USE_CORRELATION_DECODER:
         try:
