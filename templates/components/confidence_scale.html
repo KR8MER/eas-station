@@ -1,0 +1,121 @@
+{# Confidence scale visualization component
+
+   Usage:
+   {% from 'components/confidence_scale.html' import confidence_scale %}
+   {{ confidence_scale(0.75) }}
+
+   Parameters:
+   - confidence: float between 0 and 1
+   - show_percentage: bool, whether to show the percentage label (default: true)
+   - size: 'sm', 'md', 'lg' (default: 'md')
+#}
+
+{% macro confidence_scale(confidence, show_percentage=true, size='md') %}
+{% set percentage = (confidence * 100) | round(1) %}
+{% set position_percent = (confidence * 100) | round(1) %}
+
+{# Determine confidence level and color #}
+{% if confidence >= 0.8 %}
+    {% set level = 'Excellent' %}
+    {% set level_class = 'success' %}
+{% elif confidence >= 0.6 %}
+    {% set level = 'Good' %}
+    {% set level_class = 'info' %}
+{% elif confidence >= 0.4 %}
+    {% set level = 'Fair' %}
+    {% set level_class = 'warning' %}
+{% elif confidence >= 0.2 %}
+    {% set level = 'Poor' %}
+    {% set level_class = 'warning' %}
+{% else %}
+    {% set level = 'Very Poor' %}
+    {% set level_class = 'danger' %}
+{% endif %}
+
+{# Size variations #}
+{% if size == 'sm' %}
+    {% set bar_height = '12px' %}
+    {% set indicator_size = '16px' %}
+    {% set font_size = 'x-small' %}
+{% elif size == 'lg' %}
+    {% set bar_height = '24px' %}
+    {% set indicator_size = '28px' %}
+    {% set font_size = 'small' %}
+{% else %}
+    {% set bar_height = '18px' %}
+    {% set indicator_size = '22px' %}
+    {% set font_size = 'x-small' %}
+{% endif %}
+
+<div class="confidence-scale-container" style="position: relative; padding-bottom: 8px;">
+    {# Color-coded background bar #}
+    <div class="confidence-scale-bar" style="
+        position: relative;
+        height: {{ bar_height }};
+        background: linear-gradient(to right,
+            #dc3545 0%,    /* Red - Very Poor */
+            #ffc107 20%,   /* Yellow - Poor */
+            #ffc107 40%,   /* Yellow - Fair */
+            #17a2b8 60%,   /* Blue - Good */
+            #28a745 80%,   /* Green - Excellent */
+            #28a745 100%   /* Green - Excellent */
+        );
+        border-radius: 4px;
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+    ">
+        {# Range labels #}
+        <div style="
+            position: absolute;
+            top: calc({{ bar_height }} + 2px);
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            font-size: {{ font_size }};
+            color: var(--bs-secondary-color);
+            user-select: none;
+        ">
+            <span>0%</span>
+            <span style="position: absolute; left: 20%;">Poor</span>
+            <span style="position: absolute; left: 50%; transform: translateX(-50%);">Fair</span>
+            <span style="position: absolute; right: 20%;">Good</span>
+            <span>100%</span>
+        </div>
+
+        {# Position indicator #}
+        <div class="confidence-indicator" style="
+            position: absolute;
+            left: {{ position_percent }}%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: {{ indicator_size }};
+            height: {{ indicator_size }};
+            background: white;
+            border: 3px solid var(--bs-{{ level_class }});
+            border-radius: 50%;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            z-index: 10;
+        ">
+            {# Inner dot #}
+            <div style="
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: 50%;
+                height: 50%;
+                background: var(--bs-{{ level_class }});
+                border-radius: 50%;
+            "></div>
+        </div>
+    </div>
+
+    {% if show_percentage %}
+    <div class="confidence-label text-center mt-3" style="font-size: {{ font_size }};">
+        <span class="badge bg-{{ level_class }}">
+            {{ '%.1f' | format(percentage) }}% {{ level }}
+        </span>
+    </div>
+    {% endif %}
+</div>
+{% endmacro %}

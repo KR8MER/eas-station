@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'components/confidence_scale.html' import confidence_scale %}
 {% block title %}Alert Validation & Analytics{% endblock %}
 
 {% block content %}
@@ -71,8 +72,13 @@
                     <dl class="row mb-3 small">
                         <dt class="col-sm-4">Detected headers</dt>
                         <dd class="col-sm-8">{{ decode_result.headers|length }}</dd>
-                        <dt class="col-sm-4">Confidence</dt>
-                        <dd class="col-sm-8">{{ '%.2f'|format(decode_result.bit_confidence * 100) }}% avg · {{ '%.2f'|format(decode_result.min_bit_confidence * 100) }}% min</dd>
+                        <dt class="col-sm-4">Bit Confidence</dt>
+                        <dd class="col-sm-8">
+                            {{ confidence_scale(decode_result.bit_confidence, show_percentage=true, size='sm') }}
+                            <div class="text-muted mt-1" style="font-size: 0.75rem;">
+                                Min: {{ '%.1f' | format(decode_result.min_bit_confidence * 100) }}%
+                            </div>
+                        </dd>
                         <dt class="col-sm-4">Frame quality</dt>
                         <dd class="col-sm-8">{{ decode_result.frame_count - decode_result.frame_errors }} valid of {{ decode_result.frame_count }}</dd>
                         <dt class="col-sm-4">Duration analysed</dt>
@@ -121,9 +127,9 @@
                             {% for header in decode_result.headers %}
                                 <div class="col-xl-6">
                                     <div class="border rounded p-3 h-100">
-                                        <div class="d-flex justify-content-between align-items-center mb-2">
-                                            <h6 class="mb-0">{{ header.header }}</h6>
-                                            <span class="badge bg-primary">{{ '%.1f'|format(header.confidence * 100) }}% confidence</span>
+                                        <h6 class="mb-3">{{ header.header }}</h6>
+                                        <div class="mb-3">
+                                            {{ confidence_scale(header.confidence, show_percentage=true, size='sm') }}
                                         </div>
                                         {% if header.summary %}
                                             <p class="small fw-semibold text-primary mb-2">
@@ -214,7 +220,12 @@
                                     <td>
                                         {% set metrics = decode.quality_metrics or {} %}
                                         {% if metrics.bit_confidence is not none %}
-                                            {{ '%.1f'|format(metrics.bit_confidence * 100) }}%
+                                            <div style="min-width: 120px;">
+                                                {{ confidence_scale(metrics.bit_confidence, show_percentage=false, size='sm') }}
+                                                <div class="text-center mt-1" style="font-size: 0.7rem;">
+                                                    {{ '%.1f'|format(metrics.bit_confidence * 100) }}%
+                                                </div>
+                                            </div>
                                         {% else %}
                                             <span class="text-muted">—</span>
                                         {% endif %}
