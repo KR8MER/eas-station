@@ -1279,6 +1279,73 @@ def _create_segment(
     )
 
 
+def _detect_audio_sample_rate(path: str) -> int:
+    """Detect the native sample rate of an audio file using multiple methods."""
+
+    # Method 1: Try Python's wave module (works for standard PCM WAV files)
+    try:
+        with wave.open(path, "rb") as handle:
+            return handle.getframerate()
+    except Exception:
+        pass
+
+    # Method 2: Try reading WAV header manually (works for IEEE Float and other WAV formats)
+    try:
+        with open(path, "rb") as f:
+            # Read RIFF header
+            riff = f.read(4)
+            if riff == b"RIFF":
+                f.read(4)  # Skip file size
+                wave_tag = f.read(4)
+                if wave_tag == b"WAVE":
+                    # Find fmt chunk
+                    while True:
+                        chunk_id = f.read(4)
+                        if not chunk_id:
+                            break
+                        chunk_size = int.from_bytes(f.read(4), byteorder="little")
+
+                        if chunk_id == b"fmt ":
+                            # Read format chunk
+                            format_tag = int.from_bytes(f.read(2), byteorder="little")
+                            channels = int.from_bytes(f.read(2), byteorder="little")
+                            sample_rate = int.from_bytes(f.read(4), byteorder="little")
+                            if 1000 <= sample_rate <= 192000:  # Sanity check
+                                return sample_rate
+                            break
+                        else:
+                            # Skip this chunk
+                            f.seek(chunk_size, 1)
+    except Exception:
+        pass
+
+    # Method 3: Try ffprobe if available
+    if shutil.which("ffprobe"):
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v", "error",
+                    "-select_streams", "a:0",
+                    "-show_entries", "stream=sample_rate",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    path
+                ],
+                capture_output=True,
+                check=True,
+                timeout=5,
+            )
+            if result.stdout:
+                sample_rate = int(result.stdout.decode("utf-8").strip())
+                if 1000 <= sample_rate <= 192000:  # Sanity check
+                    return sample_rate
+        except (subprocess.CalledProcessError, ValueError, subprocess.TimeoutExpired):
+            pass
+
+    # Fallback to default
+    return 16000
+
+
 def decode_same_audio(path: str, *, sample_rate: Optional[int] = None) -> SAMEAudioDecodeResult:
     """Decode SAME headers from a WAV or MP3 file located at ``path``.
 
@@ -1289,14 +1356,9 @@ def decode_same_audio(path: str, *, sample_rate: Optional[int] = None) -> SAMEAu
     if not os.path.exists(path):
         raise AudioDecodeError(f"Audio file does not exist: {path}")
 
-    # Auto-detect sample rate from WAV file if not provided
+    # Auto-detect sample rate from audio file if not provided
     if sample_rate is None:
-        try:
-            with wave.open(path, "rb") as handle:
-                sample_rate = handle.getframerate()
-        except Exception:
-            # If we can't read it as a WAV, fall back to default
-            sample_rate = 16000
+        sample_rate = _detect_audio_sample_rate(path)
 
     samples, pcm_bytes = _read_audio_samples(path, sample_rate)
     sample_count = len(samples)
@@ -1308,11 +1370,10 @@ def decode_same_audio(path: str, *, sample_rate: Optional[int] = None) -> SAMEAu
     correlation_raw_text: Optional[str] = None
     correlation_confidence: Optional[float] = None
 
-    # Temporarily disable correlation decoder due to frame validation issues
-    # The correlation/DLL decoder doesn't properly validate SAME frame structure
-    # (start bit, 7 data bits, parity bit, stop bit) which causes byte misalignment
-    # and character corruption. Use Goertzel decoder instead which has proper validation.
-    USE_CORRELATION_DECODER = False
+    # Enable correlation decoder to handle external files with timing variations
+    # The correlation/DLL decoder uses a different approach that may work better
+    # for files that don't match the exact timing of internally-generated files.
+    USE_CORRELATION_DECODER = True
 
     if USE_CORRELATION_DECODER:
         try:
