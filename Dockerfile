@@ -8,7 +8,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Install system dependencies required for psycopg2, GeoAlchemy, and SoapySDR
 RUN apt-get update \
-    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         build-essential \
         libpq-dev \
