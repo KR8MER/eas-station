@@ -49,6 +49,22 @@ All documentation and tooling emphasise a guided setup process so integrators ca
 
 **Built for:** Amateur Radio Emergency Communications (KR8MER) | Putnam County, Ohio
 
+---
+
+## 📚 Documentation
+
+**New!** Comprehensive documentation is now organized in the [`docs/`](docs/) directory:
+
+- **[Documentation Hub](docs/README.md)** - Central navigation for all guides and references
+- **[Search Index](docs/INDEX.md)** - Searchable index of all topics and keywords
+- **[Operations Guide](docs/guides/HELP.md)** - Daily operations and troubleshooting
+- **[Developer Guidelines](docs/development/AGENTS.md)** - Code standards and best practices
+- **[Integration Guides](docs/guides/)** - IPAWS, SDR, and hardware configuration
+
+For quick access, visit the `/help` and `/about` pages in the web interface, which now include direct links to all documentation resources.
+
+---
+
 ### About the Maintainer
 
 Timothy Kramer (KR8MER) is an amateur radio operator and public-safety technologist based in Putnam County, Ohio. First licensed in 2004 and upgraded to General Class in 2025, he combines two decades of field experience with a passion for resilient communications. Kramer previously spent 17 years as a deputy sheriff, where mission-critical Motorola land-mobile radio systems were part of his daily toolkit. He now works as a full-time electrical panel electrician with a focus on keeping complex infrastructure reliable and safe.
@@ -976,7 +992,6 @@ eas-station/
 ├── .env.example              # Environment template
 ├── .gitignore                # Git ignore rules
 ├── README.md                 # This file
-├── AGENTS.md                 # AI/agent development guidelines
 │
 ├── poller/
 │   └── cap_poller.py         # Background alert polling daemon
@@ -1009,7 +1024,7 @@ Contributions are welcome! Whether it's bug fixes, new features, documentation i
 
 1. **Fork the repository**
 2. **Create a feature branch:** `git checkout -b feature/amazing-feature`
-3. **Follow coding standards** (see `AGENTS.md`)
+3. **Follow coding standards** (see `docs/development/AGENTS.md`)
 4. **Test your changes** thoroughly
 5. **Commit your changes:** `git commit -m 'Add amazing feature'`
 6. **Push to the branch:** `git push origin feature/amazing-feature`
@@ -1023,7 +1038,7 @@ Contributions are welcome! Whether it's bug fixes, new features, documentation i
 - Update documentation for new features
 - Test with Docker before submitting PR
 
-See `AGENTS.md` for detailed development guidelines.
+See [`docs/development/AGENTS.md`](docs/development/AGENTS.md) for detailed development guidelines, or visit the [Documentation Hub](docs/README.md) for all guides and references.
 
 ---
 
