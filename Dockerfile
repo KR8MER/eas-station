@@ -5,7 +5,7 @@ FROM python:3.12-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# Install system dependencies required for psycopg2 and GeoAlchemy
+# Install system dependencies required for psycopg2, GeoAlchemy, and SoapySDR
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
@@ -15,6 +15,12 @@ RUN apt-get update \
         espeak \
         libespeak-ng1 \
         ca-certificates \
+        libusb-1.0-0 \
+        libusb-1.0-0-dev \
+        python3-soapysdr \
+        soapysdr-module-rtlsdr \
+        soapysdr-module-airspy \
+        soapysdr-tools \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 

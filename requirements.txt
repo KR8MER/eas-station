@@ -47,3 +47,7 @@ pyttsx3==2.90  # Offline text-to-speech engine for the pyttsx3 provider
 
 # Audio processing for EAS decoding
 scipy==1.14.1  # Required for audio resampling when ffmpeg is not available
+
+# SDR support for radio receivers
+numpy==2.2.1  # Required for SoapySDR sample processing
+# Note: SoapySDR Python bindings are installed via system packages in Dockerfile
