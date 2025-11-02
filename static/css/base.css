@@ -1,0 +1,242 @@
+/**
+ * EAS Station - Base Styles
+ * Core CSS variables, typography, and fundamental styles
+ */
+
+/* ============================================
+   CSS VARIABLES (Light & Dark Theme)
+   ============================================ */
+
+:root {
+    /* Primary Brand Colors */
+    --primary-color: #204885; /* Aegean Blue */
+    --primary-soft: #2f5fa4;
+    --secondary-color: #872a96; /* Plum Crazy */
+    --secondary-soft: #9d5bb1;
+    --accent-color: #4f6fb3;
+
+    /* Status Colors */
+    --success-color: #2eb08d;
+    --danger-color: #e05263;
+    --warning-color: #f6b968;
+    --info-color: #2f5aa1;
+    --critical-color: #ff4f8b;
+
+    /* Background Colors */
+    --light-color: #f4f5fb;
+    --dark-color: #19263a;
+    --bg-color: #e8ecf7;
+    --surface-color: #ffffff;
+    --bg-card: #ffffff;
+    --bg-primary: #19263a;
+
+    /* Text Colors */
+    --text-color: #1c2233;
+    --text-secondary: #5a6c8f;
+    --text-muted: #8892a6;
+
+    /* Borders & Shadows */
+    --border-color: #ced7ea;
+    --shadow-color: rgba(32, 72, 133, 0.12);
+    --shadow: rgba(32, 72, 133, 0.12);
+
+    /* Semantic Aliases */
+    --accent-primary: #4f6fb3;
+    --accent-secondary: #872a96;
+    --info: #2f5aa1;
+    --success: #2eb08d;
+    --warning: #f6b968;
+    --danger: #e05263;
+
+    /* Border Radius */
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+
+    /* Spacing Scale */
+    --spacing-xs: 0.5rem;
+    --spacing-sm: 0.75rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2.25rem;
+
+    /* Transitions */
+    --transition-fast: 0.2s ease-in-out;
+    --transition-medium: 0.3s ease-in-out;
+}
+
+/* Dark Theme Variables */
+[data-theme="dark"] {
+    --primary-color: #3f63b6;
+    --primary-soft: #2f4f99;
+    --secondary-color: #a86cc7;
+    --secondary-soft: #c289dd;
+    --accent-color: #7f9be8;
+    --success-color: #47d3b1;
+    --danger-color: #ff7a8a;
+    --warning-color: #ffca7d;
+    --info-color: #7da9ff;
+    --light-color: #2a3245;
+    --dark-color: #0b1220;
+    --bg-color: #101628;
+    --surface-color: #1b2335;
+    --text-color: #f5f6fa;
+    --border-color: #2f3a54;
+    --shadow-color: rgba(0, 0, 0, 0.4);
+    --critical-color: #ff7ba8;
+    --accent-primary: #7f9be8;
+    --accent-secondary: #c289dd;
+    --bg-card: #1b2335;
+    --bg-primary: #0b1220;
+    --text-secondary: #a0aac0;
+    --text-muted: #7a8599;
+    --info: #7da9ff;
+    --success: #47d3b1;
+    --warning: #ffca7d;
+    --danger: #ff7a8a;
+    --shadow: rgba(0, 0, 0, 0.4);
+}
+
+/* ============================================
+   BASE TYPOGRAPHY & LAYOUT
+   ============================================ */
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    letter-spacing: 0.01em;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color var(--transition-medium), color var(--transition-medium);
+}
+
+main {
+    padding: 1.5rem 1.5rem 2.5rem;
+}
+
+/* ============================================
+   LINKS
+   ============================================ */
+
+a {
+    color: var(--primary-color);
+    transition: color var(--transition-fast);
+    text-decoration: none;
+}
+
+a:hover,
+a:focus {
+    color: var(--accent-color);
+}
+
+/* ============================================
+   CARDS
+   ============================================ */
+
+.card {
+    background-color: var(--surface-color);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 0.125rem 0.25rem var(--shadow-color);
+    transition: background-color var(--transition-medium), color var(--transition-medium);
+}
+
+/* ============================================
+   TABLES
+   ============================================ */
+
+.table {
+    background-color: var(--surface-color);
+    color: var(--text-color);
+}
+
+.table th {
+    background: linear-gradient(120deg, var(--primary-soft), var(--secondary-soft));
+    border-top: none;
+    color: #fff;
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* ============================================
+   MAP STYLING
+   ============================================ */
+
+.map-container {
+    position: relative;
+    z-index: 1;
+}
+
+.leaflet-container {
+    background: var(--light-color);
+}
+
+/* ============================================
+   TOAST NOTIFICATIONS
+   ============================================ */
+
+.toast-container {
+    position: fixed;
+    top: 88px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: flex-end;
+    width: min(360px, calc(100vw - 40px));
+    z-index: 9999;
+}
+
+.toast-container .toast {
+    width: 100%;
+    max-width: 360px;
+    box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.2);
+    word-wrap: break-word;
+}
+
+.toast-container .toast .toast-body {
+    word-break: break-word;
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+
+@media print {
+    .navbar, .theme-toggle-button, .footer {
+        display: none !important;
+    }
+
+    body {
+        background: white !important;
+        color: black !important;
+    }
+}
+
+/* ============================================
+   RESPONSIVE - MOBILE
+   ============================================ */
+
+@media (max-width: 576px) {
+    main {
+        padding: 2rem 1rem 2.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .btn-theme-toggle {
+        top: 60px;
+        right: 10px;
+        width: 40px;
+        height: 40px;
+    }
+}
