@@ -11,6 +11,7 @@ Welcome to the comprehensive documentation for **EAS Station** - an experimental
 |----------|-------------|
 | [**Help & Operations Guide**](guides/HELP.md) | Daily operations, dashboard access, alert monitoring |
 | [**Quick Start**](../README.md#quick-start) | Get up and running in 5 minutes |
+| [**Portainer Deployment**](guides/PORTAINER_DEPLOYMENT.md) | Complete guide for deploying and maintaining with Portainer |
 | [**Database Fixes**](guides/DATABASE_CONSISTENCY_FIXES.md) | Troubleshooting database connection issues |
 | [**Environment Migration**](guides/ENV_MIGRATION_GUIDE.md) | Migrating .env configuration between versions |
 | [**One-Button Upgrade**](guides/one_button_upgrade.md) | Automated upgrade workflow |
@@ -55,11 +56,13 @@ docs/
 │
 ├── guides/                            ← Operational guides and how-tos
 │   ├── HELP.md                       ← Primary operations guide
+│   ├── PORTAINER_DEPLOYMENT.md       ← Portainer deployment guide
 │   ├── DATABASE_CONSISTENCY_FIXES.md
 │   ├── ENV_MIGRATION_GUIDE.md
 │   ├── ipaws_feed_integration.md
 │   ├── one_button_upgrade.md
-│   └── radio_usb_passthrough.md
+│   ├── radio_usb_passthrough.md
+│   └── sdr_setup_guide.md
 │
 ├── development/                       ← Developer documentation
 │   ├── AGENTS.md                     ← Primary developer guide (code standards)
@@ -90,6 +93,7 @@ docs/
 
 ### By Task
 - **Setting up EAS Station for the first time?** → [Quick Start Guide](../README.md#quick-start)
+- **Deploying with Portainer?** → [Portainer Deployment Guide](guides/PORTAINER_DEPLOYMENT.md)
 - **Operating the dashboard?** → [Help & Operations Guide](guides/HELP.md)
 - **Contributing code?** → [Developer Guidelines](development/AGENTS.md) + [Contributing](process/CONTRIBUTING.md)
 - **Troubleshooting issues?** → [Database Fixes](guides/DATABASE_CONSISTENCY_FIXES.md) + [Help Guide](guides/HELP.md)
@@ -102,7 +106,7 @@ docs/
 - **👨‍💼 Emergency Managers**: Start with [About](reference/ABOUT.md) and [Terms of Use](policies/TERMS_OF_USE.md)
 - **📻 Radio Operators**: [Help Guide](guides/HELP.md) → [IPAWS Integration](guides/ipaws_feed_integration.md)
 - **💻 Developers**: [AGENTS.md](development/AGENTS.md) → [Contributing](process/CONTRIBUTING.md)
-- **🔧 System Administrators**: [Environment Migration](guides/ENV_MIGRATION_GUIDE.md) → [Database Fixes](guides/DATABASE_CONSISTENCY_FIXES.md)
+- **🔧 System Administrators**: [Portainer Deployment](guides/PORTAINER_DEPLOYMENT.md) → [Environment Migration](guides/ENV_MIGRATION_GUIDE.md) → [Database Fixes](guides/DATABASE_CONSISTENCY_FIXES.md)
 
 ---
 
