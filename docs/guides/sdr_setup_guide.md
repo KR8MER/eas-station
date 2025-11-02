@@ -55,8 +55,8 @@ For NOAA Weather Radio (162 MHz):
 
 The Docker image includes:
 - SoapySDR core libraries and Python bindings
-- RTL-SDR driver (soapysdr-module-rtlsdr)
-- Airspy driver (soapysdr-module-airspy)
+- RTL-SDR and optional Airspy drivers (controlled by the `SOAPYSDR_DRIVERS`
+  build argument)
 - NumPy for signal processing
 - USB device support
 
@@ -79,6 +79,12 @@ sudo apt install python3-soapysdr soapysdr-module-rtlsdr soapysdr-module-airspy 
 # Verify installation
 SoapySDRUtil --info
 ```
+
+> [!TIP]
+> When building the Docker image yourself (including via Portainer), set
+> `SOAPYSDR_DRIVERS` to a comma-separated list such as `rtlsdr` to skip unused
+> hardware modules and dramatically reduce build times. Keep `rtlsdr,airspy` if
+> you plan to connect both receiver families.
 
 ## Docker Configuration
 

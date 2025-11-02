@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        SOAPYSDR_DRIVERS: ${SOAPYSDR_DRIVERS:-rtlsdr,airspy}
     image: eas-station:latest
     ports:
       - "5000:5000"
