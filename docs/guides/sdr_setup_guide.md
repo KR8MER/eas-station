@@ -49,68 +49,69 @@ For NOAA Weather Radio (162 MHz):
 
 ## Software Installation
 
-### On Host System (Not Docker)
+### Docker Deployments (Recommended)
 
-If running EAS Station directly on your host:
+**Good news!** SoapySDR and all necessary drivers are now **automatically installed** as part of the Docker build process. You don't need to install anything manually!
+
+The Docker image includes:
+- SoapySDR core libraries and Python bindings
+- RTL-SDR driver (soapysdr-module-rtlsdr)
+- Airspy driver (soapysdr-module-airspy)
+- NumPy for signal processing
+- USB device support
+
+All you need to do is:
+1. Build/pull the Docker image
+2. Ensure your SDR device is plugged in
+3. Start the containers
+
+The docker-compose.yml is already configured to provide USB device access to the containers.
+
+### On Host System (Without Docker)
+
+If running EAS Station directly on your host without Docker:
 
 ```bash
 # Ubuntu/Debian
 sudo apt update
-sudo apt install python3-soapysdr soapysdr-module-rtlsdr python3-numpy
-
-# For Airspy support
-sudo apt install soapysdr-module-airspy
+sudo apt install python3-soapysdr soapysdr-module-rtlsdr soapysdr-module-airspy python3-numpy
 
 # Verify installation
 SoapySDRUtil --info
 ```
 
-### For Docker Deployments
-
-**Important:** When using Docker, SoapySDR must be installed on the **host machine**, not inside the container.
-
-```bash
-# Install on the Docker host
-sudo apt update
-sudo apt install soapysdr-module-rtlsdr soapysdr-module-airspy
-
-# Add your user to the plugdev group for USB access
-sudo usermod -a -G plugdev $USER
-
-# Log out and back in for group membership to take effect
-```
-
 ## Docker Configuration
 
-### Update docker-compose.yml
+### USB Device Access (Already Configured!)
 
-Add device mapping to expose USB devices to the container:
+The docker-compose.yml file is already configured to provide USB device access to all services. The configuration includes:
 
 ```yaml
-services:
-  app:
-    image: ghcr.io/kr8mer/eas-station:latest
-    devices:
-      - /dev/bus/usb:/dev/bus/usb
-    environment:
-      - RADIO_CAPTURE_DIR=/var/lib/eas-station/radio
-      - RADIO_CAPTURE_DURATION=30
-      - RADIO_CAPTURE_MODE=iq
-    volumes:
-      - ./radio_captures:/var/lib/eas-station/radio
+devices:
+  - /dev/bus/usb:/dev/bus/usb
+privileged: true
 ```
+
+This is automatically applied to the app, poller, and ipaws-poller services.
 
 ### Verify USB Access
 
 ```bash
 # On the host, check if your SDR is detected
 lsusb | grep -i rtl
+# Or for Airspy:
+lsusb | grep -i airspy
 
 # Should show something like:
-# Bus 001 Device 005: ID 0bda:2838 Realtek Semiconductor Corp. RTL2838 DVB-T
+# RTL-SDR: Bus 001 Device 005: ID 0bda:2838 Realtek Semiconductor Corp. RTL2838 DVB-T
+# Airspy: Bus 001 Device 006: ID 1d50:60a1 OpenMoko, Inc. Airspy
 
 # After starting the container, verify it can see the device
 docker compose exec app ls -la /dev/bus/usb
+
+# Test SoapySDR inside the container
+docker compose exec app SoapySDRUtil --find
+docker compose exec app python scripts/sdr_diagnostics.py
 ```
 
 ## Quick Setup Using the Web UI
@@ -250,35 +251,42 @@ python scripts/sdr_diagnostics.py --presets
 
 1. **SDR not plugged in**
    - Check USB connection
-   - Try a different USB port
-   - Verify with `lsusb`
+   - Try a different USB port (USB 2.0 ports often work better than USB 3.0 for some SDRs)
+   - Verify with `lsusb` on the host
 
-2. **SoapySDR module not installed**
+2. **Docker container needs restart**
+   - After plugging in or unplugging an SDR, restart the containers:
    ```bash
-   sudo apt install soapysdr-module-rtlsdr
+   docker compose restart
    ```
 
-3. **Permission denied**
+3. **Kernel driver conflict (RTL-SDR specific)**
+   - The DVB-T kernel driver may be blocking access
+   - On the host, create `/etc/modprobe.d/blacklist-rtl.conf`:
+   ```
+   blacklist dvb_usb_rtl28xxu
+   blacklist rtl2832
+   blacklist rtl2830
+   ```
+   - Then run: `sudo modprobe -r dvb_usb_rtl28xxu`
+
+4. **Docker: Container needs rebuild**
+   - If you updated the Dockerfile, rebuild the image:
    ```bash
-   # Add user to plugdev group
-   sudo usermod -a -G plugdev $USER
-   # Log out and back in
+   docker compose build app
+   docker compose up -d
    ```
 
-4. **Docker: USB not mapped**
-   - Ensure docker-compose.yml has `devices: - /dev/bus/usb:/dev/bus/usb`
-   - Restart the container after making changes
+### "SoapySDR not installed" (Shouldn't happen with Docker)
 
-### "SoapySDR not installed"
+**For Docker:**
+- SoapySDR is automatically installed in the container
+- If you see this error, rebuild the image: `docker compose build app`
 
 **For host installations:**
 ```bash
-sudo apt install python3-soapysdr python3-numpy
+sudo apt install python3-soapysdr soapysdr-module-rtlsdr soapysdr-module-airspy python3-numpy
 ```
-
-**For Docker:**
-- SoapySDR must be installed on the **host**, not in the container
-- Install on the host and map `/dev/bus/usb` to the container
 
 ### "Receiver shows 'No lock' status"
 

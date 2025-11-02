@@ -10,6 +10,9 @@ services:
       - .env
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    privileged: true
 
   poller:
     image: eas-station:latest
@@ -19,6 +22,9 @@ services:
       - .env
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    privileged: true
 
   ipaws-poller:
     image: eas-station:latest
@@ -38,6 +44,9 @@ services:
       CAP_ENDPOINTS: ${IPAWS_CAP_FEED_URLS:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    privileged: true
 
   alerts-db:
     image: ${ALERTS_DB_IMAGE:-postgis/postgis:17-3.4}
