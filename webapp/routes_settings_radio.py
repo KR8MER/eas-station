@@ -8,7 +8,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from app_core.extensions import db
 from app_core.location import get_location_settings
 from app_core.models import RadioReceiver
-from app_core.radio import ensure_radio_tables
+from app_core.radio import (
+    ensure_radio_tables,
+    enumerate_devices,
+    check_soapysdr_installation,
+    get_device_capabilities,
+    get_recommended_settings,
+    SDR_PRESETS,
+)
 
 
 def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
@@ -216,6 +223,59 @@ def register(app: Flask, logger) -> None:
             return jsonify({"error": "Failed to delete receiver."}), 500
 
         return jsonify({"success": True})
+
+    @app.route("/api/radio/discover", methods=["GET"])
+    def api_discover_devices() -> Any:
+        """Enumerate all SoapySDR-compatible devices connected to the system."""
+        try:
+            devices = enumerate_devices()
+            return jsonify({"devices": devices, "count": len(devices)})
+        except Exception as exc:
+            route_logger.error("Device enumeration failed: %s", exc)
+            return jsonify({"error": str(exc), "devices": []}), 500
+
+    @app.route("/api/radio/diagnostics", methods=["GET"])
+    def api_radio_diagnostics() -> Any:
+        """Check SoapySDR installation status and available drivers."""
+        try:
+            diagnostics = check_soapysdr_installation()
+            return jsonify(diagnostics)
+        except Exception as exc:
+            route_logger.error("Diagnostics check failed: %s", exc)
+            return jsonify({"error": str(exc), "ready": False}), 500
+
+    @app.route("/api/radio/capabilities/<driver>", methods=["GET"])
+    def api_device_capabilities(driver: str) -> Any:
+        """Query capabilities of a specific SDR driver."""
+        try:
+            # Optional device-specific arguments from query params
+            device_args = {}
+            if request.args.get("serial"):
+                device_args["serial"] = request.args.get("serial")
+            if request.args.get("device_id"):
+                device_args["device_id"] = request.args.get("device_id")
+
+            capabilities = get_device_capabilities(driver, device_args if device_args else None)
+            if capabilities is None:
+                return jsonify({"error": f"Unable to query capabilities for driver '{driver}'"}), 404
+
+            return jsonify(capabilities)
+        except Exception as exc:
+            route_logger.error("Failed to query capabilities for driver '%s': %s", driver, exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/radio/presets", methods=["GET"])
+    def api_radio_presets() -> Any:
+        """Get preset configurations for common SDR use cases."""
+        return jsonify({"presets": SDR_PRESETS})
+
+    @app.route("/api/radio/presets/<preset_key>", methods=["GET"])
+    def api_radio_preset(preset_key: str) -> Any:
+        """Get a specific preset configuration."""
+        preset = SDR_PRESETS.get(preset_key)
+        if preset is None:
+            return jsonify({"error": f"Preset '{preset_key}' not found"}), 404
+        return jsonify({"preset": preset})
 
 
 __all__ = ["register"]

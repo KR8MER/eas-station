@@ -27,6 +27,34 @@
         </div>
     </div>
 
+    <div class="card mb-4 shadow-sm border-0">
+        <div class="card-header bg-primary text-white">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="fas fa-search me-2"></i>
+                    <strong>Quick Setup</strong>
+                </div>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-light" id="discoverDevicesBtn">
+                        <i class="fas fa-satellite-dish"></i> Discover Devices
+                    </button>
+                    <button type="button" class="btn btn-light" id="runDiagnosticsBtn">
+                        <i class="fas fa-stethoscope"></i> Run Diagnostics
+                    </button>
+                    <button type="button" class="btn btn-light" id="showPresetsBtn">
+                        <i class="fas fa-magic"></i> Use Preset
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <div id="quickSetupContent" class="text-center text-muted py-3">
+                <i class="fas fa-info-circle fa-2x mb-2"></i>
+                <p class="mb-0">Use the buttons above to discover connected SDRs, run diagnostics, or apply preset configurations.</p>
+            </div>
+        </div>
+    </div>
+
     {% set location = location_settings or {} %}
     <div class="row g-3 mb-4">
         <div class="col-lg-4">
@@ -219,6 +247,74 @@
                     <button type="submit" class="btn btn-primary" id="saveReceiverBtn">Save Receiver</button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Device Discovery Modal -->
+<div class="modal fade" id="discoveryModal" tabindex="-1" aria-labelledby="discoveryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="discoveryModalLabel">Discovered SDR Devices</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="discoveryModalBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Searching for devices...</span>
+                    </div>
+                    <p class="mt-3">Searching for connected SDR devices...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Diagnostics Modal -->
+<div class="modal fade" id="diagnosticsModal" tabindex="-1" aria-labelledby="diagnosticsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="diagnosticsModalLabel">SoapySDR Diagnostics</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="diagnosticsModalBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Running diagnostics...</span>
+                    </div>
+                    <p class="mt-3">Checking SoapySDR installation...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Presets Modal -->
+<div class="modal fade" id="presetsModal" tabindex="-1" aria-labelledby="presetsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="presetsModalLabel">SDR Configuration Presets</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="presetsModalBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading presets...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
         </div>
     </div>
 </div>
@@ -633,6 +729,336 @@
     setLastUpdated(deriveLatestStatusTimestamp());
     refreshReceivers({ endpoint: MONITORING_ENDPOINT, silent: true });
     scheduleAutoRefresh();
+
+    // ========================================================================
+    // Device Discovery, Diagnostics, and Presets
+    // ========================================================================
+
+    const discoveryModal = new bootstrap.Modal(document.getElementById('discoveryModal'));
+    const diagnosticsModal = new bootstrap.Modal(document.getElementById('diagnosticsModal'));
+    const presetsModal = new bootstrap.Modal(document.getElementById('presetsModal'));
+
+    const discoverDevicesBtn = document.getElementById('discoverDevicesBtn');
+    const runDiagnosticsBtn = document.getElementById('runDiagnosticsBtn');
+    const showPresetsBtn = document.getElementById('showPresetsBtn');
+
+    // Device Discovery
+    discoverDevicesBtn?.addEventListener('click', async () => {
+        const modalBody = document.getElementById('discoveryModalBody');
+        modalBody.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Searching...</span>
+                </div>
+                <p class="mt-3">Searching for connected SDR devices...</p>
+            </div>
+        `;
+        discoveryModal.show();
+
+        try {
+            const response = await fetch('/api/radio/discover');
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Discovery failed');
+            }
+
+            if (!data.devices || data.devices.length === 0) {
+                modalBody.innerHTML = `
+                    <div class="alert alert-warning">
+                        <h6><i class="fas fa-exclamation-triangle"></i> No SDR Devices Found</h6>
+                        <p class="mb-2">No SoapySDR-compatible devices were detected.</p>
+                        <hr>
+                        <p class="mb-1"><strong>Troubleshooting tips:</strong></p>
+                        <ul class="mb-0">
+                            <li>Ensure your SDR is plugged into a USB port</li>
+                            <li>Check USB connection with <code>lsusb</code></li>
+                            <li>Verify device permissions (user may need to be in 'plugdev' group)</li>
+                            <li>Install device-specific SoapySDR modules:
+                                <ul>
+                                    <li>RTL-SDR: <code>sudo apt install soapysdr-module-rtlsdr</code></li>
+                                    <li>Airspy: <code>sudo apt install soapysdr-module-airspy</code></li>
+                                </ul>
+                            </li>
+                            <li>In Docker: ensure <code>/dev/bus/usb</code> is mapped to the container</li>
+                        </ul>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> Found ${data.devices.length} device(s)</div>`;
+
+            data.devices.forEach((device, idx) => {
+                const deviceName = escapeHtml(device.label || device.product || `Device ${idx + 1}`);
+                const driver = escapeHtml(device.driver || 'unknown');
+
+                html += `
+                    <div class="card mb-3">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <strong><i class="fas fa-broadcast-tower"></i> ${deviceName}</strong>
+                            <button class="btn btn-sm btn-primary" onclick="useDiscoveredDevice(${idx})">
+                                <i class="fas fa-plus"></i> Add This Device
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <dl class="row mb-0">
+                                <dt class="col-sm-3">Driver</dt>
+                                <dd class="col-sm-9"><code>${driver}</code></dd>
+                                ${device.serial ? `<dt class="col-sm-3">Serial</dt><dd class="col-sm-9"><code>${escapeHtml(device.serial)}</code></dd>` : ''}
+                                ${device.manufacturer ? `<dt class="col-sm-3">Manufacturer</dt><dd class="col-sm-9">${escapeHtml(device.manufacturer)}</dd>` : ''}
+                                ${device.product ? `<dt class="col-sm-3">Product</dt><dd class="col-sm-9">${escapeHtml(device.product)}</dd>` : ''}
+                                ${device.hardware ? `<dt class="col-sm-3">Hardware</dt><dd class="col-sm-9">${escapeHtml(device.hardware)}</dd>` : ''}
+                            </dl>
+                        </div>
+                    </div>
+                `;
+            });
+
+            modalBody.innerHTML = html;
+
+            // Store devices for use in adding
+            window.discoveredDevices = data.devices;
+
+        } catch (error) {
+            console.error('Discovery failed:', error);
+            modalBody.innerHTML = `
+                <div class="alert alert-danger">
+                    <h6><i class="fas fa-times-circle"></i> Discovery Failed</h6>
+                    <p class="mb-0">${escapeHtml(error.message)}</p>
+                </div>
+            `;
+        }
+    });
+
+    // Run Diagnostics
+    runDiagnosticsBtn?.addEventListener('click', async () => {
+        const modalBody = document.getElementById('diagnosticsModalBody');
+        modalBody.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-3">Running diagnostics...</p>
+            </div>
+        `;
+        diagnosticsModal.show();
+
+        try {
+            const response = await fetch('/api/radio/diagnostics');
+            const data = await response.json();
+
+            let html = '';
+
+            // SoapySDR Status
+            if (data.soapysdr_installed) {
+                html += `<div class="alert alert-success"><i class="fas fa-check-circle"></i> SoapySDR is installed (API version: ${escapeHtml(data.soapysdr_version || 'unknown')})</div>`;
+            } else {
+                html += `
+                    <div class="alert alert-danger">
+                        <h6><i class="fas fa-times-circle"></i> SoapySDR is NOT installed</h6>
+                        <p class="mb-2">SoapySDR Python bindings are required for SDR functionality.</p>
+                        <p class="mb-0"><strong>Installation:</strong></p>
+                        <ul class="mb-0">
+                            <li>Ubuntu/Debian: <code>sudo apt install python3-soapysdr</code></li>
+                            <li>Or via pip: <code>pip install SoapySDR</code></li>
+                        </ul>
+                    </div>
+                `;
+            }
+
+            // NumPy Status
+            if (data.numpy_installed) {
+                html += `<div class="alert alert-success"><i class="fas fa-check-circle"></i> NumPy is installed (version: ${escapeHtml(data.numpy_version || 'unknown')})</div>`;
+            } else {
+                html += `
+                    <div class="alert alert-danger">
+                        <h6><i class="fas fa-times-circle"></i> NumPy is NOT installed</h6>
+                        <p class="mb-0"><strong>Installation:</strong> <code>pip install numpy</code></p>
+                    </div>
+                `;
+            }
+
+            // Available Drivers
+            if (data.drivers_available && data.drivers_available.length > 0) {
+                html += `
+                    <div class="card mb-3">
+                        <div class="card-header"><strong>Available Drivers</strong></div>
+                        <div class="card-body">
+                            <p>Found ${data.drivers_available.length} driver(s):</p>
+                            <div class="d-flex flex-wrap gap-2">
+                                ${data.drivers_available.map(d => `<span class="badge bg-primary">${escapeHtml(d)}</span>`).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Total Devices
+            html += `
+                <div class="card mb-3">
+                    <div class="card-header"><strong>Connected Devices</strong></div>
+                    <div class="card-body">
+                        <p class="mb-0">${data.total_devices} SDR device(s) detected</p>
+                    </div>
+                </div>
+            `;
+
+            // Errors
+            if (data.errors && data.errors.length > 0) {
+                html += `
+                    <div class="alert alert-warning">
+                        <h6><i class="fas fa-exclamation-triangle"></i> Issues Detected</h6>
+                        <ul class="mb-0">
+                            ${data.errors.map(err => `<li>${escapeHtml(err)}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+
+            // Overall Status
+            if (data.ready) {
+                html += `
+                    <div class="alert alert-success">
+                        <h6><i class="fas fa-check-circle"></i> System Ready</h6>
+                        <p class="mb-0">All dependencies are installed and working correctly!</p>
+                    </div>
+                `;
+            }
+
+            modalBody.innerHTML = html;
+
+        } catch (error) {
+            console.error('Diagnostics failed:', error);
+            modalBody.innerHTML = `
+                <div class="alert alert-danger">
+                    <h6><i class="fas fa-times-circle"></i> Diagnostics Failed</h6>
+                    <p class="mb-0">${escapeHtml(error.message)}</p>
+                </div>
+            `;
+        }
+    });
+
+    // Show Presets
+    showPresetsBtn?.addEventListener('click', async () => {
+        const modalBody = document.getElementById('presetsModalBody');
+        modalBody.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status"></div>
+            </div>
+        `;
+        presetsModal.show();
+
+        try {
+            const response = await fetch('/api/radio/presets');
+            const data = await response.json();
+
+            if (!data.presets || Object.keys(data.presets).length === 0) {
+                modalBody.innerHTML = `<div class="alert alert-info">No presets available</div>`;
+                return;
+            }
+
+            let html = `
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>NOAA Weather Radio Frequencies:</strong> WX1: 162.400 MHz, WX2: 162.425 MHz, WX3: 162.450 MHz,
+                    WX4: 162.475 MHz, WX5: 162.500 MHz, WX6: 162.525 MHz, WX7: 162.550 MHz
+                    <br>
+                    <small>Find your local station: <a href="https://www.weather.gov/nwr/station_listing" target="_blank">https://www.weather.gov/nwr/station_listing</a></small>
+                </div>
+            `;
+
+            Object.entries(data.presets).forEach(([key, preset]) => {
+                const freqMhz = (preset.frequency_hz / 1_000_000).toFixed(3);
+                html += `
+                    <div class="card mb-3">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <strong><i class="fas fa-star"></i> ${escapeHtml(preset.name)}</strong>
+                            <button class="btn btn-sm btn-primary" onclick="applyPreset('${escapeHtml(key)}')">
+                                <i class="fas fa-download"></i> Use This Preset
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <dl class="row mb-0">
+                                <dt class="col-sm-4">Driver</dt>
+                                <dd class="col-sm-8"><code>${escapeHtml(preset.driver)}</code></dd>
+                                <dt class="col-sm-4">Frequency</dt>
+                                <dd class="col-sm-8">${freqMhz} MHz (${preset.frequency_hz.toLocaleString()} Hz)</dd>
+                                <dt class="col-sm-4">Sample Rate</dt>
+                                <dd class="col-sm-8">${preset.sample_rate.toLocaleString()} samples/sec</dd>
+                                <dt class="col-sm-4">Gain</dt>
+                                <dd class="col-sm-8">${preset.gain} dB</dd>
+                                ${preset.notes ? `<dt class="col-sm-4">Notes</dt><dd class="col-sm-8">${escapeHtml(preset.notes)}</dd>` : ''}
+                            </dl>
+                        </div>
+                    </div>
+                `;
+            });
+
+            modalBody.innerHTML = html;
+            window.availablePresets = data.presets;
+
+        } catch (error) {
+            console.error('Failed to load presets:', error);
+            modalBody.innerHTML = `
+                <div class="alert alert-danger">
+                    <h6><i class="fas fa-times-circle"></i> Failed to Load Presets</h6>
+                    <p class="mb-0">${escapeHtml(error.message)}</p>
+                </div>
+            `;
+        }
+    });
+
+    // Global function to use a discovered device
+    window.useDiscoveredDevice = (deviceIndex) => {
+        const device = window.discoveredDevices?.[deviceIndex];
+        if (!device) {
+            return;
+        }
+
+        discoveryModal.hide();
+
+        // Pre-fill the add receiver modal with discovered device info
+        document.getElementById('receiverDisplayName').value = device.label || device.product || `${device.driver} Device`;
+        document.getElementById('receiverIdentifier').value = device.serial || `${device.driver}_${deviceIndex}`;
+        document.getElementById('receiverDriver').value = device.driver || 'rtlsdr';
+
+        // Set defaults based on driver
+        if (device.driver === 'rtlsdr') {
+            document.getElementById('receiverFrequency').value = '162550000';
+            document.getElementById('receiverSampleRate').value = '2400000';
+            document.getElementById('receiverGain').value = '49.6';
+        } else if (device.driver === 'airspy') {
+            document.getElementById('receiverFrequency').value = '162550000';
+            document.getElementById('receiverSampleRate').value = '2500000';
+            document.getElementById('receiverGain').value = '21';
+        }
+
+        if (device.device_id) {
+            document.getElementById('receiverChannel').value = device.device_id;
+        }
+
+        openModal();
+    };
+
+    // Global function to apply a preset
+    window.applyPreset = (presetKey) => {
+        const preset = window.availablePresets?.[presetKey];
+        if (!preset) {
+            return;
+        }
+
+        presetsModal.hide();
+
+        // Pre-fill the add receiver modal with preset values
+        document.getElementById('receiverDisplayName').value = preset.name;
+        document.getElementById('receiverIdentifier').value = presetKey;
+        document.getElementById('receiverDriver').value = preset.driver;
+        document.getElementById('receiverFrequency').value = preset.frequency_hz;
+        document.getElementById('receiverSampleRate').value = preset.sample_rate;
+        document.getElementById('receiverGain').value = preset.gain;
+        document.getElementById('receiverNotes').value = preset.notes || '';
+
+        openModal();
+    };
 })();
 </script>
 {% endblock %}

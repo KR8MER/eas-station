@@ -600,10 +600,26 @@ Prefer scripts or automated testing? The legacy helper at `tools/generate_sample
 
 ### Multi-SDR Capture Orchestration
 
-- Configure receivers on **Admin → Radio Settings**. Each entry tracks the driver, tuned frequency, sample rate, and optional gain overrides. The UI persists configurations to Postgres and surfaces the latest lock/signal telemetry.
-- Expose your SDR hardware by mapping <code>/dev/bus/usb</code> into the container rather than running it in privileged mode. The [USB passthrough guide](static/docs/radio_usb_passthrough.html) includes a ready-to-use Docker Compose snippet.
-- Optional environment controls are available in `.env`: `RADIO_CAPTURE_DIR` (output directory), `RADIO_CAPTURE_DURATION` (seconds captured per SAME event), and `RADIO_CAPTURE_MODE` (`iq` for complex32 IQ data or `pcm` for float32 audio).
-- During polling the CAP ingestor automatically triggers IQ captures for new SAME activations and records status snapshots that appear under **/api/monitoring/radio** and the health endpoint.
+EAS Station now features **simplified SDR setup** with auto-detection, diagnostics, and preset configurations:
+
+- **Quick Setup Tools**:
+  - **Device Discovery** - Automatically detect connected RTL-SDR and Airspy devices
+  - **Built-in Diagnostics** - Verify SoapySDR installation and check system readiness
+  - **Preset Configurations** - One-click setup for NOAA Weather Radio monitoring
+  - **CLI Diagnostics Tool** - Test SDRs from command line: `python scripts/sdr_diagnostics.py`
+
+- **Web Interface**: Configure receivers on **Settings → Radio Receivers**. Each entry tracks the driver, tuned frequency, sample rate, and optional gain overrides. The UI persists configurations to Postgres and surfaces real-time lock/signal telemetry.
+
+- **Docker Support**: Expose your SDR hardware by mapping <code>/dev/bus/usb</code> into the container rather than running it in privileged mode. The [USB passthrough guide](docs/guides/radio_usb_passthrough.md) includes a ready-to-use Docker Compose snippet.
+
+- **Setup Guide**: New users should read the comprehensive [SDR Setup Guide](docs/guides/sdr_setup_guide.md) for step-by-step instructions, troubleshooting tips, and hardware recommendations.
+
+- **Environment Controls**: Configure capture behavior in `.env`:
+  - `RADIO_CAPTURE_DIR` - Output directory for IQ/PCM files
+  - `RADIO_CAPTURE_DURATION` - Seconds to capture per SAME event (default: 30)
+  - `RADIO_CAPTURE_MODE` - `iq` for complex32 IQ data or `pcm` for float32 audio
+
+- **Automatic Capture**: During polling, the CAP ingestor automatically triggers IQ captures when SAME activations occur. Status snapshots are available at **/api/monitoring/radio** and the health endpoint.
 
 #### Optional text-to-speech voiceovers
 
