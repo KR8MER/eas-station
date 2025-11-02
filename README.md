@@ -447,7 +447,32 @@ Location codes use **FIPS** (Federal Information Processing Standard) county ide
 
 **Example:** `039137` = Putnam County, Ohio (state 39, county 137)
 
-Up to **31 location codes** may be included in a single SAME header. The nationwide FIPS registry is available in `app_utils/fips_codes.py`.
+The `P` digit also enumerates FEMA-defined partial-county SAME areas. EAS Station ships
+with FEMA's `cs18mr25.dbf` catalog so every county subdivision appears anywhere the
+hierarchical picker is used, including the admin location settings and manual broadcast
+builder. Selecting a subdivision automatically applies the matching portion digit, while
+pasting a six-digit SAME code continues to work for power users who already know the
+identifier.
+
+| `P` digit | Coverage area |
+|-----------|----------------|
+| `0` | Entire area |
+| `1` | Northwest portion |
+| `2` | North central portion |
+| `3` | Northeast portion |
+| `4` | West central portion |
+| `5` | Central portion |
+| `6` | East central portion |
+| `7` | Southwest portion |
+| `8` | South central portion |
+| `9` | Southeast portion |
+
+County subdivision labels come directly from FEMA's partial-county SAME registry and are
+merged into the shared location lookup so manual tools, API responses, and UI widgets all
+use the same friendly names.
+
+Up to **31 location codes** may be included in a single SAME header. The nationwide FIPS
+registry is available in `app_utils/fips_codes.py`.
 
 ### Compliance Testing
 
@@ -560,10 +585,12 @@ When enabled, the poller generates full SAME header bursts, raises an optional G
 
 The **Manual Broadcast Builder** in the EAS Workflow console mirrors the workflow of a commercial encoder:
 
-1. Open the **EAS Workflow** console from the top navigation (visible once you are authenticated) and build your SAME target list with the hierarchical picker: choose a state or territory, select the county or statewide PSSCCC entry, and click **Add Location**. The textarea still accepts pasted codes for bulk entry, and the running list is de-duplicated automatically with a hard stop at the 31-code SAME limit.
+1. Open the **EAS Workflow** console from the top navigation (visible once you are authenticated) and build your SAME target list with the hierarchical picker: choose a state or territory, select the county, FEMA-defined subdivision, or statewide PSSCCC entry, and click **Add Location**. The textarea still accepts pasted codes for bulk entry, the picker auto-selects the matching portion digit when you choose a subdivision, and the running list is de-duplicated automatically with a hard stop at the 31-code SAME limit.
 2. Confirm the ORG, EEE, purge time (TTTT), and station identifier (LLLLLLLL). The originator selector now reflects the four production codes (EAS, CIV, WXR, PEP), the event dropdown hides the legacy `??*` placeholders, and the live header preview renders the complete `ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-` sequence so you can verify every field before you transmit.
 3. Need a test in a hurry? Tap **Quick Weekly Test** to preload the Required Weekly Test template: the tool drops in the configured SAME counties, forces the alert into `Test` status, seeds the headline/message, and omits the attention signal (FCC does not require tones for RWTs). A confirmation dialog appears before the workflow automatically generates the new activation. Switch the attention selector if you need to add it back in.
 4. Click **Generate Package** to produce discrete WAV files for the SAME bursts, attention signal (dual-tone, 1050 Hz, or omit entirely), optional narration, and the EOM burst. A composite file is also produced so you can audition the full activation end-to-end. SAME headers always transmit in three bursts automatically per the FCC specification, with one-second guard intervals between each section.
+
+The same hierarchical dataset backs **Admin → Location Settings**, so saved SAME lists can mix entire counties with FEMA-defined subdivisions while displaying consistent portion labels across the UI and audit exports.
 
 The header breakdown card reiterates the commercial nomenclature (preamble, ORG, EEE, PSSCCC, +TTTT, -JJJHHMM, -LLLLLLLL-, and the trailing `NNNN` EOM burst) and includes the FCC/FEMA guidance for each field so operators and trainees can cross-check the encoding rules.
 

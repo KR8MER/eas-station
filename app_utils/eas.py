@@ -21,6 +21,7 @@ except Exception:  # pragma: no cover - gracefully handle non-RPi environments
     RPiGPIO = None
 
 from app_utils.event_codes import EVENT_CODE_REGISTRY, resolve_event_code
+from app_utils.fips_codes import P_DIGIT_LABELS
 from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS
 
 from .eas_fsk import (
@@ -108,18 +109,7 @@ def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
     return config
 
 
-P_DIGIT_MEANINGS = {
-    '0': 'Entire area',
-    '1': 'Northwest portion',
-    '2': 'North central portion',
-    '3': 'Northeast portion',
-    '4': 'West central portion',
-    '5': 'Central portion',
-    '6': 'East central portion',
-    '7': 'Southwest portion',
-    '8': 'South central portion',
-    '9': 'Southeast portion',
-}
+P_DIGIT_MEANINGS = dict(P_DIGIT_LABELS)
 
 ORIGINATOR_DESCRIPTIONS = {
     'EAS': 'EAS Participant / broadcaster',

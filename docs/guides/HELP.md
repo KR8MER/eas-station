@@ -34,6 +34,9 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 
 ### Managing Boundaries and Alerts
 - Use the **Boundaries** module to upload county, district, or custom GIS polygons.
+- Configure SAME coverage under **Admin → Location Settings**—the picker lists FEMA-defined
+  subdivisions alongside entire counties and automatically applies the correct portion digit
+  when you select a partial-county code.
 - Review stored CAP products in **Alert History**. Filters by status, severity, and date help locate specific messages.
 - Trigger manual broadcasts with `manual_eas_event.py` for drills or locally authored messages.
 
@@ -43,7 +46,7 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 - Use the action menu to request synchronized IQ/PCM captures; captured files are surfaced alongside status updates in the compliance dashboard.
 
 ### Generating Sample Audio
-- Use the **EAS Workflow** console (accessible from the top navigation once logged in) to craft practice activations entirely in the browser. Pick a state or territory, choose the county/parish (or statewide) SAME code, and click **Add Location** to build the PSSCCC list—manual pasting is still supported for bulk entry and the picker enforces the 31-code SAME limit. The originator dropdown now exposes the four FCC originator codes (EAS, CIV, WXR, PEP), the event selector is trimmed to the authorised 47 CFR §11.31(d–e) entries, and the live preview assembles the `ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-` header while explaining each field (including the 0xAB preamble and trailing `NNNN`). Tap **Quick Weekly Test** to preload your configured counties and sample script—the preset omits the attention signal per FCC guidance, but you can re-enable the dual-tone or 1050 Hz alert if needed before confirming the run. After confirmation the workflow automatically generates the package with three SAME bursts, selectable attention tone, optional narration, and EOM WAV assets with one-second guard intervals between each section.
+- Use the **EAS Workflow** console (accessible from the top navigation once logged in) to craft practice activations entirely in the browser. Pick a state or territory, choose the county/parish, FEMA-defined subdivision, or statewide SAME code, and click **Add Location** to build the PSSCCC list—manual pasting is still supported for bulk entry, subdivision selections automatically set the correct portion digit, and the picker enforces the 31-code SAME limit. The originator dropdown now exposes the four FCC originator codes (EAS, CIV, WXR, PEP), the event selector is trimmed to the authorised 47 CFR §11.31(d–e) entries, and the live preview assembles the `ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-` header while explaining each field (including the 0xAB preamble and trailing `NNNN`). Tap **Quick Weekly Test** to preload your configured counties and sample script—the preset omits the attention signal per FCC guidance, but you can re-enable the dual-tone or 1050 Hz alert if needed before confirming the run. After confirmation the workflow automatically generates the package with three SAME bursts, selectable attention tone, optional narration, and EOM WAV assets with one-second guard intervals between each section.
 - The legacy helper remains available for automation: `docker compose exec app python tools/generate_sample_audio.py`.
 
 ### Verifying Playout & Decoding Audio

@@ -2574,7 +2574,7 @@
 
             const placeholder = document.createElement('option');
             placeholder.value = '';
-            placeholder.textContent = stateAbbr ? 'Select county or parish…' : 'Select a state first…';
+            placeholder.textContent = stateAbbr ? 'Select county, parish, or subdivision…' : 'Select a state first…';
             countySelect.appendChild(placeholder);
 
             if (!stateAbbr) {
@@ -2590,6 +2590,7 @@
                 const statewideOption = document.createElement('option');
                 statewideOption.value = state.statewide_code;
                 statewideOption.textContent = `Entire ${state.name || state.abbr} (${state.statewide_code})`;
+                statewideOption.dataset.portion = '0';
                 countySelect.appendChild(statewideOption);
             }
 
@@ -2600,7 +2601,21 @@
                 const option = document.createElement('option');
                 option.value = county.code;
                 option.textContent = `${county.name || county.code} (${county.code})`;
+                option.dataset.portion = county.code[0] || '0';
                 countySelect.appendChild(option);
+
+                const subdivisions = Array.isArray(county.subdivisions) ? county.subdivisions : [];
+                subdivisions.forEach((subdivision) => {
+                    if (!subdivision || !subdivision.code) {
+                        return;
+                    }
+                    const subOption = document.createElement('option');
+                    subOption.value = subdivision.code;
+                    subOption.textContent = `↳ ${subdivision.name || subdivision.code} (${subdivision.code})`;
+                    subOption.dataset.portion = subdivision.code[0] || '0';
+                    subOption.dataset.parentCode = county.code;
+                    countySelect.appendChild(subOption);
+                });
             });
 
             countySelect.disabled = false;
@@ -2610,10 +2625,19 @@
             if (selectedCode) {
                 const normalized = normalizeSameCode(selectedCode);
                 if (normalized) {
-                    const baseCode = `0${normalized.slice(1)}`;
-                    countySelect.value = baseCode;
-                    if (portionSelect) {
-                        portionSelect.value = normalized[0] || '0';
+                    const directOption = countySelect.querySelector(`option[value="${normalized}"]`);
+                    if (directOption) {
+                        countySelect.value = normalized;
+                        if (portionSelect) {
+                            const portionValue = directOption.dataset?.portion || normalized[0] || '0';
+                            portionSelect.value = portionValue;
+                        }
+                    } else {
+                        const baseCode = `0${normalized.slice(1)}`;
+                        countySelect.value = baseCode;
+                        if (portionSelect) {
+                            portionSelect.value = normalized[0] || '0';
+                        }
                     }
                 }
             }
@@ -2745,7 +2769,8 @@
                 return;
             }
             const stateAbbr = stateSelect.value;
-            const countyCode = countySelect.value;
+            const selectedOption = countySelect.selectedOptions ? countySelect.selectedOptions[0] : null;
+            const countyCode = selectedOption ? selectedOption.value : countySelect.value;
             if (!stateAbbr || !countyCode) {
                 setEasGeneratorStatus('Select a state and county before adding a location code.', 'warning');
                 return;
@@ -2755,9 +2780,21 @@
                 setEasGeneratorStatus('Unable to determine the SAME code for the selected area.', 'danger');
                 return;
             }
-            const portionValue = portionSelect ? portionSelect.value : '0';
-            const normalizedPortion = /^[0-9]$/.test(portionValue) ? portionValue : '0';
-            const combinedCode = `${normalizedPortion}${normalizedCounty.slice(1)}`;
+            if (selectedOption && selectedOption.dataset && selectedOption.dataset.parentCode) {
+                addSameCodes([normalizedCounty]);
+                return;
+            }
+            let portionValue = portionSelect ? portionSelect.value : '0';
+            if (!/^[0-9]$/.test(portionValue)) {
+                portionValue = '0';
+            }
+            if (normalizedCounty.slice(3) === '000') {
+                portionValue = '0';
+                if (portionSelect) {
+                    portionSelect.value = '0';
+                }
+            }
+            const combinedCode = `${portionValue}${normalizedCounty.slice(1)}`;
             addSameCodes([combinedCode]);
         }
 
@@ -2769,6 +2806,7 @@
 
             const stateSelect = document.getElementById('easStateSelect');
             const countySelect = document.getElementById('easCountySelect');
+            const portionSelect = document.getElementById('easPortionSelect');
             const addButton = document.getElementById('addSameCodeBtn');
             const clearButton = document.getElementById('clearSameCodeBtn');
             const manualInput = document.getElementById('manualSameCodesInput');
@@ -2780,6 +2818,25 @@
                 stateSelect.addEventListener('change', (event) => {
                     const abbr = event.target ? event.target.value : '';
                     populateCountyOptions(abbr || '');
+                });
+            }
+
+            if (countySelect && portionSelect) {
+                countySelect.addEventListener('change', (event) => {
+                    const option = event?.target?.selectedOptions?.[0];
+                    if (!option) {
+                        portionSelect.value = '0';
+                        return;
+                    }
+                    const portionValue = option.dataset?.portion;
+                    if (portionValue && /^[0-9]$/.test(portionValue)) {
+                        portionSelect.value = portionValue;
+                    } else if (!/^[0-9]$/.test(portionSelect.value)) {
+                        portionSelect.value = '0';
+                    }
+                    if (option.value.endsWith('000')) {
+                        portionSelect.value = '0';
+                    }
                 });
             }
 
@@ -3593,6 +3650,9 @@
                     const parts = [];
                     if (detail.stateAbbr || detail.stateName) {
                         parts.push(detail.stateAbbr || detail.stateName);
+                    }
+                    if (detail.pMeaning) {
+                        parts.push(detail.pMeaning);
                     }
                     if (detail.code) {
                         parts.push(detail.code);

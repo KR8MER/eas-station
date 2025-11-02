@@ -688,7 +688,9 @@ function populateCountyOptions(stateAbbr, selectedCode = '') {
 
     const placeholder = document.createElement('option');
     placeholder.value = '';
-    placeholder.textContent = normalizedAbbr ? 'Select county or parish…' : 'Select a state first…';
+    placeholder.textContent = normalizedAbbr
+        ? 'Select county, parish, or subdivision…'
+        : 'Select a state first…';
     countySelect.appendChild(placeholder);
 
     if (!normalizedAbbr) {
@@ -704,6 +706,7 @@ function populateCountyOptions(stateAbbr, selectedCode = '') {
         const statewideOption = document.createElement('option');
         statewideOption.value = state.statewide_code;
         statewideOption.textContent = `Entire ${state.name || state.abbr} (${state.statewide_code})`;
+        statewideOption.dataset.portion = '0';
         countySelect.appendChild(statewideOption);
     }
 
@@ -714,7 +717,21 @@ function populateCountyOptions(stateAbbr, selectedCode = '') {
         const option = document.createElement('option');
         option.value = county.code;
         option.textContent = `${county.name || county.code} (${county.code})`;
+        option.dataset.portion = county.code[0] || '0';
         countySelect.appendChild(option);
+
+        const subdivisions = Array.isArray(county.subdivisions) ? county.subdivisions : [];
+        subdivisions.forEach((subdivision) => {
+            if (!subdivision || !subdivision.code) {
+                return;
+            }
+            const subOption = document.createElement('option');
+            subOption.value = subdivision.code;
+            subOption.textContent = `↳ ${subdivision.name || subdivision.code} (${subdivision.code})`;
+            subOption.dataset.portion = subdivision.code[0] || '0';
+            subOption.dataset.parentCode = county.code;
+            countySelect.appendChild(subOption);
+        });
     });
 
     countySelect.disabled = false;
@@ -725,6 +742,15 @@ function populateCountyOptions(stateAbbr, selectedCode = '') {
     if (selectedCode) {
         const normalized = normalizeSameCode(selectedCode);
         if (normalized) {
+            const directOption = countySelect.querySelector(`option[value="${normalized}"]`);
+            if (directOption) {
+                countySelect.value = normalized;
+                if (portionSelect) {
+                    const portionValue = directOption.dataset?.portion || normalized[0] || '0';
+                    portionSelect.value = portionValue;
+                }
+                return;
+            }
             const baseCode = `0${normalized.slice(1)}`;
             countySelect.value = baseCode;
             if (portionSelect) {
@@ -742,7 +768,8 @@ function handleAddSameCode() {
         return;
     }
     const stateAbbr = stateSelect.value;
-    const countyCode = countySelect.value;
+    const selectedOption = countySelect.selectedOptions ? countySelect.selectedOptions[0] : null;
+    const countyCode = selectedOption ? selectedOption.value : countySelect.value;
     if (!stateAbbr || !countyCode) {
         setStatus('Select a state and county before adding a location code.', 'warning');
         return;
@@ -750,6 +777,10 @@ function handleAddSameCode() {
     const normalizedCounty = normalizeSameCode(countyCode);
     if (!normalizedCounty) {
         setStatus('Unable to determine the SAME code for the selected area.', 'error');
+        return;
+    }
+    if (selectedOption && selectedOption.dataset && selectedOption.dataset.parentCode) {
+        addSameCodes([normalizedCounty]);
         return;
     }
     let portionValue = portionSelect ? portionSelect.value : '0';
@@ -798,6 +829,27 @@ function initialiseSameCodeSelector() {
         stateSelect.addEventListener('change', (event) => {
             const value = event?.target?.value || '';
             populateCountyOptions(value);
+        });
+    }
+
+    const countySelect = document.getElementById('sameCountySelect');
+    const portionSelect = document.getElementById('samePortionSelect');
+    if (countySelect && portionSelect) {
+        countySelect.addEventListener('change', (event) => {
+            const option = event?.target?.selectedOptions?.[0];
+            if (!option) {
+                portionSelect.value = '0';
+                return;
+            }
+            const portionValue = option.dataset?.portion;
+            if (portionValue && /^[0-9]$/.test(portionValue)) {
+                portionSelect.value = portionValue;
+            } else if (!/^[0-9]$/.test(portionSelect.value)) {
+                portionSelect.value = '0';
+            }
+            if (option.value.endsWith('000')) {
+                portionSelect.value = '0';
+            }
         });
     }
 

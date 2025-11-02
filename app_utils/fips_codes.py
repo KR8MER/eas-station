@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Dict, FrozenSet, List, Tuple
 
 
@@ -67,6 +68,19 @@ STATE_ABBR_NAMES: Dict[str, str] = {
 
 NATIONWIDE_SAME_CODE = '000000'
 NATIONWIDE_LABEL = 'Entire United States'
+
+P_DIGIT_LABELS = {
+    '0': 'Entire area',
+    '1': 'Northwest portion',
+    '2': 'North central portion',
+    '3': 'Northeast portion',
+    '4': 'West central portion',
+    '5': 'Central portion',
+    '6': 'East central portion',
+    '7': 'Southwest portion',
+    '8': 'South central portion',
+    '9': 'Southeast portion',
+}
 
 # Data sourced from FCC / US Census FIPS code list (national_county.txt).
 # Format: STATEFP + COUNTYFP -> "County Name, ST"
@@ -3225,6 +3239,106 @@ def _to_same_county_code(code: str) -> str:
     return digits.zfill(6)
 
 
+def _format_subdivision_display_name(
+    county_label: str, raw_county: str, area_name: str, area_code: str
+) -> str:
+    portion = P_DIGIT_LABELS.get(area_code[:1], 'Partial area')
+    canonical_county = (county_label or '').strip()
+    raw_name = (raw_county or '').strip()
+    area = (area_name or '').strip()
+
+    if area and raw_name and area.lower() == raw_name.lower():
+        if portion != 'Entire area' and canonical_county:
+            return f"{portion} {canonical_county}".strip()
+        return canonical_county or area
+
+    if area:
+        if raw_name and raw_name.lower() not in area.lower() and canonical_county:
+            return f"{area} ({canonical_county})"
+        return area
+
+    if portion != 'Entire area' and canonical_county:
+        return f"{portion} {canonical_county}".strip()
+
+    return canonical_county or area_code
+
+
+def _format_subdivision_label(
+    county_label: str, raw_county: str, area_name: str, area_code: str, state_abbr: str
+) -> str:
+    display_name = _format_subdivision_display_name(
+        county_label, raw_county, area_name, area_code
+    )
+    state = (state_abbr or '').strip()
+    if state:
+        return f"{display_name}, {state}"
+    return display_name
+
+
+def _load_county_subdivision_index(
+    base_mapping: Dict[str, str]
+) -> Tuple[Dict[str, List[Dict[str, object]]], Dict[str, str]]:
+    """Return subdivision metadata keyed by the parent SAME county code."""
+
+    assets_root = Path(__file__).resolve().parents[1] / 'assets'
+    dbf_path = assets_root / 'cs18mr25.dbf'
+    if not dbf_path.exists():
+        return {}, {}
+
+    try:
+        from app_utils.zone_catalog import iter_county_subdivision_records
+    except Exception:
+        return {}, {}
+
+    subdivisions: Dict[str, List[Dict[str, object]]] = {}
+    labels: Dict[str, str] = {}
+
+    for record in iter_county_subdivision_records(dbf_path):
+        entire_code = ''.join(ch for ch in record.entire_same if ch.isdigit())
+        area_code = ''.join(ch for ch in record.area_same if ch.isdigit())
+        if len(entire_code) != 6 or len(area_code) != 6:
+            continue
+        if area_code == entire_code:
+            continue
+
+        base_label = base_mapping.get(entire_code, '')
+        county_label = base_label.split(',')[0].strip() if ',' in base_label else base_label
+        state_abbr = base_label.split(',')[-1].strip() if ',' in base_label else record.state_code
+        entry = {
+            'code': area_code,
+            'name': _format_subdivision_display_name(
+                county_label,
+                record.county_name,
+                record.area_name,
+                area_code,
+            ),
+            'latitude': record.latitude,
+            'longitude': record.longitude,
+        }
+        bucket = subdivisions.setdefault(entire_code, [])
+        replaced = False
+        for index, existing in enumerate(bucket):
+            if existing['code'] == area_code:
+                bucket[index] = entry
+                replaced = True
+                break
+        if not replaced:
+            bucket.append(entry)
+
+        labels[area_code] = _format_subdivision_label(
+            county_label,
+            record.county_name,
+            record.area_name,
+            area_code,
+            state_abbr or record.state_code,
+        )
+
+    for bucket in subdivisions.values():
+        bucket.sort(key=lambda item: (item['code'][0], item['name']))
+
+    return subdivisions, labels
+
+
 def _build_county_index() -> Dict[str, str]:
     mapping: Dict[str, str] = {}
     state_labels: Dict[str, Tuple[str, str]] = {}
@@ -3246,6 +3360,8 @@ def _build_county_index() -> Dict[str, str]:
 
 
 US_FIPS_COUNTIES: Dict[str, str] = _build_county_index()
+COUNTY_SUBDIVISIONS, US_FIPS_SUBDIVISIONS = _load_county_subdivision_index(US_FIPS_COUNTIES)
+US_FIPS_COUNTIES.update(US_FIPS_SUBDIVISIONS)
 ALL_US_FIPS_CODES = frozenset(US_FIPS_COUNTIES.keys())
 
 
@@ -3265,10 +3381,22 @@ def _build_state_tree() -> List[Dict[str, object]]:
                 'counties': [],
             },
         )
-        state_entry['counties'].append({
+        county_entry: Dict[str, object] = {
             'code': same_code,
             'name': county_name,
-        })
+        }
+        subdivisions = COUNTY_SUBDIVISIONS.get(same_code)
+        if subdivisions:
+            county_entry['subdivisions'] = [
+                {
+                    'code': item['code'],
+                    'name': item['name'],
+                    'latitude': item.get('latitude'),
+                    'longitude': item.get('longitude'),
+                }
+                for item in subdivisions
+            ]
+        state_entry['counties'].append(county_entry)
 
     ordered_states: List[Dict[str, object]] = []
     for state in states.values():
@@ -3323,10 +3451,18 @@ US_FIPS_LOOKUP: Dict[str, str] = _build_same_lookup(US_STATE_COUNTY_TREE)
 def get_us_state_county_tree() -> List[Dict[str, object]]:
     """Return a copy of the state → county SAME mapping."""
 
+    def _copy_county(county: Dict[str, object]) -> Dict[str, object]:
+        entry = dict(county)
+        if 'subdivisions' in entry and isinstance(entry['subdivisions'], list):
+            entry['subdivisions'] = [dict(item) for item in entry['subdivisions']]
+        return entry
+
     return [
         {
             **state,
-            'counties': [dict(county) for county in state.get('counties', [])],
+            'counties': [
+                _copy_county(county) for county in state.get('counties', [])
+            ],
         }
         for state in US_STATE_COUNTY_TREE
     ]

@@ -9,6 +9,7 @@ from app_core.extensions import db
 from app_core.location import describe_location_reference, update_location_settings
 from app_core.models import LocationSettings, NWSZone
 from app_core.zones import clear_zone_lookup_cache
+from app_utils.fips_codes import get_same_lookup, get_us_state_county_tree
 from app_utils.location_settings import sanitize_fips_codes
 
 
@@ -199,6 +200,34 @@ def test_sanitize_fips_codes_allows_statewide_entries():
 
     assert valid == ["039000", "039137"]
     assert invalid == ["bad-code"]
+
+
+def test_sanitize_fips_codes_allows_partial_counties():
+    valid, invalid = sanitize_fips_codes(["627137", "bad", "039137"])
+
+    assert "627137" in valid
+    assert "039137" in valid
+    assert "bad" in invalid
+
+
+def test_state_tree_includes_county_subdivisions():
+    tree = get_us_state_county_tree()
+    mn = next((state for state in tree if state.get("abbr") == "MN"), None)
+    assert mn is not None
+    st_louis = next(
+        (county for county in mn.get("counties", []) if county.get("code") == "027137"),
+        None,
+    )
+    assert st_louis is not None
+    subdivisions = [sub.get("code") for sub in st_louis.get("subdivisions", [])]
+    assert "627137" in subdivisions
+
+
+def test_same_lookup_contains_partial_counties():
+    lookup = get_same_lookup()
+    label = lookup.get("627137")
+    assert label is not None
+    assert "St. Louis" in label
 
 
 def test_describe_location_reference_flags_unknown_zones(app_context):
