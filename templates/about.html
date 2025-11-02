@@ -318,12 +318,13 @@
                             <div>
                                 <h3 class="h6 fw-bold mb-1 text-info">Python release cadence</h3>
                                 <p class="mb-0 small text-muted">
-                                    Python <strong>3.13.0</strong> is the latest upstream release, but EAS Station remains on
-                                    <strong>Python 3.12</strong> because critical dependencies such as <code>scipy==1.14.1</code>
-                                    and <code>pyttsx3==2.90</code> do not yet ship Linux/ARM64 wheels for CPython&nbsp;3.13. Upgrading
-                                    today would require compiling large Fortran and voice-synthesis toolchains on Raspberry Pi&nbsp;5
-                                    hardware, which routinely fails or takes hours. We instead track every Python&nbsp;3.12 patch
-                                    release inside the Docker base image so security fixes land without sacrificing reproducible builds.
+                                    Python <strong>3.13.0</strong> is the latest upstream release, but EAS Station uses
+                                    <strong>Python 3.11</strong> to maintain compatibility with Debian bookworm's pre-compiled
+                                    SoapySDR bindings (<code>python3-soapysdr</code>). All critical dependencies including
+                                    <code>scipy==1.14.1</code> and <code>pyttsx3==2.90</code> provide Linux/ARM64 wheels for
+                                    Python&nbsp;3.11, avoiding from-source builds that would pull heavy Fortran and voice-synthesis
+                                    toolchains and exhaust Raspberry Pi&nbsp;5 hardware. We track Python&nbsp;3.11 patch releases
+                                    inside the Docker base image so security fixes land without sacrificing reproducible builds or SDR functionality.
                                 </p>
                             </div>
                         </div>
@@ -335,7 +336,7 @@
                                 <i class="fas fa-server me-2"></i>Backend & Core Services
                             </h3>
                             <ul class="list-unstyled">
-                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Python 3.12+</strong> - Core application language</li>
+                                <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Python 3.11</strong> - Core application language (compatible with Debian bookworm SoapySDR)</li>
                                 <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Flask 3.x</strong> - Web framework with Werkzeug WSGI</li>
                                 <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>Gunicorn</strong> - Production WSGI HTTP server</li>
                                 <li class="mb-2"><i class="fas fa-chevron-right text-muted me-2"></i><strong>SQLAlchemy 2.x</strong> - Database ORM and query builder</li>

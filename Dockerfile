@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
-FROM python:3.12-slim-bookworm
+# Using Python 3.11 to match Debian bookworm's python3-soapysdr bindings
+FROM python:3.11-slim-bookworm
 
 # Prevent Python from writing pyc files and buffering stdout/stderr
 ENV PYTHONDONTWRITEBYTECODE=1 \
