@@ -370,7 +370,7 @@
             <div class="card-body">
                 <div class="row g-4">
                     <div class="col-xl-6">
-                        <div class="alert alert-info-custom mb-4">
+                        <div class="alert alert-info mb-4">
                             <h5 class="fw-bold mb-2"><i class="fas fa-rocket"></i> Welcome to the control panel</h5>
                             <p class="mb-2">Create the first administrator account to unlock the full admin experience. Once the account is saved you will be redirected to the sign-in page.</p>
                             <p class="mb-0 small">
@@ -406,7 +406,7 @@
                                     <input type="password" class="form-control" id="newUserPasswordConfirm" minlength="8" required>
                                     <div class="invalid-feedback">Passwords must match.</div>
                                 </div>
-                                <button type="submit" class="btn btn-custom btn-success w-100">
+                                <button type="submit" class="btn btn-success w-100">
                                     <i class="fas fa-user-shield"></i> Create Administrator Account
                                 </button>
                             </form>
@@ -502,7 +502,7 @@
                                 </div>
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-custom btn-primary">
+                        <button type="submit" class="btn btn-primary">
                             <i class="fas fa-upload"></i> Upload Boundaries
                         </button>
                     </form>
@@ -550,7 +550,7 @@
                                 </div>
                             </div>
                         </div>
-                        <button type="button" class="btn btn-custom btn-info" onclick="previewExtraction()">
+                        <button type="button" class="btn btn-info" onclick="previewExtraction()">
                             <i class="fas fa-eye"></i> Preview Extraction
                         </button>
                     </form>
@@ -597,10 +597,10 @@
                                 <input type="text" id="customDeleteBoundaryType" class="form-control" placeholder="e.g. Rail Corridors">
                                 <div class="form-text">Enter the custom type you previously uploaded to remove it from the system.</div>
                             </div>
-                            <button onclick="deleteBoundariesByType()" class="btn btn-custom btn-warning w-100 mb-2">
+                            <button onclick="deleteBoundariesByType()" class="btn btn-warning w-100 mb-2">
                                 <i class="fas fa-trash-alt"></i> Delete by Type
                             </button>
-                                <button onclick="clearAllBoundaries()" class="btn btn-custom btn-danger w-100">
+                                <button onclick="clearAllBoundaries()" class="btn btn-danger w-100">
                                     <i class="fas fa-exclamation-triangle"></i> Clear ALL
                                 </button>
                             </div>
@@ -618,7 +618,7 @@
                             <i class="fas fa-download fa-2x text-primary mb-3"></i>
                             <h6>CAP Alert Polling</h6>
                             <p class="text-muted small">Manually fetch latest alerts from NOAA</p>
-                            <button onclick="triggerCAPPoll()" class="btn btn-custom btn-primary w-100">
+                            <button onclick="triggerCAPPoll()" class="btn btn-primary w-100">
                                 <i class="fas fa-satellite-dish"></i> Trigger Poll
                             </button>
                         </div>
@@ -632,7 +632,7 @@
                                 <input type="text" class="form-control" id="backupLabel" maxlength="48" placeholder="e.g. pre-upgrade">
                                 <div class="form-text">The label is appended to the timestamped backup folder.</div>
                             </div>
-                            <button id="backupButton" onclick="runOneClickBackup()" class="btn btn-custom btn-success w-100">
+                            <button id="backupButton" onclick="runOneClickBackup()" class="btn btn-success w-100">
                                 <i class="fas fa-save"></i> Run Backup
                             </button>
                             <div id="backupStatus" class="small text-muted mt-2">No backups run yet.</div>
@@ -655,7 +655,7 @@
                                 <input class="form-check-input" type="checkbox" id="upgradeAllowDirty">
                                 <label class="form-check-label small" for="upgradeAllowDirty">Allow dirty git worktree</label>
                             </div>
-                            <button id="upgradeButton" onclick="runOneClickUpgrade()" class="btn btn-custom btn-primary w-100">
+                            <button id="upgradeButton" onclick="runOneClickUpgrade()" class="btn btn-primary w-100">
                                 <i class="fas fa-sync-alt"></i> Run Upgrade
                             </button>
                             <div id="upgradeStatus" class="small text-muted mt-2">No upgrades run yet.</div>
@@ -694,7 +694,7 @@
                                 </div>
                             </div>
                             <div class="form-text mt-2">Provide an identifier for the fastest lookup, or specify a start and end range with the two-letter state code. NOAA manual imports require state-level queries.</div>
-                            <button onclick="manualImportAlert()" class="btn btn-custom btn-secondary w-100 mt-3">
+                            <button onclick="manualImportAlert()" class="btn btn-secondary w-100 mt-3">
                                 <i class="fas fa-cloud-download-alt"></i> Fetch &amp; Save
                             </button>
                             <div id="manualImportResults" class="small text-muted mt-2"></div>
@@ -704,7 +704,7 @@
                             <i class="fas fa-database fa-2x text-success mb-3"></i>
                             <h6>Database Optimization</h6>
                             <p class="text-muted small">Optimize database performance</p>
-                            <button onclick="optimizeDatabase()" class="btn btn-custom btn-success w-100">
+                            <button onclick="optimizeDatabase()" class="btn btn-success w-100">
                                 <i class="fas fa-tools"></i> Optimize DB
                             </button>
                         </div>
@@ -713,7 +713,7 @@
                             <i class="fas fa-sitemap fa-2x text-info mb-3"></i>
                             <h6>Fix Intersections</h6>
                             <p class="text-muted small">Recalculate alert-boundary intersections</p>
-                            <button onclick="recalculateIntersections()" class="btn btn-custom btn-info w-100">
+                            <button onclick="recalculateIntersections()" class="btn btn-info w-100">
                                 <i class="fas fa-link"></i> Fix Intersections
                             </button>
                         </div>
@@ -722,7 +722,7 @@
                             <i class="fas fa-heartbeat fa-2x text-danger mb-3"></i>
                             <h6>Database Health</h6>
                             <p class="text-muted small">Check database health status</p>
-                            <button onclick="checkDatabaseHealth()" class="btn btn-custom btn-danger w-100">
+                            <button onclick="checkDatabaseHealth()" class="btn btn-danger w-100">
                                 <i class="fas fa-stethoscope"></i> Health Check
                             </button>
                         </div>
@@ -754,6 +754,9 @@
                                         <i class="fas fa-sync"></i> Refresh
                                     </button>
                                 </div>
+                                <button type="button" class="btn btn-outline-primary" id="refreshAlertListButton">
+                                    <i class="fas fa-sync"></i> Refresh
+                                </button>
                             </div>
                         </div>
                         <div class="card-body">
@@ -781,40 +784,26 @@
                     <!-- Alert Operations -->
                     <div class="row g-4">
                         <div class="col-md-6">
-                            <div class="card border-success">
-                                <div class="card-body text-center">
-                                    <div class="mb-3">
-                                        <i class="fas fa-bookmark fa-3x text-success"></i>
-                                    </div>
-                                    <h5 class="card-title">Mark Expired Alerts</h5>
-                                    <span class="badge badge-success mb-3">SAFE OPERATION</span>
-                                    <p class="text-muted small">Mark expired alerts as inactive while preserving all data for historical analysis.</p>
-                                    <button onclick="markExpiredAlerts()" class="btn btn-success w-100 mb-2">
-                                        <i class="fas fa-bookmark"></i> Mark as Expired
-                                    </button>
-                                    <div class="alert alert-success py-2 mb-0">
-                                        <small><i class="fas fa-check-circle"></i> Preserves all historical data</small>
-                                    </div>
-                                </div>
+                            <div class="operation-card">
+                                <i class="fas fa-bookmark fa-2x text-success mb-3"></i>
+                                <h6>Mark Expired Alerts (SAFE)</h6>
+                                <p class="text-muted small">Mark expired alerts as inactive while preserving all data for historical analysis.</p>
+                                <button onclick="markExpiredAlerts()" class="btn btn-success w-100">
+                                    <i class="fas fa-bookmark"></i> Mark as Expired
+                                </button>
+                                <small class="text-success mt-2 d-block">✓ Preserves all historical data</small>
                             </div>
                         </div>
 
                         <div class="col-md-6">
-                            <div class="card border-danger">
-                                <div class="card-body text-center">
-                                    <div class="mb-3">
-                                        <i class="fas fa-trash-alt fa-3x text-danger"></i>
-                                    </div>
-                                    <h5 class="card-title">Delete Expired Alerts</h5>
-                                    <span class="badge badge-danger mb-3">DESTRUCTIVE</span>
-                                    <p class="text-muted small">Permanently delete expired alerts from the database. This cannot be undone!</p>
-                                    <button onclick="clearExpiredAlerts()" class="btn btn-danger w-100 mb-2">
-                                        <i class="fas fa-exclamation-triangle"></i> Delete Expired
-                                    </button>
-                                    <div class="alert alert-danger py-2 mb-0">
-                                        <small><i class="fas fa-exclamation-triangle"></i> Permanently removes historical data</small>
-                                    </div>
-                                </div>
+                            <div class="operation-card border-danger">
+                                <i class="fas fa-trash-alt fa-2x text-danger mb-3"></i>
+                                <h6>Delete Expired Alerts (DESTRUCTIVE)</h6>
+                                <p class="text-muted small">Permanently delete expired alerts from the database. This cannot be undone!</p>
+                                <button onclick="clearExpiredAlerts()" class="btn btn-danger w-100">
+                                    <i class="fas fa-exclamation-triangle"></i> Delete Expired
+                                </button>
+                                <small class="text-danger mt-2 d-block">⚠️ Permanently removes historical data</small>
                             </div>
                         </div>
                     </div>
@@ -870,7 +859,7 @@
                                         <input type="password" class="form-control" id="newUserPasswordConfirm" minlength="8" required>
                                         <div class="invalid-feedback">Passwords must match.</div>
                                     </div>
-                                    <button type="submit" class="btn btn-custom btn-success w-100">
+                                    <button type="submit" class="btn btn-success w-100">
                                         <i class="fas fa-user-shield"></i> Create Administrator
                                     </button>
                                 </form>
@@ -1019,7 +1008,7 @@
                                 <small class="text-muted">These lines are used for canned messages and previews.</small>
                             </div>
                             <div class="col-12 d-flex align-items-center">
-                                <button type="submit" class="btn btn-custom btn-primary">
+                                <button type="submit" class="btn btn-primary">
                                     <i class="fas fa-save"></i> Save Location Settings
                                 </button>
                                 <button type="button" class="btn btn-outline-secondary ms-2" id="resetLocationSettings">
@@ -1442,7 +1431,7 @@
             const footer = document.getElementById('confirmationFooter');
 
             body.innerHTML = `
-                <div class="alert alert-${type}-custom">
+                <div class="alert alert-${type}">
                     <h6>${message}</h6>
                     ${warning ? `<p class="mb-0"><strong>⚠️ Warning:</strong> ${warning}</p>` : ''}
                 </div>
@@ -1471,7 +1460,7 @@
                 const footer = document.getElementById('confirmationFooter');
 
                 body.innerHTML = `
-                    <div class="alert alert-danger-custom">
+                    <div class="alert alert-danger">
                         <h6>${step.message}</h6>
                         ${step.warning ? `<p class="mb-2"><strong>⚠️ Warning:</strong> ${step.warning}</p>` : ''}
                         ${step.textConfirmation ? `
@@ -3395,7 +3384,7 @@
                 html += `
                     <div class="mb-3">
                         <label class="text-uppercase small fw-bold text-muted">Narration Preview</label>
-                        <div class="alert alert-info-custom mb-0">${messageText}</div>
+                        <div class="alert alert-info mb-0">${messageText}</div>
                     </div>
                 `;
             }
@@ -3411,7 +3400,7 @@
             if (components.tts) {
                 html += buildEasAudioCard('Narration / TTS', components.tts, 'Synthesised narration using the configured provider.');
             } else if (data.tts_warning) {
-                html += `<div class="alert alert-warning-custom">${escapeHtml(data.tts_warning)}</div>`;
+                html += `<div class="alert alert-warning">${escapeHtml(data.tts_warning)}</div>`;
             }
             html += buildEasAudioCard('End of Message (EOM)', components.eom, 'Completes the activation with three end-of-message bursts.');
             html += buildEasAudioCard('Composite Package', components.composite, 'Full playback including header, tone, narration, and EOM.');
@@ -3432,7 +3421,7 @@
                     ? actions.join('\n')
                     : '<span class="text-muted small">Archive links unavailable.</span>';
                 html += `
-                    <div class="alert alert-info-custom d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <div>
                             <strong>Archived activation #${escapeHtml(String(activation.id || ''))}</strong>
                             <span class="small text-muted ms-2">Saved at ${escapeHtml(archivedAt)}.</span>
@@ -3508,10 +3497,10 @@
                 return;
             }
             const classes = {
-                success: 'alert-success-custom',
-                danger: 'alert-danger-custom',
-                warning: 'alert-warning-custom',
-                info: 'alert-info-custom',
+                success: 'alert-success',
+                danger: 'alert-danger',
+                warning: 'alert-warning',
+                info: 'alert-info',
             };
             const alertClass = classes[type] || classes.info;
             container.innerHTML = `<div class="alert ${alertClass} mb-0">${escapeHtml(message)}</div>`;
@@ -3620,7 +3609,7 @@
             if (!statusDiv) {
                 return;
             }
-            statusDiv.className = `alert alert-${type}-custom`;
+            statusDiv.className = `alert alert-${type}`;
             statusDiv.innerHTML = `
                 <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-triangle' : 'info-circle'}"></i>
                 ${message}
@@ -4400,7 +4389,7 @@
                 }
             } catch (error) {
                 if (listContainer) {
-                    listContainer.innerHTML = `<div class="alert alert-danger-custom">Failed to load alerts: ${escapeHtml(error.message)}</div>`;
+                    listContainer.innerHTML = `<div class="alert alert-danger">Failed to load alerts: ${escapeHtml(error.message)}</div>`;
                 }
                 if (metaContainer) {
                     metaContainer.textContent = '';
@@ -4427,7 +4416,7 @@
             }
 
             if (!alerts.length) {
-                listContainer.innerHTML = '<div class="alert alert-info-custom">No alerts found for the selected filters.</div>';
+                listContainer.innerHTML = '<div class="alert alert-info">No alerts found for the selected filters.</div>';
                 return;
             }
 
@@ -4917,10 +4906,10 @@
                     html += '</div>';
                     resultsDiv.innerHTML = html;
                 } else {
-                    resultsDiv.innerHTML = `<div class="alert alert-danger-custom">❌ ${result.error}</div>`;
+                    resultsDiv.innerHTML = `<div class="alert alert-danger">❌ ${result.error}</div>`;
                 }
             } catch (error) {
-                resultsDiv.innerHTML = `<div class="alert alert-danger-custom">❌ Error: ${error.message}</div>`;
+                resultsDiv.innerHTML = `<div class="alert alert-danger">❌ Error: ${error.message}</div>`;
             }
         }
 
@@ -4982,11 +4971,11 @@
                     html += '</div>';
                     listDiv.innerHTML = html;
                 } else {
-                    listDiv.innerHTML = '<div class="alert alert-info-custom">No boundaries found. Use the upload form to add boundary files.</div>';
+                    listDiv.innerHTML = '<div class="alert alert-info">No boundaries found. Use the upload form to add boundary files.</div>';
                 }
                 initializeCustomTypeControls();
             } catch (error) {
-                document.getElementById('boundariesList').innerHTML = `<div class="alert alert-danger-custom">Error loading boundaries: ${error.message}</div>`;
+                document.getElementById('boundariesList').innerHTML = `<div class="alert alert-danger">Error loading boundaries: ${error.message}</div>`;
             }
         }
 
@@ -5597,7 +5586,7 @@
                 const result = await response.json();
 
                 if (response.ok) {
-                    let healthHtml = '<div class="alert alert-info-custom"><h6>Database Health Report:</h6>';
+                    let healthHtml = '<div class="alert alert-info"><h6>Database Health Report:</h6>';
                     healthHtml += `<p><strong>Connectivity:</strong> ${result.connectivity}</p>`;
                     healthHtml += `<p><strong>Database Size:</strong> ${result.database_size}</p>`;
                     healthHtml += `<p><strong>Active Connections:</strong> ${result.active_connections}</p>`;
