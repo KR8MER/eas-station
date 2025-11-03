@@ -37,6 +37,7 @@ Welcome to the comprehensive documentation for **EAS Station** - an experimental
 | [**About**](reference/ABOUT.md) | Project mission, architecture, technology stack |
 | [**Changelog**](reference/CHANGELOG.md) | Complete version history and release notes |
 | [**Roadmap**](roadmap/) | Feature planning and requirements |
+| [**DASDEC3 Comparison**](roadmap/DASDEC3_COMPARISON.md) | Gap analysis vs. commercial encoder/decoder |
 | [**License Attribution**](reference/dependency_attribution.md) | Open-source dependencies and licenses |
 | [**Theory of Operation**](architecture/THEORY_OF_OPERATION.md) | End-to-end system flow and SAME protocol internals |
 
@@ -88,7 +89,8 @@ docs/
 │
 └── roadmap/                           ← Feature planning
     ├── master_todo.md                ← Drop-in replacement roadmap
-    └── eas_todo.md                   ← EAS-specific features
+    ├── eas_todo.md                   ← EAS-specific features
+    └── DASDEC3_COMPARISON.md         ← Gap analysis vs. DASDEC3 manual
 ```
 
 ---

@@ -298,6 +298,28 @@
                 </div>
             </div>
 
+            <!-- Hardware & Cost Spotlight -->
+            <div class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4">
+                    <div class="row g-4 align-items-center">
+                        <div class="col-md-5 text-center">
+                            <img src="{{ url_for('static', filename='img/raspberry-pi-hero.svg') }}" alt="Illustration of Raspberry Pi 5 with audio, relay, and SDR callouts" class="img-fluid rounded-3 shadow-sm">
+                            <p class="small text-muted mt-2 mb-0"><i class="fas fa-camera me-2"></i>Reference Raspberry Pi 5 build used throughout the documentation.</p>
+                        </div>
+                        <div class="col-md-7">
+                            <h2 class="h5 mb-3"><i class="fas fa-coins text-warning me-2"></i>Build a DASDEC-Class Station for 12% of the Cost</h2>
+                            <p class="mb-3">The official roadmap targets parity with the Digital Alert Systems DASDEC3 without the $5,000+ appliance. A carefully selected Raspberry Pi 5 (8 GB) paired with balanced audio, GPIO relays, dual SDR capture, NVMe storage, and UPS protection lands at <strong>$585 USD</strong> in 2025 pricing. Everything runs inside containers, making replacements as simple as swapping SD cards or SSDs.</p>
+                            <ul class="list-unstyled small mb-3">
+                                <li class="mb-2"><i class="fas fa-microchip text-success me-2"></i>Pi 5 horsepower keeps narration, SDR verification, and analytics on a single board.</li>
+                                <li class="mb-2"><i class="fas fa-random text-primary me-2"></i>GPIO relays and balanced audio mirror DASDEC3 program/control routing without proprietary cards.</li>
+                                <li class="mb-2"><i class="fas fa-network-wired text-info me-2"></i>USB 3.0 + PCIe NVMe sustain high-duty logging, while redundant SDRs validate retransmissions.</li>
+                            </ul>
+                            <p class="small text-muted mb-0">Compare the open-source stack with the DASDEC3 manual using the <a href="https://github.com/KR8MER/eas-station/blob/main/docs/roadmap/DASDEC3_COMPARISON.md" target="_blank" rel="noopener" class="link-secondary">DASDEC3 capability gap analysis</a>. Keep the vendor user’s guide at <code>docs/Version 5.1 Software_Users Guide_R1.0 5-31-23.pdf</code> for private reference.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Interface Overview -->
             <div id="ui-overview" class="card shadow-sm mb-4 border-0">
                 <div class="card-body p-4">

@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-labelledby="title desc">
+  <title id="title">Raspberry Pi 5 reference build</title>
+  <desc id="desc">Simplified illustration of a Raspberry Pi single-board computer with labeled subsystems used for EAS Station.</desc>
+  <defs>
+    <linearGradient id="board" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#14603B" />
+      <stop offset="100%" stop-color="#0B4027" />
+    </linearGradient>
+    <linearGradient id="shadow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#000" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#000" stop-opacity="0" />
+    </linearGradient>
+    <style>
+      text { font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; fill: #ffffff; }
+      .label { font-size: 16px; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.4); }
+      .annotation { font-size: 14px; font-weight: 500; fill: #E8F5E9; text-shadow: 0 1px 2px rgba(0,0,0,0.45); }
+    </style>
+  </defs>
+  <rect width="640" height="360" fill="#0d1b2a" />
+  <rect x="60" y="60" width="520" height="240" rx="24" ry="24" fill="url(#board)" stroke="#35A76A" stroke-width="6" />
+  <rect x="90" y="90" width="160" height="200" rx="16" ry="16" fill="#263238" stroke="#9E9E9E" stroke-width="4" />
+  <rect x="270" y="90" width="220" height="120" rx="16" ry="16" fill="#1B263B" stroke="#7C4DFF" stroke-width="4" />
+  <rect x="510" y="110" width="40" height="140" rx="6" ry="6" fill="#ECEFF1" stroke="#B0BEC5" stroke-width="4" />
+  <rect x="270" y="230" width="120" height="60" rx="12" ry="12" fill="#37474F" stroke="#26C6DA" stroke-width="4" />
+  <rect x="410" y="230" width="80" height="60" rx="12" ry="12" fill="#37474F" stroke="#FFB74D" stroke-width="4" />
+  <circle cx="170" cy="190" r="30" fill="#212121" stroke="#4CAF50" stroke-width="6" />
+  <circle cx="210" cy="220" r="18" fill="#00695C" stroke="#80CBC4" stroke-width="4" />
+  <circle cx="120" cy="210" r="18" fill="#00897B" stroke="#A5D6A7" stroke-width="4" />
+  <rect x="100" y="110" width="140" height="20" rx="10" ry="10" fill="#455A64" />
+  <circle cx="560" cy="150" r="10" fill="#CFD8DC" />
+  <circle cx="560" cy="210" r="10" fill="#CFD8DC" />
+  <path d="M70 280h500l-20 40H90z" fill="url(#shadow)" opacity="0.5" />
+  <g>
+    <line x1="170" y1="90" x2="170" y2="40" stroke="#80CBC4" stroke-width="3" stroke-dasharray="6 6" />
+    <rect x="120" y="10" width="100" height="40" rx="12" ry="12" fill="#1B5E20" stroke="#A5D6A7" stroke-width="3" />
+    <text x="170" y="36" text-anchor="middle" class="label">CM4/BCM2712</text>
+  </g>
+  <g>
+    <line x1="380" y1="90" x2="380" y2="30" stroke="#B39DDB" stroke-width="3" stroke-dasharray="6 6" />
+    <rect x="310" y="-10" width="140" height="60" rx="12" ry="12" fill="#311B92" stroke="#9575CD" stroke-width="3" />
+    <text x="380" y="16" text-anchor="middle" class="label">LPDDR4X 8 GB</text>
+    <text x="380" y="36" text-anchor="middle" class="annotation">for Polly/Narration</text>
+  </g>
+  <g>
+    <line x1="560" y1="110" x2="610" y2="70" stroke="#90A4AE" stroke-width="3" stroke-dasharray="6 6" />
+    <rect x="560" y="40" width="110" height="40" rx="12" ry="12" fill="#263238" stroke="#ECEFF1" stroke-width="3" />
+    <text x="615" y="66" text-anchor="middle" class="label">GPIO Relay Bank</text>
+  </g>
+  <g>
+    <line x1="320" y1="260" x2="280" y2="320" stroke="#26C6DA" stroke-width="3" stroke-dasharray="6 6" />
+    <rect x="220" y="320" width="160" height="40" rx="12" ry="12" fill="#004D40" stroke="#4DB6AC" stroke-width="3" />
+    <text x="300" y="346" text-anchor="middle" class="label">Balanced Audio HAT</text>
+  </g>
+  <g>
+    <line x1="450" y1="260" x2="470" y2="330" stroke="#FFCC80" stroke-width="3" stroke-dasharray="6 6" />
+    <rect x="440" y="320" width="150" height="40" rx="12" ry="12" fill="#BF360C" stroke="#FFB74D" stroke-width="3" />
+    <text x="515" y="346" text-anchor="middle" class="label">Dual SDR Capture</text>
+  </g>
+  <text x="320" y="140" text-anchor="middle" class="annotation">PCIe 2.0 x1 slot for M.2 NVMe storage<br/>high-duty-cycle logging + CAP cache</text>
+  <text x="320" y="210" text-anchor="middle" class="annotation">USB 3.0, HDMI 2.0, PoE+ ready<br/>for studio integration + monitoring</text>
+  <text x="170" y="190" text-anchor="middle" class="annotation">Tensor compute<br/>for speech + ML QA</text>
+</svg>

@@ -26,6 +26,22 @@ While the codebase remains hardware-agnostic, the following Raspberry Pi-based s
 
 All documentation and tooling emphasise a guided setup process so integrators can reproduce the build with off-the-shelf components instead of bespoke rack units.
 
+<p align="center">
+  <img src="static/img/raspberry-pi-hero.svg" alt="Illustration of the Raspberry Pi 5 reference build highlighting GPIO relays, balanced audio, and SDR capture" width="640" />
+</p>
+
+### Raspberry Pi Heritage & Project History
+
+- **2012 – Raspberry Pi Model B arrives:** A $35 SBC capable of decoding HD video proves that accessible, low-cost hardware can shoulder broadcast workloads. Early CAP/SAME experiments by the maintainer took place on Pi 1 hardware with USB sound cards and shell scripts.
+- **2016 – Pi 3 automation pilots:** Integrated Wi-Fi and faster ARM cores made it feasible to poll NOAA CAP feeds and synthesize audio concurrently. This is when the first `multimon-ng` parity tests began.
+- **2020 – Pi 4 lab deployments:** Quad-core Cortex-A72 CPUs, USB 3.0, and true gigabit Ethernet unlocked simultaneous capture and playout without resorting to desktop PCs. EAS Station’s first Flask dashboard prototypes came together during this era.
+- **2023 – Pi 5 generational leap:** PCIe 2.0, LPDDR4X memory, and the BCM2712 SoC offer enough headroom for text-to-speech narration, SDR capture, and compliance analytics to run on a single board. The current roadmap standardises on Pi 5 with NVMe storage to survive 24/7 logging.
+- **2024 – Project maturation:** GPIO relay orchestration, LED sign integration, and SDR verification landed, setting the stage for a complete encoder/decoder replacement driven entirely by software.
+
+EAS Station’s north star is to replicate the capabilities of a Digital Alert Systems DASDEC3 without the $5,000–$7,000 appliance price tag. A Raspberry Pi 5-based build with relays, balanced audio, dual SDRs, and protective power comes in under $600 in 2025 USD—less than 12 % of the DASDEC3 baseline. The saved budget can be invested in redundancy, external monitoring, or additional receivers instead of proprietary chassis upgrades.
+
+For a feature-by-feature comparison, see [`docs/roadmap/DASDEC3_COMPARISON.md`](docs/roadmap/DASDEC3_COMPARISON.md), which distils the publicly available **Digital Alert Systems DASDEC3 Version 5.1 Software User’s Guide** into a living roadmap for EAS Station.
+
 [![CI status](https://github.com/KR8MER/eas-station/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/KR8MER/eas-station/actions/workflows/build.yml)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://www.docker.com/)
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-blue?logo=python)](https://www.python.org/)

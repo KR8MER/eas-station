@@ -171,6 +171,32 @@
             </div>
         </div>
 
+        <!-- Raspberry Pi Heritage -->
+        <div class="card shadow-sm mb-4 border-0">
+            <div class="card-body p-4">
+                <div class="row g-4 align-items-center">
+                    <div class="col-lg-5 text-center">
+                        <img src="{{ url_for('static', filename='img/raspberry-pi-hero.svg') }}"
+                             alt="Diagram showing the Raspberry Pi 5 reference build with GPIO relays, balanced audio, and dual SDR capture"
+                             class="img-fluid rounded-3 shadow-sm">
+                        <p class="small text-muted mt-2 mb-0"><i class="fas fa-image me-2"></i>Illustration of the documented Pi 5 build.</p>
+                    </div>
+                    <div class="col-lg-7">
+                        <h2 class="h4 mb-3"><i class="fas fa-history text-secondary me-2"></i>Raspberry Pi Heritage & Cost Advantage</h2>
+                        <p class="mb-3">EAS Station exists because commodity single-board computers evolved fast enough to shoulder commercial-grade alerting. The timeline below shows how each Raspberry Pi generation unlocked the workflows now automated in software:</p>
+                        <ul class="list-unstyled mb-3">
+                            <li class="mb-2"><strong>2012 – Model B:</strong> Shell scripts on a $35 board generated SAME bursts with USB DACs—proof that the stack could be democratized.</li>
+                            <li class="mb-2"><strong>2016 – Pi 3:</strong> Quad-core CPUs plus on-board Wi-Fi enabled simultaneous CAP polling and narration.</li>
+                            <li class="mb-2"><strong>2020 – Pi 4:</strong> USB 3.0 and gigabit Ethernet stabilized dual-SDR capture and GPIO relay orchestration.</li>
+                            <li class="mb-2"><strong>2023 – Pi 5:</strong> PCIe storage, LPDDR4X RAM, and BCM2712 horsepower empowered SDR verification, compliance analytics, and narration on a single board.</li>
+                        </ul>
+                        <p class="mb-3">A fully appointed Pi 5 build with balanced audio, dual RTL-SDR receivers, NVMe storage, relay automation, and UPS support totals roughly <strong>$585 USD</strong> in 2025 pricing. Comparable Digital Alert Systems DASDEC3 appliances list between <strong>$5,000 and $7,000 USD</strong>, underscoring why the project channels effort into software reliability instead of proprietary rack hardware.</p>
+                        <p class="mb-0">For a capability-by-capability comparison with the DASDEC3 manual, review the <a href="https://github.com/KR8MER/eas-station/blob/main/docs/roadmap/DASDEC3_COMPARISON.md" class="link-primary" target="_blank" rel="noopener">roadmap gap analysis</a> and keep a copy of the <em>DASDEC3 Version 5.1 Software User’s Guide</em> on hand for parity tracking.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- System Architecture -->
         <div class="card shadow-sm mb-4 border-0">
             <div class="card-body p-4">
