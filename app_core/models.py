@@ -209,7 +209,7 @@ class EASMessage(db.Model):
     buffer_audio_data = db.Column(db.LargeBinary)
     text_payload = db.Column(db.JSON, default=dict)
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
-    metadata_payload = db.Column("metadata", db.JSON, default=dict)
+    metadata_payload = db.Column(db.JSON, default=dict)
 
     cap_alert = db.relationship(
         "CAPAlert",
