@@ -388,22 +388,22 @@
                     <div class="col-xl-6">
                         <div class="border rounded-4 p-4 h-100" style="background: var(--light-color);">
                             <h5 class="fw-bold mb-3"><i class="fas fa-user-plus text-success"></i> Create Administrator</h5>
-                            <form id="createUserForm" class="needs-validation" novalidate>
+                            <form id="createUserForm-setup" class="needs-validation" novalidate>
                                 <div class="mb-3">
-                                    <label for="newUserUsername" class="form-label">Username</label>
-                                    <input type="text" class="form-control" id="newUserUsername" name="username" pattern="[A-Za-z0-9_.-]{3,64}" required autofocus>
+                                    <label for="newUserUsername-setup" class="form-label">Username</label>
+                                    <input type="text" class="form-control" id="newUserUsername-setup" name="username" pattern="[A-Za-z0-9_.-]{3,64}" required autofocus>
                                     <div class="form-text">3-64 characters: letters, numbers, dot, dash, and underscore only.</div>
                                     <div class="invalid-feedback">Enter a valid username (letters, numbers, dot, dash, underscore).</div>
                                 </div>
                                 <div class="mb-3">
-                                    <label for="newUserPassword" class="form-label">Password</label>
-                                    <input type="password" class="form-control" id="newUserPassword" name="password" minlength="8" required>
+                                    <label for="newUserPassword-setup" class="form-label">Password</label>
+                                    <input type="password" class="form-control" id="newUserPassword-setup" name="password" minlength="8" required>
                                     <div class="form-text">Passwords are stored using salted SHA-256 hashes.</div>
                                     <div class="invalid-feedback">Password must be at least 8 characters long.</div>
                                 </div>
                                 <div class="mb-3">
-                                    <label for="newUserPasswordConfirm" class="form-label">Confirm Password</label>
-                                    <input type="password" class="form-control" id="newUserPasswordConfirm" minlength="8" required>
+                                    <label for="newUserPasswordConfirm-setup" class="form-label">Confirm Password</label>
+                                    <input type="password" class="form-control" id="newUserPasswordConfirm-setup" minlength="8" required>
                                     <div class="invalid-feedback">Passwords must match.</div>
                                 </div>
                                 <button type="submit" class="btn btn-success w-100">
@@ -790,9 +790,6 @@
                                         <i class="fas fa-sync"></i> Refresh
                                     </button>
                                 </div>
-                                <button type="button" class="btn btn-outline-primary" id="refreshAlertListButton">
-                                    <i class="fas fa-sync"></i> Refresh
-                                </button>
                             </div>
                         </div>
                         <div class="card-body">
@@ -1543,9 +1540,9 @@
         }
 
         function initializeUserManagement() {
-            const form = document.getElementById('createUserForm');
-            const passwordInput = document.getElementById('newUserPassword');
-            const confirmInput = document.getElementById('newUserPasswordConfirm');
+            const form = document.getElementById('createUserForm') || document.getElementById('createUserForm-setup');
+            const passwordInput = document.getElementById('newUserPassword') || document.getElementById('newUserPassword-setup');
+            const confirmInput = document.getElementById('newUserPasswordConfirm') || document.getElementById('newUserPasswordConfirm-setup');
             if (!form || !passwordInput || !confirmInput) {
                 return;
             }
