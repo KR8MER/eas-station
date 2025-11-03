@@ -12,65 +12,19 @@
             box-shadow: 0 4px 20px var(--shadow-color);
         }
 
-        .admin-card {
-            background-color: var(--bg-color);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            box-shadow: 0 4px 15px var(--shadow-color);
-            transition: all 0.3s ease;
-            margin-bottom: 0.5rem;
-            overflow: hidden;
-        }
+        
 
-        .admin-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px var(--shadow-color);
-        }
+        
 
-        .card-header-custom {
-            background: linear-gradient(135deg, var(--light-color), var(--border-color));
-            border-bottom: 2px solid var(--primary-color);
-            padding: 1.5rem;
-        }
-
-        .tabs-container {
+        
             border-bottom: 3px solid var(--border-color);
             background: var(--light-color);
             border-radius: 12px 12px 0 0;
         }
 
-        .nav-tabs-custom {
-            border: none;
-            padding: 0.5rem 1rem;
-        }
+        
 
-        .nav-tabs-custom .nav-link {
-            border: none;
-            background: transparent;
-            color: var(--text-color);
-            padding: 1rem 1.5rem;
-            margin: 0 0.25rem;
-            border-radius: 8px 8px 0 0;
-            transition: all 0.3s ease;
-            font-weight: 500;
-        }
-
-        .nav-tabs-custom .nav-link:hover {
-            background: var(--primary-color);
-            color: white;
-            transform: translateY(-2px);
-        }
-
-        .nav-tabs-custom .nav-link.active {
-            background: var(--primary-color);
-            color: white;
-            border-bottom: 3px solid var(--info-color);
-        }
-
-        .tab-content-custom {
-            padding: 1rem 2rem 2rem 2rem;
-            min-height: 0;
-        }
+        
 
         .form-control, .form-select {
             background-color: var(--bg-color);
@@ -157,20 +111,7 @@
             margin: 1.5rem 0;
         }
 
-        .operation-card {
-            background: var(--bg-color);
-            border: 2px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1.5rem;
-            text-align: center;
-            transition: all 0.3s ease;
-        }
-
-        .operation-card:hover {
-            border-color: var(--primary-color);
-            transform: translateY(-3px);
-            box-shadow: 0 10px 30px var(--shadow-color);
-        }
+        
 
         .alert-custom {
             border-radius: 8px;
@@ -218,10 +159,7 @@
             to { transform: rotate(360deg); }
         }
 
-        .confirmation-modal {
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(5px);
-        }
+        
 
         .modal-content {
             background: var(--bg-color);
@@ -276,19 +214,19 @@
                 grid-template-columns: 1fr;
             }
 
-            .nav-tabs-custom .nav-link {
+            
                 padding: 0.75rem 1rem;
                 font-size: 0.9rem;
             }
 
-            .tab-content-custom {
+            
                 padding: 0.75rem 1rem 1rem 1rem;
             }
         }
 
         /* Print styles */
         @media print {
-            .keyboard-shortcuts, .nav-tabs-custom {
+            .keyboard-shortcuts {
                 display: none !important;
             }
         }
@@ -331,10 +269,10 @@
 
     <div class="container-fluid">
         <!-- System Overview -->
-        <div class="admin-card">
-            <div class="card-header-custom">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
                 <h5 class="mb-0">
-                    <i class="fas fa-tachometer-alt text-primary"></i> System Overview
+                    <i class="fas fa-tachometer-alt"></i> System Overview
                 </h5>
             </div>
             <div class="card-body">
@@ -360,11 +298,11 @@
         </div>
 
         <!-- Main Admin Interface -->
-        <div class="admin-card">
+        <div class="card shadow-sm">
             {% if setup_mode %}
-            <div class="card-header-custom">
+            <div class="card-header bg-success text-white">
                 <h5 class="mb-0">
-                    <i class="fas fa-user-shield text-success"></i> First-Time Administrator Setup
+                    <i class="fas fa-user-shield"></i> First-Time Administrator Setup
                 </h5>
             </div>
             <div class="card-body">
@@ -416,8 +354,8 @@
                 </div>
             </div>
             {% else %}
-            <div class="tabs-container">
-                <ul class="nav nav-tabs nav-tabs-custom" id="adminTabs" role="tablist">
+            <div class="container-fluid">
+                <ul class="nav nav-tabs" id="adminTabs" role="tablist">
                     <li class="nav-item" role="presentation">
                         <button class="nav-link active" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload" type="button" role="tab">
                             <i class="fas fa-upload"></i> Upload Files
@@ -461,7 +399,7 @@
                 </ul>
             </div>
 
-            <div class="tab-content tab-content-custom" id="adminTabContent">
+            <div class="tab-content" id="adminTabContent">
                 <!-- Upload Tab -->
                 <div class="tab-pane fade show active" id="upload" role="tabpanel">
                     <!-- Page Header -->
@@ -612,7 +550,7 @@
                         </div>
                         <div class="col-md-4">
                             <h5>Bulk Operations</h5>
-                            <div class="operation-card">
+                            <div class="card shadow-sm h-100">
                             <h6>Delete by Type</h6>
                             <select id="deleteType" class="form-select mb-3">
                                 <option value="">Select boundary type...</option>
@@ -653,118 +591,146 @@
                         <p class="text-muted">Perform manual system operations and maintenance tasks.</p>
                     </div>
 
-                    <div class="operation-grid">
-                        <div class="operation-card">
-                            <i class="fas fa-download fa-2x text-primary mb-3"></i>
-                            <h6>CAP Alert Polling</h6>
-                            <p class="text-muted small">Manually fetch latest alerts from NOAA</p>
-                            <button onclick="triggerCAPPoll()" class="btn btn-primary w-100">
-                                <i class="fas fa-satellite-dish"></i> Trigger Poll
-                            </button>
+                    <div class="row g-3">
+                        <div class="col-md-6 col-lg-4">
+                            <div class="card shadow-sm h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-download fa-2x text-primary mb-3"></i>
+                                    <h6>CAP Alert Polling</h6>
+                                    <p class="text-muted small">Manually fetch latest alerts from NOAA</p>
+                                    <button onclick="triggerCAPPoll()" class="btn btn-primary w-100">
+                                        <i class="fas fa-satellite-dish"></i> Trigger Poll
+                                    </button>
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="operation-card">
-                            <i class="fas fa-hdd fa-2x text-success mb-3"></i>
-                            <h6>One-Button Backup</h6>
+                        <div class="col-md-6 col-lg-4">
+                            <div class="card shadow-sm h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-hdd fa-2x text-success mb-3"></i>
+                                    <h6>One-Button Backup</h6>
                             <p class="text-muted small">Snapshot the configuration and database using the backup helper.</p>
+                                    <div class="mb-2">
+                                        <label class="form-label small fw-semibold" for="backupLabel">Optional label</label>
+                                        <input type="text" class="form-control" id="backupLabel" maxlength="48" placeholder="e.g. pre-upgrade">
+                                        <div class="form-text">The label is appended to the timestamped backup folder.</div>
+                                    </div>
+                                    <button id="backupButton" onclick="runOneClickBackup()" class="btn btn-success w-100">
+                                        <i class="fas fa-save"></i> Run Backup
+                                    </button>
+                                    <div id="backupStatus" class="small text-muted mt-2">No backups run yet.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 col-lg-4">
+                            <div class="card shadow-sm h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-level-up-alt fa-2x text-primary mb-3"></i>
+                                    <h6>One-Button Upgrade</h6>
+                                    <p class="text-muted small">Fetch updates, rebuild containers, and restart services in place.</p>
                             <div class="mb-2">
-                                <label class="form-label small fw-semibold" for="backupLabel">Optional label</label>
-                                <input type="text" class="form-control" id="backupLabel" maxlength="48" placeholder="e.g. pre-upgrade">
-                                <div class="form-text">The label is appended to the timestamped backup folder.</div>
-                            </div>
-                            <button id="backupButton" onclick="runOneClickBackup()" class="btn btn-success w-100">
-                                <i class="fas fa-save"></i> Run Backup
-                            </button>
-                            <div id="backupStatus" class="small text-muted mt-2">No backups run yet.</div>
-                        </div>
-
-                        <div class="operation-card">
-                            <i class="fas fa-level-up-alt fa-2x text-primary mb-3"></i>
-                            <h6>One-Button Upgrade</h6>
-                            <p class="text-muted small">Fetch updates, rebuild containers, and restart services in place.</p>
-                            <div class="mb-2">
-                                <label class="form-label small fw-semibold" for="upgradeCheckout">Checkout ref (optional)</label>
-                                <input type="text" class="form-control" id="upgradeCheckout" placeholder="e.g. v2.3.1">
-                                <div class="form-text">Leave blank to stay on the current branch.</div>
-                            </div>
-                            <div class="form-check form-switch text-start mb-2">
-                                <input class="form-check-input" type="checkbox" id="upgradeSkipMigrations">
-                                <label class="form-check-label small" for="upgradeSkipMigrations">Skip database migrations</label>
-                            </div>
-                            <div class="form-check form-switch text-start mb-3">
-                                <input class="form-check-input" type="checkbox" id="upgradeAllowDirty">
-                                <label class="form-check-label small" for="upgradeAllowDirty">Allow dirty git worktree</label>
-                            </div>
-                            <button id="upgradeButton" onclick="runOneClickUpgrade()" class="btn btn-primary w-100">
-                                <i class="fas fa-sync-alt"></i> Run Upgrade
-                            </button>
-                            <div id="upgradeStatus" class="small text-muted mt-2">No upgrades run yet.</div>
-                        </div>
-
-                        <div class="operation-card">
-                            <i class="fas fa-history fa-2x text-secondary mb-3"></i>
-                            <h6>Import Archived Alert</h6>
-                            <p class="text-muted small">Query NOAA for specific alerts (including expired) and store them locally.</p>
-                            <div class="mb-3">
-                                <label class="form-label">Alert Identifier</label>
-                                <input type="text" class="form-control" id="manualAlertIdentifier" placeholder="e.g. NWS-ID-123456" autocomplete="off">
-                            </div>
-                            <div class="row g-2">
-                                <div class="col-md-6">
-                                    <label class="form-label">Start (local)</label>
-                                    <input type="datetime-local" class="form-control" id="manualAlertStart">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">End (local)</label>
-                                    <input type="datetime-local" class="form-control" id="manualAlertEnd">
+                                        <label class="form-label small fw-semibold" for="upgradeCheckout">Checkout ref (optional)</label>
+                                        <input type="text" class="form-control" id="upgradeCheckout" placeholder="e.g. v2.3.1">
+                                        <div class="form-text">Leave blank to stay on the current branch.</div>
+                                    </div>
+                                    <div class="form-check form-switch text-start mb-2">
+                                        <input class="form-check-input" type="checkbox" id="upgradeSkipMigrations">
+                                        <label class="form-check-label small" for="upgradeSkipMigrations">Skip database migrations</label>
+                                    </div>
+                                    <div class="form-check form-switch text-start mb-3">
+                                        <input class="form-check-input" type="checkbox" id="upgradeAllowDirty">
+                                        <label class="form-check-label small" for="upgradeAllowDirty">Allow dirty git worktree</label>
+                                    </div>
+                                    <button id="upgradeButton" onclick="runOneClickUpgrade()" class="btn btn-primary w-100">
+                                        <i class="fas fa-sync-alt"></i> Run Upgrade
+                                    </button>
+                                    <div id="upgradeStatus" class="small text-muted mt-2">No upgrades run yet.</div>
                                 </div>
                             </div>
-                            <div class="row g-2">
-                                <div class="col-md-4">
-                                    <label class="form-label">State (2-letter)</label>
-                                    <input type="text" class="form-control" id="manualAlertArea" value="OH" placeholder="e.g. OH" maxlength="2">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">Event Filter (optional)</label>
-                                    <input type="text" class="form-control" id="manualAlertEvent" placeholder="e.g. Tornado Warning">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">Result Limit</label>
-                                    <input type="number" class="form-control" id="manualAlertLimit" min="1" max="50" value="5">
+                        </div>
+
+                        <div class="col-md-6 col-lg-4">
+                            <div class="card shadow-sm h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-history fa-2x text-secondary mb-3"></i>
+                                    <h6>Import Archived Alert</h6>
+                                    <p class="text-muted small">Query NOAA for specific alerts (including expired) and store them locally.</p>
+                                    <div class="mb-3">
+                                        <label class="form-label">Alert Identifier</label>
+                                        <input type="text" class="form-control" id="manualAlertIdentifier" placeholder="e.g. NWS-ID-123456" autocomplete="off">
+                                    </div>
+                                    <div class="row g-2">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Start (local)</label>
+                                            <input type="datetime-local" class="form-control" id="manualAlertStart">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">End (local)</label>
+                                            <input type="datetime-local" class="form-control" id="manualAlertEnd">
+                                        </div>
+                                    </div>
+                                    <div class="row g-2">
+                                        <div class="col-md-4">
+                                            <label class="form-label">State (2-letter)</label>
+                                            <input type="text" class="form-control" id="manualAlertArea" value="OH" placeholder="e.g. OH" maxlength="2">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Event Filter (optional)</label>
+                                            <input type="text" class="form-control" id="manualAlertEvent" placeholder="e.g. Tornado Warning">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Result Limit</label>
+                                            <input type="number" class="form-control" id="manualAlertLimit" min="1" max="50" value="5">
+                                        </div>
+                                    </div>
+                                    <div class="form-text mt-2">Provide an identifier for the fastest lookup, or specify a start and end range with the two-letter state code. NOAA manual imports require state-level queries.</div>
+                                    <button onclick="manualImportAlert()" class="btn btn-secondary w-100 mt-3">
+                                        <i class="fas fa-cloud-download-alt"></i> Fetch &amp; Save
+                                    </button>
+                                    <div id="manualImportResults" class="small text-muted mt-2"></div>
                                 </div>
                             </div>
-                            <div class="form-text mt-2">Provide an identifier for the fastest lookup, or specify a start and end range with the two-letter state code. NOAA manual imports require state-level queries.</div>
-                            <button onclick="manualImportAlert()" class="btn btn-secondary w-100 mt-3">
-                                <i class="fas fa-cloud-download-alt"></i> Fetch &amp; Save
-                            </button>
-                            <div id="manualImportResults" class="small text-muted mt-2"></div>
                         </div>
 
-                        <div class="operation-card">
-                            <i class="fas fa-database fa-2x text-success mb-3"></i>
-                            <h6>Database Optimization</h6>
-                            <p class="text-muted small">Optimize database performance</p>
-                            <button onclick="optimizeDatabase()" class="btn btn-success w-100">
-                                <i class="fas fa-tools"></i> Optimize DB
-                            </button>
+                        <div class="col-md-6 col-lg-4">
+                            <div class="card shadow-sm h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-database fa-2x text-success mb-3"></i>
+                                    <h6>Database Optimization</h6>
+                                    <p class="text-muted small">Optimize database performance</p>
+                                    <button onclick="optimizeDatabase()" class="btn btn-success w-100">
+                                        <i class="fas fa-tools"></i> Optimize DB
+                                    </button>
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="operation-card">
-                            <i class="fas fa-sitemap fa-2x text-info mb-3"></i>
-                            <h6>Fix Intersections</h6>
-                            <p class="text-muted small">Recalculate alert-boundary intersections</p>
-                            <button onclick="recalculateIntersections()" class="btn btn-info w-100">
-                                <i class="fas fa-link"></i> Fix Intersections
-                            </button>
+                        <div class="col-md-6 col-lg-4">
+                            <div class="card shadow-sm h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-sitemap fa-2x text-info mb-3"></i>
+                                    <h6>Fix Intersections</h6>
+                                    <p class="text-muted small">Recalculate alert-boundary intersections</p>
+                                    <button onclick="recalculateIntersections()" class="btn btn-info w-100">
+                                        <i class="fas fa-link"></i> Fix Intersections
+                                    </button>
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="operation-card">
-                            <i class="fas fa-heartbeat fa-2x text-danger mb-3"></i>
-                            <h6>Database Health</h6>
-                            <p class="text-muted small">Check database health status</p>
-                            <button onclick="checkDatabaseHealth()" class="btn btn-danger w-100">
-                                <i class="fas fa-stethoscope"></i> Health Check
-                            </button>
+                        <div class="col-md-6 col-lg-4">
+                            <div class="card shadow-sm h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-heartbeat fa-2x text-danger mb-3"></i>
+                                    <h6>Database Health</h6>
+                                    <p class="text-muted small">Check database health status</p>
+                                    <button onclick="checkDatabaseHealth()" class="btn btn-danger w-100">
+                                        <i class="fas fa-stethoscope"></i> Health Check
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -821,27 +787,33 @@
                     <!-- Alert Operations -->
                     <div class="row g-4">
                         <div class="col-md-6">
-                            <div class="operation-card">
-                                <i class="fas fa-bookmark fa-2x text-success mb-3"></i>
-                                <h6>Mark Expired Alerts (SAFE)</h6>
-                                <p class="text-muted small">Mark expired alerts as inactive while preserving all data for historical analysis.</p>
-                                <button onclick="markExpiredAlerts()" class="btn btn-success w-100">
-                                    <i class="fas fa-bookmark"></i> Mark as Expired
-                                </button>
-                                <small class="text-success mt-2 d-block">✓ Preserves all historical data</small>
+                            <div class="card shadow-sm h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-bookmark fa-2x text-success mb-3"></i>
+                                    <h6>Mark Expired Alerts (SAFE)</h6>
+                                    <p class="text-muted small">Mark expired alerts as inactive while preserving all data for historical analysis.</p>
+                                    <button onclick="markExpiredAlerts()" class="btn btn-success w-100">
+                                        <i class="fas fa-bookmark"></i> Mark as Expired
+                                    </button>
+                                    <small class="text-success mt-2 d-block">✓ Preserves all historical data</small>
+                                </div>
                             </div>
                         </div>
 
                         <div class="col-md-6">
-                            <div class="operation-card border-danger">
-                                <i class="fas fa-trash-alt fa-2x text-danger mb-3"></i>
-                                <h6>Delete Expired Alerts (DESTRUCTIVE)</h6>
-                                <p class="text-muted small">Permanently delete expired alerts from the database. This cannot be undone!</p>
-                                <button onclick="clearExpiredAlerts()" class="btn btn-danger w-100">
-                                    <i class="fas fa-exclamation-triangle"></i> Delete Expired
-                                </button>
-                                <small class="text-danger mt-2 d-block">⚠️ Permanently removes historical data</small>
+                            <div class="card shadow-sm h-100 border-danger">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-trash-alt fa-2x text-danger mb-3"></i>
+                                    <h6>Delete Expired Alerts (DESTRUCTIVE)</h6>
+                                    <p class="text-muted small">Permanently delete expired alerts from the database. This cannot be undone!</p>
+                                    <button onclick="clearExpiredAlerts()" class="btn btn-danger w-100">
+                                        <i class="fas fa-exclamation-triangle"></i> Delete Expired
+                                    </button>
+                                    <small class="text-danger mt-2 d-block">⚠️ Permanently removes historical data</small>
+                                </div>
                             </div>
+                        </div>
+                    </div>
                         </div>
                     </div>
                 </div>
@@ -1066,10 +1038,10 @@
             </div>
             <!-- End of tab-content -->
             </div>
-            <!-- End of tabs-container -->
+            <!-- End of tab container -->
             {% endif %}
         </div>
-        <!-- End of admin-card -->
+        <!-- End of admin cards -->
 
         <!-- Operation Status -->
         <div id="operationStatus" class="mt-3" style="display: none;"></div>
@@ -1077,7 +1049,7 @@
 
     {% if not setup_mode %}
     <!-- Confirmation Modal -->
-    <div class="modal fade confirmation-modal" id="confirmationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
@@ -4997,9 +4969,10 @@
                         const displayLabel = group.label || formatBoundaryLabel(typeKey);
                         html += `
                             <div class="col-md-6 col-lg-4 mb-3">
-                                <div class="operation-card">
-                                    <h6>${escapeHtml(displayLabel)} (${boundaries.length})</h6>
-                                    <div style="max-height: 200px; overflow-y: auto;">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body">
+                                        <h6>${escapeHtml(displayLabel)} (${boundaries.length})</h6>
+                                        <div style="max-height: 200px; overflow-y: auto;">
                         `;
                         boundaries.slice(0, 10).forEach(boundary => {
                             html += `
