@@ -41,6 +41,38 @@
             color: var(--text-color);
         }
 
+        .btn-custom {
+            border-radius: 8px;
+            padding: 0.75rem 1.5rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border: none;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-custom:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px var(--shadow-color);
+        }
+
+        .btn-custom.btn-primary {
+            background: linear-gradient(135deg, var(--primary-color), var(--info-color));
+        }
+
+        .btn-custom.btn-success {
+            background: linear-gradient(135deg, var(--success-color), #20c997);
+        }
+
+        .btn-custom.btn-danger {
+            background: linear-gradient(135deg, var(--danger-color), #e74c3c);
+        }
+
+        .btn-custom.btn-warning {
+            background: linear-gradient(135deg, var(--warning-color), #f39c12);
+            color: var(--dark-color);
+        }
+
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
