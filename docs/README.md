@@ -38,6 +38,7 @@ Welcome to the comprehensive documentation for **EAS Station** - an experimental
 | [**Changelog**](reference/CHANGELOG.md) | Complete version history and release notes |
 | [**Roadmap**](roadmap/) | Feature planning and requirements |
 | [**License Attribution**](reference/dependency_attribution.md) | Open-source dependencies and licenses |
+| [**Theory of Operation**](architecture/THEORY_OF_OPERATION.md) | End-to-end system flow and SAME protocol internals |
 
 ### Legal & Policies
 | Document | Description |
@@ -74,6 +75,9 @@ docs/
 │   ├── dependency_attribution.md     ← License compliance
 │   └── CFR-2010-title47-vol1-sec11-31.xml  ← FCC regulations
 │
+├── architecture/                      ← System theory of operation and diagrams
+│   └── THEORY_OF_OPERATION.md        ← Detailed pipeline and SAME overview
+│
 ├── policies/                          ← Legal and governance
 │   ├── TERMS_OF_USE.md
 │   └── PRIVACY_POLICY.md
@@ -99,7 +103,7 @@ docs/
 - **Troubleshooting issues?** → [Database Fixes](guides/DATABASE_CONSISTENCY_FIXES.md) + [Help Guide](guides/HELP.md)
 - **Integrating with IPAWS?** → [IPAWS Integration Guide](guides/ipaws_feed_integration.md)
 - **Configuring SDR hardware?** → [Radio USB Passthrough](guides/radio_usb_passthrough.md)
-- **Understanding the architecture?** → [About](reference/ABOUT.md) + [Main README](../README.md)
+- **Understanding the architecture?** → [Theory of Operation](architecture/THEORY_OF_OPERATION.md) + [About](reference/ABOUT.md) + [Main README](../README.md)
 - **Checking version history?** → [Changelog](reference/CHANGELOG.md)
 
 ### By Audience
@@ -162,5 +166,5 @@ This documentation is part of the EAS Station project, licensed under the MIT Li
 
 ---
 
-**Last Updated**: 2025-11-02
+**Last Updated**: 2025-11-15
 **Documentation Version**: Corresponds to EAS Station v2.1.x+

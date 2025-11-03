@@ -30,7 +30,7 @@
                     <div class="alert alert-secondary d-flex align-items-start" role="alert">
                         <i class="fas fa-scale-balanced fa-lg me-3"></i>
                         <div>
-                            <strong>Real-World Consequences:</strong> The FCC has repeatedly issued six-figure penalties for misusing EAS tones. In 2015, iHeartMedia paid a <a href="https://www.fcc.gov/document/iheartmedia-pays-1-million-misuse-eas-tones" class="link-dark" target="_blank" rel="noopener">$1&nbsp;million consent decree</a> after <em>The Bobby Bones Show</em> triggered false alerts. The trailer for <em>Olympus Has Fallen</em> led to a combined <a href="https://www.fcc.gov/document/companies-pay-19m-misuse-emergency-alert-system-tones" class="link-dark" target="_blank" rel="noopener">$1.9&nbsp;million settlement</a> across multiple national networks. Misuse is traceable, and enforcement actions can include equipment seizure and license revocation.
+                            <strong>Real-World Consequences:</strong> The FCC has repeatedly issued six-figure penalties for misusing EAS tones. In 2015, iHeartMedia paid a <a href="https://docs.fcc.gov/public/attachments/DA-15-199A1.pdf" class="link-dark" target="_blank" rel="noopener">$1&nbsp;million consent decree</a> after <em>The Bobby Bones Show</em> triggered false alerts. The trailer for <em>Olympus Has Fallen</em> led to a combined <a href="https://docs.fcc.gov/public/attachments/DA-14-1097A1.pdf" class="link-dark" target="_blank" rel="noopener">$1.9&nbsp;million settlement</a> across multiple national networks. Misuse is traceable, and enforcement actions can include equipment seizure and license revocation.
                         </div>
                     </div>
                     <div class="alert alert-dark d-flex align-items-start" role="alert">
@@ -94,7 +94,7 @@
                 <h2 class="h4 mb-3">
                     <i class="fas fa-list-check text-success me-2"></i>Drop-In Replacement Requirements
                 </h2>
-                <p class="mb-3">The <a href="https://github.com/KR8MER/eas-station/blob/main/docs/master_todo.md" class="text-decoration-none">Master Implementation Roadmap</a> tracks the nine capability areas that must be completed before the project can stand in for commercial hardware:</p>
+                <p class="mb-3">The <a href="https://github.com/KR8MER/eas-station/blob/main/docs/roadmap/master_todo.md" class="text-decoration-none">Master Implementation Roadmap</a> tracks the nine capability areas that must be completed before the project can stand in for commercial hardware:</p>
                 <ul class="mb-0">
                     <li><strong>Reliable Baseband Capture</strong> – Unified ingest from SDR, line-in, and file sources with synchronized metering.</li>
                     <li><strong>Deterministic Audio Playout</strong> – Queue-driven SAME headers, attention tones, GPIO triggers, and narration.</li>
@@ -116,7 +116,7 @@
                     <i class="fas fa-microchip text-danger me-2"></i>Reference Raspberry Pi Hardware Stack
                 </h2>
                 <p class="mb-3">The roadmap targets a reproducible build assembled entirely from commodity parts so integrators can swap in software for the rack-mount black boxes sold today:</p>
-                <p class="mb-3 text-muted"><i class="fas fa-circle-check me-2"></i>Validated on Debian&nbsp;14 (Trixie) 64-bit images—specifically 14.2.0-19—while the container image continues to ship on Debian Bookworm via the multi-arch <code>python:3.12-slim-bookworm</code> base.</p>
+                <p class="mb-3 text-muted"><i class="fas fa-circle-check me-2"></i>Validated on Debian&nbsp;14 (Trixie) 64-bit images—specifically 14.2.0-19—while the container image continues to ship on Debian Bookworm via the multi-arch <code>python:3.11-slim-bookworm</code> base.</p>
                 <div class="row g-3">
                     <div class="col-md-6">
                         <div class="d-flex align-items-start">
@@ -300,12 +300,85 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Technology Stack -->
-            <div class="card shadow-sm mb-4 border-0">
+        <!-- Theory of Operation Summary -->
+        <div class="card shadow-sm mb-4 border-0">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center mb-3">
+                    <img src="{{ url_for('static', filename='img/eas-station-logo.svg') }}" alt="EAS Station logo" class="me-3" width="56" height="56">
+                    <div>
+                        <h2 class="h4 mb-1">End-to-End Theory of Operation</h2>
+                        <p class="mb-0 text-muted">Trace every step between CAP ingestion, SAME generation, and verified broadcast.</p>
+                    </div>
+                </div>
+                <p class="mb-3">The <a href="https://github.com/KR8MER/eas-station/blob/main/docs/architecture/THEORY_OF_OPERATION.md" class="text-decoration-none" target="_blank" rel="noopener">theory of operation guide</a> provides a deep dive with diagrams, but the essentials are outlined below for quick reference:</p>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="border rounded-3 h-100 p-3 bg-light">
+                            <h3 class="h6 fw-bold text-primary mb-2"><i class="fas fa-cloud-download-alt me-2"></i>Data Path</h3>
+                            <ul class="list-unstyled small mb-0">
+                                <li class="mb-2"><strong>Ingestion:</strong> <code>poller/cap_poller.py</code> validates CAP 1.2 feeds, reusing <code>manual_eas_event.parse_cap_xml</code> for schema enforcement.</li>
+                                <li class="mb-2"><strong>Normalization:</strong> Alerts persist through SQLAlchemy models in <code>app_core/models.py</code>, with deduplication handled by <code>app_core/alerts.py</code>.</li>
+                                <li class="mb-0"><strong>Spatial context:</strong> <code>app_core/location.py</code> and <code>app_core/boundaries.py</code> drive PostGIS intersections to determine who should receive an activation.</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="border rounded-3 h-100 p-3 bg-light">
+                            <h3 class="h6 fw-bold text-success mb-2"><i class="fas fa-wave-square me-2"></i>Broadcast & Verification</h3>
+                            <ul class="list-unstyled small mb-0">
+                                <li class="mb-2"><strong>Operator workflow:</strong> <code>/eas/workflow</code> pairs curated templates with text-to-speech previews before releasing an activation.</li>
+                                <li class="mb-2"><strong>SAME generation:</strong> <code>app_utils/eas.py</code> produces precise 520⅔ baud bursts, attention tones, and End-of-Message sequences.</li>
+                                <li class="mb-0"><strong>Feedback loop:</strong> SDR recordings captured via <code>app_core/radio/manager.py</code> flow into <code>/admin/alert-verification</code> for decode confirmation and compliance logging.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <p class="small text-muted mt-3 mb-0"><i class="fas fa-route me-2"></i>Need the complete flowchart and operational checklist? Open <code>docs/architecture/THEORY_OF_OPERATION.md</code> in the repository or via the in-app documentation links.</p>
+            </div>
+        </div>
+
+        <!-- SAME Protocol History -->
+        <div class="card shadow-sm mb-4 border-0">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center mb-3">
+                    <img src="{{ url_for('static', filename='img/eas-station-logo.svg') }}" alt="EAS Station logo" class="me-3" width="56" height="56">
+                    <div>
+                        <h2 class="h4 mb-1">SAME Protocol Context & Compliance</h2>
+                        <p class="mb-0 text-muted">Why the audio matters, how it is constructed, and how the FCC enforces it.</p>
+                    </div>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="border rounded-3 h-100 p-3 bg-light">
+                            <h3 class="h6 fw-bold text-danger mb-2"><i class="fas fa-broadcast-tower me-2"></i>Under the Hood</h3>
+                            <ul class="list-unstyled small mb-0">
+                                <li class="mb-2"><strong>Header synthesis:</strong> <code>app_utils/eas.py</code> assembles <code>ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-</code> strings directly from CAP metadata.</li>
+                                <li class="mb-2"><strong>Audio pipeline:</strong> Attention tones (853/960&nbsp;Hz) and narration are sequenced in <code>webapp/eas/workflow.py</code>, then stored in <code>static/audio/</code> for auditing.</li>
+                                <li class="mb-0"><strong>EOM tracking:</strong> <code>app_core/eas_storage.py</code> records End-of-Message bursts with timestamps to fuel <code>/admin/compliance</code> exports.</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="border rounded-3 h-100 p-3 bg-light">
+                            <h3 class="h6 fw-bold text-warning mb-2"><i class="fas fa-landmark me-2"></i>Historical Milestones</h3>
+                            <ul class="list-unstyled small mb-0">
+                                <li class="mb-2"><strong>1994:</strong> FCC codifies SAME as the nationwide standard, replacing the legacy two-tone Attention Signal.</li>
+                                <li class="mb-2"><strong>2002:</strong> FEMA integrates SAME with IPAWS, standardising CAP 1.2 distribution that EAS Station now polls.</li>
+                                <li class="mb-0"><strong>2014–2015:</strong> Enforcement actions against <em>The Bobby Bones Show</em> and <em>Olympus Has Fallen</em> highlight the financial risk for any misuse of valid headers.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <p class="small text-muted mt-3 mb-0"><i class="fas fa-book me-2"></i>Explore the dedicated primer in <code>docs/architecture/THEORY_OF_OPERATION.md</code> for the full historical timeline and protocol specifics.</p>
+            </div>
+        </div>
+
+        <!-- Technology Stack -->
+        <div class="card shadow-sm mb-4 border-0">
                 <div class="card-body p-4">
                     <h2 class="h4 mb-3">
                         <i class="fas fa-code text-primary me-2"></i>Technology Stack

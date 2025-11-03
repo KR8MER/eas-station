@@ -14,6 +14,7 @@ This comprehensive index catalogs all documentation across the EAS Station proje
 |-------|----------|----------|-------|
 | Project overview, quick start, architecture | readme, getting started, overview, architecture, docker | [README.md](../README.md) | 1,093 |
 | Project mission, goals, technology stack | about, mission, vision, goals, stack, python | [reference/ABOUT.md](reference/ABOUT.md) | 73 |
+| Theory of operation, system flow, SAME internals | architecture, pipeline, mermaid, same, history | [architecture/THEORY_OF_OPERATION.md](architecture/THEORY_OF_OPERATION.md) | 109 |
 | Developer guidelines, code standards | agents, coding standards, security, patterns, testing | [development/AGENTS.md](development/AGENTS.md) | 549 |
 | License information | mit, license, copyright | [LICENSE](../LICENSE) | 22 |
 
@@ -59,6 +60,7 @@ This comprehensive index catalogs all documentation across the EAS Station proje
 |-------|----------|----------|-------|
 | Open source dependencies | dependencies, licenses, attribution, third-party | [reference/dependency_attribution.md](reference/dependency_attribution.md) | 46 |
 | FCC regulations (EAS/SAME) | fcc, regulations, cfr, same, eas, compliance | [reference/CFR-2010-title47-vol1-sec11-31.xml](reference/CFR-2010-title47-vol1-sec11-31.xml) | - |
+| Theory of operation & SAME protocol | architecture, signal chain, history, mermaid | [architecture/THEORY_OF_OPERATION.md](architecture/THEORY_OF_OPERATION.md) | 109 |
 | M-Protocol specification (LED signs) | m-protocol, led, signs, alpha, protocol, specification | [M-Protocol.pdf](M-Protocol.pdf) | PDF |
 
 ### Roadmap & Planning
@@ -78,7 +80,7 @@ This comprehensive index catalogs all documentation across the EAS Station proje
 - **AI Agents (Development)** → [development/AGENTS.md](development/AGENTS.md)
 - **Alerts (Monitoring)** → [guides/HELP.md](guides/HELP.md), [README.md](../README.md)
 - **API Endpoints** → [README.md#api-endpoints](../README.md)
-- **Architecture** → [reference/ABOUT.md](reference/ABOUT.md), [README.md](../README.md)
+- **Architecture** → [architecture/THEORY_OF_OPERATION.md](architecture/THEORY_OF_OPERATION.md), [reference/ABOUT.md](reference/ABOUT.md), [README.md](../README.md)
 - **Audio Generation** → [guides/HELP.md](guides/HELP.md), [roadmap/eas_todo.md](roadmap/eas_todo.md)
 - **Attribution (Dependencies)** → [reference/dependency_attribution.md](reference/dependency_attribution.md)
 
@@ -169,7 +171,7 @@ This comprehensive index catalogs all documentation across the EAS Station proje
 
 ### S
 
-- **SAME (Specific Area Message Encoding)** → [roadmap/eas_todo.md](roadmap/eas_todo.md), [reference/CFR-2010-title47-vol1-sec11-31.xml](reference/CFR-2010-title47-vol1-sec11-31.xml)
+- **SAME (Specific Area Message Encoding)** → [architecture/THEORY_OF_OPERATION.md](architecture/THEORY_OF_OPERATION.md), [roadmap/eas_todo.md](roadmap/eas_todo.md), [reference/CFR-2010-title47-vol1-sec11-31.xml](reference/CFR-2010-title47-vol1-sec11-31.xml)
 - **SDR (Software Defined Radio)** → [guides/radio_usb_passthrough.md](guides/radio_usb_passthrough.md)
 - **Security** → [development/AGENTS.md#security](development/AGENTS.md)
 - **Setup** → [README.md#quick-start](../README.md)

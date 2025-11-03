@@ -29,10 +29,10 @@ All documentation and tooling emphasise a guided setup process so integrators ca
 [![CI status](https://github.com/KR8MER/eas-station/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/KR8MER/eas-station/actions/workflows/build.yml)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://www.docker.com/)
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-blue?logo=python)](https://www.python.org/)
-[![Flask](https://img.shields.io/badge/Flask-2.3-green?logo=flask)](https://flask.palletsprojects.com/)
-[![Gunicorn](https://img.shields.io/badge/Gunicorn-21.2-green?logo=gunicorn)](https://gunicorn.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue?logo=postgresql)](https://www.postgresql.org/)
-[![PostGIS](https://img.shields.io/badge/PostGIS-3.x-orange)](https://postgis.net/)
+[![Flask](https://img.shields.io/badge/Flask-3.0-green?logo=flask)](https://flask.palletsprojects.com/)
+[![Gunicorn](https://img.shields.io/badge/Gunicorn-23.0-green?logo=gunicorn)](https://gunicorn.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-blue?logo=postgresql)](https://www.postgresql.org/)
+[![PostGIS](https://img.shields.io/badge/PostGIS-3.4-orange)](https://postgis.net/)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-red?logo=sqlalchemy)](https://www.sqlalchemy.org/)
 [![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-purple?logo=bootstrap)](https://getbootstrap.com/)
 [![Leaflet](https://img.shields.io/badge/Leaflet-Maps-green?logo=leaflet)](https://leafletjs.com/)
@@ -155,6 +155,42 @@ EAS Station is not just an alert monitor—it's a **complete emergency broadcast
 - **Auto-Recovery** - Containers restart on failure with health checks
 - **Environment-Based Configuration** - All settings via `.env` file with template-based setup
 - **Dark/Light Theme** - Consistent UI across all pages with persistent user preferences
+
+### 📐 Theory of Operation
+
+The system follows a deterministic path from CAP ingestion to verified broadcast. Each stage is implemented by specific modules that can be traced inside this repository.
+
+```mermaid
+flowchart LR
+    poller[poller/cap_poller.py] --> alerts[app_core/alerts.py]
+    alerts --> db[(PostgreSQL 17\nPostGIS 3.4)]
+    db --> spatial[app_core/location.py\napp_core/boundaries.py]
+    spatial --> workflow[webapp/eas/workflow.py]
+    workflow --> generator[app_utils/eas.py]
+    generator --> gpio[led_sign_controller.py\nGPIO relays]
+    generator --> audio[static/audio/ WAV output]
+    audio --> verification[webapp/routes/alert_verification.py]
+    verification --> compliance[app_core/eas_storage.py\n/admin/compliance]
+```
+
+- **Ingestion** – `poller/cap_poller.py` and `manual_eas_event.py` normalise CAP 1.2 payloads, enforce schema validity, and store de-duplicated alerts through SQLAlchemy models in `app_core/models.py`.
+- **Spatial intelligence** – Geographic intersections are calculated via PostGIS queries orchestrated by `app_core/boundaries.py` and `app_core/location.py`.
+- **Operator workflow** – The `/eas/workflow` blueprint renders manual broadcast tools, while `/help` and `/about` surface synchronized documentation for lab operators.
+- **SAME generation & playout** – `app_utils/eas.py` produces headers, attention tones, and End-of-Message bursts, coordinating GPIO relays and LED signage through `led_sign_controller.py`.
+- **Verification** – SDR capture drivers in `app_core/radio/drivers.py` and the alert verification portal close the loop, ensuring transmissions decode exactly as produced.
+
+For deeper context—including subsystem responsibilities and an operational checklist—see [docs/architecture/THEORY_OF_OPERATION.md](docs/architecture/THEORY_OF_OPERATION.md).
+
+### 📜 SAME Protocol Primer
+
+SAME (Specific Area Message Encoding) defines the 520⅔ baud FSK headers that trigger downstream equipment. EAS Station implements this standard faithfully:
+
+- **Header construction** – `app_utils/eas.py` assembles the `ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-` header from CAP data, enforcing the three-burst requirement from FCC § 11.31.
+- **Attention signal** – Dual-tone 853/960 Hz audio is rendered for the configured duration before message narration generated in `webapp/eas/workflow.py`.
+- **EOM enforcement** – `app_core/eas_storage.py` records the triplet of `NNNN` bursts and timestamps to support compliance exports.
+- **Historical guardrails** – The `/about` page links to official FCC enforcement actions, including the 2015 iHeartMedia (Bobby Bones Show) and 2014 *Olympus Has Fallen* consent decrees, underscoring why lab isolation is mandatory.
+
+Review [Theory of Operation](docs/architecture/THEORY_OF_OPERATION.md) for the full protocol history and see [`docs/roadmap/eas_todo.md`](docs/roadmap/eas_todo.md) for the remaining encoder/decoder enhancements.
 
 ---
 
