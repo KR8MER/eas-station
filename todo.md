@@ -1,71 +1,35 @@
-# EAS Station UI Modernization - Phase 4 Tasks
+# EAS Station Development Tasks
 
-## Current Status
-- ✅ Buttons: Standardized across all admin tabs (17 instances)
-- ✅ Alerts: Standardized across all admin tabs (17 instances) 
-- ✅ Tab 5: Alert Management - Complete migration
-- ✅ Tab 6: System Health - Complete migration
-- ✅ Tab 7: User Management - Complete migration
-- ✅ Tab 8: Location Settings - Complete migration
-- ✅ Custom Components: All standardized to Bootstrap
+## Selected Task: Audio Ingest Pipeline Implementation
 
-## Priority Tasks
+Based on the master roadmap, I'll work on implementing the unified audio ingest pipeline (Requirement 1) which is currently incomplete and critical for the drop-in replacement goal.
 
-### 1. Complete Tab 7: User Management Migration
-- [x] Analyze User Management tab for custom classes/components
-- [x] Standardize form elements and inputs
-- [x] Standardize table styling
-- [x] Update modal dialogs to design system
-- [ ] Test functionality
-- [x] Document changes
+### Task Overview
+**Goal**: Normalize capture from SDR, ALSA/Pulse, and file inputs into a single managed pipeline with metering and diagnostics.
 
-### 2. Complete Tab 8: Location Settings Migration  
-- [x] Analyze Location Settings tab for custom classes/components
-- [x] Standardize form elements and inputs
-- [x] Standardize button styling (if any remaining)
-- [x] Update any custom components
-- [ ] Test functionality
-- [x] Document changes
+### Implementation Plan
+1. Create `app_core/audio/ingest.py` with pluggable source adapters
+2. Add configuration parsing to `configure.py` for source priorities and failover
+3. Implement peak/RMS metering and silence detection
+4. Store metering data for UI display in system health views
+5. Provide calibration utilities under `tools/audio_debug.py`
+6. Add configuration documentation in `docs/audio.md`
 
-### 3. Standardize Remaining Custom Components
-- [x] Replace admin-card class with standard Bootstrap card
-- [x] Replace card-header-custom class with standard Bootstrap card-header
-- [x] Replace nav-tabs-custom class with standard Bootstrap nav-tabs
-- [x] Replace tab-content-custom class with standard Bootstrap tab-content
-- [x] Replace operation-card class with standard Bootstrap card
-- [x] Replace tabs-container class with standard Bootstrap container
-- [x] Replace confirmation-modal class with standard Bootstrap modal
-- [x] Test all standardized components
+### Progress Tracking
+- [x] Create app_core/audio directory structure
+- [x] Implement base audio source adapter interface
+- [x] Create SDR audio source adapter
+- [x] Create ALSA/Pulse audio source adapter  
+- [x] Create file input audio source adapter
+- [x] Implement unified ingest controller
+- [x] Add peak/RMS metering and silence detection
+- [x] Create metering storage models
+- [x] Update configure.py for audio settings
+- [x] Create audio debug utilities
+- [x] Update system health endpoints
+- [x] Add documentation
+- [x] Write tests
+- [x] Create pull request
 
-### 4. Final Cleanup
-- [x] Remove unused custom CSS definitions
-- [ ] Verify all admin tabs use design system
-- [ ] Final testing across all tabs
-- [ ] Update documentation
-
-### 5. Create Pull Request
-- [x] Push changes to GitHub
-- [x] Create comprehensive PR description
-- [x] Request review/merge
-
-## Pull Request Created
-- **URL**: https://github.com/KR8MER/eas-station/pull/311
-- **Title**: Phase 4: Complete admin.html standardization to design system
-- **Status**: Ready for review
-
-## Success Metrics
-- 100% design system compliance for admin interface
-- Zero custom classes remaining in admin.html
-- All functionality preserved
-- Improved maintainability
-
-## Changes Made
-- Replaced 2 admin-card instances with Bootstrap cards
-- Replaced 2 card-header-custom instances with Bootstrap card-header
-- Replaced nav-tabs-custom with Bootstrap nav-tabs
-- Replaced tab-content-custom with Bootstrap tab-content
-- Replaced 12 operation-card instances with Bootstrap cards
-- Replaced tabs-container with Bootstrap container
-- Replaced confirmation-modal with Bootstrap modal
-- Removed all unused custom CSS definitions
-- Improved responsive design with proper Bootstrap grid
+### Reference Implementation
+This task builds on the existing radio manager infrastructure in `app_core/radio/` and will integrate with the system health monitoring in `app_core/system_health.py`.
