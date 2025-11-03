@@ -69,8 +69,6 @@
             margin: 1.5rem 0;
         }
 
-        
-
         .alert-custom {
             border-radius: 8px;
             border: none;
@@ -116,8 +114,6 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
-
-        
 
         .modal-content {
             background: var(--bg-color);
@@ -172,7 +168,6 @@
                 grid-template-columns: 1fr;
             }
         }
-
         /* Print styles */
         @media print {
             .keyboard-shortcuts {
@@ -215,7 +210,6 @@
             </div>
         </div>
     </div>
-
     <div class="container-fluid">
         <!-- System Overview -->
         <div class="card shadow-sm">
@@ -347,7 +341,6 @@
                     </li>
                 </ul>
             </div>
-
             <div class="tab-content" id="adminTabContent">
                 <!-- Upload Tab -->
                 <div class="tab-pane fade show active" id="upload" role="tabpanel">
@@ -356,7 +349,6 @@
                         <h4 class="mb-2"><i class="fas fa-upload text-primary"></i> Upload Boundary Files</h4>
                         <p class="text-muted">Upload GeoJSON files to add new boundary layers to the system.</p>
                     </div>
-
                     <form id="uploadForm" enctype="multipart/form-data" class="mt-4">
                         <div class="row">
                             <div class="col-md-6">
@@ -393,24 +385,15 @@
                             </div>
                         </div>
                                             <div class="d-grid gap-2 d-md-flex">
-
                                                 <button type="submit" class="btn btn-primary">
-
                                                     <i class="fas fa-upload"></i> Upload Boundaries
-
                                                 </button>
-
                                             </div>
-
                                         </form>
-
                                     </div>
-
                                 </div>
 
-
                                 <!-- Upload Status -->
-
                                 <div id="uploadStatus" class="mt-3"></div>
                 </div>
 
@@ -421,7 +404,6 @@
                         <h4 class="mb-2"><i class="fas fa-eye text-info"></i> Preview Data Extraction</h4>
                         <p class="text-muted">Preview what data will be extracted from your GeoJSON file before uploading.</p>
                     </div>
-
                     <form id="previewForm" enctype="multipart/form-data" class="mt-4">
                         <div class="row">
                             <div class="col-md-6">
@@ -458,24 +440,15 @@
                             </div>
                         </div>
                                             <div class="d-grid gap-2 d-md-flex">
-
                                                 <button type="button" class="btn btn-info" onclick="previewExtraction()">
-
                                                     <i class="fas fa-eye"></i> Preview Extraction
-
                                                 </button>
-
                                             </div>
-
                                         </form>
-
                                     </div>
-
                                 </div>
 
-
                                 <!-- Preview Results -->
-
                                 <div id="previewResults" class="mt-4"></div>
                 </div>
 
@@ -486,7 +459,6 @@
                         <h4 class="mb-2"><i class="fas fa-tasks text-success"></i> Manage Boundary Data</h4>
                         <p class="text-muted">View, edit, and delete existing boundary data in the system.</p>
                     </div>
-
                     <div class="row">
                         <div class="col-md-8">
                             <h5>Current Boundaries</h5>
@@ -539,7 +511,6 @@
                         <h4 class="mb-2"><i class="fas fa-tools text-warning"></i> System Operations</h4>
                         <p class="text-muted">Perform manual system operations and maintenance tasks.</p>
                     </div>
-
                     <div class="row g-3">
                         <div class="col-md-6 col-lg-4">
                             <div class="card shadow-sm h-100">
@@ -553,7 +524,6 @@
                                 </div>
                             </div>
                         </div>
-
                         <div class="col-md-6 col-lg-4">
                             <div class="card shadow-sm h-100">
                                 <div class="card-body text-center">
@@ -572,7 +542,6 @@
                                 </div>
                             </div>
                         </div>
-
                         <div class="col-md-6 col-lg-4">
                             <div class="card shadow-sm h-100">
                                 <div class="card-body text-center">
@@ -599,7 +568,6 @@
                                 </div>
                             </div>
                         </div>
-
                         <div class="col-md-6 col-lg-4">
                             <div class="card shadow-sm h-100">
                                 <div class="card-body text-center">
@@ -642,7 +610,6 @@
                                 </div>
                             </div>
                         </div>
-
                         <div class="col-md-6 col-lg-4">
                             <div class="card shadow-sm h-100">
                                 <div class="card-body text-center">
@@ -655,7 +622,6 @@
                                 </div>
                             </div>
                         </div>
-
                         <div class="col-md-6 col-lg-4">
                             <div class="card shadow-sm h-100">
                                 <div class="card-body text-center">
@@ -668,7 +634,6 @@
                                 </div>
                             </div>
                         </div>
-
                         <div class="col-md-6 col-lg-4">
                             <div class="card shadow-sm h-100">
                                 <div class="card-body text-center">
@@ -721,7 +686,6 @@
                                     <small id="adminAlertListMeta" class="text-muted"></small>
                                 </div>
                             </div>
-
                             <div id="adminAlertList" class="table-responsive">
                                 <div class="text-center py-4">
                                     <div class="spinner-border text-primary" role="status">
@@ -748,7 +712,6 @@
                                 </div>
                             </div>
                         </div>
-
                         <div class="col-md-6">
                             <div class="card shadow-sm h-100 border-danger">
                                 <div class="card-body text-center">
@@ -773,14 +736,13 @@
                         <h4 class="mb-2"><i class="fas fa-heartbeat text-info"></i> System Health Monitor</h4>
                         <p class="text-muted mb-0">Real-time system health and performance monitoring.</p>
                     </div>
-                    
+
                     <!-- Embed System Health Page -->
                     <iframe src="/system_health" 
                             style="width: 100%; min-height: 360px; border: none; border-radius: 8px;"
                             title="System Health Monitor"
                             id="systemHealthFrame">
                     </iframe>
-                    
                     <noscript>
                         <div class="alert alert-warning">
                             <i class="fas fa-exclamation-triangle"></i>
@@ -797,7 +759,6 @@
                         <h4 class="mb-2"><i class="fas fa-users-cog text-primary"></i> Administrator Accounts</h4>
                         <p class="text-muted">Create, reset, and revoke access for control panel users.</p>
                     </div>
-
                     <div class="row g-4">
                         <div class="col-lg-5">
                             <div class="border rounded-4 p-4 h-100" style="background: var(--light-color);">
@@ -872,14 +833,12 @@
                         <h4 class="mb-2"><i class="fas fa-map-marker-alt text-primary"></i> Location Configuration</h4>
                         <p class="text-muted">Update the jurisdiction, timezone, and NOAA filters used by the system.</p>
                     </div>
-
                     <div class="alert alert-warning d-flex align-items-start" role="alert">
                         <i class="fas fa-satellite-dish me-3 mt-1"></i>
                         <div>
                             Manage SDR receivers on the <a href="{{ url_for('radio_settings') }}">Radio Settings</a> page to coordinate multi-tuner captures.
                         </div>
                     </div>
-
                     <form id="locationSettingsForm" class="mt-4">
                         <div class="row g-3">
                             <div class="col-md-6">
@@ -1178,7 +1137,6 @@
                 EAS_STATE_BY_FIPS[state.state_fips] = state;
             }
         });
-
         // Global variables
         let confirmationModal;
         let currentOperation = null;
@@ -1194,7 +1152,6 @@
         let locationFipsSelection = [];
         let locationDerivedZoneList = [];
         let locationDerivedZoneCodes = new Set();
-
         const sanitizeBoundaryTypeInput = (value) => {
             if (!value) {
                 return '';
@@ -1207,7 +1164,6 @@
                 .replace(/_+/g, '_')
                 .replace(/^_+|_+$/g, '');
         };
-
         function formatBoundaryLabel(type) {
             const sanitized = sanitizeBoundaryTypeInput(type);
             const config = BOUNDARY_TYPE_CONFIG[sanitized];
@@ -1219,14 +1175,12 @@
             }
             return sanitized.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
         }
-
         function initializeCustomTypeControls() {
             const controls = [
                 { selectId: 'boundaryType', wrapperId: 'customBoundaryTypeWrapper', inputId: 'customBoundaryType' },
                 { selectId: 'previewBoundaryType', wrapperId: 'customPreviewBoundaryTypeWrapper', inputId: 'customPreviewBoundaryType' },
                 { selectId: 'deleteType', wrapperId: 'customDeleteBoundaryTypeWrapper', inputId: 'customDeleteBoundaryType' }
             ];
-
             controls.forEach(({ selectId, wrapperId, inputId }) => {
                 const select = document.getElementById(selectId);
                 const wrapper = document.getElementById(wrapperId);
@@ -1234,7 +1188,6 @@
                 if (!select || !wrapper) {
                     return;
                 }
-
                 const updateVisibility = () => {
                     if (select.value === 'custom') {
                         wrapper.style.display = 'block';
@@ -1248,7 +1201,6 @@
                         }
                     }
                 };
-
                 if (!select.dataset.customTypeBound) {
                     select.addEventListener('change', updateVisibility);
                     select.dataset.customTypeBound = 'true';
@@ -1256,13 +1208,11 @@
                 updateVisibility();
             });
         }
-
         function getSelectedBoundaryType(selectId, inputId) {
             const select = document.getElementById(selectId);
             if (!select) {
                 return { type: null, label: null };
             }
-
             if (select.value === 'custom') {
                 const input = document.getElementById(inputId);
                 const rawValue = input ? input.value.trim() : '';
@@ -1275,19 +1225,15 @@
                 }
                 return { type: sanitized, label: rawValue };
             }
-
             if (!select.value) {
                 return { type: null, label: null };
             }
-
             const sanitized = sanitizeBoundaryTypeInput(select.value);
             if (!sanitized) {
                 return { type: null, label: null };
             }
-
             return { type: sanitized, label: formatBoundaryLabel(sanitized) };
         }
-
         function addOptionIfMissing(select, value, label) {
             if (!select || !value || select.querySelector(`option[value="${value}"]`)) {
                 return;
@@ -1302,7 +1248,6 @@
                 select.appendChild(option);
             }
         }
-
         function ensureDynamicBoundaryOptions(typeEntries) {
             const typeSet = new Set((typeEntries || []).map(entry => entry.key));
             const selects = [
@@ -1310,7 +1255,6 @@
                 document.getElementById('previewBoundaryType'),
                 document.getElementById('deleteType')
             ].filter(Boolean);
-
             selects.forEach(select => {
                 Array.from(select.options).forEach(option => {
                     const value = option.value;
@@ -1322,7 +1266,6 @@
                     }
                 });
             });
-
             (typeEntries || []).forEach(entry => {
                 if (!entry || !entry.key || DEFAULT_BOUNDARY_TYPES.has(entry.key)) {
                     return;
@@ -1333,25 +1276,20 @@
                 addOptionIfMissing(document.getElementById('deleteType'), entry.key, label);
             });
         }
-
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
             initializeUserManagement();
-
             if (ADMIN_SETUP_MODE) {
                 return;
             }
-
             const confirmationModalElement = document.getElementById('confirmationModal');
             if (confirmationModalElement) {
                 confirmationModal = new bootstrap.Modal(confirmationModalElement);
             }
-
             const editAlertModalElement = document.getElementById('editAlertModal');
             if (editAlertModalElement) {
                 editAlertModal = new bootstrap.Modal(editAlertModalElement);
             }
-
             loadBoundaries();
             loadSystemHealth();
             setupKeyboardShortcuts();
@@ -1359,16 +1297,13 @@
             initializeLocationSettings();
             initializeEasPanel();
             initializeCustomTypeControls();
-
             refreshOperationStatus();
             setInterval(refreshOperationStatus, 15000);
-
             // Auto-refresh every 30 seconds
             setInterval(() => {
                 loadSystemHealth();
             }, 30000);
         });
-
         // Keyboard shortcuts
         function setupKeyboardShortcuts() {
             document.addEventListener('keydown', function(e) {
@@ -1388,47 +1323,37 @@
                 }
             });
         }
-
         function switchTab(tabId) {
             document.getElementById(tabId).click();
         }
-
         // Enhanced confirmation system
         function showConfirmation(options) {
             const { title, message, warning, type = 'danger', confirmText = 'Confirm', cancelText = 'Cancel', onConfirm } = options;
-
             const body = document.getElementById('confirmationBody');
             const footer = document.getElementById('confirmationFooter');
-
             body.innerHTML = `
                 <div class="alert alert-${type}">
                     <h6>${message}</h6>
                     ${warning ? `<p class="mb-0"><strong>⚠️ Warning:</strong> ${warning}</p>` : ''}
                 </div>
             `;
-
             footer.innerHTML = `
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">${cancelText}</button>
                 <button type="button" class="btn btn-${type}" id="confirmButton">${confirmText}</button>
             `;
-
             document.getElementById('confirmButton').onclick = function() {
                 confirmationModal.hide();
                 if (onConfirm) onConfirm();
             };
-
             confirmationModal.show();
         }
-
         function showMultiStepConfirmation(options) {
             const { steps, onComplete } = options;
             let currentStep = 0;
-
             function showStep() {
                 const step = steps[currentStep];
                 const body = document.getElementById('confirmationBody');
                 const footer = document.getElementById('confirmationFooter');
-
                 body.innerHTML = `
                     <div class="alert alert-danger">
                         <h6>${step.message}</h6>
@@ -1441,14 +1366,12 @@
                         ` : ''}
                     </div>
                 `;
-
                 footer.innerHTML = `
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-danger" id="stepConfirmButton">
                         ${currentStep === steps.length - 1 ? 'CONFIRM DELETION' : 'Continue'}
                     </button>
                 `;
-
                 document.getElementById('stepConfirmButton').onclick = function() {
                     if (step.textConfirmation) {
                         const input = document.getElementById('textConfirmInput');
@@ -1457,7 +1380,6 @@
                             return;
                         }
                     }
-
                     currentStep++;
                     if (currentStep < steps.length) {
                         showStep();
@@ -1467,11 +1389,9 @@
                     }
                 };
             }
-
             showStep();
             confirmationModal.show();
         }
-
         function initializeUserManagement() {
             const form = document.getElementById('createUserForm') || document.getElementById('createUserForm-setup');
             const passwordInput = document.getElementById('newUserPassword') || document.getElementById('newUserPassword-setup');
@@ -1479,12 +1399,10 @@
             if (!form || !passwordInput || !confirmInput) {
                 return;
             }
-
             const refreshButton = document.getElementById('refreshUserList');
             if (refreshButton) {
                 refreshButton.addEventListener('click', () => loadUserAccounts());
             }
-
             const validatePasswordMatch = () => {
                 if (confirmInput.value !== passwordInput.value) {
                     confirmInput.setCustomValidity('Passwords must match.');
@@ -1492,24 +1410,18 @@
                     confirmInput.setCustomValidity('');
                 }
             };
-
             passwordInput.addEventListener('input', validatePasswordMatch);
             confirmInput.addEventListener('input', validatePasswordMatch);
-
             form.addEventListener('submit', async (event) => {
                 event.preventDefault();
                 event.stopPropagation();
-
                 validatePasswordMatch();
-
                 if (!form.checkValidity()) {
                     form.classList.add('was-validated');
                     return;
                 }
-
                 const username = form.username.value.trim();
                 const password = passwordInput.value;
-
                 try {
                     const response = await fetch('/admin/users', {
                         method: 'POST',
@@ -1519,18 +1431,15 @@
                         },
                         body: JSON.stringify({ username, password })
                     });
-
                     if (response.status === 401) {
                         window.location.href = '/login';
                         return;
                     }
-
                     const data = await response.json().catch(() => ({}));
                     if (!response.ok) {
                         showStatus(data.error || 'Failed to create user.', 'danger');
                         return;
                     }
-
                     form.reset();
                     form.classList.remove('was-validated');
                     confirmInput.setCustomValidity('');
@@ -1548,7 +1457,6 @@
                     showStatus('Unexpected error while creating user.', 'danger');
                 }
             });
-
             const tableBody = document.getElementById('userTableBody');
             if (tableBody) {
                 tableBody.addEventListener('click', (event) => {
@@ -1556,10 +1464,8 @@
                     if (!button) {
                         return;
                     }
-
                     const userId = button.dataset.userId;
                     const username = button.dataset.username;
-
                     if (button.dataset.action === 'reset-password') {
                         handleUserPasswordReset(userId, username);
                     } else if (button.dataset.action === 'delete-user') {
@@ -1567,16 +1473,13 @@
                     }
                 });
             }
-
             loadUserAccounts();
         }
-
         async function loadUserAccounts() {
             const tableBody = document.getElementById('userTableBody');
             if (!tableBody) {
                 return;
             }
-
             tableBody.innerHTML = `
                 <tr>
                     <td colspan="4" class="text-center text-muted py-4">
@@ -1585,23 +1488,19 @@
                     </td>
                 </tr>
             `;
-
             try {
                 const response = await fetch('/admin/users', {
                     headers: { 'Accept': 'application/json' }
                 });
-
                 if (response.status === 401) {
                     window.location.href = '/login';
                     return;
                 }
-
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) {
                     showStatus(data.error || 'Unable to load users.', 'danger');
                     return;
                 }
-
                 const users = data.users || [];
                 if (!users.length) {
                     tableBody.innerHTML = `
@@ -1613,7 +1512,6 @@
                     `;
                     return;
                 }
-
                 tableBody.innerHTML = '';
                 users.forEach(user => {
                     const row = document.createElement('tr');
@@ -1639,7 +1537,6 @@
                 showStatus('Unexpected error while loading users.', 'danger');
             }
         }
-
         function initializeEasPanel() {
             initializeEasGenerator();
             loadEasMessages();
@@ -1664,14 +1561,12 @@
                 manualPurge.addEventListener('click', () => handleManualPurgePrompt());
             }
         }
-
         async function loadManualEasEvents() {
             const tableBody = document.getElementById('manualEasEventsBody');
             const status = document.getElementById('manualEasStatus');
             if (!tableBody) {
                 return;
             }
-
             tableBody.innerHTML = `
                 <tr>
                     <td colspan="4" class="text-center text-muted py-3">
@@ -1680,17 +1575,14 @@
                     </td>
                 </tr>
             `;
-
             try {
                 const response = await fetch('/eas/manual/events?limit=50', {
                     headers: { 'Accept': 'application/json' }
                 });
-
                 if (response.status === 401) {
                     window.location.href = '/login';
                     return;
                 }
-
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) {
                     tableBody.innerHTML = `
@@ -1705,10 +1597,8 @@
                     }
                     return;
                 }
-
                 const events = Array.isArray(data.events) ? data.events : [];
                 const total = typeof data.total === 'number' ? data.total : events.length;
-
                 if (!events.length) {
                     tableBody.innerHTML = `
                         <tr>
@@ -1742,7 +1632,6 @@
                         const actionGroup = actions.length
                             ? actions.join(' ')
                             : '<span class="text-muted">No files</span>';
-
                         const row = document.createElement('tr');
                         row.innerHTML = `
                             <td class="text-nowrap">${escapeHtml(createdLabel)}</td>
@@ -1753,7 +1642,6 @@
                         tableBody.appendChild(row);
                     });
                 }
-
                 if (status) {
                     status.textContent = events.length
                         ? `Showing ${events.length} of ${total} archived manual activations.`
@@ -1773,14 +1661,12 @@
                 }
             }
         }
-
         async function loadEasMessages() {
             const tableBody = document.getElementById('easMessagesTableBody');
             const status = document.getElementById('easMessageStatus');
             if (!tableBody) {
                 return;
             }
-
             tableBody.innerHTML = `
                 <tr>
                     <td colspan="6" class="text-center text-muted py-4">
@@ -1789,30 +1675,25 @@
                     </td>
                 </tr>
             `;
-
             try {
                 const response = await fetch('/eas/messages?limit=100', {
                     headers: { 'Accept': 'application/json' }
                 });
-
                 if (response.status === 401) {
                     window.location.href = '/login';
                     return;
                 }
-
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) {
                     showStatus(data.error || 'Unable to load EAS transmissions.', 'danger');
                     return;
                 }
-
                 const messages = data.messages || [];
                 const easEnabled = data.eas_enabled !== undefined ? Boolean(data.eas_enabled) : true;
                 if (status) {
                     const total = Number.isFinite(data.total) ? Number(data.total) : messages.length;
                     status.classList.toggle('text-warning', !easEnabled);
                     status.classList.toggle('text-muted', easEnabled);
-
                     if (!easEnabled) {
                         status.textContent = 'Automatic capture is disabled; stored transmissions remain available below.';
                     } else if (total > 0) {
@@ -1822,7 +1703,6 @@
                         status.textContent = 'No SAME audio has been generated yet.';
                     }
                 }
-
                 if (!messages.length) {
                     tableBody.innerHTML = `
                         <tr>
@@ -1839,14 +1719,12 @@
                         const createdLabel = created && !Number.isNaN(created.getTime())
                             ? created.toLocaleString()
                             : 'Unknown';
-
                         const severityBadge = metadata.severity
                             ? `<span class="badge bg-danger ms-2">${escapeHtml(metadata.severity)}</span>`
                             : '';
                         const statusBadge = metadata.status
                             ? `<span class="badge bg-secondary ms-1">${escapeHtml(metadata.status)}</span>`
                             : '';
-
                         const row = document.createElement('tr');
                         const messageId = Number.parseInt(message.id, 10);
                         const summaryButton = message.text_url
@@ -1876,21 +1754,18 @@
                         tableBody.appendChild(row);
                     });
                 }
-
                 if (status) {
                     const total = typeof data.total === 'number' ? data.total : messages.length;
                     if (messages.length || total > 0) {
                         status.textContent = `Showing ${messages.length} of ${total} stored alerts.`;
                     }
                 }
-
                 bindEasMessageActions();
             } catch (error) {
                 console.error('Failed to load EAS messages', error);
                 showStatus('Unexpected error while loading EAS transmissions.', 'danger');
             }
         }
-
         function bindEasMessageActions() {
             const buttons = document.querySelectorAll('.btn-delete-eas');
             buttons.forEach((button) => {
@@ -1920,7 +1795,6 @@
                 });
             });
         }
-
         async function deleteEasMessage(messageId) {
             try {
                 const response = await fetch(`/eas/messages/${messageId}`, {
@@ -1941,7 +1815,6 @@
                 return false;
             }
         }
-
         async function purgeEasMessages(olderThanDays) {
             try {
                 const response = await fetch('/eas/messages/purge', {
@@ -1966,7 +1839,6 @@
                 showStatus('Unexpected error while purging EAS transmissions.', 'danger');
             }
         }
-
         function handlePurgePrompt() {
             const input = prompt('Delete transmissions older than how many days? Enter 0 to purge all stored transmissions.', '30');
             if (input === null) {
@@ -1984,12 +1856,10 @@
             }
             purgeEasMessages(days);
         }
-
         async function deleteManualEasEvent(eventId) {
             if (!confirm('Delete this manual EAS activation? This action cannot be undone.')) {
                 return;
             }
-
             try {
                 const response = await fetch(`/eas/manual/events/${eventId}`, {
                     method: 'DELETE',
@@ -2010,7 +1880,6 @@
                 showStatus('Unexpected error while deleting manual EAS activation.', 'danger');
             }
         }
-
         async function purgeManualEasEvents(olderThanDays) {
             try {
                 const response = await fetch('/eas/manual/events/purge', {
@@ -2035,7 +1904,6 @@
                 showStatus('Unexpected error while purging manual EAS activations.', 'danger');
             }
         }
-
         function handleManualPurgePrompt() {
             const input = prompt('Delete manual EAS activations older than how many days? Enter 0 to purge all manual activations.', '30');
             if (input === null) {
@@ -2053,13 +1921,11 @@
             }
             purgeManualEasEvents(days);
         }
-
         function initializeEasGenerator() {
             const form = document.getElementById('easGeneratorForm');
             if (!form) {
                 return;
             }
-
             initializeSameCodeSelector();
             populateEasEventCodes();
             const eventNameInput = document.getElementById('easEventName');
@@ -2068,12 +1934,10 @@
                     eventNameInput.dataset.autofilled = 'false';
                 });
             }
-
             const quickRwtButton = document.getElementById('quickRwtButton');
             if (quickRwtButton) {
                 quickRwtButton.addEventListener('click', () => applyQuickRwtTemplate());
             }
-
             const eventSelect = document.getElementById('easEventCode');
             if (eventSelect) {
                 eventSelect.addEventListener('change', () => {
@@ -2081,14 +1945,11 @@
                     updateSameHeaderPreview();
                 });
             }
-
             const toneProfileSelect = document.getElementById('easToneProfile');
             if (toneProfileSelect) {
                 toneProfileSelect.addEventListener('change', () => updateToneControls());
             }
-
             form.addEventListener('submit', handleManualEasGenerate);
-
             const resetButton = document.getElementById('resetEasGenerator');
             if (resetButton) {
                 resetButton.addEventListener('click', (event) => {
@@ -2096,7 +1957,6 @@
                     resetEasGeneratorForm();
                 });
             }
-
             const randomButton = document.getElementById('generateIdentifierBtn');
             if (randomButton) {
                 randomButton.addEventListener('click', (event) => {
@@ -2104,7 +1964,6 @@
                     assignNewIdentifier(true);
                 });
             }
-
             ['easOriginator', 'easStationId', 'easDuration'].forEach((elementId) => {
                 const element = document.getElementById(elementId);
                 if (!element) {
@@ -2113,9 +1972,7 @@
                 element.addEventListener('input', () => updateSameHeaderPreview());
                 element.addEventListener('change', () => updateSameHeaderPreview());
             });
-
             resetEasGeneratorForm(true);
-
             const copyButton = document.getElementById('copySameHeaderBtn');
             if (copyButton) {
                 copyButton.addEventListener('click', async () => {
@@ -2131,13 +1988,11 @@
                 });
             }
         }
-
         function populateEasEventCodes() {
             const select = document.getElementById('easEventCode');
             if (!select) {
                 return;
             }
-
             const previousValue = select.value;
             const domEntries = Array.from(select.options || [])
                 .map((option) => {
@@ -2148,48 +2003,38 @@
                     return { code, name };
                 })
                 .filter((entry) => entry.code);
-
             let entries = Array.isArray(EAS_EVENT_CODES) ? [...EAS_EVENT_CODES] : [];
             if (!entries.length && domEntries.length) {
                 entries = domEntries;
             }
-
             entries = entries
                 .map((entry) => ({ code: entry.code, name: entry.name || entry.code }))
                 .filter((entry) => entry.code)
                 .sort((a, b) => a.code.localeCompare(b.code));
-
             if (!entries.length) {
                 entries = [{ code: 'RWT', name: 'Required Weekly Test' }];
             }
-
             select.innerHTML = '';
             const fragment = document.createDocumentFragment();
-
             entries.forEach((entry) => {
                 const option = document.createElement('option');
                 option.value = entry.code;
                 option.textContent = `${entry.code} — ${entry.name || entry.code}`;
                 fragment.appendChild(option);
             });
-
             select.appendChild(fragment);
-
             const preferredCode = entries.find((entry) => entry.code === previousValue)?.code
                 || entries.find((entry) => entry.code === 'RWT')?.code
                 || (entries.length ? entries[0].code : 'RWT');
-
             select.value = preferredCode;
             syncEasEventName(true);
         }
-
         function syncEasEventName(force = false) {
             const select = document.getElementById('easEventCode');
             const input = document.getElementById('easEventName');
             if (!select || !input) {
                 return;
             }
-
             const entry = (Array.isArray(EAS_EVENT_CODES) ? EAS_EVENT_CODES : []).find((item) => item.code === select.value);
             if (!entry) {
                 if (force && !input.value) {
@@ -2198,13 +2043,11 @@
                 }
                 return;
             }
-
             if (force || !input.value || input.dataset.autofilled === 'true') {
                 input.value = entry.name || entry.code;
                 input.dataset.autofilled = 'true';
             }
         }
-
         function getConfiguredDefaultSameCodes() {
             if (Array.isArray(window.APP_LOCATION?.same_codes) && window.APP_LOCATION.same_codes.length) {
                 return window.APP_LOCATION.same_codes;
@@ -2214,45 +2057,37 @@
             }
             return [];
         }
-
         function resetEasGeneratorForm(skipEventPopulation = false) {
             const form = document.getElementById('easGeneratorForm');
             if (!form) {
                 return;
             }
-
             form.reset();
-
             if (!skipEventPopulation) {
                 populateEasEventCodes();
             } else {
                 syncEasEventName(true);
             }
-
             setEasDefaultValue('easOriginator', EAS_DEFAULTS.originator);
             const defaultStation = (EAS_DEFAULTS.stationId || '').toString().toUpperCase();
             setEasDefaultValue('easStationId', defaultStation);
             setEasDefaultValue('easToneSeconds', EAS_DEFAULTS.attentionSeconds);
             setEasDefaultValue('easSampleRate', EAS_DEFAULTS.sampleRate);
-
             const toneProfileSelect = document.getElementById('easToneProfile');
             if (toneProfileSelect) {
                 toneProfileSelect.value = 'attention';
             }
             updateToneControls();
-
             const includeTts = document.getElementById('easIncludeTts');
             if (includeTts) {
                 includeTts.checked = (EAS_DEFAULTS.ttsProvider || '') === 'azure';
             }
-
             assignNewIdentifier(false);
             setSelectedSameCodes(getConfiguredDefaultSameCodes());
             setEasGeneratorStatus('');
             renderEasGeneratorResults(null);
             updateSameHeaderPreview();
         }
-
         function applyQuickRwtTemplate() {
             const eventSelect = document.getElementById('easEventCode');
             if (eventSelect) {
@@ -2265,60 +2100,47 @@
                 eventSelect.dispatchEvent(new Event('change'));
             }
             syncEasEventName(true);
-
             const originatorSelect = document.getElementById('easOriginator');
             const defaultOriginator = (EAS_DEFAULTS.originator || 'WXR').toString().toUpperCase();
             if (originatorSelect && originatorSelect.options.length) {
                 const hasDefault = Array.from(originatorSelect.options).some((option) => option.value === defaultOriginator);
                 originatorSelect.value = hasDefault ? defaultOriginator : originatorSelect.options[0].value;
             }
-
             setEasDefaultValue('easStationId', (EAS_DEFAULTS.stationId || '').toString().toUpperCase());
-
             const durationInput = document.getElementById('easDuration');
             if (durationInput) {
                 durationInput.value = '15';
             }
-
             const statusSelect = document.getElementById('easStatus');
             if (statusSelect) {
                 statusSelect.value = 'Test';
             }
-
             const toneProfileSelect = document.getElementById('easToneProfile');
             if (toneProfileSelect) {
                 toneProfileSelect.value = 'none';
             }
-
             const toneSecondsInput = document.getElementById('easToneSeconds');
             if (toneSecondsInput) {
                 toneSecondsInput.value = '0';
             }
-
             updateToneControls();
-
             assignNewIdentifier(true);
             setSelectedSameCodes(getConfiguredDefaultSameCodes());
-
             const headlineInput = document.getElementById('easHeadline');
             if (headlineInput) {
                 headlineInput.value = 'This is a Required Weekly Test.';
             }
-
             const messageInput = document.getElementById('easMessageBody');
             if (messageInput) {
                 messageInput.value = 'This is a test of the Emergency Alert System. No action is required.';
             }
-
             const instructionInput = document.getElementById('easInstruction');
             if (instructionInput) {
                 instructionInput.value = '';
             }
-
             setEasGeneratorStatus('Loaded the Required Weekly Test preset with the attention signal omitted. Review the narration before transmitting.', 'info');
             updateSameHeaderPreview();
         }
-
         function setEasDefaultValue(elementId, value) {
             if (value === undefined || value === null) {
                 return;
@@ -2333,17 +2155,14 @@
             }
             element.value = value;
         }
-
         function updateToneControls() {
             const toneProfileSelect = document.getElementById('easToneProfile');
             const toneSecondsInput = document.getElementById('easToneSeconds');
             if (!toneProfileSelect || !toneSecondsInput) {
                 return;
             }
-
             const profile = (toneProfileSelect.value || '').toLowerCase();
             const omitTone = profile === 'none';
-
             toneSecondsInput.readOnly = omitTone;
             toneSecondsInput.classList.toggle('bg-light', omitTone);
             toneSecondsInput.classList.toggle('text-muted', omitTone);
@@ -2358,7 +2177,6 @@
                 }
             }
         }
-
         function assignNewIdentifier(force = false) {
             const input = document.getElementById('easIdentifier');
             if (!input) {
@@ -2375,7 +2193,6 @@
             const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
             input.value = `${station}-${timestamp}`;
         }
-
         function normalizeSameCode(value) {
             if (value === undefined || value === null) {
                 return '';
@@ -2386,7 +2203,6 @@
             }
             return digits.padStart(6, '0').slice(0, 6);
         }
-
         function getSameCodeDetails(code) {
             const normalized = normalizeSameCode(code);
             if (!normalized) {
@@ -2413,7 +2229,6 @@
                 description,
             };
         }
-
         function normalizeZoneCode(value) {
             if (value === undefined || value === null) {
                 return '';
@@ -2424,14 +2239,12 @@
             }
             return trimmed.replace(/[^A-Z0-9]/g, '');
         }
-
         function deriveCountyZoneCodes(fipsCodes) {
             const derived = [];
             const seen = new Set();
             if (!Array.isArray(fipsCodes)) {
                 return derived;
             }
-
             const addCode = (value) => {
                 const normalized = normalizeZoneCode(value);
                 if (!normalized || seen.has(normalized)) {
@@ -2440,7 +2253,6 @@
                 seen.add(normalized);
                 derived.push(normalized);
             };
-
             fipsCodes.forEach((code) => {
                 const details = getSameCodeDetails(code);
                 if (!details || !details.stateAbbr || !details.countyFips || details.isStatewide) {
@@ -2454,18 +2266,14 @@
                 if (!/^[A-Z]{2}$/.test(stateAbbr)) {
                     return;
                 }
-
                 const normalizedSame = details.code;
                 if (normalizedSame && Array.isArray(EAS_COUNTY_FORECAST_ZONES?.[normalizedSame])) {
                     EAS_COUNTY_FORECAST_ZONES[normalizedSame].forEach((zone) => addCode(zone));
                 }
-
                 addCode(`${stateAbbr}C${suffix}`);
             });
-
             return derived;
         }
-
         function syncZoneCodeFieldWithDerived() {
             const field = document.getElementById('locationZoneCodes');
             if (!field) {
@@ -2478,7 +2286,6 @@
             const normalizedDerived = new Set(derivedTokens);
             const manualTokens = [];
             const seenManual = new Set();
-
             existingTokens.forEach((token) => {
                 const normalized = normalizeZoneCode(token);
                 if (!normalized || normalizedDerived.has(normalized)) {
@@ -2489,10 +2296,8 @@
                     manualTokens.push(normalized);
                 }
             });
-
             const combined = manualTokens.concat(derivedTokens);
             field.value = combined.join('\n');
-
             if (locationSettingsCache) {
                 locationSettingsCache.zone_codes = combined.slice();
             }
@@ -2500,21 +2305,18 @@
                 window.APP_LOCATION.zone_codes = combined.slice();
             }
         }
-
         function refreshDerivedZoneCodesFromSelection() {
             const derived = deriveCountyZoneCodes(locationFipsSelection);
             locationDerivedZoneList = derived.slice();
             locationDerivedZoneCodes = new Set(derived.map(normalizeZoneCode).filter(Boolean));
             syncZoneCodeFieldWithDerived();
         }
-
         function populatePortionOptions() {
             const portionSelect = document.getElementById('easPortionSelect');
             if (!portionSelect) {
                 return;
             }
             portionSelect.innerHTML = '';
-
             const digits = Object.keys(EAS_P_DIGIT_MEANINGS || {}).sort((a, b) => Number(a) - Number(b));
             digits.forEach((digit) => {
                 const option = document.createElement('option');
@@ -2523,13 +2325,11 @@
                 option.textContent = meaning ? `${digit} — ${meaning}` : digit;
                 portionSelect.appendChild(option);
             });
-
             if (!portionSelect.value) {
                 portionSelect.value = '0';
             }
             portionSelect.disabled = true;
         }
-
         function populateStateOptions() {
             const stateSelect = document.getElementById('easStateSelect');
             if (!stateSelect) {
@@ -2552,7 +2352,6 @@
             });
             stateSelect.appendChild(fragment);
         }
-
         function populateCountyOptions(stateAbbr, selectedCode = '') {
             const countySelect = document.getElementById('easCountySelect');
             const portionSelect = document.getElementById('easPortionSelect');
@@ -2565,21 +2364,17 @@
                 portionSelect.value = '0';
                 portionSelect.disabled = true;
             }
-
             const placeholder = document.createElement('option');
             placeholder.value = '';
             placeholder.textContent = stateAbbr ? 'Select county, parish, or subdivision…' : 'Select a state first…';
             countySelect.appendChild(placeholder);
-
             if (!stateAbbr) {
                 return;
             }
-
             const state = EAS_STATE_BY_ABBR[stateAbbr];
             if (!state) {
                 return;
             }
-
             if (state.statewide_code) {
                 const statewideOption = document.createElement('option');
                 statewideOption.value = state.statewide_code;
@@ -2587,7 +2382,6 @@
                 statewideOption.dataset.portion = '0';
                 countySelect.appendChild(statewideOption);
             }
-
             (Array.isArray(state.counties) ? state.counties : []).forEach((county) => {
                 if (!county || !county.code) {
                     return;
@@ -2597,7 +2391,6 @@
                 option.textContent = `${county.name || county.code} (${county.code})`;
                 option.dataset.portion = county.code[0] || '0';
                 countySelect.appendChild(option);
-
                 const subdivisions = Array.isArray(county.subdivisions) ? county.subdivisions : [];
                 subdivisions.forEach((subdivision) => {
                     if (!subdivision || !subdivision.code) {
@@ -2611,7 +2404,6 @@
                     countySelect.appendChild(subOption);
                 });
             });
-
             countySelect.disabled = false;
             if (portionSelect) {
                 portionSelect.disabled = false;
@@ -2636,7 +2428,6 @@
                 }
             }
         }
-
         function updateSelectedSameCodesDisplay() {
             const container = document.getElementById('easSelectedLocations');
             const hiddenInput = document.getElementById('easSameCodes');
@@ -2676,7 +2467,6 @@
             container.innerHTML = items;
             updateSameHeaderPreview();
         }
-
         function setSelectedSameCodes(codes) {
             const normalized = Array.isArray(codes) ? codes.map(normalizeSameCode).filter(Boolean) : [];
             const unique = [];
@@ -2693,7 +2483,6 @@
             }
             selectedSameCodes = unique.slice(0, MAX_SAME_CODES);
             updateSelectedSameCodesDisplay();
-
             const stateSelect = document.getElementById('easStateSelect');
             if (!stateSelect) {
                 return;
@@ -2715,7 +2504,6 @@
             stateSelect.value = '';
             populateCountyOptions('');
         }
-
         function addSameCodes(codes) {
             const stateSelect = document.getElementById('easStateSelect');
             const countySelect = document.getElementById('easCountySelect');
@@ -2745,7 +2533,6 @@
                 }
             }
         }
-
         function removeSameCode(code) {
             const normalized = normalizeSameCode(code);
             if (!normalized) {
@@ -2754,7 +2541,6 @@
             selectedSameCodes = selectedSameCodes.filter((item) => item !== normalized);
             updateSelectedSameCodesDisplay();
         }
-
         function handleAddSameCode() {
             const stateSelect = document.getElementById('easStateSelect');
             const countySelect = document.getElementById('easCountySelect');
@@ -2791,13 +2577,11 @@
             const combinedCode = `${portionValue}${normalizedCounty.slice(1)}`;
             addSameCodes([combinedCode]);
         }
-
         function initializeSameCodeSelector() {
             populatePortionOptions();
             populateStateOptions();
             populateCountyOptions('');
             updateSelectedSameCodesDisplay();
-
             const stateSelect = document.getElementById('easStateSelect');
             const countySelect = document.getElementById('easCountySelect');
             const portionSelect = document.getElementById('easPortionSelect');
@@ -2807,14 +2591,12 @@
             const manualAdd = document.getElementById('applyManualSameCodes');
             const manualClear = document.getElementById('clearManualSameCodes');
             const selectedContainer = document.getElementById('easSelectedLocations');
-
             if (stateSelect) {
                 stateSelect.addEventListener('change', (event) => {
                     const abbr = event.target ? event.target.value : '';
                     populateCountyOptions(abbr || '');
                 });
             }
-
             if (countySelect && portionSelect) {
                 countySelect.addEventListener('change', (event) => {
                     const option = event?.target?.selectedOptions?.[0];
@@ -2833,21 +2615,18 @@
                     }
                 });
             }
-
             if (addButton) {
                 addButton.addEventListener('click', (event) => {
                     event.preventDefault();
                     handleAddSameCode();
                 });
             }
-
             if (clearButton) {
                 clearButton.addEventListener('click', (event) => {
                     event.preventDefault();
                     setSelectedSameCodes([]);
                 });
             }
-
             if (manualAdd) {
                 manualAdd.addEventListener('click', (event) => {
                     event.preventDefault();
@@ -2861,7 +2640,6 @@
                     }
                 });
             }
-
             if (manualClear) {
                 manualClear.addEventListener('click', (event) => {
                     event.preventDefault();
@@ -2871,13 +2649,11 @@
                     updateSameHeaderPreview();
                 });
             }
-
             if (manualInput) {
                 manualInput.addEventListener('input', () => {
                     updateSameHeaderPreview();
                 });
             }
-
             if (selectedContainer) {
                 selectedContainer.addEventListener('click', (event) => {
                     const target = event.target;
@@ -2892,7 +2668,6 @@
                 });
             }
         }
-
         function parseSameCodeInput(raw) {
             if (!raw) {
                 return [];
@@ -2902,12 +2677,10 @@
                 .map((item) => normalizeSameCode(item))
                 .filter(Boolean);
         }
-
         function gatherManualSameCodes() {
             const manualInput = document.getElementById('manualSameCodesInput');
             return manualInput ? parseSameCodeInput(manualInput.value) : [];
         }
-
         function gatherAllSameCodes() {
             const combined = Array.from(selectedSameCodes);
             let limitReached = combined.length >= MAX_SAME_CODES;
@@ -2926,7 +2699,6 @@
             }
             return combined.slice(0, MAX_SAME_CODES);
         }
-
         function roundDurationMinutes(value) {
             let minutes = Number(value);
             if (!Number.isFinite(minutes) || minutes <= 0) {
@@ -2941,7 +2713,6 @@
             }
             return Math.max(15, Math.min(minutes, 600));
         }
-
         function formatDurationMinutesLabel(minutes) {
             if (!Number.isFinite(minutes)) {
                 return null;
@@ -2955,27 +2726,21 @@
             }
             return `${minutes} minute${minutes === 1 ? '' : 's'}`;
         }
-
         function computeSameHeaderPreview() {
             const originatorInput = document.getElementById('easOriginator');
             const stationInput = document.getElementById('easStationId');
             const durationInput = document.getElementById('easDuration');
             const eventSelect = document.getElementById('easEventCode');
-
             const codes = gatherAllSameCodes();
             const hasCodes = codes.length > 0;
-
             const originatorRaw = (originatorInput?.value || EAS_DEFAULTS.originator || 'WXR')
                 .toUpperCase()
                 .replace(/[^A-Z0-9]/g, '');
             const originator = originatorRaw.padEnd(3, 'X').slice(0, 3);
-
             const eventRaw = (eventSelect?.value || 'RWT').toUpperCase().replace(/[^A-Z0-9?]/g, '');
             const eventCode = eventRaw.padEnd(3, 'T').slice(0, 3);
-
             const durationRounded = roundDurationMinutes(durationInput?.value ?? 15);
             const durationCode = String(durationRounded).padStart(4, '0');
-
             const now = new Date();
             const startOfYear = Date.UTC(now.getUTCFullYear(), 0, 1, 0, 0, 0, 0);
             const millisIntoYear = Date.UTC(
@@ -2993,13 +2758,10 @@
             const julianCode = `${dayOfYear.toString().padStart(3, '0')}${hour.toString().padStart(2, '0')}${minute
                 .toString()
                 .padStart(2, '0')}`;
-
             const stationRaw = (stationInput?.value || EAS_DEFAULTS.stationId || 'EASNODES').toUpperCase();
             const stationIdentifier = stationRaw.padEnd(8, ' ').slice(0, 8);
-
             const locationField = hasCodes ? codes.join('-') : 'PSSCCC';
             const header = `ZCZC-${originator}-${eventCode}-${locationField}+${durationCode}-${julianCode}-${stationIdentifier}-`;
-
             if (!hasCodes) {
                 return {
                     header,
@@ -3027,7 +2789,6 @@
                     },
                 };
             }
-
             const locationDetails = codes.map((code) => {
                 const info = getSameCodeDetails(code);
                 if (!info) {
@@ -3052,7 +2813,6 @@
                     is_statewide: info.isStatewide,
                 };
             });
-
             return {
                 header,
                 detail: {
@@ -3079,7 +2839,6 @@
                 },
             };
         }
-
         function renderSameHeaderDetail(detail, options = {}) {
             const settings = {
                 includeLocations: true,
@@ -3088,11 +2847,9 @@
                 wrapperClass: 'border rounded-3 p-3 mb-3 bg-dark bg-opacity-10',
                 ...options,
             };
-
             if (!detail || !detail.originator) {
                 return settings.emptyMessage || '';
             }
-
             const originatorDescription =
                 detail.originator_description
                 || (EAS_ORIGINATOR_DESCRIPTIONS ? EAS_ORIGINATOR_DESCRIPTIONS[detail.originator] : null);
@@ -3102,7 +2859,6 @@
             const issueDescription = detail.issue_time_label
                 ? `<div class="small text-muted">${escapeHtml(detail.issue_time_label)}</div>`
                 : '';
-
             let locationRows = '';
             if (settings.includeLocations) {
                 locationRows = (Array.isArray(detail.locations) ? detail.locations : [])
@@ -3121,17 +2877,14 @@
                     })
                     .join('');
             }
-
             const hasLocationRows = Boolean(locationRows);
             const rawLocations = Array.isArray(detail.raw_locations) ? detail.raw_locations : [];
             const fallbackLocations = rawLocations.length
                 ? rawLocations.map((code) => `<code>${escapeHtml(code)}</code>`).join(', ')
                 : '';
-
             const wrapperClass = typeof settings.wrapperClass === 'string'
                 ? settings.wrapperClass
                 : 'border rounded-3 p-3 mb-3 bg-dark bg-opacity-10';
-
             let html = `<div class="${escapeHtml(wrapperClass)}">`;
             html += `
                 <div class="row g-3">
@@ -3157,7 +2910,6 @@
                     </div>
                 </div>
             `;
-
             if (settings.includeLocations) {
                 if (hasLocationRows) {
                     html += `
@@ -3180,23 +2932,19 @@
                     html += `<div class="small text-muted mt-3">Locations: ${fallbackLocations}</div>`;
                 }
             }
-
             if (settings.includePreambleNote) {
                 const preambleNote = detail.preamble_description
                     || 'SAME headers begin with a sixteen-byte 0xAB preamble for receiver synchronisation.';
                 html += `<div class="small text-muted mt-3">${escapeHtml(preambleNote)}</div>`;
             }
-
             html += '</div>';
             return html;
         }
-
         function updateSameHeaderPreview() {
             const previewElement = document.getElementById('sameHeaderPreview');
             const breakdownContainer = document.getElementById('sameHeaderPreviewBreakdown');
             const noteElement = document.getElementById('sameHeaderPreviewNote');
             const preview = computeSameHeaderPreview();
-
             if (previewElement) {
                 previewElement.textContent = preview.header;
             }
@@ -3211,10 +2959,8 @@
                     wrapperClass: 'border rounded-3 p-3 bg-dark bg-opacity-10 mb-0',
                 });
             }
-
             return preview;
         }
-
         async function handleManualEasGenerate(event) {
             event.preventDefault();
             const form = event.target;
@@ -3222,9 +2968,7 @@
             if (submitButton) {
                 submitButton.disabled = true;
             }
-
             setEasGeneratorStatus('Generating audio package…', 'info');
-
             try {
                 const payload = collectEasFormPayload(form);
                 const response = await fetch('/eas/manual/generate', {
@@ -3235,18 +2979,15 @@
                     },
                     body: JSON.stringify(payload),
                 });
-
                 if (response.status === 401) {
                     window.location.href = '/login';
                     return;
                 }
-
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) {
                     setEasGeneratorStatus(data.error || 'Unable to generate EAS audio components.', 'danger');
                     return;
                 }
-
                 easLastResponse = data;
                 renderEasGeneratorResults(data);
                 setEasGeneratorStatus('Manual EAS package generated and archived. Review each component below.', 'success');
@@ -3260,11 +3001,9 @@
                 }
             }
         }
-
         function collectEasFormPayload(form) {
             const formData = new FormData(form);
             const payload = {};
-
             formData.forEach((value, key) => {
                 if (typeof value === 'string') {
                     payload[key] = value.trim();
@@ -3272,19 +3011,16 @@
                     payload[key] = value;
                 }
             });
-
             payload.same_codes = gatherAllSameCodes();
             payload.include_tts = form.querySelector('#easIncludeTts')?.checked ?? false;
             return payload;
         }
-
         function renderEasGeneratorResults(data) {
             const container = document.getElementById('easGeneratorResults');
             const copyButton = document.getElementById('copySameHeaderBtn');
             if (!container) {
                 return;
             }
-
             if (!data) {
                 container.innerHTML = '<p class="text-muted mb-0">Fill out the form to generate SAME/EAS audio assets.</p>';
                 if (copyButton) {
@@ -3292,7 +3028,6 @@
                 }
                 return;
             }
-
             const sameHeader = data.same_header || '';
             const headerDetail = data.same_header_detail || {};
             const headerLocations = Array.isArray(headerDetail.locations) ? headerDetail.locations : [];
@@ -3303,7 +3038,6 @@
             } else if ((data.tone_profile || '').toLowerCase() === 'none') {
                 toneProfile = 'Attention Signal Omitted';
             }
-
             const toneDuration = (data.tone_profile || '').toLowerCase() === 'none'
                 ? 'Not included'
                 : data.tone_seconds
@@ -3315,14 +3049,12 @@
             const eomHeader = data.eom_header ? `<code>${escapeHtml(data.eom_header)}</code>` : '';
             const sampleRate = data.sample_rate ? `${escapeHtml(String(data.sample_rate))} Hz` : '—';
             const components = data.components || {};
-
             const locationBadges = headerLocations
                 .map((loc) => {
                     const label = loc.description || loc.code;
                     return `<span class="badge bg-dark-subtle text-dark me-2 mb-1">${escapeHtml(label)} · <code>${escapeHtml(loc.code)}</code></span>`;
                 })
                 .join('');
-
             let html = `
                 <div class="mb-3">
                     <label class="text-uppercase small fw-bold text-muted">SAME Header</label>
@@ -3349,7 +3081,6 @@
                     </div>
                 </div>
             `;
-
             if (messageText) {
                 html += `
                     <div class="mb-3">
@@ -3358,13 +3089,11 @@
                     </div>
                 `;
             }
-
             if (headerDetail && Object.keys(headerDetail).length) {
                 html += renderSameHeaderDetail(headerDetail, {
                     wrapperClass: 'border rounded-3 p-3 mb-3 bg-dark bg-opacity-10',
                 });
             }
-
             html += buildEasAudioCard('SAME Header Burst', components.same, 'Three data bursts with one second of silence between each transmission.');
             html += buildEasAudioCard(`${toneProfile}`, components.attention, 'Attention signal for legacy receivers.');
             if (components.tts) {
@@ -3374,7 +3103,6 @@
             }
             html += buildEasAudioCard('End of Message (EOM)', components.eom, 'Completes the activation with three end-of-message bursts.');
             html += buildEasAudioCard('Composite Package', components.composite, 'Full playback including header, tone, narration, and EOM.');
-
             if (data.activation) {
                 const activation = data.activation;
                 const actions = [];
@@ -3402,14 +3130,12 @@
                     </div>
                 `;
             }
-
             container.innerHTML = html;
             if (copyButton) {
                 copyButton.disabled = !sameHeader;
             }
             updateSameHeaderPreview();
         }
-
         function formatBytes(value) {
             const bytes = Number(value);
             if (!Number.isFinite(bytes) || bytes <= 0) {
@@ -3425,7 +3151,6 @@
             const precision = size >= 10 || index === 0 ? 0 : 1;
             return `${size.toFixed(precision)} ${units[index]}`;
         }
-
         function buildEasAudioCard(title, component, description) {
             if (!component) {
                 return '';
@@ -3441,7 +3166,6 @@
                         <i class="fas fa-download"></i> Download
                    </a>`
                 : '<span class="btn btn-sm btn-outline-secondary disabled"><i class="fas fa-download"></i></span>';
-
             return `
                 <div class="border rounded-3 p-3 mb-3">
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -3455,7 +3179,6 @@
                 </div>
             `;
         }
-
         function setEasGeneratorStatus(message, type = 'info') {
             const container = document.getElementById('easGeneratorStatus');
             if (!container) {
@@ -3476,22 +3199,18 @@
             container.innerHTML = `<div class="alert ${alertClass} mb-0">${escapeHtml(message)}</div>`;
             container.style.display = 'block';
         }
-
         async function handleUserPasswordReset(userId, username) {
             if (!userId) {
                 return;
             }
-
             const newPassword = prompt(`Enter a new password for ${username} (minimum 8 characters):`);
             if (newPassword === null) {
                 return;
             }
-
             if (newPassword.trim().length < 8) {
                 showStatus('Password must be at least 8 characters long.', 'warning');
                 return;
             }
-
             try {
                 const response = await fetch(`/admin/users/${userId}`, {
                     method: 'PATCH',
@@ -3501,18 +3220,15 @@
                     },
                     body: JSON.stringify({ password: newPassword })
                 });
-
                 if (response.status === 401) {
                     window.location.href = '/login';
                     return;
                 }
-
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) {
                     showStatus(data.error || 'Failed to reset password.', 'danger');
                     return;
                 }
-
                 showStatus(data.message || 'Password reset successfully.', 'success');
                 loadUserAccounts();
             } catch (error) {
@@ -3520,12 +3236,10 @@
                 showStatus('Unexpected error while resetting password.', 'danger');
             }
         }
-
         function handleUserDeletion(userId, username) {
             if (!userId) {
                 return;
             }
-
             showConfirmation({
                 title: 'Delete Administrator',
                 message: `Remove administrator ${username}?`,
@@ -3538,18 +3252,15 @@
                             method: 'DELETE',
                             headers: { 'Accept': 'application/json' }
                         });
-
                         if (response.status === 401) {
                             window.location.href = '/login';
                             return;
                         }
-
                         const data = await response.json().catch(() => ({}));
                         if (!response.ok) {
                             showStatus(data.error || 'Failed to delete user.', 'danger');
                             return;
                         }
-
                         showStatus(data.message || 'User deleted successfully.', 'success');
                         loadUserAccounts();
                     } catch (error) {
@@ -3559,20 +3270,16 @@
                 }
             });
         }
-
         function formatUserTimestamp(timestamp) {
             if (!timestamp) {
                 return '—';
             }
-
             const date = new Date(timestamp);
             if (Number.isNaN(date.getTime())) {
                 return '—';
             }
-
             return date.toLocaleString();
         }
-
         // Status display functions
         function showStatus(message, type = 'info', duration = 5000) {
             const statusDiv = document.getElementById('operationStatus');
@@ -3585,14 +3292,12 @@
                 ${message}
             `;
             statusDiv.style.display = 'block';
-
             if (type === 'success' && duration > 0) {
                 setTimeout(() => {
                     statusDiv.style.display = 'none';
                 }, duration);
             }
         }
-
         function updateLocationSettingsStatus(message, tone = 'muted') {
             const statusEl = document.getElementById('locationSettingsStatus');
             if (!statusEl) {
@@ -3601,7 +3306,6 @@
             statusEl.className = `ms-3 small text-${tone}`;
             statusEl.textContent = message;
         }
-
         function parseListInput(value) {
             if (!value) {
                 return [];
@@ -3611,15 +3315,12 @@
                 .map((item) => item.trim())
                 .filter((item) => item.length > 0);
         }
-
         function normalizeFipsCode(value) {
             return normalizeSameCode(value);
         }
-
         function getFipsCodeDetails(code) {
             return getSameCodeDetails(code);
         }
-
         function renderLocationFipsSelection() {
             const container = document.getElementById('locationSelectedFips');
             const hiddenInput = document.getElementById('locationFipsCodes');
@@ -3667,7 +3368,6 @@
             }).join('');
             container.innerHTML = items;
         }
-
         function setLocationFipsSelection(codes) {
             const normalized = Array.isArray(codes) ? codes.map(normalizeFipsCode).filter(Boolean) : [];
             const unique = [];
@@ -3691,7 +3391,6 @@
             }
             refreshDerivedZoneCodesFromSelection();
         }
-
         function addLocationFipsCode(code) {
             const normalized = normalizeFipsCode(code);
             if (!normalized || locationFipsSelection.includes(normalized)) {
@@ -3713,7 +3412,6 @@
             }
             refreshDerivedZoneCodesFromSelection();
         }
-
         function removeLocationFipsCode(code) {
             const normalized = normalizeFipsCode(code);
             if (!normalized) {
@@ -3731,7 +3429,6 @@
             }
             refreshDerivedZoneCodesFromSelection();
         }
-
         function populateLocationFipsStateOptions() {
             const select = document.getElementById('locationFipsState');
             if (!select) {
@@ -3754,7 +3451,6 @@
             });
             select.appendChild(fragment);
         }
-
         function populateLocationFipsCountyOptions(stateAbbr) {
             const select = document.getElementById('locationFipsCounty');
             if (!select) {
@@ -3762,28 +3458,23 @@
             }
             select.innerHTML = '';
             select.disabled = true;
-
             const placeholder = document.createElement('option');
             placeholder.value = '';
             placeholder.textContent = stateAbbr ? 'Select county or parish…' : 'Select a state first…';
             select.appendChild(placeholder);
-
             if (!stateAbbr) {
                 return;
             }
-
             const state = EAS_STATE_BY_ABBR[stateAbbr];
             if (!state) {
                 return;
             }
-
             if (state.statewide_code) {
                 const statewide = document.createElement('option');
                 statewide.value = state.statewide_code;
                 statewide.textContent = `Entire ${state.name || state.abbr} (${state.statewide_code})`;
                 select.appendChild(statewide);
             }
-
             (Array.isArray(state.counties) ? state.counties : []).forEach((county) => {
                 if (!county || !county.code) {
                     return;
@@ -3793,15 +3484,12 @@
                 option.textContent = `${county.name || county.code} (${county.code})`;
                 select.appendChild(option);
             });
-
             select.disabled = false;
         }
-
         function initializeLocationFipsControls() {
             populateLocationFipsStateOptions();
             populateLocationFipsCountyOptions('');
             renderLocationFipsSelection();
-
             const stateSelect = document.getElementById('locationFipsState');
             if (stateSelect) {
                 stateSelect.addEventListener('change', (event) => {
@@ -3809,7 +3497,6 @@
                     populateLocationFipsCountyOptions(abbr);
                 });
             }
-
             const addButton = document.getElementById('locationAddFipsBtn');
             if (addButton) {
                 addButton.addEventListener('click', (event) => {
@@ -3823,7 +3510,6 @@
                     addLocationFipsCode(selected);
                 });
             }
-
             const selectedContainer = document.getElementById('locationSelectedFips');
             if (selectedContainer) {
                 selectedContainer.addEventListener('click', (event) => {
@@ -3835,7 +3521,6 @@
                 });
             }
         }
-
         function describeSameSubdivision(subdivision) {
             const mapping = {
                 '0': 'Entire area',
@@ -3851,7 +3536,6 @@
             };
             return mapping[subdivision] || 'Custom area';
         }
-
         function updateLocationReferenceStatus(message, tone = 'muted') {
             const statusEl = document.getElementById('locationReferenceStatus');
             if (!statusEl) {
@@ -3868,7 +3552,6 @@
             statusEl.className = `small mt-3 mb-0 ${toneClass}`;
             statusEl.textContent = message || '';
         }
-
         function formatDegree(value, isLatitude) {
             const number = Number(value);
             if (!Number.isFinite(number)) {
@@ -3879,7 +3562,6 @@
                 : (number >= 0 ? 'E' : 'W');
             return `${Math.abs(number).toFixed(2)}° ${suffix}`;
         }
-
         function formatLatLon(lat, lng) {
             const latLabel = formatDegree(lat, true);
             const lngLabel = formatDegree(lng, false);
@@ -3894,7 +3576,6 @@
             }
             return `${latLabel} / ${lngLabel}`;
         }
-
         function renderLocationReference(data) {
             const container = document.getElementById('locationReferenceContent');
             if (!container) {
@@ -3904,9 +3585,7 @@
                 container.innerHTML = '<p class="text-muted small mb-0">Reference data unavailable.</p>';
                 return;
             }
-
             locationReferenceCache = data;
-
             const location = data.location || {};
             const locationParts = [];
             if (location.county_name) {
@@ -3919,7 +3598,6 @@
             const locationIntro = locationParts.length
                 ? `<p class="small text-muted mb-2">Saved configuration for <strong>${locationParts.join(', ')}</strong>${timezoneLabel}.</p>`
                 : '';
-
             const referenceSources = Array.isArray(data.sources) ? data.sources : [];
             const referenceItems = referenceSources.map((source) => {
                 const labelText = source?.label || source?.url || source?.path || 'Reference material';
@@ -3945,7 +3623,6 @@
                         <ul class="list-unstyled mb-0">${referenceItems}</ul>
                     </div>`
                 : '';
-
             const zones = Array.isArray(data.zones?.known) ? data.zones.known : [];
             const zoneRows = zones.map((zone) => {
                 const detailParts = [];
@@ -3979,7 +3656,6 @@
                     </tr>
                 `;
             }).join('');
-
             const zoneTable = zoneRows
                 ? `<div class="table-responsive">
                         <table class="table table-sm align-middle mb-2">
@@ -3996,18 +3672,15 @@
                         </table>
                     </div>`
                 : '<p class="text-muted small mb-0">No NOAA zone codes saved.</p>';
-
             const missingZones = Array.isArray(data.zones?.missing) ? data.zones.missing : [];
             const missingZoneNote = missingZones.length
                 ? `<p class="text-warning small mb-0">Metadata not found for ${missingZones.map((code) => `<code>${escapeHtml(code)}</code>`).join(', ')}. Keep the catalog updated to include these zones.</p>`
                 : '';
-
             const totalZones = typeof data.zones?.total_catalog === 'number' ? data.zones.total_catalog : null;
             const zoneSummaryCount = zones.length;
             const zoneSummaryLabel = totalZones !== null
                 ? `Matching ${zoneSummaryCount} of ${totalZones} catalogued zones.`
                 : `Matching ${zoneSummaryCount} saved zone${zoneSummaryCount === 1 ? '' : 's'}.`;
-
             const fipsEntries = Array.isArray(data.fips?.known) ? data.fips.known : [];
             const fipsRows = fipsEntries.map((entry) => {
                 const subdivision = entry.same_subdivision ? describeSameSubdivision(entry.same_subdivision) : '';
@@ -4050,7 +3723,6 @@
                     </tr>
                 `;
             }).join('');
-
             const fipsTable = fipsRows
                 ? `<div class="table-responsive">
                         <table class="table table-sm align-middle mb-2">
@@ -4065,22 +3737,18 @@
                         </table>
                     </div>`
                 : '<p class="text-muted small mb-0">No SAME / FIPS codes saved.</p>';
-
             const missingFips = Array.isArray(data.fips?.missing) ? data.fips.missing : [];
             const missingFipsNote = missingFips.length
                 ? `<p class="text-warning small mb-0">Unknown SAME codes: ${missingFips.map((code) => `<code>${escapeHtml(code)}</code>`).join(', ')}.</p>`
                 : '';
-
             const totalFips = typeof data.fips?.total_catalog === 'number' ? data.fips.total_catalog : null;
             const fipsSummaryLabel = totalFips !== null
                 ? `Matching ${fipsEntries.length} of ${totalFips} authorised SAME entries.`
                 : `Matching ${fipsEntries.length} saved SAME code${fipsEntries.length === 1 ? '' : 's'}.`;
-
             const areaTerms = Array.isArray(data.area_terms) ? data.area_terms : [];
             const areaTermsContent = areaTerms.length
                 ? `<div class="d-flex flex-wrap gap-2">${areaTerms.map((term) => `<span class="badge bg-secondary-subtle text-secondary-emphasis">${escapeHtml(term)}</span>`).join('')}</div>`
                 : '<p class="text-muted small mb-0">No area match keywords configured.</p>';
-
             container.innerHTML = `
                 ${locationIntro}
                 ${referenceSection}
@@ -4105,7 +3773,6 @@
                 </div>
             `;
         }
-
         async function loadLocationReference(forceRefresh = false) {
             const container = document.getElementById('locationReferenceContent');
             if (!container) {
@@ -4137,13 +3804,11 @@
                 updateLocationReferenceStatus(`Failed to load reference data: ${error.message}`, 'danger');
             }
         }
-
         function populateLocationSettingsForm(settings) {
             if (!settings) {
                 return;
             }
             locationSettingsCache = { ...settings };
-
             const countyField = document.getElementById('locationCountyName');
             const stateField = document.getElementById('locationStateCode');
             const timezoneField = document.getElementById('locationTimezone');
@@ -4153,7 +3818,6 @@
             const lngField = document.getElementById('locationMapLng');
             const zoomField = document.getElementById('locationMapZoom');
             const ledField = document.getElementById('locationLedLines');
-
             if (countyField) countyField.value = settings.county_name || '';
             if (stateField) stateField.value = settings.state_code || '';
             if (timezoneField) timezoneField.value = settings.timezone || '';
@@ -4164,11 +3828,9 @@
             if (lngField) lngField.value = settings.map_center_lng ?? '';
             if (zoomField) zoomField.value = settings.map_default_zoom ?? '';
             if (ledField) ledField.value = (settings.led_default_lines || []).join('\n');
-
             refreshDerivedZoneCodesFromSelection();
             updateLocationSettingsStatus('Loaded current configuration.', 'muted');
         }
-
         function serializeLocationSettingsForm() {
             return {
                 county_name: document.getElementById('locationCountyName')?.value.trim() || '',
@@ -4183,7 +3845,6 @@
                 led_default_lines: parseListInput(document.getElementById('locationLedLines')?.value)
             };
         }
-
         async function loadLocationSettings(force = false) {
             try {
                 const response = await fetch('/admin/location_settings');
@@ -4209,12 +3870,10 @@
                 updateLocationSettingsStatus('Failed to load settings.', 'danger');
             }
         }
-
         async function saveLocationSettings(event) {
             event.preventDefault();
             const payload = serializeLocationSettingsForm();
             updateLocationSettingsStatus('Saving changes...', 'info');
-
             try {
                 const response = await fetch('/admin/location_settings', {
                     method: 'PUT',
@@ -4222,7 +3881,6 @@
                     body: JSON.stringify(payload)
                 });
                 const result = await response.json();
-
                 if (response.ok) {
                     showStatus('Location settings updated successfully.', 'success');
                     if (result.settings) {
@@ -4242,17 +3900,13 @@
                 updateLocationSettingsStatus('Save failed.', 'danger');
             }
         }
-
         function initializeLocationSettings() {
             const form = document.getElementById('locationSettingsForm');
             if (!form) {
                 return;
             }
-
             initializeLocationFipsControls();
-
             form.addEventListener('submit', saveLocationSettings);
-
             const refreshReferenceButton = document.getElementById('refreshLocationReference');
             if (refreshReferenceButton) {
                 refreshReferenceButton.addEventListener('click', (event) => {
@@ -4260,7 +3914,6 @@
                     loadLocationReference(true);
                 });
             }
-
             const resetButton = document.getElementById('resetLocationSettings');
             if (resetButton) {
                 resetButton.addEventListener('click', () => {
@@ -4268,19 +3921,15 @@
                     updateLocationSettingsStatus('Reverted to last saved values.', 'info');
                 });
             }
-
             populateLocationSettingsForm(locationSettingsCache || window.APP_LOCATION || {});
             loadLocationSettings(true);
         }
-
         function initializeAlertManagement() {
             loadAdminAlerts();
-
             const searchInput = document.getElementById('alertSearchInput');
             if (searchInput) {
                 searchInput.addEventListener('input', onAlertSearchChanged);
             }
-
             const includeExpiredToggle = document.getElementById('includeExpiredAlertsToggle');
             if (includeExpiredToggle) {
                 includeExpiredToggle.addEventListener('change', (event) => {
@@ -4288,23 +3937,19 @@
                     loadAdminAlerts();
                 });
             }
-
             const refreshButton = document.getElementById('refreshAlertListButton');
             if (refreshButton) {
                 refreshButton.addEventListener('click', () => loadAdminAlerts(true));
             }
-
             const editForm = document.getElementById('editAlertForm');
             if (editForm) {
                 editForm.addEventListener('submit', submitAlertEdit);
             }
-
             const editModalElement = document.getElementById('editAlertModal');
             if (editModalElement) {
                 editModalElement.addEventListener('hidden.bs.modal', resetAlertEditForm);
             }
         }
-
         function onAlertSearchChanged(event) {
             const value = event.target ? event.target.value.trim() : '';
             adminAlertFilters.search = value;
@@ -4315,11 +3960,9 @@
                 loadAdminAlerts();
             }, 400);
         }
-
         async function loadAdminAlerts(showRefreshNotice = false) {
             const listContainer = document.getElementById('adminAlertList');
             const metaContainer = document.getElementById('adminAlertListMeta');
-
             if (listContainer) {
                 listContainer.innerHTML = `
                     <div class="text-center py-4">
@@ -4331,7 +3974,6 @@
             if (metaContainer) {
                 metaContainer.textContent = '';
             }
-
             const params = new URLSearchParams();
             if (adminAlertFilters.includeExpired) {
                 params.set('include_expired', 'true');
@@ -4339,21 +3981,16 @@
             if (adminAlertFilters.search) {
                 params.set('search', adminAlertFilters.search);
             }
-
             const queryString = params.toString();
             const url = queryString ? `/admin/alerts?${queryString}` : '/admin/alerts';
-
             try {
                 const response = await fetch(url);
                 const result = await response.json();
-
                 if (!response.ok || (result && result.error)) {
                     throw new Error((result && result.error) || 'Failed to load alerts.');
                 }
-
                 adminAlerts = Array.isArray(result.alerts) ? result.alerts : [];
                 renderAdminAlertList(result);
-
                 if (showRefreshNotice) {
                     showStatus('✅ Alert list refreshed.', 'success', 2500);
                 }
@@ -4367,15 +4004,12 @@
                 showStatus(`❌ Failed to load alerts: ${error.message}`, 'danger');
             }
         }
-
         function renderAdminAlertList(payload) {
             const listContainer = document.getElementById('adminAlertList');
             const metaContainer = document.getElementById('adminAlertListMeta');
-
             if (!listContainer) {
                 return;
             }
-
             const alerts = Array.isArray(adminAlerts) ? adminAlerts : [];
             if (metaContainer) {
                 const total = typeof payload.total === 'number' ? payload.total : alerts.length;
@@ -4384,12 +4018,10 @@
                 const countText = total !== returned ? `${returned} of ${total}` : `${returned}`;
                 metaContainer.textContent = alerts.length ? `${countText} displayed (${descriptor})` : '';
             }
-
             if (!alerts.length) {
                 listContainer.innerHTML = '<div class="alert alert-info">No alerts found for the selected filters.</div>';
                 return;
             }
-
             const rows = alerts.map(renderAdminAlertRow).join('');
             listContainer.innerHTML = `
                 <div class="table-responsive">
@@ -4408,7 +4040,6 @@
                 </div>
             `;
         }
-
         function renderAdminAlertRow(alert) {
             const eventLabel = escapeHtml(alert.event || 'Unknown');
             const identifier = escapeHtml(alert.identifier || '');
@@ -4421,7 +4052,6 @@
                 renderUrgencyBadge(alert.urgency),
                 renderCertaintyBadge(alert.certainty)
             ].filter(Boolean).join(' ');
-
             return `
                 <tr>
                     <td>
@@ -4445,7 +4075,6 @@
                 </tr>
             `;
         }
-
         function renderSeverityBadge(severity) {
             if (!severity) {
                 return '';
@@ -4463,7 +4092,6 @@
             }
             return `<span class="badge ${badgeClass} me-1">${escapeHtml(severity)}</span>`;
         }
-
         function renderUrgencyBadge(urgency) {
             if (!urgency) {
                 return '';
@@ -4479,7 +4107,6 @@
             }
             return `<span class="badge ${badgeClass} me-1">${escapeHtml(urgency)}</span>`;
         }
-
         function renderCertaintyBadge(certainty) {
             if (!certainty) {
                 return '';
@@ -4495,7 +4122,6 @@
             }
             return `<span class="badge ${badgeClass}">${escapeHtml(certainty)}</span>`;
         }
-
         function renderStatusBadge(status) {
             if (!status) {
                 return '<span class="badge bg-secondary">Unknown</span>';
@@ -4511,7 +4137,6 @@
             }
             return `<span class="badge ${badgeClass}">${escapeHtml(status)}</span>`;
         }
-
         function formatDateTimeDisplay(value) {
             if (!value) {
                 return '<span class="text-muted">—</span>';
@@ -4522,7 +4147,6 @@
             }
             return escapeHtml(parsed.toLocaleString());
         }
-
         function isoToLocalInputValue(value) {
             if (!value) {
                 return '';
@@ -4535,7 +4159,6 @@
             const localTime = new Date(parsed.getTime() - offsetMinutes * 60000);
             return localTime.toISOString().slice(0, 16);
         }
-
         function localInputToIso(value) {
             if (!value) {
                 return null;
@@ -4548,28 +4171,23 @@
             const utcTime = new Date(parsed.getTime() - offsetMinutes * 60000);
             return utcTime.toISOString();
         }
-
         function setInputValue(id, value) {
             const element = document.getElementById(id);
             if (element) {
                 element.value = value || '';
             }
         }
-
         function openEditAlert(alertId) {
             const target = adminAlerts.find(alert => alert.id === alertId);
             if (!target) {
                 showStatus('Selected alert could not be found. Refresh the list and try again.', 'warning');
                 return;
             }
-
             editingAlertId = alertId;
-
             const identifierLabel = document.getElementById('editAlertIdentifier');
             if (identifierLabel) {
                 identifierLabel.textContent = target.identifier || '';
             }
-
             setInputValue('editAlertEvent', target.event);
             setInputValue('editAlertStatus', target.status);
             setInputValue('editAlertSeverity', target.severity);
@@ -4580,17 +4198,14 @@
             setInputValue('editAlertDescription', target.description);
             setInputValue('editAlertInstruction', target.instruction);
             setInputValue('editAlertAreaDesc', target.area_desc);
-
             const expiresInput = document.getElementById('editAlertExpires');
             if (expiresInput) {
                 expiresInput.value = isoToLocalInputValue(target.expires);
             }
-
             if (editAlertModal) {
                 editAlertModal.show();
             }
         }
-
         function resetAlertEditForm() {
             editingAlertId = null;
             const form = document.getElementById('editAlertForm');
@@ -4602,16 +4217,13 @@
                 identifierLabel.textContent = '';
             }
         }
-
         function promptDeleteAlert(alertId) {
             const target = adminAlerts.find(alert => alert.id === alertId);
             if (!target) {
                 showStatus('Selected alert could not be found. Refresh the list and try again.', 'warning');
                 return;
             }
-
             const identifierLabel = target.identifier ? `"${target.identifier}"` : `ID ${alertId}`;
-
             showConfirmation({
                 title: 'Delete Alert',
                 message: `Delete alert ${escapeHtml(identifierLabel)}?`,
@@ -4621,44 +4233,35 @@
                 onConfirm: () => deleteAlert(alertId)
             });
         }
-
         async function deleteAlert(alertId) {
             try {
                 const response = await fetch(`/admin/alerts/${alertId}`, { method: 'DELETE' });
                 const result = await response.json();
-
                 if (!response.ok || (result && result.error)) {
                     throw new Error((result && result.error) || 'Failed to delete alert.');
                 }
-
                 showStatus(result.message || 'Alert deleted.', 'success');
                 await loadAdminAlerts();
             } catch (error) {
                 showStatus(`❌ Failed to delete alert: ${error.message}`, 'danger');
             }
         }
-
         async function submitAlertEdit(event) {
             event.preventDefault();
-
             if (!editingAlertId) {
                 showStatus('No alert selected for editing.', 'warning');
                 return;
             }
-
             const eventValue = (document.getElementById('editAlertEvent')?.value || '').trim();
             const statusValue = (document.getElementById('editAlertStatus')?.value || '').trim();
-
             if (!eventValue) {
                 showStatus('Event name is required.', 'warning');
                 return;
             }
-
             if (!statusValue) {
                 showStatus('Status is required.', 'warning');
                 return;
             }
-
             const payload = {
                 event: eventValue,
                 status: statusValue,
@@ -4671,7 +4274,6 @@
                 instruction: (document.getElementById('editAlertInstruction')?.value || '').trim() || null,
                 area_desc: (document.getElementById('editAlertAreaDesc')?.value || '').trim() || null,
             };
-
             const expiresValue = document.getElementById('editAlertExpires')?.value || '';
             if (expiresValue) {
                 const isoValue = localInputToIso(expiresValue);
@@ -4683,7 +4285,6 @@
             } else {
                 payload.expires = null;
             }
-
             try {
                 const response = await fetch(`/admin/alerts/${editingAlertId}`, {
                     method: 'PATCH',
@@ -4691,11 +4292,9 @@
                     body: JSON.stringify(payload)
                 });
                 const result = await response.json();
-
                 if (!response.ok || (result && result.error)) {
                     throw new Error((result && result.error) || 'Failed to update alert.');
                 }
-
                 showStatus(result.message || 'Alert updated successfully.', 'success');
                 if (editAlertModal) {
                     editAlertModal.hide();
@@ -4705,11 +4304,9 @@
                 showStatus(`❌ Failed to update alert: ${error.message}`, 'danger');
             }
         }
-
         // File upload handling
         document.getElementById('uploadForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-
             let selection;
             try {
                 selection = getSelectedBoundaryType('boundaryType', 'customBoundaryType');
@@ -4717,28 +4314,22 @@
                 showStatus(error.message, 'warning');
                 return;
             }
-
             if (!selection.type) {
                 showStatus('Please select a boundary type before uploading.', 'warning');
                 return;
             }
-
             const formData = new FormData(this);
             formData.set('boundary_type', selection.type);
             const submitBtn = this.querySelector('button[type="submit"]');
             const originalText = submitBtn.innerHTML;
-
             submitBtn.innerHTML = '<span class="loading-spinner"></span> Uploading...';
             submitBtn.disabled = true;
-
             try {
                 const response = await fetch('/admin/upload_boundaries', {
                     method: 'POST',
                     body: formData
                 });
-
                 const result = await response.json();
-
                 if (response.ok) {
                     showStatus(`✅ ${result.success}`, 'success');
                     this.reset();
@@ -4754,12 +4345,10 @@
                 submitBtn.disabled = false;
             }
         });
-
         // Preview extraction
         async function previewExtraction() {
             const form = document.getElementById('previewForm');
             const resultsDiv = document.getElementById('previewResults');
-
             let selection;
             try {
                 selection = getSelectedBoundaryType('previewBoundaryType', 'customPreviewBoundaryType');
@@ -4770,7 +4359,6 @@
                 }
                 return;
             }
-
             if (!selection.type) {
                 showStatus('Please select a boundary type to preview.', 'warning');
                 if (resultsDiv) {
@@ -4778,26 +4366,20 @@
                 }
                 return;
             }
-
             const formData = new FormData(form);
             formData.set('boundary_type', selection.type);
-
             resultsDiv.innerHTML = '<div class="text-center py-3"><div class="loading-spinner"></div><span class="ms-2">Analyzing file...</span></div>';
-
             try {
                 const response = await fetch('/admin/preview_geojson', {
                     method: 'POST',
                     body: formData
                 });
-
                 const result = await response.json();
-
                 if (response.ok) {
                     const allFields = (result.all_fields || []).map(escapeHtml);
                     const ownerFields = (result.owner_fields || []).map(escapeHtml);
                     const lineIdFields = (result.line_id_fields || []).map(escapeHtml);
                     const recommendedFields = (result.recommended_additional_fields || []).map(escapeHtml);
-
                     let html = `
                         <div class="preview-container">
                             <h5>📋 Preview Results</h5>
@@ -4805,21 +4387,16 @@
                             <p><strong>Boundary Type:</strong> ${escapeHtml(result.boundary_type || 'Unknown')}</p>
                             <p><strong>Available Fields:</strong> ${allFields.length ? allFields.join(', ') : 'None detected'}</p>
                     `;
-
                     if (ownerFields.length) {
                         html += `<p><strong>Owner Fields Detected:</strong> ${ownerFields.join(', ')}</p>`;
                     }
-
                     if (lineIdFields.length) {
                         html += `<p><strong>Identifier Fields Detected:</strong> ${lineIdFields.join(', ')}</p>`;
                     }
-
                     if (recommendedFields.length) {
                         html += `<p><strong>Suggested Metadata:</strong> ${recommendedFields.join(', ')}</p>`;
                     }
-
                     html += `<h6 class="mt-3">🔍 Sample Extractions (first ${escapeHtml(String(result.preview_count))}):</h6>`;
-
                     result.previews.forEach((preview, index) => {
                         const nameLabel = escapeHtml(preview.name || 'Unknown');
                         const ownerLabel = preview.owner ? escapeHtml(preview.owner) : 'Unknown';
@@ -4828,7 +4405,6 @@
                         const mtfccLabel = preview.mtfcc ? escapeHtml(preview.mtfcc) : '';
                         const lengthLabel = preview.length_label ? escapeHtml(preview.length_label) : '';
                         const lineIdLabel = preview.line_id ? escapeHtml(preview.line_id) : '';
-
                         html += `
                             <div class="preview-item">
                                 <strong>Feature ${index + 1}:</strong><br>
@@ -4836,22 +4412,18 @@
                                 <strong>👤 Owner:</strong> ${ownerLabel}<br>
                                 <strong>📄 Description:</strong> ${descriptionLabel}<br>
                         `;
-
                         if (classificationLabel || mtfccLabel) {
                             const classificationText = classificationLabel
                                 ? (mtfccLabel ? `${classificationLabel} (${mtfccLabel})` : classificationLabel)
                                 : mtfccLabel;
                             html += `<strong>🏷 Classification:</strong> ${classificationText}<br>`;
                         }
-
                         if (lengthLabel) {
                             html += `<strong>📏 Length:</strong> ${lengthLabel}<br>`;
                         }
-
                         if (lineIdLabel) {
                             html += `<strong>🆔 Identifier:</strong> ${lineIdLabel}<br>`;
                         }
-
                         if (Array.isArray(preview.additional_details) && preview.additional_details.length) {
                             html += '<ul class="mb-0 mt-1">';
                             preview.additional_details.forEach(detail => {
@@ -4859,10 +4431,8 @@
                             });
                             html += '</ul>';
                         }
-
                         html += '</div>';
                     });
-
                     if (result.field_mappings && Object.keys(result.field_mappings).length > 0) {
                         const nameFields = result.field_mappings.name_fields || [];
                         const descriptionFields = result.field_mappings.description_fields || [];
@@ -4872,7 +4442,6 @@
                             <p><strong>Description Fields:</strong> ${descriptionFields.length ? descriptionFields.map(escapeHtml).join(', ') : 'None configured'}</p>
                         `;
                     }
-
                     html += '</div>';
                     resultsDiv.innerHTML = html;
                 } else {
@@ -4882,15 +4451,12 @@
                 resultsDiv.innerHTML = `<div class="alert alert-danger">❌ Error: ${error.message}</div>`;
             }
         }
-
         // Load boundaries
         async function loadBoundaries() {
             try {
                 const response = await fetch('/api/boundaries');
                 const data = await response.json();
-
                 const listDiv = document.getElementById('boundariesList');
-
                 if (data.features && data.features.length > 0) {
                     const boundariesByType = {};
                     data.features.forEach(feature => {
@@ -4905,13 +4471,11 @@
                         }
                         boundariesByType[typeKey].items.push(props);
                     });
-
                     const dynamicTypes = Object.entries(boundariesByType).map(([key, group]) => ({
                         key,
                         label: group.label || formatBoundaryLabel(key)
                     }));
                     ensureDynamicBoundaryOptions(dynamicTypes);
-
                     let html = '<div class="row">';
                     for (const [typeKey, group] of Object.entries(boundariesByType)) {
                         const boundaries = group.items;
@@ -4949,7 +4513,6 @@
                 document.getElementById('boundariesList').innerHTML = `<div class="alert alert-danger">Error loading boundaries: ${error.message}</div>`;
             }
         }
-
         // System health loading
         // System Health now loaded via iframe - no need for separate function
         // The iframe loads /system_health which uses system_health_new.html
@@ -4957,13 +4520,11 @@
             // No-op: System health is now loaded via iframe
             console.log('System health loaded via iframe at /system_health');
         }
-
         // Alert Management Functions (NEW PRESERVATION SYSTEM)
         async function markExpiredAlerts() {
             try {
                 const response = await fetch('/admin/mark_expired', { method: 'POST' });
                 const result = await response.json();
-
                 if (response.ok) {
                     showStatus(`✅ ${result.message}`, 'success');
                     if (result.note) {
@@ -4976,7 +4537,6 @@
                 showStatus(`❌ Error: ${error.message}`, 'danger');
             }
         }
-
         async function clearExpiredAlerts() {
             try {
                 // First request to get confirmation details
@@ -4985,9 +4545,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({})
                 });
-
                 const result = await response.json();
-
                 if (result.requires_confirmation) {
                     showConfirmation({
                         title: '⚠️ PERMANENT DELETION WARNING',
@@ -5002,9 +4560,7 @@
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ confirmed: true })
                                 });
-
                                 const confirmResult = await confirmResponse.json();
-
                                 if (confirmResponse.ok) {
                                     showStatus(`✅ ${confirmResult.message}`, 'success');
                                     if (confirmResult.warning) {
@@ -5025,7 +4581,6 @@
                 showStatus(`❌ Error: ${error.message}`, 'danger');
             }
         }
-
         // Boundary Management Functions
         async function deleteBoundary(boundaryId, boundaryName) {
             showConfirmation({
@@ -5038,7 +4593,6 @@
                     try {
                         const response = await fetch(`/admin/delete_boundary/${boundaryId}`, { method: 'DELETE' });
                         const result = await response.json();
-
                         if (response.ok) {
                             showStatus(`✅ ${result.success}`, 'success');
                             loadBoundaries();
@@ -5051,7 +4605,6 @@
                 }
             });
         }
-
         async function deleteBoundariesByType() {
             let selection;
             try {
@@ -5060,14 +4613,11 @@
                 showStatus(error.message, 'warning');
                 return;
             }
-
             if (!selection.type) {
                 showStatus('Please select a boundary type to delete', 'warning');
                 return;
             }
-
             const displayLabel = selection.label || formatBoundaryLabel(selection.type);
-
             showConfirmation({
                 title: 'Delete Boundary Type',
                 message: `Delete all ${escapeHtml(displayLabel)} boundaries?`,
@@ -5080,7 +4630,6 @@
                             method: 'DELETE'
                         });
                         const result = await response.json();
-
                         if (response.ok) {
                             showStatus(`✅ ${result.success}`, 'success');
                             const select = document.getElementById('deleteType');
@@ -5102,7 +4651,6 @@
                 }
             });
         }
-
         async function clearAllBoundaries() {
             const steps = [
                 {
@@ -5115,7 +4663,6 @@
                     textConfirmation: 'DELETE ALL BOUNDARIES'
                 }
             ];
-
             showMultiStepConfirmation({
                 steps: steps,
                 onComplete: async () => {
@@ -5128,9 +4675,7 @@
                                 text_confirmation: 'DELETE ALL BOUNDARIES'
                             })
                         });
-
                         const result = await response.json();
-
                         if (response.ok) {
                             showStatus(`✅ ${result.success}`, 'success');
                             loadBoundaries();
@@ -5143,14 +4688,12 @@
                 }
             });
         }
-
         // System Operations
         async function triggerCAPPoll() {
             try {
                 showStatus('📡 Triggering CAP poll...', 'info');
                 const response = await fetch('/admin/trigger_poll', { method: 'POST' });
                 const result = await response.json();
-
                 if (response.ok) {
                     showStatus(`✅ ${result.message}`, 'success');
                 } else {
@@ -5160,7 +4703,6 @@
                 showStatus(`❌ Error: ${error.message}`, 'danger');
             }
         }
-
         function truncate(value, maxLength = 180) {
             if (!value || typeof value !== 'string') {
                 return '';
@@ -5170,7 +4712,6 @@
             }
             return `${value.slice(0, maxLength - 1)}…`;
         }
-
         function formatOperationTimestamp(value) {
             if (!value) {
                 return null;
@@ -5181,7 +4722,6 @@
             }
             return parsed.toLocaleString();
         }
-
         function setOperationIndicator(name, state) {
             const statusElement = document.getElementById(`${name}Status`);
             const buttonElement = document.getElementById(`${name}Button`);
@@ -5222,7 +4762,6 @@
             }
             statusElement.textContent = message || 'Status unknown.';
         }
-
         function updateOperationStatusIndicators(operations) {
             if (!operations || typeof operations !== 'object') {
                 return;
@@ -5231,7 +4770,6 @@
             setOperationIndicator('backup', latestOperationStatus.backup);
             setOperationIndicator('upgrade', latestOperationStatus.upgrade);
         }
-
         async function refreshOperationStatus() {
             try {
                 const response = await fetch('/admin/operations/status');
@@ -5244,7 +4782,6 @@
                 console.warn('Unable to refresh operation status', error);
             }
         }
-
         async function runOneClickBackup() {
             const labelInput = document.getElementById('backupLabel');
             const payload = {};
@@ -5273,7 +4810,6 @@
                 showStatus(`❌ Error: ${error.message}`, 'danger');
             }
         }
-
         async function runOneClickUpgrade() {
             const payload = {};
             const checkoutInput = document.getElementById('upgradeCheckout');
@@ -5310,7 +4846,6 @@
                 showStatus(`❌ Error: ${error.message}`, 'danger');
             }
         }
-
         function escapeHtml(value) {
             if (typeof value !== 'string') {
                 return value;
@@ -5322,27 +4857,22 @@
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
         }
-
         const renderQueryDetails = (container, queryUrl, params) => {
             if (!container || !queryUrl) {
                 return;
             }
-
             const detailsContainer = document.createElement('div');
             detailsContainer.className = 'mt-3 alert alert-light border manual-import-query-details';
-
             const heading = document.createElement('div');
             heading.className = 'small fw-semibold text-uppercase text-muted';
             heading.textContent = 'NOAA API Query';
             detailsContainer.appendChild(heading);
-
             const urlWrapper = document.createElement('div');
             urlWrapper.className = 'small text-break';
             const urlCode = document.createElement('code');
             urlCode.textContent = queryUrl;
             urlWrapper.appendChild(urlCode);
             detailsContainer.appendChild(urlWrapper);
-
             const paramEntries = params && typeof params === 'object' ? Object.entries(params) : [];
             if (paramEntries.length > 0) {
                 const list = document.createElement('dl');
@@ -5351,13 +4881,11 @@
                     const dt = document.createElement('dt');
                     dt.className = 'col-sm-4';
                     dt.textContent = key;
-
                     const dd = document.createElement('dd');
                     dd.className = 'col-sm-8 text-break';
                     const codeEl = document.createElement('code');
                     codeEl.textContent = String(value);
                     dd.appendChild(codeEl);
-
                     list.appendChild(dt);
                     list.appendChild(dd);
                 });
@@ -5368,10 +4896,8 @@
                 noParams.textContent = 'No additional query parameters were sent.';
                 detailsContainer.appendChild(noParams);
             }
-
             container.appendChild(detailsContainer);
         };
-
         async function manualImportAlert() {
             const identifierInput = document.getElementById('manualAlertIdentifier');
             const startInput = document.getElementById('manualAlertStart');
@@ -5380,11 +4906,9 @@
             const eventInput = document.getElementById('manualAlertEvent');
             const limitInput = document.getElementById('manualAlertLimit');
             const resultsDiv = document.getElementById('manualImportResults');
-
             if (resultsDiv) {
                 resultsDiv.textContent = '';
             }
-
             const identifier = identifierInput ? identifierInput.value.trim() : '';
             const startValue = startInput ? startInput.value : '';
             const endValue = endInput ? endInput.value : '';
@@ -5392,7 +4916,6 @@
             const sanitizedState = rawState.replace(/[^A-Z]/g, '').slice(0, 2);
             const eventFilter = eventInput ? eventInput.value.trim() : '';
             const limit = limitInput ? parseInt(limitInput.value, 10) : 5;
-
             const normalizeDate = (value) => {
                 if (!value) {
                     return null;
@@ -5403,15 +4926,12 @@
                 }
                 return new Date(parsed).toISOString();
             };
-
             const startIso = normalizeDate(startValue);
             const endIso = normalizeDate(endValue);
-
             if (!identifier && (!startIso || !endIso)) {
                 showStatus('Please provide an alert identifier or both start and end timestamps.', 'warning');
                 return;
             }
-
             if (!identifier) {
                 if (!sanitizedState || sanitizedState.length !== 2) {
                     showStatus('Provide the two-letter state code when searching without an identifier.', 'warning');
@@ -5421,45 +4941,37 @@
                 showStatus('State filters must use the two-letter postal abbreviation.', 'warning');
                 return;
             }
-
             const payload = {
                 identifier,
                 event: eventFilter,
                 limit: Number.isNaN(limit) ? 5 : limit,
             };
-
             if (sanitizedState && sanitizedState.length === 2) {
                 payload.area = sanitizedState;
             }
-
             if (startIso) {
                 payload.start = startIso;
             }
             if (endIso) {
                 payload.end = endIso;
             }
-
             if (resultsDiv) {
                 resultsDiv.textContent = 'Contacting NOAA API…';
             }
-
             try {
                 const response = await fetch('/admin/import_alert', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
-
                 let rawBody = '';
                 let result = null;
-
                 try {
                     rawBody = await response.text();
                     result = rawBody ? JSON.parse(rawBody) : {};
                 } catch (parseError) {
                     console.error('Manual NOAA import response was not valid JSON', parseError, rawBody);
                 }
-
                 if (response.ok && result && !result.error) {
                     const summaryParts = [];
                     if (typeof result.inserted === 'number') {
@@ -5471,11 +4983,8 @@
                     if (typeof result.skipped === 'number' && result.skipped > 0) {
                         summaryParts.push(`${result.skipped} skipped`);
                     }
-
                     const identifiers = (result.identifiers || []).map(id => `<code>${escapeHtml(id)}</code>`).join(', ');
-
                     showStatus(`✅ ${result.message || 'Alert import completed successfully.'}`, 'success');
-
                     if (resultsDiv) {
                         resultsDiv.innerHTML = `
                             ${summaryParts.length ? `<div>${summaryParts.join(' • ')}</div>` : ''}
@@ -5483,7 +4992,6 @@
                         `;
                         renderQueryDetails(resultsDiv, result.query_url, result.params);
                     }
-
                     if (result.query_url) {
                         console.info('Manual NOAA import executed', {
                             url: result.query_url,
@@ -5508,13 +5016,11 @@
                 }
             }
         }
-
         async function optimizeDatabase() {
             try {
                 showStatus('🔧 Optimizing database...', 'info');
                 const response = await fetch('/admin/optimize_db', { method: 'POST' });
                 const result = await response.json();
-
                 if (response.ok) {
                     showStatus(`✅ ${result.message}`, 'success');
                 } else {
@@ -5524,7 +5030,6 @@
                 showStatus(`❌ Error: ${error.message}`, 'danger');
             }
         }
-
         async function recalculateIntersections() {
             showConfirmation({
                 title: 'Recalculate Intersections',
@@ -5537,7 +5042,6 @@
                         showStatus('🔗 Recalculating intersections...', 'info');
                         const response = await fetch('/admin/recalculate_intersections', { method: 'POST' });
                         const result = await response.json();
-
                         if (response.ok) {
                             showStatus(`✅ ${result.success}`, 'success');
                         } else {
@@ -5549,20 +5053,17 @@
                 }
             });
         }
-
         async function checkDatabaseHealth() {
             try {
                 showStatus('🔍 Checking database health...', 'info');
                 const response = await fetch('/admin/check_db_health');
                 const result = await response.json();
-
                 if (response.ok) {
                     let healthHtml = '<div class="alert alert-info"><h6>Database Health Report:</h6>';
                     healthHtml += `<p><strong>Connectivity:</strong> ${result.connectivity}</p>`;
                     healthHtml += `<p><strong>Database Size:</strong> ${result.database_size}</p>`;
                     healthHtml += `<p><strong>Active Connections:</strong> ${result.active_connections}</p>`;
                     healthHtml += '</div>';
-
                     showStatus(healthHtml, 'info', 10000);
                 } else {
                     showStatus(`❌ ${result.error}`, 'danger');
