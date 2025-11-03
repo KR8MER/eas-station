@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS eas_messages (
     audio_data BYTEA,
     eom_audio_data BYTEA,
     text_payload JSONB DEFAULT '{}'::jsonb,
-    metadata JSONB DEFAULT '{}'::jsonb,
+    metadata_payload JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
