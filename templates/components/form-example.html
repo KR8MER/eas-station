@@ -1,0 +1,262 @@
+<!-- Example: Location Settings Form using Design System -->
+<!-- This demonstrates proper form structure and component usage -->
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-map-marker-alt text-primary"></i> Location Configuration
+        </h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="/admin/location-settings" id="locationForm">
+            
+            <!-- Basic Location Information Section -->
+            <div class="form-section mb-4">
+                <h6 class="form-section-title">
+                    <i class="fas fa-info-circle"></i> Basic Information
+                </h6>
+                <div class="form-section-content">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="county-name" class="form-label required">County Name</label>
+                            <input type="text" class="form-control" id="county-name" 
+                                   name="county_name" placeholder="Enter county name" required>
+                            <div class="form-text">Official county name for your service area</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="state-code" class="form-label required">State Code</label>
+                            <select class="form-select" id="state-code" name="state_code" required>
+                                <option value="">Select state...</option>
+                                <option value="AL">Alabama</option>
+                                <option value="AK">Alaska</option>
+                                <!-- More states... -->
+                            </select>
+                            <div class="form-text">Two-letter state abbreviation</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Map Center Coordinates Section -->
+            <div class="form-section mb-4">
+                <h6 class="form-section-title">
+                    <i class="fas fa-crosshairs"></i> Map Center Coordinates
+                </h6>
+                <div class="form-section-content">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="map-lat" class="form-label required">Latitude</label>
+                            <input type="number" class="form-control" id="map-lat" 
+                                   name="map_center_lat" step="0.000001" 
+                                   placeholder="40.7128" required>
+                            <div class="form-text">Decimal degrees (-90 to 90)</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="map-lng" class="form-label required">Longitude</label>
+                            <input type="number" class="form-control" id="map-lng" 
+                                   name="map_center_lng" step="0.000001" 
+                                   placeholder="-74.0060" required>
+                            <div class="form-text">Decimal degrees (-180 to 180)</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="map-zoom" class="form-label required">Default Zoom</label>
+                            <input type="number" class="form-control" id="map-zoom" 
+                                   name="map_default_zoom" min="1" max="18" 
+                                   value="10" required>
+                            <div class="form-text">Zoom level (1-18)</div>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-info mt-3" role="alert">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Tip:</strong> You can use the map to find coordinates, or search for your location online.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Advanced Settings (Collapsible) -->
+            <div class="accordion mb-4" id="advancedSettings">
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingAdvanced">
+                        <button class="accordion-button collapsed" type="button" 
+                                data-bs-toggle="collapse" data-bs-target="#collapseAdvanced">
+                            <i class="fas fa-cog me-2"></i> Advanced Settings
+                        </button>
+                    </h2>
+                    <div id="collapseAdvanced" class="accordion-collapse collapse" 
+                         data-bs-parent="#advancedSettings">
+                        <div class="accordion-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="timezone" class="form-label">Timezone</label>
+                                    <select class="form-select" id="timezone" name="timezone">
+                                        <option value="">Auto-detect</option>
+                                        <option value="America/New_York">Eastern Time</option>
+                                        <option value="America/Chicago">Central Time</option>
+                                        <option value="America/Denver">Mountain Time</option>
+                                        <option value="America/Los_Angeles">Pacific Time</option>
+                                    </select>
+                                    <div class="form-text">Leave blank to auto-detect from coordinates</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="fips-code" class="form-label">FIPS Code</label>
+                                    <input type="text" class="form-control" id="fips-code" 
+                                           name="fips_code" placeholder="12345">
+                                    <div class="form-text">5-digit FIPS code for your county</div>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" 
+                                           id="auto-refresh" name="auto_refresh" value="true">
+                                    <label class="form-check-label" for="auto-refresh">
+                                        Enable automatic map refresh
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" 
+                                           id="show-boundaries" name="show_boundaries" value="true" checked>
+                                    <label class="form-check-label" for="show-boundaries">
+                                        Show county boundaries by default
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Save Configuration
+                </button>
+                <button type="reset" class="btn btn-secondary">
+                    <i class="fas fa-undo"></i> Reset
+                </button>
+                <button type="button" class="btn btn-outline-info" onclick="testLocation()">
+                    <i class="fas fa-map-marker-alt"></i> Test on Map
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Success/Error Messages -->
+<div class="toast-container position-fixed top-0 end-0 p-3">
+    <div id="successToast" class="toast align-items-center text-white bg-success border-0" role="alert">
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-check-circle me-2"></i> Settings saved successfully!
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" 
+                    data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+    <div id="errorToast" class="toast align-items-center text-white bg-danger border-0" role="alert">
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-exclamation-circle me-2"></i> <span id="errorMessage">Error saving settings</span>
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" 
+                    data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Form validation and submission
+document.getElementById('locationForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    // Validate coordinates
+    const lat = parseFloat(document.getElementById('map-lat').value);
+    const lng = parseFloat(document.getElementById('map-lng').value);
+    
+    if (lat < -90 || lat > 90) {
+        showError('Latitude must be between -90 and 90');
+        return;
+    }
+    
+    if (lng < -180 || lng > 180) {
+        showError('Longitude must be between -180 and 180');
+        return;
+    }
+    
+    // Submit form
+    const formData = new FormData(this);
+    
+    fetch(this.action, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showSuccess();
+        } else {
+            showError(data.message || 'Error saving settings');
+        }
+    })
+    .catch(error => {
+        showError('Network error: ' + error.message);
+    });
+});
+
+function showSuccess() {
+    const toast = new bootstrap.Toast(document.getElementById('successToast'));
+    toast.show();
+}
+
+function showError(message) {
+    document.getElementById('errorMessage').textContent = message;
+    const toast = new bootstrap.Toast(document.getElementById('errorToast'));
+    toast.show();
+}
+
+function testLocation() {
+    const lat = document.getElementById('map-lat').value;
+    const lng = document.getElementById('map-lng').value;
+    const zoom = document.getElementById('map-zoom').value;
+    
+    if (lat && lng) {
+        window.open(`/?lat=${lat}&lng=${lng}&zoom=${zoom}`, '_blank');
+    } else {
+        showError('Please enter coordinates first');
+    }
+}
+</script>
+
+<style>
+/* Additional form-specific styles */
+.form-section {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+    background: var(--surface-color);
+}
+
+.form-section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-color);
+    margin-bottom: var(--spacing-md);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 2px solid var(--border-color);
+}
+
+.form-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    padding-top: var(--spacing-lg);
+    border-top: 1px solid var(--border-color);
+    margin-top: var(--spacing-lg);
+}
+
+.form-label.required::after {
+    content: " *";
+    color: var(--danger-color);
+}
+</style>
+<script src="https://sites.super.myninja.ai/_assets/ninja-daytona-script.js"></script>
