@@ -370,7 +370,7 @@
             <div class="card-body">
                 <div class="row g-4">
                     <div class="col-xl-6">
-                        <div class="alert alert-info-custom mb-4">
+                        <div class="alert alert-info mb-4">
                             <h5 class="fw-bold mb-2"><i class="fas fa-rocket"></i> Welcome to the control panel</h5>
                             <p class="mb-2">Create the first administrator account to unlock the full admin experience. Once the account is saved you will be redirected to the sign-in page.</p>
                             <p class="mb-0 small">
@@ -1436,7 +1436,7 @@
                 const footer = document.getElementById('confirmationFooter');
 
                 body.innerHTML = `
-                    <div class="alert alert-danger-custom">
+                    <div class="alert alert-danger">
                         <h6>${step.message}</h6>
                         ${step.warning ? `<p class="mb-2"><strong>⚠️ Warning:</strong> ${step.warning}</p>` : ''}
                         ${step.textConfirmation ? `
@@ -3360,7 +3360,7 @@
                 html += `
                     <div class="mb-3">
                         <label class="text-uppercase small fw-bold text-muted">Narration Preview</label>
-                        <div class="alert alert-info-custom mb-0">${messageText}</div>
+                        <div class="alert alert-info mb-0">${messageText}</div>
                     </div>
                 `;
             }
@@ -3376,7 +3376,7 @@
             if (components.tts) {
                 html += buildEasAudioCard('Narration / TTS', components.tts, 'Synthesised narration using the configured provider.');
             } else if (data.tts_warning) {
-                html += `<div class="alert alert-warning-custom">${escapeHtml(data.tts_warning)}</div>`;
+                html += `<div class="alert alert-warning">${escapeHtml(data.tts_warning)}</div>`;
             }
             html += buildEasAudioCard('End of Message (EOM)', components.eom, 'Completes the activation with three end-of-message bursts.');
             html += buildEasAudioCard('Composite Package', components.composite, 'Full playback including header, tone, narration, and EOM.');
@@ -3397,7 +3397,7 @@
                     ? actions.join('\n')
                     : '<span class="text-muted small">Archive links unavailable.</span>';
                 html += `
-                    <div class="alert alert-info-custom d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <div>
                             <strong>Archived activation #${escapeHtml(String(activation.id || ''))}</strong>
                             <span class="small text-muted ms-2">Saved at ${escapeHtml(archivedAt)}.</span>
@@ -3473,10 +3473,10 @@
                 return;
             }
             const classes = {
-                success: 'alert-success-custom',
-                danger: 'alert-danger-custom',
-                warning: 'alert-warning-custom',
-                info: 'alert-info-custom',
+                success: 'alert-success',
+                danger: 'alert-danger',
+                warning: 'alert-warning',
+                info: 'alert-info',
             };
             const alertClass = classes[type] || classes.info;
             container.innerHTML = `<div class="alert ${alertClass} mb-0">${escapeHtml(message)}</div>`;
@@ -4365,7 +4365,7 @@
                 }
             } catch (error) {
                 if (listContainer) {
-                    listContainer.innerHTML = `<div class="alert alert-danger-custom">Failed to load alerts: ${escapeHtml(error.message)}</div>`;
+                    listContainer.innerHTML = `<div class="alert alert-danger">Failed to load alerts: ${escapeHtml(error.message)}</div>`;
                 }
                 if (metaContainer) {
                     metaContainer.textContent = '';
@@ -4392,7 +4392,7 @@
             }
 
             if (!alerts.length) {
-                listContainer.innerHTML = '<div class="alert alert-info-custom">No alerts found for the selected filters.</div>';
+                listContainer.innerHTML = '<div class="alert alert-info">No alerts found for the selected filters.</div>';
                 return;
             }
 
@@ -4882,10 +4882,10 @@
                     html += '</div>';
                     resultsDiv.innerHTML = html;
                 } else {
-                    resultsDiv.innerHTML = `<div class="alert alert-danger-custom">❌ ${result.error}</div>`;
+                    resultsDiv.innerHTML = `<div class="alert alert-danger">❌ ${result.error}</div>`;
                 }
             } catch (error) {
-                resultsDiv.innerHTML = `<div class="alert alert-danger-custom">❌ Error: ${error.message}</div>`;
+                resultsDiv.innerHTML = `<div class="alert alert-danger">❌ Error: ${error.message}</div>`;
             }
         }
 
@@ -4947,11 +4947,11 @@
                     html += '</div>';
                     listDiv.innerHTML = html;
                 } else {
-                    listDiv.innerHTML = '<div class="alert alert-info-custom">No boundaries found. Use the upload form to add boundary files.</div>';
+                    listDiv.innerHTML = '<div class="alert alert-info">No boundaries found. Use the upload form to add boundary files.</div>';
                 }
                 initializeCustomTypeControls();
             } catch (error) {
-                document.getElementById('boundariesList').innerHTML = `<div class="alert alert-danger-custom">Error loading boundaries: ${error.message}</div>`;
+                document.getElementById('boundariesList').innerHTML = `<div class="alert alert-danger">Error loading boundaries: ${error.message}</div>`;
             }
         }
 
@@ -4993,7 +4993,7 @@
                 `;
                 healthDiv.innerHTML = healthHtml;
             } catch (error) {
-                document.getElementById('systemHealthData').innerHTML = `<div class="alert alert-danger-custom">Error loading system health: ${error.message}</div>`;
+                document.getElementById('systemHealthData').innerHTML = `<div class="alert alert-danger">Error loading system health: ${error.message}</div>`;
             }
         }
 
@@ -5596,7 +5596,7 @@
                 const result = await response.json();
 
                 if (response.ok) {
-                    let healthHtml = '<div class="alert alert-info-custom"><h6>Database Health Report:</h6>';
+                    let healthHtml = '<div class="alert alert-info"><h6>Database Health Report:</h6>';
                     healthHtml += `<p><strong>Connectivity:</strong> ${result.connectivity}</p>`;
                     healthHtml += `<p><strong>Database Size:</strong> ${result.database_size}</p>`;
                     healthHtml += `<p><strong>Active Connections:</strong> ${result.active_connections}</p>`;

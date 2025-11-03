@@ -14,7 +14,7 @@ Complete the UI modernization by migrating admin.html and fixing remaining issue
 - [x] Create admin_new.html base
 - [x] Migrate tab 6: System Health (COMPLETE - uses iframe)
 - [ ] Test tab 6 in development
-- [ ] Migrate tab 5: Alert Management
+- [x] Migrate tab 5: Alert Management (COMPLETE - design system cards)
 - [ ] Migrate tab 1: Upload Boundaries
 - [ ] Migrate tab 2: Preview Data
 - [ ] Migrate tab 7: User Management
