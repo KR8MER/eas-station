@@ -65,12 +65,12 @@
                 <div class="card-body">
                     <form method="GET" id="filterForm">
                         <div class="row g-3">
-                            <div class="col-md-3">
+                            <div class="col-12 col-lg-4">
                                 <label for="search" class="form-label">Search</label>
                                 <input type="text" class="form-control" id="search" name="search" 
                                        value="{{ current_filters.search or '' }}" placeholder="Search alerts...">
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-6 col-lg-2">
                                 <label for="status" class="form-label">Status</label>
                                 <select class="form-select" id="status" name="status">
                                     <option value="">All Statuses</option>
@@ -81,7 +81,7 @@
                                     {% endfor %}
                                 </select>
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-6 col-lg-2">
                                 <label for="severity" class="form-label">Severity</label>
                                 <select class="form-select" id="severity" name="severity">
                                     <option value="">All Severities</option>
@@ -92,7 +92,7 @@
                                     {% endfor %}
                                 </select>
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-6 col-lg-2">
                                 <label for="event" class="form-label">Event Type</label>
                                 <select class="form-select" id="event" name="event">
                                     <option value="">All Events</option>
@@ -103,7 +103,7 @@
                                     {% endfor %}
                                 </select>
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-6 col-lg-2">
                                 <label for="source" class="form-label">Source</label>
                                 <select class="form-select" id="source" name="source">
                                     <option value="">All Sources</option>
@@ -114,7 +114,7 @@
                                     {% endfor %}
                                 </select>
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-6 col-lg-2">
                                 <label for="per_page" class="form-label">Per Page</label>
                                 <select class="form-select" id="per_page" name="per_page">
                                     <option value="25" {% if current_filters.per_page == 25 %}selected{% endif %}>25</option>
@@ -122,15 +122,16 @@
                                     <option value="100" {% if current_filters.per_page == 100 %}selected{% endif %}>100</option>
                                 </select>
                             </div>
-                            <div class="col-md-1">
+                            <div class="col-12 col-lg-2">
                                 <label class="form-label d-block">&nbsp;</label>
                                 <button type="submit" class="btn btn-primary w-100">
-                                    <i class="fas fa-search"></i>
+                                    <i class="fas fa-search me-1"></i>
+                                    <span class="d-none d-lg-inline">Search</span>
                                 </button>
                             </div>
                         </div>
                         <div class="row g-3 mt-2">
-                            <div class="col-md-3">
+                            <div class="col-12 col-lg-6">
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" id="show_expired" name="show_expired" value="true"
                                            {% if current_filters.show_expired %}checked{% endif %}>
@@ -139,9 +140,9 @@
                                     </label>
                                 </div>
                             </div>
-                            <div class="col-md-9 text-end">
-                                <a href="/alerts" class="btn btn-outline-secondary">
-                                    <i class="fas fa-times"></i> Clear Filters
+                            <div class="col-12 col-lg-6 text-lg-end">
+                                <a href="/alerts" class="btn btn-outline-secondary w-100 w-lg-auto">
+                                    <i class="fas fa-times me-1"></i> Clear Filters
                                 </a>
                             </div>
                         </div>

@@ -8,12 +8,30 @@
 
 <style>
     #map {
-        height: 600px;
+        height: 60vh;
+        min-height: 400px;
+        max-height: 800px;
         width: 100%;
         border-radius: var(--radius-md);
         border: 1px solid var(--border-color);
         box-shadow: 0 12px 30px rgba(32, 72, 133, 0.16);
         overflow: hidden;
+    }
+    
+    @media (max-width: 768px) {
+        #map {
+            height: 50vh;
+            min-height: 300px;
+            max-height: 600px;
+        }
+    }
+    
+    @media (max-width: 576px) {
+        #map {
+            height: 45vh;
+            min-height: 250px;
+            max-height: 500px;
+        }
     }
 
     .page-shell {
