@@ -293,7 +293,8 @@ except Exception as e:
         eom_audio_data = Column(LargeBinary)
         text_payload = Column(JSON)
         created_at = Column(DateTime, default=utc_now)
-        metadata_payload = Column('metadata', JSON)
+        # Use metadata_payload column name to match the migration
+        metadata_payload = Column(JSON)
 
     class RadioReceiver(Base):
         __tablename__ = 'radio_receivers'

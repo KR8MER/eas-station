@@ -692,7 +692,8 @@ class AudioSourceMetrics(db.Model):
     timestamp = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False, index=True)
 
     # Additional metadata (JSON)
-    source_metadata = db.Column(JSONB)
+    # Map to existing 'metadata' column to avoid schema drift
+    source_metadata = db.Column('metadata', JSONB)
 
 
 class AudioHealthStatus(db.Model):
@@ -725,7 +726,8 @@ class AudioHealthStatus(db.Model):
     last_update = db.Column(db.DateTime(timezone=True), default=utc_now)
 
     # Additional metadata (JSON)
-    health_metadata = db.Column(JSONB)
+    # Map to existing 'metadata' column to avoid schema drift
+    health_metadata = db.Column('metadata', JSONB)
 
 
 class AudioAlert(db.Model):
@@ -763,7 +765,8 @@ class AudioAlert(db.Model):
     updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
     # Additional metadata (JSON)
-    alert_metadata = db.Column(JSONB)
+    # Map to existing 'metadata' column to avoid schema drift
+    alert_metadata = db.Column('metadata', JSONB)
 
 
 __all__ = [
