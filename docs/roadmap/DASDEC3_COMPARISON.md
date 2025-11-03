@@ -10,6 +10,14 @@ This document translates the **Digital Alert Systems DASDEC3 Version 5.1 Softwar
 - **Software Parity:** Alert ingestion, SAME generation, GPIO control, LED signage, and SDR verification are already at parity or ahead because EAS Station can iterate rapidly in software. Remaining work clusters around redundant audio paths, multi-station clustering, and formal FCC test suites.
 - **Roadmap Alignment:** Each gap below maps to the canonical [`docs/roadmap/master_todo.md`](master_todo.md) items. Use this file as the bridge between vendor-grade checklists and open-source milestones.
 
+### Primary Reference Documents
+
+1. **Digital Alert Systems DASDEC3 Version 5.1 Software User’s Guide (R1.0, 31 May 2023)** → `docs/Version 5.1 Software_Users Guide_R1.0 5-31-23.pdf`
+2. **DASDEC-G3 Release 5.1 Quick Start Guide** → `docs/QSG_DASDEC-G3_R5.1.docx`
+3. **Grob Systems Adjunct Specification (ADJ06182024A)** → `docs/D,GrobSystems,ADJ06182024A.pdf`
+
+These documents define the control surface, wiring expectations, and capability groupings used throughout this comparison. When editing this file, verify page and section references against the manuals so the roadmap reflects the vendor’s terminology.
+
 ## Capability Matrix
 
 | DASDEC3 Capability (Manual Section) | DASDEC3 Reference | EAS Station Status | Notes & Follow-Up |
@@ -60,5 +68,14 @@ A comparable DASDEC3 bundle with redundant audio, DASDEC-G3 software license, an
 - **2016–2020:** Pi 3 and Pi 4 generations introduced gigabit networking and quad-core CPUs, enabling simultaneous polling, rendering, and SDR capture.
 - **2023:** Pi 5's PCIe and LPDDR4X upgrades gave EAS Station the runway to match DASDEC3 concurrency without a rack chassis.
 - **2024+:** Software refinements—GPIO orchestration, LED signage, SDR verification—close the loop, with remaining gaps centered on redundancy and certification.
+
+## Manual Synchronization Checklist
+
+Before updating this gap analysis:
+
+- Review section headings and feature descriptions in the vendor PDFs/DOCX listed above so terminology mirrors the DASDEC3 documentation.
+- Confirm any hardware guidance remains achievable with the Raspberry Pi reference build documented in [`README.md`](../../README.md).
+- Cross-check roadmap tickets in [`master_todo.md`](master_todo.md) and [`eas_todo.md`](eas_todo.md) so new features are traced to manual capabilities.
+- Update `/about` and `/help` templates if new operator guidance or warnings are introduced here.
 
 Maintain this comparison as roadmap items ship so the documentation accurately reflects parity with DASDEC3 offerings.

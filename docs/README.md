@@ -38,6 +38,7 @@ Welcome to the comprehensive documentation for **EAS Station** - an experimental
 | [**Changelog**](reference/CHANGELOG.md) | Complete version history and release notes |
 | [**Roadmap**](roadmap/) | Feature planning and requirements |
 | [**DASDEC3 Comparison**](roadmap/DASDEC3_COMPARISON.md) | Gap analysis vs. commercial encoder/decoder |
+| [**DASDEC3 Manuals (Reference)**](Version%205.1%20Software_Users%20Guide_R1.0%205-31-23.pdf) | Vendor manual, quick start, Grob Systems dossier |
 | [**License Attribution**](reference/dependency_attribution.md) | Open-source dependencies and licenses |
 | [**Theory of Operation**](architecture/THEORY_OF_OPERATION.md) | End-to-end system flow and SAME protocol internals |
 

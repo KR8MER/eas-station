@@ -4,7 +4,7 @@
 
 This comprehensive index catalogs all documentation across the EAS Station project. Each entry includes the topic, relevant keywords, and the document location.
 
-> ℹ️ Keep the vendor-supplied **Digital Alert Systems DASDEC3 Version 5.1 Software User's Guide** at `docs/Version 5.1 Software_Users Guide_R1.0 5-31-23.pdf` (maintainer local copy, not version-controlled). The roadmap comparison references that manual for parity tracking.
+> ℹ️ Keep the vendor-supplied **Digital Alert Systems DASDEC3 Version 5.1 Software User's Guide** at `docs/Version 5.1 Software_Users Guide_R1.0 5-31-23.pdf` (maintainer local copy, not version-controlled). Pair it with the `docs/QSG_DASDEC-G3_R5.1.docx` quick start and the `docs/D,GrobSystems,ADJ06182024A.pdf` project dossier when updating roadmap parity notes.
 
 ---
 
@@ -72,6 +72,7 @@ This comprehensive index catalogs all documentation across the EAS Station proje
 | Drop-in replacement roadmap | roadmap, features, requirements, planning, saratoga | [roadmap/master_todo.md](roadmap/master_todo.md) | 125 |
 | EAS-specific feature checklist | eas, same, audio, broadcast, alerts, verification | [roadmap/eas_todo.md](roadmap/eas_todo.md) | 72 |
 | DASDEC3 capability comparison | dasdec, commercial parity, cost, roadmap | [roadmap/DASDEC3_COMPARISON.md](roadmap/DASDEC3_COMPARISON.md) | 94 |
+| DASDEC3 vendor manuals (reference) | vendor manual, quick start, grob systems | [Version 5.1 Software_Users Guide_R1.0 5-31-23.pdf](Version%205.1%20Software_Users%20Guide_R1.0%205-31-23.pdf), [QSG_DASDEC-G3_R5.1.docx](QSG_DASDEC-G3_R5.1.docx), [D,GrobSystems,ADJ06182024A.pdf](D%2CGrobSystems%2CADJ06182024A.pdf) | External |
 
 ---
 
@@ -105,7 +106,7 @@ This comprehensive index catalogs all documentation across the EAS Station proje
 
 - **Dashboard** → [guides/HELP.md](guides/HELP.md)
 - **Database** → [guides/DATABASE_CONSISTENCY_FIXES.md](guides/DATABASE_CONSISTENCY_FIXES.md)
-- **DASDEC3** → [roadmap/DASDEC3_COMPARISON.md](roadmap/DASDEC3_COMPARISON.md)
+- **DASDEC3** → [roadmap/DASDEC3_COMPARISON.md](roadmap/DASDEC3_COMPARISON.md), [Version 5.1 Software_Users Guide_R1.0 5-31-23.pdf](Version%205.1%20Software_Users%20Guide_R1.0%205-31-23.pdf), [QSG_DASDEC-G3_R5.1.docx](QSG_DASDEC-G3_R5.1.docx)
 - **DCO (Developer Certificate of Origin)** → [process/CONTRIBUTING.md](process/CONTRIBUTING.md)
 - **Dependencies** → [reference/dependency_attribution.md](reference/dependency_attribution.md)
 - **Development** → [development/AGENTS.md](development/AGENTS.md)

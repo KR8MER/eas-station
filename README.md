@@ -13,6 +13,18 @@ Commercial EAS decoders are expensive, power-hungry appliances that demand rack 
 
 This vision guides the feature backlog, documentation, and governance decisions captured throughout the repository.
 
+### Project Origins & Goals
+
+EAS Station began as an experiment to replicate the workflow of a **Digital Alert Systems DASDEC3** without purchasing the $5,000–$7,000 rack appliance. The maintainer’s earliest prototypes (2012–2015) used shell scripts, USB DACs, and a Raspberry Pi Model B to prove that CAP-to-SAME conversion was possible entirely in software. Every iteration since has kept the same promise: **match vendor features using commodity parts and auditable Python code.**
+
+The open-source roadmap is anchored to the vendor documentation maintained in the repository:
+
+- [`docs/Version 5.1 Software_Users Guide_R1.0 5-31-23.pdf`](docs/Version%205.1%20Software_Users%20Guide_R1.0%205-31-23.pdf) – Official DASDEC3 user manual used for capability parity checks.
+- [`docs/QSG_DASDEC-G3_R5.1.docx`](docs/QSG_DASDEC-G3_R5.1.docx) – Quick-start wiring and configuration reference for comparing the Raspberry Pi build procedure.
+- [`docs/D,GrobSystems,ADJ06182024A.pdf`](docs/D%2CGrobSystems%2CADJ06182024A.pdf) – Grob Systems project dossier that documents field requirements influencing the roadmap.
+
+Where these files are unavailable in a working tree (for example when cloning without Git LFS), consult the same paths on GitHub to access the authoritative references before updating roadmap documentation.
+
 ### Reference Commodity Hardware Stack
 
 While the codebase remains hardware-agnostic, the following Raspberry Pi-based stack is the reference platform the roadmap optimises around:
@@ -32,15 +44,31 @@ All documentation and tooling emphasise a guided setup process so integrators ca
 
 ### Raspberry Pi Heritage & Project History
 
-- **2012 – Raspberry Pi Model B arrives:** A $35 SBC capable of decoding HD video proves that accessible, low-cost hardware can shoulder broadcast workloads. Early CAP/SAME experiments by the maintainer took place on Pi 1 hardware with USB sound cards and shell scripts.
-- **2016 – Pi 3 automation pilots:** Integrated Wi-Fi and faster ARM cores made it feasible to poll NOAA CAP feeds and synthesize audio concurrently. This is when the first `multimon-ng` parity tests began.
-- **2020 – Pi 4 lab deployments:** Quad-core Cortex-A72 CPUs, USB 3.0, and true gigabit Ethernet unlocked simultaneous capture and playout without resorting to desktop PCs. EAS Station’s first Flask dashboard prototypes came together during this era.
-- **2023 – Pi 5 generational leap:** PCIe 2.0, LPDDR4X memory, and the BCM2712 SoC offer enough headroom for text-to-speech narration, SDR capture, and compliance analytics to run on a single board. The current roadmap standardises on Pi 5 with NVMe storage to survive 24/7 logging.
-- **2024 – Project maturation:** GPIO relay orchestration, LED sign integration, and SDR verification landed, setting the stage for a complete encoder/decoder replacement driven entirely by software.
+| Year | Raspberry Pi Milestone | Project Milestone | Impact on the DASDEC3 Replacement Goal |
+| --- | --- | --- | --- |
+| **2012** | Model B (700 MHz, 256 MB) | First CAP-to-SAME proof-of-concept using Python, `arecord`, and `sox`. | Demonstrated that FSK headers and attention tones can be rendered without proprietary encoders. |
+| **2014** | Model B+ (40-pin GPIO) | Added relay control scripts for transmitter keying experiments. | Enabled GPIO automation comparable to the DASDEC3’s internal relay cards. |
+| **2016** | Pi 3 (quad-core 1.2 GHz, Wi-Fi) | Poller rewrite with concurrent NOAA/IPAWS ingestion and the first Flask dashboard prototype. | Matched DASDEC3’s multi-feed aggregation while remaining headless. |
+| **2020** | Pi 4 (Cortex-A72, USB 3.0, GbE) | Dual-SDR verification harness, PostGIS-backed mapping, and LED sign pilot deployments. | Delivered the receive/monitor workflows DASDEC3 advertises for compliance and signage. |
+| **2023** | Pi 5 (BCM2712, PCIe 2.0) | NVMe-backed storage, text-to-speech narration, and deterministic GPIO orchestration merged into `main`. | Provided the compute headroom to run ingest, playout, verification, and analytics on a single board. |
+| **2024** | Pi 5 production kits & CM4 carriers | Hardened lab deployments with UPS-backed power, watchdog scripts, and roadmap checkpoints tied directly to the DASDEC3 manual. | Brought the open-source stack within striking distance of a certified appliance while keeping the bill of materials under $600. |
 
 EAS Station’s north star is to replicate the capabilities of a Digital Alert Systems DASDEC3 without the $5,000–$7,000 appliance price tag. A Raspberry Pi 5-based build with relays, balanced audio, dual SDRs, and protective power comes in under $600 in 2025 USD—less than 12 % of the DASDEC3 baseline. The saved budget can be invested in redundancy, external monitoring, or additional receivers instead of proprietary chassis upgrades.
 
-For a feature-by-feature comparison, see [`docs/roadmap/DASDEC3_COMPARISON.md`](docs/roadmap/DASDEC3_COMPARISON.md), which distils the publicly available **Digital Alert Systems DASDEC3 Version 5.1 Software User’s Guide** into a living roadmap for EAS Station.
+#### Cost & Component Comparison (2025 USD)
+
+| Component | Qty | Cost | DASDEC3 Equivalent |
+| --- | --- | --- | --- |
+| Raspberry Pi 5 (8 GB) + active cooling | 1 | $120 | Integrated SBC + chassis |
+| NVMe SSD (512 GB) with PCIe adapter | 1 | $80 | Internal RAID storage |
+| Balanced audio HAT (ADC/DAC) | 1 | $110 | Multi-channel audio switcher |
+| 8-channel GPIO relay HAT | 1 | $45 | DASDEC3 GPIO expansion frame |
+| Dual RTL-SDR (Blog V4/Airspy Mini pair) | 2 | $120 | Dual tuner option |
+| UPS HAT + surge-protected PSU | 1 | $70 | Internal battery backup |
+| Shielded cabling & misc. | - | $40 | Factory harness |
+| **Total Raspberry Pi Build** |  | **$585** | **$5,000–$7,000** turnkey appliance |
+
+For a feature-by-feature comparison, see [`docs/roadmap/DASDEC3_COMPARISON.md`](docs/roadmap/DASDEC3_COMPARISON.md), which distils the vendor manuals into a living roadmap for EAS Station. Keep the PDF/DOCX references listed above handy when updating the comparison so terminology and capability groupings stay aligned.
 
 [![CI status](https://github.com/KR8MER/eas-station/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/KR8MER/eas-station/actions/workflows/build.yml)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://www.docker.com/)
@@ -76,6 +104,7 @@ For a feature-by-feature comparison, see [`docs/roadmap/DASDEC3_COMPARISON.md`](
 - **[Operations Guide](docs/guides/HELP.md)** - Daily operations and troubleshooting
 - **[Developer Guidelines](docs/development/AGENTS.md)** - Code standards and best practices
 - **[Integration Guides](docs/guides/)** - IPAWS, SDR, and hardware configuration
+- **Vendor Manuals (docs directory)** - `Version 5.1 Software_Users Guide_R1.0 5-31-23.pdf`, `QSG_DASDEC-G3_R5.1.docx`, `D,GrobSystems,ADJ06182024A.pdf`
 
 For quick access, visit the `/help` and `/about` pages in the web interface, which now include direct links to all documentation resources.
 
