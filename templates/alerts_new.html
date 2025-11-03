@@ -1,0 +1,410 @@
+{% extends "base.html" %}
+
+{% block title %}Alerts History - EAS Station{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    {% set audio_map = audio_map or {} %}
+    
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1">
+                <i class="fas fa-history text-primary"></i> Alerts History
+            </h1>
+            <p class="text-muted mb-0">View and manage emergency alert records</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <button onclick="exportCurrentAlerts()" class="btn btn-success" title="Export current filtered alerts to Excel">
+                <i class="fas fa-file-excel"></i> Export
+            </button>
+            <button onclick="printPage()" class="btn btn-secondary" title="Print this page">
+                <i class="fas fa-print"></i> Print
+            </button>
+            <a href="/" class="btn btn-outline-secondary">
+                <i class="fas fa-map"></i> Back to Map
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary Metrics using Design System -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="metric-card metric-card-success">
+                <div class="metric-icon">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <div class="metric-content">
+                    <div class="metric-label">Active Alerts</div>
+                    <div class="metric-value">{{ active_alerts }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="metric-card metric-card-warning">
+                <div class="metric-icon">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <div class="metric-content">
+                    <div class="metric-label">Expired Alerts</div>
+                    <div class="metric-value">{{ expired_alerts }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="metric-card metric-card-info">
+                <div class="metric-icon">
+                    <i class="fas fa-list"></i>
+                </div>
+                <div class="metric-content">
+                    <div class="metric-label">Total Alerts</div>
+                    <div class="metric-value">{{ total_alerts }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters Card -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-filter"></i> Filters
+            </h5>
+        </div>
+        <div class="card-body">
+            <form method="GET" id="filterForm">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="search" class="form-label">Search</label>
+                        <input type="text" class="form-control" id="search" name="search" 
+                               value="{{ current_filters.search or '' }}" placeholder="Search alerts...">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="status" class="form-label">Status</label>
+                        <select class="form-select" id="status" name="status">
+                            <option value="">All Statuses</option>
+                            {% for status in statuses %}
+                            <option value="{{ status }}" {% if status == current_filters.status %}selected{% endif %}>
+                                {{ status }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="severity" class="form-label">Severity</label>
+                        <select class="form-select" id="severity" name="severity">
+                            <option value="">All Severities</option>
+                            {% for severity in severities %}
+                            <option value="{{ severity }}" {% if severity == current_filters.severity %}selected{% endif %}>
+                                {{ severity }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="event" class="form-label">Event Type</label>
+                        <select class="form-select" id="event" name="event">
+                            <option value="">All Events</option>
+                            {% for event in events %}
+                            <option value="{{ event }}" {% if event == current_filters.event %}selected{% endif %}>
+                                {{ event }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="source" class="form-label">Source</label>
+                        <select class="form-select" id="source" name="source">
+                            <option value="">All Sources</option>
+                            {% for source in sources %}
+                            <option value="{{ source }}" {% if source == current_filters.source %}selected{% endif %}>
+                                {{ source }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-1">
+                        <label class="form-label d-block">&nbsp;</label>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="row g-3 mt-2">
+                    <div class="col-md-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="show_expired" name="show_expired" value="true"
+                                   {% if current_filters.show_expired %}checked{% endif %}>
+                            <label class="form-check-label" for="show_expired">
+                                Include Expired Alerts
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="per_page" class="form-label">Per Page</label>
+                        <select class="form-select" id="per_page" name="per_page">
+                            <option value="25" {% if current_filters.per_page == 25 %}selected{% endif %}>25</option>
+                            <option value="50" {% if current_filters.per_page == 50 %}selected{% endif %}>50</option>
+                            <option value="100" {% if current_filters.per_page == 100 %}selected{% endif %}>100</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 text-end d-flex align-items-end justify-content-end">
+                        <a href="/alerts" class="btn btn-outline-secondary">
+                            <i class="fas fa-times"></i> Clear Filters
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Alerts Table Card -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-list"></i> Alerts
+                {% if pagination.total > 0 %}
+                <span class="badge badge-secondary ms-2">{{ pagination.total }} total</span>
+                {% endif %}
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            {% if alerts %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Event</th>
+                            <th>Severity</th>
+                            <th>Status</th>
+                            <th>Source</th>
+                            <th>Sent</th>
+                            <th>Expires</th>
+                            <th>Headline</th>
+                            <th>Area</th>
+                            <th>Audio</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for alert in alerts %}
+                        {% set is_expired = alert.expires | is_expired %}
+                        <tr {% if is_expired %}class="table-muted"{% endif %}>
+                            <td>
+                                <span class="badge badge-primary">{{ alert.event }}</span>
+                            </td>
+                            <td>
+                                {% if alert.severity %}
+                                <span class="badge {% if alert.severity == 'Extreme' %}badge-danger{% elif alert.severity == 'Severe' %}badge-warning{% elif alert.severity == 'Moderate' %}badge-info{% else %}badge-secondary{% endif %}">
+                                    {{ alert.severity }}
+                                </span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge badge-outline">{{ alert.status }}</span>
+                            </td>
+                            <td>
+                                {% if alert.source %}
+                                <span class="badge badge-dark text-uppercase">{{ alert.source }}</span>
+                                {% else %}
+                                <span class="text-muted">Unknown</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small class="text-muted">
+                                    {{ alert.sent | format_local_datetime(false) if alert.sent else 'Unknown' }}
+                                </small>
+                            </td>
+                            <td>
+                                {% if alert.expires %}
+                                <small class="{% if is_expired %}text-danger{% else %}text-success{% endif %}">
+                                    {{ alert.expires | format_local_datetime(false) }}
+                                </small>
+                                {% else %}
+                                <span class="text-muted">No expiration</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if alert.headline %}
+                                <div class="text-truncate" style="max-width: 200px;" title="{{ alert.headline }}">
+                                    {{ alert.headline }}
+                                </div>
+                                {% else %}
+                                <span class="text-muted">No headline</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if alert.area_desc %}
+                                <div class="text-truncate" style="max-width: 150px;" title="{{ alert.area_desc }}">
+                                    {{ alert.area_desc }}
+                                </div>
+                                {% else %}
+                                <span class="text-muted">No area description</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% set audio_entries = audio_map.get(alert.id, []) %}
+                                {% if audio_entries %}
+                                <div class="d-flex flex-column gap-1">
+                                    {% set primary_audio = audio_entries[0] %}
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        {% if primary_audio.audio_url %}
+                                        <a class="btn btn-sm btn-outline-primary" href="{{ primary_audio.audio_url }}" target="_blank" rel="noopener">
+                                            <i class="fas fa-play"></i>
+                                        </a>
+                                        {% endif %}
+                                        <a class="btn btn-sm btn-outline-info" href="{{ primary_audio.detail_url }}">
+                                            <i class="fas fa-headphones"></i>
+                                        </a>
+                                    </div>
+                                    {% if primary_audio.text_url %}
+                                    <a class="small" href="{{ primary_audio.text_url }}" target="_blank" rel="noopener">
+                                        <i class="fas fa-file-alt"></i> Summary
+                                    </a>
+                                    {% endif %}
+                                    {% if audio_entries|length > 1 %}
+                                    <small class="text-muted">{{ audio_entries|length }} recordings</small>
+                                    {% endif %}
+                                </div>
+                                {% else %}
+                                <span class="text-muted">None</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="/alerts/{{ alert.id }}" class="btn btn-sm btn-primary">
+                                    <i class="fas fa-eye"></i> View
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <h5 class="empty-state-title">No alerts found</h5>
+                <p class="empty-state-text">Try adjusting your filters or check back later.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if pagination and pagination.pages > 1 %}
+    <nav aria-label="Alerts pagination" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if pagination.has_prev %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('alerts', page=pagination.prev_num, **current_filters) }}">
+                    <i class="fas fa-chevron-left"></i> Previous
+                </a>
+            </li>
+            {% endif %}
+
+            {% for page_num in pagination.iter_pages() %}
+                {% if page_num %}
+                    {% if page_num != pagination.page %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('alerts', page=page_num, **current_filters) }}">{{ page_num }}</a>
+                    </li>
+                    {% else %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ page_num }}</span>
+                    </li>
+                    {% endif %}
+                {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">...</span>
+                </li>
+                {% endif %}
+            {% endfor %}
+
+            {% if pagination.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('alerts', page=pagination.next_num, **current_filters) }}">
+                    Next <i class="fas fa-chevron-right"></i>
+                </a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+
+<script>
+// Export current filtered alerts
+function exportCurrentAlerts() {
+    try {
+        const alertsData = [];
+        const alertRows = document.querySelectorAll('tbody tr');
+
+        alertRows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            if (cells.length >= 7) {
+                alertsData.push({
+                    'Event': cells[0].textContent.trim(),
+                    'Severity': cells[1].textContent.trim(),
+                    'Status': cells[2].textContent.trim(),
+                    'Source': cells[3].textContent.trim(),
+                    'Sent': cells[4].textContent.trim(),
+                    'Expires': cells[5].textContent.trim(),
+                    'Headline': cells[6].textContent.trim(),
+                    'Area': cells[7].textContent.trim()
+                });
+            }
+        });
+
+        if (alertsData.length === 0) {
+            showToast('No alerts data to export', 'warning');
+            return;
+        }
+
+        exportToExcel(alertsData, 'Filtered_Alerts');
+        showToast(`Exported ${alertsData.length} alerts successfully!`, 'success');
+
+    } catch (error) {
+        console.error('Export error:', error);
+        showToast('Failed to export alerts. Please try again.', 'error');
+    }
+}
+
+// Auto-submit form when filters change
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('filterForm');
+    const selects = form.querySelectorAll('select');
+    const checkbox = form.querySelector('#show_expired');
+
+    selects.forEach(select => {
+        select.addEventListener('change', function() {
+            form.submit();
+        });
+    });
+
+    if (checkbox) {
+        checkbox.addEventListener('change', function() {
+            form.submit();
+        });
+    }
+});
+
+// Simple toast notification fallback
+function showToast(message, type) {
+    if (typeof window.showToast === 'function') {
+        window.showToast(message, type);
+    } else {
+        alert(message);
+    }
+}
+
+// Print page function
+function printPage() {
+    window.print();
+}
+</script>
+{% endblock %}
+<script src="https://sites.super.myninja.ai/_assets/ninja-daytona-script.js"></script>
