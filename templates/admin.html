@@ -464,7 +464,9 @@
             <div class="tab-content tab-content-custom" id="adminTabContent">
                 <!-- Upload Tab -->
                 <div class="tab-pane fade show active" id="upload" role="tabpanel">
-                    <h4><i class="fas fa-upload text-primary"></i> Upload Boundary Files</h4>
+                       <!-- Page Header -->
+                       <div class="mb-4">
+                           <h4 class="mb-2"><i class="fas fa-upload text-primary"></i> Upload Boundary Files</h4>
                     <p class="text-muted">Upload GeoJSON files to add new boundary layers to the system.</p>
 
                     <form id="uploadForm" enctype="multipart/form-data" class="mt-4">
@@ -502,17 +504,33 @@
                                 </div>
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-upload"></i> Upload Boundaries
-                        </button>
-                    </form>
+                                            <div class="d-grid gap-2 d-md-flex">
 
-                    <div id="uploadStatus" class="mt-3"></div>
+                                                <button type="submit" class="btn btn-primary">
+
+                                                    <i class="fas fa-upload"></i> Upload Boundaries
+
+                                                </button>
+
+                                            </div>
+
+                                        </form>
+
+                                    </div>
+
+                                </div>
+
+
+                                <!-- Upload Status -->
+
+                                <div id="uploadStatus" class="mt-3"></div>
                 </div>
 
                 <!-- Preview Tab -->
                 <div class="tab-pane fade" id="preview" role="tabpanel">
-                    <h4><i class="fas fa-eye text-info"></i> Preview Data Extraction</h4>
+                       <!-- Page Header -->
+                       <div class="mb-4">
+                           <h4 class="mb-2"><i class="fas fa-eye text-info"></i> Preview Data Extraction</h4>
                     <p class="text-muted">Preview what data will be extracted from your GeoJSON file before uploading.</p>
 
                     <form id="previewForm" enctype="multipart/form-data" class="mt-4">
@@ -550,17 +568,33 @@
                                 </div>
                             </div>
                         </div>
-                        <button type="button" class="btn btn-info" onclick="previewExtraction()">
-                            <i class="fas fa-eye"></i> Preview Extraction
-                        </button>
-                    </form>
+                                            <div class="d-grid gap-2 d-md-flex">
 
-                    <div id="previewResults" class="mt-4"></div>
+                                                <button type="button" class="btn btn-info" onclick="previewExtraction()">
+
+                                                    <i class="fas fa-eye"></i> Preview Extraction
+
+                                                </button>
+
+                                            </div>
+
+                                        </form>
+
+                                    </div>
+
+                                </div>
+
+
+                                <!-- Preview Results -->
+
+                                <div id="previewResults" class="mt-4"></div>
                 </div>
 
                 <!-- Manage Tab -->
                 <div class="tab-pane fade" id="manage" role="tabpanel">
-                    <h4><i class="fas fa-tasks text-success"></i> Manage Boundary Data</h4>
+                       <!-- Page Header -->
+                       <div class="mb-4">
+                           <h4 class="mb-2"><i class="fas fa-tasks text-success"></i> Manage Boundary Data</h4>
                     <p class="text-muted">View, edit, and delete existing boundary data in the system.</p>
 
                     <div class="row mt-4">
@@ -610,7 +644,9 @@
 
                 <!-- Operations Tab -->
                 <div class="tab-pane fade" id="operations" role="tabpanel">
-                    <h4><i class="fas fa-tools text-warning"></i> System Operations</h4>
+                       <!-- Page Header -->
+                       <div class="mb-4">
+                           <h4 class="mb-2"><i class="fas fa-tools text-warning"></i> System Operations</h4>
                     <p class="text-muted">Perform manual system operations and maintenance tasks.</p>
 
                     <div class="operation-grid">
@@ -834,7 +870,9 @@
 
                 <!-- User Management Tab -->
                 <div class="tab-pane fade" id="user-management" role="tabpanel">
-                    <h4><i class="fas fa-users-cog text-primary"></i> Administrator Accounts</h4>
+                       <!-- Page Header -->
+                       <div class="mb-4">
+                           <h4 class="mb-2"><i class="fas fa-users-cog text-primary"></i> Administrator Accounts</h4>
                     <p class="text-muted">Create, reset, and revoke access for control panel users.</p>
 
                     <div class="row g-4 mt-2">
@@ -906,7 +944,9 @@
 
                 <!-- Location Settings Tab -->
                 <div class="tab-pane fade" id="location-settings" role="tabpanel">
-                    <h4><i class="fas fa-map-marker-alt text-primary"></i> Location Configuration</h4>
+                       <!-- Page Header -->
+                       <div class="mb-4">
+                           <h4 class="mb-2"><i class="fas fa-map-marker-alt text-primary"></i> Location Configuration</h4>
                     <p class="text-muted">Update the jurisdiction, timezone, and NOAA filters used by the system.</p>
                     <div class="alert alert-warning d-flex align-items-start" role="alert">
                         <i class="fas fa-satellite-dish me-3 mt-1"></i>
