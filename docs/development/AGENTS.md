@@ -12,6 +12,14 @@ This document provides coding standards and guidelines for AI agents (including 
 4. **Focused Changes**: Keep fixes targeted to the specific issue
 5. **Document Changes**: Update relevant documentation when adding features
 
+## 🧭 Documentation & UX Standards
+
+- **Link Accuracy Matters** – Reference primary sources (e.g., FCC consent decrees via `docs.fcc.gov`) instead of news summaries. Broken or redirected links must be updated immediately.
+- **Theory of Operation Is Canonical** – Whenever you touch ingestion, SAME generation, or verification logic, review and update [`docs/architecture/THEORY_OF_OPERATION.md`](../architecture/THEORY_OF_OPERATION.md) so diagrams, timelines, and checklists match the code.
+- **Surface Docs In-App** – Front-end templates (`templates/`) should link to the corresponding Markdown resources in `docs/`. Keep `/about`, `/help`, `/terms`, and `/privacy` synchronized with repository guidance.
+- **Brand Consistency** – Use `static/img/eas-station-logo.svg` for hero sections, headers, and major UI cards when expanding documentation pages. The logo must remain accessible (include `alt` text).
+- **Mermaid-Friendly Markdown** – GitHub-flavoured Mermaid diagrams are welcome in repository docs. Keep them accurate by naming real modules, packages, and endpoints.
+
 ### Modularity & File Size
 
 - **Prefer small, focused modules** – Aim to keep Python modules under ~400 lines and HTML templates under ~300 lines.
@@ -536,6 +544,7 @@ Before committing code, verify:
 - [ ] Database transactions properly handled (commit/rollback)
 - [ ] Tested in Docker locally
 - [ ] Documentation updated if needed
+- [ ] Cross-check docs and UI links (README, Theory of Operation, `/about`, `/help`) for accuracy and live references
 - [ ] Commit message follows format guidelines
 
 ---

@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-labelledby="pi5-title pi5-desc">
+  <title id="pi5-title">Raspberry Pi 5 reference hardware for EAS Station</title>
+  <desc id="pi5-desc">Detailed illustration of a Raspberry Pi 5 with labeled subsystems: BCM2712 SoC, LPDDR4X memory, PCIe NVMe carrier, balanced audio HAT, relay bank, SDR receivers, and power management.</desc>
+  <defs>
+    <linearGradient id="board-fill" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1f7a4d" />
+      <stop offset="100%" stop-color="#105335" />
+    </linearGradient>
+    <linearGradient id="shadow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#000" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#000" stop-opacity="0" />
+    </linearGradient>
+    <style>
+      text { font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; fill: #f4f9f6; }
+      .label { font-size: 16px; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.35); }
+      .annotation { font-size: 13px; font-weight: 500; fill: #e3fcef; }
+      .callout text { fill: #0d1b2a; font-weight: 600; }
+      .callout rect { fill: #f4f9f6; stroke-width: 2; stroke: #0d1b2a; rx: 8; ry: 8; }
+    </style>
+  </defs>
+  <rect width="640" height="360" fill="#0b1726" />
+  <rect x="48" y="44" width="544" height="272" rx="28" ry="28" fill="url(#board-fill)" stroke="#2ecc71" stroke-width="6" />
+  <path d="M72 300h496l-26 44H98z" fill="url(#shadow)" opacity="0.6" />
+
+  <!-- HDMI / USB cluster -->
+  <rect x="90" y="72" width="90" height="38" rx="6" ry="6" fill="#2b3a4a" stroke="#90a4ae" stroke-width="3" />
+  <rect x="90" y="116" width="90" height="38" rx="6" ry="6" fill="#2b3a4a" stroke="#90a4ae" stroke-width="3" />
+  <rect x="186" y="72" width="64" height="82" rx="10" ry="10" fill="#1e2b38" stroke="#7e57c2" stroke-width="4" />
+  <text x="218" y="118" text-anchor="middle" class="annotation">USB 3.0<br/>PoE+</text>
+
+  <!-- BCM2712 SoC -->
+  <rect x="270" y="96" width="120" height="120" rx="18" ry="18" fill="#101b24" stroke="#26c6da" stroke-width="4" />
+  <rect x="288" y="114" width="84" height="84" rx="16" ry="16" fill="#1b2631" stroke="#4dd0e1" stroke-width="3" />
+  <text x="330" y="160" text-anchor="middle" class="label">BCM2712</text>
+  <text x="330" y="186" text-anchor="middle" class="annotation">4× Cortex-A76<br/>VideoCore VII</text>
+
+  <!-- LPDDR4X memory stack -->
+  <rect x="410" y="88" width="110" height="64" rx="14" ry="14" fill="#2d1b4f" stroke="#9575cd" stroke-width="4" />
+  <text x="465" y="120" text-anchor="middle" class="label">LPDDR4X 8 GB</text>
+  <text x="465" y="142" text-anchor="middle" class="annotation">tts + verification headroom</text>
+
+  <!-- PCIe / NVMe carrier -->
+  <rect x="402" y="170" width="144" height="88" rx="16" ry="16" fill="#1c2833" stroke="#f7d794" stroke-width="4" />
+  <rect x="418" y="186" width="112" height="56" rx="12" ry="12" fill="#2f3e4f" stroke="#f5cd79" stroke-width="2" />
+  <text x="474" y="216" text-anchor="middle" class="label">PCIe NVMe</text>
+  <text x="474" y="236" text-anchor="middle" class="annotation">512 GB logging cache</text>
+
+  <!-- Balanced Audio HAT -->
+  <rect x="140" y="190" width="128" height="86" rx="18" ry="18" fill="#0d2f2d" stroke="#4db6ac" stroke-width="4" />
+  <text x="204" y="232" text-anchor="middle" class="label">Balanced I/O HAT</text>
+  <text x="204" y="252" text-anchor="middle" class="annotation">+4 dBu in/out, AES67 ready</text>
+
+  <!-- Relay bank -->
+  <rect x="540" y="124" width="52" height="140" rx="10" ry="10" fill="#eceff1" stroke="#90a4ae" stroke-width="4" />
+  <circle cx="566" cy="150" r="11" fill="#cfd8dc" />
+  <circle cx="566" cy="186" r="11" fill="#cfd8dc" />
+  <circle cx="566" cy="222" r="11" fill="#cfd8dc" />
+  <text x="566" y="266" text-anchor="middle" class="annotation">GPIO relays</text>
+
+  <!-- Dual SDR receivers -->
+  <rect x="332" y="268" width="96" height="52" rx="12" ry="12" fill="#3b1f0f" stroke="#ffb74d" stroke-width="4" />
+  <rect x="438" y="268" width="96" height="52" rx="12" ry="12" fill="#3b1f0f" stroke="#ffb74d" stroke-width="4" />
+  <text x="380" y="302" text-anchor="middle" class="annotation">SDR #1<br/>air-chain</text>
+  <text x="486" y="302" text-anchor="middle" class="annotation">SDR #2<br/>confidence</text>
+
+  <!-- Power / UPS -->
+  <rect x="120" y="286" width="96" height="40" rx="10" ry="10" fill="#212121" stroke="#ff6f61" stroke-width="3" />
+  <text x="168" y="310" text-anchor="middle" class="annotation">UPS &amp; surge</text>
+
+  <!-- Callouts -->
+  <g class="callout">
+    <line x1="330" y1="96" x2="330" y2="36" stroke="#26c6da" stroke-width="3" stroke-dasharray="6 6" />
+    <rect x="250" y="10" width="160" height="44" />
+    <text x="330" y="38" text-anchor="middle">Deterministic SAME engine</text>
+  </g>
+  <g class="callout">
+    <line x1="204" y1="190" x2="120" y2="132" stroke="#4db6ac" stroke-width="3" stroke-dasharray="6 6" />
+    <rect x="20" y="104" width="180" height="72" />
+    <text x="110" y="134" text-anchor="middle">Balanced audio<br/>mirrors DASDEC3 program/control</text>
+  </g>
+  <g class="callout">
+    <line x1="474" y1="170" x2="574" y2="96" stroke="#f7d794" stroke-width="3" stroke-dasharray="6 6" />
+    <rect x="520" y="52" width="164" height="58" />
+    <text x="602" y="82" text-anchor="middle">PCIe NVMe = log retention</text>
+  </g>
+  <g class="callout">
+    <line x1="380" y1="268" x2="310" y2="220" stroke="#ffb74d" stroke-width="3" stroke-dasharray="6 6" />
+    <rect x="250" y="196" width="152" height="56" />
+    <text x="326" y="226" text-anchor="middle">Dual SDRs verify retransmission</text>
+  </g>
+  <g class="callout">
+    <line x1="566" y1="264" x2="606" y2="314" stroke="#90a4ae" stroke-width="3" stroke-dasharray="6 6" />
+    <rect x="522" y="314" width="180" height="40" />
+    <text x="612" y="340" text-anchor="middle">Dry-contact relays drive STL/transmitter</text>
+  </g>
+</svg>

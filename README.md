@@ -13,6 +13,18 @@ Commercial EAS decoders are expensive, power-hungry appliances that demand rack 
 
 This vision guides the feature backlog, documentation, and governance decisions captured throughout the repository.
 
+### Project Origins & Goals
+
+EAS Station began as an experiment to replicate the workflow of a **Digital Alert Systems DASDEC3** without purchasing the $5,000–$7,000 rack appliance. The maintainer’s earliest prototypes (2012–2015) used shell scripts, USB DACs, and a Raspberry Pi Model B to prove that CAP-to-SAME conversion was possible entirely in software. Every iteration since has kept the same promise: **match vendor features using commodity parts and auditable Python code.**
+
+The open-source roadmap is anchored to the vendor documentation maintained in the repository:
+
+- [`docs/Version 5.1 Software_Users Guide_R1.0 5-31-23.pdf`](docs/Version%205.1%20Software_Users%20Guide_R1.0%205-31-23.pdf) – Official DASDEC3 user manual used for capability parity checks.
+- [`docs/QSG_DASDEC-G3_R5.1.docx`](docs/QSG_DASDEC-G3_R5.1.docx) – Quick-start wiring and configuration reference for comparing the Raspberry Pi build procedure.
+- [`docs/D,GrobSystems,ADJ06182024A.pdf`](docs/D%2CGrobSystems%2CADJ06182024A.pdf) – Grob Systems project dossier that documents field requirements influencing the roadmap.
+
+Where these files are unavailable in a working tree (for example when cloning without Git LFS), consult the same paths on GitHub to access the authoritative references before updating roadmap documentation.
+
 ### Reference Commodity Hardware Stack
 
 While the codebase remains hardware-agnostic, the following Raspberry Pi-based stack is the reference platform the roadmap optimises around:
@@ -26,13 +38,45 @@ While the codebase remains hardware-agnostic, the following Raspberry Pi-based s
 
 All documentation and tooling emphasise a guided setup process so integrators can reproduce the build with off-the-shelf components instead of bespoke rack units.
 
+<p align="center">
+  <img src="static/img/raspberry-pi-hero.svg" alt="Illustration of the Raspberry Pi 5 reference build highlighting GPIO relays, balanced audio, and SDR capture" width="640" />
+</p>
+
+### Raspberry Pi Heritage & Project History
+
+| Year | Raspberry Pi Milestone | Project Milestone | Impact on the DASDEC3 Replacement Goal |
+| --- | --- | --- | --- |
+| **2012** | Model B (700 MHz, 256 MB) | First CAP-to-SAME proof-of-concept using Python, `arecord`, and `sox`. | Demonstrated that FSK headers and attention tones can be rendered without proprietary encoders. |
+| **2014** | Model B+ (40-pin GPIO) | Added relay control scripts for transmitter keying experiments. | Enabled GPIO automation comparable to the DASDEC3’s internal relay cards. |
+| **2016** | Pi 3 (quad-core 1.2 GHz, Wi-Fi) | Poller rewrite with concurrent NOAA/IPAWS ingestion and the first Flask dashboard prototype. | Matched DASDEC3’s multi-feed aggregation while remaining headless. |
+| **2020** | Pi 4 (Cortex-A72, USB 3.0, GbE) | Dual-SDR verification harness, PostGIS-backed mapping, and LED sign pilot deployments. | Delivered the receive/monitor workflows DASDEC3 advertises for compliance and signage. |
+| **2023** | Pi 5 (BCM2712, PCIe 2.0) | NVMe-backed storage, text-to-speech narration, and deterministic GPIO orchestration merged into `main`. | Provided the compute headroom to run ingest, playout, verification, and analytics on a single board. |
+| **2024** | Pi 5 production kits & CM4 carriers | Hardened lab deployments with UPS-backed power, watchdog scripts, and roadmap checkpoints tied directly to the DASDEC3 manual. | Brought the open-source stack within striking distance of a certified appliance while keeping the bill of materials under $600. |
+
+EAS Station’s north star is to replicate the capabilities of a Digital Alert Systems DASDEC3 without the $5,000–$7,000 appliance price tag. A Raspberry Pi 5-based build with relays, balanced audio, dual SDRs, and protective power comes in under $600 in 2025 USD—less than 12 % of the DASDEC3 baseline. The saved budget can be invested in redundancy, external monitoring, or additional receivers instead of proprietary chassis upgrades.
+
+#### Cost & Component Comparison (2025 USD)
+
+| Component | Qty | Cost | DASDEC3 Equivalent |
+| --- | --- | --- | --- |
+| Raspberry Pi 5 (8 GB) + active cooling | 1 | $120 | Integrated SBC + chassis |
+| NVMe SSD (512 GB) with PCIe adapter | 1 | $80 | Internal RAID storage |
+| Balanced audio HAT (ADC/DAC) | 1 | $110 | Multi-channel audio switcher |
+| 8-channel GPIO relay HAT | 1 | $45 | DASDEC3 GPIO expansion frame |
+| Dual RTL-SDR (Blog V4/Airspy Mini pair) | 2 | $120 | Dual tuner option |
+| UPS HAT + surge-protected PSU | 1 | $70 | Internal battery backup |
+| Shielded cabling & misc. | - | $40 | Factory harness |
+| **Total Raspberry Pi Build** |  | **$585** | **$5,000–$7,000** turnkey appliance |
+
+For a feature-by-feature comparison, see [`docs/roadmap/DASDEC3_COMPARISON.md`](docs/roadmap/DASDEC3_COMPARISON.md), which distils the vendor manuals into a living roadmap for EAS Station. Keep the PDF/DOCX references listed above handy when updating the comparison so terminology and capability groupings stay aligned.
+
 [![CI status](https://github.com/KR8MER/eas-station/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/KR8MER/eas-station/actions/workflows/build.yml)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://www.docker.com/)
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-blue?logo=python)](https://www.python.org/)
-[![Flask](https://img.shields.io/badge/Flask-2.3-green?logo=flask)](https://flask.palletsprojects.com/)
-[![Gunicorn](https://img.shields.io/badge/Gunicorn-21.2-green?logo=gunicorn)](https://gunicorn.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue?logo=postgresql)](https://www.postgresql.org/)
-[![PostGIS](https://img.shields.io/badge/PostGIS-3.x-orange)](https://postgis.net/)
+[![Flask](https://img.shields.io/badge/Flask-3.0-green?logo=flask)](https://flask.palletsprojects.com/)
+[![Gunicorn](https://img.shields.io/badge/Gunicorn-23.0-green?logo=gunicorn)](https://gunicorn.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-blue?logo=postgresql)](https://www.postgresql.org/)
+[![PostGIS](https://img.shields.io/badge/PostGIS-3.4-orange)](https://postgis.net/)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-red?logo=sqlalchemy)](https://www.sqlalchemy.org/)
 [![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-purple?logo=bootstrap)](https://getbootstrap.com/)
 [![Leaflet](https://img.shields.io/badge/Leaflet-Maps-green?logo=leaflet)](https://leafletjs.com/)
@@ -60,6 +104,7 @@ All documentation and tooling emphasise a guided setup process so integrators ca
 - **[Operations Guide](docs/guides/HELP.md)** - Daily operations and troubleshooting
 - **[Developer Guidelines](docs/development/AGENTS.md)** - Code standards and best practices
 - **[Integration Guides](docs/guides/)** - IPAWS, SDR, and hardware configuration
+- **Vendor Manuals (docs directory)** - `Version 5.1 Software_Users Guide_R1.0 5-31-23.pdf`, `QSG_DASDEC-G3_R5.1.docx`, `D,GrobSystems,ADJ06182024A.pdf`
 
 For quick access, visit the `/help` and `/about` pages in the web interface, which now include direct links to all documentation resources.
 
@@ -155,6 +200,42 @@ EAS Station is not just an alert monitor—it's a **complete emergency broadcast
 - **Auto-Recovery** - Containers restart on failure with health checks
 - **Environment-Based Configuration** - All settings via `.env` file with template-based setup
 - **Dark/Light Theme** - Consistent UI across all pages with persistent user preferences
+
+### 📐 Theory of Operation
+
+The system follows a deterministic path from CAP ingestion to verified broadcast. Each stage is implemented by specific modules that can be traced inside this repository.
+
+```mermaid
+flowchart LR
+    poller[poller/cap_poller.py] --> alerts[app_core/alerts.py]
+    alerts --> db[(PostgreSQL 17\nPostGIS 3.4)]
+    db --> spatial[app_core/location.py\napp_core/boundaries.py]
+    spatial --> workflow[webapp/eas/workflow.py]
+    workflow --> generator[app_utils/eas.py]
+    generator --> gpio[led_sign_controller.py\nGPIO relays]
+    generator --> audio[static/audio/ WAV output]
+    audio --> verification[webapp/routes/alert_verification.py]
+    verification --> compliance[app_core/eas_storage.py\n/admin/compliance]
+```
+
+- **Ingestion** – `poller/cap_poller.py` and `manual_eas_event.py` normalise CAP 1.2 payloads, enforce schema validity, and store de-duplicated alerts through SQLAlchemy models in `app_core/models.py`.
+- **Spatial intelligence** – Geographic intersections are calculated via PostGIS queries orchestrated by `app_core/boundaries.py` and `app_core/location.py`.
+- **Operator workflow** – The `/eas/workflow` blueprint renders manual broadcast tools, while `/help` and `/about` surface synchronized documentation for lab operators.
+- **SAME generation & playout** – `app_utils/eas.py` produces headers, attention tones, and End-of-Message bursts, coordinating GPIO relays and LED signage through `led_sign_controller.py`.
+- **Verification** – SDR capture drivers in `app_core/radio/drivers.py` and the alert verification portal close the loop, ensuring transmissions decode exactly as produced.
+
+For deeper context—including subsystem responsibilities and an operational checklist—see [docs/architecture/THEORY_OF_OPERATION.md](docs/architecture/THEORY_OF_OPERATION.md).
+
+### 📜 SAME Protocol Primer
+
+SAME (Specific Area Message Encoding) defines the 520⅔ baud FSK headers that trigger downstream equipment. EAS Station implements this standard faithfully:
+
+- **Header construction** – `app_utils/eas.py` assembles the `ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-` header from CAP data, enforcing the three-burst requirement from FCC § 11.31.
+- **Attention signal** – Dual-tone 853/960 Hz audio is rendered for the configured duration before message narration generated in `webapp/eas/workflow.py`.
+- **EOM enforcement** – `app_core/eas_storage.py` records the triplet of `NNNN` bursts and timestamps to support compliance exports.
+- **Historical guardrails** – The `/about` page links to official FCC enforcement actions, including the 2015 iHeartMedia (Bobby Bones Show) and 2014 *Olympus Has Fallen* consent decrees, underscoring why lab isolation is mandatory.
+
+Review [Theory of Operation](docs/architecture/THEORY_OF_OPERATION.md) for the full protocol history and see [`docs/roadmap/eas_todo.md`](docs/roadmap/eas_todo.md) for the remaining encoder/decoder enhancements.
 
 ---
 
