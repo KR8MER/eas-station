@@ -69,7 +69,7 @@
 
         .tab-content-custom {
             padding: 1rem 2rem 2rem 2rem;
-            min-height: 400px;
+            min-height: 0;
         }
 
         .form-control, .form-select {
@@ -855,7 +855,7 @@
                     
                     <!-- Embed System Health Page -->
                     <iframe src="/system_health" 
-                            style="width: 100%; min-height: 800px; border: none; border-radius: 8px;"
+                            style="width: 100%; min-height: 360px; border: none; border-radius: 8px;"
                             title="System Health Monitor"
                             id="systemHealthFrame">
                     </iframe>
@@ -1063,12 +1063,17 @@
                         </div>
                     </form>
                 </div>
+            </div>
             <!-- End of tab-content -->
+            </div>
+            <!-- End of tabs-container -->
             {% endif %}
+        </div>
         <!-- End of admin-card -->
 
         <!-- Operation Status -->
         <div id="operationStatus" class="mt-3" style="display: none;"></div>
+    </div>
 
     {% if not setup_mode %}
     <!-- Confirmation Modal -->
@@ -1214,6 +1219,7 @@
         <i class="fas fa-keyboard"></i> Alt+1-8: Switch Tabs | Alt+R: Refresh | Alt+H: Help
     </div>
     {% endif %}
+</div>
 {% endblock %}
 
 {% block scripts %}
