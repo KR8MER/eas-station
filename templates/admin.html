@@ -406,7 +406,7 @@
                                     <input type="password" class="form-control" id="newUserPasswordConfirm" minlength="8" required>
                                     <div class="invalid-feedback">Passwords must match.</div>
                                 </div>
-                                <button type="submit" class="btn btn-custom btn-success w-100">
+                                <button type="submit" class="btn btn-success w-100">
                                     <i class="fas fa-user-shield"></i> Create Administrator Account
                                 </button>
                             </form>
@@ -502,7 +502,7 @@
                                 </div>
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-custom btn-primary">
+                        <button type="submit" class="btn btn-primary">
                             <i class="fas fa-upload"></i> Upload Boundaries
                         </button>
                     </form>
@@ -550,7 +550,7 @@
                                 </div>
                             </div>
                         </div>
-                        <button type="button" class="btn btn-custom btn-info" onclick="previewExtraction()">
+                        <button type="button" class="btn btn-info" onclick="previewExtraction()">
                             <i class="fas fa-eye"></i> Preview Extraction
                         </button>
                     </form>
@@ -597,10 +597,10 @@
                                 <input type="text" id="customDeleteBoundaryType" class="form-control" placeholder="e.g. Rail Corridors">
                                 <div class="form-text">Enter the custom type you previously uploaded to remove it from the system.</div>
                             </div>
-                            <button onclick="deleteBoundariesByType()" class="btn btn-custom btn-warning w-100 mb-2">
+                            <button onclick="deleteBoundariesByType()" class="btn btn-warning w-100 mb-2">
                                 <i class="fas fa-trash-alt"></i> Delete by Type
                             </button>
-                                <button onclick="clearAllBoundaries()" class="btn btn-custom btn-danger w-100">
+                                <button onclick="clearAllBoundaries()" class="btn btn-danger w-100">
                                     <i class="fas fa-exclamation-triangle"></i> Clear ALL
                                 </button>
                             </div>
@@ -618,7 +618,7 @@
                             <i class="fas fa-download fa-2x text-primary mb-3"></i>
                             <h6>CAP Alert Polling</h6>
                             <p class="text-muted small">Manually fetch latest alerts from NOAA</p>
-                            <button onclick="triggerCAPPoll()" class="btn btn-custom btn-primary w-100">
+                            <button onclick="triggerCAPPoll()" class="btn btn-primary w-100">
                                 <i class="fas fa-satellite-dish"></i> Trigger Poll
                             </button>
                         </div>
@@ -632,7 +632,7 @@
                                 <input type="text" class="form-control" id="backupLabel" maxlength="48" placeholder="e.g. pre-upgrade">
                                 <div class="form-text">The label is appended to the timestamped backup folder.</div>
                             </div>
-                            <button id="backupButton" onclick="runOneClickBackup()" class="btn btn-custom btn-success w-100">
+                            <button id="backupButton" onclick="runOneClickBackup()" class="btn btn-success w-100">
                                 <i class="fas fa-save"></i> Run Backup
                             </button>
                             <div id="backupStatus" class="small text-muted mt-2">No backups run yet.</div>
@@ -655,7 +655,7 @@
                                 <input class="form-check-input" type="checkbox" id="upgradeAllowDirty">
                                 <label class="form-check-label small" for="upgradeAllowDirty">Allow dirty git worktree</label>
                             </div>
-                            <button id="upgradeButton" onclick="runOneClickUpgrade()" class="btn btn-custom btn-primary w-100">
+                            <button id="upgradeButton" onclick="runOneClickUpgrade()" class="btn btn-primary w-100">
                                 <i class="fas fa-sync-alt"></i> Run Upgrade
                             </button>
                             <div id="upgradeStatus" class="small text-muted mt-2">No upgrades run yet.</div>
@@ -694,7 +694,7 @@
                                 </div>
                             </div>
                             <div class="form-text mt-2">Provide an identifier for the fastest lookup, or specify a start and end range with the two-letter state code. NOAA manual imports require state-level queries.</div>
-                            <button onclick="manualImportAlert()" class="btn btn-custom btn-secondary w-100 mt-3">
+                            <button onclick="manualImportAlert()" class="btn btn-secondary w-100 mt-3">
                                 <i class="fas fa-cloud-download-alt"></i> Fetch &amp; Save
                             </button>
                             <div id="manualImportResults" class="small text-muted mt-2"></div>
@@ -704,7 +704,7 @@
                             <i class="fas fa-database fa-2x text-success mb-3"></i>
                             <h6>Database Optimization</h6>
                             <p class="text-muted small">Optimize database performance</p>
-                            <button onclick="optimizeDatabase()" class="btn btn-custom btn-success w-100">
+                            <button onclick="optimizeDatabase()" class="btn btn-success w-100">
                                 <i class="fas fa-tools"></i> Optimize DB
                             </button>
                         </div>
@@ -713,7 +713,7 @@
                             <i class="fas fa-sitemap fa-2x text-info mb-3"></i>
                             <h6>Fix Intersections</h6>
                             <p class="text-muted small">Recalculate alert-boundary intersections</p>
-                            <button onclick="recalculateIntersections()" class="btn btn-custom btn-info w-100">
+                            <button onclick="recalculateIntersections()" class="btn btn-info w-100">
                                 <i class="fas fa-link"></i> Fix Intersections
                             </button>
                         </div>
@@ -722,7 +722,7 @@
                             <i class="fas fa-heartbeat fa-2x text-danger mb-3"></i>
                             <h6>Database Health</h6>
                             <p class="text-muted small">Check database health status</p>
-                            <button onclick="checkDatabaseHealth()" class="btn btn-custom btn-danger w-100">
+                            <button onclick="checkDatabaseHealth()" class="btn btn-danger w-100">
                                 <i class="fas fa-stethoscope"></i> Health Check
                             </button>
                         </div>
@@ -745,7 +745,7 @@
                                     <input class="form-check-input" type="checkbox" role="switch" id="includeExpiredAlertsToggle">
                                     <label class="form-check-label small" for="includeExpiredAlertsToggle">Include expired alerts</label>
                                 </div>
-                                <button type="button" class="btn btn-custom btn-outline-primary" id="refreshAlertListButton">
+                                <button type="button" class="btn btn-outline-primary" id="refreshAlertListButton">
                                     <i class="fas fa-sync"></i> Refresh
                                 </button>
                             </div>
@@ -774,7 +774,7 @@
                                 <i class="fas fa-bookmark fa-2x text-success mb-3"></i>
                                 <h6>Mark Expired Alerts (SAFE)</h6>
                                 <p class="text-muted small">Mark expired alerts as inactive while preserving all data for historical analysis.</p>
-                                <button onclick="markExpiredAlerts()" class="btn btn-custom btn-success w-100">
+                                <button onclick="markExpiredAlerts()" class="btn btn-success w-100">
                                     <i class="fas fa-bookmark"></i> Mark as Expired
                                 </button>
                                 <small class="text-success mt-2 d-block">✓ Preserves all historical data</small>
@@ -786,7 +786,7 @@
                                 <i class="fas fa-trash-alt fa-2x text-danger mb-3"></i>
                                 <h6>Delete Expired Alerts (DESTRUCTIVE)</h6>
                                 <p class="text-muted small">Permanently delete expired alerts from the database. This cannot be undone!</p>
-                                <button onclick="clearExpiredAlerts()" class="btn btn-custom btn-danger w-100">
+                                <button onclick="clearExpiredAlerts()" class="btn btn-danger w-100">
                                     <i class="fas fa-exclamation-triangle"></i> Delete Expired
                                 </button>
                                 <small class="text-danger mt-2 d-block">⚠️ Permanently removes historical data</small>
@@ -797,15 +797,25 @@
 
                 <!-- Health Tab -->
                 <div class="tab-pane fade" id="health" role="tabpanel">
-                    <h4><i class="fas fa-heartbeat text-info"></i> System Health Monitor</h4>
-                    <p class="text-muted">Real-time system health and performance monitoring.</p>
-
-                    <div id="systemHealthData" class="mt-4">
-                        <div class="text-center py-4">
-                            <div class="loading-spinner"></div>
-                            <span class="ms-2">Loading system health data...</span>
-                        </div>
+                    <div class="mb-3">
+                        <h4 class="mb-2"><i class="fas fa-heartbeat text-info"></i> System Health Monitor</h4>
+                        <p class="text-muted mb-0">Real-time system health and performance monitoring.</p>
                     </div>
+                    
+                    <!-- Embed System Health Page -->
+                    <iframe src="/system_health" 
+                            style="width: 100%; min-height: 800px; border: none; border-radius: 8px;"
+                            title="System Health Monitor"
+                            id="systemHealthFrame">
+                    </iframe>
+                    
+                    <noscript>
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            JavaScript is required to view system health. Please enable JavaScript or 
+                            <a href="/system_health" target="_blank">open system health in a new tab</a>.
+                        </div>
+                    </noscript>
                 </div>
 
                 <!-- User Management Tab -->
@@ -835,7 +845,7 @@
                                         <input type="password" class="form-control" id="newUserPasswordConfirm" minlength="8" required>
                                         <div class="invalid-feedback">Passwords must match.</div>
                                     </div>
-                                    <button type="submit" class="btn btn-custom btn-success w-100">
+                                    <button type="submit" class="btn btn-success w-100">
                                         <i class="fas fa-user-shield"></i> Create Administrator
                                     </button>
                                 </form>
@@ -984,7 +994,7 @@
                                 <small class="text-muted">These lines are used for canned messages and previews.</small>
                             </div>
                             <div class="col-12 d-flex align-items-center">
-                                <button type="submit" class="btn btn-custom btn-primary">
+                                <button type="submit" class="btn btn-primary">
                                     <i class="fas fa-save"></i> Save Location Settings
                                 </button>
                                 <button type="button" class="btn btn-outline-secondary ms-2" id="resetLocationSettings">
@@ -1407,7 +1417,7 @@
             const footer = document.getElementById('confirmationFooter');
 
             body.innerHTML = `
-                <div class="alert alert-${type}-custom">
+                <div class="alert alert-${type}">
                     <h6>${message}</h6>
                     ${warning ? `<p class="mb-0"><strong>⚠️ Warning:</strong> ${warning}</p>` : ''}
                 </div>
@@ -3585,7 +3595,7 @@
             if (!statusDiv) {
                 return;
             }
-            statusDiv.className = `alert alert-${type}-custom`;
+            statusDiv.className = `alert alert-${type}`;
             statusDiv.innerHTML = `
                 <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-triangle' : 'info-circle'}"></i>
                 ${message}
@@ -4956,45 +4966,11 @@
         }
 
         // System health loading
+        // System Health now loaded via iframe - no need for separate function
+        // The iframe loads /system_health which uses system_health_new.html
         async function loadSystemHealth() {
-            try {
-                const response = await fetch('/api/system_status');
-                const data = await response.json();
-
-                const healthDiv = document.getElementById('systemHealthData');
-
-                const healthHtml = `
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-number">${data.active_alerts_count || 0}</div>
-                            <div class="stat-label">Active Alerts</div>
-                        </div>
-                        <div class="stat-card" style="background: linear-gradient(135deg, var(--success-color), #20c997);">
-                            <div class="stat-number">${data.boundaries_count || 0}</div>
-                            <div class="stat-label">Total Boundaries</div>
-                        </div>
-                        <div class="stat-card" style="background: linear-gradient(135deg, var(--warning-color), #f39c12);">
-                            <div class="stat-number">${data.system_resources.cpu_usage_percent.toFixed(1)}%</div>
-                            <div class="stat-label">CPU Usage</div>
-                        </div>
-                        <div class="stat-card" style="background: linear-gradient(135deg, var(--info-color), #339af0);">
-                            <div class="stat-number">${data.system_resources.memory_usage_percent.toFixed(1)}%</div>
-                            <div class="stat-label">Memory Usage</div>
-                        </div>
-                        <div class="stat-card" style="background: linear-gradient(135deg, var(--danger-color), #e74c3c);">
-                            <div class="stat-number">${data.system_resources.disk_free_gb} GB</div>
-                            <div class="stat-label">Free Disk</div>
-                        </div>
-                        <div class="stat-card" style="background: linear-gradient(135deg, var(--secondary-color), #6c757d);">
-                            <div class="stat-number" style="color: ${data.database_status === 'connected' ? '#28a745' : '#dc3545'};">${data.database_status}</div>
-                            <div class="stat-label">Database</div>
-                        </div>
-                    </div>
-                `;
-                healthDiv.innerHTML = healthHtml;
-            } catch (error) {
-                document.getElementById('systemHealthData').innerHTML = `<div class="alert alert-danger">Error loading system health: ${error.message}</div>`;
-            }
+            // No-op: System health is now loaded via iframe
+            console.log('System health loaded via iframe at /system_health');
         }
 
         // Alert Management Functions (NEW PRESERVATION SYSTEM)
