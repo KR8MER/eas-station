@@ -731,65 +731,90 @@
 
                 <!-- Alert Management Tab -->
                 <div class="tab-pane fade" id="alerts-mgmt" role="tabpanel">
-                    <h4><i class="fas fa-exclamation-triangle text-danger"></i> Alert Management</h4>
-                    <p class="text-muted">Manage expired alerts and data preservation.</p>
+                    <!-- Page Header -->
+                    <div class="mb-4">
+                        <h4 class="mb-2"><i class="fas fa-exclamation-triangle text-danger"></i> Alert Management</h4>
+                        <p class="text-muted mb-0">Manage expired alerts and data preservation.</p>
+                    </div>
 
-                    <div class="operation-card mb-4">
-                        <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-lg-between gap-3 mb-3">
-                            <div>
-                                <h6 class="mb-1">Stored Alerts</h6>
-                                <div class="text-muted small">Edit or remove alerts directly from the database.</div>
-                            </div>
-                            <div class="d-flex align-items-center gap-3 flex-wrap">
-                                <div class="form-check form-switch mb-0">
-                                    <input class="form-check-input" type="checkbox" role="switch" id="includeExpiredAlertsToggle">
-                                    <label class="form-check-label small" for="includeExpiredAlertsToggle">Include expired alerts</label>
+                    <!-- Stored Alerts Section -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-lg-between gap-3">
+                                <div>
+                                    <h5 class="card-title mb-1">Stored Alerts</h5>
+                                    <p class="text-muted small mb-0">Edit or remove alerts directly from the database.</p>
                                 </div>
-                                <button type="button" class="btn btn-custom btn-outline-primary" id="refreshAlertListButton">
-                                    <i class="fas fa-sync"></i> Refresh
-                                </button>
+                                <div class="d-flex align-items-center gap-3 flex-wrap">
+                                    <div class="form-check form-switch mb-0">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="includeExpiredAlertsToggle">
+                                        <label class="form-check-label small" for="includeExpiredAlertsToggle">Include expired</label>
+                                    </div>
+                                    <button type="button" class="btn btn-primary btn-sm" id="refreshAlertListButton">
+                                        <i class="fas fa-sync"></i> Refresh
+                                    </button>
+                                </div>
                             </div>
                         </div>
-
-                        <div class="row g-3 mb-3">
-                            <div class="col-md-6">
-                                <input type="text" class="form-control" id="alertSearchInput" placeholder="Search by identifier, event, or headline...">
+                        <div class="card-body">
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control" id="alertSearchInput" 
+                                           placeholder="Search by identifier, event, or headline...">
+                                </div>
+                                <div class="col-md-6 text-md-end d-flex align-items-center justify-content-md-end">
+                                    <small id="adminAlertListMeta" class="text-muted"></small>
+                                </div>
                             </div>
-                            <div class="col-md-6 text-md-end">
-                                <small id="adminAlertListMeta" class="text-muted"></small>
-                            </div>
-                        </div>
 
-                        <div id="adminAlertList" class="table-responsive">
-                            <div class="text-center py-4">
-                                <div class="loading-spinner"></div>
-                                <span class="ms-2">Loading alerts...</span>
+                            <div id="adminAlertList" class="table-responsive">
+                                <div class="text-center py-4">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p class="text-muted mt-2 mb-0">Loading alerts...</p>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="row">
+                    <!-- Alert Operations -->
+                    <div class="row g-4">
                         <div class="col-md-6">
-                            <div class="operation-card">
-                                <i class="fas fa-bookmark fa-2x text-success mb-3"></i>
-                                <h6>Mark Expired Alerts (SAFE)</h6>
-                                <p class="text-muted small">Mark expired alerts as inactive while preserving all data for historical analysis.</p>
-                                <button onclick="markExpiredAlerts()" class="btn btn-custom btn-success w-100">
-                                    <i class="fas fa-bookmark"></i> Mark as Expired
-                                </button>
-                                <small class="text-success mt-2 d-block">✓ Preserves all historical data</small>
+                            <div class="card border-success">
+                                <div class="card-body text-center">
+                                    <div class="mb-3">
+                                        <i class="fas fa-bookmark fa-3x text-success"></i>
+                                    </div>
+                                    <h5 class="card-title">Mark Expired Alerts</h5>
+                                    <span class="badge badge-success mb-3">SAFE OPERATION</span>
+                                    <p class="text-muted small">Mark expired alerts as inactive while preserving all data for historical analysis.</p>
+                                    <button onclick="markExpiredAlerts()" class="btn btn-success w-100 mb-2">
+                                        <i class="fas fa-bookmark"></i> Mark as Expired
+                                    </button>
+                                    <div class="alert alert-success py-2 mb-0">
+                                        <small><i class="fas fa-check-circle"></i> Preserves all historical data</small>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
                         <div class="col-md-6">
-                            <div class="operation-card border-danger">
-                                <i class="fas fa-trash-alt fa-2x text-danger mb-3"></i>
-                                <h6>Delete Expired Alerts (DESTRUCTIVE)</h6>
-                                <p class="text-muted small">Permanently delete expired alerts from the database. This cannot be undone!</p>
-                                <button onclick="clearExpiredAlerts()" class="btn btn-custom btn-danger w-100">
-                                    <i class="fas fa-exclamation-triangle"></i> Delete Expired
-                                </button>
-                                <small class="text-danger mt-2 d-block">⚠️ Permanently removes historical data</small>
+                            <div class="card border-danger">
+                                <div class="card-body text-center">
+                                    <div class="mb-3">
+                                        <i class="fas fa-trash-alt fa-3x text-danger"></i>
+                                    </div>
+                                    <h5 class="card-title">Delete Expired Alerts</h5>
+                                    <span class="badge badge-danger mb-3">DESTRUCTIVE</span>
+                                    <p class="text-muted small">Permanently delete expired alerts from the database. This cannot be undone!</p>
+                                    <button onclick="clearExpiredAlerts()" class="btn btn-danger w-100 mb-2">
+                                        <i class="fas fa-exclamation-triangle"></i> Delete Expired
+                                    </button>
+                                    <div class="alert alert-danger py-2 mb-0">
+                                        <small><i class="fas fa-exclamation-triangle"></i> Permanently removes historical data</small>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
