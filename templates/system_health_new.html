@@ -1,0 +1,374 @@
+{% extends "base.html" %}
+
+{% block title %}System Health - EAS Station{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/design-system.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+<style>
+    /* System Health Specific Styles */
+    .health-overview {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: var(--space-4);
+        margin-bottom: var(--space-6);
+    }
+    
+    .health-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+        gap: var(--space-6);
+        margin-bottom: var(--space-6);
+    }
+    
+    .detail-section {
+        margin-bottom: var(--space-6);
+    }
+    
+    .detail-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: var(--space-4);
+    }
+    
+    .detail-title {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-size: var(--text-xl);
+        font-weight: var(--font-semibold);
+        color: var(--color-text-primary);
+    }
+    
+    .detail-title i {
+        color: var(--color-primary-500);
+    }
+    
+    .resource-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--space-3) 0;
+        border-bottom: 1px solid var(--color-border-light);
+    }
+    
+    .resource-item:last-child {
+        border-bottom: none;
+    }
+    
+    .resource-info {
+        flex: 1;
+    }
+    
+    .resource-name {
+        font-weight: var(--font-medium);
+        color: var(--color-text-primary);
+        margin-bottom: var(--space-1);
+    }
+    
+    .resource-details {
+        font-size: var(--text-sm);
+        color: var(--color-text-secondary);
+    }
+    
+    .resource-usage {
+        min-width: 120px;
+        text-align: right;
+    }
+    
+    .usage-bar {
+        width: 100%;
+        margin-top: var(--space-2);
+    }
+    
+    .last-updated {
+        font-size: var(--text-sm);
+        color: var(--color-text-muted);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid" style="max-width: 1400px; margin: 0 auto; padding: var(--space-6);">
+    
+    <!-- Page Header -->
+    <div class="detail-header">
+        <h1 class="detail-title">
+            <i class="fas fa-heartbeat"></i>
+            System Health Monitor
+        </h1>
+        <div style="display: flex; align-items: center; gap: var(--space-4);">
+            <span class="last-updated" id="last-updated">Updated just now</span>
+            <button class="btn btn-secondary btn-sm" id="refresh-btn" onclick="refreshHealth()">
+                <i class="fas fa-sync-alt"></i>
+                Refresh
+            </button>
+        </div>
+    </div>
+    
+    <!-- System Overview Cards -->
+    <div class="health-overview">
+        <!-- Uptime Card -->
+        <div class="metric-card">
+            <div class="metric-label">System Uptime</div>
+            <div class="metric-value" id="uptime-value">
+                {{ format_uptime(system.uptime_seconds or 0) }}
+            </div>
+            <div class="status-indicator">
+                <span class="status-dot status-dot-success status-dot-pulse"></span>
+                <span>Running</span>
+            </div>
+        </div>
+        
+        <!-- CPU Card -->
+        <div class="metric-card">
+            <div class="metric-label">CPU Usage</div>
+            <div class="metric-value" id="cpu-value">
+                {{ "%.0f"|format(cpu.cpu_usage_percent or 0) }}<span class="metric-unit">%</span>
+            </div>
+            <div class="progress progress-sm">
+                <div class="progress-bar {% if cpu.cpu_usage_percent > 80 %}progress-bar-danger{% elif cpu.cpu_usage_percent > 50 %}progress-bar-warning{% else %}progress-bar-success{% endif %}" 
+                     style="width: {{ cpu.cpu_usage_percent or 0 }}%"></div>
+            </div>
+        </div>
+        
+        <!-- Memory Card -->
+        <div class="metric-card">
+            <div class="metric-label">Memory Usage</div>
+            <div class="metric-value" id="memory-value">
+                {{ "%.0f"|format(memory.percentage or 0) }}<span class="metric-unit">%</span>
+            </div>
+            <div class="progress progress-sm">
+                <div class="progress-bar {% if memory.percentage > 90 %}progress-bar-danger{% elif memory.percentage > 75 %}progress-bar-warning{% else %}progress-bar-success{% endif %}" 
+                     style="width: {{ memory.percentage or 0 }}%"></div>
+            </div>
+        </div>
+        
+        <!-- Disk Card -->
+        <div class="metric-card">
+            <div class="metric-label">Disk Usage</div>
+            <div class="metric-value" id="disk-value">
+                {% if disk and disk|length > 0 %}
+                    {{ "%.0f"|format(disk[0].percentage or 0) }}<span class="metric-unit">%</span>
+                {% else %}
+                    N/A
+                {% endif %}
+            </div>
+            <div class="progress progress-sm">
+                {% if disk and disk|length > 0 %}
+                    <div class="progress-bar {% if disk[0].percentage > 90 %}progress-bar-danger{% elif disk[0].percentage > 75 %}progress-bar-warning{% else %}progress-bar-success{% endif %}" 
+                         style="width: {{ disk[0].percentage or 0 }}%"></div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Resource Details -->
+    <div class="health-grid">
+        
+        <!-- CPU Details -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-microchip"></i> Processor
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="resource-item">
+                    <div class="resource-info">
+                        <div class="resource-name">CPU Cores</div>
+                        <div class="resource-details">{{ cpu.physical_cores or 'N/A' }} physical, {{ cpu.total_cores or 'N/A' }} logical</div>
+                    </div>
+                </div>
+                <div class="resource-item">
+                    <div class="resource-info">
+                        <div class="resource-name">Frequency</div>
+                        <div class="resource-details">Current: {{ "%.0f"|format(cpu.current_frequency or 0) }} MHz</div>
+                    </div>
+                    <div class="resource-usage">
+                        <span class="text-muted">Max: {{ "%.0f"|format(cpu.max_frequency or 0) }} MHz</span>
+                    </div>
+                </div>
+                <div class="resource-item">
+                    <div class="resource-info">
+                        <div class="resource-name">Load Average</div>
+                        <div class="resource-details">
+                            {% if load_averages %}
+                                1m: {{ "%.2f"|format(load_averages[0]) }}, 
+                                5m: {{ "%.2f"|format(load_averages[1]) }}, 
+                                15m: {{ "%.2f"|format(load_averages[2]) }}
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Memory Details -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-memory"></i> Memory
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="resource-item">
+                    <div class="resource-info">
+                        <div class="resource-name">RAM</div>
+                        <div class="resource-details">{{ format_bytes(memory.used or 0) }} of {{ format_bytes(memory.total or 0) }} used</div>
+                    </div>
+                    <div class="resource-usage">
+                        <span class="badge {% if memory.percentage > 90 %}badge-danger{% elif memory.percentage > 75 %}badge-warning{% else %}badge-success{% endif %}">
+                            {{ "%.1f"|format(memory.percentage or 0) }}%
+                        </span>
+                    </div>
+                </div>
+                <div class="resource-item">
+                    <div class="resource-info">
+                        <div class="resource-name">Available</div>
+                        <div class="resource-details">{{ format_bytes(memory.available or 0) }} free for applications</div>
+                    </div>
+                </div>
+                {% if memory.swap_total and memory.swap_total > 0 %}
+                <div class="resource-item">
+                    <div class="resource-info">
+                        <div class="resource-name">Swap</div>
+                        <div class="resource-details">{{ format_bytes(memory.swap_used or 0) }} of {{ format_bytes(memory.swap_total or 0) }} used</div>
+                    </div>
+                    <div class="resource-usage">
+                        <span class="badge badge-info">{{ "%.1f"|format(memory.swap_percentage or 0) }}%</span>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Services Status -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-cogs"></i> Services
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="resource-item">
+                    <div class="resource-info">
+                        <div class="resource-name">Database</div>
+                        <div class="resource-details">
+                            {% if database.info and database.info.version %}
+                                {{ database.info.version[:50] }}
+                            {% else %}
+                                PostgreSQL
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="resource-usage">
+                        {% set db_status = database.status or 'Unknown' %}
+                        <span class="badge {% if db_status == 'connected' %}badge-success{% elif 'error' in db_status|lower %}badge-danger{% else %}badge-neutral{% endif %}">
+                            {{ db_status }}
+                        </span>
+                    </div>
+                </div>
+                {% if services %}
+                    {% for service_name, status in services.items() %}
+                    <div class="resource-item">
+                        <div class="resource-info">
+                            <div class="resource-name">{{ service_name.title() }}</div>
+                        </div>
+                        <div class="resource-usage">
+                            {% set normalized_status = (status or '')|lower %}
+                            <span class="badge {% if normalized_status == 'active' %}badge-success{% elif normalized_status in ['inactive', 'unknown'] %}badge-neutral{% else %}badge-danger{% endif %}">
+                                {{ status or 'unknown' }}
+                            </span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- System Info -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-server"></i> System Information
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="resource-item">
+                    <div class="resource-info">
+                        <div class="resource-name">Hostname</div>
+                        <div class="resource-details">{{ system.hostname or 'Unknown' }}</div>
+                    </div>
+                </div>
+                <div class="resource-item">
+                    <div class="resource-info">
+                        <div class="resource-name">Operating System</div>
+                        <div class="resource-details">{{ system.system or 'Unknown' }} {{ system.release or '' }}</div>
+                    </div>
+                </div>
+                <div class="resource-item">
+                    <div class="resource-info">
+                        <div class="resource-name">Architecture</div>
+                        <div class="resource-details">{{ system.machine or 'Unknown' }}</div>
+                    </div>
+                </div>
+                <div class="resource-item">
+                    <div class="resource-info">
+                        <div class="resource-name">Processes</div>
+                        <div class="resource-details">{{ processes.total_processes or 0 }} total ({{ processes.running_processes or 0 }} running)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+    
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let lastUpdateTime = new Date();
+    
+    function updateLastUpdated() {
+        const now = new Date();
+        const seconds = Math.floor((now - lastUpdateTime) / 1000);
+        const element = document.getElementById('last-updated');
+        
+        if (seconds < 60) {
+            element.textContent = seconds === 0 ? 'Updated just now' : `Updated ${seconds}s ago`;
+        } else {
+            const minutes = Math.floor(seconds / 60);
+            element.textContent = `Updated ${minutes}m ago`;
+        }
+    }
+    
+    async function refreshHealth() {
+        const btn = document.getElementById('refresh-btn');
+        const originalContent = btn.innerHTML;
+        
+        try {
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
+            btn.disabled = true;
+            
+            const response = await fetch('/api/system_health');
+            if (!response.ok) throw new Error('Failed to fetch health data');
+            
+            window.location.reload();
+            
+        } catch (error) {
+            console.error('Error refreshing health data:', error);
+            btn.innerHTML = originalContent;
+            btn.disabled = false;
+        }
+    }
+    
+    setInterval(updateLastUpdated, 1000);
+    setInterval(() => { refreshHealth(); }, 30000);
+</script>
+{% endblock %}
+<script src="https://sites.super.myninja.ai/_assets/ninja-daytona-script.js"></script>
