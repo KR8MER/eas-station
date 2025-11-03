@@ -70,6 +70,26 @@ EAS Station’s north star is to replicate the capabilities of a Digital Alert S
 
 For a feature-by-feature comparison, see [`docs/roadmap/DASDEC3_COMPARISON.md`](docs/roadmap/DASDEC3_COMPARISON.md), which distils the vendor manuals into a living roadmap for EAS Station. Keep the PDF/DOCX references listed above handy when updating the comparison so terminology and capability groupings stay aligned.
 
+   ### Why Raspberry Pi? The Philosophy Behind This Project
+
+   This project embodies a fundamental principle: **complex problems can often be solved with carefully crafted software rather than expensive specialized hardware**. The Raspberry Pi represents the democratization of computing—over 60 million units sold worldwide, powering everything from educational projects to industrial automation to scientific research aboard the International Space Station.
+
+   **Key advantages of the Raspberry Pi approach:**
+
+   - **Affordability**: A complete system costs $85-135 vs. $2,195-7,000 for commercial EAS equipment (95-98% cost savings)
+   - **Flexibility**: Open-source software means complete customization and no vendor lock-in
+   - **Modern Technology**: Web-based interface, RESTful APIs, real-time updates, mobile-friendly design
+   - **Redundancy Through Affordability**: Deploy multiple units for backup at a fraction of the cost of one commercial unit
+   - **Community Support**: Massive ecosystem of tutorials, libraries, and shared knowledge
+   - **Proven Reliability**: Raspberry Pi hardware is battle-tested in millions of deployments worldwide
+   - **Educational Value**: Transparent, inspectable code that teaches how EAS systems actually work
+
+   **For more details, see:**
+   - [`docs/raspberry-pi-history.md`](docs/raspberry-pi-history.md) - The remarkable story of the Raspberry Pi and its impact on computing
+   - [`docs/project-philosophy.md`](docs/project-philosophy.md) - Our vision for democratizing emergency alerting infrastructure
+   - [`docs/dasdec3-comparison.md`](docs/dasdec3-comparison.md) - Detailed feature comparison with commercial systems
+   - [`docs/roadmap/dasdec3-feature-roadmap.md`](docs/roadmap/dasdec3-feature-roadmap.md) - Implementation roadmap for achieving complete feature parity
+
 [![CI status](https://github.com/KR8MER/eas-station/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/KR8MER/eas-station/actions/workflows/build.yml)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://www.docker.com/)
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-blue?logo=python)](https://www.python.org/)

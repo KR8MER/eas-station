@@ -14,11 +14,20 @@ This comprehensive index catalogs all documentation across the EAS Station proje
 
 | Topic | Keywords | Document | Lines |
 |-------|----------|----------|-------|
-| Project overview, quick start, architecture | readme, getting started, overview, architecture, docker | [README.md](../README.md) | 1,093 |
+| Project overview, quick start, architecture | readme, getting started, overview, architecture, docker | [README.md](../README.md) | 1,395 |
 | Project mission, goals, technology stack | about, mission, vision, goals, stack, python | [reference/ABOUT.md](reference/ABOUT.md) | 73 |
 | Theory of operation, system flow, SAME internals | architecture, pipeline, mermaid, same, history | [architecture/THEORY_OF_OPERATION.md](architecture/THEORY_OF_OPERATION.md) | 109 |
 | Developer guidelines, code standards | agents, coding standards, security, patterns, testing | [development/AGENTS.md](development/AGENTS.md) | 549 |
 | License information | mit, license, copyright | [LICENSE](../LICENSE) | 22 |
+
+### Project Philosophy & Vision
+
+| Topic | Keywords | Document | Lines |
+|-------|----------|----------|-------|
+| Raspberry Pi history and evolution | raspberry pi, history, eben upton, foundation, evolution, models | [raspberry-pi-history.md](raspberry-pi-history.md) | 450+ |
+| Project philosophy and goals | philosophy, vision, goals, dasdec3, alternative, open source, democratization | [project-philosophy.md](project-philosophy.md) | 500+ |
+| DASDEC3 feature comparison | dasdec3, comparison, features, cost, specifications, commercial | [dasdec3-comparison.md](dasdec3-comparison.md) | 600+ |
+| DASDEC3 feature implementation roadmap | roadmap, features, implementation, timeline, phases, parity | [roadmap/dasdec3-feature-roadmap.md](roadmap/dasdec3-feature-roadmap.md) | 800+ |
 
 ### Operations & Maintenance
 
