@@ -18,6 +18,7 @@ If you're new to EAS Station, start here:
 | Document | Description |
 |----------|-------------|
 | [📋 Help & Operations Guide](guides/HELP.md) | Complete operator manual |
+| [🎨 Frontend User Guide](frontend/USER_INTERFACE_GUIDE.md) | Web interface navigation and usage |
 | [🎯 Alert Management](guides/HELP.md#managing-boundaries-and-alerts) | Creating and managing alerts |
 | [📊 System Monitoring](guides/HELP.md#routine-operations) | Dashboard and health checks |
 | [🔧 Troubleshooting](guides/HELP.md#troubleshooting) | Common issues and solutions |
@@ -38,6 +39,14 @@ If you're new to EAS Station, start here:
 | [💡 LED Sign Integration](guides/HELP.md#led-sign-not-responding) | Alpha Protocol signage |
 | [📻 Radio Management](guides/radio_usb_passthrough.md) | USB radio devices |
 
+### Web Interface & Frontend
+| Document | Description |
+|----------|-------------|
+| [🎨 UI Components Library](frontend/COMPONENT_LIBRARY.md) | Complete component reference |
+| [📱 Responsive Design Guide](frontend/RESPONSIVE_DESIGN.md) | Mobile-first design principles |
+| [🎨 Theming & Customization](frontend/THEMING_CUSTOMIZATION.md) | Theme system and branding |
+| [🚀 JavaScript API](frontend/JAVASCRIPT_API.md) | Frontend API documentation |
+
 ## 🛠️ Developer Documentation
 
 ### Getting Started
@@ -45,6 +54,7 @@ If you're new to EAS Station, start here:
 |----------|-------------|
 | [🏗️ Architecture Overview](architecture/THEORY_OF_OPERATION.md) | System design and components |
 | [💻 Development Setup](development/AGENTS.md) | Local development environment |
+| [🎨 Frontend Documentation](frontend/FRONTEND_INDEX.md) | Complete UI and frontend guide |
 | [🔧 API Reference](../README.md#api-endpoints) | REST API documentation |
 | [🗺️ Project Structure](development/AGENTS.md#project-structure) | Code organization guide |
 
@@ -55,6 +65,7 @@ If you're new to EAS Station, start here:
 | [✅ Pull Request Process](process/PR_DESCRIPTION.md) | PR guidelines and templates |
 | [🐛 Issue Reporting](process/CONTRIBUTING.md#issues) | Bug report guidelines |
 | [📝 Code Standards](development/AGENTS.md#coding-standards) | Style and quality standards |
+| [🎨 Frontend Development](frontend/FRONTEND_INDEX.md#-development) | UI development guidelines |
 
 ## 📈 Project Information
 
