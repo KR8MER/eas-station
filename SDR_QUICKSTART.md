@@ -1,21 +1,17 @@
-# SoapySDR Quick Start Guide
+# SDR Quick Start Guide (RTL-SDR & Airspy)
 
-## Summary
+## ⚡ One-Click Setup
 
-SoapySDR and all necessary drivers (RTL-SDR, Airspy) are now **automatically installed** as part of the Docker build. You don't need to install anything manually on your host system!
+SoapySDR, RTL-SDR, and Airspy drivers are **pre-installed** in the Docker image. No manual installation, no .env configuration needed - just plug in your device and start the container!
 
-## What Changed
+## ✨ What's Included
 
-### Before
-- Users had to manually install SoapySDR on the host system
-- Drivers had to be installed separately
-- USB device mapping had to be configured manually
-
-### After (Now)
-- ✅ SoapySDR automatically installed in Docker container
-- ✅ RTL-SDR and Airspy drivers pre-installed
-- ✅ NumPy included for signal processing
-- ✅ USB device access pre-configured in docker-compose.yml
+- ✅ **SoapySDR** - Automatically installed
+- ✅ **RTL-SDR drivers** - Pre-compiled and ready
+- ✅ **Airspy drivers** - Pre-compiled and ready
+- ✅ **USB access** - Pre-configured in docker-compose.yml
+- ✅ **NumPy** - For signal processing
+- ✅ **No .env variables** - No paths to configure!
 
 ## Quick Setup Steps
 
@@ -31,15 +27,17 @@ lsusb | grep -i rtl
 lsusb | grep -i airspy
 ```
 
-### 2. Build the Docker Image
+### 2. Build or Pull the Image
 
 ```bash
-# Build the image with SoapySDR support
+# Option A: Build locally (includes RTL-SDR + Airspy by default)
 docker compose build app
 
-# Or pull the pre-built image (if available)
+# Option B: Pull pre-built image (if available)
 docker pull ghcr.io/kr8mer/eas-station:latest
 ```
+
+**Note**: Both RTL-SDR and Airspy are included by default. No build args needed!
 
 ### 3. Start the Containers
 
@@ -153,18 +151,17 @@ The Dockerfile now includes:
 - `soapysdr-tools` - Command-line utilities (SoapySDRUtil, etc.)
 - `numpy` - Signal processing (in requirements.txt)
 
-#### Speeding up Docker builds
+#### Optional: Speeding up Docker builds
 
-Portainer rebuilds can be slow if you include hardware drivers you do not use.
-Edit `stack.env` (or your `.env`) and set:
+If you only use RTL-SDR (not Airspy), you can speed up builds by adding to `.env`:
 
 ```env
 SOAPYSDR_DRIVERS=rtlsdr
 ```
 
-This keeps RTL-SDR support but skips Airspy packages, which shortens the `apt`
-step dramatically. Provide a comma-separated list (for example
-`rtlsdr,airspy`) whenever you need multiple drivers.
+**Default** (both drivers): `SOAPYSDR_DRIVERS=rtlsdr,airspy`
+
+This only affects build time - runtime performance is identical.
 
 ### Docker Compose Configuration
 
