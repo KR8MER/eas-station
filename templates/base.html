@@ -21,6 +21,10 @@
     <!-- EAS Station Stylesheets -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive-enhancements.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/loading-states.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/error-handling.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/accessibility.css') }}">
 
     <script>
         window.CSRF_TOKEN = {{ csrf_token | tojson }};
@@ -62,7 +66,7 @@
     <div class="toast-container"></div>
 
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top shadow-sm">
         <div class="container-fluid">
             <div class="navbar-brand-group">
                 <a class="navbar-brand" href="/">
@@ -92,7 +96,8 @@
                         <li class="nav-item">
                             <a class="nav-link" href="/">
                                 <i class="fas fa-gauge-high"></i>
-                                <span>Dashboard</span>
+                                <span class="d-none d-md-inline">Dashboard</span>
+                                <span class="d-md-none">Home</span>
                             </a>
                         </li>
 
@@ -100,7 +105,8 @@
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" id="monitoringDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 <i class="fas fa-radar"></i>
-                                <span>Monitoring</span>
+                                <span class="d-none d-md-inline">Monitoring</span>
+                                <span class="d-md-none">Monitor</span>
                             </a>
                             <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="monitoringDropdown">
                                 <li>
@@ -125,7 +131,8 @@
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" id="operationsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 <i class="fas fa-tower-broadcast"></i>
-                                <span>Operations</span>
+                                <span class="d-none d-md-inline">Operations</span>
+                                <span class="d-md-none">Ops</span>
                             </a>
                             <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="operationsDropdown">
                                 <li>
@@ -170,7 +177,8 @@
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" id="analyticsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 <i class="fas fa-chart-line"></i>
-                                <span>Analytics</span>
+                                <span class="d-none d-md-inline">Analytics</span>
+                                <span class="d-md-none">Stats</span>
                             </a>
                             <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="analyticsDropdown">
                                 <li>
@@ -206,7 +214,8 @@
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" id="settingsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 <i class="fas fa-cog"></i>
-                                <span>Settings</span>
+                                <span class="d-none d-md-inline">Settings</span>
+                                <span class="d-md-none">Config</span>
                             </a>
                             <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="settingsDropdown">
                                 <li>
@@ -350,6 +359,8 @@
     <script src="{{ url_for('static', filename='js/core/api.js') }}"></script>
     <script src="{{ url_for('static', filename='js/core/health.js') }}"></script>
     <script src="{{ url_for('static', filename='js/core/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/loading-error-utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/accessibility-utils.js') }}"></script>
 
     <!-- 3. Page-specific scripts -->
     {% block scripts %}{% endblock %}
