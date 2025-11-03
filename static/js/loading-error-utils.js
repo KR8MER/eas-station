@@ -45,7 +45,7 @@ class LoadingErrorUtils {
         // Handle uncaught errors
         window.addEventListener('error', (event) => {
             console.error('Uncaught error:', event.error);
-            this.showError('An unexpected error occurred. Please refresh the page.');
+            this.showError(null, 'An unexpected error occurred. Please refresh the page.');
         });
     }
 
