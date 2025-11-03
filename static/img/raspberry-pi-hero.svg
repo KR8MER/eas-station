@@ -1,96 +1,135 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-labelledby="pi5-title pi5-desc">
-  <title id="pi5-title">Raspberry Pi 5 reference hardware for EAS Station</title>
-  <desc id="pi5-desc">Detailed illustration of a Raspberry Pi 5 with labeled subsystems: BCM2712 SoC, LPDDR4X memory, PCIe NVMe carrier, balanced audio HAT, relay bank, SDR receivers, and power management.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" role="img" aria-labelledby="hero-title hero-desc">
+  <title id="hero-title">EAS Station - Powered by Raspberry Pi</title>
+  <desc id="hero-desc">Modern Emergency Alert System broadcasting powered by affordable Raspberry Pi hardware</desc>
+  
   <defs>
-    <linearGradient id="board-fill" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#1f7a4d" />
-      <stop offset="100%" stop-color="#105335" />
+    <!-- Clean gradients -->
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e293b;stop-opacity:1" />
     </linearGradient>
-    <linearGradient id="shadow" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#000" stop-opacity="0.25" />
-      <stop offset="100%" stop-color="#000" stop-opacity="0" />
+    
+    <linearGradient id="pi-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
     </linearGradient>
+    
+    <!-- Subtle grid pattern -->
+    <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
+      <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#334155" stroke-width="0.5" opacity="0.2"/>
+    </pattern>
+    
     <style>
-      text { font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; fill: #f4f9f6; }
-      .label { font-size: 16px; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.35); }
-      .annotation { font-size: 13px; font-weight: 500; fill: #e3fcef; }
-      .callout text { fill: #0d1b2a; font-weight: 600; }
-      .callout rect { fill: #f4f9f6; stroke-width: 2; stroke: #0d1b2a; rx: 8; ry: 8; }
+      .hero-title { 
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 56px;
+        font-weight: 800;
+        fill: #f8fafc;
+        letter-spacing: -0.02em;
+      }
+      .hero-subtitle { 
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 24px;
+        font-weight: 500;
+        fill: #94a3b8;
+      }
+      .feature-text {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 16px;
+        font-weight: 600;
+        fill: #cbd5e1;
+      }
+      .stat-number {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 36px;
+        font-weight: 700;
+        fill: #10b981;
+      }
+      .stat-label {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 13px;
+        font-weight: 500;
+        fill: #64748b;
+      }
+      .badge-text {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 11px;
+        font-weight: 600;
+        fill: #0f172a;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
     </style>
   </defs>
-  <rect width="640" height="360" fill="#0b1726" />
-  <rect x="48" y="44" width="544" height="272" rx="28" ry="28" fill="url(#board-fill)" stroke="#2ecc71" stroke-width="6" />
-  <path d="M72 300h496l-26 44H98z" fill="url(#shadow)" opacity="0.6" />
-
-  <!-- HDMI / USB cluster -->
-  <rect x="90" y="72" width="90" height="38" rx="6" ry="6" fill="#2b3a4a" stroke="#90a4ae" stroke-width="3" />
-  <rect x="90" y="116" width="90" height="38" rx="6" ry="6" fill="#2b3a4a" stroke="#90a4ae" stroke-width="3" />
-  <rect x="186" y="72" width="64" height="82" rx="10" ry="10" fill="#1e2b38" stroke="#7e57c2" stroke-width="4" />
-  <text x="218" y="118" text-anchor="middle" class="annotation">USB 3.0<br/>PoE+</text>
-
-  <!-- BCM2712 SoC -->
-  <rect x="270" y="96" width="120" height="120" rx="18" ry="18" fill="#101b24" stroke="#26c6da" stroke-width="4" />
-  <rect x="288" y="114" width="84" height="84" rx="16" ry="16" fill="#1b2631" stroke="#4dd0e1" stroke-width="3" />
-  <text x="330" y="160" text-anchor="middle" class="label">BCM2712</text>
-  <text x="330" y="186" text-anchor="middle" class="annotation">4× Cortex-A76<br/>VideoCore VII</text>
-
-  <!-- LPDDR4X memory stack -->
-  <rect x="410" y="88" width="110" height="64" rx="14" ry="14" fill="#2d1b4f" stroke="#9575cd" stroke-width="4" />
-  <text x="465" y="120" text-anchor="middle" class="label">LPDDR4X 8 GB</text>
-  <text x="465" y="142" text-anchor="middle" class="annotation">tts + verification headroom</text>
-
-  <!-- PCIe / NVMe carrier -->
-  <rect x="402" y="170" width="144" height="88" rx="16" ry="16" fill="#1c2833" stroke="#f7d794" stroke-width="4" />
-  <rect x="418" y="186" width="112" height="56" rx="12" ry="12" fill="#2f3e4f" stroke="#f5cd79" stroke-width="2" />
-  <text x="474" y="216" text-anchor="middle" class="label">PCIe NVMe</text>
-  <text x="474" y="236" text-anchor="middle" class="annotation">512 GB logging cache</text>
-
-  <!-- Balanced Audio HAT -->
-  <rect x="140" y="190" width="128" height="86" rx="18" ry="18" fill="#0d2f2d" stroke="#4db6ac" stroke-width="4" />
-  <text x="204" y="232" text-anchor="middle" class="label">Balanced I/O HAT</text>
-  <text x="204" y="252" text-anchor="middle" class="annotation">+4 dBu in/out, AES67 ready</text>
-
-  <!-- Relay bank -->
-  <rect x="540" y="124" width="52" height="140" rx="10" ry="10" fill="#eceff1" stroke="#90a4ae" stroke-width="4" />
-  <circle cx="566" cy="150" r="11" fill="#cfd8dc" />
-  <circle cx="566" cy="186" r="11" fill="#cfd8dc" />
-  <circle cx="566" cy="222" r="11" fill="#cfd8dc" />
-  <text x="566" y="266" text-anchor="middle" class="annotation">GPIO relays</text>
-
-  <!-- Dual SDR receivers -->
-  <rect x="332" y="268" width="96" height="52" rx="12" ry="12" fill="#3b1f0f" stroke="#ffb74d" stroke-width="4" />
-  <rect x="438" y="268" width="96" height="52" rx="12" ry="12" fill="#3b1f0f" stroke="#ffb74d" stroke-width="4" />
-  <text x="380" y="302" text-anchor="middle" class="annotation">SDR #1<br/>air-chain</text>
-  <text x="486" y="302" text-anchor="middle" class="annotation">SDR #2<br/>confidence</text>
-
-  <!-- Power / UPS -->
-  <rect x="120" y="286" width="96" height="40" rx="10" ry="10" fill="#212121" stroke="#ff6f61" stroke-width="3" />
-  <text x="168" y="310" text-anchor="middle" class="annotation">UPS &amp; surge</text>
-
-  <!-- Callouts -->
-  <g class="callout">
-    <line x1="330" y1="96" x2="330" y2="36" stroke="#26c6da" stroke-width="3" stroke-dasharray="6 6" />
-    <rect x="250" y="10" width="160" height="44" />
-    <text x="330" y="38" text-anchor="middle">Deterministic SAME engine</text>
+  
+  <!-- Background -->
+  <rect width="1200" height="600" fill="url(#bg-gradient)"/>
+  <rect width="1200" height="600" fill="url(#grid)"/>
+  
+  <!-- Left side: Content (well-spaced) -->
+  <g id="content">
+    <!-- Badge -->
+    <rect x="80" y="100" width="160" height="28" rx="14" fill="#10b981"/>
+    <text x="160" y="118" text-anchor="middle" class="badge-text">Open Source</text>
+    
+    <!-- Main title - plenty of space -->
+    <text x="80" y="190" class="hero-title">Professional EAS</text>
+    <text x="80" y="250" class="hero-title">Broadcasting</text>
+    
+    <!-- Subtitle - good spacing -->
+    <text x="80" y="300" class="hero-subtitle">Powered by Raspberry Pi</text>
+    
+    <!-- Feature list - well spaced -->
+    <g transform="translate(80, 360)">
+      <circle cx="6" cy="6" r="6" fill="#10b981"/>
+      <text x="24" y="12" class="feature-text">95% Cost Savings vs Commercial Systems</text>
+    </g>
+    
+    <g transform="translate(80, 410)">
+      <circle cx="6" cy="6" r="6" fill="#3b82f6"/>
+      <text x="24" y="12" class="feature-text">DASDEC3-Compatible Architecture</text>
+    </g>
+    
+    <g transform="translate(80, 460)">
+      <circle cx="6" cy="6" r="6" fill="#8b5cf6"/>
+      <text x="24" y="12" class="feature-text">Open Source & Community Driven</text>
+    </g>
   </g>
-  <g class="callout">
-    <line x1="204" y1="190" x2="120" y2="132" stroke="#4db6ac" stroke-width="3" stroke-dasharray="6 6" />
-    <rect x="20" y="104" width="180" height="72" />
-    <text x="110" y="134" text-anchor="middle">Balanced audio<br/>mirrors DASDEC3 program/control</text>
+  
+  <!-- Right side: Simple Pi board -->
+  <g id="pi-board" transform="translate(700, 180)">
+    <!-- Main board - clean and simple -->
+    <rect x="0" y="0" width="380" height="240" rx="16" fill="url(#pi-gradient)" opacity="0.9"/>
+    
+    <!-- Raspberry Pi logo (simplified) -->
+    <circle cx="190" cy="120" r="60" fill="#0f172a" opacity="0.4"/>
+    <text x="190" y="145" text-anchor="middle" style="font-family: 'Georgia', serif; font-size: 72px; font-weight: bold; fill: #f8fafc; opacity: 0.9;">π</text>
+    
+    <!-- Corner accents -->
+    <rect x="20" y="20" width="40" height="40" rx="6" fill="#1e293b" stroke="#3b82f6" stroke-width="2"/>
+    <rect x="320" y="20" width="40" height="40" rx="6" fill="#1e293b" stroke="#10b981" stroke-width="2"/>
+    <rect x="20" y="180" width="40" height="40" rx="6" fill="#1e293b" stroke="#8b5cf6" stroke-width="2"/>
+    <rect x="320" y="180" width="40" height="40" rx="6" fill="#1e293b" stroke="#f59e0b" stroke-width="2"/>
   </g>
-  <g class="callout">
-    <line x1="474" y1="170" x2="574" y2="96" stroke="#f7d794" stroke-width="3" stroke-dasharray="6 6" />
-    <rect x="520" y="52" width="164" height="58" />
-    <text x="602" y="82" text-anchor="middle">PCIe NVMe = log retention</text>
-  </g>
-  <g class="callout">
-    <line x1="380" y1="268" x2="310" y2="220" stroke="#ffb74d" stroke-width="3" stroke-dasharray="6 6" />
-    <rect x="250" y="196" width="152" height="56" />
-    <text x="326" y="226" text-anchor="middle">Dual SDRs verify retransmission</text>
-  </g>
-  <g class="callout">
-    <line x1="566" y1="264" x2="606" y2="314" stroke="#90a4ae" stroke-width="3" stroke-dasharray="6 6" />
-    <rect x="522" y="314" width="180" height="40" />
-    <text x="612" y="340" text-anchor="middle">Dry-contact relays drive STL/transmitter</text>
+  
+  <!-- Stats row - clean and separated -->
+  <g id="stats" transform="translate(700, 460)">
+    <!-- Stat 1 -->
+    <g>
+      <text x="0" y="0" class="stat-number">$85</text>
+      <text x="0" y="20" class="stat-label">Starting Cost</text>
+    </g>
+    
+    <!-- Stat 2 -->
+    <g transform="translate(140, 0)">
+      <text x="0" y="0" class="stat-number">4×</text>
+      <text x="0" y="20" class="stat-label">CPU Cores</text>
+    </g>
+    
+    <!-- Stat 3 -->
+    <g transform="translate(260, 0)">
+      <text x="0" y="0" class="stat-number">8GB</text>
+      <text x="0" y="20" class="stat-label">Memory</text>
+    </g>
   </g>
 </svg>
