@@ -110,6 +110,45 @@ class Config:
     ENABLE_AUDIO_ALERTS = os.environ.get('ENABLE_AUDIO_ALERTS', 'False').lower() == 'true'
     AUDIO_OUTPUT_DIR = os.environ.get('AUDIO_OUTPUT_DIR', '/tmp/audio')
 
+    # Audio Ingest Pipeline settings
+    AUDIO_INGEST_ENABLED = os.environ.get('AUDIO_INGEST_ENABLED', 'False').lower() == 'true'
+    AUDIO_INGEST_BUFFER_SIZE = int(os.environ.get('AUDIO_INGEST_BUFFER_SIZE', '4096'))
+    AUDIO_INGEST_SAMPLE_RATE = int(os.environ.get('AUDIO_INGEST_SAMPLE_RATE', '44100'))
+    AUDIO_INGEST_CHANNELS = int(os.environ.get('AUDIO_INGEST_CHANNELS', '1'))
+    
+    # Audio source configurations
+    # SDR audio source
+    AUDIO_SDR_ENABLED = os.environ.get('AUDIO_SDR_ENABLED', 'False').lower() == 'true'
+    AUDIO_SDR_RECEIVER_ID = os.environ.get('AUDIO_SDR_RECEIVER_ID', '')
+    AUDIO_SDR_PRIORITY = int(os.environ.get('AUDIO_SDR_PRIORITY', '100'))
+    
+    # ALSA audio source
+    AUDIO_ALSA_ENABLED = os.environ.get('AUDIO_ALSA_ENABLED', 'False').lower() == 'true'
+    AUDIO_ALSA_DEVICE = os.environ.get('AUDIO_ALSA_DEVICE', 'default')
+    AUDIO_ALSA_PRIORITY = int(os.environ.get('AUDIO_ALSA_PRIORITY', '200'))
+    
+    # PulseAudio source
+    AUDIO_PULSE_ENABLED = os.environ.get('AUDIO_PULSE_ENABLED', 'False').lower() == 'true'
+    AUDIO_PULSE_DEVICE_INDEX = os.environ.get('AUDIO_PULSE_DEVICE_INDEX', '')
+    AUDIO_PULSE_PRIORITY = int(os.environ.get('AUDIO_PULSE_PRIORITY', '300'))
+    
+    # File source (for testing)
+    AUDIO_FILE_ENABLED = os.environ.get('AUDIO_FILE_ENABLED', 'False').lower() == 'true'
+    AUDIO_FILE_PATH = os.environ.get('AUDIO_FILE_PATH', '')
+    AUDIO_FILE_LOOP = os.environ.get('AUDIO_FILE_LOOP', 'False').lower() == 'true'
+    AUDIO_FILE_PRIORITY = int(os.environ.get('AUDIO_FILE_PRIORITY', '999'))
+    
+    # Audio metering and monitoring
+    AUDIO_SILENCE_THRESHOLD_DB = float(os.environ.get('AUDIO_SILENCE_THRESHOLD_DB', '-60.0'))
+    AUDIO_SILENCE_DURATION_SECONDS = float(os.environ.get('AUDIO_SILENCE_DURATION_SECONDS', '5.0'))
+    AUDIO_CLIPPING_THRESHOLD = float(os.environ.get('AUDIO_CLIPPING_THRESHOLD', '0.95'))
+    AUDIO_METER_WINDOW_SIZE = int(os.environ.get('AUDIO_METER_WINDOW_SIZE', '1024'))
+    
+    # Audio health monitoring
+    AUDIO_HEALTH_CHECK_INTERVAL = int(os.environ.get('AUDIO_HEALTH_CHECK_INTERVAL', '10'))
+    AUDIO_ALERT_CALLBACK_ENABLED = os.environ.get('AUDIO_ALERT_CALLBACK_ENABLED', 'True').lower() == 'true'
+    AUDIO_ALERT_EMAIL_ENABLED = os.environ.get('AUDIO_ALERT_EMAIL_ENABLED', 'False').lower() == 'true'
+
     # Performance settings
     CACHE_TIMEOUT = int(os.environ.get('CACHE_TIMEOUT', 300))  # 5 minutes
     MAX_WORKERS = int(os.environ.get('MAX_WORKERS', 2))
@@ -123,6 +162,11 @@ class Config:
 
         if Config.ENABLE_AUDIO_ALERTS:
             os.makedirs(Config.AUDIO_OUTPUT_DIR, exist_ok=True)
+            
+        # Create audio ingest directories
+        if Config.AUDIO_INGEST_ENABLED:
+            audio_ingest_dir = os.environ.get('AUDIO_INGEST_DIR', '/tmp/audio_ingest')
+            os.makedirs(audio_ingest_dir, exist_ok=True)
 
 
 class DevelopmentConfig(Config):
