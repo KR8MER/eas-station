@@ -11,11 +11,12 @@ services:
     env_file:
       - .env
     environment:
-      - SDR_ARGS=${SDR_ARGS:-driver=airspy}
+      SDR_ARGS: ${SDR_ARGS:-driver=airspy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     devices:
       - /dev/bus/usb:/dev/bus/usb
+      - /dev/bus/usb/003/002:/dev/bus/usb/003/002
     privileged: true
 
   poller:
@@ -25,7 +26,7 @@ services:
     env_file:
       - .env
     environment:
-      - SDR_ARGS=${SDR_ARGS:-driver=airspy}
+      SDR_ARGS: ${SDR_ARGS:-driver=airspy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     devices:
@@ -48,7 +49,7 @@ services:
     environment:
       CAP_POLLER_MODE: IPAWS
       CAP_ENDPOINTS: ${IPAWS_CAP_FEED_URLS:-}
-      - SDR_ARGS=${SDR_ARGS:-driver=airspy}
+      SDR_ARGS: ${SDR_ARGS:-driver=airspy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     devices:
