@@ -206,7 +206,8 @@ def check_soapysdr_installation() -> Dict[str, Any]:
         try:
             # Get drivers from enumerated devices
             devices = SoapySDR.Device.enumerate()
-            drivers = set(device.get("driver", "unknown") for device in devices)
+            # Fix: SoapySDRKwargs objects don't have .get() method - cast to dict first
+            drivers = set(dict(device).get("driver", "unknown") for device in devices)
             result["drivers_available"] = sorted(drivers)
             result["total_devices"] = len(devices)
         except Exception as exc:

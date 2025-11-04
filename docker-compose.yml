@@ -10,6 +10,8 @@ services:
       - "5000:5000"
     env_file:
       - .env
+    environment:
+      - SDR_ARGS=${SDR_ARGS:-driver=airspy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     devices:
@@ -22,6 +24,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - SDR_ARGS=${SDR_ARGS:-driver=airspy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     devices:
@@ -44,6 +48,7 @@ services:
     environment:
       CAP_POLLER_MODE: IPAWS
       CAP_ENDPOINTS: ${IPAWS_CAP_FEED_URLS:-}
+      - SDR_ARGS=${SDR_ARGS:-driver=airspy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     devices:
