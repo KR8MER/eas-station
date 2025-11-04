@@ -328,7 +328,7 @@
     const tableBody = document.querySelector('#radioReceiversTable tbody');
     const statusBanner = document.getElementById('radioStatus');
     const modalElement = document.getElementById('radioReceiverModal');
-    const receiverModal = new bootstrap.Modal(modalElement);
+    const receiverModal = bootstrap.Modal.getOrCreateInstance(modalElement);
     const form = document.getElementById('radioReceiverForm');
     const addButton = document.getElementById('addReceiverBtn');
     const refreshButton = document.getElementById('refreshStatusBtn');
@@ -734,9 +734,9 @@
     // Device Discovery, Diagnostics, and Presets
     // ========================================================================
 
-    const discoveryModal = new bootstrap.Modal(document.getElementById('discoveryModal'));
-    const diagnosticsModal = new bootstrap.Modal(document.getElementById('diagnosticsModal'));
-    const presetsModal = new bootstrap.Modal(document.getElementById('presetsModal'));
+    const discoveryModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('discoveryModal'));
+    const diagnosticsModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('diagnosticsModal'));
+    const presetsModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('presetsModal'));
 
     const discoverDevicesBtn = document.getElementById('discoverDevicesBtn');
     const runDiagnosticsBtn = document.getElementById('runDiagnosticsBtn');
