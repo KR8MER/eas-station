@@ -110,7 +110,7 @@ class AudioMeter:
             return {
                 'peak_dbfs': 20 * np.log10(max(self._current_peak, 1e-10)),
                 'rms_dbfs': 20 * np.log10(max(rms, 1e-10)),
-                'peak_linear': = self._current_peak,
+                'peak_linear': self._current_peak,
                 'rms_linear': rms
             }
 

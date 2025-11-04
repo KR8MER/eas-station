@@ -771,6 +771,45 @@ class AudioAlert(db.Model):
     alert_metadata = db.Column('metadata', JSONB)
 
 
+class AudioSourceConfigDB(db.Model):
+    """Persistent audio source configurations (database model)."""
+    __tablename__ = "audio_source_configs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True, index=True)
+    source_type = db.Column(db.String(20), nullable=False)  # 'sdr', 'alsa', 'pulse', 'file'
+
+    # Configuration parameters (stored as JSON)
+    config_params = db.Column('config', JSONB, nullable=False)
+
+    # Source settings
+    priority = db.Column(db.Integer, default=0)
+    enabled = db.Column(db.Boolean, default=True)
+    auto_start = db.Column(db.Boolean, default=False)
+
+    # Timestamps
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    # Optional description
+    description = db.Column(db.Text)
+
+    def to_dict(self):
+        """Convert configuration to dictionary."""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'source_type': self.source_type,
+            'config': self.config_params or {},
+            'priority': self.priority,
+            'enabled': self.enabled,
+            'auto_start': self.auto_start,
+            'description': self.description,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 __all__ = [
     "Boundary",
     "CAPAlert",
@@ -787,4 +826,5 @@ __all__ = [
     "AudioSourceMetrics",
     "AudioHealthStatus",
     "AudioAlert",
+    "AudioSourceConfigDB",
 ]

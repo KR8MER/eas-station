@@ -496,10 +496,80 @@ async function deleteSource(sourceId) {
 }
 
 /**
- * Edit an audio source (stub for future implementation)
+ * Edit an audio source
  */
-function editSource(sourceId) {
-    showError('Edit functionality coming soon');
+async function editSource(sourceId) {
+    try {
+        // Fetch current source configuration
+        const response = await fetch(`/api/audio/sources/${sourceId}`);
+        if (!response.ok) {
+            showError('Failed to load source configuration');
+            return;
+        }
+
+        const source = await response.json();
+
+        // Populate the edit modal
+        document.getElementById('editSourceId').value = source.id;
+        document.getElementById('editSourceName').value = source.name;
+        document.getElementById('editSourceType').value = source.type.toUpperCase();
+        document.getElementById('editPriority').value = source.priority || 100;
+        document.getElementById('editEnabled').checked = source.enabled !== false;
+
+        // Set silence detection values from config
+        const config = source.config || {};
+        document.getElementById('editSilenceThreshold').value = config.silence_threshold_db || -60;
+        document.getElementById('editSilenceDuration').value = config.silence_duration_seconds || 5;
+
+        // Set database-only fields
+        document.getElementById('editAutoStart').checked = source.auto_start || false;
+        document.getElementById('editDescription').value = source.description || '';
+
+        // Show the modal
+        const modal = new bootstrap.Modal(document.getElementById('editSourceModal'));
+        modal.show();
+    } catch (error) {
+        console.error('Error loading source for edit:', error);
+        showError('Failed to load source configuration');
+    }
+}
+
+/**
+ * Save edited audio source configuration
+ */
+async function saveEditedSource() {
+    try {
+        const sourceId = document.getElementById('editSourceId').value;
+
+        const updates = {
+            enabled: document.getElementById('editEnabled').checked,
+            priority: parseInt(document.getElementById('editPriority').value),
+            silence_threshold_db: parseFloat(document.getElementById('editSilenceThreshold').value),
+            silence_duration_seconds: parseFloat(document.getElementById('editSilenceDuration').value),
+            auto_start: document.getElementById('editAutoStart').checked,
+            description: document.getElementById('editDescription').value,
+        };
+
+        const response = await fetch(`/api/audio/sources/${sourceId}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(updates),
+        });
+
+        if (response.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('editSourceModal')).hide();
+            showSuccess('Audio source updated successfully');
+            loadAudioSources();
+        } else {
+            const error = await response.json();
+            showError(`Failed to update source: ${error.error}`);
+        }
+    } catch (error) {
+        console.error('Error updating source:', error);
+        showError('Failed to update audio source');
+    }
 }
 
 /**
