@@ -282,7 +282,7 @@ select:focus,
 
 /* Modal Accessibility */
 .modal {
-    z-index: 1050;
+    z-index: 1055;
 }
 
 .modal-dialog {

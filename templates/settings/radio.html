@@ -734,16 +734,14 @@
     // Device Discovery, Diagnostics, and Presets
     // ========================================================================
 
-    const discoveryModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('discoveryModal'));
-    const diagnosticsModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('diagnosticsModal'));
-    const presetsModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('presetsModal'));
-
     const discoverDevicesBtn = document.getElementById('discoverDevicesBtn');
     const runDiagnosticsBtn = document.getElementById('runDiagnosticsBtn');
     const showPresetsBtn = document.getElementById('showPresetsBtn');
 
     // Device Discovery
     discoverDevicesBtn?.addEventListener('click', async () => {
+        const modalElement = document.getElementById('discoveryModal');
+        const discoveryModal = bootstrap.Modal.getOrCreateInstance(modalElement);
         const modalBody = document.getElementById('discoveryModalBody');
         modalBody.innerHTML = `
             <div class="text-center py-4">
@@ -833,6 +831,8 @@
 
     // Run Diagnostics
     runDiagnosticsBtn?.addEventListener('click', async () => {
+        const modalElement = document.getElementById('diagnosticsModal');
+        const diagnosticsModal = bootstrap.Modal.getOrCreateInstance(modalElement);
         const modalBody = document.getElementById('diagnosticsModalBody');
         modalBody.innerHTML = `
             <div class="text-center py-4">
@@ -939,6 +939,8 @@
 
     // Show Presets
     showPresetsBtn?.addEventListener('click', async () => {
+        const modalElement = document.getElementById('presetsModal');
+        const presetsModal = bootstrap.Modal.getOrCreateInstance(modalElement);
         const modalBody = document.getElementById('presetsModalBody');
         modalBody.innerHTML = `
             <div class="text-center py-4">
@@ -1014,7 +1016,10 @@
             return;
         }
 
-        discoveryModal.hide();
+        const discoveryModal = bootstrap.Modal.getInstance(document.getElementById('discoveryModal'));
+        if (discoveryModal) {
+            discoveryModal.hide();
+        }
 
         // Pre-fill the add receiver modal with discovered device info
         document.getElementById('receiverDisplayName').value = device.label || device.product || `${device.driver} Device`;
@@ -1046,7 +1051,10 @@
             return;
         }
 
-        presetsModal.hide();
+        const presetsModal = bootstrap.Modal.getInstance(document.getElementById('presetsModal'));
+        if (presetsModal) {
+            presetsModal.hide();
+        }
 
         // Pre-fill the add receiver modal with preset values
         document.getElementById('receiverDisplayName').value = preset.name;
