@@ -5,6 +5,7 @@ from __future__ import annotations
 from app_utils.eas import load_eas_config
 
 from .audio import register_audio_routes
+from .audio_ingest import register_audio_ingest_routes
 from .api import register_api_routes
 from .auth import register_auth_routes
 from .boundaries import register_boundary_routes
@@ -20,6 +21,7 @@ def register(app, logger):
     eas_config = load_eas_config(app.root_path)
 
     register_audio_routes(app, logger, eas_config)
+    register_audio_ingest_routes(app, logger)
     register_api_routes(app, logger)
     register_maintenance_routes(app, logger)
     register_intersection_routes(app, logger)

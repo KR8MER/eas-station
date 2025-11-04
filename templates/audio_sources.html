@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+
+{% block title %}Audio Sources - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+.audio-meter {
+    height: 24px;
+    background: #2d2d2d;
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+
+.audio-meter-bar {
+    height: 100%;
+    transition: width 0.1s ease-out;
+    position: relative;
+}
+
+.audio-meter-bar.peak {
+    background: linear-gradient(90deg,
+        #4CAF50 0%,
+        #8BC34A 40%,
+        #FFC107 75%,
+        #FF5722 90%,
+        #f44336 100%);
+}
+
+.audio-meter-bar.rms {
+    background: linear-gradient(90deg,
+        #2E7D32 0%,
+        #558B2F 40%,
+        #F57C00 75%,
+        #D32F2F 90%,
+        #C62828 100%);
+}
+
+.audio-meter-value {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: white;
+    font-size: 11px;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+}
+
+.source-card {
+    border-left: 4px solid #6c757d;
+    transition: all 0.3s ease;
+}
+
+.source-card.status-running {
+    border-left-color: #28a745;
+}
+
+.source-card.status-error {
+    border-left-color: #dc3545;
+}
+
+.source-card.status-starting {
+    border-left-color: #ffc107;
+}
+
+.health-score-circle {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    font-weight: bold;
+    background: conic-gradient(#28a745 0deg, #28a745 calc(var(--score) * 3.6deg), #e9ecef calc(var(--score) * 3.6deg));
+}
+
+.health-score-inner {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.silence-warning {
+    animation: flash 1s ease-in-out infinite;
+}
+
+@keyframes flash {
+    0%, 100% { background-color: #fff3cd; }
+    50% { background-color: #ffc107; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 text-primary mb-0">
+                    <i class="fas fa-microphone"></i> Audio Sources
+                </h1>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-primary" onclick="showAddSourceModal()">
+                        <i class="fas fa-plus"></i> Add Source
+                    </button>
+                    <button type="button" class="btn btn-info" onclick="discoverDevices()">
+                        <i class="fas fa-search"></i> Discover Devices
+                    </button>
+                    <a href="/" class="btn btn-outline-secondary">
+                        <i class="fas fa-map"></i> Back to Map
+                    </a>
+                </div>
+            </div>
+
+            <!-- Health Overview Cards -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <div class="health-score-circle mx-auto" style="--score: 0" id="overall-health-circle">
+                                <div class="health-score-inner">
+                                    <span id="overall-health-score">--</span>
+                                </div>
+                            </div>
+                            <h5 class="mt-3 mb-0">Overall Health</h5>
+                            <small class="text-muted">System Score</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h3 class="mb-0 text-success" id="active-sources-count">0</h3>
+                            <h5 class="mb-0">Active Sources</h5>
+                            <small class="text-muted">Currently Running</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h3 class="mb-0" id="total-sources-count">0</h3>
+                            <h5 class="mb-0">Total Sources</h5>
+                            <small class="text-muted">Configured</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h3 class="mb-0 text-warning" id="alerts-count">0</h3>
+                            <h5 class="mb-0">Alerts</h5>
+                            <small class="text-muted">Unresolved Issues</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Sources -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-play-circle"></i> Audio Sources
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div id="sources-list">
+                        <div class="text-center text-muted py-5">
+                            <i class="fas fa-spinner fa-spin fa-3x mb-3"></i>
+                            <p>Loading audio sources...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Alerts -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-exclamation-triangle"></i> Recent Alerts
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div id="alerts-list">
+                        <p class="text-muted">No recent alerts.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Source Modal -->
+<div class="modal fade" id="addSourceModal" tabindex="-1" aria-labelledby="addSourceModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addSourceModalLabel">Add Audio Source</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addSourceForm">
+                    <div class="mb-3">
+                        <label for="sourceName" class="form-label">Source Name</label>
+                        <input type="text" class="form-control" id="sourceName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="sourceType" class="form-label">Source Type</label>
+                        <select class="form-select" id="sourceType" required>
+                            <option value="">Select type...</option>
+                            <option value="sdr">SDR Receiver</option>
+                            <option value="alsa">ALSA Device</option>
+                            <option value="pulse">PulseAudio</option>
+                            <option value="file">Audio File</option>
+                        </select>
+                    </div>
+                    <div id="sourceTypeConfig"></div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="sampleRate" class="form-label">Sample Rate (Hz)</label>
+                                <input type="number" class="form-control" id="sampleRate" value="44100">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="channels" class="form-label">Channels</label>
+                                <select class="form-select" id="channels">
+                                    <option value="1" selected>Mono (1)</option>
+                                    <option value="2">Stereo (2)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="silenceThreshold" class="form-label">Silence Threshold (dB)</label>
+                                <input type="number" class="form-control" id="silenceThreshold" value="-60" step="0.1">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="silenceDuration" class="form-label">Silence Duration (s)</label>
+                                <input type="number" class="form-control" id="silenceDuration" value="5" step="0.1">
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="addAudioSource()">Add Source</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Device Discovery Modal -->
+<div class="modal fade" id="deviceDiscoveryModal" tabindex="-1" aria-labelledby="deviceDiscoveryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deviceDiscoveryModalLabel">Discovered Audio Devices</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="discoveredDevices">
+                    <div class="text-center text-muted py-5">
+                        <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                        <p>Discovering devices...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/audio_monitoring.js') }}"></script>
+{% endblock %}
