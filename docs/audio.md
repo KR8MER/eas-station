@@ -455,6 +455,157 @@ from app_core.audio.ingest import AudioIngestController
 "
 ```
 
+## Web UI
+
+### Overview
+
+The audio ingest system includes a comprehensive web interface for managing and monitoring audio sources in real-time. Access it via:
+
+**URL**: `/audio/sources` (Operations → Audio Sources)
+
+### Features
+
+#### 1. Dashboard Overview
+
+- **Overall Health Score**: Visual health indicator (0-100%)
+- **Active Sources Count**: Number of currently running sources
+- **Total Sources**: Total configured sources
+- **Alerts Count**: Unresolved system alerts
+
+#### 2. Source Management
+
+**Add New Sources**:
+- Click "Add Source" button
+- Select source type (SDR, ALSA, PulseAudio, File)
+- Configure parameters:
+  - Name and sample rate
+  - Channels (mono/stereo)
+  - Silence detection thresholds
+  - Device-specific parameters
+
+**Control Sources**:
+- Start/Stop individual sources
+- Edit source configuration
+- Delete sources
+- View real-time status
+
+#### 3. Real-Time Monitoring
+
+**Audio Meters**:
+- Peak level meters (-60 to 0 dBFS)
+- RMS level meters
+- Color-coded visualization:
+  - Green: Normal levels (-40 to -10 dBFS)
+  - Yellow: High levels (-10 to -3 dBFS)
+  - Red: Clipping risk (> -3 dBFS)
+
+**Status Indicators**:
+- Running (green badge with animation)
+- Stopped (gray badge)
+- Starting (yellow badge)
+- Error (red badge)
+
+**Silence Detection**:
+- Visual warnings when silence detected
+- Configurable thresholds per source
+
+#### 4. Device Discovery
+
+- Auto-discover ALSA and PulseAudio devices
+- Click "Discover Devices" button
+- Quick-add discovered devices with one click
+
+#### 5. Alert Management
+
+**View Alerts**:
+- Recent system alerts
+- Alert levels (info, warning, error, critical)
+- Alert types (silence, clipping, disconnect)
+
+**Manage Alerts**:
+- Acknowledge alerts
+- Resolve alerts with notes
+- Filter unresolved alerts
+
+### API Endpoints
+
+All endpoints return JSON responses.
+
+#### Source Management
+
+```
+GET    /api/audio/sources              - List all sources
+POST   /api/audio/sources              - Create new source
+GET    /api/audio/sources/<name>       - Get source details
+PATCH  /api/audio/sources/<name>       - Update source config
+DELETE /api/audio/sources/<name>       - Delete source
+POST   /api/audio/sources/<name>/start - Start source
+POST   /api/audio/sources/<name>/stop  - Stop source
+```
+
+#### Monitoring
+
+```
+GET /api/audio/metrics                 - Real-time metrics
+GET /api/audio/health                  - Health status
+GET /api/audio/alerts                  - System alerts
+```
+
+#### Device Discovery
+
+```
+GET /api/audio/devices                 - Discover audio devices
+```
+
+#### Alert Management
+
+```
+POST /api/audio/alerts/<id>/acknowledge - Acknowledge alert
+POST /api/audio/alerts/<id>/resolve     - Resolve alert
+```
+
+### Example: Adding a Source via API
+
+```bash
+curl -X POST http://localhost:5000/api/audio/sources \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "alsa",
+    "name": "Main Audio Input",
+    "sample_rate": 44100,
+    "channels": 1,
+    "silence_threshold_db": -60.0,
+    "silence_duration_seconds": 5.0,
+    "device_params": {
+      "device_name": "hw:0,0"
+    }
+  }'
+```
+
+### JavaScript Integration
+
+The UI uses `static/js/audio_monitoring.js` for:
+- Auto-refreshing metrics (1 second interval)
+- Live meter updates
+- Real-time status changes
+- Toast notifications
+- Modal dialogs for configuration
+
+### Accessibility
+
+- ARIA labels for status indicators
+- Keyboard navigation support
+- Screen reader compatible
+- Color-blind friendly status indicators
+
+## References
+
+- Backend Implementation: `app_core/audio/`
+- Web UI Implementation: `webapp/admin/audio_ingest.py`, `templates/audio_sources.html`, `static/js/audio_monitoring.js`
+- Testing Tools: `tools/audio_debug.py`
+- Unit Tests: `tests/test_audio_ingest.py`
+- Database Models: `app_core/models.py` (AudioSourceMetrics, AudioHealthStatus, AudioAlert)
+
 ## Future Enhancements
 
 ### Planned Features
