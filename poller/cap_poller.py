@@ -308,6 +308,7 @@ except Exception as e:
         sample_rate = Column(Integer, nullable=False)
         gain = Column(Float)
         channel = Column(Integer)
+        serial = Column(String(128))
         auto_start = Column(Boolean, nullable=False, default=True)
         enabled = Column(Boolean, nullable=False, default=True)
         notes = Column(Text)
@@ -324,6 +325,7 @@ except Exception as e:
                 sample_rate=int(self.sample_rate),
                 gain=self.gain,
                 channel=self.channel,
+                serial=self.serial,
                 enabled=bool(self.enabled and self.auto_start),
             )
 
