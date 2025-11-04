@@ -13,8 +13,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from flask import Flask, render_template, abort, Markup
-from markupsafe import escape
+from flask import Flask, render_template, abort
+from markupsafe import escape, Markup
 
 logger = logging.getLogger(__name__)
 
