@@ -39,6 +39,12 @@ RUN --mount=type=cache,target=/var/lib/apt \
     update-ca-certificates; \
     rm -rf /var/lib/apt/lists/*
 
+# Fix Python binding visibility for SoapySDR
+# Debian's python3-soapysdr installs to /usr/lib/python3/dist-packages
+# but /usr/local/bin/python3 doesn't search this path by default
+RUN mkdir -p /usr/local/lib/python3.11/site-packages \
+    && echo '/usr/lib/python3/dist-packages' > /usr/local/lib/python3.11/site-packages/_deb_distpackages.pth
+
 # Create and set working directory
 WORKDIR /app
 
