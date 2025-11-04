@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Documentation - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+.doc-content {
+    font-size: 1.05rem;
+    line-height: 1.7;
+}
+
+.doc-content h1 {
+    color: #0d6efd;
+    border-bottom: 2px solid #0d6efd;
+    padding-bottom: 0.5rem;
+    margin-top: 2rem;
+    margin-bottom: 1.5rem;
+}
+
+.doc-content h2 {
+    color: #212529;
+    border-bottom: 1px solid #dee2e6;
+    padding-bottom: 0.3rem;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.doc-content h3 {
+    color: #495057;
+    margin-top: 1.25rem;
+    margin-bottom: 0.75rem;
+}
+
+.doc-content h4, .doc-content h5 {
+    color: #6c757d;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.doc-content code {
+    background-color: #f8f9fa;
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
+    color: #d63384;
+    font-size: 0.9em;
+}
+
+.doc-content pre {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    padding: 1rem;
+    overflow-x: auto;
+}
+
+.doc-content pre code {
+    background-color: transparent;
+    padding: 0;
+    color: #212529;
+    font-size: 0.875rem;
+}
+
+.doc-content blockquote {
+    border-left: 4px solid #0d6efd;
+    padding-left: 1rem;
+    margin-left: 0;
+    color: #6c757d;
+    font-style: italic;
+}
+
+.doc-content a {
+    color: #0d6efd;
+    text-decoration: none;
+}
+
+.doc-content a:hover {
+    text-decoration: underline;
+}
+
+.doc-content ul, .doc-content ol {
+    margin-bottom: 1rem;
+}
+
+.doc-content li {
+    margin-bottom: 0.5rem;
+}
+
+.doc-content table {
+    width: 100%;
+    margin-bottom: 1rem;
+    border-collapse: collapse;
+}
+
+.doc-content table th,
+.doc-content table td {
+    padding: 0.75rem;
+    border: 1px solid #dee2e6;
+}
+
+.doc-content table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+}
+
+.doc-content hr {
+    margin: 2rem 0;
+    border-top: 2px solid #dee2e6;
+}
+
+.doc-sidebar {
+    position: sticky;
+    top: 80px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+}
+
+.doc-nav-link {
+    padding: 0.5rem 1rem;
+    color: #6c757d;
+    text-decoration: none;
+    display: block;
+    border-left: 2px solid transparent;
+    transition: all 0.2s;
+}
+
+.doc-nav-link:hover {
+    background-color: #f8f9fa;
+    border-left-color: #0d6efd;
+    color: #0d6efd;
+}
+
+.doc-nav-link.active {
+    border-left-color: #0d6efd;
+    color: #0d6efd;
+    font-weight: 600;
+}
+
+@media print {
+    .doc-sidebar {
+        display: none;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <!-- Sidebar Navigation -->
+        <div class="col-lg-3 d-none d-lg-block">
+            <div class="doc-sidebar">
+                <div class="card">
+                    <div class="card-header bg-light">
+                        <h6 class="mb-0">
+                            <i class="fas fa-list"></i> Documentation
+                        </h6>
+                    </div>
+                    <div class="card-body p-0">
+                        {% for category, docs in structure.items() %}
+                        {% if docs %}
+                        <div class="p-2 bg-light border-bottom">
+                            <small class="text-muted fw-bold">{{ category }}</small>
+                        </div>
+                        {% for doc in docs %}
+                        <a href="{{ doc.url }}" class="doc-nav-link {% if doc.url == '/docs/' + doc_path %}active{% endif %}">
+                            <small>{{ doc.title }}</small>
+                        </a>
+                        {% endfor %}
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-lg-9">
+            <div class="mb-3">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/">Home</a></li>
+                        <li class="breadcrumb-item"><a href="/docs">Documentation</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">{{ title }}</li>
+                    </ol>
+                </nav>
+            </div>
+
+            <div class="card">
+                <div class="card-body p-4 p-md-5">
+                    <div class="doc-content">
+                        {{ content|safe }}
+                    </div>
+
+                    <hr class="my-4">
+
+                    <div class="d-flex justify-content-between align-items-center">
+                        <a href="/docs" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left"></i> Back to Documentation Index
+                        </a>
+                        <button onclick="window.print()" class="btn btn-outline-primary">
+                            <i class="fas fa-print"></i> Print
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-3 mb-4">
+                <div class="card-body">
+                    <p class="mb-0 text-muted">
+                        <i class="fas fa-info-circle"></i>
+                        <small>This document is served from <code>docs/{{ doc_path }}.md</code> in the EAS Station installation.</small>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

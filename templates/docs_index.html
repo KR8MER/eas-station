@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}Documentation - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+.doc-category {
+    margin-bottom: 2rem;
+}
+
+.doc-category-title {
+    border-bottom: 2px solid #0d6efd;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.doc-link {
+    display: block;
+    padding: 0.75rem 1rem;
+    color: #212529;
+    text-decoration: none;
+    border-left: 3px solid transparent;
+    transition: all 0.2s;
+}
+
+.doc-link:hover {
+    background-color: #f8f9fa;
+    border-left-color: #0d6efd;
+    color: #0d6efd;
+    transform: translateX(5px);
+}
+
+.doc-icon {
+    width: 20px;
+    text-align: center;
+    margin-right: 0.5rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 text-primary mb-0">
+                    <i class="fas fa-book"></i> Documentation
+                </h1>
+                <div>
+                    <a href="/" class="btn btn-outline-secondary">
+                        <i class="fas fa-map"></i> Back to Map
+                    </a>
+                </div>
+            </div>
+
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                <strong>Complete Documentation Available:</strong> All documentation is accessible directly from this interface. You don't need to visit the GitHub repository to read docs.
+            </div>
+
+            <div class="row">
+                {% for category, docs in structure.items() %}
+                {% if docs %}
+                <div class="col-md-6 col-lg-4">
+                    <div class="card mb-4">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">
+                                {% if category == 'Getting Started' %}
+                                <i class="fas fa-rocket"></i>
+                                {% elif category == 'Operations' %}
+                                <i class="fas fa-tasks"></i>
+                                {% elif category == 'Architecture' %}
+                                <i class="fas fa-sitemap"></i>
+                                {% elif category == 'Development' %}
+                                <i class="fas fa-code"></i>
+                                {% elif category == 'Guides' %}
+                                <i class="fas fa-compass"></i>
+                                {% elif category == 'Reference' %}
+                                <i class="fas fa-book-open"></i>
+                                {% elif category == 'Policies' %}
+                                <i class="fas fa-gavel"></i>
+                                {% endif %}
+                                {{ category }}
+                            </h5>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="list-group list-group-flush">
+                                {% for doc in docs %}
+                                <a href="{{ doc.url }}" class="list-group-item list-group-item-action">
+                                    <i class="fas fa-file-alt text-muted me-2"></i>
+                                    {{ doc.title }}
+                                </a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+
+            <div class="card mt-4">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-question-circle"></i> Need Help?</h5>
+                    <p class="card-text">
+                        If you can't find what you're looking for, try these quick links:
+                    </p>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a href="/help" class="btn btn-outline-primary">
+                            <i class="fas fa-life-ring"></i> Help & Operations Guide
+                        </a>
+                        <a href="/docs/guides/HELP" class="btn btn-outline-primary">
+                            <i class="fas fa-book"></i> Full Help Documentation
+                        </a>
+                        <a href="/docs/architecture/SYSTEM_ARCHITECTURE" class="btn btn-outline-primary">
+                            <i class="fas fa-sitemap"></i> System Architecture
+                        </a>
+                        <a href="/docs/README" class="btn btn-outline-primary">
+                            <i class="fas fa-list"></i> Documentation Index
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

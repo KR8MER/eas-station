@@ -26,9 +26,35 @@ When discussing or investigating bugs:
 
 ## 🧭 Documentation & UX Standards
 
+### Documentation Accessibility Requirements
+
+**⚠️ CRITICAL: All documentation MUST be accessible from the web UI.**
+
+End users should never need to visit the GitHub repository to access documentation. All markdown files in `docs/` must be available through the web interface.
+
+- **Documentation Viewer Required** – The web application includes a documentation viewer at `/docs` that serves all markdown files from the `docs/` directory
+- **Navigation Links** – Main navigation must include a "Documentation" link that takes users to the documentation index
+- **No Repository References** – Never tell users to "check the repo" or "see the GitHub page" for documentation
+- **Template Fallbacks** – If templates fail to load, error messages must NOT direct users to the repository
+- **Integration Points** – Link to relevant documentation from:
+  - Error messages (when appropriate)
+  - Help pages
+  - Settings pages
+  - Admin interfaces
+  - Setup wizards
+
+**Implementation Checklist:**
+- [ ] All new markdown documentation added to `docs/` directory
+- [ ] Documentation viewer can render the new docs
+- [ ] Navigation includes link to documentation
+- [ ] No hardcoded GitHub URLs in user-facing messages
+- [ ] Help content references `/docs` routes, not repository paths
+
+### General Documentation Standards
+
 - **Link Accuracy Matters** – Reference primary sources (e.g., FCC consent decrees via `docs.fcc.gov`) instead of news summaries. Broken or redirected links must be updated immediately.
 - **Theory of Operation Is Canonical** – Whenever you touch ingestion, SAME generation, or verification logic, review and update [`docs/architecture/THEORY_OF_OPERATION.md`](../architecture/THEORY_OF_OPERATION.md) so diagrams, timelines, and checklists match the code.
-- **Surface Docs In-App** – Front-end templates (`templates/`) should link to the corresponding Markdown resources in `docs/`. Keep `/about`, `/help`, `/terms`, and `/privacy` synchronized with repository guidance.
+- **Surface Docs In-App** – Front-end templates (`templates/`) should link to the corresponding Markdown resources in `docs/` via the `/docs` route. Keep `/about`, `/help`, `/terms`, and `/privacy` synchronized with repository guidance.
 - **Documentation Updates Required** – When adding new features or changing workflows, update:
   - `templates/help.html` – User-facing help documentation
   - `templates/about.html` – System overview and feature descriptions
