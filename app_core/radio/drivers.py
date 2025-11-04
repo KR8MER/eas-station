@@ -198,13 +198,21 @@ class _SoapySDRReceiver(ReceiverInterface):
         channel = self.config.channel if self.config.channel is not None else 0
 
         args: Dict[str, str] = {"driver": self.driver_hint}
+
+        # Use the device serial number if available for precise device identification
+        if self.config.serial:
+            args["serial"] = self.config.serial
+
+        # Use channel/device_id as fallback identification
+        if self.config.channel is not None:
+            args["device_id"] = str(self.config.channel)
+            # Only set serial from channel if no explicit serial was provided
+            if not self.config.serial:
+                args["serial"] = str(self.config.channel)
+
+        # Label is for human reference only, not device identification
         if self.config.identifier:
             args.setdefault("label", self.config.identifier)
-        # Provide optional hints that some Soapy drivers expect.
-        if self.config.channel is not None:
-            device_id = str(self.config.channel)
-            args.setdefault("device_id", device_id)
-            args.setdefault("serial", device_id)
 
         try:
             device = SoapySDR.Device(args)

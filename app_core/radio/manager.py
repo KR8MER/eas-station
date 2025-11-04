@@ -23,6 +23,7 @@ class ReceiverConfig:
     sample_rate: int
     gain: Optional[float] = None
     channel: Optional[int] = None
+    serial: Optional[str] = None
     enabled: bool = True
 
 
