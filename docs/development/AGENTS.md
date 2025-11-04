@@ -11,12 +11,29 @@ This document provides coding standards and guidelines for AI agents (including 
 3. **Test Before Commit**: Always verify changes work in Docker before committing
 4. **Focused Changes**: Keep fixes targeted to the specific issue
 5. **Document Changes**: Update relevant documentation when adding features
+6. **Check Bug Screenshots**: When discussing bugs, always check the `/bugs` directory first for screenshots
+7. **Follow Versioning**: Bug fixes increment by 0.0.+1, feature upgrades increment by 0.+1.0
+
+## 🐛 Bug Tracking & Screenshots
+
+When discussing or investigating bugs:
+
+1. **Check `/bugs` Directory First** – Before starting any bug investigation, check the `/bugs` directory for screenshots and other evidence
+2. **Screenshots Over Text** – Since AI assistants can't receive images directly in chat, users will place bug screenshots in `/bugs`
+3. **Name Descriptively** – Screenshot filenames should indicate the issue (e.g., `admin_spacing_issue.jpeg`, `dark_mode_contrast_bug.png`)
+4. **Document Fixes** – When fixing a bug shown in a screenshot, reference the screenshot filename in commit messages
+5. **Clean Up After** – Once a bug is fixed and verified, move the screenshot to `/bugs/resolved` or delete it
 
 ## 🧭 Documentation & UX Standards
 
 - **Link Accuracy Matters** – Reference primary sources (e.g., FCC consent decrees via `docs.fcc.gov`) instead of news summaries. Broken or redirected links must be updated immediately.
 - **Theory of Operation Is Canonical** – Whenever you touch ingestion, SAME generation, or verification logic, review and update [`docs/architecture/THEORY_OF_OPERATION.md`](../architecture/THEORY_OF_OPERATION.md) so diagrams, timelines, and checklists match the code.
 - **Surface Docs In-App** – Front-end templates (`templates/`) should link to the corresponding Markdown resources in `docs/`. Keep `/about`, `/help`, `/terms`, and `/privacy` synchronized with repository guidance.
+- **Documentation Updates Required** – When adding new features or changing workflows, update:
+  - `templates/help.html` – User-facing help documentation
+  - `templates/about.html` – System overview and feature descriptions
+  - Relevant Markdown files in `docs/` directory
+  - This ensures users always have current information about system capabilities
 - **Brand Consistency** – Use `static/img/eas-station-logo.svg` for hero sections, headers, and major UI cards when expanding documentation pages. The logo must remain accessible (include `alt` text).
 - **Mermaid-Friendly Markdown** – GitHub-flavoured Mermaid diagrams are welcome in repository docs. Keep them accurate by naming real modules, packages, and endpoints.
 
@@ -464,6 +481,32 @@ new-library==1.2.3  # Add with version
 
 ## 🔄 Git Workflow
 
+### Versioning Convention
+
+**CRITICAL**: Follow semantic versioning for all releases:
+
+- **Bug Fixes**: Increment patch version by `0.0.+1`
+  - Example: `2.3.12` → `2.3.13`
+  - Includes: Bug fixes, security patches, minor corrections
+  - No new features or breaking changes
+
+- **Feature Upgrades**: Increment minor version by `0.+1.0`
+  - Example: `2.3.12` → `2.4.0`
+  - Includes: New features, enhancements, non-breaking changes
+  - Reset patch version to 0
+
+- **Major Releases**: Increment major version by `+1.0.0` (rare)
+  - Example: `2.3.12` → `3.0.0`
+  - Includes: Breaking changes, major architecture changes
+  - Reset minor and patch versions to 0
+
+**Version File Location**: `/VERSION` (single line, format: `MAJOR.MINOR.PATCH`)
+
+**Before Every Commit**:
+1. Update `/VERSION` file with appropriate increment
+2. Update `docs/reference/CHANGELOG.md` under `[Unreleased]` section
+3. Ensure `.env.example` reflects any new environment variables
+
 ### Commit Messages
 
 Follow this format:
@@ -533,6 +576,9 @@ If you're unsure about something:
 
 Before committing code, verify:
 
+- [ ] **Version incremented properly** – Bug fix (+0.0.1) or feature (+0.1.0) in `/VERSION` file
+- [ ] **Documentation updated** – If features changed, update `templates/help.html` and `templates/about.html`
+- [ ] **Bug screenshots checked** – If fixing a bug, verified screenshot in `/bugs` directory
 - [ ] Follows Python PEP 8 style (4-space indentation)
 - [ ] Uses existing logger, not new logger instance
 - [ ] Includes proper error handling with specific exceptions
