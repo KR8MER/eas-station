@@ -40,6 +40,7 @@ Welcome to the comprehensive documentation for **EAS Station** - an experimental
 | [**DASDEC3 Comparison**](roadmap/DASDEC3_COMPARISON.md) | Gap analysis vs. commercial encoder/decoder |
 | [**DASDEC3 Manuals (Reference)**](Version%205.1%20Software_Users%20Guide_R1.0%205-31-23.pdf) | Vendor manual, quick start, Grob Systems dossier |
 | [**License Attribution**](reference/dependency_attribution.md) | Open-source dependencies and licenses |
+| [**System Architecture**](architecture/SYSTEM_ARCHITECTURE.md) | Comprehensive flowcharts and component diagrams |
 | [**Theory of Operation**](architecture/THEORY_OF_OPERATION.md) | End-to-end system flow and SAME protocol internals |
 
 ### Legal & Policies
@@ -78,6 +79,7 @@ docs/
 │   └── CFR-2010-title47-vol1-sec11-31.xml  ← FCC regulations
 │
 ├── architecture/                      ← System theory of operation and diagrams
+│   ├── SYSTEM_ARCHITECTURE.md        ← Comprehensive architecture diagrams
 │   └── THEORY_OF_OPERATION.md        ← Detailed pipeline and SAME overview
 │
 ├── policies/                          ← Legal and governance
@@ -106,7 +108,7 @@ docs/
 - **Troubleshooting issues?** → [Database Fixes](guides/DATABASE_CONSISTENCY_FIXES.md) + [Help Guide](guides/HELP.md)
 - **Integrating with IPAWS?** → [IPAWS Integration Guide](guides/ipaws_feed_integration.md)
 - **Configuring SDR hardware?** → [Radio USB Passthrough](guides/radio_usb_passthrough.md)
-- **Understanding the architecture?** → [Theory of Operation](architecture/THEORY_OF_OPERATION.md) + [About](reference/ABOUT.md) + [Main README](../README.md)
+- **Understanding the architecture?** → [System Architecture](architecture/SYSTEM_ARCHITECTURE.md) + [Theory of Operation](architecture/THEORY_OF_OPERATION.md) + [About](reference/ABOUT.md)
 - **Checking version history?** → [Changelog](reference/CHANGELOG.md)
 
 ### By Audience
