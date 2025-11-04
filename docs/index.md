@@ -22,25 +22,25 @@ EAS Station is a **software-defined Emergency Alert System (EAS)** platform desi
 
 <div class="grid cards" markdown>
 
--   :fontawesome-solid-tower-broadcast:{ .lg .middle } __Broadcasters__
+-   :fontawesome-solid-tower-broadcast:{ .lg .middle } **Broadcasters**
 
     ---
 
     Radio and TV stations seeking cost-effective EAS solutions
 
--   :fontawesome-solid-satellite-dish:{ .lg .middle } __Amateur Radio Operators__
+-   :fontawesome-solid-satellite-dish:{ .lg .middle } **Amateur Radio Operators**
 
     ---
 
     Hams experimenting with emergency communications
 
--   :fontawesome-solid-building-shield:{ .lg .middle } __Emergency Management__
+-   :fontawesome-solid-building-shield:{ .lg .middle } **Emergency Management**
 
     ---
 
     Public safety organizations building alert systems
 
--   :fontawesome-solid-code:{ .lg .middle } __Developers__
+-   :fontawesome-solid-code:{ .lg .middle } **Developers**
 
     ---
 
@@ -97,7 +97,7 @@ Responsive, accessible administration:
 
 <div class="grid cards" markdown>
 
--   :material-clock-fast:{ .lg .middle } __Getting Started__
+-   :material-clock-fast:{ .lg .middle } **Getting Started**
 
     ---
 
@@ -105,7 +105,7 @@ Responsive, accessible administration:
 
     [:octicons-arrow-right-24: Quick Start](getting-started/quick-start.md)
 
--   :material-book-open-variant:{ .lg .middle } __User Guide__
+-   :material-book-open-variant:{ .lg .middle } **User Guide**
 
     ---
 
@@ -113,7 +113,7 @@ Responsive, accessible administration:
 
     [:octicons-arrow-right-24: User Guide](user-guide/index.md)
 
--   :material-cog:{ .lg .middle } __Admin Guide__
+-   :material-cog:{ .lg .middle } **Admin Guide**
 
     ---
 
@@ -121,7 +121,7 @@ Responsive, accessible administration:
 
     [:octicons-arrow-right-24: Admin Guide](admin-guide/index.md)
 
--   :material-code-braces:{ .lg .middle } __Developer Guide__
+-   :material-code-braces:{ .lg .middle } **Developer Guide**
 
     ---
 
@@ -129,7 +129,7 @@ Responsive, accessible administration:
 
     [:octicons-arrow-right-24: Developer Guide](developer-guide/index.md)
 
--   :material-palette:{ .lg .middle } __Frontend Docs__
+-   :material-palette:{ .lg .middle } **Frontend Docs**
 
     ---
 
@@ -137,7 +137,7 @@ Responsive, accessible administration:
 
     [:octicons-arrow-right-24: Frontend](frontend/index.md)
 
--   :material-api:{ .lg .middle } __API Reference__
+-   :material-api:{ .lg .middle } **API Reference**
 
     ---
 

@@ -32,7 +32,7 @@ Choose the installation method that best fits your needs:
 
 <div class="grid cards" markdown>
 
--   :material-clock-fast:{ .lg .middle } __Quick Start__
+-   :material-clock-fast:{ .lg .middle } **Quick Start**
 
     ---
 
@@ -40,7 +40,7 @@ Choose the installation method that best fits your needs:
 
     [:octicons-arrow-right-24: Quick Start](quick-start.md)
 
--   :material-docker:{ .lg .middle } __Docker Installation__
+-   :material-docker:{ .lg .middle } **Docker Installation**
 
     ---
 
@@ -48,7 +48,7 @@ Choose the installation method that best fits your needs:
 
     [:octicons-arrow-right-24: Installation Guide](installation.md)
 
--   :material-cog:{ .lg .middle } __Initial Configuration__
+-   :material-cog:{ .lg .middle } **Initial Configuration**
 
     ---
 
@@ -56,7 +56,7 @@ Choose the installation method that best fits your needs:
 
     [:octicons-arrow-right-24: Configuration](configuration.md)
 
--   :material-alert:{ .lg .middle } __First Alert__
+-   :material-alert:{ .lg .middle } **First Alert**
 
     ---
 

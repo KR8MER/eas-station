@@ -105,7 +105,7 @@ docker compose up -d --build
 
 Expected output:
 
-```
+```plaintext
 [+] Building 45.2s (18/18) FINISHED
 [+] Running 2/2
  ✔ Container alerts-db     Started
@@ -122,7 +122,7 @@ docker compose ps
 
 You should see:
 
-```
+```plaintext
 NAME            STATE     PORTS
 alerts-db       running   5432/tcp
 eas-station     running   0.0.0.0:5000->5000/tcp
@@ -182,7 +182,7 @@ docker compose logs -f
 
 You should see:
 
-```
+```plaintext
 eas-station | INFO: Alert poller started
 eas-station | INFO: Polling NOAA Weather Service...
 eas-station | INFO: Retrieved 15 alerts
@@ -231,7 +231,7 @@ Now that EAS Station is running:
 
 <div class="grid cards" markdown>
 
--   :material-map:{ .lg .middle } __Configure Location__
+-   :material-map:{ .lg .middle } **Configure Location**
 
     ---
 
@@ -239,7 +239,7 @@ Now that EAS Station is running:
 
     [:octicons-arrow-right-24: Boundaries Guide](../user-guide/boundaries.md)
 
--   :material-radio:{ .lg .middle } __Add Hardware__
+-   :material-radio:{ .lg .middle } **Add Hardware**
 
     ---
 
@@ -247,7 +247,7 @@ Now that EAS Station is running:
 
     [:octicons-arrow-right-24: Hardware Setup](../user-guide/hardware/index.md)
 
--   :material-volume-high:{ .lg .middle } __Enable Broadcasting__
+-   :material-volume-high:{ .lg .middle } **Enable Broadcasting**
 
     ---
 
@@ -255,7 +255,7 @@ Now that EAS Station is running:
 
     [:octicons-arrow-right-24: Configuration Guide](configuration.md)
 
--   :material-book-open-variant:{ .lg .middle } __Learn More__
+-   :material-book-open-variant:{ .lg .middle } **Learn More**
 
     ---
 

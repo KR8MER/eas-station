@@ -45,7 +45,7 @@ Output in `site/` directory.
 ## Documentation Structure
 
 ```
-docs_new/                    # Documentation source
+docs/                        # Documentation source
 ├── index.md                 # Homepage
 ├── getting-started/         # Installation and setup
 ├── user-guide/              # User documentation
@@ -159,7 +159,7 @@ Serves with strict mode enabled.
 
 ### Custom CSS
 
-Edit `docs_new/stylesheets/extra.css`:
+Edit `docs/stylesheets/extra.css`:
 
 ```css
 :root {

@@ -4,7 +4,7 @@ EAS Station is licensed under the MIT License.
 
 ## MIT License
 
-```
+```plaintext
 Copyright (c) 2025 KR8MER
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

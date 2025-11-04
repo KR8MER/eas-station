@@ -15,7 +15,7 @@ Ensure you have:
 
 Navigate to the admin panel:
 
-```
+```plaintext
 http://localhost:5000/admin
 ```
 
@@ -61,7 +61,7 @@ docker compose logs -f eas-station
 
 You should see:
 
-```
+```plaintext
 INFO: Alert poller started
 INFO: Polling NOAA Weather Service for OH...
 INFO: Retrieved 12 alerts from https://api.weather.gov/alerts/active?area=OH
@@ -75,7 +75,7 @@ INFO: Next poll in 180 seconds
 
 Navigate to the main dashboard:
 
-```
+```plaintext
 http://localhost:5000
 ```
 
@@ -105,7 +105,7 @@ By default, all alerts for your state are ingested. To filter by county:
 2. Click **Add Boundary**
 3. Configure:
 
-    ```
+    ```plaintext
     Name: My County Alerts
     Type: County
     State: OH
@@ -153,7 +153,7 @@ For federal alerts (Presidential, AMBER, etc.):
 1. **Admin** → **Alert Sources** → **Add Source**
 2. Configure:
 
-    ```
+    ```plaintext
     Name: IPAWS National Alerts
     Type: IPAWS
     Feed URL: https://apps.fema.gov/IPAWS-Server/rest/public/
@@ -169,7 +169,7 @@ For third-party alert sources:
 1. **Admin** → **Alert Sources** → **Add Source**
 2. Configure:
 
-    ```
+    ```plaintext
     Name: Custom CAP Source
     Type: Custom CAP
     Feed URL: https://your-cap-feed.example.com/feed
@@ -248,7 +248,7 @@ If you see `HTTP 403` or `429` errors:
 
 Navigate to:
 
-```
+```plaintext
 http://localhost:5000/system_health
 ```
 
@@ -265,7 +265,7 @@ Now that alerts are flowing:
 
 <div class="grid cards" markdown>
 
--   :material-map-marker-radius:{ .lg .middle } __Geographic Boundaries__
+-   :material-map-marker-radius:{ .lg .middle } **Geographic Boundaries**
 
     ---
 
@@ -273,7 +273,7 @@ Now that alerts are flowing:
 
     [:octicons-arrow-right-24: Boundaries Guide](../user-guide/boundaries.md)
 
--   :material-radio:{ .lg .middle } __Hardware Integration__
+-   :material-radio:{ .lg .middle } **Hardware Integration**
 
     ---
 
@@ -281,7 +281,7 @@ Now that alerts are flowing:
 
     [:octicons-arrow-right-24: Hardware Setup](../user-guide/hardware/index.md)
 
--   :material-volume-high:{ .lg .middle } __Audio Generation__
+-   :material-volume-high:{ .lg .middle } **Audio Generation**
 
     ---
 
@@ -289,7 +289,7 @@ Now that alerts are flowing:
 
     [:octicons-arrow-right-24: Audio Sources](../user-guide/audio-sources.md)
 
--   :material-book-open:{ .lg .middle } __Learn the Interface__
+-   :material-book-open:{ .lg .middle } **Learn the Interface**
 
     ---
 

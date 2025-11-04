@@ -101,7 +101,7 @@ Choose the installation method that fits your environment:
 
     Expected output:
 
-    ```
+    ```plaintext
     Docker version 24.0.7, build afdd53b
     Docker Compose version v2.23.0
     ```
@@ -249,7 +249,7 @@ docker compose up -d --build
 
 Build output:
 
-```
+```plaintext
 [+] Building 45.2s (18/18) FINISHED
  => [internal] load build definition
  => => transferring dockerfile
