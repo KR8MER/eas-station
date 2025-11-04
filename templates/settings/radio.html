@@ -212,7 +212,8 @@
                         </div>
                         <div class="col-md-6">
                             <label for="receiverFrequency" class="form-label">Frequency (Hz)</label>
-                            <input type="number" class="form-control" id="receiverFrequency" name="frequency_hz" step="1" min="1" required>
+                            <input type="number" class="form-control" id="receiverFrequency" name="frequency_hz" step="any" min="0.001" placeholder="e.g., 162400000 for 162.4 MHz" required>
+                            <small class="form-text text-muted">Enter frequency in Hertz (e.g., 162.4 MHz = 162400000 Hz)</small>
                         </div>
                         <div class="col-md-6">
                             <label for="receiverSampleRate" class="form-label">Sample Rate (samples/sec)</label>

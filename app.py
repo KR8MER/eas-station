@@ -734,7 +734,7 @@ def after_request(response):
 
     # Add security headers
     response.headers.add('X-Content-Type-Options', 'nosniff')
-    response.headers.add('X-Frame-Options', 'DENY')
+    response.headers.add('X-Frame-Options', 'SAMEORIGIN')
     response.headers.add('X-XSS-Protection', '1; mode=block')
 
     return response
