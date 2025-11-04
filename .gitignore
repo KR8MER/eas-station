@@ -12,3 +12,7 @@ logs/
 *.log
 static/eas_messages/
 *.sqlite3
+
+# MkDocs documentation build
+site/
+.cache/
