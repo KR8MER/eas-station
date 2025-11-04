@@ -56,26 +56,26 @@ Then open http://localhost:5000 in your browser.
 <td width="50%">
 
 ### For Users
-- **[📖 Getting Started](docs_new/getting-started/index.md)**
+- **[📖 Getting Started](docs/INDEX.md)**
   Installation, configuration, first alert
 
-- **[📘 User Guide](docs_new/user-guide/index.md)**
+- **[📘 User Guide](docs/guides/HELP.md)**
   Daily operations, alert management, hardware
 
-- **[🔧 Admin Guide](docs_new/admin-guide/index.md)**
+- **[🔧 Admin Guide](docs/guides/PORTAINER_DEPLOYMENT.md)**
   Deployment, database, maintenance
 
 </td>
 <td width="50%">
 
 ### For Developers
-- **[💻 Developer Guide](docs_new/developer-guide/index.md)**
+- **[💻 Developer Guide](docs/development/AGENTS.md)**
   Architecture, contribution guidelines, testing
 
-- **[🎨 Frontend Docs](docs_new/frontend/index.md)**
+- **[🎨 Frontend Docs](docs/frontend/FRONTEND_INDEX.md)**
   UI components, theming, JavaScript API
 
-- **[📡 API Reference](docs_new/api/index.md)**
+- **[📡 API Reference](docs/INDEX.md)**
   REST API documentation
 
 </td>
@@ -197,18 +197,18 @@ EAS_ORIGINATOR=WXR
 EAS_STATION_ID=YOURCALL
 ```
 
-See [Configuration Guide](docs_new/getting-started/configuration.md) for complete reference.
+See [Configuration Guide](docs/guides/HELP.md) for complete reference.
 
 ## 📊 Screenshots
 
 <table>
 <tr>
 <td width="50%">
-<img src="docs_new/images/dashboard.png" alt="Dashboard" />
+<img src="static/img/eas-station-logo.svg" alt="Dashboard" />
 <p align="center"><em>Main Dashboard</em></p>
 </td>
 <td width="50%">
-<img src="docs_new/images/admin.png" alt="Admin Panel" />
+<img src="static/img/raspberry-pi-hero.svg" alt="Admin Panel" />
 <p align="center"><em>Administration Panel</em></p>
 </td>
 </tr>
@@ -218,9 +218,9 @@ See [Configuration Guide](docs_new/getting-started/configuration.md) for complet
 
 We welcome contributions! Please see:
 
-- [Contributing Guide](docs_new/developer-guide/contributing.md)
-- [Code Standards](docs_new/developer-guide/standards.md)
-- [Development Setup](docs_new/developer-guide/setup.md)
+- [Contributing Guide](docs/process/CONTRIBUTING.md)
+- [Code Standards](docs/development/AGENTS.md)
+- [Development Setup](docs/development/AGENTS.md)
 
 ### Development
 
@@ -244,7 +244,7 @@ python app.py
 
 ## 🆘 Support
 
-- 📖 **Documentation**: [Complete Docs](docs_new/index.md)
+- 📖 **Documentation**: [Complete Docs](docs/INDEX.md)
 - 💬 **Discussions**: [GitHub Discussions](https://github.com/KR8MER/eas-station/discussions)
 - 🐛 **Issues**: [GitHub Issues](https://github.com/KR8MER/eas-station/issues)
 - 📡 **Community**: Join our amateur radio forums
@@ -259,7 +259,7 @@ python app.py
 
     Always work in shielded test environments. Never connect to production broadcast chains.
 
-See [Terms of Use](docs_new/legal/terms.md) and [FCC Compliance](docs_new/reference/fcc-compliance.md) for details.
+See [Terms of Use](docs/policies/TERMS_OF_USE.md) and [FCC Compliance](docs/reference/ABOUT.md) for details.
 
 ## 📈 Roadmap
 
@@ -270,7 +270,7 @@ Current development focuses on:
 - ⏳ **Certification**: FCC Part 11 compliance documentation
 - ⏳ **Advanced Features**: Cloud sync, mobile app, multi-site coordination
 
-See [Roadmap](docs_new/roadmap/index.md) for complete details.
+See [Roadmap](docs/roadmap/master_todo.md) for complete details.
 
 ## 📜 License
 
@@ -300,7 +300,7 @@ See [LICENSE](LICENSE) file for full text.
 
 | Resource | Link |
 |----------|------|
-| **Documentation** | [docs_new/](docs_new/index.md) |
+| **Documentation** | [docs/](docs/INDEX.md) |
 | **NOAA CAP API** | https://www.weather.gov/documentation/services-web-api |
 | **IPAWS** | https://www.fema.gov/emergency-managers/practitioners/integrated-public-alert-warning-system |
 | **FCC Part 11** | https://www.ecfr.gov/current/title-47/chapter-I/subchapter-A/part-11 |
