@@ -228,6 +228,11 @@
                             <input type="number" class="form-control" id="receiverChannel" name="channel" min="0">
                         </div>
                         <div class="col-md-6">
+                            <label for="receiverSerial" class="form-label">Device Serial</label>
+                            <input type="text" class="form-control" id="receiverSerial" name="serial" placeholder="Hardware serial number">
+                            <small class="form-text text-muted">Optional: Serial number for precise device identification</small>
+                        </div>
+                        <div class="col-md-6">
                             <label for="receiverNotes" class="form-label">Notes</label>
                             <textarea class="form-control" id="receiverNotes" name="notes" rows="2"></textarea>
                         </div>
@@ -564,6 +569,7 @@
         document.getElementById('receiverSampleRate').value = receiver?.sample_rate ?? '';
         document.getElementById('receiverGain').value = receiver?.gain ?? '';
         document.getElementById('receiverChannel').value = receiver?.channel ?? '';
+        document.getElementById('receiverSerial').value = receiver?.serial ?? '';
         document.getElementById('receiverNotes').value = receiver?.notes ?? '';
         document.getElementById('receiverEnabled').checked = receiver?.enabled !== false;
         document.getElementById('receiverAutoStart').checked = receiver?.auto_start !== false;
@@ -1026,6 +1032,7 @@
         document.getElementById('receiverDisplayName').value = device.label || device.product || `${device.driver} Device`;
         document.getElementById('receiverIdentifier').value = device.serial || `${device.driver}_${deviceIndex}`;
         document.getElementById('receiverDriver').value = device.driver || 'rtlsdr';
+        document.getElementById('receiverSerial').value = device.serial || '';
 
         // Set defaults based on driver
         if (device.driver === 'rtlsdr') {

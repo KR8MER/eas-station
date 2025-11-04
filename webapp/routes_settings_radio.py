@@ -29,6 +29,7 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
         "sample_rate": receiver.sample_rate,
         "gain": receiver.gain,
         "channel": receiver.channel,
+        "serial": receiver.serial,
         "auto_start": receiver.auto_start,
         "enabled": receiver.enabled,
         "notes": receiver.notes,
@@ -121,6 +122,10 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
                 data["channel"] = parsed_channel
             except Exception:
                 return None, "Channel must be a non-negative integer."
+
+    if "serial" in payload:
+        serial = payload.get("serial")
+        data["serial"] = str(serial).strip() if serial not in (None, "") else None
 
     if "auto_start" in payload or not partial:
         data["auto_start"] = _coerce_bool(payload.get("auto_start"), True)

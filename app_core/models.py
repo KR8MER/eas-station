@@ -530,6 +530,7 @@ class RadioReceiver(db.Model):
     sample_rate = db.Column(db.Integer, nullable=False)
     gain = db.Column(db.Float)
     channel = db.Column(db.Integer)
+    serial = db.Column(db.String(128))
     auto_start = db.Column(db.Boolean, nullable=False, default=True)
     enabled = db.Column(db.Boolean, nullable=False, default=True)
     notes = db.Column(db.Text)
@@ -564,6 +565,7 @@ class RadioReceiver(db.Model):
             sample_rate=int(self.sample_rate),
             gain=self.gain,
             channel=self.channel,
+            serial=self.serial,
             enabled=bool(self.enabled and self.auto_start),
         )
 
