@@ -45,18 +45,17 @@ Output in `site/` directory.
 ## Documentation Structure
 
 ```
-docs_new/                    # Documentation source
-├── index.md                 # Homepage
-├── getting-started/         # Installation and setup
-├── user-guide/              # User documentation
-├── admin-guide/             # Administrator docs
-├── developer-guide/         # Developer docs
+docs/                        # Documentation source
+├── README.md                # Documentation homepage
+├── INDEX.md                 # Searchable index
+├── guides/                  # User guides and tutorials
+├── development/             # Developer documentation
+├── architecture/            # System architecture docs
 ├── frontend/                # UI documentation
-├── api/                     # API reference
 ├── reference/               # Technical reference
-├── legal/                   # Legal and policies
+├── policies/                # Project policies
 ├── roadmap/                 # Development roadmap
-└── stylesheets/             # Custom CSS
+└── process/                 # Development processes
 
 mkdocs.yml                   # MkDocs configuration
 ```
@@ -159,13 +158,20 @@ Serves with strict mode enabled.
 
 ### Custom CSS
 
-Edit `docs_new/stylesheets/extra.css`:
+Custom CSS is not currently configured. To add custom styles:
 
-```css
-:root {
-  --custom-color: #3b82f6;
-}
-```
+1. Create `docs/stylesheets/extra.css`:
+   ```css
+   :root {
+     --custom-color: #3b82f6;
+   }
+   ```
+
+2. Uncomment in `mkdocs.yml`:
+   ```yaml
+   extra_css:
+     - stylesheets/extra.css
+   ```
 
 ### Theme Customization
 

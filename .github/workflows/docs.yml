@@ -5,12 +5,12 @@ on:
     branches:
       - main
     paths:
-      - 'docs_new/**'
+      - 'docs/**'
       - 'mkdocs.yml'
       - '.github/workflows/docs.yml'
   pull_request:
     paths:
-      - 'docs_new/**'
+      - 'docs/**'
       - 'mkdocs.yml'
 
 permissions:
