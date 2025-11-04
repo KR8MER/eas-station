@@ -75,8 +75,8 @@ Then open http://localhost:5000 in your browser.
 - **[🎨 Frontend Docs](docs/frontend/FRONTEND_INDEX.md)**
   UI components, theming, JavaScript API
 
-- **[📡 API Reference](docs/INDEX.md)**
-  REST API documentation
+- **[📡 API Reference](docs/frontend/JAVASCRIPT_API.md)**
+  REST API and JavaScript API documentation
 
 </td>
 </tr>

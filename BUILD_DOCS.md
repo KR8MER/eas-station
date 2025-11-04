@@ -46,7 +46,8 @@ Output in `site/` directory.
 
 ```
 docs/                        # Documentation source
-├── INDEX.md                 # Homepage
+├── README.md                # Documentation homepage
+├── INDEX.md                 # Searchable index
 ├── guides/                  # User guides and tutorials
 ├── development/             # Developer documentation
 ├── architecture/            # System architecture docs
@@ -157,13 +158,20 @@ Serves with strict mode enabled.
 
 ### Custom CSS
 
-Edit `docs/stylesheets/extra.css` (if needed):
+Custom CSS is not currently configured. To add custom styles:
 
-```css
-:root {
-  --custom-color: #3b82f6;
-}
-```
+1. Create `docs/stylesheets/extra.css`:
+   ```css
+   :root {
+     --custom-color: #3b82f6;
+   }
+   ```
+
+2. Uncomment in `mkdocs.yml`:
+   ```yaml
+   extra_css:
+     - stylesheets/extra.css
+   ```
 
 ### Theme Customization
 
