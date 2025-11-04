@@ -9,7 +9,7 @@ from flask import Flask, jsonify, render_template, request
 from sqlalchemy import desc
 
 from app_core.extensions import db
-from app_core.models import AudioAlert, AudioHealthStatus, AudioSourceMetrics
+from app_core.models import AudioAlert, AudioHealthStatus, AudioSourceMetrics, AudioSourceConfig as AudioSourceConfigDB
 from app_core.audio import AudioIngestController
 from app_core.audio.ingest import AudioSourceConfig, AudioSourceType, AudioSourceStatus
 from app_core.audio.sources import create_audio_source
@@ -26,7 +26,54 @@ def _get_audio_controller() -> AudioIngestController:
     global _audio_controller
     if _audio_controller is None:
         _audio_controller = AudioIngestController()
+        _initialize_audio_sources(_audio_controller)
     return _audio_controller
+
+
+def _initialize_audio_sources(controller: AudioIngestController) -> None:
+    """Initialize audio sources from database configuration."""
+    try:
+        # Load all saved configurations from database
+        saved_configs = AudioSourceConfigDB.query.filter_by(enabled=True).all()
+
+        for db_config in saved_configs:
+            try:
+                # Parse source type
+                source_type = AudioSourceType(db_config.source_type)
+
+                # Create runtime configuration from database config
+                config_params = db_config.config_params or {}
+                runtime_config = AudioSourceConfig(
+                    source_type=source_type,
+                    name=db_config.name,
+                    enabled=db_config.enabled,
+                    priority=db_config.priority,
+                    sample_rate=config_params.get('sample_rate', 44100),
+                    channels=config_params.get('channels', 1),
+                    buffer_size=config_params.get('buffer_size', 4096),
+                    silence_threshold_db=config_params.get('silence_threshold_db', -60.0),
+                    silence_duration_seconds=config_params.get('silence_duration_seconds', 5.0),
+                    device_params=config_params.get('device_params', {}),
+                )
+
+                # Create and add adapter
+                adapter = create_audio_source(runtime_config)
+                controller.add_source(adapter)
+
+                # Auto-start if configured
+                if db_config.auto_start:
+                    controller.start_source(db_config.name)
+                    logger.info('Auto-started audio source: %s', db_config.name)
+                else:
+                    logger.info('Loaded audio source: %s (not auto-started)', db_config.name)
+
+            except Exception as exc:
+                logger.error('Error loading audio source %s: %s', db_config.name, exc)
+
+        logger.info('Initialized %d audio sources from database', len(saved_configs))
+
+    except Exception as exc:
+        logger.error('Error initializing audio sources from database: %s', exc)
 
 
 def _serialize_audio_source(source_name: str, adapter: Any) -> Dict[str, Any]:
@@ -128,6 +175,26 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
                 device_params=data.get('device_params', {}),
             )
 
+            # Save to database
+            db_config = AudioSourceConfigDB(
+                name=name,
+                source_type=source_type,
+                config_params={
+                    'sample_rate': config.sample_rate,
+                    'channels': config.channels,
+                    'buffer_size': config.buffer_size,
+                    'silence_threshold_db': config.silence_threshold_db,
+                    'silence_duration_seconds': config.silence_duration_seconds,
+                    'device_params': config.device_params,
+                },
+                priority=config.priority,
+                enabled=config.enabled,
+                auto_start=data.get('auto_start', False),
+                description=data.get('description', ''),
+            )
+            db.session.add(db_config)
+            db.session.commit()
+
             # Create adapter
             adapter = create_audio_source(config)
 
@@ -189,6 +256,32 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             if 'device_params' in data:
                 config.device_params.update(data['device_params'])
 
+            # Update database configuration
+            db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+            if db_config:
+                if 'enabled' in data:
+                    db_config.enabled = data['enabled']
+                if 'priority' in data:
+                    db_config.priority = data['priority']
+                if 'auto_start' in data:
+                    db_config.auto_start = data['auto_start']
+                if 'description' in data:
+                    db_config.description = data['description']
+
+                # Update config params
+                config_params = db_config.config_params or {}
+                if 'silence_threshold_db' in data:
+                    config_params['silence_threshold_db'] = data['silence_threshold_db']
+                if 'silence_duration_seconds' in data:
+                    config_params['silence_duration_seconds'] = data['silence_duration_seconds']
+                if 'device_params' in data:
+                    device_params = config_params.get('device_params', {})
+                    device_params.update(data['device_params'])
+                    config_params['device_params'] = device_params
+
+                db_config.config_params = config_params
+                db.session.commit()
+
             logger.info('Updated audio source: %s', source_name)
 
             return jsonify({
@@ -216,6 +309,12 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
 
             # Remove from controller
             controller.remove_source(source_name)
+
+            # Remove from database
+            db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+            if db_config:
+                db.session.delete(db_config)
+                db.session.commit()
 
             logger.info('Deleted audio source: %s', source_name)
 
