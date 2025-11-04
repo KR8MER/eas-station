@@ -771,8 +771,8 @@ class AudioAlert(db.Model):
     alert_metadata = db.Column('metadata', JSONB)
 
 
-class AudioSourceConfig(db.Model):
-    """Persistent audio source configurations."""
+class AudioSourceConfigDB(db.Model):
+    """Persistent audio source configurations (database model)."""
     __tablename__ = "audio_source_configs"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -826,5 +826,5 @@ __all__ = [
     "AudioSourceMetrics",
     "AudioHealthStatus",
     "AudioAlert",
-    "AudioSourceConfig",
+    "AudioSourceConfigDB",
 ]

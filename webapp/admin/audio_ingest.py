@@ -9,7 +9,7 @@ from flask import Flask, jsonify, render_template, request
 from sqlalchemy import desc
 
 from app_core.extensions import db
-from app_core.models import AudioAlert, AudioHealthStatus, AudioSourceMetrics, AudioSourceConfig as AudioSourceConfigDB
+from app_core.models import AudioAlert, AudioHealthStatus, AudioSourceMetrics, AudioSourceConfigDB
 from app_core.audio import AudioIngestController
 from app_core.audio.ingest import AudioSourceConfig, AudioSourceType, AudioSourceStatus
 from app_core.audio.sources import create_audio_source
