@@ -298,8 +298,9 @@ function updateSourceTypeConfig() {
         case 'sdr':
             html = `
                 <div class="mb-3">
-                    <label for="receiverId" class="form-label">Receiver ID</label>
-                    <input type="text" class="form-control" id="receiverId" placeholder="e.g., rtl_sdr_0">
+                    <label for="receiverId" class="form-label">Receiver ID <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="receiverId" placeholder="e.g., rtl_sdr_0" required>
+                    <small class="form-text text-muted">Must match a configured SDR receiver</small>
                 </div>
             `;
             break;
@@ -307,7 +308,8 @@ function updateSourceTypeConfig() {
             html = `
                 <div class="mb-3">
                     <label for="deviceName" class="form-label">ALSA Device Name</label>
-                    <input type="text" class="form-control" id="deviceName" placeholder="e.g., default, hw:0,0">
+                    <input type="text" class="form-control" id="deviceName" placeholder="e.g., default, hw:0,0" value="default">
+                    <small class="form-text text-muted">Leave as "default" to use system default device</small>
                 </div>
             `;
             break;
@@ -316,20 +318,22 @@ function updateSourceTypeConfig() {
                 <div class="mb-3">
                     <label for="deviceIndex" class="form-label">PulseAudio Device Index (optional)</label>
                     <input type="number" class="form-control" id="deviceIndex" placeholder="Leave blank for default">
+                    <small class="form-text text-muted">Optional: Specific device index from PulseAudio</small>
                 </div>
             `;
             break;
         case 'file':
             html = `
                 <div class="mb-3">
-                    <label for="filePath" class="form-label">Audio File Path</label>
-                    <input type="text" class="form-control" id="filePath" placeholder="/path/to/audio.wav">
+                    <label for="filePath" class="form-label">Audio File Path <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="filePath" placeholder="/path/to/audio.wav" required>
+                    <small class="form-text text-muted">Absolute path to WAV or MP3 file</small>
                 </div>
                 <div class="mb-3">
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="loop" checked>
                         <label class="form-check-label" for="loop">
-                            Loop playback
+                            Loop playback continuously
                         </label>
                     </div>
                 </div>
@@ -352,33 +356,41 @@ async function addAudioSource() {
     const silenceDuration = parseFloat(document.getElementById('silenceDuration').value);
 
     if (!sourceType || !sourceName) {
-        alert('Please fill in all required fields');
+        showError('Please fill in all required fields');
         return;
     }
 
     const deviceParams = {};
 
-    // Get source-specific parameters
+    // Get source-specific parameters and validate required fields
     switch (sourceType) {
         case 'sdr':
             const receiverId = document.getElementById('receiverId')?.value;
-            if (receiverId) deviceParams.receiver_id = receiverId;
+            if (!receiverId) {
+                showError('Receiver ID is required for SDR sources');
+                return;
+            }
+            deviceParams.receiver_id = receiverId;
             break;
         case 'alsa':
-            const deviceName = document.getElementById('deviceName')?.value;
-            if (deviceName) deviceParams.device_name = deviceName;
+            const deviceName = document.getElementById('deviceName')?.value || 'default';
+            deviceParams.device_name = deviceName;
             break;
         case 'pulse':
             const deviceIndex = document.getElementById('deviceIndex')?.value;
-            if (deviceIndex) deviceParams.device_index = parseInt(deviceIndex);
+            if (deviceIndex) {
+                deviceParams.device_index = parseInt(deviceIndex);
+            }
             break;
         case 'file':
             const filePath = document.getElementById('filePath')?.value;
             const loop = document.getElementById('loop')?.checked;
-            if (filePath) {
-                deviceParams.file_path = filePath;
-                deviceParams.loop = loop;
+            if (!filePath) {
+                showError('File path is required for file sources');
+                return;
             }
+            deviceParams.file_path = filePath;
+            deviceParams.loop = loop;
             break;
     }
 
