@@ -214,7 +214,13 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
                 description=data.get('description', ''),
             )
             db.session.add(db_config)
-            db.session.commit()
+            try:
+                db.session.commit()
+            except Exception:
+                # If database commit fails, remove from controller to keep state consistent
+                db.session.rollback()
+                controller.remove_source(name)
+                raise
 
             logger.info('Created audio source: %s (Type: %s)', name, source_type)
 
@@ -258,19 +264,7 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             if not data:
                 return jsonify({'error': 'No data provided'}), 400
 
-            # Update configuration (only allow certain fields to be updated)
-            if 'enabled' in data:
-                config.enabled = data['enabled']
-            if 'priority' in data:
-                config.priority = data['priority']
-            if 'silence_threshold_db' in data:
-                config.silence_threshold_db = data['silence_threshold_db']
-            if 'silence_duration_seconds' in data:
-                config.silence_duration_seconds = data['silence_duration_seconds']
-            if 'device_params' in data:
-                config.device_params.update(data['device_params'])
-
-            # Update database configuration
+            # Update database configuration FIRST, before touching the in-memory config
             db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
             if db_config:
                 if 'enabled' in data:
@@ -294,7 +288,24 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
                     config_params['device_params'] = device_params
 
                 db_config.config_params = config_params
-                db.session.commit()
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                    raise
+
+            # Update in-memory configuration AFTER the database transaction succeeds
+            # This prevents inconsistency if the commit fails
+            if 'enabled' in data:
+                config.enabled = data['enabled']
+            if 'priority' in data:
+                config.priority = data['priority']
+            if 'silence_threshold_db' in data:
+                config.silence_threshold_db = data['silence_threshold_db']
+            if 'silence_duration_seconds' in data:
+                config.silence_duration_seconds = data['silence_duration_seconds']
+            if 'device_params' in data:
+                config.device_params.update(data['device_params'])
 
             logger.info('Updated audio source: %s', source_name)
 
@@ -321,14 +332,19 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             if adapter.status == AudioSourceStatus.RUNNING:
                 controller.stop_source(source_name)
 
-            # Remove from controller
-            controller.remove_source(source_name)
-
-            # Remove from database
+            # Remove from database FIRST, before touching the controller
             db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
             if db_config:
                 db.session.delete(db_config)
-                db.session.commit()
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                    raise
+
+            # Remove from controller AFTER the database transaction succeeds
+            # This prevents zombie sources if the commit fails
+            controller.remove_source(source_name)
 
             logger.info('Deleted audio source: %s', source_name)
 
