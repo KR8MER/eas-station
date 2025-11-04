@@ -5,6 +5,11 @@ All notable changes to this project are documented in this file. The format is b
 tracks releases under the 2.x series.
 
 ## [Unreleased]
+### Changed
+- Enhanced AGENTS.md with bug screenshot workflow, documentation update requirements, and semantic versioning conventions
+- Reorganized root directory by moving development/debug scripts to scripts/deprecated/ and utility scripts to scripts/
+- Removed README.md.backup file from repository
+
 ### Added
 - Added an admin location reference view that summarises the saved NOAA zone catalog
   entries, SAME/FIPS codes, and keyword matches so operators can understand how
