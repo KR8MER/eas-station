@@ -521,10 +521,9 @@ async function editSource(sourceId) {
         document.getElementById('editSilenceThreshold').value = config.silence_threshold_db || -60;
         document.getElementById('editSilenceDuration').value = config.silence_duration_seconds || 5;
 
-        // Note: auto_start and description come from database, not returned by current API
-        // We'll need to add these to the API response or use defaults
-        document.getElementById('editAutoStart').checked = false;
-        document.getElementById('editDescription').value = '';
+        // Set database-only fields
+        document.getElementById('editAutoStart').checked = source.auto_start || false;
+        document.getElementById('editDescription').value = source.description || '';
 
         // Show the modal
         const modal = new bootstrap.Modal(document.getElementById('editSourceModal'));

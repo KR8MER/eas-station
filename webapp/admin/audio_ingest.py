@@ -33,8 +33,9 @@ def _get_audio_controller() -> AudioIngestController:
 def _initialize_audio_sources(controller: AudioIngestController) -> None:
     """Initialize audio sources from database configuration."""
     try:
-        # Load all saved configurations from database
-        saved_configs = AudioSourceConfigDB.query.filter_by(enabled=True).all()
+        # Load ALL saved configurations from database (not just enabled ones)
+        # This allows disabled sources to be manageable through the UI
+        saved_configs = AudioSourceConfigDB.query.all()
 
         for db_config in saved_configs:
             try:
@@ -60,8 +61,8 @@ def _initialize_audio_sources(controller: AudioIngestController) -> None:
                 adapter = create_audio_source(runtime_config)
                 controller.add_source(adapter)
 
-                # Auto-start if configured
-                if db_config.auto_start:
+                # Auto-start only if both enabled AND auto_start are True
+                if db_config.enabled and db_config.auto_start:
                     controller.start_source(db_config.name)
                     logger.info('Auto-started audio source: %s', db_config.name)
                 else:
@@ -79,6 +80,10 @@ def _initialize_audio_sources(controller: AudioIngestController) -> None:
 def _serialize_audio_source(source_name: str, adapter: Any) -> Dict[str, Any]:
     """Serialize an audio source adapter to JSON-compatible dict."""
     config = adapter.config
+
+    # Fetch database config for additional fields
+    db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+
     return {
         'id': source_name,
         'name': config.name,
@@ -86,6 +91,8 @@ def _serialize_audio_source(source_name: str, adapter: Any) -> Dict[str, Any]:
         'status': adapter.status.value,
         'enabled': config.enabled,
         'priority': config.priority,
+        'auto_start': db_config.auto_start if db_config else False,
+        'description': db_config.description if db_config else '',
         'config': {
             'sample_rate': config.sample_rate,
             'channels': config.channels,
@@ -161,6 +168,14 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             except ValueError:
                 return jsonify({'error': f'Invalid source type: {source_type}'}), 400
 
+            # Get controller first to ensure it's initialized
+            # (prevents duplicate adapter creation when controller initializes from DB)
+            controller = _get_audio_controller()
+
+            # Check if source already exists
+            if name in controller._sources:
+                return jsonify({'error': f'Source "{name}" already exists'}), 400
+
             # Create configuration
             config = AudioSourceConfig(
                 source_type=audio_type,
@@ -175,7 +190,13 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
                 device_params=data.get('device_params', {}),
             )
 
-            # Save to database
+            # Create adapter
+            adapter = create_audio_source(config)
+
+            # Add to controller
+            controller.add_source(adapter)
+
+            # Save to database AFTER adding to controller
             db_config = AudioSourceConfigDB(
                 name=name,
                 source_type=source_type,
@@ -194,13 +215,6 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             )
             db.session.add(db_config)
             db.session.commit()
-
-            # Create adapter
-            adapter = create_audio_source(config)
-
-            # Add to controller
-            controller = _get_audio_controller()
-            controller.add_source(adapter)
 
             logger.info('Created audio source: %s (Type: %s)', name, source_type)
 
