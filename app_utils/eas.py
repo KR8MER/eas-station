@@ -518,6 +518,29 @@ def _generate_silence(duration: float, sample_rate: int) -> List[int]:
     return [0] * max(1, int(duration * sample_rate))
 
 
+def _normalize_audio_amplitude(samples: List[int], target_amplitude: float) -> List[int]:
+    """Normalize audio samples to match the target amplitude.
+
+    This ensures TTS audio has the same volume level as SAME/AFSK tones.
+    """
+    if not samples:
+        return samples
+
+    # Calculate peak amplitude of the input samples
+    peak = max(abs(s) for s in samples)
+
+    # Avoid division by zero
+    if peak == 0:
+        return samples
+
+    # Calculate the scaling factor needed to reach target amplitude
+    # Use 0.95 safety factor to prevent clipping
+    scale = (target_amplitude * 0.95) / peak
+
+    # Apply scaling to all samples
+    return [int(s * scale) for s in samples]
+
+
 def _write_wave_file(path: str, samples: Sequence[int], sample_rate: int) -> None:
     with wave.open(path, 'w') as wav:
         wav.setnchannels(1)
@@ -651,11 +674,13 @@ class EASAudioGenerator:
         voice_samples = self.tts_engine.generate(message_text)
         tts_segment: List[int] = []
         if voice_samples:
+            # Normalize TTS audio to match SAME/AFSK amplitude
+            normalized_voice_samples = _normalize_audio_amplitude(voice_samples, amplitude)
             pre_voice_silence = _generate_silence(1.0, self.sample_rate)
             samples.extend(pre_voice_silence)
             segment_samples['buffer'].extend(pre_voice_silence)
-            samples.extend(voice_samples)
-            tts_segment = list(voice_samples)
+            samples.extend(normalized_voice_samples)
+            tts_segment = list(normalized_voice_samples)
 
         trailing_silence = _generate_silence(1.0, self.sample_rate)
         samples.extend(trailing_silence)
@@ -800,7 +825,9 @@ class EASAudioGenerator:
         if include_tts:
             voiceover = self.tts_engine.generate(message_text)
             if voiceover:
-                tts_samples.extend(voiceover)
+                # Normalize TTS audio to match SAME/AFSK amplitude
+                normalized_voiceover = _normalize_audio_amplitude(voiceover, amplitude)
+                tts_samples.extend(normalized_voiceover)
             else:
                 error_detail = self.tts_engine.last_error
                 if provider == 'azure':
