@@ -5,6 +5,9 @@ All notable changes to this project are documented in this file. The format is b
 tracks releases under the 2.x series.
 
 ## [Unreleased]
+### Fixed
+- Fixed module import paths in scripts/manual_eas_event.py and scripts/manual_alert_fetch.py by adding repository root to sys.path
+
 ### Changed
 - Enhanced AGENTS.md with bug screenshot workflow, documentation update requirements, and semantic versioning conventions
 - Reorganized root directory by moving development/debug scripts to scripts/deprecated/ and utility scripts to scripts/

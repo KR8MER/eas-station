@@ -9,6 +9,11 @@ import sys
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 from xml.etree import ElementTree
 
+# Add repository root to Python path so 'app' module can be imported
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+sys.path.insert(0, REPO_ROOT)
+
 from app import (
     CAPAlert,
     EASMessage,
