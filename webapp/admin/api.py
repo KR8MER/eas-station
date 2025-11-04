@@ -775,5 +775,348 @@ def register_api_routes(app, logger):
             logger.error('Error getting system health via API: %s', exc)
             return jsonify({'error': str(exc)}), 500
 
+    # =========================================================================
+    # AUDIO INGEST API ENDPOINTS
+    # =========================================================================
+
+    def _get_audio_controller():
+        """Get or create the global AudioIngestController instance."""
+        if not hasattr(app, '_audio_controller'):
+            from app_core.audio import AudioIngestController
+            app._audio_controller = AudioIngestController()
+        return app._audio_controller
+
+    @app.route('/api/audio/sources', methods=['GET'])
+    def api_get_audio_sources():
+        """List all configured audio sources"""
+        try:
+            controller = _get_audio_controller()
+            sources = []
+
+            for source_name in controller.list_sources():
+                status = controller.get_source_status(source_name)
+                metrics = controller.get_source_metrics(source_name)
+                source = controller._sources.get(source_name)
+
+                if source:
+                    sources.append({
+                        'name': source.config.name,
+                        'type': source.config.source_type.value,
+                        'status': status.value if status else 'unknown',
+                        'enabled': source.config.enabled,
+                        'priority': source.config.priority,
+                        'sample_rate': source.config.sample_rate,
+                        'channels': source.config.channels,
+                        'device_params': source.config.device_params,
+                        'metrics': {
+                            'peak_level_db': metrics.peak_level_db if metrics else None,
+                            'rms_level_db': metrics.rms_level_db if metrics else None,
+                            'silence_detected': metrics.silence_detected if metrics else False,
+                            'buffer_utilization': metrics.buffer_utilization if metrics else 0.0,
+                        } if metrics else None
+                    })
+
+            return jsonify({'sources': sources, 'count': len(sources)})
+        except Exception as exc:
+            logger.error('Error getting audio sources: %s', exc)
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/audio/sources', methods=['POST'])
+    def api_create_audio_source():
+        """Create a new audio source"""
+        try:
+            data = request.get_json()
+
+            # Validate required fields
+            if not data.get('name'):
+                return jsonify({'error': 'Source name is required'}), 400
+            if not data.get('type'):
+                return jsonify({'error': 'Source type is required'}), 400
+
+            # Import required classes
+            from app_core.audio.ingest import AudioSourceConfig, AudioSourceType
+            from app_core.audio.sources import create_audio_source
+
+            # Parse source type
+            try:
+                source_type = AudioSourceType(data['type'])
+            except ValueError:
+                return jsonify({'error': f"Invalid source type: {data['type']}"}), 400
+
+            # Create configuration
+            config = AudioSourceConfig(
+                source_type=source_type,
+                name=data['name'],
+                enabled=data.get('enabled', True),
+                priority=data.get('priority', 100),
+                sample_rate=data.get('sample_rate', 44100),
+                channels=data.get('channels', 1),
+                buffer_size=data.get('buffer_size', 4096),
+                silence_threshold_db=data.get('silence_threshold_db', -60.0),
+                silence_duration_seconds=data.get('silence_duration_seconds', 5.0),
+                device_params=data.get('device_params', {})
+            )
+
+            # Create source adapter
+            source = create_audio_source(config)
+
+            # Add to controller
+            controller = _get_audio_controller()
+            controller.add_source(source)
+
+            # Optionally auto-start
+            if data.get('auto_start', False):
+                controller.start_source(data['name'])
+
+            return jsonify({
+                'success': True,
+                'message': f"Audio source '{data['name']}' created successfully",
+                'source': {
+                    'name': config.name,
+                    'type': config.source_type.value,
+                    'status': source.status.value
+                }
+            }), 201
+
+        except Exception as exc:
+            logger.error('Error creating audio source: %s', exc)
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/audio/sources/<source_name>', methods=['PATCH'])
+    def api_update_audio_source(source_name):
+        """Update audio source configuration"""
+        try:
+            controller = _get_audio_controller()
+
+            # Check if source exists
+            if source_name not in controller.list_sources():
+                return jsonify({'error': f"Source '{source_name}' not found"}), 404
+
+            data = request.get_json()
+            source = controller._sources[source_name]
+
+            # Update configuration fields
+            if 'enabled' in data:
+                source.config.enabled = data['enabled']
+            if 'priority' in data:
+                source.config.priority = data['priority']
+            if 'silence_threshold_db' in data:
+                source.config.silence_threshold_db = data['silence_threshold_db']
+            if 'silence_duration_seconds' in data:
+                source.config.silence_duration_seconds = data['silence_duration_seconds']
+
+            return jsonify({
+                'success': True,
+                'message': f"Audio source '{source_name}' updated successfully"
+            })
+
+        except Exception as exc:
+            logger.error('Error updating audio source: %s', exc)
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/audio/sources/<source_name>', methods=['DELETE'])
+    def api_delete_audio_source(source_name):
+        """Delete an audio source"""
+        try:
+            controller = _get_audio_controller()
+
+            # Check if source exists
+            if source_name not in controller.list_sources():
+                return jsonify({'error': f"Source '{source_name}' not found"}), 404
+
+            # Remove source (will automatically stop it)
+            controller.remove_source(source_name)
+
+            return jsonify({
+                'success': True,
+                'message': f"Audio source '{source_name}' deleted successfully"
+            })
+
+        except Exception as exc:
+            logger.error('Error deleting audio source: %s', exc)
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/audio/sources/<source_name>/start', methods=['POST'])
+    def api_start_audio_source(source_name):
+        """Start audio ingestion from a source"""
+        try:
+            controller = _get_audio_controller()
+
+            # Check if source exists
+            if source_name not in controller.list_sources():
+                return jsonify({'error': f"Source '{source_name}' not found"}), 404
+
+            # Start the source
+            success = controller.start_source(source_name)
+
+            if success:
+                return jsonify({
+                    'success': True,
+                    'message': f"Audio source '{source_name}' started successfully"
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': f"Failed to start audio source '{source_name}'"
+                }), 500
+
+        except Exception as exc:
+            logger.error('Error starting audio source: %s', exc)
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/audio/sources/<source_name>/stop', methods=['POST'])
+    def api_stop_audio_source(source_name):
+        """Stop audio ingestion from a source"""
+        try:
+            controller = _get_audio_controller()
+
+            # Check if source exists
+            if source_name not in controller.list_sources():
+                return jsonify({'error': f"Source '{source_name}' not found"}), 404
+
+            # Stop the source
+            controller.stop_source(source_name)
+
+            return jsonify({
+                'success': True,
+                'message': f"Audio source '{source_name}' stopped successfully"
+            })
+
+        except Exception as exc:
+            logger.error('Error stopping audio source: %s', exc)
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/audio/metrics', methods=['GET'])
+    def api_get_audio_metrics():
+        """Get real-time metrics for all audio sources"""
+        try:
+            controller = _get_audio_controller()
+            all_metrics = controller.get_all_metrics()
+            all_status = controller.get_all_status()
+
+            metrics_list = []
+            for source_name, metrics in all_metrics.items():
+                status = all_status.get(source_name)
+                metrics_list.append({
+                    'source_name': source_name,
+                    'status': status.value if status else 'unknown',
+                    'timestamp': metrics.timestamp,
+                    'peak_level_db': metrics.peak_level_db,
+                    'rms_level_db': metrics.rms_level_db,
+                    'sample_rate': metrics.sample_rate,
+                    'channels': metrics.channels,
+                    'frames_captured': metrics.frames_captured,
+                    'silence_detected': metrics.silence_detected,
+                    'buffer_utilization': metrics.buffer_utilization
+                })
+
+            return jsonify({
+                'metrics': metrics_list,
+                'timestamp': utc_now().isoformat(),
+                'active_source': controller.get_active_source()
+            })
+
+        except Exception as exc:
+            logger.error('Error getting audio metrics: %s', exc)
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/audio/health', methods=['GET'])
+    def api_get_audio_health():
+        """Get audio system health status"""
+        try:
+            controller = _get_audio_controller()
+            all_status = controller.get_all_status()
+            all_metrics = controller.get_all_metrics()
+
+            # Calculate overall health
+            total_sources = len(controller.list_sources())
+            running_sources = sum(1 for s in all_status.values() if s.value == 'running')
+            error_sources = sum(1 for s in all_status.values() if s.value == 'error')
+            silence_count = sum(1 for m in all_metrics.values() if m.silence_detected)
+
+            # Calculate health score (0-100)
+            health_score = 100.0
+            if total_sources > 0:
+                health_score = (running_sources / total_sources) * 100
+                health_score -= (error_sources * 20)  # Deduct for errors
+                health_score -= (silence_count * 10)  # Deduct for silence
+                health_score = max(0, min(100, health_score))
+
+            # Calculate total uptime (use the active source's frames as a proxy)
+            active_source_name = controller.get_active_source()
+            uptime_seconds = 0
+            if active_source_name and active_source_name in all_metrics:
+                metrics = all_metrics[active_source_name]
+                # Estimate uptime based on frames captured and sample rate
+                if metrics.sample_rate > 0:
+                    uptime_seconds = metrics.frames_captured / metrics.sample_rate
+
+            return jsonify({
+                'health_score': round(health_score, 1),
+                'total_sources': total_sources,
+                'active_sources': running_sources,
+                'error_sources': error_sources,
+                'silence_alerts': silence_count,
+                'uptime_seconds': round(uptime_seconds, 1),
+                'active_source': active_source_name,
+                'timestamp': utc_now().isoformat()
+            })
+
+        except Exception as exc:
+            logger.error('Error getting audio health: %s', exc)
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/audio/devices', methods=['GET'])
+    def api_discover_audio_devices():
+        """Discover available audio input devices"""
+        try:
+            devices = []
+
+            # Try ALSA devices
+            try:
+                import alsaaudio
+                alsa_cards = alsaaudio.cards()
+                for idx, card in enumerate(alsa_cards):
+                    try:
+                        pcm_list = alsaaudio.pcms(alsaaudio.PCM_CAPTURE)
+                        for pcm in pcm_list:
+                            if card.lower() in pcm.lower():
+                                devices.append({
+                                    'type': 'alsa',
+                                    'name': f"{card} - {pcm}",
+                                    'device_id': pcm,
+                                    'description': f"ALSA device {pcm}"
+                                })
+                    except Exception:
+                        pass
+            except ImportError:
+                logger.warning("ALSA not available for device discovery")
+
+            # Try PulseAudio/PyAudio devices
+            try:
+                import pyaudio
+                p = pyaudio.PyAudio()
+                for i in range(p.get_device_count()):
+                    info = p.get_device_info_by_index(i)
+                    if info['maxInputChannels'] > 0:  # Input device
+                        devices.append({
+                            'type': 'pulse',
+                            'name': info['name'],
+                            'device_id': i,
+                            'description': f"PulseAudio device (channels: {info['maxInputChannels']}, rate: {int(info['defaultSampleRate'])} Hz)"
+                        })
+                p.terminate()
+            except ImportError:
+                logger.warning("PyAudio not available for device discovery")
+
+            return jsonify({
+                'devices': devices,
+                'count': len(devices)
+            })
+
+        except Exception as exc:
+            logger.error('Error discovering audio devices: %s', exc)
+            return jsonify({'error': str(exc)}), 500
+
 
 __all__ = ['register_api_routes']

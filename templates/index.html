@@ -612,6 +612,18 @@
                 </div>
             </div>
         </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="metric-card">
+                <div class="metric-icon" style="background: #7c3aed;">
+                    <i class="fas fa-waveform"></i>
+                </div>
+                <div>
+                    <span class="metric-label">Audio System</span>
+                    <div class="metric-value" id="audio-health">--<span style="font-size: 0.9rem; font-weight: normal; color: var(--text-muted);">%</span></div>
+                    <small id="audio-sources-status">Loading...</small>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="row g-4 align-items-start">
@@ -1883,5 +1895,53 @@ console.log('  • window.mapDebug.testAPIs() - Test all API endpoints');
 console.log('  • window.mapDebug.refreshAll() - Refresh all map data');
 console.log('  • window.mapDebug.inspectMap() - Inspect map objects');
 console.log('  • window.mapDebug.analyzeBoundaries() - Analyze boundary types');
+
+// Audio Health Widget
+async function updateAudioHealth() {
+    try {
+        const response = await fetch('/api/audio/health');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const health = await response.json();
+
+        const healthElement = document.getElementById('audio-health');
+        const statusElement = document.getElementById('audio-sources-status');
+
+        if (healthElement) {
+            healthElement.innerHTML = `${health.health_score}<span style="font-size: 0.9rem; font-weight: normal; color: var(--text-muted);">%</span>`;
+
+            // Color code based on health score
+            if (health.health_score >= 80) {
+                healthElement.style.color = '#2eb08d';
+            } else if (health.health_score >= 50) {
+                healthElement.style.color = '#f6b968';
+            } else {
+                healthElement.style.color = '#e05263';
+            }
+        }
+
+        if (statusElement) {
+            const activeText = health.active_sources === 1 ? 'source' : 'sources';
+            statusElement.textContent = `${health.active_sources} ${activeText} active`;
+        }
+    } catch (error) {
+        console.error('Failed to update audio health:', error);
+        const healthElement = document.getElementById('audio-health');
+        const statusElement = document.getElementById('audio-sources-status');
+
+        if (healthElement) {
+            healthElement.textContent = '—';
+            healthElement.style.color = 'var(--text-muted)';
+        }
+        if (statusElement) {
+            statusElement.textContent = 'Unavailable';
+        }
+    }
+}
+
+// Update audio health periodically
+updateAudioHealth();
+setInterval(updateAudioHealth, 5000);
 </script>
 {% endblock %}
