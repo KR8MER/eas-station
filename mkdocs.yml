@@ -1,0 +1,200 @@
+# MkDocs Configuration for EAS Station Documentation
+site_name: EAS Station Documentation
+site_description: Professional Emergency Alert System platform for NOAA and IPAWS alerts
+site_author: KR8MER
+site_url: https://kr8mer.github.io/eas-station/
+repo_url: https://github.com/KR8MER/eas-station
+repo_name: KR8MER/eas-station
+copyright: Copyright &copy; 2025 KR8MER. Licensed under MIT License.
+docs_dir: docs
+
+# Theme Configuration
+theme:
+  name: material
+  language: en
+  logo: static/img/eas-station-logo.svg
+  favicon: static/img/eas-station-logo.svg
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant     # Instant loading
+    - navigation.tracking    # URL updates with scroll
+    - navigation.tabs        # Top-level tabs
+    - navigation.tabs.sticky # Sticky tabs
+    - navigation.sections    # Section navigation
+    - navigation.expand      # Expand navigation by default
+    - navigation.indexes     # Section index pages
+    - navigation.top         # Back to top button
+    - search.suggest         # Search suggestions
+    - search.highlight       # Highlight search results
+    - search.share           # Share search results
+    - toc.follow            # TOC follows scroll
+    - content.code.copy     # Copy code button
+    - content.code.annotate # Code annotations
+    - content.tabs.link     # Link content tabs
+
+# Extensions
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# Plugins
+plugins:
+  - search:
+      lang: en
+      separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
+  # - minify:  # Disabled for compatibility
+  #     minify_html: true
+  #     minify_js: true
+  #     minify_css: true
+  #     htmlmin_opts:
+  #       remove_comments: true
+  #     cache_safe: true
+
+# Extra Configuration
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/KR8MER/eas-station
+      name: GitHub Repository
+  generator: false
+  version:
+    provider: mike
+
+# Additional CSS
+extra_css:
+  - stylesheets/extra.css
+
+# Navigation Structure
+nav:
+  - Home: index.md
+  - Getting Started:
+      - getting-started/index.md
+      - Quick Start: getting-started/quick-start.md
+      - Installation: getting-started/installation.md
+      - First Alert: getting-started/first-alert.md
+      - Initial Configuration: getting-started/configuration.md
+  - User Guide:
+      - user-guide/index.md
+      - Dashboard Overview: user-guide/dashboard.md
+      - Managing Alerts: user-guide/alerts.md
+      - Geographic Boundaries: user-guide/boundaries.md
+      - Audio Sources: user-guide/audio-sources.md
+      - Hardware Setup:
+          - user-guide/hardware/index.md
+          - SDR Receivers: user-guide/hardware/sdr.md
+          - GPIO Relays: user-guide/hardware/gpio.md
+          - LED Signs: user-guide/hardware/led.md
+      - Troubleshooting: user-guide/troubleshooting.md
+  - Administrator Guide:
+      - admin-guide/index.md
+      - Deployment:
+          - admin-guide/deployment/index.md
+          - Docker Deployment: admin-guide/deployment/docker.md
+          - Portainer: admin-guide/deployment/portainer.md
+      - Database:
+          - admin-guide/database/index.md
+          - Setup & Configuration: admin-guide/database/setup.md
+          - Maintenance: admin-guide/database/maintenance.md
+          - Troubleshooting: admin-guide/database/troubleshooting.md
+      - System Configuration:
+          - admin-guide/configuration/index.md
+          - Environment Variables: admin-guide/configuration/environment.md
+          - Alert Sources: admin-guide/configuration/sources.md
+          - Performance Tuning: admin-guide/configuration/performance.md
+      - Upgrades & Migration: admin-guide/upgrades.md
+      - Backup & Recovery: admin-guide/backup.md
+  - Developer Guide:
+      - developer-guide/index.md
+      - Architecture:
+          - developer-guide/architecture/index.md
+          - System Overview: developer-guide/architecture/overview.md
+          - Theory of Operation: developer-guide/architecture/theory.md
+          - Components: developer-guide/architecture/components.md
+      - Development Setup: developer-guide/setup.md
+      - Code Standards: developer-guide/standards.md
+      - Testing: developer-guide/testing.md
+      - Contributing: developer-guide/contributing.md
+      - Git Workflow: developer-guide/git-workflow.md
+  - Frontend:
+      - frontend/index.md
+      - User Interface: frontend/ui-guide.md
+      - Component Library: frontend/components.md
+      - JavaScript API: frontend/javascript-api.md
+      - Theming: frontend/theming.md
+      - Responsive Design: frontend/responsive.md
+  - API Reference:
+      - api/index.md
+      - Alerts API: api/alerts.md
+      - Boundaries API: api/boundaries.md
+      - Audio Sources API: api/audio.md
+      - System API: api/system.md
+      - Radio API: api/radio.md
+      - LED API: api/led.md
+  - Reference:
+      - reference/index.md
+      - Configuration: reference/configuration.md
+      - Event Codes: reference/event-codes.md
+      - FIPS Codes: reference/fips-codes.md
+      - SAME Protocol: reference/same.md
+      - FCC Compliance: reference/fcc-compliance.md
+      - Changelog: reference/changelog.md
+  - Legal & Policies:
+      - legal/index.md
+      - Terms of Use: legal/terms.md
+      - Privacy Policy: legal/privacy.md
+      - License: legal/license.md
+  - Roadmap:
+      - roadmap/index.md
+      - Feature Roadmap: roadmap/features.md
+      - DASDEC3 Comparison: roadmap/dasdec3.md
