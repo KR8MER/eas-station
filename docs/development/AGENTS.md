@@ -13,6 +13,7 @@ This document provides coding standards and guidelines for AI agents (including 
 5. **Document Changes**: Update relevant documentation when adding features
 6. **Check Bug Screenshots**: When discussing bugs, always check the `/bugs` directory first for screenshots
 7. **Follow Versioning**: Bug fixes increment by 0.0.+1, feature upgrades increment by 0.+1.0
+8. **No Input Ignored**: Every user request, suggestion, or bug report must be acknowledged and tracked - either implemented immediately or added to the todo list for future work. Use the TodoWrite tool to ensure nothing falls through the cracks
 
 ## 🐛 Bug Tracking & Screenshots
 
@@ -602,3 +603,31 @@ Before committing code, verify:
 ## 🤖 Agent Activity Log
 
 - 2024-11-12: Repository automation agent reviewed these guidelines before making any changes. All updates in this session comply with the established standards.
+- 2025-11-05: Added Core Principle #8: "No Input Ignored" - All user requests must be acknowledged and tracked
+
+---
+
+## 📋 Handling User Requests Comprehensively
+
+When a user provides multiple requests, suggestions, feature ideas, or bug reports in a single message:
+
+1. **Acknowledge Everything** – Read through the entire message and identify all distinct items
+2. **Create a Todo List** – Use the TodoWrite tool to capture every item, even if you can only tackle one immediately
+3. **Prioritize Wisely** – Fix critical bugs first, then features, then documentation
+4. **Communicate Clearly** – Tell the user what you're working on now and what's queued
+5. **Never Assume** – Don't assume something is out of scope or not important; if unsure, ask or track it
+
+**Example Workflow:**
+```
+User: "Fix the 404 bug, add a waveform visualizer, support M3U streams,
+       and why do my sessions keep disconnecting?"
+
+Agent Response:
+1. Create todo list with all 4 items
+2. Fix the 404 bug first (quick win)
+3. Document session disconnect possibilities
+4. Move on to feature implementations
+5. Keep user informed of progress throughout
+```
+
+This ensures the user feels heard and nothing gets lost, which is critical for maintaining a comprehensive roadmap toward **DASDEC III parity** and beyond.

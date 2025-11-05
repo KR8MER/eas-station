@@ -5,8 +5,17 @@ All notable changes to this project are documented in this file. The format is b
 tracks releases under the 2.x series.
 
 ## [Unreleased]
+
+## [2.3.15] - 2025-11-05
 ### Fixed
+- Fixed 404 error for 'Optimize Database' button in admin panel by adding missing `/admin/optimize_db` route
 - Fixed module import paths in scripts/manual_eas_event.py and scripts/manual_alert_fetch.py by adding repository root to sys.path
+
+### Added
+- Added `/admin/optimize_db` endpoint that performs PostgreSQL VACUUM ANALYZE operations to reclaim space and update query statistics
+- Added comprehensive session disconnection troubleshooting guide at docs/troubleshooting/SESSION_DISCONNECTS.md
+- Added Core Principle #8 to AGENTS.md: "No Input Ignored" - ensuring all user requests are acknowledged and tracked
+- Added "Handling User Requests Comprehensively" section to AGENTS.md with best practices for managing multiple simultaneous requests
 
 ### Changed
 - Enhanced AGENTS.md with bug screenshot workflow, documentation update requirements, and semantic versioning conventions

@@ -1105,6 +1105,70 @@ def register_maintenance_routes(app, logger):
             logger.error("Error marking expired alerts: %s", exc)
             return jsonify({"error": str(exc)}), 500
 
+    @app.route("/admin/optimize_db", methods=["POST"])
+    def optimize_database():
+        """Optimize database performance by running VACUUM and ANALYZE."""
+        try:
+            logger.info("Starting database optimization")
+
+            # Get initial database size
+            size_before = db.session.execute(
+                text("SELECT pg_database_size(current_database())")
+            ).scalar()
+
+            # Run VACUUM ANALYZE to reclaim space and update statistics
+            # Note: VACUUM cannot run inside a transaction block
+            db.session.commit()  # Ensure any pending transaction is committed
+
+            connection = db.engine.raw_connection()
+            try:
+                connection.set_isolation_level(0)  # AUTOCOMMIT mode
+                cursor = connection.cursor()
+                cursor.execute("VACUUM ANALYZE")
+                cursor.close()
+                connection.set_isolation_level(1)  # Back to READ COMMITTED
+            finally:
+                connection.close()
+
+            # Get final database size
+            size_after = db.session.execute(
+                text("SELECT pg_database_size(current_database())")
+            ).scalar()
+
+            space_freed = size_before - size_after if size_before and size_after else 0
+
+            log_entry = SystemLog(
+                level="INFO",
+                message="Database optimization completed",
+                module="admin",
+                details={
+                    "optimized_at_utc": utc_now().isoformat(),
+                    "optimized_at_local": local_now().isoformat(),
+                    "size_before": format_bytes(size_before) if size_before else "Unknown",
+                    "size_after": format_bytes(size_after) if size_after else "Unknown",
+                    "space_freed": format_bytes(space_freed) if space_freed > 0 else "None",
+                },
+            )
+            db.session.add(log_entry)
+            db.session.commit()
+
+            logger.info("Database optimization completed successfully")
+
+            message = "Database optimization completed successfully"
+            if space_freed > 0:
+                message = f"Database optimized. Freed {format_bytes(space_freed)} of space."
+
+            return jsonify({
+                "message": message,
+                "size_before": format_bytes(size_before) if size_before else "Unknown",
+                "size_after": format_bytes(size_after) if size_after else "Unknown",
+                "space_freed": format_bytes(space_freed) if space_freed > 0 else "None",
+            })
+
+        except Exception as exc:
+            logger.error("Error optimizing database: %s", exc)
+            return jsonify({"error": f"Database optimization failed: {str(exc)}"}), 500
+
 
 __all__ = [
     "NOAAImportError",
