@@ -122,12 +122,6 @@ from app_core.led import (
     initialise_led_controller,
     led_controller,
 )
-from app_core.vfd import (
-    VFD_AVAILABLE,
-    ensure_vfd_tables,
-    initialise_vfd_controller,
-    vfd_controller,
-)
 from app_core.location import get_location_settings, update_location_settings
 from app_core.models import (
     AdminUser,
@@ -810,9 +804,6 @@ def initialize_database():
             if not LED_AVAILABLE:
                 initialise_led_controller(logger)
                 ensure_led_tables()
-            if not VFD_AVAILABLE:
-                initialise_vfd_controller(logger)
-                ensure_vfd_tables()
         except OperationalError as db_error:
             _db_initialization_error = db_error
             logger.error("Database initialization failed: %s", db_error)
