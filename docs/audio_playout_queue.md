@@ -260,7 +260,7 @@ The `AudioOutputService` generates playout events that can be stored in the `met
 
 ### Example 1: Presidential Alert Preempts Everything
 
-```
+```text
 Initial Queue:
 1. Tornado Warning (LOCAL, EXTREME, IMMEDIATE) - currently playing
 2. Severe Thunderstorm Warning (LOCAL, SEVERE, IMMEDIATE) - queued
@@ -279,7 +279,7 @@ Final Queue:
 
 ### Example 2: Severity-Based Priority
 
-```
+```text
 Queue:
 1. Flood Advisory (LOCAL, MINOR, EXPECTED)
 
@@ -296,7 +296,7 @@ Result (ordered by precedence, severity, urgency):
 
 ### Example 3: Test vs. Operational Alerts
 
-```
+```text
 Queue:
 1. Required Monthly Test (RMT) - currently playing
 

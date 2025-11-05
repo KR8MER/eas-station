@@ -229,7 +229,7 @@ class AudioOutputService:
                 self._play_alert(item)
 
             except Exception as exc:
-                self.logger.error(f'Error in playout worker: {exc}', exc_info=True)
+                self.logger.exception(f'Error in playout worker: {exc}')
                 time.sleep(1.0)
 
         self.logger.info('Playout worker thread stopped')
@@ -244,6 +244,7 @@ class AudioOutputService:
         start_time = time.time()
         start_dt = datetime.now(timezone.utc)
         success = False
+        play_success = False
         error_msg: Optional[str] = None
 
         try:
@@ -268,13 +269,22 @@ class AudioOutputService:
                 play_success = self._play_audio_file(item.audio_path)
                 if not play_success and not self._interrupt_event.is_set():
                     error_msg = f'Failed to play audio: {item.audio_path}'
+            else:
+                self.logger.warning('No audio path provided for alert %s', item.alert_id)
+                error_msg = 'No audio path provided'
 
             # Play EOM if present and main playback succeeded
             if play_success and item.eom_path and not self._interrupt_event.is_set():
                 self._play_audio_file(item.eom_path)
 
             # Determine overall success
-            success = play_success or self._interrupt_event.is_set()
+            # Interrupted alerts should NOT be marked as successful
+            if self._interrupt_event.is_set():
+                success = False
+                if not error_msg:
+                    error_msg = 'Playback interrupted by higher-priority alert'
+            else:
+                success = play_success
 
             # Deactivate GPIO relay
             if gpio_activated:
@@ -284,7 +294,7 @@ class AudioOutputService:
                     self.logger.warning(f'GPIO deactivation failed: {exc}')
 
         except Exception as exc:
-            self.logger.error(f'Error playing alert: {exc}', exc_info=True)
+            self.logger.exception(f'Error playing alert: {exc}')
             error_msg = str(exc)
             success = False
 
@@ -297,6 +307,21 @@ class AudioOutputService:
             if self._interrupt_event.is_set():
                 status = PlayoutStatus.INTERRUPTED
                 self._interrupt_event.clear()
+
+                # Re-queue interrupted items so they can be played later
+                try:
+                    requeued_item = self.queue.requeue_interrupted_item(item)
+                    self.logger.info(
+                        'Re-queued interrupted alert %s (event=%s) as queue_id=%s',
+                        item.alert_id,
+                        item.event_code,
+                        requeued_item.queue_id,
+                    )
+                except Exception as exc:
+                    self.logger.exception(
+                        f'Failed to re-queue interrupted alert {item.alert_id}: {exc}'
+                    )
+
             elif success:
                 status = PlayoutStatus.COMPLETED
             else:
@@ -311,12 +336,19 @@ class AudioOutputService:
                 error=error_msg,
             ))
 
-            # Mark item as completed in queue
-            self.queue.mark_completed(
-                item,
-                success=success,
-                error=error_msg,
-            )
+            # Mark item as completed in queue (or failed for interrupted items)
+            # Interrupted items are NOT marked as completed since they were re-queued
+            if status != PlayoutStatus.INTERRUPTED:
+                self.queue.mark_completed(
+                    item,
+                    success=success,
+                    error=error_msg,
+                )
+            else:
+                # Clear current item for interrupted alerts
+                # (they've been re-queued with a new ID)
+                if self.queue._current_item and self.queue._current_item.queue_id == item.queue_id:
+                    self.queue._current_item = None
 
             self.logger.info(
                 'Playout %s for alert %s (event=%s) in %.1f ms',
@@ -350,7 +382,8 @@ class AudioOutputService:
         try:
             with self._process_lock:
                 # Start the playback process
-                self._current_process = subprocess.Popen(
+                # S603: subprocess call - command is from config, validated by operator
+                self._current_process = subprocess.Popen(  # noqa: S603
                     command,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
@@ -362,12 +395,28 @@ class AudioOutputService:
                     self._terminate_current_process()
                     return False
 
+                # Check for higher-priority alerts during playback
+                # This enables preemption per FCC requirements
+                if self.queue.peek() and self.queue.current_item:
+                    next_item = self.queue.peek()
+                    current = self.queue.current_item
+                    if self.queue._should_preempt(next_item, current):
+                        self.logger.warning(
+                            'Higher-priority alert detected during playback, '
+                            'interrupting for %s',
+                            next_item.event_code
+                        )
+                        self._interrupt_event.set()
+                        self._terminate_current_process()
+                        return False
+
                 # Check if process has finished
                 returncode = self._current_process.poll()
                 if returncode is not None:
                     break
 
                 # Sleep briefly before checking again
+                # Use a short interval to ensure responsive preemption
                 time.sleep(0.1)
 
             with self._process_lock:
@@ -382,8 +431,8 @@ class AudioOutputService:
                 )
                 return False
 
-        except Exception as exc:
-            self.logger.error(f'Failed to play audio {audio_path}: {exc}')
+        except (OSError, subprocess.SubprocessError) as exc:
+            self.logger.exception(f'Failed to play audio {audio_path}: {exc}')
             with self._process_lock:
                 self._current_process = None
             return False
@@ -431,7 +480,7 @@ class AudioOutputService:
             try:
                 callback(event)
             except Exception as exc:
-                self.logger.error(f'Error in event callback: {exc}', exc_info=True)
+                self.logger.exception(f'Error in event callback: {exc}')
 
     def get_status(self) -> Dict[str, Any]:
         """

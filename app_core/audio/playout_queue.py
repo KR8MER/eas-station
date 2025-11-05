@@ -416,6 +416,57 @@ class AudioPlayoutQueue:
             self._next_queue_id += 1
             return queue_id
 
+    def requeue_interrupted_item(self, item: PlayoutItem) -> PlayoutItem:
+        """
+        Re-queue an interrupted item with a fresh queue ID.
+
+        When a lower-priority alert is preempted by a higher-priority alert,
+        it should be re-queued so it can be played after the interruption.
+
+        Args:
+            item: The PlayoutItem that was interrupted
+
+        Returns:
+            New PlayoutItem with fresh queue ID, ready for re-queuing
+        """
+        with self._lock:
+            # Create a new item with the same priority but fresh queue ID
+            new_queue_id = self.get_next_queue_id()
+
+            new_item = PlayoutItem(
+                precedence_level=item.precedence_level,
+                severity=item.severity,
+                urgency=item.urgency,
+                timestamp=item.timestamp,  # Keep original timestamp
+                queue_id=new_queue_id,
+                alert_id=item.alert_id,
+                eas_message_id=item.eas_message_id,
+                event_code=item.event_code,
+                event_name=item.event_name,
+                same_header=item.same_header,
+                audio_path=item.audio_path,
+                eom_path=item.eom_path,
+                metadata=dict(item.metadata),  # Copy metadata
+            )
+
+            # Add metadata about the interruption
+            new_item.metadata['requeued'] = True
+            new_item.metadata['original_queue_id'] = item.queue_id
+            new_item.metadata['requeue_reason'] = 'Interrupted by higher-priority alert'
+            new_item.metadata['requeued_at'] = datetime.now(timezone.utc).isoformat()
+
+            # Enqueue the new item
+            heapq.heappush(self._queue, new_item)
+
+            self.logger.info(
+                'Re-queued interrupted alert %s (event=%s) with new queue_id=%s',
+                new_item.alert_id,
+                new_item.event_code,
+                new_queue_id,
+            )
+
+            return new_item
+
     def _should_preempt(
         self,
         new_item: PlayoutItem,
