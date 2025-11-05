@@ -528,7 +528,8 @@ class StreamSourceAdapter(AudioSourceAdapter):
                         self._stop_capture()
                         self._start_capture()
                         return None
-                    except Exception:
+                    except Exception as reconnect_err:
+                        logger.error(f"Reconnection attempt failed: {reconnect_err}")
                         self.status = AudioSourceStatus.DISCONNECTED
                         return None
                 else:

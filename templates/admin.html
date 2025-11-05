@@ -1003,7 +1003,8 @@
                     </div>
                     <div class="mb-3">
                         <label for="envContent" class="form-label fw-bold">stack.env Content</label>
-                        <textarea id="envContent" class="form-control font-monospace" rows="25" style="font-size: 0.85rem;"></textarea>
+                        <textarea id="envContent" class="form-control font-monospace" rows="25" style="font-size: 0.85rem;"
+                                  spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
                         <div class="form-text">
                             <i class="fas fa-info-circle"></i>
                             Edit the configuration file above. Lines starting with # are comments.
@@ -5082,15 +5083,22 @@
             try {
                 showStatus('📖 Loading environment configuration...', 'info');
                 const response = await fetch('/admin/env_config', { method: 'GET' });
-                const result = await response.json();
+
+                // Handle authentication failure
+                if (response.status === 401) {
+                    window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+                    return;
+                }
+
+                const result = await response.json().catch(() => ({}));
 
                 if (response.ok) {
-                    document.getElementById('envContent').value = result.content;
+                    document.getElementById('envContent').value = result.content || '';
                     const modal = new bootstrap.Modal(document.getElementById('envEditorModal'));
                     modal.show();
                     showStatus('✅ Configuration loaded', 'success');
                 } else {
-                    showStatus(`❌ ${result.error}`, 'danger');
+                    showStatus(`❌ ${result.error || 'Failed to load configuration'}`, 'danger');
                 }
             } catch (error) {
                 showStatus(`❌ Failed to load configuration: ${error.message}`, 'danger');
@@ -5119,22 +5127,32 @@
                 showStatus('💾 Saving configuration...', 'info');
                 const response = await fetch('/admin/env_config', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                    },
                     body: JSON.stringify({ content })
                 });
-                const result = await response.json();
+
+                // Handle authentication failure
+                if (response.status === 401) {
+                    window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+                    return;
+                }
+
+                const result = await response.json().catch(() => ({}));
 
                 if (response.ok) {
-                    showStatus(`✅ ${result.message}`, 'success');
+                    showStatus(`✅ ${result.message || 'Configuration saved'}`, 'success');
                     const modal = bootstrap.Modal.getInstance(document.getElementById('envEditorModal'));
-                    modal.hide();
+                    if (modal) modal.hide();
 
                     // Show restart reminder
                     setTimeout(() => {
                         showStatus('⚠️ Remember to restart the application for changes to take effect!', 'warning');
                     }, 2000);
                 } else {
-                    showStatus(`❌ ${result.error}`, 'danger');
+                    showStatus(`❌ ${result.error || 'Failed to save configuration'}`, 'danger');
                 }
             } catch (error) {
                 showStatus(`❌ Failed to save configuration: ${error.message}`, 'danger');
