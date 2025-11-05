@@ -11,6 +11,7 @@ from .auth import register_auth_routes
 from .boundaries import register_boundary_routes
 from .coverage import calculate_coverage_percentages
 from .dashboard import register_dashboard_routes
+from .environment import register_environment_routes
 from .intersections import register_intersection_routes
 from .maintenance import register_maintenance_routes
 
@@ -23,6 +24,7 @@ def register(app, logger):
     register_audio_routes(app, logger, eas_config)
     register_audio_ingest_routes(app, logger)
     register_api_routes(app, logger)
+    register_environment_routes(app, logger)
     register_maintenance_routes(app, logger)
     register_intersection_routes(app, logger)
     register_boundary_routes(app, logger)

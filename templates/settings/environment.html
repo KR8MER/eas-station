@@ -1,0 +1,600 @@
+{% extends "base.html" %}
+
+{% block title %}Environment Settings - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+    .settings-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+
+    .settings-header {
+        margin-bottom: 2rem;
+    }
+
+    .settings-header h1 {
+        font-size: 2rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .settings-header p {
+        color: var(--bs-secondary);
+        margin-bottom: 1rem;
+    }
+
+    .validation-banner {
+        margin-bottom: 1.5rem;
+    }
+
+    .category-nav {
+        position: sticky;
+        top: 80px;
+        max-height: calc(100vh - 100px);
+        overflow-y: auto;
+    }
+
+    .category-btn {
+        width: 100%;
+        text-align: left;
+        padding: 0.75rem 1rem;
+        margin-bottom: 0.5rem;
+        border: 1px solid var(--bs-border-color);
+        background: var(--bs-body-bg);
+        border-radius: 0.375rem;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .category-btn:hover {
+        background: var(--bs-light);
+        border-color: var(--bs-primary);
+    }
+
+    .category-btn.active {
+        background: var(--bs-primary);
+        color: white;
+        border-color: var(--bs-primary);
+    }
+
+    .category-btn i {
+        width: 1.25rem;
+        text-align: center;
+    }
+
+    .category-info {
+        flex: 1;
+    }
+
+    .category-name {
+        font-weight: 600;
+        display: block;
+    }
+
+    .category-desc {
+        font-size: 0.875rem;
+        opacity: 0.8;
+        display: block;
+    }
+
+    .category-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 1rem;
+        background: rgba(255,255,255,0.2);
+    }
+
+    .category-section {
+        display: none;
+        background: var(--bs-body-bg);
+        border: 1px solid var(--bs-border-color);
+        border-radius: 0.5rem;
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .category-section.active {
+        display: block;
+    }
+
+    .category-section-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid var(--bs-border-color);
+    }
+
+    .category-section-header i {
+        font-size: 1.75rem;
+        color: var(--bs-primary);
+    }
+
+    .category-section-header h2 {
+        font-size: 1.5rem;
+        margin: 0;
+    }
+
+    .variable-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .variable-group:last-child {
+        margin-bottom: 0;
+    }
+
+    .variable-label {
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .variable-required {
+        color: var(--bs-danger);
+    }
+
+    .variable-sensitive {
+        font-size: 0.75rem;
+        padding: 0.125rem 0.5rem;
+        border-radius: 0.25rem;
+        background: var(--bs-warning);
+        color: var(--bs-dark);
+    }
+
+    .variable-description {
+        font-size: 0.875rem;
+        color: var(--bs-secondary);
+        margin-top: 0.25rem;
+    }
+
+    .form-control, .form-select {
+        font-family: 'Courier New', monospace;
+    }
+
+    .actions-bar {
+        position: sticky;
+        bottom: 0;
+        background: var(--bs-body-bg);
+        border-top: 2px solid var(--bs-border-color);
+        padding: 1.5rem;
+        margin: 0 -2rem -2rem -2rem;
+        border-radius: 0 0 0.5rem 0.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .changed-indicator {
+        display: none;
+        color: var(--bs-warning);
+        font-weight: 600;
+    }
+
+    .changed-indicator.show {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    @media (max-width: 991px) {
+        .category-nav {
+            position: static;
+            max-height: none;
+            margin-bottom: 2rem;
+        }
+
+        .settings-container {
+            padding: 1rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="settings-container">
+    <!-- Header -->
+    <div class="settings-header">
+        <h1><i class="fas fa-cog"></i> Environment Settings</h1>
+        <p>Manage application configuration and environment variables. Changes require a restart to take effect.</p>
+
+        <!-- Validation Banner -->
+        <div id="validation-banner" class="validation-banner"></div>
+    </div>
+
+    <div class="row">
+        <!-- Category Navigation -->
+        <div class="col-lg-3">
+            <div class="category-nav" id="category-nav">
+                <!-- Populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Settings Content -->
+        <div class="col-lg-9">
+            <div id="settings-content">
+                <!-- Category sections populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let categoriesData = {};
+    let currentValues = {};
+    let hasChanges = false;
+
+    // Load categories and variables on page load
+    async function loadSettings() {
+        try {
+            showLoading();
+
+            // Load validation status
+            const validationResp = await fetch('/api/environment/validate');
+            const validation = await validationResp.json();
+            displayValidation(validation);
+
+            // Load all variables
+            const resp = await fetch('/api/environment/variables');
+            categoriesData = await resp.json();
+
+            // Store current values
+            for (const [catId, catData] of Object.entries(categoriesData)) {
+                for (const variable of catData.variables) {
+                    currentValues[variable.key] = variable.value;
+                }
+            }
+
+            renderCategoryNav();
+            renderCategories();
+
+            // Activate first category
+            const firstCat = Object.keys(categoriesData)[0];
+            if (firstCat) {
+                activateCategory(firstCat);
+            }
+
+            hideLoading();
+        } catch (error) {
+            console.error('Error loading settings:', error);
+            showToast('Error loading settings', 'danger');
+            hideLoading();
+        }
+    }
+
+    function displayValidation(validation) {
+        const banner = document.getElementById('validation-banner');
+        if (!validation.issues.length && !validation.warnings.length) {
+            banner.innerHTML = '';
+            return;
+        }
+
+        const issues = [...validation.issues, ...validation.warnings];
+        const hasErrors = issues.some(i => i.severity === 'error');
+
+        const alertClass = hasErrors ? 'alert-danger' : 'alert-warning';
+        const icon = hasErrors ? 'fa-exclamation-triangle' : 'fa-info-circle';
+
+        let html = `
+            <div class="alert ${alertClass} alert-dismissible fade show">
+                <i class="fas ${icon}"></i>
+                <strong>${hasErrors ? 'Configuration Issues' : 'Configuration Warnings'}</strong>
+                <ul class="mb-0 mt-2">
+        `;
+
+        for (const issue of issues) {
+            html += `<li><strong>${issue.variable}:</strong> ${issue.message}</li>`;
+        }
+
+        html += `
+                </ul>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+
+        banner.innerHTML = html;
+    }
+
+    function renderCategoryNav() {
+        const nav = document.getElementById('category-nav');
+        let html = '';
+
+        for (const [catId, catData] of Object.entries(categoriesData)) {
+            html += `
+                <button class="category-btn" data-category="${catId}" onclick="activateCategory('${catId}')">
+                    <i class="fas ${catData.icon}"></i>
+                    <div class="category-info">
+                        <span class="category-name">${catData.name}</span>
+                        <span class="category-desc">${catData.description}</span>
+                    </div>
+                    <span class="category-badge">${catData.variables.length}</span>
+                </button>
+            `;
+        }
+
+        nav.innerHTML = html;
+    }
+
+    function renderCategories() {
+        const content = document.getElementById('settings-content');
+        let html = '';
+
+        for (const [catId, catData] of Object.entries(categoriesData)) {
+            html += `
+                <div class="category-section" id="category-${catId}">
+                    <div class="category-section-header">
+                        <i class="fas ${catData.icon}"></i>
+                        <div>
+                            <h2>${catData.name}</h2>
+                            <p class="text-muted mb-0">${catData.description}</p>
+                        </div>
+                    </div>
+
+                    <form id="form-${catId}">
+            `;
+
+            for (const variable of catData.variables) {
+                html += renderVariable(variable);
+            }
+
+            html += `
+                        <div class="actions-bar">
+                            <div class="changed-indicator" id="changed-${catId}">
+                                <i class="fas fa-exclamation-circle"></i>
+                                <span>Unsaved changes</span>
+                            </div>
+                            <div>
+                                <button type="button" class="btn btn-secondary" onclick="resetCategory('${catId}')">
+                                    <i class="fas fa-undo"></i> Reset
+                                </button>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save"></i> Save Changes
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            `;
+        }
+
+        content.innerHTML = html;
+
+        // Attach form submit handlers
+        for (const catId of Object.keys(categoriesData)) {
+            const form = document.getElementById(`form-${catId}`);
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                saveCategory(catId);
+            });
+
+            // Attach change handlers
+            const inputs = form.querySelectorAll('input, select, textarea');
+            inputs.forEach(input => {
+                input.addEventListener('input', () => checkChanges(catId));
+            });
+        }
+    }
+
+    function renderVariable(variable) {
+        const required = variable.required ? '<span class="variable-required">*</span>' : '';
+        const sensitive = variable.sensitive ? '<span class="variable-sensitive"><i class="fas fa-lock"></i> Sensitive</span>' : '';
+
+        let inputHtml = '';
+        const inputId = `var-${variable.key}`;
+        const value = escapeHtml(variable.value || '');
+
+        if (variable.type === 'boolean') {
+            const checked = value === 'true' ? 'checked' : '';
+            inputHtml = `
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="${inputId}" name="${variable.key}" ${checked}>
+                    <label class="form-check-label" for="${inputId}">${variable.description || variable.label}</label>
+                </div>
+            `;
+        } else if (variable.type === 'select') {
+            inputHtml = `<select class="form-select" id="${inputId}" name="${variable.key}" ${variable.required ? 'required' : ''}>`;
+            for (const option of variable.options || []) {
+                const selected = value === option ? 'selected' : '';
+                inputHtml += `<option value="${option}" ${selected}>${option}</option>`;
+            }
+            inputHtml += `</select>`;
+        } else if (variable.type === 'textarea') {
+            inputHtml = `<textarea class="form-control" id="${inputId}" name="${variable.key}" rows="3" placeholder="${variable.placeholder || ''}" ${variable.required ? 'required' : ''}>${value}</textarea>`;
+        } else {
+            const inputType = variable.type || 'text';
+            const step = variable.step ? `step="${variable.step}"` : '';
+            const min = variable.min !== undefined ? `min="${variable.min}"` : '';
+            const max = variable.max !== undefined ? `max="${variable.max}"` : '';
+            const maxlength = variable.maxlength ? `maxlength="${variable.maxlength}"` : '';
+            const placeholder = variable.placeholder ? `placeholder="${variable.placeholder}"` : '';
+
+            inputHtml = `<input type="${inputType}" class="form-control" id="${inputId}" name="${variable.key}" value="${value}" ${step} ${min} ${max} ${maxlength} ${placeholder} ${variable.required ? 'required' : ''}>`;
+        }
+
+        return `
+            <div class="variable-group">
+                <label class="variable-label" for="${inputId}">
+                    ${variable.label}
+                    ${required}
+                    ${sensitive}
+                </label>
+                ${inputHtml}
+                ${variable.description && variable.type !== 'boolean' ? `<div class="variable-description">${variable.description}</div>` : ''}
+            </div>
+        `;
+    }
+
+    function activateCategory(catId) {
+        // Update nav buttons
+        document.querySelectorAll('.category-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.querySelector(`[data-category="${catId}"]`).classList.add('active');
+
+        // Update sections
+        document.querySelectorAll('.category-section').forEach(section => {
+            section.classList.remove('active');
+        });
+        document.getElementById(`category-${catId}`).classList.add('active');
+    }
+
+    function checkChanges(catId) {
+        const form = document.getElementById(`form-${catId}`);
+        const formData = new FormData(form);
+        let hasChanges = false;
+
+        const catData = categoriesData[catId];
+        for (const variable of catData.variables) {
+            let currentValue;
+            if (variable.type === 'boolean') {
+                const checkbox = form.querySelector(`[name="${variable.key}"]`);
+                currentValue = checkbox.checked ? 'true' : 'false';
+            } else {
+                currentValue = formData.get(variable.key) || '';
+            }
+
+            const originalValue = currentValues[variable.key] || '';
+            if (currentValue !== originalValue) {
+                hasChanges = true;
+                break;
+            }
+        }
+
+        const indicator = document.getElementById(`changed-${catId}`);
+        if (hasChanges) {
+            indicator.classList.add('show');
+        } else {
+            indicator.classList.remove('show');
+        }
+    }
+
+    function resetCategory(catId) {
+        const form = document.getElementById(`form-${catId}`);
+        const catData = categoriesData[catId];
+
+        for (const variable of catData.variables) {
+            const input = form.querySelector(`[name="${variable.key}"]`);
+            const originalValue = currentValues[variable.key] || '';
+
+            if (variable.type === 'boolean') {
+                input.checked = originalValue === 'true';
+            } else {
+                input.value = originalValue;
+            }
+        }
+
+        checkChanges(catId);
+    }
+
+    async function saveCategory(catId) {
+        const form = document.getElementById(`form-${catId}`);
+        const formData = new FormData(form);
+        const updates = {};
+
+        const catData = categoriesData[catId];
+        for (const variable of catData.variables) {
+            if (variable.type === 'boolean') {
+                const checkbox = form.querySelector(`[name="${variable.key}"]`);
+                updates[variable.key] = checkbox.checked ? 'true' : 'false';
+            } else {
+                updates[variable.key] = formData.get(variable.key) || '';
+            }
+        }
+
+        try {
+            showLoading();
+
+            const resp = await fetch('/api/environment/variables', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ variables: updates }),
+            });
+
+            const result = await resp.json();
+
+            if (resp.ok) {
+                showToast(result.message, 'success');
+
+                // Update current values
+                Object.assign(currentValues, updates);
+                checkChanges(catId);
+
+                // Show restart warning
+                if (result.restart_required) {
+                    setTimeout(() => {
+                        showToast('Restart the application for changes to take effect', 'warning', 10000);
+                    }, 1000);
+                }
+
+                // Reload validation
+                const validationResp = await fetch('/api/environment/validate');
+                const validation = await validationResp.json();
+                displayValidation(validation);
+            } else {
+                showToast(result.error || 'Failed to save settings', 'danger');
+            }
+
+            hideLoading();
+        } catch (error) {
+            console.error('Error saving settings:', error);
+            showToast('Error saving settings', 'danger');
+            hideLoading();
+        }
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function showLoading() {
+        // You can implement a loading overlay here
+    }
+
+    function hideLoading() {
+        // Hide loading overlay
+    }
+
+    function showToast(message, type = 'info', duration = 5000) {
+        const toastContainer = document.querySelector('.toast-container');
+        if (!toastContainer) return;
+
+        const toastId = 'toast-' + Date.now();
+        const bgClass = type === 'success' ? 'bg-success' : type === 'danger' ? 'bg-danger' : type === 'warning' ? 'bg-warning' : 'bg-info';
+
+        const toast = document.createElement('div');
+        toast.id = toastId;
+        toast.className = `toast align-items-center text-white ${bgClass} border-0`;
+        toast.setAttribute('role', 'alert');
+        toast.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body">${message}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        `;
+
+        toastContainer.appendChild(toast);
+        const bsToast = new bootstrap.Toast(toast, { delay: duration });
+        bsToast.show();
+
+        toast.addEventListener('hidden.bs.toast', () => {
+            toast.remove();
+        });
+    }
+
+    // Load settings on page load
+    document.addEventListener('DOMContentLoaded', loadSettings);
+</script>
+{% endblock %}
