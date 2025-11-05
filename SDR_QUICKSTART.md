@@ -31,32 +31,34 @@ lsusb | grep -i airspy
 
 ```bash
 # Option A: Build locally (includes RTL-SDR + Airspy by default)
-docker compose build app
+sudo docker compose build app
 
 # Option B: Pull pre-built image (if available)
-docker pull ghcr.io/kr8mer/eas-station:latest
+sudo docker pull ghcr.io/kr8mer/eas-station:latest
 ```
 
 **Note**: Both RTL-SDR and Airspy are included by default. No build args needed!
+
+> **Non-root users**: Docker commands typically require `sudo`. If you've added your user to the `docker` group, you can omit `sudo`.
 
 ### 3. Start the Containers
 
 ```bash
 # Start all services
-docker compose up -d
+sudo docker compose up -d
 
 # Or with embedded database
-docker compose -f docker-compose.yml -f docker-compose.embedded-db.yml up -d
+sudo docker compose -f docker-compose.yml -f docker-compose.embedded-db.yml up -d
 ```
 
 ### 4. Verify SoapySDR Installation
 
 ```bash
 # Test SoapySDR from inside the container
-docker compose exec app SoapySDRUtil --find
+sudo docker compose exec app SoapySDRUtil --find
 
 # Run the diagnostic script
-docker compose exec app python scripts/sdr_diagnostics.py
+sudo docker compose exec app python scripts/sdr_diagnostics.py
 ```
 
 You should see output showing your connected SDR device(s).
@@ -71,7 +73,7 @@ You should see output showing your connected SDR device(s).
 
 ## Expected Output
 
-When you run `docker compose exec app SoapySDRUtil --find`, you should see something like:
+When you run `sudo docker compose exec app SoapySDRUtil --find`, you should see something like:
 
 ```
 ######################################################
@@ -103,8 +105,8 @@ Found device 0
 ### No devices found?
 
 1. **Check USB connection**: `lsusb` on the host should show your device
-2. **Restart containers**: `docker compose restart`
-3. **Check logs**: `docker compose logs app`
+2. **Restart containers**: `sudo docker compose restart`
+3. **Check logs**: `sudo docker compose logs app`
 4. **Blacklist kernel drivers** (for RTL-SDR):
    ```bash
    # On the host, create /etc/modprobe.d/blacklist-rtl.conf:
@@ -120,10 +122,10 @@ Found device 0
 
 Run the full diagnostic tool:
 ```bash
-docker compose exec app python scripts/sdr_diagnostics.py --enumerate
-docker compose exec app python scripts/sdr_diagnostics.py --capabilities rtlsdr
+sudo docker compose exec app python scripts/sdr_diagnostics.py --enumerate
+sudo docker compose exec app python scripts/sdr_diagnostics.py --capabilities rtlsdr
 # Or for Airspy:
-docker compose exec app python scripts/sdr_diagnostics.py --capabilities airspy
+sudo docker compose exec app python scripts/sdr_diagnostics.py --capabilities airspy
 ```
 
 ## Next Steps
@@ -186,6 +188,6 @@ If you encounter issues:
 
 Include:
 - Output of `lsusb` on the host
-- Output of `docker compose exec app SoapySDRUtil --find`
-- Output of `docker compose exec app python scripts/sdr_diagnostics.py`
-- Relevant logs from `docker compose logs app`
+- Output of `sudo docker compose exec app SoapySDRUtil --find`
+- Output of `sudo docker compose exec app python scripts/sdr_diagnostics.py`
+- Relevant logs from `sudo docker compose logs app`

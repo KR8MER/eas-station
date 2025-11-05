@@ -257,12 +257,12 @@ Before committing, always test in Docker:
 
 ```bash
 # Rebuild and test
-docker compose build
-docker compose up -d
-docker compose logs -f app
+sudo docker compose build
+sudo docker compose up -d
+sudo docker compose logs -f app
 
 # Check for errors
-docker compose ps
+sudo docker compose ps
 curl http://localhost:5000/health
 ```
 
@@ -443,10 +443,10 @@ def process_alerts(alert_ids=None):
 Before committing changes:
 
 - [ ] Code passes Python syntax check: `python3 -m py_compile app.py`
-- [ ] Docker build succeeds: `docker compose build`
-- [ ] Application starts without errors: `docker compose up -d`
+- [ ] Docker build succeeds: `sudo docker compose build`
+- [ ] Application starts without errors: `sudo docker compose up -d`
 - [ ] Health check passes: `curl http://localhost:5000/health`
-- [ ] Logs show no errors: `docker compose logs -f app`
+- [ ] Logs show no errors: `sudo docker compose logs -f app`
 - [ ] UI tested in browser (light and dark mode)
 - [ ] Database queries work as expected
 

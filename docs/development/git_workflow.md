@@ -17,14 +17,14 @@ Follow these steps to ensure your local `eas-station` environment tracks the lat
    * Use `--ff-only` to guarantee you fast-forward to the remote history without creating a merge commit.
 4. **Rebuild and restart your containers.**
    ```bash
-   docker compose down
-   docker compose up -d --build
+   sudo docker compose down
+   sudo docker compose up -d --build
    ```
-   * Running `docker compose down` first ensures the old containers are removed before rebuilding.
+   * Running `sudo docker compose down` first ensures the old containers are removed before rebuilding.
 5. **Verify the running code version.**
    ```bash
-   docker compose exec web git rev-parse --short HEAD
+   sudo docker compose exec web git rev-parse --short HEAD
    ```
    * The hash shown should match the latest commit from `git log origin/<branch> -1`.
 
-If you rely on system-wide Git or Docker privileges (e.g., using `sudo`), apply them consistently to each command above. Mixing privileged and non-privileged commands can leave your working tree or containers in a mismatched state.
+**Note:** Docker commands require root privileges when running as a non-root user. Apply `sudo` consistently to all Docker commands to avoid permission issues.
