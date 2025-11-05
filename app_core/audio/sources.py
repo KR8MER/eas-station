@@ -40,6 +40,14 @@ except ImportError:
     RADIO_AVAILABLE = False
     logger.warning("Radio manager not available - SDR source adapter will be disabled")
 
+try:
+    import requests
+    import urllib.parse
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    REQUESTS_AVAILABLE = False
+    logger.warning("Requests not available - Stream source adapter will be disabled")
+
 
 class SDRSourceAdapter(AudioSourceAdapter):
     """Audio source adapter for SDR receivers via the radio manager."""
@@ -375,6 +383,235 @@ class FileSourceAdapter(AudioSourceAdapter):
             raise RuntimeError("pydub not available for MP3 playback - install with: pip install pydub")
 
 
+class StreamSourceAdapter(AudioSourceAdapter):
+    """Audio source adapter for HTTP/M3U audio streams."""
+
+    def __init__(self, config: AudioSourceConfig):
+        super().__init__(config)
+        self._stream_url = self.config.device_params.get('stream_url', '')
+        self._session: Optional[requests.Session] = None
+        self._stream_response = None
+        self._buffer = bytearray()
+        self._stream_format = self.config.device_params.get('format', 'mp3')  # mp3, aac, raw
+        self._decoder = None
+        self._reconnect_attempts = 0
+        self._max_reconnect_attempts = 5
+
+    def _parse_m3u(self, url: str) -> str:
+        """Parse M3U playlist and return the first stream URL."""
+        try:
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+
+            content = response.text
+            # Parse M3U content - look for http/https URLs
+            for line in content.split('\n'):
+                line = line.strip()
+                if line and not line.startswith('#') and (line.startswith('http://') or line.startswith('https://')):
+                    logger.info(f"Found stream URL in M3U: {line}")
+                    return line
+
+            raise ValueError("No valid stream URL found in M3U playlist")
+        except Exception as e:
+            raise RuntimeError(f"Failed to parse M3U playlist: {e}")
+
+    def _start_capture(self) -> None:
+        """Start HTTP stream audio capture."""
+        if not REQUESTS_AVAILABLE:
+            raise RuntimeError("Requests library not available")
+
+        try:
+            stream_url = self._stream_url
+
+            # Check if this is an M3U playlist
+            if stream_url.lower().endswith('.m3u') or stream_url.lower().endswith('.m3u8'):
+                stream_url = self._parse_m3u(stream_url)
+
+            # Create session and start streaming
+            self._session = requests.Session()
+            self._session.headers.update({
+                'User-Agent': 'EAS-Station/1.0',
+                'Icy-MetaData': '1'  # Request Shoutcast/Icecast metadata
+            })
+
+            logger.info(f"Connecting to stream: {stream_url}")
+            self._stream_response = self._session.get(stream_url, stream=True, timeout=30)
+            self._stream_response.raise_for_status()
+
+            # Log stream metadata
+            content_type = self._stream_response.headers.get('Content-Type', 'unknown')
+            logger.info(f"Stream content-type: {content_type}")
+
+            # Auto-detect format from content-type if not specified
+            if 'audio/mpeg' in content_type or 'audio/mp3' in content_type:
+                self._stream_format = 'mp3'
+            elif 'audio/aac' in content_type:
+                self._stream_format = 'aac'
+            elif 'audio/ogg' in content_type:
+                self._stream_format = 'ogg'
+
+            self.status = AudioSourceStatus.RUNNING
+            self._reconnect_attempts = 0
+            logger.info(f"Started stream audio capture: {stream_url} (format: {self._stream_format})")
+
+        except Exception as e:
+            raise RuntimeError(f"Failed to start stream capture: {e}")
+
+    def _stop_capture(self) -> None:
+        """Stop HTTP stream audio capture."""
+        if self._stream_response:
+            try:
+                self._stream_response.close()
+            except Exception:
+                pass
+            self._stream_response = None
+
+        if self._session:
+            try:
+                self._session.close()
+            except Exception:
+                pass
+            self._session = None
+
+        self._buffer.clear()
+        self._decoder = None
+
+    def _read_audio_chunk(self) -> Optional[np.ndarray]:
+        """Read audio chunk from HTTP stream."""
+        if not self._stream_response:
+            return None
+
+        try:
+            # Read data from stream
+            chunk_size = self.config.buffer_size * 4  # Read more data for compressed formats
+
+            try:
+                data = self._stream_response.raw.read(chunk_size)
+            except Exception as e:
+                logger.error(f"Error reading from stream: {e}")
+                # Attempt reconnection
+                if self._reconnect_attempts < self._max_reconnect_attempts:
+                    self._reconnect_attempts += 1
+                    logger.info(f"Attempting to reconnect to stream (attempt {self._reconnect_attempts}/{self._max_reconnect_attempts})")
+                    time.sleep(2)
+                    try:
+                        self._stop_capture()
+                        self._start_capture()
+                        return None
+                    except Exception:
+                        self.status = AudioSourceStatus.DISCONNECTED
+                        return None
+                else:
+                    self.status = AudioSourceStatus.ERROR
+                    return None
+
+            if not data:
+                logger.warning("Stream ended or no data received")
+                self.status = AudioSourceStatus.DISCONNECTED
+                return None
+
+            # Append to buffer
+            self._buffer.extend(data)
+
+            # Decode audio based on format
+            if self._stream_format == 'mp3':
+                return self._decode_mp3_chunk()
+            elif self._stream_format == 'aac':
+                return self._decode_aac_chunk()
+            elif self._stream_format == 'ogg':
+                return self._decode_ogg_chunk()
+            elif self._stream_format == 'raw':
+                return self._decode_raw_chunk()
+            else:
+                logger.error(f"Unsupported stream format: {self._stream_format}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error reading stream audio: {e}")
+            return None
+
+    def _decode_mp3_chunk(self) -> Optional[np.ndarray]:
+        """Decode MP3 audio from buffer using pydub."""
+        try:
+            from pydub import AudioSegment
+            import io
+
+            # Need enough data to decode
+            if len(self._buffer) < 4096:
+                return None
+
+            # Try to decode what we have
+            try:
+                # Take a chunk from buffer
+                chunk_data = bytes(self._buffer[:16384])  # Try to decode 16KB at a time
+
+                audio = AudioSegment.from_file(io.BytesIO(chunk_data), format="mp3")
+
+                # Remove decoded data from buffer
+                self._buffer = self._buffer[16384:]
+
+                # Convert to numpy array
+                samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
+
+                # Convert to mono if needed
+                if audio.channels == 2:
+                    samples = samples.reshape((-1, 2))
+                    samples = np.mean(samples, axis=1)
+
+                # Normalize
+                max_val = float(2 ** (audio.sample_width * 8 - 1))
+                samples = samples / max_val
+
+                return samples
+
+            except Exception as e:
+                # If decode fails, drop some data and try again
+                if len(self._buffer) > 65536:  # If buffer is getting too large
+                    self._buffer = self._buffer[4096:]  # Drop 4KB
+                return None
+
+        except ImportError:
+            logger.error("pydub not available for MP3 stream decoding")
+            self.status = AudioSourceStatus.ERROR
+            return None
+
+    def _decode_aac_chunk(self) -> Optional[np.ndarray]:
+        """Decode AAC audio from buffer."""
+        # AAC decoding would require additional libraries like faad
+        logger.warning("AAC decoding not yet implemented - consider using MP3 streams")
+        return None
+
+    def _decode_ogg_chunk(self) -> Optional[np.ndarray]:
+        """Decode OGG/Vorbis audio from buffer."""
+        # OGG decoding would require additional libraries
+        logger.warning("OGG decoding not yet implemented - consider using MP3 streams")
+        return None
+
+    def _decode_raw_chunk(self) -> Optional[np.ndarray]:
+        """Decode raw PCM audio from buffer."""
+        try:
+            # Assume 16-bit PCM
+            bytes_needed = self.config.buffer_size * 2
+
+            if len(self._buffer) < bytes_needed:
+                return None
+
+            # Extract samples
+            chunk_data = bytes(self._buffer[:bytes_needed])
+            self._buffer = self._buffer[bytes_needed:]
+
+            # Convert to numpy array
+            audio_array = np.frombuffer(chunk_data, dtype=np.int16)
+            # Convert to float32 normalized to [-1, 1]
+            audio_array = audio_array.astype(np.float32) / 32768.0
+
+            return audio_array
+
+        except Exception as e:
+            logger.error(f"Error decoding raw audio: {e}")
+            return None
+
+
 # Factory function for creating sources
 def create_audio_source(config: AudioSourceConfig) -> AudioSourceAdapter:
     """Factory function to create the appropriate audio source adapter."""
@@ -396,6 +633,11 @@ def create_audio_source(config: AudioSourceConfig) -> AudioSourceAdapter:
     
     elif config.source_type.value == "file":
         return FileSourceAdapter(config)
-    
+
+    elif config.source_type.value == "stream":
+        if not REQUESTS_AVAILABLE:
+            raise RuntimeError("Stream source not available - install requests library")
+        return StreamSourceAdapter(config)
+
     else:
         raise ValueError(f"Unsupported audio source type: {config.source_type}")

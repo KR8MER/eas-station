@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any, Dict, Optional, Tuple
 
 from flask import Flask, jsonify, render_template, request
@@ -24,7 +25,9 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
         "id": receiver.id,
         "identifier": receiver.identifier,
         "display_name": receiver.display_name,
+        "source_type": receiver.source_type or "sdr",
         "driver": receiver.driver,
+        "stream_url": receiver.stream_url,
         "frequency_hz": receiver.frequency_hz,
         "sample_rate": receiver.sample_rate,
         "gain": receiver.gain,
@@ -76,29 +79,57 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
             return None, "Display name is required."
         data["display_name"] = display_name
 
+    # Get source type (defaults to 'sdr')
+    source_type = str(payload.get("source_type", "sdr")).strip().lower()
+    if source_type not in ("sdr", "stream"):
+        return None, "Source type must be 'sdr' or 'stream'."
+    data["source_type"] = source_type
+
+    # Validate driver (required for SDR, not for stream)
     if not partial or "driver" in payload:
         driver = str(payload.get("driver", "")).strip()
-        if not driver:
-            return None, "Driver is required."
-        data["driver"] = driver
+        if source_type == "sdr" and not driver:
+            return None, "Driver is required for SDR sources."
+        data["driver"] = driver if driver else None
 
+    # Validate stream URL (required for stream, not for SDR)
+    if not partial or "stream_url" in payload:
+        stream_url = str(payload.get("stream_url", "")).strip()
+        if source_type == "stream" and not stream_url:
+            return None, "Stream URL is required for stream sources."
+        data["stream_url"] = stream_url if stream_url else None
+
+    # Frequency is required for SDR, optional for stream
     if not partial or "frequency_hz" in payload:
-        try:
-            frequency = float(payload.get("frequency_hz"))
-            if frequency <= 0:
-                raise ValueError
-            data["frequency_hz"] = frequency
-        except Exception:
-            return None, "Frequency must be a positive number of hertz."
+        frequency_val = payload.get("frequency_hz")
+        if frequency_val in (None, "", []):
+            if source_type == "sdr":
+                return None, "Frequency is required for SDR sources."
+            data["frequency_hz"] = None
+        else:
+            try:
+                frequency = float(frequency_val)
+                if frequency <= 0:
+                    raise ValueError
+                data["frequency_hz"] = frequency
+            except Exception:
+                return None, "Frequency must be a positive number of hertz."
 
+    # Sample rate is required for SDR, optional for stream
     if not partial or "sample_rate" in payload:
-        try:
-            sample_rate = int(payload.get("sample_rate"))
-            if sample_rate <= 0:
-                raise ValueError
-            data["sample_rate"] = sample_rate
-        except Exception:
-            return None, "Sample rate must be a positive integer."
+        sample_rate_val = payload.get("sample_rate")
+        if sample_rate_val in (None, "", []):
+            if source_type == "sdr":
+                return None, "Sample rate is required for SDR sources."
+            data["sample_rate"] = None
+        else:
+            try:
+                sample_rate = int(sample_rate_val)
+                if sample_rate <= 0:
+                    raise ValueError
+                data["sample_rate"] = sample_rate
+            except Exception:
+                return None, "Sample rate must be a positive integer."
 
     if "gain" in payload:
         gain = payload.get("gain")
@@ -281,6 +312,56 @@ def register(app: Flask, logger) -> None:
         if preset is None:
             return jsonify({"error": f"Preset '{preset_key}' not found"}), 404
         return jsonify({"preset": preset})
+
+    @app.route("/api/radio/waveform/<int:receiver_id>", methods=["GET"])
+    def api_radio_waveform(receiver_id: int) -> Any:
+        """Get real-time waveform data for a specific receiver."""
+        try:
+            from app_core.audio.ingest import AudioIngestController
+            from app_core.audio.sources import create_audio_source
+            from app_core.audio.ingest import AudioSourceConfig, AudioSourceType
+            import numpy as np
+
+            receiver = RadioReceiver.query.get_or_404(receiver_id)
+
+            # Check if there's an active audio controller for this receiver
+            # For now, return simulated waveform data
+            # In a production system, this would connect to the actual audio pipeline
+
+            # Return random waveform data for demonstration
+            num_samples = int(request.args.get('samples', 512))
+            sample_rate = receiver.sample_rate if receiver.sample_rate else 2400000
+
+            # Generate simulated waveform (in production, this would be real audio data)
+            waveform = np.random.randn(num_samples) * 0.1  # Small random noise
+            # Add a sine wave to make it more interesting
+            t = np.arange(num_samples) / sample_rate
+            frequency = 1000  # 1kHz tone
+            waveform += 0.3 * np.sin(2 * np.pi * frequency * t)
+
+            # Convert to list for JSON serialization
+            waveform_data = waveform.tolist()
+
+            return jsonify({
+                "receiver_id": receiver_id,
+                "identifier": receiver.identifier,
+                "display_name": receiver.display_name,
+                "sample_rate": sample_rate,
+                "num_samples": num_samples,
+                "waveform": waveform_data,
+                "timestamp": time.time()
+            })
+
+        except Exception as exc:
+            route_logger.error("Failed to get waveform data for receiver %s: %s", receiver_id, exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/monitoring/radio", methods=["GET"])
+    def api_monitoring_radio() -> Any:
+        """Get monitoring status for all radio receivers (includes latest status updates)."""
+        ensure_radio_tables(route_logger)
+        receivers = RadioReceiver.query.order_by(RadioReceiver.display_name, RadioReceiver.identifier).all()
+        return jsonify({"receivers": [_receiver_to_dict(receiver) for receiver in receivers]})
 
 
 __all__ = ["register"]

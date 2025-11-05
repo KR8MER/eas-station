@@ -525,9 +525,11 @@ class RadioReceiver(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     identifier = db.Column(db.String(64), nullable=False)
     display_name = db.Column(db.String(128), nullable=False)
-    driver = db.Column(db.String(64), nullable=False)
-    frequency_hz = db.Column(db.Float, nullable=False)
-    sample_rate = db.Column(db.Integer, nullable=False)
+    source_type = db.Column(db.String(16), nullable=False, default='sdr')  # 'sdr' or 'stream'
+    driver = db.Column(db.String(64))  # Required for SDR, null for stream
+    stream_url = db.Column(db.String(512))  # Required for stream, null for SDR
+    frequency_hz = db.Column(db.Float)  # Required for SDR, optional for stream
+    sample_rate = db.Column(db.Integer)  # Required for SDR, optional for stream
     gain = db.Column(db.Float)
     channel = db.Column(db.Integer)
     serial = db.Column(db.String(128))
