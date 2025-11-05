@@ -266,10 +266,10 @@ POSTGRES_HOST=alerts-db
 ```bash
 # Test that app starts with proper credentials
 cd ~/eas-station
-docker compose restart app
+sudo docker compose restart app
 
 # Check logs for errors
-docker compose logs app | grep -i "error\|password"
+sudo docker compose logs app | grep -i "error\|password"
 
 # Should see no errors about DATABASE_URL or missing credentials
 ```

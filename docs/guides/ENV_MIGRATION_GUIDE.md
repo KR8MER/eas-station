@@ -119,11 +119,11 @@ After migration:
 ```bash
 # Restart containers to pick up changes
 cd ~/eas-station
-docker compose down
-docker compose up -d
+sudo docker compose down
+sudo docker compose up -d
 
 # Check logs
-docker compose logs -f ipaws-poller
+sudo docker compose logs -f ipaws-poller
 
 # Should see:
 # INFO:__main__:Starting CAP Alert Poller with LED Integration - Mode: IPAWS
@@ -138,7 +138,7 @@ If you have issues:
 cp .env.backup .env
 
 # Restart
-docker compose restart
+sudo docker compose restart
 ```
 
 ## Questions?

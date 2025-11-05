@@ -35,12 +35,12 @@ EAS Station is a software-defined drop-in replacement for commercial EAS encoder
 git clone https://github.com/KR8MER/eas-station.git && \
 cd eas-station && \
 cp .env.example .env && \
-docker compose up -d --build
+sudo docker compose up -d --build
 ```
 
 Then open http://localhost:5000 in your browser.
 
-> 💡 **Next Steps**: Edit `.env` with your configuration, then restart: `docker compose restart`
+> 💡 **Next Steps**: Edit `.env` with your configuration, then restart: `sudo docker compose restart`
 
 ### Prerequisites
 
@@ -48,6 +48,8 @@ Then open http://localhost:5000 in your browser.
 - PostgreSQL 14+ with PostGIS (can use embedded container)
 - 4GB RAM (8GB recommended)
 - Internet connection for alert polling
+
+> **Note**: Most Docker commands require root privileges. If you're running as a non-root user, prefix commands with `sudo`. Alternatively, add your user to the `docker` group (see [Docker Post-Installation Steps](https://docs.docker.com/engine/install/linux-postinstall/)).
 
 ## 📚 Documentation
 

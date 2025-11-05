@@ -15,7 +15,8 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 2. **Provision infrastructure:** Deploy Docker Engine 24+ with Docker Compose V2 and ensure a dedicated PostgreSQL 15 + PostGIS database container is available before starting the app stack.
 3. **Configure environment variables:** Copy `.env.example` to `.env`, set secure secrets, and update database connection details. Optional Azure AI speech settings can remain blank until credentials are available.
 4. **Launch the stack:**
-   - Run `docker compose up -d --build` after `.env` points at your PostgreSQL/PostGIS deployment.
+   - Run `sudo docker compose up -d --build` after `.env` points at your PostgreSQL/PostGIS deployment.
+   - **Note:** Docker commands require root privileges. Use `sudo` if running as a non-root user.
 
 ## Routine Operations
 ### Accessing the Dashboard
@@ -47,7 +48,7 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 
 ### Generating Sample Audio
 - Use the **EAS Workflow** console (accessible from the top navigation once logged in) to craft practice activations entirely in the browser. Pick a state or territory, choose the county/parish, FEMA-defined subdivision, or statewide SAME code, and click **Add Location** to build the PSSCCC list—manual pasting is still supported for bulk entry, subdivision selections automatically set the correct portion digit, and the picker enforces the 31-code SAME limit. The originator dropdown now exposes the four FCC originator codes (EAS, CIV, WXR, PEP), the event selector is trimmed to the authorised 47 CFR §11.31(d–e) entries, and the live preview assembles the `ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-` header while explaining each field (including the 0xAB preamble and trailing `NNNN`). Tap **Quick Weekly Test** to preload your configured counties and sample script—the preset omits the attention signal per FCC guidance, but you can re-enable the dual-tone or 1050 Hz alert if needed before confirming the run. After confirmation the workflow automatically generates the package with three SAME bursts, selectable attention tone, optional narration, and EOM WAV assets with one-second guard intervals between each section.
-- For automation scripts, the command-line helper is available: `docker compose exec app python tools/generate_sample_audio.py`.
+- For automation scripts, the command-line helper is available: `sudo docker compose exec app python tools/generate_sample_audio.py`.
 
 ### Verifying Playout & Decoding Audio
 - Open **Alert Verification** (`/admin/alert-verification`) to inspect delivery timelines, latency metrics, and per-target outcomes built by `app_core/eas_storage.py`.
@@ -59,7 +60,7 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 - Confirm the PostgreSQL/PostGIS database container is running and reachable.
 - If you rely on the bundled service, ensure `docker-compose.embedded-db.yml` is included in the command or `COMPOSE_FILE` environment variable.
 - Verify environment variables in `.env` match the external database credentials and host.
-- Inspect logs using `docker compose logs -f app` and `docker compose logs -f poller` for detailed error messages.
+- Inspect logs using `sudo docker compose logs -f app` and `sudo docker compose logs -f poller` for detailed error messages.
 
 ### Spatial Queries Failing
 - Ensure the PostGIS extension is enabled on the database (`CREATE EXTENSION postgis;`).
@@ -77,12 +78,12 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 ## Reference Commands
 | Task | Command |
 |------|---------|
-| Build and start services (embedded database) | `docker compose -f docker-compose.yml -f docker-compose.embedded-db.yml up -d --build` |
-| Build and start services (external database) | `docker compose up -d --build` |
-| View aggregate logs | `docker compose logs -f` |
-| Restart the web app | `docker compose restart app` |
+| Build and start services (embedded database) | `sudo docker compose -f docker-compose.yml -f docker-compose.embedded-db.yml up -d --build` |
+| Build and start services (external database) | `sudo docker compose up -d --build` |
+| View aggregate logs | `sudo docker compose logs -f` |
+| Restart the web app | `sudo docker compose restart app` |
 | Run database migrations (if applicable) | `flask db upgrade` |
-| Legacy sample audio helper | `docker compose exec app python tools/generate_sample_audio.py` |
+| Legacy sample audio helper | `sudo docker compose exec app python tools/generate_sample_audio.py` |
 | Manual CAP injection | `python manual_eas_event.py --help` |
 
 ## Getting Help
