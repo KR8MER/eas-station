@@ -107,12 +107,14 @@ def register(app: Flask, logger) -> None:
         and deployment metadata to aid in audit trails and troubleshooting.
         """
 
-        # Read version from VERSION file
+        # Read version from VERSION file and determine repository root
         try:
-            version_path = Path(__file__).resolve().parents[1] / "VERSION"
+            repo_root = Path(__file__).resolve().parents[1]
+            version_path = repo_root / "VERSION"
             version = version_path.read_text(encoding="utf-8").strip()
         except Exception:
             version = _system_version()
+            repo_root = Path(__file__).resolve().parents[1]  # Still needed for git commands
 
         # Get current git commit hash
         try:
@@ -122,6 +124,7 @@ def register(app: Flask, logger) -> None:
                 text=True,
                 check=False,
                 timeout=5,
+                cwd=repo_root,
             ).stdout.strip()
             if not git_hash:
                 git_hash = "unknown"
@@ -136,6 +139,7 @@ def register(app: Flask, logger) -> None:
                 text=True,
                 check=False,
                 timeout=5,
+                cwd=repo_root,
             ).stdout.strip()
             if not git_branch:
                 git_branch = "unknown"
@@ -150,6 +154,7 @@ def register(app: Flask, logger) -> None:
                 text=True,
                 check=False,
                 timeout=5,
+                cwd=repo_root,
             ).stdout.strip()
             git_clean = not bool(git_status_output)
         except Exception:
