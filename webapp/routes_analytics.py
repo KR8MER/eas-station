@@ -15,7 +15,7 @@ from app_core.analytics import (
     TrendAnalyzer,
     TrendRecord,
 )
-from app_core.auth import require_login, require_permission
+from app_core.auth import require_permission
 from app_utils import utc_now
 
 
@@ -34,7 +34,6 @@ def register(app: Flask, logger) -> None:
     # ====================================================================
 
     @app.route("/analytics")
-    @require_login
     def analytics_dashboard_page():
         """Display the analytics dashboard page."""
         return render_template("analytics_dashboard.html")
@@ -44,7 +43,6 @@ def register(app: Flask, logger) -> None:
     # ====================================================================
 
     @app.route("/api/analytics/metrics", methods=["GET"])
-    @require_login
     def get_metrics():
         """Get metric snapshots.
 
@@ -98,7 +96,6 @@ def register(app: Flask, logger) -> None:
             return jsonify({"success": False, "error": str(exc)}), 500
 
     @app.route("/api/analytics/metrics/categories", methods=["GET"])
-    @require_login
     def get_metric_categories():
         """Get list of available metric categories."""
         try:
@@ -124,7 +121,6 @@ def register(app: Flask, logger) -> None:
             return jsonify({"success": False, "error": str(exc)}), 500
 
     @app.route("/api/analytics/metrics/aggregate", methods=["POST"])
-    @require_login
     @require_permission("analytics_manage")
     def aggregate_metrics():
         """Manually trigger metrics aggregation.
@@ -160,7 +156,6 @@ def register(app: Flask, logger) -> None:
     # ====================================================================
 
     @app.route("/api/analytics/trends", methods=["GET"])
-    @require_login
     def get_trends():
         """Get trend analysis records.
 
@@ -199,7 +194,6 @@ def register(app: Flask, logger) -> None:
             return jsonify({"success": False, "error": str(exc)}), 500
 
     @app.route("/api/analytics/trends/analyze", methods=["POST"])
-    @require_login
     @require_permission("analytics_manage")
     def analyze_trends():
         """Manually trigger trend analysis.
@@ -265,7 +259,6 @@ def register(app: Flask, logger) -> None:
     # ====================================================================
 
     @app.route("/api/analytics/anomalies", methods=["GET"])
-    @require_login
     def get_anomalies():
         """Get anomaly records.
 
@@ -313,7 +306,6 @@ def register(app: Flask, logger) -> None:
             return jsonify({"success": False, "error": str(exc)}), 500
 
     @app.route("/api/analytics/anomalies/detect", methods=["POST"])
-    @require_login
     @require_permission("analytics_manage")
     def detect_anomalies():
         """Manually trigger anomaly detection.
@@ -367,7 +359,6 @@ def register(app: Flask, logger) -> None:
             return jsonify({"success": False, "error": str(exc)}), 500
 
     @app.route("/api/analytics/anomalies/<int:anomaly_id>/acknowledge", methods=["POST"])
-    @require_login
     @require_permission("analytics_manage")
     def acknowledge_anomaly(anomaly_id: int):
         """Acknowledge an anomaly.
@@ -397,7 +388,6 @@ def register(app: Flask, logger) -> None:
             return jsonify({"success": False, "error": str(exc)}), 500
 
     @app.route("/api/analytics/anomalies/<int:anomaly_id>/resolve", methods=["POST"])
-    @require_login
     @require_permission("analytics_manage")
     def resolve_anomaly(anomaly_id: int):
         """Resolve an anomaly.
@@ -431,7 +421,6 @@ def register(app: Flask, logger) -> None:
             return jsonify({"success": False, "error": str(exc)}), 500
 
     @app.route("/api/analytics/anomalies/<int:anomaly_id>/false-positive", methods=["POST"])
-    @require_login
     @require_permission("analytics_manage")
     def mark_false_positive(anomaly_id: int):
         """Mark an anomaly as a false positive.
@@ -465,7 +454,6 @@ def register(app: Flask, logger) -> None:
     # ====================================================================
 
     @app.route("/api/analytics/dashboard", methods=["GET"])
-    @require_login
     def analytics_dashboard():
         """Get analytics dashboard summary.
 

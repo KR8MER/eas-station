@@ -13,7 +13,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 
 from app_core.extensions import db
 from app_core.analytics.models import MetricSnapshot, TrendRecord
