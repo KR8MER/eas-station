@@ -672,6 +672,9 @@ def register_maintenance_routes(app, logger):
             if not new_content:
                 return jsonify({"error": "No content provided"}), 400
 
+            # Initialize backup_path
+            backup_path = None
+
             # Create backup of existing file
             if env_file_path.exists():
                 backup_path = env_file_path.with_suffix(".env.backup")
@@ -692,7 +695,7 @@ def register_maintenance_routes(app, logger):
                     "updated_at_utc": utc_now().isoformat(),
                     "updated_at_local": local_now().isoformat(),
                     "file_path": str(env_file_path),
-                    "backup_created": str(backup_path) if env_file_path.exists() else None,
+                    "backup_created": str(backup_path) if backup_path else None,
                     "warning": "Application restart required for changes to take effect",
                 },
             )
@@ -703,7 +706,7 @@ def register_maintenance_routes(app, logger):
 
             return jsonify({
                 "message": "Configuration updated successfully. Restart the application for changes to take effect.",
-                "backup_path": str(backup_path) if env_file_path.exists() else None,
+                "backup_path": str(backup_path) if backup_path else None,
                 "restart_required": True,
             })
 

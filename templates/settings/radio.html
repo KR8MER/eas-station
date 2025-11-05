@@ -1151,7 +1151,7 @@
     const waveformAutoRefresh = document.getElementById('waveformAutoRefresh');
     let waveformRefreshHandle = null;
     const waveformCanvases = new Map();
-    const WAVEFORM_REFRESH_INTERVAL_MS = 100; // 10 Hz refresh rate
+    const WAVEFORM_REFRESH_INTERVAL_MS = 1000; // 1 Hz refresh rate (reduced from 100ms to prevent backend flooding)
 
     function createWaveformCanvas(receiver) {
         const canvasId = `waveform-${receiver.id}`;

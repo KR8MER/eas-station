@@ -560,11 +560,15 @@ class RadioReceiver(db.Model):
 
         from app_core.radio import ReceiverConfig
 
+        # Handle nullable fields for stream sources
+        frequency = float(self.frequency_hz) if self.frequency_hz is not None else 0.0
+        sample_rate = int(self.sample_rate) if self.sample_rate is not None else 0
+
         return ReceiverConfig(
             identifier=self.identifier,
-            driver=self.driver,
-            frequency_hz=float(self.frequency_hz),
-            sample_rate=int(self.sample_rate),
+            driver=self.driver or "",
+            frequency_hz=frequency,
+            sample_rate=sample_rate,
             gain=self.gain,
             channel=self.channel,
             serial=self.serial,

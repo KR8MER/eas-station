@@ -317,10 +317,12 @@ def register(app: Flask, logger) -> None:
     def api_radio_waveform(receiver_id: int) -> Any:
         """Get real-time waveform data for a specific receiver."""
         try:
-            from app_core.audio.ingest import AudioIngestController
-            from app_core.audio.sources import create_audio_source
-            from app_core.audio.ingest import AudioSourceConfig, AudioSourceType
-            import numpy as np
+            # Try to import NumPy, but handle gracefully if not available
+            try:
+                import numpy as np
+            except ImportError:
+                route_logger.error("NumPy not available for waveform generation")
+                return jsonify({"error": "Waveform feature requires NumPy"}), 503
 
             receiver = RadioReceiver.query.get_or_404(receiver_id)
 
@@ -329,7 +331,13 @@ def register(app: Flask, logger) -> None:
             # In a production system, this would connect to the actual audio pipeline
 
             # Return random waveform data for demonstration
-            num_samples = int(request.args.get('samples', 512))
+            # Bound the samples parameter to prevent expensive requests
+            try:
+                num_samples = int(request.args.get('samples', 512))
+                num_samples = max(64, min(num_samples, 2048))  # Clamp between 64 and 2048
+            except (ValueError, TypeError):
+                num_samples = 512  # Default
+
             sample_rate = receiver.sample_rate if receiver.sample_rate else 2400000
 
             # Generate simulated waveform (in production, this would be real audio data)
@@ -354,7 +362,8 @@ def register(app: Flask, logger) -> None:
 
         except Exception as exc:
             route_logger.error("Failed to get waveform data for receiver %s: %s", receiver_id, exc)
-            return jsonify({"error": str(exc)}), 500
+            # Don't leak sensitive exception details to client
+            return jsonify({"error": "Failed to generate waveform data"}), 500
 
     @app.route("/api/monitoring/radio", methods=["GET"])
     def api_monitoring_radio() -> Any:

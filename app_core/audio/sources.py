@@ -423,9 +423,23 @@ class StreamSourceAdapter(AudioSourceAdapter):
         try:
             stream_url = self._stream_url
 
+            # Validate URL scheme and netloc
+            from urllib.parse import urlparse
+            parsed = urlparse(stream_url)
+            if parsed.scheme not in ('http', 'https'):
+                raise ValueError(f"Invalid URL scheme '{parsed.scheme}'. Only http and https are allowed.")
+            if not parsed.netloc:
+                raise ValueError(f"Invalid URL: missing hostname")
+
             # Check if this is an M3U playlist
             if stream_url.lower().endswith('.m3u') or stream_url.lower().endswith('.m3u8'):
                 stream_url = self._parse_m3u(stream_url)
+                # Validate the resolved stream URL from M3U
+                parsed = urlparse(stream_url)
+                if parsed.scheme not in ('http', 'https'):
+                    raise ValueError(f"Invalid M3U stream URL scheme '{parsed.scheme}'. Only http and https are allowed.")
+                if not parsed.netloc:
+                    raise ValueError(f"Invalid M3U stream URL: missing hostname")
 
             # Create session and start streaming
             self._session = requests.Session()
@@ -478,8 +492,24 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
     def _read_audio_chunk(self) -> Optional[np.ndarray]:
         """Read audio chunk from HTTP stream."""
+        # If stream is disconnected, attempt reconnection
         if not self._stream_response:
-            return None
+            if self._reconnect_attempts < self._max_reconnect_attempts:
+                self._reconnect_attempts += 1
+                logger.info(f"Stream disconnected, attempting to reconnect (attempt {self._reconnect_attempts}/{self._max_reconnect_attempts})")
+                time.sleep(2)
+                try:
+                    self._start_capture()
+                    # Return None this iteration, will read data on next call
+                    return None
+                except Exception as e:
+                    logger.error(f"Reconnection failed: {e}")
+                    self.status = AudioSourceStatus.DISCONNECTED
+                    return None
+            else:
+                # Max reconnection attempts reached
+                self.status = AudioSourceStatus.ERROR
+                return None
 
         try:
             # Read data from stream
