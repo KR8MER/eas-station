@@ -439,7 +439,8 @@ def retrieve_noaa_alerts(
 def register_maintenance_routes(app, logger):
     """Attach administrative maintenance endpoints to the Flask app."""
 
-    repo_root = Path(app.root_path).resolve().parent
+    # app.root_path is /app inside the container, where stack.env is located
+    repo_root = Path(app.root_path).resolve()
 
     @app.route("/admin/operations/status", methods=["GET"])
     def get_operation_status():
