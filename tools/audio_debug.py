@@ -23,7 +23,7 @@ try:
     from app_core.audio.ingest import AudioIngestController, AudioSourceConfig, AudioSourceType
     from app_core.audio.sources import create_audio_source
     from app_core.audio.metering import AudioMeter, SilenceDetector, AudioHealthMonitor
-    from configure import Config
+    from scripts.configure import Config
 except ImportError as e:
     print(f"Error importing audio modules: {e}")
     print("Make sure you're running from the project root with dependencies installed.")
