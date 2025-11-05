@@ -51,7 +51,3 @@ scipy==1.14.1  # Required for audio resampling when ffmpeg is not available
 # SDR support for radio receivers
 numpy==2.2.1  # Required for SoapySDR sample processing
 # Note: SoapySDR Python bindings are installed via system packages in Dockerfile
-
-# VFD Display support (Noritake GU140x32F-7000B)
-pyserial==3.5  # Serial communication for VFD display
-Pillow==10.4.0  # Image processing for VFD graphics rendering
