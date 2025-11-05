@@ -701,11 +701,12 @@ def register_environment_routes(app, logger):
                 var_data = dict(var_config)
                 key = var_config['key']
 
-                # Get current value from .env file or environment
-                current_value = current_values.get(key, '')
-
-                # If not in .env, try getting from environment
-                if not current_value:
+                # Get current value - respect explicit empty values in .env
+                if key in current_values:
+                    # Key exists in .env file (even if empty)
+                    current_value = current_values[key]
+                else:
+                    # Key not in .env, try environment variable then default
                     current_value = os.environ.get(key, var_config.get('default', ''))
 
                 # Mask sensitive values
@@ -714,7 +715,8 @@ def register_environment_routes(app, logger):
                     var_data['has_value'] = True
                 else:
                     var_data['value'] = current_value
-                    var_data['has_value'] = bool(current_value)
+                    # has_value is True if key exists in .env or has non-empty value
+                    var_data['has_value'] = (key in current_values) or bool(current_value)
 
                 variables.append(var_data)
 
@@ -810,8 +812,13 @@ def register_environment_routes(app, logger):
         for cat_data in ENV_CATEGORIES.values():
             for var_config in cat_data['variables']:
                 key = var_config['key']
-                # Check both .env and environment
-                value = env_vars.get(key, '') or os.environ.get(key, '')
+
+                # Get value - respect explicit empty values in .env
+                if key in env_vars:
+                    value = env_vars[key]
+                else:
+                    # Key not in .env, check environment variable
+                    value = os.environ.get(key, '')
 
                 # Required field validation
                 if var_config.get('required') and not value:
