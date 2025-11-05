@@ -851,7 +851,15 @@ class EASAudioGenerator:
 
 
 class EASBroadcaster:
-    def __init__(self, db_session, model_cls, config: Dict[str, object], logger, location_settings: Optional[Dict[str, object]] = None) -> None:
+    def __init__(
+        self,
+        db_session,
+        model_cls,
+        config: Dict[str, object],
+        logger,
+        location_settings: Optional[Dict[str, object]] = None,
+        playout_queue: Optional[object] = None,
+    ) -> None:
         self.db_session = db_session
         self.model_cls = model_cls
         self.config = config
@@ -860,11 +868,17 @@ class EASBroadcaster:
         self.enabled = bool(config.get('enabled'))
         self.audio_generator = EASAudioGenerator(config, logger)
         self.gpio_controller: Optional[GPIORelayController] = None
+        self.playout_queue = playout_queue  # Optional AudioPlayoutQueue for queued playback
 
         if not self.enabled:
             self.logger.info('EAS broadcasting is disabled via configuration.')
         else:
-            self.logger.info('EAS broadcasting enabled with output directory %s', self.audio_generator.output_dir)
+            mode = 'with queue' if self.playout_queue else 'immediate'
+            self.logger.info(
+                'EAS broadcasting enabled (%s mode) with output directory %s',
+                mode,
+                self.audio_generator.output_dir,
+            )
 
         gpio_pin = config.get('gpio_pin')
         if gpio_pin and self.enabled:
@@ -886,6 +900,69 @@ class EASBroadcaster:
         command = list(cmd) + [audio_path]
         self.logger.info('Playing alert audio using %s', ' '.join(command))
         _run_command(command, self.logger)
+
+    def _enqueue_alert(
+        self,
+        alert: object,
+        eas_message: object,
+        broadcast_result: Dict[str, object],
+    ) -> Dict[str, object]:
+        """
+        Enqueue an alert for priority-based playback via AudioPlayoutQueue.
+
+        This method is called when playout_queue is configured. It creates a
+        PlayoutItem from the alert and EAS message record, then adds it to the
+        queue with FCC-compliant precedence.
+
+        Args:
+            alert: CAPAlert database model instance
+            eas_message: EASMessage database record (already persisted)
+            broadcast_result: Result dictionary from audio generation
+
+        Returns:
+            Updated broadcast_result with queue information
+        """
+        try:
+            # Import here to avoid circular dependency
+            from app_core.audio import PlayoutItem
+
+            # Get next queue ID
+            queue_id = self.playout_queue.get_next_queue_id()
+
+            # Create playout item using the real database record
+            item = PlayoutItem.from_alert(
+                alert=alert,
+                eas_message=eas_message,
+                broadcast_result=broadcast_result,
+                queue_id=queue_id,
+            )
+
+            # Enqueue the item
+            should_interrupt = self.playout_queue.enqueue(item, check_preemption=True)
+
+            # Update result with queue information
+            broadcast_result['queued'] = True
+            broadcast_result['queue_id'] = queue_id
+            broadcast_result['should_interrupt'] = should_interrupt
+
+            self.logger.info(
+                'Enqueued alert %s (event=%s, precedence=%s) with queue_id=%s',
+                getattr(alert, 'id', None),
+                broadcast_result.get('event_code'),
+                item.precedence_level,
+                queue_id,
+            )
+
+            if should_interrupt:
+                self.logger.warning(
+                    'High-priority alert should interrupt current playback'
+                )
+
+        except Exception as exc:
+            self.logger.error(f'Failed to enqueue alert: {exc}', exc_info=True)
+            broadcast_result['queue_error'] = str(exc)
+
+        return broadcast_result
 
     def handle_alert(self, alert: object, payload: Dict[str, object]) -> Dict[str, object]:
         result: Dict[str, object] = {"same_triggered": False}
@@ -958,25 +1035,8 @@ class EASBroadcaster:
             }
         )
 
-        controller = self.gpio_controller
-        if controller:
-            try:  # pragma: no cover - hardware specific
-                controller.activate(self.logger)
-            except Exception as exc:
-                self.logger.warning(f"GPIO activation failed: {exc}")
-                controller = None
-
-        try:
-            self._play_audio(audio_path)
-            if eom_path:
-                self._play_audio(eom_path)
-        finally:
-            if controller:
-                try:  # pragma: no cover - hardware specific
-                    controller.deactivate(self.logger)
-                except Exception as exc:
-                    self.logger.warning(f"GPIO release failed: {exc}")
-
+        # Create and persist database record BEFORE queue/immediate mode split
+        # This ensures both modes have consistent database tracking
         segment_metadata = {
             key: {
                 'duration_seconds': value.get('duration_seconds'),
@@ -1021,6 +1081,32 @@ class EASBroadcaster:
             self.logger.error(f"Failed to persist EAS message record: {exc}")
             self.db_session.rollback()
             result['error'] = str(exc)
+            # If database persistence fails, we can't continue
+            return result
+
+        # Queue mode: enqueue for later playback by AudioOutputService
+        if self.playout_queue:
+            return self._enqueue_alert(alert, record, result)
+
+        # Immediate mode: play synchronously (legacy behavior)
+        controller = self.gpio_controller
+        if controller:
+            try:  # pragma: no cover - hardware specific
+                controller.activate(self.logger)
+            except Exception as exc:
+                self.logger.warning(f"GPIO activation failed: {exc}")
+                controller = None
+
+        try:
+            self._play_audio(audio_path)
+            if eom_path:
+                self._play_audio(eom_path)
+        finally:
+            if controller:
+                try:  # pragma: no cover - hardware specific
+                    controller.deactivate(self.logger)
+                except Exception as exc:
+                    self.logger.warning(f"GPIO release failed: {exc}")
 
         return result
 
