@@ -145,7 +145,32 @@ def format_led_lines_for_display(value: str) -> str:
     return "\n".join(part.strip() for part in value.split(",") if part.strip())
 
 
-WIZARD_FIELDS: List[WizardField] = [
+@dataclass(frozen=True)
+class WizardSection:
+    """Logical grouping of related wizard fields."""
+
+    name: str
+    title: str
+    description: str
+    fields: List[WizardField]
+
+
+def _validate_bool(value: str) -> str:
+    """Validate boolean values."""
+    if value.lower() not in {"true", "false"}:
+        raise ValueError("Must be 'true' or 'false'.")
+    return value.lower()
+
+
+def _validate_fips(value: str) -> str:
+    """Validate FIPS codes (numeric only)."""
+    if value and not value.replace(",", "").isdigit():
+        raise ValueError("FIPS codes must be numeric, comma-separated.")
+    return value
+
+
+# Core section - Required settings
+CORE_FIELDS = [
     WizardField(
         key="SECRET_KEY",
         label="Flask Secret Key",
@@ -179,10 +204,14 @@ WIZARD_FIELDS: List[WizardField] = [
         description="Password for the configured database user.",
         input_type="password",
     ),
+]
+
+# Location section
+LOCATION_FIELDS = [
     WizardField(
         key="DEFAULT_TIMEZONE",
         label="Default Timezone",
-        description="Pre-populates the admin UI location settings.",
+        description="Pre-populates the admin UI location settings. Use Region/City format.",
         validator=_validate_timezone,
     ),
     WizardField(
@@ -191,13 +220,177 @@ WIZARD_FIELDS: List[WizardField] = [
         description="Displayed in the admin UI and LED signage defaults.",
     ),
     WizardField(
+        key="DEFAULT_STATE_CODE",
+        label="Default State Code",
+        description="Two-letter state abbreviation (e.g., OH, CA, NY).",
+        required=False,
+    ),
+    WizardField(
+        key="DEFAULT_ZONE_CODES",
+        label="Default Zone Codes",
+        description="Comma-separated NWS zone codes for your area (e.g., OHZ016,OHC137).",
+        required=False,
+    ),
+]
+
+# EAS Broadcast section
+EAS_FIELDS = [
+    WizardField(
+        key="EAS_BROADCAST_ENABLED",
+        label="Enable EAS Broadcast",
+        description="Enable SAME header generation and audio playout (true/false).",
+        validator=_validate_bool,
+        required=False,
+    ),
+    WizardField(
+        key="EAS_ORIGINATOR",
+        label="EAS Originator Code",
+        description="Three-letter originator code (e.g., WXR, EAS, CIV).",
+        required=False,
+    ),
+    WizardField(
+        key="EAS_STATION_ID",
+        label="EAS Station ID",
+        description="Eight-character station callsign or identifier.",
+        required=False,
+    ),
+    WizardField(
+        key="EAS_MANUAL_FIPS_CODES",
+        label="Authorized FIPS Codes",
+        description="FIPS codes authorized for manual broadcasts (comma-separated).",
+        validator=_validate_fips,
+        required=False,
+    ),
+    WizardField(
+        key="EAS_GPIO_PIN",
+        label="GPIO Relay Pin",
+        description="GPIO pin number for relay control (leave blank to disable).",
+        required=False,
+    ),
+]
+
+# Audio Ingest section
+AUDIO_INGEST_FIELDS = [
+    WizardField(
+        key="AUDIO_INGEST_ENABLED",
+        label="Enable Audio Ingest",
+        description="Enable audio capture pipeline for SDR and line-level sources (true/false).",
+        validator=_validate_bool,
+        required=False,
+    ),
+    WizardField(
+        key="AUDIO_ALSA_ENABLED",
+        label="Enable ALSA Audio Source",
+        description="Capture from ALSA device (true/false).",
+        validator=_validate_bool,
+        required=False,
+    ),
+    WizardField(
+        key="AUDIO_ALSA_DEVICE",
+        label="ALSA Device Name",
+        description="ALSA device identifier (e.g., 'default', 'hw:0,0').",
+        required=False,
+    ),
+    WizardField(
+        key="AUDIO_SDR_ENABLED",
+        label="Enable SDR Audio Source",
+        description="Capture audio from SDR receiver (true/false).",
+        validator=_validate_bool,
+        required=False,
+    ),
+]
+
+# TTS section
+TTS_FIELDS = [
+    WizardField(
+        key="EAS_TTS_PROVIDER",
+        label="TTS Provider",
+        description="Text-to-speech provider (azure, azure_openai, pyttsx3, or blank).",
+        required=False,
+    ),
+    WizardField(
+        key="AZURE_OPENAI_ENDPOINT",
+        label="Azure OpenAI Endpoint",
+        description="Azure OpenAI endpoint URL (if using azure_openai TTS).",
+        required=False,
+    ),
+    WizardField(
+        key="AZURE_OPENAI_KEY",
+        label="Azure OpenAI Key",
+        description="Azure OpenAI API key (if using azure_openai TTS).",
+        input_type="password",
+        required=False,
+    ),
+]
+
+# Hardware section
+HARDWARE_FIELDS = [
+    WizardField(
         key="DEFAULT_LED_LINES",
         label="Default LED Lines",
         description="Four comma-separated phrases shown on the LED sign when idle.",
         widget="textarea",
         normalizer=_normalise_led_lines,
+        required=False,
+    ),
+    WizardField(
+        key="LED_SIGN_IP",
+        label="LED Sign IP Address",
+        description="IP address of Alpha protocol LED sign (leave blank to disable).",
+        required=False,
+    ),
+    WizardField(
+        key="VFD_PORT",
+        label="VFD Serial Port",
+        description="Serial port for Noritake VFD display (e.g., /dev/ttyUSB0, leave blank to disable).",
+        required=False,
     ),
 ]
+
+# Organize all fields into sections
+WIZARD_SECTIONS = [
+    WizardSection(
+        name="core",
+        title="Core Settings",
+        description="Essential database and security configuration",
+        fields=CORE_FIELDS,
+    ),
+    WizardSection(
+        name="location",
+        title="Location Settings",
+        description="Geographic and timezone information",
+        fields=LOCATION_FIELDS,
+    ),
+    WizardSection(
+        name="eas",
+        title="EAS Broadcast",
+        description="SAME encoder and broadcast settings",
+        fields=EAS_FIELDS,
+    ),
+    WizardSection(
+        name="audio_ingest",
+        title="Audio Ingest",
+        description="Audio capture from SDR and line-level sources",
+        fields=AUDIO_INGEST_FIELDS,
+    ),
+    WizardSection(
+        name="tts",
+        title="Text-to-Speech",
+        description="Voice synthesis for alert announcements",
+        fields=TTS_FIELDS,
+    ),
+    WizardSection(
+        name="hardware",
+        title="Hardware Integration",
+        description="LED signs, VFD displays, and GPIO",
+        fields=HARDWARE_FIELDS,
+    ),
+]
+
+# Flatten all fields for backward compatibility
+WIZARD_FIELDS: List[WizardField] = []
+for section in WIZARD_SECTIONS:
+    WIZARD_FIELDS.extend(section.fields)
 
 
 def load_wizard_state() -> WizardState:
@@ -306,8 +499,10 @@ __all__ = [
     "ENV_TEMPLATE_PATH",
     "PLACEHOLDER_SECRET_VALUES",
     "WizardField",
+    "WizardSection",
     "WizardState",
     "WIZARD_FIELDS",
+    "WIZARD_SECTIONS",
     "SetupWizardError",
     "SetupValidationError",
     "build_env_content",

@@ -1,0 +1,63 @@
+# Docker Compose override for PulseAudio integration
+#
+# Copy this file to the project root as docker-compose.override.yml
+# to enable PulseAudio support.
+#
+# Usage:
+#   cp examples/docker-compose/docker-compose.audio-pulse.yml docker-compose.override.yml
+#   docker-compose up -d
+
+version: '3.8'
+
+services:
+  app:
+    environment:
+      # Enable PulseAudio server connection
+      PULSE_SERVER: unix:/run/user/1000/pulse/native
+      # Disable ALSA direct access (use PulseAudio instead)
+      AUDIO_ALSA_ENABLED: "false"
+      AUDIO_PULSE_ENABLED: "true"
+
+    volumes:
+      # Mount PulseAudio socket
+      - /run/user/1000/pulse:/run/user/1000/pulse:ro
+      # Mount PulseAudio client config
+      - ~/.config/pulse:/home/appuser/.config/pulse:ro
+
+    group_add:
+      # Add container user to audio group
+      - audio
+
+    devices:
+      # Expose ALSA devices (PulseAudio uses them)
+      - /dev/snd:/dev/snd
+
+  poller:
+    environment:
+      PULSE_SERVER: unix:/run/user/1000/pulse/native
+      AUDIO_PULSE_ENABLED: "true"
+
+    volumes:
+      - /run/user/1000/pulse:/run/user/1000/pulse:ro
+      - ~/.config/pulse:/home/appuser/.config/pulse:ro
+
+    group_add:
+      - audio
+
+    devices:
+      - /dev/snd:/dev/snd
+
+  ipaws-poller:
+    environment:
+      PULSE_SERVER: unix:/run/user/1000/pulse/native
+      AUDIO_PULSE_ENABLED: "true"
+
+    volumes:
+      - /run/user/1000/pulse:/run/user/1000/pulse:ro
+      - ~/.config/pulse:/home/appuser/.config/pulse:ro
+
+    group_add:
+      - audio
+
+    devices:
+      - /dev/snd:/dev/snd

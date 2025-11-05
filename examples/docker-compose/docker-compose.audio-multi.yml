@@ -1,0 +1,99 @@
+# Docker Compose override for multiple USB audio interfaces
+#
+# This configuration supports multiple USB audio interfaces for
+# monitoring multiple radio receivers simultaneously.
+#
+# Copy this file to the project root as docker-compose.override.yml:
+#   cp examples/docker-compose/docker-compose.audio-multi.yml docker-compose.override.yml
+#   docker-compose up -d
+
+version: '3.8'
+
+services:
+  app:
+    environment:
+      # Enable audio ingest pipeline
+      AUDIO_INGEST_ENABLED: "true"
+
+      # Primary USB interface (Weather Radio 162.400 MHz)
+      AUDIO_ALSA_ENABLED: "true"
+      AUDIO_ALSA_DEVICE: "hw:1,0"
+      AUDIO_ALSA_PRIORITY: "100"
+
+      # Secondary USB interface (Weather Radio 162.550 MHz)
+      AUDIO_PULSE_ENABLED: "true"
+      AUDIO_PULSE_DEVICE_INDEX: "2"
+      AUDIO_PULSE_PRIORITY: "200"
+
+      # Optional: SDR audio source
+      AUDIO_SDR_ENABLED: "true"
+      AUDIO_SDR_RECEIVER_ID: "sdr_primary"
+      AUDIO_SDR_PRIORITY: "50"
+
+      # Audio metering and health monitoring
+      AUDIO_SILENCE_THRESHOLD_DB: "-60.0"
+      AUDIO_SILENCE_DURATION_SECONDS: "5.0"
+      AUDIO_HEALTH_CHECK_INTERVAL: "10"
+
+    volumes:
+      # Mount ALSA configuration
+      - /etc/asound.conf:/etc/asound.conf:ro
+
+      # Audio ingest buffer directory
+      - ./audio_ingest:/tmp/audio_ingest
+
+    group_add:
+      - audio
+
+    devices:
+      # Expose all ALSA devices
+      - /dev/snd:/dev/snd
+
+      # If using multiple USB audio interfaces, map specific devices:
+      # - /dev/snd/controlC1:/dev/snd/controlC1  # USB interface 1
+      # - /dev/snd/pcmC1D0c:/dev/snd/pcmC1D0c    # Capture
+      # - /dev/snd/pcmC1D0p:/dev/snd/pcmC1D0p    # Playback
+      # - /dev/snd/controlC2:/dev/snd/controlC2  # USB interface 2
+      # - /dev/snd/pcmC2D0c:/dev/snd/pcmC2D0c
+      # - /dev/snd/pcmC2D0p:/dev/snd/pcmC2D0p
+
+    cap_add:
+      - SYS_NICE  # Real-time priority
+
+  poller:
+    environment:
+      AUDIO_INGEST_ENABLED: "true"
+      AUDIO_ALSA_ENABLED: "true"
+      AUDIO_ALSA_DEVICE: "hw:1,0"
+
+    volumes:
+      - /etc/asound.conf:/etc/asound.conf:ro
+      - ./audio_ingest:/tmp/audio_ingest
+
+    group_add:
+      - audio
+
+    devices:
+      - /dev/snd:/dev/snd
+
+    cap_add:
+      - SYS_NICE
+
+  ipaws-poller:
+    environment:
+      AUDIO_INGEST_ENABLED: "true"
+      AUDIO_ALSA_ENABLED: "true"
+      AUDIO_ALSA_DEVICE: "hw:1,0"
+
+    volumes:
+      - /etc/asound.conf:/etc/asound.conf:ro
+      - ./audio_ingest:/tmp/audio_ingest
+
+    group_add:
+      - audio
+
+    devices:
+      - /dev/snd:/dev/snd
+
+    cap_add:
+      - SYS_NICE
