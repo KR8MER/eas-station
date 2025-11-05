@@ -1084,7 +1084,7 @@
     });
 
     // Global function to use a discovered device
-    window.useDiscoveredDevice = (deviceIndex) => {
+    window.useDiscoveredDevice = async (deviceIndex) => {
         const device = window.discoveredDevices?.[deviceIndex];
         if (!device) {
             return;
@@ -1101,23 +1101,119 @@
         document.getElementById('receiverDriver').value = device.driver || 'rtlsdr';
         document.getElementById('receiverSerial').value = device.serial || '';
 
-        // Set defaults based on driver
-        if (device.driver === 'rtlsdr') {
-            document.getElementById('receiverFrequency').value = '162550000';
-            document.getElementById('receiverSampleRate').value = '2400000';
-            document.getElementById('receiverGain').value = '49.6';
-        } else if (device.driver === 'airspy') {
-            document.getElementById('receiverFrequency').value = '162550000';
-            document.getElementById('receiverSampleRate').value = '2500000';
-            document.getElementById('receiverGain').value = '21';
-        }
+        // Set default frequency for NOAA Weather Radio
+        document.getElementById('receiverFrequency').value = '162550000';
 
         if (device.device_id) {
             document.getElementById('receiverChannel').value = device.device_id;
         }
 
+        // Fetch actual device capabilities to populate sample rate and gain
+        try {
+            // Show loading state in the modal title while fetching capabilities
+            const modalTitle = document.getElementById('radioReceiverModalLabel');
+            const originalTitle = 'Add Receiver';
+            modalTitle.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Detecting device capabilities...';
+
+            const params = new URLSearchParams();
+            if (device.serial) {
+                params.append('serial', device.serial);
+            }
+            if (device.device_id) {
+                params.append('device_id', device.device_id);
+            }
+
+            const capUrl = `/api/radio/capabilities/${encodeURIComponent(device.driver)}${params.toString() ? '?' + params.toString() : ''}`;
+            const response = await fetch(capUrl);
+
+            // Restore original title
+            modalTitle.textContent = originalTitle;
+
+            if (response.ok) {
+                const capabilities = await response.json();
+
+                // Auto-populate sample rate from device capabilities
+                if (capabilities.sample_rates && capabilities.sample_rates.length > 0) {
+                    // For NOAA Weather Radio, prefer sample rates around 2-2.5 MHz
+                    const preferredRates = [2400000, 2500000, 2048000, 3200000];
+                    let selectedRate = null;
+
+                    // Try to find a preferred rate that's supported
+                    for (const preferred of preferredRates) {
+                        if (capabilities.sample_rates.includes(preferred)) {
+                            selectedRate = preferred;
+                            break;
+                        }
+                    }
+
+                    // If no preferred rate found, use the closest one or first available
+                    if (!selectedRate) {
+                        // Find the rate closest to 2.4 MHz
+                        selectedRate = capabilities.sample_rates.reduce((prev, curr) => {
+                            return Math.abs(curr - 2400000) < Math.abs(prev - 2400000) ? curr : prev;
+                        });
+                    }
+
+                    document.getElementById('receiverSampleRate').value = selectedRate;
+                }
+
+                // Auto-populate gain from device capabilities
+                if (capabilities.gains && Object.keys(capabilities.gains).length > 0) {
+                    // Get the first gain control (usually "TUNER" for RTL-SDR)
+                    const gainName = Object.keys(capabilities.gains)[0];
+                    const gainRange = capabilities.gains[gainName];
+
+                    // For NOAA Weather Radio, use near-maximum gain (but not quite max to avoid saturation)
+                    let recommendedGain = gainRange.max;
+
+                    // For RTL-SDR, 49.6 dB is a good default (near max)
+                    if (device.driver === 'rtlsdr' && gainRange.max >= 49.6) {
+                        recommendedGain = 49.6;
+                    }
+                    // For Airspy, 21 dB (linear gain) is typical
+                    else if (device.driver === 'airspy' && gainRange.max >= 21) {
+                        recommendedGain = 21;
+                    }
+                    // Otherwise use 80% of max gain
+                    else {
+                        recommendedGain = gainRange.max * 0.8;
+                    }
+
+                    document.getElementById('receiverGain').value = recommendedGain;
+                }
+
+            } else {
+                // If capabilities query fails, fall back to driver-based defaults
+                console.warn('Failed to fetch device capabilities, using defaults');
+                setDefaultsForDriver(device.driver);
+                // Restore title
+                document.getElementById('radioReceiverModalLabel').textContent = 'Add Receiver';
+            }
+        } catch (error) {
+            console.error('Error fetching device capabilities:', error);
+            // Fall back to driver-based defaults
+            setDefaultsForDriver(device.driver);
+            // Restore title
+            document.getElementById('radioReceiverModalLabel').textContent = 'Add Receiver';
+        }
+
         openModal();
     };
+
+    // Helper function to set defaults based on driver when capabilities aren't available
+    function setDefaultsForDriver(driver) {
+        if (driver === 'rtlsdr') {
+            document.getElementById('receiverSampleRate').value = '2400000';
+            document.getElementById('receiverGain').value = '49.6';
+        } else if (driver === 'airspy') {
+            document.getElementById('receiverSampleRate').value = '2500000';
+            document.getElementById('receiverGain').value = '21';
+        } else {
+            // Generic defaults
+            document.getElementById('receiverSampleRate').value = '2400000';
+            document.getElementById('receiverGain').value = '30';
+        }
+    }
 
     // Global function to apply a preset
     window.applyPreset = (presetKey) => {
