@@ -507,14 +507,40 @@ def register(app: Flask, logger) -> None:
         import os
 
         if request.method == "GET":
-            # Return current serial configuration from environment
-            config = {
-                "serial_mode": os.getenv("LED_SERIAL_MODE", "RS232"),
-                "baud_rate": int(os.getenv("LED_BAUD_RATE", "9600")),
-                "led_sign_ip": os.getenv("LED_SIGN_IP", ""),
-                "led_sign_port": int(os.getenv("LED_SIGN_PORT", "10001")),
-            }
-            return jsonify({"success": True, "config": config})
+            # Return current serial configuration from database, falling back to environment
+            try:
+                ensure_led_tables()
+                status_record = LEDSignStatus.query.first()
+
+                if status_record and status_record.serial_mode and status_record.baud_rate:
+                    # Use database values if available
+                    config = {
+                        "serial_mode": status_record.serial_mode,
+                        "baud_rate": status_record.baud_rate,
+                        "led_sign_ip": os.getenv("LED_SIGN_IP", ""),
+                        "led_sign_port": int(os.getenv("LED_SIGN_PORT", "10001")),
+                    }
+                else:
+                    # Fall back to environment variables
+                    config = {
+                        "serial_mode": os.getenv("LED_SERIAL_MODE", "RS232"),
+                        "baud_rate": int(os.getenv("LED_BAUD_RATE", "9600")),
+                        "led_sign_ip": os.getenv("LED_SIGN_IP", ""),
+                        "led_sign_port": int(os.getenv("LED_SIGN_PORT", "10001")),
+                    }
+
+                return jsonify({"success": True, "config": config})
+
+            except Exception as db_error:
+                route_logger.warning(f"Could not retrieve serial config from database: {db_error}")
+                # Fall back to environment variables on error
+                config = {
+                    "serial_mode": os.getenv("LED_SERIAL_MODE", "RS232"),
+                    "baud_rate": int(os.getenv("LED_BAUD_RATE", "9600")),
+                    "led_sign_ip": os.getenv("LED_SIGN_IP", ""),
+                    "led_sign_port": int(os.getenv("LED_SIGN_PORT", "10001")),
+                }
+                return jsonify({"success": True, "config": config})
 
         elif request.method == "POST":
             try:
@@ -535,7 +561,7 @@ def register(app: Flask, logger) -> None:
                 # The actual serial configuration must be set on the Lantronix adapter
                 route_logger.info(f"LED serial configuration updated: {serial_mode} @ {baud_rate} baud")
 
-                # Store configuration in LEDSignStatus table if available
+                # Store configuration in LEDSignStatus table
                 try:
                     ensure_led_tables()
 
@@ -543,19 +569,25 @@ def register(app: Flask, logger) -> None:
                     status_record = LEDSignStatus.query.first()
                     if not status_record:
                         status_record = LEDSignStatus(
-                            host=os.getenv("LED_SIGN_IP", ""),
-                            port=int(os.getenv("LED_SIGN_PORT", "10001")),
-                            connected=False,
+                            sign_ip=os.getenv("LED_SIGN_IP", "192.168.1.100"),
+                            serial_mode=serial_mode,
+                            baud_rate=baud_rate,
+                            brightness_level=10,
+                            is_connected=False,
                             last_update=utc_now(),
                         )
                         db.session.add(status_record)
+                    else:
+                        # Update existing record with new serial configuration
+                        status_record.serial_mode = serial_mode
+                        status_record.baud_rate = baud_rate
+                        status_record.last_update = utc_now()
 
-                    # Store serial config as JSON in a notes field (if available)
-                    # Or we can add it to the model if needed
                     db.session.commit()
 
                 except Exception as db_error:
                     route_logger.warning(f"Could not store serial config in database: {db_error}")
+                    return jsonify({"success": False, "error": f"Database error: {str(db_error)}"})
 
                 return jsonify({
                     "success": True,
