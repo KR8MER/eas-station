@@ -24,9 +24,11 @@
       <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />
       <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:1" />
     </linearGradient>
+
     <filter id="dep-shadow">
-      <feDropShadow dx="3" dy="3" stdDeviation="4" flood-opacity="0.3"/>
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.25"/>
     </filter>
+
     <marker id="dep-arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
       <polygon points="0 0, 10 3, 0 6" fill="#334155" />
     </marker>
@@ -50,7 +52,7 @@
   </text>
 
   <!-- Main Raspberry Pi 5 Container -->
-  <rect x="350" y="150" width="500" height="550" rx="12" fill="#fce4ec" stroke="#c2185b" stroke-width="3" filter="url(#dep-shadow)"/>
+  <rect x="350" y="150" width="500" height="550" rx="12" fill="#fce4ec" stroke="#c2185b" stroke-width="3"/>
 
   <!-- Pi 5 Header -->
   <rect x="350" y="150" width="500" height="60" rx="12" fill="url(#dep-grad-pi)"/>
@@ -59,141 +61,122 @@
     Raspberry Pi 5 (8GB)
   </text>
   <text x="600" y="202" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="white">
-    BCM2712 • Quad-core Cortex-A76 @ 2.4GHz • 8GB LPDDR4X
+    BCM2712 • Cortex-A76 @ 2.4GHz • 8GB LPDDR4X
   </text>
 
   <!-- Docker Engine -->
-  <rect x="370" y="230" width="460" height="50" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
-  <text x="600" y="252" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e40af">
-    Docker Engine 24+
-  </text>
-  <text x="600" y="270" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="#1e40af">
-    Container Runtime with Compose V2
+  <rect x="370" y="230" width="460" height="48" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="600" y="260" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e40af">
+    Docker Engine 24+ (Compose V2)
   </text>
 
   <!-- Docker Containers -->
   <g id="containers">
     <!-- Web App Container -->
-    <rect x="380" y="305" width="200" height="110" rx="6" fill="url(#dep-grad-container)" filter="url(#dep-shadow)"/>
-    <text x="480" y="325" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="white">Web Application</text>
-    <text x="480" y="345" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">Python 3.12 + Flask</text>
-    <text x="480" y="360" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">Port: 5000</text>
-    <text x="480" y="378" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#bfdbfe">• Web UI</text>
-    <text x="480" y="392" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#bfdbfe">• REST API</text>
-    <text x="480" y="406" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#bfdbfe">• EAS Workflow</text>
+    <rect x="380" y="300" width="220" height="116" rx="6" fill="url(#dep-grad-container)" filter="url(#dep-shadow)"/>
+    <text x="490" y="322" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="white">Web Application</text>
+    <text x="490" y="342" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">Python 3.12 • Flask</text>
+    <text x="490" y="362" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">Port 5000 • UI &amp; REST</text>
+    <text x="490" y="382" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#bfdbfe">EAS Workflow</text>
 
     <!-- Poller Container -->
-    <rect x="600" y="305" width="110" height="110" rx="6" fill="url(#dep-grad-container)" filter="url(#dep-shadow)"/>
-    <text x="655" y="325" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">CAP Poller</text>
-    <text x="655" y="345" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#dbeafe">Background</text>
-    <text x="655" y="360" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#dbeafe">Service</text>
-    <text x="655" y="378" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#bfdbfe">NOAA</text>
-    <text x="655" y="391" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#bfdbfe">polling</text>
+    <rect x="620" y="300" width="110" height="116" rx="6" fill="url(#dep-grad-container)" filter="url(#dep-shadow)"/>
+    <text x="675" y="322" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">CAP Poller</text>
+    <text x="675" y="342" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">NOAA Feeds</text>
+    <text x="675" y="362" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#bfdbfe">Background Svc</text>
 
     <!-- IPAWS Container -->
-    <rect x="730" y="305" width="90" height="110" rx="6" fill="url(#dep-grad-container)" filter="url(#dep-shadow)"/>
-    <text x="775" y="325" font-family="Arial, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" fill="white">IPAWS</text>
-    <text x="775" y="342" font-family="Arial, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" fill="white">Poller</text>
-    <text x="775" y="362" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#bfdbfe">FEMA</text>
-    <text x="775" y="375" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#bfdbfe">alert</text>
-    <text x="775" y="388" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#bfdbfe">polling</text>
+    <rect x="750" y="300" width="100" height="116" rx="6" fill="url(#dep-grad-container)" filter="url(#dep-shadow)"/>
+    <text x="800" y="322" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">IPAWS</text>
+    <text x="800" y="342" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">FEMA Alerts</text>
+    <text x="800" y="362" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#bfdbfe">Polling</text>
 
     <!-- Database Container -->
-    <rect x="380" y="435" width="440" height="110" rx="6" fill="url(#dep-grad-container)" filter="url(#dep-shadow)"/>
-    <text x="600" y="455" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="white">PostgreSQL 17 + PostGIS 3.4</text>
-    <text x="600" y="475" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">Port: 5432</text>
-    <text x="600" y="493" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#bfdbfe">• CAP Alerts • Boundaries • Receivers</text>
-    <text x="600" y="508" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#bfdbfe">• Spatial Intelligence • EAS Messages</text>
-    <text x="600" y="523" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#bfdbfe">• Audio Metrics • System Health</text>
+    <rect x="380" y="436" width="470" height="110" rx="6" fill="url(#dep-grad-container)" filter="url(#dep-shadow)"/>
+    <text x="615" y="458" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="white">PostgreSQL 17 + PostGIS 3.4</text>
+    <text x="615" y="478" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">Port 5432 • CAP Alerts • Boundaries • Receivers</text>
+    <text x="615" y="498" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#bfdbfe">Spatial Intelligence • EAS Messages • Health</text>
   </g>
 
-  <!-- Storage -->
-  <rect x="380" y="570" width="440" height="110" rx="6" fill="url(#dep-grad-storage)" filter="url(#dep-shadow)"/>
-  <text x="600" y="592" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="white">NVMe SSD Storage</text>
-  <text x="600" y="612" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="#ede9fe">PCIe Gen 2.0 • 256GB+ recommended</text>
-  <text x="600" y="633" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#ddd6fe">Volumes:</text>
-  <text x="600" y="650" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#ddd6fe">• pgdata (Database) • static/audio (WAV files) • logs (System logs)</text>
-  <text x="600" y="665" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#ddd6fe">• iq_captures (SDR recordings) • backups (Database dumps)</text>
+  <!-- Storage (inside Pi) -->
+  <rect x="380" y="570" width="470" height="110" rx="6" fill="url(#dep-grad-storage)" filter="url(#dep-shadow)"/>
+  <text x="615" y="592" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="white">NVMe SSD Storage</text>
+  <text x="615" y="612" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="#ede9fe">PCIe Gen 2.0 • 256GB+ recommended</text>
+  <text x="615" y="635" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#ddd6fe">pgdata • static/audio • logs • iq_captures • backups</text>
+
+  <!-- Anchor points on Pi edges (for clean, non-overlapping routes) -->
+  <!-- Left anchors -->
+  <circle cx="350" cy="300" r="0" id="anch-left-300"/>
+  <circle cx="350" cy="360" r="0" id="anch-left-360"/>
+  <circle cx="350" cy="420" r="0" id="anch-left-420"/>
+  <!-- Right anchors -->
+  <circle cx="850" cy="245" r="0" id="anch-right-245"/>
+  <circle cx="850" cy="352" r="0" id="anch-right-352"/>
+  <circle cx="850" cy="360" r="0" id="anch-right-360"/>
+  <circle cx="850" cy="470" r="0" id="anch-right-470"/>
+  <circle cx="850" cy="570" r="0" id="anch-right-570"/>
+  <!-- Bottom anchors -->
+  <circle cx="585" cy="700" r="0" id="anch-bot-585"/>
+  <circle cx="775" cy="700" r="0" id="anch-bot-775"/>
+  <circle cx="965" cy="700" r="0" id="anch-bot-965"/>
 
   <!-- USB Peripherals (Left Side) -->
   <g id="usb-left">
     <!-- RTL-SDR -->
-    <rect x="30" y="200" width="150" height="90" rx="6" fill="url(#dep-grad-peripheral)" filter="url(#dep-shadow)"/>
-    <text x="105" y="220" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">RTL-SDR v3</text>
-    <text x="105" y="240" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">USB 2.0/3.0</text>
-    <text x="105" y="257" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#d1fae5">162 MHz NOAA</text>
-    <text x="105" y="272" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#d1fae5">Monitoring</text>
-    <text x="105" y="285" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#a7f3d0">/dev/bus/usb</text>
-
-    <path d="M 180,245 L 350,360" stroke="#10b981" stroke-width="3" stroke-dasharray="5,5" fill="none" marker-end="url(#dep-arrow-usb)"/>
-    <text x="250" y="295" font-family="Arial, sans-serif" font-size="10" fill="#065f46">USB 3.0</text>
+    <rect x="30" y="195" width="160" height="90" rx="6" fill="url(#dep-grad-peripheral)" filter="url(#dep-shadow)"/>
+    <text x="110" y="215" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">RTL-SDR v3</text>
+    <text x="110" y="235" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">USB 2.0/3.0 • 162 MHz</text>
+    <text x="110" y="253" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#a7f3d0">/dev/bus/usb</text>
+    <path d="M 190,240 H 320 V 300 H 350" stroke="#10b981" stroke-width="3" stroke-dasharray="6,5" fill="none" marker-end="url(#dep-arrow-usb)"/>
+    <text x="225" y="232" font-family="Arial, sans-serif" font-size="10" fill="#065f46">USB 3.0</text>
 
     <!-- Airspy -->
-    <rect x="30" y="310" width="150" height="90" rx="6" fill="url(#dep-grad-peripheral)" filter="url(#dep-shadow)"/>
-    <text x="105" y="330" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Airspy Mini</text>
-    <text x="105" y="350" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">USB 2.0/3.0</text>
-    <text x="105" y="367" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#d1fae5">Backup receiver</text>
-    <text x="105" y="382" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#d1fae5">Optional</text>
-    <text x="105" y="395" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#a7f3d0">/dev/bus/usb</text>
-
-    <path d="M 180,355 L 350,360" stroke="#10b981" stroke-width="3" stroke-dasharray="5,5" fill="none" marker-end="url(#dep-arrow-usb)"/>
-    <text x="250" y="345" font-family="Arial, sans-serif" font-size="10" fill="#065f46">USB 3.0</text>
+    <rect x="30" y="315" width="160" height="90" rx="6" fill="url(#dep-grad-peripheral)" filter="url(#dep-shadow)"/>
+    <text x="110" y="335" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Airspy Mini</text>
+    <text x="110" y="355" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">Backup • USB 2.0/3.0</text>
+    <text x="110" y="373" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#a7f3d0">/dev/bus/usb</text>
+    <path d="M 190,360 H 350" stroke="#10b981" stroke-width="3" stroke-dasharray="6,5" fill="none" marker-end="url(#dep-arrow-usb)"/>
+    <text x="225" y="350" font-family="Arial, sans-serif" font-size="10" fill="#065f46">USB</text>
 
     <!-- USB Sound Card -->
-    <rect x="30" y="420" width="150" height="90" rx="6" fill="url(#dep-grad-peripheral)" filter="url(#dep-shadow)"/>
-    <text x="105" y="440" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">USB Audio DAC</text>
-    <text x="105" y="460" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">Balanced output</text>
-    <text x="105" y="477" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#d1fae5">ALSA device</text>
-    <text x="105" y="492" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#d1fae5">hw:1,0</text>
-    <text x="105" y="505" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#a7f3d0">Audio playback</text>
-
-    <path d="M 180,465 L 350,360" stroke="#10b981" stroke-width="3" stroke-dasharray="5,5" fill="none" marker-end="url(#dep-arrow-usb)"/>
-    <text x="250" y="405" font-family="Arial, sans-serif" font-size="10" fill="#065f46">USB 2.0</text>
+    <rect x="30" y="435" width="160" height="90" rx="6" fill="url(#dep-grad-peripheral)" filter="url(#dep-shadow)"/>
+    <text x="110" y="455" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">USB Audio DAC</text>
+    <text x="110" y="475" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">ALSA hw:1,0</text>
+    <text x="110" y="493" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#a7f3d0">Balanced out</text>
+    <path d="M 190,480 H 320 V 420 H 350" stroke="#10b981" stroke-width="3" stroke-dasharray="6,5" fill="none" marker-end="url(#dep-arrow-usb)"/>
+    <text x="225" y="472" font-family="Arial, sans-serif" font-size="10" fill="#065f46">USB 2.0</text>
   </g>
 
-  <!-- GPIO HAT and Network (Right Side) -->
+  <!-- GPIO / Network / Video / PCIe (Right Side) -->
   <g id="peripherals-right">
     <!-- GPIO Relay HAT -->
-    <rect x="900" y="200" width="170" height="110" rx="6" fill="url(#dep-grad-peripheral)" filter="url(#dep-shadow)"/>
-    <text x="985" y="220" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">GPIO Relay HAT</text>
-    <text x="985" y="240" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">40-pin header</text>
-    <text x="985" y="257" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#d1fae5">Multi-relay board</text>
-    <text x="985" y="274" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#d1fae5">• Transmitter PTT</text>
-    <text x="985" y="289" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#d1fae5">• LED sign power</text>
-    <text x="985" y="304" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#a7f3d0">GPIO control</text>
-
-    <path d="M 850,255 L 900,255" stroke="#dc2626" stroke-width="3" fill="none" marker-end="url(#dep-arrow-gpio)"/>
-    <text x="860" y="245" font-family="Arial, sans-serif" font-size="10" fill="#7f1d1d">GPIO</text>
+    <rect x="910" y="190" width="170" height="100" rx="6" fill="url(#dep-grad-peripheral)" filter="url(#dep-shadow)"/>
+    <text x="995" y="210" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">GPIO Relay HAT</text>
+    <text x="995" y="230" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">40-pin • Multi-relay</text>
+    <text x="995" y="248" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#a7f3d0">PTT • LED power</text>
+    <path d="M 910,240 H 850" stroke="#dc2626" stroke-width="3" fill="none" marker-end="url(#dep-arrow-gpio)"/>
+    <text x="870" y="232" font-family="Arial, sans-serif" font-size="10" fill="#7f1d1d">GPIO</text>
 
     <!-- Ethernet -->
-    <rect x="900" y="330" width="170" height="80" rx="6" fill="url(#dep-grad-peripheral)" filter="url(#dep-shadow)"/>
-    <text x="985" y="350" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Gigabit Ethernet</text>
-    <text x="985" y="370" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">RJ45 port</text>
-    <text x="985" y="387" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#d1fae5">1000 Mbps</text>
-    <text x="985" y="402" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#a7f3d0">Internet access</text>
-
-    <path d="M 850,370 L 900,370" stroke="#3b82f6" stroke-width="3" fill="none" marker-end="url(#dep-arrow)"/>
-    <text x="860" y="360" font-family="Arial, sans-serif" font-size="10" fill="#1e40af">ETH</text>
+    <rect x="910" y="320" width="170" height="80" rx="6" fill="url(#dep-grad-peripheral)" filter="url(#dep-shadow)"/>
+    <text x="995" y="342" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Gigabit Ethernet</text>
+    <text x="995" y="362" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">RJ45 • 1000 Mbps</text>
+    <path d="M 910,360 H 850" stroke="#3b82f6" stroke-width="3" fill="none" marker-end="url(#dep-arrow)"/>
+    <text x="870" y="352" font-family="Arial, sans-serif" font-size="10" fill="#1e40af">ETH</text>
 
     <!-- HDMI Monitor -->
-    <rect x="900" y="430" width="170" height="80" rx="6" fill="url(#dep-grad-peripheral)" filter="url(#dep-shadow)"/>
-    <text x="985" y="450" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">HDMI Monitor</text>
-    <text x="985" y="470" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">Dual micro-HDMI</text>
-    <text x="985" y="487" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#d1fae5">4K @ 60Hz</text>
-    <text x="985" y="502" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#a7f3d0">Status display</text>
-
-    <path d="M 850,470 L 900,470" stroke="#6366f1" stroke-width="3" fill="none" marker-end="url(#dep-arrow)"/>
-    <text x="857" y="460" font-family="Arial, sans-serif" font-size="10" fill="#4338ca">HDMI</text>
+    <rect x="910" y="430" width="170" height="80" rx="6" fill="url(#dep-grad-peripheral)" filter="url(#dep-shadow)"/>
+    <text x="995" y="452" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">HDMI Monitor</text>
+    <text x="995" y="472" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">Dual µHDMI • 4K60</text>
+    <path d="M 910,470 H 850" stroke="#6366f1" stroke-width="3" fill="none" marker-end="url(#dep-arrow)"/>
+    <text x="870" y="462" font-family="Arial, sans-serif" font-size="10" fill="#4338ca">HDMI</text>
 
     <!-- PCIe Storage -->
-    <rect x="900" y="530" width="170" height="80" rx="6" fill="url(#dep-grad-storage)" filter="url(#dep-shadow)"/>
-    <text x="985" y="550" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">PCIe HAT+</text>
-    <text x="985" y="570" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#ede9fe">PCIe 2.0 x1</text>
-    <text x="985" y="587" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#ddd6fe">NVMe SSD</text>
-    <text x="985" y="602" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#c7d2fe">Fast storage</text>
-
-    <path d="M 850,570 L 900,570" stroke="#8b5cf6" stroke-width="3" fill="none" marker-end="url(#dep-arrow)"/>
-    <text x="857" y="560" font-family="Arial, sans-serif" font-size="10" fill="#6b21a8">PCIe</text>
+    <rect x="910" y="530" width="170" height="80" rx="6" fill="url(#dep-grad-storage)" filter="url(#dep-shadow)"/>
+    <text x="995" y="552" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">PCIe HAT+</text>
+    <text x="995" y="572" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#ede9fe">PCIe 2.0 x1 • NVMe</text>
+    <path d="M 910,570 H 850" stroke="#8b5cf6" stroke-width="3" fill="none" marker-end="url(#dep-arrow)"/>
+    <text x="870" y="562" font-family="Arial, sans-serif" font-size="10" fill="#6b21a8">PCIe</text>
   </g>
 
   <!-- External Connections (Bottom) -->
@@ -203,70 +186,63 @@
     <text x="150" y="775" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="white">Internet</text>
     <text x="150" y="793" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#fef9c3">CAP Feeds</text>
 
-    <path d="M 985,410 L 985,750 L 215,780" stroke="#3b82f6" stroke-width="2" stroke-dasharray="8,4" fill="none" marker-end="url(#dep-arrow)"/>
+    <!-- Route Internet to a dedicated WAN anchor (no overlap with ETH line) -->
+    <path d="M 240,780 H 320 V 352 H 845 V 352 H 850" stroke="#3b82f6" stroke-width="2" stroke-dasharray="8,4" fill="none" marker-end="url(#dep-arrow)"/>
 
     <!-- FM Transmitter -->
-    <rect x="320" y="745" width="140" height="70" rx="6" fill="url(#dep-grad-external)" filter="url(#dep-shadow)"/>
-    <text x="390" y="765" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">FM Transmitter</text>
-    <text x="390" y="783" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#fef9c3">EAS broadcast</text>
-    <text x="390" y="800" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#fef9c3">GPIO controlled</text>
-
-    <path d="M 985,310 L 985,720 L 430,745" stroke="#dc2626" stroke-width="2" fill="none" marker-end="url(#dep-arrow)"/>
-    <text x="700" y="520" font-family="Arial, sans-serif" font-size="10" fill="#7f1d1d" transform="rotate(-60, 700, 520)">PTT Relay</text>
+    <rect x="320" y="740" width="150" height="80" rx="6" fill="url(#dep-grad-external)" filter="url(#dep-shadow)"/>
+    <text x="395" y="762" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">FM Transmitter</text>
+    <text x="395" y="782" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#fef9c3">EAS broadcast • PTT</text>
+    <!-- PTT via GPIO -->
+    <path d="M 470,740 V 688 H 845 V 245" stroke="#dc2626" stroke-width="2" fill="none" marker-end="url(#dep-arrow)"/>
+    <text x="700" y="682" font-family="Arial, sans-serif" font-size="10" fill="#7f1d1d">PTT Relay</text>
 
     <!-- LED Sign -->
-    <rect x="510" y="745" width="140" height="70" rx="6" fill="url(#dep-grad-external)" filter="url(#dep-shadow)"/>
-    <text x="580" y="765" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">LED Sign</text>
-    <text x="580" y="783" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#fef9c3">Alpha protocol</text>
-    <text x="580" y="800" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#fef9c3">RS-232/USB</text>
-
-    <path d="M 480,700 L 480,745" stroke="#3b82f6" stroke-width="2" fill="none" marker-end="url(#dep-arrow)"/>
+    <rect x="510" y="740" width="150" height="80" rx="6" fill="url(#dep-grad-external)" filter="url(#dep-shadow)"/>
+    <text x="585" y="762" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">LED Sign</text>
+    <text x="585" y="782" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#fef9c3">Alpha • RS-232/USB</text>
+    <path d="M 585,740 V 700" stroke="#3b82f6" stroke-width="2" fill="none" marker-end="url(#dep-arrow)"/>
 
     <!-- Operator Browser -->
-    <rect x="700" y="745" width="140" height="70" rx="6" fill="url(#dep-grad-external)" filter="url(#dep-shadow)"/>
-    <text x="770" y="765" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Web Browser</text>
-    <text x="770" y="783" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#fef9c3">Operator UI</text>
-    <text x="770" y="800" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#fef9c3">http://pi:5000</text>
-
-    <path d="M 770,700 L 770,745" stroke="#3b82f6" stroke-width="2" fill="none" marker-end="url(#dep-arrow)"/>
+    <rect x="700" y="740" width="150" height="80" rx="6" fill="url(#dep-grad-external)" filter="url(#dep-shadow)"/>
+    <text x="775" y="762" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Web Browser</text>
+    <text x="775" y="782" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#fef9c3">Operator UI • http://pi:5000</text>
+    <path d="M 775,740 V 700" stroke="#3b82f6" stroke-width="2" fill="none" marker-end="url(#dep-arrow)"/>
 
     <!-- Audio Output -->
-    <rect x="890" y="745" width="140" height="70" rx="6" fill="url(#dep-grad-external)" filter="url(#dep-shadow)"/>
-    <text x="960" y="765" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Audio System</text>
-    <text x="960" y="783" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#fef9c3">Balanced output</text>
-    <text x="960" y="800" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#fef9c3">SAME audio</text>
-
-    <path d="M 105,510 L 105,720 L 920,780" stroke="#10b981" stroke-width="2" fill="none" marker-end="url(#dep-arrow)"/>
+    <rect x="890" y="740" width="150" height="80" rx="6" fill="url(#dep-grad-external)" filter="url(#dep-shadow)"/>
+    <text x="965" y="762" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Audio System</text>
+    <text x="965" y="782" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#fef9c3">Balanced • SAME</text>
+    <path d="M 965,740 V 700" stroke="#10b981" stroke-width="2" fill="none" marker-end="url(#dep-arrow)"/>
   </g>
 
   <!-- Legend -->
-  <g id="legend" transform="translate(50, 550)">
-    <rect x="0" y="0" width="150" height="140" rx="6" fill="white" stroke="#cbd5e1" stroke-width="2" filter="url(#dep-shadow)"/>
-    <text x="75" y="20" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#1e293b">Connections</text>
+  <g id="legend" transform="translate(50, 560)">
+    <rect x="0" y="0" width="160" height="140" rx="6" fill="white" stroke="#cbd5e1" stroke-width="2" filter="url(#dep-shadow)"/>
+    <text x="80" y="20" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#1e293b">Connections</text>
 
-    <path d="M 10,35 L 50,35" stroke="#10b981" stroke-width="3" stroke-dasharray="5,5" fill="none" marker-end="url(#dep-arrow-usb)"/>
-    <text x="60" y="39" font-family="Arial, sans-serif" font-size="10" fill="#475569">USB 2.0/3.0</text>
+    <path d="M 12,38 H 60" stroke="#10b981" stroke-width="3" stroke-dasharray="6,5" fill="none" marker-end="url(#dep-arrow-usb)"/>
+    <text x="70" y="41" font-family="Arial, sans-serif" font-size="10" fill="#475569">USB 2.0/3.0</text>
 
-    <path d="M 10,55 L 50,55" stroke="#dc2626" stroke-width="3" fill="none" marker-end="url(#dep-arrow-gpio)"/>
-    <text x="60" y="59" font-family="Arial, sans-serif" font-size="10" fill="#475569">GPIO</text>
+    <path d="M 12,58 H 60" stroke="#dc2626" stroke-width="3" fill="none" marker-end="url(#dep-arrow-gpio)"/>
+    <text x="70" y="61" font-family="Arial, sans-serif" font-size="10" fill="#475569">GPIO</text>
 
-    <path d="M 10,75 L 50,75" stroke="#3b82f6" stroke-width="3" fill="none" marker-end="url(#dep-arrow)"/>
-    <text x="60" y="79" font-family="Arial, sans-serif" font-size="10" fill="#475569">Network/Data</text>
+    <path d="M 12,78 H 60" stroke="#3b82f6" stroke-width="3" fill="none" marker-end="url(#dep-arrow)"/>
+    <text x="70" y="81" font-family="Arial, sans-serif" font-size="10" fill="#475569">Network/Data</text>
 
-    <path d="M 10,95 L 50,95" stroke="#6366f1" stroke-width="3" fill="none" marker-end="url(#dep-arrow)"/>
-    <text x="60" y="99" font-family="Arial, sans-serif" font-size="10" fill="#475569">HDMI Video</text>
+    <path d="M 12,98 H 60" stroke="#6366f1" stroke-width="3" fill="none" marker-end="url(#dep-arrow)"/>
+    <text x="70" y="101" font-family="Arial, sans-serif" font-size="10" fill="#475569">HDMI Video</text>
 
-    <path d="M 10,115 L 50,115" stroke="#8b5cf6" stroke-width="3" fill="none" marker-end="url(#dep-arrow)"/>
-    <text x="60" y="119" font-family="Arial, sans-serif" font-size="10" fill="#475569">PCIe</text>
+    <path d="M 12,118 H 60" stroke="#8b5cf6" stroke-width="3" fill="none" marker-end="url(#dep-arrow)"/>
+    <text x="70" y="121" font-family="Arial, sans-serif" font-size="10" fill="#475569">PCIe</text>
   </g>
 
   <!-- Cost Box -->
-  <rect x="220" y="550" width="110" height="90" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="2" filter="url(#dep-shadow)"/>
-  <text x="275" y="570" font-family="Arial, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" fill="#166534">Total Cost</text>
-  <text x="275" y="590" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="#15803d">~$585</text>
-  <text x="275" y="608" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#166534">vs. DASDEC3</text>
-  <text x="275" y="622" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#166534">$5,000-$7,000</text>
-  <text x="275" y="635" font-family="Arial, sans-serif" font-size="8" font-weight="bold" text-anchor="middle" fill="#15803d">90% savings!</text>
+  <rect x="230" y="560" width="120" height="95" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="2" filter="url(#dep-shadow)"/>
+  <text x="290" y="580" font-family="Arial, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" fill="#166534">Total Cost</text>
+  <text x="290" y="602" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="#15803d">~$585</text>
+  <text x="290" y="620" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#166534">vs. DASDEC3 $5–7k</text>
+  <text x="290" y="635" font-family="Arial, sans-serif" font-size="9" font-weight="bold" text-anchor="middle" fill="#15803d">~90% savings</text>
 
   <!-- Footer -->
   <text x="600" y="885" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="#64748b">
