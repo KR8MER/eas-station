@@ -593,13 +593,22 @@ def get_env_file_path() -> Path:
 
 
 def read_env_file() -> Dict[str, str]:
-    """Read all variables from .env file."""
+    """Read all variables from .env file, or from environment if .env doesn't exist."""
     env_path = get_env_file_path()
     env_vars = {}
 
     if not env_path.exists():
+        # If .env doesn't exist, read from current environment variables
+        # Get all variables we care about from our ENV_CATEGORIES
+        for cat_data in ENV_CATEGORIES.values():
+            for var_config in cat_data['variables']:
+                key = var_config['key']
+                value = os.environ.get(key, '')
+                if value:
+                    env_vars[key] = value
         return env_vars
 
+    # Read from .env file
     with open(env_path, 'r') as f:
         for line in f:
             line = line.strip()
@@ -677,8 +686,12 @@ def register_environment_routes(app, logger):
     @app.route('/api/environment/variables')
     def get_environment_variables():
         """Get all environment variables with current values."""
-        # Read current values from .env
+        # Read current values from .env or environment
         current_values = read_env_file()
+
+        # Check if .env file exists
+        env_path = get_env_file_path()
+        env_file_exists = env_path.exists()
 
         # Build response with categories and variables
         response = {}
@@ -713,6 +726,13 @@ def register_environment_routes(app, logger):
                 'description': cat_data['description'],
                 'variables': variables,
             }
+
+        # Add metadata about .env file status
+        response['_meta'] = {
+            'env_file_exists': env_file_exists,
+            'env_file_path': str(env_path),
+            'reading_from': 'env_file' if env_file_exists else 'environment',
+        }
 
         return jsonify(response)
 
@@ -778,6 +798,15 @@ def register_environment_routes(app, logger):
         env_vars = read_env_file()
         issues = []
         warnings = []
+
+        # Check if .env file exists
+        env_path = get_env_file_path()
+        if not env_path.exists():
+            warnings.append({
+                'severity': 'warning',
+                'variable': '.env file',
+                'message': f'.env file does not exist at {env_path}. Reading from environment variables. Create .env file to persist changes.',
+            })
 
         # Check required variables
         for cat_data in ENV_CATEGORIES.values():
