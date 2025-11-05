@@ -1,0 +1,16 @@
+[Unit]
+Description=Daily EAS Station Backup Timer
+Documentation=https://github.com/KR8MER/eas-station
+Requires=eas-backup.service
+
+[Timer]
+# Run daily at 2:00 AM local time
+OnCalendar=daily
+OnCalendar=02:00
+Persistent=true
+
+# Run 5 minutes after boot if we missed a scheduled run
+OnBootSec=5min
+
+[Install]
+WantedBy=timers.target
