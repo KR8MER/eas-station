@@ -483,7 +483,7 @@ class MetricsAggregator:
                 aggregation_period=aggregation_period,
                 value=relay_rate,
                 sample_count=received_total,
-                metadata={
+                extra_metadata={
                     "received": received_total,
                     "relayed": relayed_total,
                     "auto_relayed": auto_relay_total,

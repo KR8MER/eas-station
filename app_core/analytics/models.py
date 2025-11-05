@@ -51,7 +51,8 @@ class MetricSnapshot(db.Model):
     entity_type = db.Column(db.String(50))
 
     # Additional metadata (JSON)
-    metadata = db.Column(JSONB)
+    # NOTE: Using 'extra_metadata' instead of 'metadata' because 'metadata' is reserved by SQLAlchemy
+    extra_metadata = db.Column(JSONB)
 
     # Timestamps
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
@@ -92,7 +93,7 @@ class MetricSnapshot(db.Model):
             'sample_count': self.sample_count,
             'entity_id': self.entity_id,
             'entity_type': self.entity_type,
-            'metadata': self.metadata,
+            'metadata': self.extra_metadata,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -156,7 +157,8 @@ class TrendRecord(db.Model):
     forecast_confidence = db.Column(db.Float)  # 0.0 to 1.0
 
     # Additional metadata (JSON)
-    metadata = db.Column(JSONB)
+    # NOTE: Using 'extra_metadata' instead of 'metadata' because 'metadata' is reserved by SQLAlchemy
+    extra_metadata = db.Column(JSONB)
 
     # Timestamps
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
@@ -209,7 +211,7 @@ class TrendRecord(db.Model):
             'forecast_days_ahead': self.forecast_days_ahead,
             'forecast_value': self.forecast_value,
             'forecast_confidence': self.forecast_confidence,
-            'metadata': self.metadata,
+            'metadata': self.extra_metadata,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -281,7 +283,8 @@ class AnomalyRecord(db.Model):
     false_positive_reason = db.Column(db.Text)
 
     # Additional metadata (JSON)
-    metadata = db.Column(JSONB)
+    # NOTE: Using 'extra_metadata' instead of 'metadata' because 'metadata' is reserved by SQLAlchemy
+    extra_metadata = db.Column(JSONB)
 
     # Timestamps
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
@@ -343,7 +346,7 @@ class AnomalyRecord(db.Model):
             'resolution_notes': self.resolution_notes,
             'false_positive': self.false_positive,
             'false_positive_reason': self.false_positive_reason,
-            'metadata': self.metadata,
+            'metadata': self.extra_metadata,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
