@@ -122,7 +122,7 @@ Allow: /
             route_logger.debug("Radio table validation failed: %s", exc)
 
         receivers = (
-            RadioReceiver.query.order_by(RadioReceiver.display_name, RadioReceiver.identifier).all()
+            RadioReceiver.query.order_by(RadioReceiver.display_name.asc(), RadioReceiver.identifier.asc()).all()
         )
 
         payload = []

@@ -181,7 +181,7 @@ def register(app: Flask, logger) -> None:
         except Exception as exc:  # pragma: no cover - defensive
             route_logger.debug("Radio table validation failed: %s", exc)
 
-        receivers = RadioReceiver.query.order_by(RadioReceiver.display_name, RadioReceiver.identifier).all()
+        receivers = RadioReceiver.query.order_by(RadioReceiver.display_name.asc(), RadioReceiver.identifier.asc()).all()
         location_settings = get_location_settings()
 
         return render_template(
@@ -193,7 +193,7 @@ def register(app: Flask, logger) -> None:
     @app.route("/api/radio/receivers", methods=["GET"])
     def api_list_receivers() -> Any:
         ensure_radio_tables(route_logger)
-        receivers = RadioReceiver.query.order_by(RadioReceiver.display_name, RadioReceiver.identifier).all()
+        receivers = RadioReceiver.query.order_by(RadioReceiver.display_name.asc(), RadioReceiver.identifier.asc()).all()
         return jsonify({"receivers": [_receiver_to_dict(receiver) for receiver in receivers]})
 
     @app.route("/api/radio/receivers", methods=["POST"])
@@ -369,7 +369,7 @@ def register(app: Flask, logger) -> None:
     def api_monitoring_radio() -> Any:
         """Get monitoring status for all radio receivers (includes latest status updates)."""
         ensure_radio_tables(route_logger)
-        receivers = RadioReceiver.query.order_by(RadioReceiver.display_name, RadioReceiver.identifier).all()
+        receivers = RadioReceiver.query.order_by(RadioReceiver.display_name.asc(), RadioReceiver.identifier.asc()).all()
         return jsonify({"receivers": [_receiver_to_dict(receiver) for receiver in receivers]})
 
 
