@@ -15,11 +15,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-try:  # pragma: no cover - GPIO hardware is optional and platform specific
-    import RPi.GPIO as RPiGPIO  # type: ignore
-except Exception:  # pragma: no cover - gracefully handle non-RPi environments
-    RPiGPIO = None
-
 from app_utils.event_codes import EVENT_CODE_REGISTRY, resolve_event_code
 from app_utils.fips_codes import P_DIGIT_LABELS
 from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS
@@ -32,6 +27,7 @@ from .eas_fsk import (
     generate_fsk_samples,
 )
 from .eas_tts import TTSEngine
+from .gpio import GPIORelayController  # Import from unified GPIO module
 
 MANUAL_FIPS_ENV_TOKENS = {'ALL', 'ANY', 'US', 'USA', '*'}
 
@@ -570,41 +566,7 @@ def _run_command(command: Sequence[str], logger) -> None:
             logger.warning(f"Failed to run command {' '.join(command)}: {exc}")
 
 
-@dataclass
-class GPIORelayController:
-    pin: int
-    active_high: bool
-    hold_seconds: float
-    activated_at: Optional[float] = field(default=None, init=False)
-
-    def __post_init__(self) -> None:  # pragma: no cover - hardware specific
-        if RPiGPIO is None:
-            raise RuntimeError('RPi.GPIO not available')
-        self._active_level = RPiGPIO.HIGH if self.active_high else RPiGPIO.LOW
-        self._resting_level = RPiGPIO.LOW if self.active_high else RPiGPIO.HIGH
-        RPiGPIO.setmode(RPiGPIO.BCM)
-        RPiGPIO.setup(self.pin, RPiGPIO.OUT, initial=self._resting_level)
-
-    def activate(self, logger) -> None:  # pragma: no cover - hardware specific
-        if RPiGPIO is None:
-            return
-        RPiGPIO.output(self.pin, self._active_level)
-        self.activated_at = time.monotonic()
-        if logger:
-            logger.debug('Activated GPIO relay on pin %s', self.pin)
-
-    def deactivate(self, logger) -> None:  # pragma: no cover - hardware specific
-        if RPiGPIO is None:
-            return
-        if self.activated_at is not None:
-            elapsed = time.monotonic() - self.activated_at
-            remaining = max(0.0, self.hold_seconds - elapsed)
-            if remaining > 0:
-                time.sleep(remaining)
-        RPiGPIO.output(self.pin, self._resting_level)
-        self.activated_at = None
-        if logger:
-            logger.debug('Released GPIO relay on pin %s', self.pin)
+# GPIORelayController is now imported from app_utils.gpio module
 
 
 class EASAudioGenerator:
