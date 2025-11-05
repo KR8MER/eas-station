@@ -116,7 +116,14 @@ if (secretButton) {
         secretButton.disabled = true;
         secretButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Generating';
         try {
-            const response = await fetch('{{ url_for('setup_generate_secret') }}', { method: 'POST' });
+            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+            const response = await fetch('{{ url_for('setup_generate_secret') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                }
+            });
             if (!response.ok) {
                 throw new Error('Failed to generate secret key.');
             }
