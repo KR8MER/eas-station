@@ -5,6 +5,7 @@
 This document provides comprehensive architectural diagrams and flowcharts for the entire EAS Station system, covering all major components, data flows, and operational workflows. It serves as a visual reference for understanding how the system operates from end to end.
 
 **Related Documents:**
+- [Data Flow Sequences](DATA_FLOW_SEQUENCES.md) - Detailed sequence diagrams showing data processing paths ⭐ NEW
 - [Theory of Operation](THEORY_OF_OPERATION.md) - Conceptual overview and protocol details
 - [Audio Ingest Documentation](../audio.md) - Audio ingest system specifics
 - [Help Guide](../guides/HELP.md) - Operational procedures
@@ -1072,6 +1073,7 @@ This architecture document provides visual representations of:
 These diagrams serve as living documentation that should be updated as the system evolves.
 
 **Related Resources:**
+- [Data Flow Sequences](DATA_FLOW_SEQUENCES.md) - Detailed data processing paths ⭐ NEW
 - [Theory of Operation](THEORY_OF_OPERATION.md) - Detailed operational concepts
 - [Developer Guide](../development/AGENTS.md) - Code standards and practices
 - [Help Guide](../guides/HELP.md) - Operational procedures
