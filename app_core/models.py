@@ -666,6 +666,40 @@ class LEDSignStatus(db.Model):
     is_connected = db.Column(db.Boolean, default=False)
 
 
+class VFDDisplay(db.Model):
+    """VFD display content and state tracking."""
+    __tablename__ = "vfd_displays"
+
+    id = db.Column(db.Integer, primary_key=True)
+    content_type = db.Column(db.String(50), nullable=False)  # text, image, alert, status
+    content_data = db.Column(db.Text)  # Text content or image path
+    binary_data = db.Column(db.LargeBinary)  # Image binary data
+    priority = db.Column(db.Integer, default=2)  # 0=emergency, 1=alert, 2=normal, 3=low
+    x_position = db.Column(db.Integer, default=0)
+    y_position = db.Column(db.Integer, default=0)
+    duration_seconds = db.Column(db.Integer)
+    scheduled_time = db.Column(db.DateTime(timezone=True))
+    displayed_at = db.Column(db.DateTime(timezone=True))
+    is_active = db.Column(db.Boolean, default=True)
+    alert_id = db.Column(db.Integer, db.ForeignKey("cap_alerts.id"))
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
+
+
+class VFDStatus(db.Model):
+    """VFD display hardware status tracking."""
+    __tablename__ = "vfd_status"
+
+    id = db.Column(db.Integer, primary_key=True)
+    port = db.Column(db.String(50), nullable=False)
+    baudrate = db.Column(db.Integer, default=38400)
+    brightness_level = db.Column(db.Integer, default=7)
+    is_connected = db.Column(db.Boolean, default=False)
+    error_count = db.Column(db.Integer, default=0)
+    last_error = db.Column(db.Text)
+    last_update = db.Column(db.DateTime(timezone=True), default=utc_now)
+    current_content_type = db.Column(db.String(50))  # What's currently displayed
+
+
 class AudioSourceMetrics(db.Model):
     """Real-time audio source metrics for monitoring and health tracking."""
     __tablename__ = "audio_source_metrics"
