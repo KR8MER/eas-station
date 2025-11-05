@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Error - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+    .error-container {
+        min-height: 60vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+    }
+
+    .error-content {
+        max-width: 600px;
+        text-align: center;
+    }
+
+    .error-icon {
+        font-size: 4rem;
+        color: var(--bs-danger);
+        margin-bottom: 1.5rem;
+    }
+
+    .error-title {
+        font-size: 2rem;
+        font-weight: 600;
+        color: var(--bs-dark);
+        margin-bottom: 1rem;
+    }
+
+    [data-theme="dark"] .error-title {
+        color: var(--bs-light);
+    }
+
+    .error-message {
+        font-size: 1.1rem;
+        color: var(--bs-secondary);
+        margin-bottom: 1.5rem;
+    }
+
+    .error-details {
+        background-color: var(--bs-light);
+        border: 1px solid var(--bs-border-color);
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-top: 1.5rem;
+        text-align: left;
+        font-family: monospace;
+        font-size: 0.9rem;
+        color: var(--bs-dark);
+        overflow-x: auto;
+    }
+
+    [data-theme="dark"] .error-details {
+        background-color: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.1);
+        color: var(--bs-light);
+    }
+
+    .error-actions {
+        margin-top: 2rem;
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="error-container">
+        <div class="error-content">
+            <div class="error-icon">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+
+            <h1 class="error-title">
+                {{ error or "An Error Occurred" }}
+            </h1>
+
+            <p class="error-message">
+                We're sorry, but something went wrong while processing your request.
+            </p>
+
+            {% if details %}
+            <details>
+                <summary class="text-muted" style="cursor: pointer; user-select: none;">
+                    <i class="fas fa-info-circle me-1"></i>Technical Details
+                </summary>
+                <div class="error-details">
+                    {{ details }}
+                </div>
+            </details>
+            {% endif %}
+
+            <div class="error-actions">
+                <a href="javascript:history.back()" class="btn btn-outline-primary">
+                    <i class="fas fa-arrow-left me-1"></i> Go Back
+                </a>
+                <a href="/" class="btn btn-primary">
+                    <i class="fas fa-home me-1"></i> Home
+                </a>
+                <a href="/docs" class="btn btn-outline-secondary">
+                    <i class="fas fa-book me-1"></i> Documentation
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
