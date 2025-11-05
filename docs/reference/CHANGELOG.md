@@ -16,6 +16,7 @@ tracks releases under the 2.x series.
   - Built analytics dashboard UI at `/analytics` with real-time metrics, trend visualization, and anomaly management
   - Added `AnalyticsScheduler` for automated background processing of metrics aggregation and analysis
   - Documented complete analytics system architecture and usage in `app_core/analytics/README.md`
+  - Published comprehensive compliance reporting playbook in `docs/compliance/reporting_playbook.md` with workflows for weekly/monthly test verification, performance monitoring, anomaly investigation, and regulatory audit preparation
 - Added comprehensive audio ingest pipeline for unified capture from SDR, ALSA, and file sources
   - Implemented `app_core/audio/ingest.py` with pluggable source adapters and PCM normalization
   - Added peak/RMS metering and silence detection with PostgreSQL storage
