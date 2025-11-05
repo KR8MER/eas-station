@@ -46,7 +46,7 @@ export POSTGRES_HOST=localhost  # or your database host
 export POSTGRES_PASSWORD=your_password
 
 # Run the migration script
-python3 apply_source_type_migration.py
+python3 scripts/apply_source_type_migration.py
 ```
 
 The script will:
