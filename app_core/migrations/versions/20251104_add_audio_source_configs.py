@@ -8,7 +8,7 @@ from sqlalchemy import inspect
 from sqlalchemy.dialects.postgresql import JSONB
 
 
-revision = "20251104_audio_source_configs"
+revision = "20251104_add_audio_source_configs"
 down_revision = "20251104_radio_serial"
 branch_labels = None
 depends_on = None
