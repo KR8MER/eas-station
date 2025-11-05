@@ -165,6 +165,30 @@ These diagrams were created earlier and provide high-level system overviews:
 
 In addition to the professional SVG diagrams above, the following documentation files contain embedded Mermaid.js diagrams that render in GitHub, GitLab, and compatible markdown viewers:
 
+### Data Flow Sequences (Mermaid) ⭐ NEW
+
+**File:** [docs/architecture/DATA_FLOW_SEQUENCES.md](architecture/DATA_FLOW_SEQUENCES.md)
+
+**Contains:**
+- **Alert Processing Data Flow** - Complete CAP alert path from fetch to storage
+- **SDR Continuous Monitoring Data Flow** - RF signal to digital samples conversion
+- **Multi-Source Audio Ingest Data Flow** - Audio from multiple sources through adapters
+- **Radio Capture Coordination Data Flow** - Coordinated capture triggering during broadcast
+- **EAS Message Generation Data Flow** - Alert to SAME to audio file generation
+- **Complete Alert-to-Broadcast Pipeline** - End-to-end flow with all components
+
+**Rendering:**
+- ✅ **GitHub**: Native Mermaid rendering in markdown
+- ✅ **MkDocs Site**: Automatic rendering via pymdownx.superfences
+- ✅ **Local Viewing**: Renders in any Mermaid-compatible markdown viewer
+
+**Use Cases:**
+- Understanding how data moves through the system
+- Tracing data transformations at each stage
+- Debugging data flow issues
+- Onboarding developers to system architecture
+- Planning modifications to data processing paths
+
 ### System Architecture (Mermaid)
 
 **File:** [docs/architecture/SYSTEM_ARCHITECTURE.md](architecture/SYSTEM_ARCHITECTURE.md)
@@ -267,5 +291,5 @@ When adding new diagrams:
 ---
 
 **Last Updated:** 2025-11-05
-**Diagram Count:** 7 professional SVG diagrams + 25+ embedded Mermaid diagrams
-**Total Documentation Coverage:** Complete system from hardware to software
+**Diagram Count:** 7 professional SVG diagrams + 31+ embedded Mermaid diagrams (6 new data flow sequences)
+**Total Documentation Coverage:** Complete system from hardware to software, including detailed data processing flows

@@ -135,6 +135,7 @@ nav:
       - Contributing: process/CONTRIBUTING.md
   - Architecture:
       - System Architecture: architecture/SYSTEM_ARCHITECTURE.md
+      - Data Flow Sequences: architecture/DATA_FLOW_SEQUENCES.md
       - Theory of Operation: architecture/THEORY_OF_OPERATION.md
   - Frontend:
       - Frontend Index: frontend/FRONTEND_INDEX.md
