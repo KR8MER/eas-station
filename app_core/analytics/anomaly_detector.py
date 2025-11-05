@@ -292,7 +292,7 @@ class AnomalyDetector:
                         baseline_mean=baseline_mean,
                         baseline_stddev=baseline_stddev,
                         description=description,
-                        metadata={
+                        extra_metadata={
                             "percent_change": percent_change * 100,
                             "previous_value": prev_snapshot.value,
                         },
@@ -511,7 +511,7 @@ class AnomalyDetector:
                     baseline_mean=baseline_mean,
                     baseline_stddev=baseline_stddev,
                     description=description,
-                    metadata={
+                    extra_metadata={
                         "previous_direction": previous_trend.trend_direction,
                         "current_direction": current_trend.trend_direction,
                     },
