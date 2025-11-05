@@ -291,7 +291,7 @@ def register(app: Flask, logger) -> None:
             cutoff = utc_now() - timedelta(days=days)
 
             # Get activation counts by pin
-            from sqlalchemy import func
+            from sqlalchemy import func, case
 
             pin_stats = (
                 db.session.query(
@@ -300,7 +300,10 @@ def register(app: Flask, logger) -> None:
                     func.avg(GPIOActivationLog.duration_seconds).label("avg_duration"),
                     func.max(GPIOActivationLog.duration_seconds).label("max_duration"),
                     func.sum(
-                        func.cast(~GPIOActivationLog.success, db.Integer)
+                        case(
+                            (GPIOActivationLog.success.is_(False), 1),
+                            else_=0,
+                        )
                     ).label("failure_count"),
                 )
                 .filter(GPIOActivationLog.activated_at >= cutoff)

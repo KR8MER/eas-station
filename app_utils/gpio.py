@@ -445,8 +445,11 @@ class GPIOController:
                         self.logger.error(
                             f"Watchdog timeout on pin {pin} after {timeout_seconds}s - forcing deactivation"
                         )
-                    self._states[pin] = GPIOState.WATCHDOG_TIMEOUT
+                    # Deactivate first, then mark as watchdog timeout
                     self.deactivate(pin, force=True)
+                    # Mark as watchdog timeout after successful deactivation
+                    if self._states.get(pin) == GPIOState.INACTIVE:
+                        self._states[pin] = GPIOState.WATCHDOG_TIMEOUT
 
         thread = threading.Thread(target=watchdog, daemon=True, name=f"gpio-watchdog-{pin}")
         self._watchdog_threads[pin] = thread
