@@ -1,0 +1,512 @@
+{% extends "base.html" %}
+
+{% block title %}VFD Display Control{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <h1 class="mb-4">
+        <i class="fas fa-tv"></i> VFD Display Control
+        <span class="badge {% if vfd_available %}badge-success{% else %}badge-secondary{% endif %}">
+            {% if vfd_available %}Connected{% else %}Disconnected{% endif %}
+        </span>
+    </h1>
+
+    {% if not vfd_available %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        <strong>VFD Display Not Available</strong><br>
+        The Noritake VFD display is not connected or not configured. Check the VFD_PORT and VFD_BAUDRATE environment variables.
+    </div>
+    {% endif %}
+
+    <!-- Display Status -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="fas fa-info-circle"></i> Display Status
+        </div>
+        <div class="card-body">
+            {% if vfd_status %}
+            <div class="row">
+                <div class="col-md-3">
+                    <strong>Connection:</strong><br>
+                    <span class="badge {% if vfd_status.connected %}badge-success{% else %}badge-danger{% endif %}">
+                        {% if vfd_status.connected %}Connected{% else %}Disconnected{% endif %}
+                    </span>
+                </div>
+                <div class="col-md-3">
+                    <strong>Port:</strong><br>
+                    {{ vfd_status.port }}
+                </div>
+                <div class="col-md-3">
+                    <strong>Baud Rate:</strong><br>
+                    {{ vfd_status.baudrate }}
+                </div>
+                <div class="col-md-3">
+                    <strong>Resolution:</strong><br>
+                    {{ vfd_status.width }} × {{ vfd_status.height }} pixels
+                </div>
+            </div>
+            <div class="row mt-3">
+                <div class="col-md-3">
+                    <strong>Brightness:</strong><br>
+                    Level {{ vfd_status.brightness }} / 7
+                </div>
+                <div class="col-md-9">
+                    {% if db_status and db_status.current_content_type %}
+                    <strong>Current Display:</strong><br>
+                    {{ db_status.current_content_type|title }}
+                    <small class="text-muted">(Last updated: {{ db_status.last_update.strftime('%Y-%m-%d %H:%M:%S') if db_status.last_update else 'Never' }})</small>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <p class="text-muted">VFD status unavailable</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Control Tabs -->
+    <ul class="nav nav-tabs" id="vfdTabs" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link active" id="text-tab" data-toggle="tab" href="#text" role="tab">
+                <i class="fas fa-font"></i> Text
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="image-tab" data-toggle="tab" href="#image" role="tab">
+                <i class="fas fa-image"></i> Image
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="graphics-tab" data-toggle="tab" href="#graphics" role="tab">
+                <i class="fas fa-draw-polygon"></i> Graphics
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="settings-tab" data-toggle="tab" href="#settings" role="tab">
+                <i class="fas fa-cog"></i> Settings
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="history-tab" data-toggle="tab" href="#history" role="tab">
+                <i class="fas fa-history"></i> History
+            </a>
+        </li>
+    </ul>
+
+    <div class="tab-content mt-3" id="vfdTabContent">
+        <!-- Text Tab -->
+        <div class="tab-pane fade show active" id="text" role="tabpanel">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Display Text</h5>
+                    <form id="textForm">
+                        <div class="form-group">
+                            <label>Text Content</label>
+                            <input type="text" class="form-control" id="textContent" placeholder="Enter text to display" maxlength="20">
+                            <small class="form-text text-muted">Maximum 20 characters</small>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label>X Position (0-139)</label>
+                                <input type="number" class="form-control" id="textX" value="0" min="0" max="139">
+                            </div>
+                            <div class="col-md-6">
+                                <label>Y Position (0-31)</label>
+                                <input type="number" class="form-control" id="textY" value="0" min="0" max="31">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary mt-3" {% if not vfd_available %}disabled{% endif %}>
+                            <i class="fas fa-paper-plane"></i> Display Text
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Image Tab -->
+        <div class="tab-pane fade" id="image" role="tabpanel">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Display Image</h5>
+                    <form id="imageForm" enctype="multipart/form-data">
+                        <div class="form-group">
+                            <label>Image File</label>
+                            <input type="file" class="form-control-file" id="imageFile" accept="image/*">
+                            <small class="form-text text-muted">
+                                Supports PNG, JPG, BMP. Image will be converted to 1-bit monochrome.
+                                Recommended size: 140×32 pixels or smaller.
+                            </small>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label>X Position</label>
+                                <input type="number" class="form-control" id="imageX" value="0" min="0" max="139">
+                            </div>
+                            <div class="col-md-6">
+                                <label>Y Position</label>
+                                <input type="number" class="form-control" id="imageY" value="0" min="0" max="31">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary mt-3" {% if not vfd_available %}disabled{% endif %}>
+                            <i class="fas fa-upload"></i> Upload & Display
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Graphics Tab -->
+        <div class="tab-pane fade" id="graphics" role="tabpanel">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Draw Graphics</h5>
+
+                    <!-- Draw Line -->
+                    <h6 class="mt-3">Draw Line</h6>
+                    <form id="lineForm" class="border p-3 mb-3">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <label>X1</label>
+                                <input type="number" class="form-control" id="lineX1" value="0" min="0" max="139">
+                            </div>
+                            <div class="col-md-3">
+                                <label>Y1</label>
+                                <input type="number" class="form-control" id="lineY1" value="0" min="0" max="31">
+                            </div>
+                            <div class="col-md-3">
+                                <label>X2</label>
+                                <input type="number" class="form-control" id="lineX2" value="139" min="0" max="139">
+                            </div>
+                            <div class="col-md-3">
+                                <label>Y2</label>
+                                <input type="number" class="form-control" id="lineY2" value="31" min="0" max="31">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-success mt-2" {% if not vfd_available %}disabled{% endif %}>
+                            <i class="fas fa-slash"></i> Draw Line
+                        </button>
+                    </form>
+
+                    <!-- Draw Rectangle -->
+                    <h6 class="mt-3">Draw Rectangle</h6>
+                    <form id="rectangleForm" class="border p-3 mb-3">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <label>X1</label>
+                                <input type="number" class="form-control" id="rectX1" value="10" min="0" max="139">
+                            </div>
+                            <div class="col-md-3">
+                                <label>Y1</label>
+                                <input type="number" class="form-control" id="rectY1" value="5" min="0" max="31">
+                            </div>
+                            <div class="col-md-3">
+                                <label>X2</label>
+                                <input type="number" class="form-control" id="rectX2" value="130" min="0" max="139">
+                            </div>
+                            <div class="col-md-3">
+                                <label>Y2</label>
+                                <input type="number" class="form-control" id="rectY2" value="27" min="0" max="31">
+                            </div>
+                        </div>
+                        <div class="form-check mt-2">
+                            <input type="checkbox" class="form-check-input" id="rectFilled">
+                            <label class="form-check-label" for="rectFilled">Filled</label>
+                        </div>
+                        <button type="submit" class="btn btn-success mt-2" {% if not vfd_available %}disabled{% endif %}>
+                            <i class="fas fa-square"></i> Draw Rectangle
+                        </button>
+                    </form>
+
+                    <!-- Progress Bar -->
+                    <h6 class="mt-3">Progress Bar</h6>
+                    <form id="progressForm" class="border p-3">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <label>X</label>
+                                <input type="number" class="form-control" id="progressX" value="10" min="0" max="139">
+                            </div>
+                            <div class="col-md-3">
+                                <label>Y</label>
+                                <input type="number" class="form-control" id="progressY" value="12" min="0" max="31">
+                            </div>
+                            <div class="col-md-3">
+                                <label>Width</label>
+                                <input type="number" class="form-control" id="progressWidth" value="120" min="10" max="140">
+                            </div>
+                            <div class="col-md-3">
+                                <label>Height</label>
+                                <input type="number" class="form-control" id="progressHeight" value="8" min="4" max="32">
+                            </div>
+                        </div>
+                        <div class="form-group mt-2">
+                            <label>Progress (0-100%)</label>
+                            <input type="range" class="custom-range" id="progressValue" min="0" max="100" value="50">
+                            <span id="progressValueDisplay">50%</span>
+                        </div>
+                        <button type="submit" class="btn btn-success mt-2" {% if not vfd_available %}disabled{% endif %}>
+                            <i class="fas fa-chart-bar"></i> Draw Progress Bar
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div class="tab-pane fade" id="settings" role="tabpanel">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Display Settings</h5>
+
+                    <!-- Brightness Control -->
+                    <div class="form-group">
+                        <label>Brightness Level</label>
+                        <input type="range" class="custom-range" id="brightnessSlider" min="0" max="7"
+                               value="{{ vfd_status.brightness if vfd_status else 7 }}"
+                               {% if not vfd_available %}disabled{% endif %}>
+                        <div class="d-flex justify-content-between">
+                            <small>0 (Dimmest)</small>
+                            <span id="brightnessValue">{{ vfd_status.brightness if vfd_status else 7 }}</span>
+                            <small>7 (Brightest)</small>
+                        </div>
+                    </div>
+
+                    <!-- Clear Display -->
+                    <div class="mt-4">
+                        <button id="clearButton" class="btn btn-danger" {% if not vfd_available %}disabled{% endif %}>
+                            <i class="fas fa-eraser"></i> Clear Display
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- History Tab -->
+        <div class="tab-pane fade" id="history" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-history"></i> Display History
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Type</th>
+                                    <th>Content</th>
+                                    <th>Position</th>
+                                    <th>Priority</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody">
+                                {% for display in recent_displays %}
+                                <tr>
+                                    <td>{{ display.created_at.strftime('%H:%M:%S') if display.created_at else 'N/A' }}</td>
+                                    <td><span class="badge badge-info">{{ display.content_type }}</span></td>
+                                    <td>
+                                        {% if display.content_type == 'text' %}
+                                            {{ display.content_data[:30] }}
+                                        {% elif display.content_type == 'image' %}
+                                            <i class="fas fa-image"></i> Image
+                                        {% else %}
+                                            {{ display.content_type }}
+                                        {% endif %}
+                                    </td>
+                                    <td>({{ display.x_position }}, {{ display.y_position }})</td>
+                                    <td>{{ display.priority }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">No display history</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Status Toast -->
+<div class="toast" id="statusToast" style="position: fixed; top: 80px; right: 20px; z-index: 9999;" data-delay="3000">
+    <div class="toast-header">
+        <strong class="mr-auto">VFD Status</strong>
+        <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button>
+    </div>
+    <div class="toast-body" id="toastBody"></div>
+</div>
+
+<script>
+// Toast helper
+function showToast(message, isSuccess = true) {
+    const toast = $('#statusToast');
+    $('#toastBody').text(message);
+    toast.find('.toast-header').removeClass('bg-success bg-danger').addClass(isSuccess ? 'bg-success' : 'bg-danger');
+    toast.toast('show');
+}
+
+// Text form submission
+$('#textForm').on('submit', function(e) {
+    e.preventDefault();
+    const text = $('#textContent').val();
+    const x = parseInt($('#textX').val());
+    const y = parseInt($('#textY').val());
+
+    if (!text) {
+        showToast('Please enter text to display', false);
+        return;
+    }
+
+    $.ajax({
+        url: '/api/vfd/text',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ text, x, y }),
+        success: function(response) {
+            if (response.success) {
+                showToast(response.message, true);
+            } else {
+                showToast(response.error || 'Error displaying text', false);
+            }
+        },
+        error: function() {
+            showToast('Failed to communicate with VFD', false);
+        }
+    });
+});
+
+// Image form submission
+$('#imageForm').on('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData();
+    const fileInput = $('#imageFile')[0];
+
+    if (!fileInput.files.length) {
+        showToast('Please select an image file', false);
+        return;
+    }
+
+    formData.append('image', fileInput.files[0]);
+    formData.append('x', $('#imageX').val());
+    formData.append('y', $('#imageY').val());
+
+    $.ajax({
+        url: '/api/vfd/image',
+        method: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(response) {
+            if (response.success) {
+                showToast(response.message, true);
+            } else {
+                showToast(response.error || 'Error displaying image', false);
+            }
+        },
+        error: function() {
+            showToast('Failed to upload image', false);
+        }
+    });
+});
+
+// Line form
+$('#lineForm').on('submit', function(e) {
+    e.preventDefault();
+    $.ajax({
+        url: '/api/vfd/graphics/line',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            x1: parseInt($('#lineX1').val()),
+            y1: parseInt($('#lineY1').val()),
+            x2: parseInt($('#lineX2').val()),
+            y2: parseInt($('#lineY2').val())
+        }),
+        success: function(response) {
+            showToast(response.success ? response.message : response.error, response.success);
+        }
+    });
+});
+
+// Rectangle form
+$('#rectangleForm').on('submit', function(e) {
+    e.preventDefault();
+    $.ajax({
+        url: '/api/vfd/graphics/rectangle',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            x1: parseInt($('#rectX1').val()),
+            y1: parseInt($('#rectY1').val()),
+            x2: parseInt($('#rectX2').val()),
+            y2: parseInt($('#rectY2').val()),
+            filled: $('#rectFilled').is(':checked')
+        }),
+        success: function(response) {
+            showToast(response.success ? response.message : response.error, response.success);
+        }
+    });
+});
+
+// Progress bar form
+$('#progressForm').on('submit', function(e) {
+    e.preventDefault();
+    $.ajax({
+        url: '/api/vfd/graphics/progress',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            x: parseInt($('#progressX').val()),
+            y: parseInt($('#progressY').val()),
+            width: parseInt($('#progressWidth').val()),
+            height: parseInt($('#progressHeight').val()),
+            progress: parseInt($('#progressValue').val()) / 100.0
+        }),
+        success: function(response) {
+            showToast(response.success ? response.message : response.error, response.success);
+        }
+    });
+});
+
+// Progress value display
+$('#progressValue').on('input', function() {
+    $('#progressValueDisplay').text($(this).val() + '%');
+});
+
+// Brightness slider
+$('#brightnessSlider').on('change', function() {
+    const level = parseInt($(this).val());
+    $('#brightnessValue').text(level);
+
+    $.ajax({
+        url: '/api/vfd/brightness',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ level }),
+        success: function(response) {
+            showToast(response.success ? response.message : response.error, response.success);
+        }
+    });
+});
+
+$('#brightnessSlider').on('input', function() {
+    $('#brightnessValue').text($(this).val());
+});
+
+// Clear button
+$('#clearButton').on('click', function() {
+    if (confirm('Clear the VFD display?')) {
+        $.ajax({
+            url: '/api/vfd/clear',
+            method: 'POST',
+            success: function(response) {
+                showToast(response.success ? response.message : response.error, response.success);
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
