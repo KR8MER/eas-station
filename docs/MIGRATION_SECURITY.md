@@ -218,9 +218,10 @@ git checkout main
 
 # Restore database backup
 docker-compose down
-docker-compose exec alerts-db psql -U postgres -d eas_station < backup_YYYYMMDD.sql
+docker-compose up -d alerts-db
+docker-compose exec -T alerts-db psql -U postgres -d eas_station < backup_YYYYMMDD.sql
 
-# Restart
+# Restart all services
 docker-compose up -d
 ```
 

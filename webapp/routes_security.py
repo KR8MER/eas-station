@@ -9,7 +9,7 @@ Provides:
 """
 
 from flask import Blueprint, request, jsonify, session, send_file, current_app
-from io import BytesIO
+from io import BytesIO, StringIO
 import csv
 from datetime import datetime, timedelta
 
@@ -188,6 +188,11 @@ def mfa_disable():
 
     try:
         disable_user_mfa(user)
+        AuditLogger.log(
+            action=AuditAction.MFA_DISABLED,
+            user_id=user.id,
+            username=user.username
+        )
         return jsonify({
             'success': True,
             'message': 'MFA disabled successfully'
@@ -421,8 +426,8 @@ def export_audit_logs():
 
     logs = query.all()
 
-    # Create CSV
-    output = BytesIO()
+    # Create CSV (use StringIO for text mode)
+    output = StringIO()
     writer = csv.writer(output)
     writer.writerow(['Timestamp', 'Username', 'Action', 'Resource Type', 'Resource ID',
                      'IP Address', 'Success', 'Details'])
@@ -439,7 +444,9 @@ def export_audit_logs():
             str(log.details) if log.details else ''
         ])
 
+    # Convert to bytes for send_file
     output.seek(0)
+    csv_bytes = BytesIO(output.getvalue().encode('utf-8'))
 
     AuditLogger.log(
         action=AuditAction.LOG_EXPORTED,
@@ -447,7 +454,7 @@ def export_audit_logs():
     )
 
     return send_file(
-        output,
+        csv_bytes,
         mimetype='text/csv',
         as_attachment=True,
         download_name=f'audit_logs_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}.csv'

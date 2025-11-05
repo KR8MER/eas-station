@@ -175,6 +175,7 @@ def register_auth_routes(app, logger):
 
                     # Determine if backup code was used
                     method = 'backup_code' if len(code) > 6 else 'totp'
+                    AuditLogger.log_login_success(user.id, user.username)
                     AuditLogger.log_mfa_verify_success(user.id, user.username, method)
 
                     target = next_param if _is_safe_redirect_target(next_param) else url_for('admin')
