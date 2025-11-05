@@ -591,7 +591,11 @@ def register_maintenance_routes(app, logger):
             finally:
                 connection.close()
 
-            # Get database size after optimization
+            # Important: Remove the session after raw connection usage
+            # This ensures the next query gets a fresh connection
+            db.session.remove()
+
+            # Get database size after optimization (with fresh session)
             size_after = db.session.execute(
                 text("SELECT pg_database_size(current_database())")
             ).scalar()
@@ -626,7 +630,87 @@ def register_maintenance_routes(app, logger):
         except Exception as exc:
             logger.error("Error optimizing database: %s", exc)
             db.session.rollback()
-            return jsonify({"error": f"Database optimization failed: {exc}"}), 500
+            return jsonify({"error": f"Database optimization failed: {str(exc)}"}), 500
+
+    @app.route("/admin/env_config", methods=["GET", "POST"])
+    def env_config():
+        """Read or update the stack.env file."""
+
+        env_file_path = repo_root / "stack.env"
+
+        if request.method == "GET":
+            try:
+                if not env_file_path.exists():
+                    return jsonify({"error": "stack.env file not found"}), 404
+
+                with open(env_file_path, "r") as f:
+                    content = f.read()
+
+                # Parse the env file to extract key-value pairs (excluding comments)
+                env_vars = {}
+                for line in content.splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, _, value = line.partition("=")
+                        env_vars[key.strip()] = value.strip()
+
+                return jsonify({
+                    "content": content,
+                    "env_vars": env_vars,
+                    "path": str(env_file_path),
+                })
+
+            except Exception as exc:
+                logger.error("Failed to read env file: %s", exc)
+                return jsonify({"error": f"Failed to read configuration: {exc}"}), 500
+
+        # POST - Update the env file
+        try:
+            payload = request.get_json(silent=True) or {}
+            new_content = payload.get("content", "")
+
+            if not new_content:
+                return jsonify({"error": "No content provided"}), 400
+
+            # Create backup of existing file
+            if env_file_path.exists():
+                backup_path = env_file_path.with_suffix(".env.backup")
+                import shutil
+                shutil.copy2(env_file_path, backup_path)
+                logger.info("Created backup of stack.env at %s", backup_path)
+
+            # Write new content
+            with open(env_file_path, "w") as f:
+                f.write(new_content)
+
+            # Log the change
+            log_entry = SystemLog(
+                level="WARNING",
+                message="Environment configuration file updated via admin interface",
+                module="admin",
+                details={
+                    "updated_at_utc": utc_now().isoformat(),
+                    "updated_at_local": local_now().isoformat(),
+                    "file_path": str(env_file_path),
+                    "backup_created": str(backup_path) if env_file_path.exists() else None,
+                    "warning": "Application restart required for changes to take effect",
+                },
+            )
+            db.session.add(log_entry)
+            db.session.commit()
+
+            logger.warning("Environment configuration updated. Restart required for changes to take effect.")
+
+            return jsonify({
+                "message": "Configuration updated successfully. Restart the application for changes to take effect.",
+                "backup_path": str(backup_path) if env_file_path.exists() else None,
+                "restart_required": True,
+            })
+
+        except Exception as exc:
+            logger.error("Failed to update env file: %s", exc)
+            db.session.rollback()
+            return jsonify({"error": f"Failed to update configuration: {exc}"}), 500
 
     @app.route("/admin/trigger_poll", methods=["POST"])
     def trigger_poll():
