@@ -235,17 +235,51 @@
 
     // Load categories and variables on page load
     async function loadSettings() {
+        console.log('Loading environment settings...');
         try {
             showLoading();
 
             // Load validation status
+            console.log('Fetching validation status...');
             const validationResp = await fetch('/api/environment/validate');
+            if (!validationResp.ok) {
+                console.error('Validation API failed:', validationResp.status, validationResp.statusText);
+            }
             const validation = await validationResp.json();
+            console.log('Validation result:', validation);
             displayValidation(validation);
 
             // Load all variables
+            console.log('Fetching environment variables...');
             const resp = await fetch('/api/environment/variables');
+            if (!resp.ok) {
+                console.error('Variables API failed:', resp.status, resp.statusText);
+                throw new Error(`API returned ${resp.status}: ${resp.statusText}`);
+            }
             categoriesData = await resp.json();
+            console.log('Loaded categories:', Object.keys(categoriesData));
+
+            // Check for metadata
+            if (categoriesData._meta) {
+                console.log('Environment metadata:', categoriesData._meta);
+                if (!categoriesData._meta.env_file_exists) {
+                    console.warn('.env file does not exist, reading from environment variables');
+
+                    // Show info banner
+                    const banner = document.getElementById('validation-banner');
+                    banner.innerHTML = `
+                        <div class="alert alert-info alert-dismissible fade show">
+                            <i class="fas fa-info-circle"></i>
+                            <strong>No .env File Found</strong>
+                            <p class="mb-0">Reading configuration from environment variables at <code>${categoriesData._meta.env_file_path}</code>.
+                            When you save changes, a .env file will be created automatically to persist your settings.</p>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    `;
+                }
+                // Remove _meta from categories data
+                delete categoriesData._meta;
+            }
 
             // Store current values
             for (const [catId, catData] of Object.entries(categoriesData)) {
@@ -254,19 +288,38 @@
                 }
             }
 
+            console.log('Rendering UI...');
             renderCategoryNav();
             renderCategories();
 
             // Activate first category
             const firstCat = Object.keys(categoriesData)[0];
             if (firstCat) {
+                console.log('Activating first category:', firstCat);
                 activateCategory(firstCat);
             }
 
             hideLoading();
+            console.log('Environment settings loaded successfully');
         } catch (error) {
             console.error('Error loading settings:', error);
-            showToast('Error loading settings', 'danger');
+
+            // Show detailed error on page
+            const content = document.getElementById('settings-content');
+            if (content) {
+                content.innerHTML = `
+                    <div class="alert alert-danger">
+                        <h4><i class="fas fa-exclamation-triangle"></i> Error Loading Settings</h4>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <p>Please check the browser console for more details.</p>
+                        <button class="btn btn-primary" onclick="loadSettings()">
+                            <i class="fas fa-redo"></i> Retry
+                        </button>
+                    </div>
+                `;
+            }
+
+            showToast('Error loading settings: ' + error.message, 'danger');
             hideLoading();
         }
     }
