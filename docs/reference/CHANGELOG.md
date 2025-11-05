@@ -5,13 +5,49 @@ All notable changes to this project are documented in this file. The format is b
 tracks releases under the 2.x series.
 
 ## [Unreleased]
+### Added
+- Added comprehensive audio ingest pipeline for unified capture from SDR, ALSA, and file sources
+  - Implemented `app_core/audio/ingest.py` with pluggable source adapters and PCM normalization
+  - Added peak/RMS metering and silence detection with PostgreSQL storage
+  - Built web UI at `/settings/audio-sources` for source management with real-time metering
+  - Exposed configuration for capture priority and failover in environment variables
+- Added FCC-compliant audio playout queue with deterministic priority-based scheduling
+  - Created `app_core/audio/playout_queue.py` with Presidential > Local > State > National > Test precedence
+  - Built `app_core/audio/output_service.py` background service for ALSA/JACK playback
+  - Implemented automatic preemption for high-priority alerts (e.g., Presidential EAN)
+  - Added playout event tracking for compliance reporting and audit trails
+- Added comprehensive GPIO hardening with audit trails and operator controls
+  - Created unified `app_utils/gpio.py` GPIOController with active-high/low, debounce, and watchdog timers
+  - Added `GPIOActivationLog` database model tracking pin activations with operator, reason, and duration
+  - Built operator override web UI at `/admin/gpio` with authentication and manual control capabilities
+  - Documented complete hardware setup, wiring diagrams, and safety practices in `docs/hardware/gpio.md`
+- Added comprehensive security controls with role-based access control (RBAC), multi-factor authentication (MFA), and audit logging
+  - Implemented four-tier role hierarchy (Admin, Operator, Analyst, Viewer) with granular permission assignments
+  - Added TOTP-based MFA enrollment and verification flows with QR code setup
+  - Created comprehensive audit log system tracking all security-critical operations with retention policies
+  - Built dedicated security settings UI at `/settings/security` for managing roles, permissions, and MFA
+  - Added database migrations to auto-initialize roles and assign them to existing users
+  - Documented security hardening procedures in `docs/MIGRATION_SECURITY.md`
+- Redesigned EAS Station logo with modern signal processing visualization
+  - Professional audio frequency spectrum visualization with animated elements
+  - Radar/monitoring circular grid overlay for technical aesthetic
+  - Animated signal waveform with alert gradient effects
+  - Deep blue to cyan gradient representing signal monitoring and alert processing
+  - SVG filters for depth, glow effects, and contemporary design polish
+
 ### Fixed
 - Fixed module import paths in scripts/manual_eas_event.py and scripts/manual_alert_fetch.py by adding repository root to sys.path
+- Fixed CSRF token protection in password change form (security settings)
+- Fixed audit log pagination to cap per_page parameter at 1000 to prevent DoS attacks
+- Fixed timezone handling to use timezone-aware UTC timestamps instead of naive datetime.utcnow()
+- Fixed migration safety with defensive checks for permission lookup to handle missing permissions gracefully
+- Fixed markdown formatting in MIGRATION_SECURITY.md with proper heading levels and code block language specs
 
 ### Changed
 - Enhanced AGENTS.md with bug screenshot workflow, documentation update requirements, and semantic versioning conventions
 - Reorganized root directory by moving development/debug scripts to scripts/deprecated/ and utility scripts to scripts/
 - Removed README.md.backup file from repository
+- Improved error logging to use logger.exception() instead of logger.error() in 8 locations across security routes for better debugging
 
 ### Added
 - Added an admin location reference view that summarises the saved NOAA zone catalog
