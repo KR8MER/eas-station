@@ -15,7 +15,7 @@ fi
 
 # Create temporary directory for mermaid files
 TEMP_DIR=$(mktemp -d)
-trap "rm -rf $TEMP_DIR" EXIT
+trap 'rm -rf "$TEMP_DIR"' EXIT
 
 # Output directory
 OUTPUT_DIR="static/docs"
@@ -56,14 +56,23 @@ echo "=========================================="
 if ls *.mmd 1> /dev/null 2>&1; then
     echo ""
     echo "Found .mmd files in current directory. Converting..."
+    FAILED_CONVERSIONS=0
     for mmd_file in *.mmd; do
         base_name=$(basename "$mmd_file" .mmd)
         svg_file="$OUTPUT_DIR/${base_name}.svg"
         echo "Converting $mmd_file -> $svg_file"
-        npx -y @mermaid-js/mermaid-cli mmdc -i "$mmd_file" -o "$svg_file" -t neutral -b transparent || true
+        if ! npx -y @mermaid-js/mermaid-cli mmdc -i "$mmd_file" -o "$svg_file" -t neutral -b transparent 2>&1; then
+            echo "Warning: Failed to convert $mmd_file"
+            ((FAILED_CONVERSIONS++))
+        fi
     done
     echo ""
-    echo "Conversion complete! SVG files saved to $OUTPUT_DIR/"
+    if [ $FAILED_CONVERSIONS -eq 0 ]; then
+        echo "Conversion complete! SVG files saved to $OUTPUT_DIR/"
+    else
+        echo "Conversion complete with $FAILED_CONVERSIONS failure(s). Check logs above for details."
+        echo "SVG files saved to $OUTPUT_DIR/"
+    fi
 else
     echo ""
     echo "No .mmd files found in current directory."
