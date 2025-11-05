@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any, Dict
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, g, jsonify, render_template, request
 
 from app_core.analytics import (
     AnomalyDetector,
@@ -368,7 +368,7 @@ def register(app: Flask, logger) -> None:
         """
         try:
             data = request.get_json() or {}
-            acknowledged_by = data.get("acknowledged_by", request.username)
+            acknowledged_by = data.get("acknowledged_by", g.current_user.username if g.current_user else "unknown")
 
             anomaly = anomaly_detector.acknowledge_anomaly(anomaly_id, acknowledged_by)
 
@@ -398,7 +398,7 @@ def register(app: Flask, logger) -> None:
         """
         try:
             data = request.get_json() or {}
-            resolved_by = data.get("resolved_by", request.username)
+            resolved_by = data.get("resolved_by", g.current_user.username if g.current_user else "unknown")
             resolution_notes = data.get("resolution_notes")
 
             anomaly = anomaly_detector.resolve_anomaly(

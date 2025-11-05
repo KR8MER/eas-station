@@ -118,23 +118,23 @@ class MetricsAggregator:
 
             # Query delivery reports in this window
             reports = AlertDeliveryReport.query.filter(
-                AlertDeliveryReport.timestamp >= win_start,
-                AlertDeliveryReport.timestamp < win_end,
+                AlertDeliveryReport.generated_at >= win_start,
+                AlertDeliveryReport.generated_at < win_end,
             ).all()
 
             if not reports:
                 continue
 
             # Calculate success rate
-            total_alerts = sum(r.expected_count for r in reports)
-            delivered = sum(r.delivered_count for r in reports)
+            total_alerts = sum(r.total_alerts for r in reports)
+            delivered = sum(r.delivered_alerts for r in reports)
             success_rate = (delivered / total_alerts * 100) if total_alerts > 0 else 0
 
             # Calculate average latency
             latencies = [
-                r.avg_latency_ms for r in reports if r.avg_latency_ms is not None
+                r.average_latency_seconds for r in reports if r.average_latency_seconds is not None
             ]
-            avg_latency = sum(latencies) / len(latencies) if latencies else 0
+            avg_latency = (sum(latencies) / len(latencies)) * 1000 if latencies else 0  # Convert to ms
 
             # Create success rate snapshot
             snapshot = MetricSnapshot(
@@ -146,14 +146,14 @@ class MetricsAggregator:
                 aggregation_period=aggregation_period,
                 value=success_rate,
                 min_value=min(
-                    (r.delivered_count / r.expected_count * 100)
-                    if r.expected_count > 0
+                    (r.delivered_alerts / r.total_alerts * 100)
+                    if r.total_alerts > 0
                     else 0
                     for r in reports
                 ),
                 max_value=max(
-                    (r.delivered_count / r.expected_count * 100)
-                    if r.expected_count > 0
+                    (r.delivered_alerts / r.total_alerts * 100)
+                    if r.total_alerts > 0
                     else 0
                     for r in reports
                 ),
@@ -165,6 +165,7 @@ class MetricsAggregator:
 
             # Create average latency snapshot
             if avg_latency > 0:
+                latencies_ms = [l * 1000 for l in latencies]  # Convert to milliseconds
                 snapshot = MetricSnapshot(
                     metric_category="alert_delivery",
                     metric_name="avg_delivery_latency_ms",
@@ -173,8 +174,8 @@ class MetricsAggregator:
                     window_end=win_end,
                     aggregation_period=aggregation_period,
                     value=avg_latency,
-                    min_value=min(latencies),
-                    max_value=max(latencies),
+                    min_value=min(latencies_ms),
+                    max_value=max(latencies_ms),
                     avg_value=avg_latency,
                     sample_count=len(latencies),
                 )

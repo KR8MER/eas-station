@@ -190,7 +190,7 @@ class TrendAnalyzer:
             absolute_change=absolute_change,
             percent_change=percent_change,
             rate_per_day=rate_per_day,
-            forecast_days_ahead=forecast_days if forecast_value else None,
+            forecast_days_ahead=forecast_days if forecast_days > 0 else None,
             forecast_value=forecast_value,
             forecast_confidence=forecast_confidence,
         )

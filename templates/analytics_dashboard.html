@@ -217,7 +217,11 @@
                 <td>${trend.metric_category}.${trend.metric_name}</td>
                 <td><span class="${trendClass}"><i class="fas fa-arrow-${trend.trend_direction === 'rising' ? 'up' : trend.trend_direction === 'falling' ? 'down' : 'right'}"></i> ${trend.trend_direction}</span></td>
                 <td>${trend.trend_strength || 'N/A'}</td>
-                <td>${trend.percent_change ? trend.percent_change.toFixed(2) + '%' : 'N/A'}</td>
+                <td>${
+                    trend.percent_change === null || trend.percent_change === undefined
+                        ? 'N/A'
+                        : trend.percent_change.toFixed(2) + '%'
+                }</td>
                 <td>${new Date(trend.analysis_time).toLocaleString()}</td>
             `;
             tbody.appendChild(row);
