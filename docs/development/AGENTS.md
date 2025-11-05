@@ -34,7 +34,7 @@ When discussing or investigating bugs:
   - `templates/about.html` – System overview and feature descriptions
   - Relevant Markdown files in `docs/` directory
   - This ensures users always have current information about system capabilities
-- **Brand Consistency** – Use `static/img/eas-station-logo.svg` for hero sections, headers, and major UI cards when expanding documentation pages. The logo must remain accessible (include `alt` text).
+- **Brand Consistency** – Use `static/img/eas-system-wordmark.svg` for hero sections, headers, and major UI cards when expanding documentation pages. The logo must remain accessible (include `alt` text).
 - **Mermaid-Friendly Markdown** – GitHub-flavoured Mermaid diagrams are welcome in repository docs. Keep them accurate by naming real modules, packages, and endpoints.
 
 ### Modularity & File Size
