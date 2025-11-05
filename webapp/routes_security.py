@@ -498,6 +498,26 @@ def check_permission():
 
 
 # ============================================================================
+# Web UI Routes
+# ============================================================================
+
+@security_bp.route('/settings', methods=['GET'])
+def security_settings():
+    """Security settings page for users."""
+    from flask import g, render_template, redirect, url_for
+
+    if not g.current_user:
+        return redirect(url_for('login'))
+
+    return render_template(
+        'security_settings.html',
+        current_user=g.current_user,
+        mfa_enabled=g.current_user.mfa_enabled,
+        mfa_enrolled_at=g.current_user.mfa_enrolled_at
+    )
+
+
+# ============================================================================
 # Blueprint Registration
 # ============================================================================
 
