@@ -8,7 +8,7 @@ from sqlalchemy import inspect
 
 
 revision = "20251105_add_vfd_tables"
-down_revision = "20251104_add_serial_to_radio_receivers"
+down_revision = "20251104_radio_serial"
 branch_labels = None
 depends_on = None
 
