@@ -935,6 +935,56 @@
                                 <textarea class="form-control" id="locationLedLines" name="led_default_lines" rows="4" placeholder="Each line shown on the LED sign">{{ (location_settings.led_default_lines or []) | join('\n') }}</textarea>
                                 <small class="text-muted">These lines are used for canned messages and previews.</small>
                             </div>
+
+                            <!-- LED Adapter Configuration -->
+                            <div class="col-12">
+                                <div class="card border-primary-subtle shadow-sm mt-3">
+                                    <div class="card-header bg-primary-subtle">
+                                        <h5 class="mb-0">
+                                            <i class="fas fa-network-wired"></i> LED Sign Adapter Configuration
+                                        </h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="alert alert-info mb-3">
+                                            <i class="fas fa-info-circle"></i>
+                                            <strong>Connection Method:</strong> This system uses a Lantronix (or compatible) serial-to-Ethernet adapter to connect the LED sign.
+                                            The adapter emulates a serial port over TCP/IP, allowing network-based control of RS232/RS485 LED signs.
+                                        </div>
+
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <label for="ledSerialMode" class="form-label fw-bold">Serial Mode</label>
+                                                <select class="form-select" id="ledSerialMode" name="led_serial_mode">
+                                                    <option value="RS232" selected>RS232 (Standard Serial)</option>
+                                                    <option value="RS485">RS485 (Multi-drop / Long Distance)</option>
+                                                </select>
+                                                <small class="text-muted">
+                                                    <strong>RS232:</strong> Standard serial, short distances (&lt;50ft), single device<br>
+                                                    <strong>RS485:</strong> Long distances (up to 4000ft), multiple devices, industrial
+                                                </small>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="ledBaudRate" class="form-label fw-bold">Baud Rate</label>
+                                                <select class="form-select" id="ledBaudRate" name="led_baud_rate">
+                                                    <option value="9600" selected>9600 (Standard)</option>
+                                                    <option value="19200">19200 (Fast)</option>
+                                                    <option value="38400">38400</option>
+                                                    <option value="57600">57600</option>
+                                                    <option value="115200">115200</option>
+                                                </select>
+                                                <small class="text-muted">Must match both your Lantronix adapter and LED sign settings</small>
+                                            </div>
+                                        </div>
+
+                                        <div class="alert alert-warning mt-3 mb-0">
+                                            <i class="fas fa-exclamation-triangle"></i>
+                                            <strong>Important:</strong> These settings are informational and stored in the database.
+                                            You must also configure these same serial settings on your Lantronix adapter to match your LED sign's hardware.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="col-12 d-flex align-items-center">
                                 <button type="submit" class="btn btn-primary">
                                     <i class="fas fa-save"></i> Save Location Settings
@@ -3929,6 +3979,9 @@
                 });
                 const result = await response.json();
                 if (response.ok) {
+                    // Save LED adapter configuration separately
+                    await saveLedAdapterConfig();
+
                     showStatus('Location settings updated successfully.', 'success');
                     if (result.settings) {
                         populateLocationSettingsForm(result.settings);
@@ -3947,6 +4000,52 @@
                 updateLocationSettingsStatus('Save failed.', 'danger');
             }
         }
+
+        async function saveLedAdapterConfig() {
+            const serialMode = document.getElementById('ledSerialMode')?.value || 'RS232';
+            const baudRate = parseInt(document.getElementById('ledBaudRate')?.value || '9600');
+
+            try {
+                const response = await fetch('/api/led/serial_config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        serial_mode: serialMode,
+                        baud_rate: baudRate
+                    })
+                });
+
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    console.warn('LED adapter config save failed:', result.error);
+                }
+            } catch (error) {
+                console.warn('Failed to save LED adapter configuration:', error);
+            }
+        }
+
+        async function loadLedAdapterConfig() {
+            try {
+                const response = await fetch('/api/led/serial_config');
+                const result = await response.json();
+
+                if (result.success && result.config) {
+                    const serialModeSelect = document.getElementById('ledSerialMode');
+                    const baudRateSelect = document.getElementById('ledBaudRate');
+
+                    if (serialModeSelect && result.config.serial_mode) {
+                        serialModeSelect.value = result.config.serial_mode;
+                    }
+
+                    if (baudRateSelect && result.config.baud_rate) {
+                        baudRateSelect.value = result.config.baud_rate.toString();
+                    }
+                }
+            } catch (error) {
+                console.warn('Failed to load LED adapter configuration:', error);
+            }
+        }
+
         function initializeLocationSettings() {
             const form = document.getElementById('locationSettingsForm');
             if (!form) {
@@ -3970,6 +4069,7 @@
             }
             populateLocationSettingsForm(locationSettingsCache || window.APP_LOCATION || {});
             loadLocationSettings(true);
+            loadLedAdapterConfig();
         }
         function initializeAlertManagement() {
             loadAdminAlerts();
