@@ -73,14 +73,19 @@ Each roadmap item below references the requirement(s) it unlocks so contributors
   4. Add integration tests (pytest) that mock ingest/output paths and GPIO behaviors under `tests/` to protect against regressions.
   5. Centralize post-install checklists in `docs/deployment/post_install.md`.
 
-## 7. Analytics & Compliance Enhancements (Requirement 7)
+## 7. Analytics & Compliance Enhancements (Requirement 7) ✅ COMPLETE
 - **Goal**: Give operators actionable insight into alert flow health and compliance posture.
-- **Status**: Baseline dashboards and CSV exports exist, but trend analysis and anomaly detection are limited.
-- **Plan**:
-  1. Extend verification analytics in `app_core/eas_storage.py` to compute trend aggregates (per originator, per station) for charts.
-  2. Add anomaly detection hooks in `app_utils/analytics.py` that flag missing audio, delayed retransmissions, or receiver outages.
-  3. Surface charts and drill-downs within `templates/eas/alert_verification.html` using the existing chart helpers.
-  4. Document reporting workflows in `docs/compliance/reporting_playbook.md`.
+- **Status**: ✅ **Completed in PR #379** – Comprehensive analytics module with trend analysis and anomaly detection delivered.
+- **Delivered**:
+  1. ✅ Created `app_core/analytics/` module with metrics aggregation, trend analysis, and anomaly detection capabilities.
+  2. ✅ Implemented `TrendAnalyzer` with linear regression, statistical forecasting, and trend classification (rising/falling/stable).
+  3. ✅ Built `AnomalyDetector` using Z-score outlier detection, spike/drop detection, and trend break analysis.
+  4. ✅ Added `MetricsAggregator` collecting time-series data from alert delivery, audio health, receiver status, and GPIO activity.
+  5. ✅ Created comprehensive analytics dashboard UI at `/analytics` with real-time metrics visualization and anomaly management.
+  6. ✅ Built API endpoints at `/api/analytics/*` for programmatic access to metrics, trends, and anomalies.
+  7. ✅ Added `AnalyticsScheduler` for automated background processing with configurable intervals.
+  8. ✅ Integrated trend analysis into alert verification page at `/eas/alert-verification` with charts and drill-downs.
+  9. ✅ Documented complete system architecture and usage patterns in `app_core/analytics/README.md`.
 
 ## 8. Documentation & Operator Enablement (Requirement 8)
 - **Goal**: Keep all safety disclaimers, legal notices, and operating guides synchronized between the repository and web UI.
