@@ -14,6 +14,18 @@ This guide will walk you through setting up Software Defined Radio (SDR) receive
 8. [Troubleshooting](#troubleshooting)
 9. [Advanced Topics](#advanced-topics)
 
+---
+
+## Visual Setup Guide
+
+For a complete visual overview of the SDR setup process, see the professional flowchart below:
+
+![SDR Setup and Configuration Flow](../../static/docs/sdr-setup-flow.svg)
+
+**[View full-size diagram](../../static/docs/sdr-setup-flow.svg)**
+
+---
+
 ## Overview
 
 EAS Station supports multiple SDR receivers through SoapySDR, a vendor-neutral SDR library. The most common and affordable option is an RTL-SDR dongle (based on the RTL2832U chip), which typically costs $20-40.

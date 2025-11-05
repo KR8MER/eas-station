@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="1200" height="800" viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="alert-pipeline-title">
+  <title id="alert-pipeline-title">Alert Processing Pipeline Flowchart</title>
+  <desc>Detailed flowchart showing how CAP alerts are ingested, validated, processed, and stored in the EAS Station system</desc>
+
+  <defs>
+    <linearGradient id="grad-source" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad-process" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad-storage" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad-error" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ef4444;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#dc2626;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad-decision" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#334155" />
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="800" fill="#f8fafc"/>
+
+  <!-- Title -->
+  <text x="600" y="30" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#1e293b">
+    Alert Processing Pipeline
+  </text>
+
+  <!-- External Sources -->
+  <g id="sources">
+    <rect x="50" y="80" width="140" height="80" rx="8" fill="url(#grad-source)" filter="url(#shadow)"/>
+    <text x="120" y="110" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="white">NOAA Weather</text>
+    <text x="120" y="130" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="white">CAP Feeds</text>
+    <text x="120" y="148" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#e0e7ff">api.weather.gov</text>
+
+    <rect x="220" y="80" width="140" height="80" rx="8" fill="url(#grad-source)" filter="url(#shadow)"/>
+    <text x="290" y="110" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="white">FEMA IPAWS</text>
+    <text x="290" y="130" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="white">CAP Feeds</text>
+    <text x="290" y="148" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#e0e7ff">ipaws feeds</text>
+  </g>
+
+  <!-- Poller -->
+  <rect x="135" y="200" width="140" height="70" rx="8" fill="url(#grad-process)" filter="url(#shadow)"/>
+  <text x="205" y="225" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="white">CAP Poller</text>
+  <text x="205" y="245" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="#d1fae5">Scheduled Fetch</text>
+  <text x="205" y="260" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">cap_poller.py</text>
+
+  <!-- Arrow from sources to poller -->
+  <path d="M 120,160 L 120,200" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M 290,160 L 260,200" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+
+  <!-- Parse XML Decision -->
+  <polygon points="205,310 270,345 205,380 140,345" fill="url(#grad-decision)" filter="url(#shadow)"/>
+  <text x="205" y="345" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="white">Parse</text>
+  <text x="205" y="360" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="white">XML?</text>
+
+  <path d="M 205,270 L 205,310" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+
+  <!-- Parse Error -->
+  <rect x="320" y="320" width="120" height="50" rx="6" fill="url(#grad-error)" filter="url(#shadow)"/>
+  <text x="380" y="340" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Parse Error</text>
+  <text x="380" y="358" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#fee2e2">Log & Skip</text>
+
+  <path d="M 270,345 L 320,345" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="285" y="335" font-family="Arial, sans-serif" font-size="11" fill="#64748b">NO</text>
+
+  <!-- Schema Validation Decision -->
+  <polygon points="205,420 270,455 205,490 140,455" fill="url(#grad-decision)" filter="url(#shadow)"/>
+  <text x="205" y="452" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Schema</text>
+  <text x="205" y="467" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="white">Valid?</text>
+
+  <path d="M 205,380 L 205,420" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="215" y="400" font-family="Arial, sans-serif" font-size="11" fill="#10b981">YES</text>
+
+  <!-- Schema Error -->
+  <rect x="320" y="430" width="120" height="50" rx="6" fill="url(#grad-error)" filter="url(#shadow)"/>
+  <text x="380" y="450" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Schema Error</text>
+  <text x="380" y="468" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#fee2e2">Reject Alert</text>
+
+  <path d="M 270,455 L 320,455" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="285" y="445" font-family="Arial, sans-serif" font-size="11" fill="#64748b">NO</text>
+
+  <!-- Extract Data -->
+  <rect x="135" y="530" width="140" height="60" rx="8" fill="url(#grad-process)" filter="url(#shadow)"/>
+  <text x="205" y="555" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="white">Extract Alert Data</text>
+  <text x="205" y="575" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">Parse CAP elements</text>
+
+  <path d="M 205,490 L 205,530" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="215" y="510" font-family="Arial, sans-serif" font-size="11" fill="#10b981">YES</text>
+
+  <!-- Geometry Processing -->
+  <polygon points="500,120 580,155 500,190 420,155" fill="url(#grad-decision)" filter="url(#shadow)"/>
+  <text x="500" y="152" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Has</text>
+  <text x="500" y="167" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="white">Geometry?</text>
+
+  <path d="M 275,560 L 420,560 L 420,155" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+
+  <!-- Use SAME Codes -->
+  <rect x="620" y="125" width="130" height="60" rx="6" fill="url(#grad-process)" filter="url(#shadow)"/>
+  <text x="685" y="148" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Use SAME Codes</text>
+  <text x="685" y="170" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">FIPS lookup</text>
+
+  <path d="M 580,155 L 620,155" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="590" y="145" font-family="Arial, sans-serif" font-size="11" fill="#64748b">NO</text>
+
+  <!-- Normalize Geometry -->
+  <rect x="435" y="240" width="130" height="60" rx="6" fill="url(#grad-process)" filter="url(#shadow)"/>
+  <text x="500" y="260" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Normalize</text>
+  <text x="500" y="277" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="white">Geometry</text>
+  <text x="500" y="292" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#d1fae5">Polygon/Circle/SAME</text>
+
+  <path d="M 500,190 L 500,240" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="510" y="210" font-family="Arial, sans-serif" font-size="11" fill="#10b981">YES</text>
+
+  <!-- Duplicate Check -->
+  <polygon points="685,350 765,390 685,430 605,390" fill="url(#grad-decision)" filter="url(#shadow)"/>
+  <text x="685" y="387" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Duplicate</text>
+  <text x="685" y="402" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="white">Alert?</text>
+
+  <path d="M 685,185 L 685,350" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M 565,270 L 605,390" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+
+  <!-- Duplicate Log -->
+  <rect x="810" y="365" width="120" height="50" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="2" filter="url(#shadow)"/>
+  <text x="870" y="385" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#92400e">Duplicate</text>
+  <text x="870" y="403" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#92400e">Log & Skip</text>
+
+  <path d="M 765,390 L 810,390" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="778" y="380" font-family="Arial, sans-serif" font-size="11" fill="#64748b">YES</text>
+
+  <!-- Store to Database -->
+  <rect x="615" y="480" width="140" height="70" rx="8" fill="url(#grad-storage)" filter="url(#shadow)"/>
+  <text x="685" y="505" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="white">Store to Database</text>
+  <text x="685" y="525" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="#ede9fe">PostgreSQL + PostGIS</text>
+  <text x="685" y="540" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#ede9fe">CAPAlert table</text>
+
+  <path d="M 685,430 L 685,480" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="695" y="455" font-family="Arial, sans-serif" font-size="11" fill="#10b981">NO</text>
+
+  <!-- Spatial Processing -->
+  <rect x="615" y="590" width="140" height="60" rx="8" fill="url(#grad-storage)" filter="url(#shadow)"/>
+  <text x="685" y="612" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Spatial Processing</text>
+  <text x="685" y="632" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#ede9fe">Calculate intersections</text>
+
+  <path d="M 685,550 L 685,590" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+
+  <!-- Update Web UI -->
+  <rect x="615" y="690" width="140" height="60" rx="8" fill="url(#grad-process)" filter="url(#shadow)"/>
+  <text x="685" y="712" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Update Web UI</text>
+  <text x="685" y="732" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">Dashboard refresh</text>
+
+  <path d="M 685,650 L 685,690" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+
+  <!-- Notify Operators -->
+  <ellipse cx="870" cy="720" rx="70" ry="35" fill="#3b82f6" stroke="#2563eb" stroke-width="2" filter="url(#shadow)"/>
+  <text x="870" y="717" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Notify</text>
+  <text x="870" y="733" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="white">Operators</text>
+
+  <path d="M 755,720 L 800,720" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+
+  <!-- Legend -->
+  <g id="legend" transform="translate(980, 80)">
+    <text x="0" y="0" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#1e293b">Legend</text>
+
+    <rect x="0" y="15" width="50" height="30" rx="4" fill="url(#grad-source)"/>
+    <text x="60" y="33" font-family="Arial, sans-serif" font-size="11" fill="#475569">Source</text>
+
+    <rect x="0" y="55" width="50" height="30" rx="4" fill="url(#grad-process)"/>
+    <text x="60" y="73" font-family="Arial, sans-serif" font-size="11" fill="#475569">Process</text>
+
+    <polygon points="25,115 50,130 25,145 0,130" fill="url(#grad-decision)"/>
+    <text x="60" y="133" font-family="Arial, sans-serif" font-size="11" fill="#475569">Decision</text>
+
+    <rect x="0" y="155" width="50" height="30" rx="4" fill="url(#grad-storage)"/>
+    <text x="60" y="173" font-family="Arial, sans-serif" font-size="11" fill="#475569">Storage</text>
+
+    <rect x="0" y="195" width="50" height="30" rx="4" fill="url(#grad-error)"/>
+    <text x="60" y="213" font-family="Arial, sans-serif" font-size="11" fill="#475569">Error</text>
+  </g>
+
+  <!-- Annotations -->
+  <text x="600" y="770" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#64748b">
+    Complete alert ingestion flow from CAP source to database storage with spatial intelligence
+  </text>
+</svg>
