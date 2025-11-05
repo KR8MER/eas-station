@@ -26,7 +26,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask import current_app
 
 from app_core.extensions import db
-from app_utils.timestamp import utc_now
+from app_utils import utc_now
 
 
 class MFAManager:

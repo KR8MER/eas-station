@@ -16,7 +16,7 @@ from flask import request, session, current_app
 from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Index
 
 from app_core.extensions import db
-from app_utils.timestamp import utc_now
+from app_utils import utc_now
 
 
 class AuditAction(Enum):
