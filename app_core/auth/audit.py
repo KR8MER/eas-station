@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from flask import request, session, current_app
 from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, Index
 
-from app_core.db import db
+from app_core.extensions import db
 from app_utils.timestamp import utc_now
 
 

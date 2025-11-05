@@ -45,7 +45,7 @@ Assign roles to existing users:
 ```python
 from app_core.models import AdminUser
 from app_core.auth.roles import Role
-from app_core.db import db
+from app_core.extensions import db
 
 # Get user and role
 user = AdminUser.query.filter_by(username='your_username').first()
@@ -167,7 +167,7 @@ Via Python:
 
 ```python
 from app_core.auth.roles import Role, Permission
-from app_core.db import db
+from app_core.extensions import db
 
 # Create a custom role
 custom_role = Role(
@@ -562,7 +562,7 @@ Set up alerts for:
 ```python
 from app_core.models import AdminUser
 from app_core.auth.roles import Role
-from app_core.db import db
+from app_core.extensions import db
 
 user = AdminUser.query.filter_by(username='username').first()
 admin_role = Role.query.filter_by(name='admin').first()

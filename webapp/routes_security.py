@@ -13,7 +13,7 @@ from io import BytesIO, StringIO
 import csv
 from datetime import timedelta
 
-from app_core.db import db
+from app_core.extensions import db
 from app_core.models import AdminUser
 from app_utils import utc_now
 from app_core.auth.roles import (

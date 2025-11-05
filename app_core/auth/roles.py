@@ -14,7 +14,7 @@ from flask import session, abort, current_app
 from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, Text
 from sqlalchemy.orm import relationship
 
-from app_core.db import db
+from app_core.extensions import db
 from app_utils.timestamp import utc_now
 
 

@@ -93,7 +93,7 @@ docker-compose exec app flask shell
 ```python
 from app_core.models import AdminUser
 from app_core.auth.roles import Role
-from app_core.db import db
+from app_core.extensions import db
 
 # Get admin role
 admin_role = Role.query.filter_by(name='admin').first()
