@@ -199,6 +199,51 @@ EAS_STATION_ID=YOURCALL
 
 See [Configuration Guide](docs/guides/HELP.md) for complete reference.
 
+## 📊 System Diagrams
+
+Professional flowcharts and block diagrams illustrating system architecture and workflows:
+
+<table>
+<tr>
+<td width="50%">
+<a href="static/docs/alert-processing-pipeline.svg">
+<img src="static/docs/alert-processing-pipeline.svg" alt="Alert Processing Pipeline" />
+</a>
+<p align="center"><em><strong>Alert Processing Pipeline</strong></em><br/>CAP ingestion, validation, and storage workflow</p>
+</td>
+<td width="50%">
+<a href="static/docs/broadcast-workflow.svg">
+<img src="static/docs/broadcast-workflow.svg" alt="Broadcast Workflow" />
+</a>
+<p align="center"><em><strong>EAS Broadcast Workflow</strong></em><br/>SAME generation and transmission process</p>
+</td>
+</tr>
+<tr>
+<td width="50%">
+<a href="static/docs/sdr-setup-flow.svg">
+<img src="static/docs/sdr-setup-flow.svg" alt="SDR Setup Flow" />
+</a>
+<p align="center"><em><strong>SDR Setup & Configuration</strong></em><br/>Complete radio receiver setup guide</p>
+</td>
+<td width="50%">
+<a href="static/docs/audio-source-routing.svg">
+<img src="static/docs/audio-source-routing.svg" alt="Audio Source Routing" />
+</a>
+<p align="center"><em><strong>Audio Source Architecture</strong></em><br/>Multi-source audio routing and monitoring</p>
+</td>
+</tr>
+<tr>
+<td colspan="2">
+<a href="static/docs/system-deployment-hardware.svg">
+<img src="static/docs/system-deployment-hardware.svg" alt="Hardware Deployment" />
+</a>
+<p align="center"><em><strong>Hardware Deployment Architecture</strong></em><br/>Raspberry Pi 5 reference configuration with peripherals</p>
+</td>
+</tr>
+</table>
+
+📖 **[View all architectural diagrams →](docs/architecture/SYSTEM_ARCHITECTURE.md)**
+
 ## 📊 Screenshots
 
 <table>

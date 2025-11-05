@@ -22,6 +22,7 @@ This document provides comprehensive architectural diagrams and flowcharts for t
 7. [Data Flow Diagrams](#data-flow-diagrams)
 8. [Component Interactions](#component-interactions)
 9. [Deployment Architecture](#deployment-architecture)
+10. [Professional Diagrams](#professional-diagrams)
 
 ---
 
@@ -1075,5 +1076,51 @@ These diagrams serve as living documentation that should be updated as the syste
 - [Developer Guide](../development/AGENTS.md) - Code standards and practices
 - [Help Guide](../guides/HELP.md) - Operational procedures
 
-**Last Updated:** 2025-11-04
-**Diagram Format:** Mermaid.js (renders in GitHub, GitLab, and compatible viewers)
+---
+
+## Professional Diagrams
+
+For enhanced clarity and presentation, the following professional SVG diagrams are available:
+
+### Alert Processing Pipeline
+
+Detailed flowchart showing the complete CAP alert ingestion workflow from external sources through validation, parsing, spatial processing, and database storage.
+
+![Alert Processing Pipeline](../../static/docs/alert-processing-pipeline.svg)
+
+**File:** [static/docs/alert-processing-pipeline.svg](../../static/docs/alert-processing-pipeline.svg)
+
+---
+
+### EAS Broadcast Workflow
+
+Step-by-step workflow diagram illustrating the complete EAS message generation and transmission process, from alert selection through SAME encoding to broadcast completion.
+
+![EAS Broadcast Workflow](../../static/docs/broadcast-workflow.svg)
+
+**File:** [static/docs/broadcast-workflow.svg](../../static/docs/broadcast-workflow.svg)
+
+---
+
+### Audio Source Routing Architecture
+
+Block diagram showing multi-source audio ingestion architecture with adapters, priority selection, monitoring systems, and database integration.
+
+![Audio Source Routing](../../static/docs/audio-source-routing.svg)
+
+**File:** [static/docs/audio-source-routing.svg](../../static/docs/audio-source-routing.svg)
+
+---
+
+### Hardware Deployment Architecture
+
+Physical deployment diagram showing Raspberry Pi 5 hardware configuration with all peripherals, storage, and external connections.
+
+![Hardware Deployment](../../static/docs/system-deployment-hardware.svg)
+
+**File:** [static/docs/system-deployment-hardware.svg](../../static/docs/system-deployment-hardware.svg)
+
+---
+
+**Last Updated:** 2025-11-05
+**Diagram Format:** Mermaid.js (Markdown) and SVG (Professional graphics)

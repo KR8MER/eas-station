@@ -12,6 +12,19 @@ If you're new to EAS Station, start here:
 | [⚡ 5-Minute Quick Start](guides/HELP.md#getting-started) | Get running immediately | New users |
 | [🐳 Portainer Deployment](guides/PORTAINER_DEPLOYMENT.md) | Container-based setup | System admins |
 
+## 📊 Visual Documentation
+
+**NEW:** Professional diagrams and flowcharts for system understanding:
+
+| Diagram | Description | Use Case |
+|---------|-------------|----------|
+| [📊 All Diagrams Index](DIAGRAMS.md) | Complete visual documentation index | Browse all diagrams |
+| [🔄 Alert Processing Pipeline](DIAGRAMS.md#1-alert-processing-pipeline) | CAP ingestion workflow | Understanding alert flow |
+| [📡 EAS Broadcast Workflow](DIAGRAMS.md#2-eas-broadcast-workflow) | SAME generation & transmission | Operator training |
+| [📻 SDR Setup Flow](DIAGRAMS.md#3-sdr-setup--configuration-flow) | Radio receiver configuration | Hardware setup |
+| [🔊 Audio Source Routing](DIAGRAMS.md#4-audio-source-routing-architecture) | Audio ingestion architecture | Audio troubleshooting |
+| [🖥️ Hardware Deployment](DIAGRAMS.md#5-hardware-deployment-architecture) | Raspberry Pi reference config | Physical installation |
+
 ## 👥 User Documentation
 
 ### Daily Operations

@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="1000" height="1100" viewBox="0 0 1000 1100" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="broadcast-title">
+  <title id="broadcast-title">EAS Broadcast Workflow</title>
+  <desc>Step-by-step workflow for generating and transmitting EAS SAME messages from alert selection to broadcast verification</desc>
+
+  <defs>
+    <linearGradient id="bw-grad-start" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="bw-grad-process" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="bw-grad-decision" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="bw-grad-complete" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:1" />
+    </linearGradient>
+    <filter id="bw-shadow">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+    <marker id="bw-arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#334155" />
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1000" height="1100" fill="#f8fafc"/>
+
+  <!-- Title -->
+  <text x="500" y="35" font-family="Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" fill="#1e293b">
+    EAS Broadcast Workflow
+  </text>
+  <text x="500" y="58" font-family="Arial, sans-serif" font-size="13" text-anchor="middle" fill="#64748b">
+    From Alert Selection to Transmission
+  </text>
+
+  <!-- Start -->
+  <ellipse cx="500" cy="110" rx="90" ry="40" fill="url(#bw-grad-start)" filter="url(#bw-shadow)"/>
+  <text x="500" y="108" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="white">Operator Initiates</text>
+  <text x="500" y="125" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="white">EAS Workflow</text>
+
+  <!-- Alert Type Decision -->
+  <polygon points="500,190 590,230 500,270 410,230" fill="url(#bw-grad-decision)" filter="url(#bw-shadow)"/>
+  <text x="500" y="227" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="white">Alert Type</text>
+  <text x="500" y="244" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="white">Selection</text>
+
+  <path d="M 500,150 L 500,190" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#bw-arrow)"/>
+
+  <!-- Manual Path -->
+  <rect x="250" y="300" width="130" height="55" rx="6" fill="url(#bw-grad-process)" filter="url(#bw-shadow)"/>
+  <text x="315" y="322" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Select Event Code</text>
+  <text x="315" y="341" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">RWT, RMT, TOR, etc.</text>
+
+  <path d="M 410,230 L 315,300" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#bw-arrow)"/>
+  <text x="350" y="260" font-family="Arial, sans-serif" font-size="11" fill="#475569">Manual</text>
+
+  <!-- CAP Alert Path -->
+  <rect x="620" y="300" width="130" height="55" rx="6" fill="url(#bw-grad-process)" filter="url(#bw-shadow)"/>
+  <text x="685" y="322" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Select CAP Alert</text>
+  <text x="685" y="341" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">From database</text>
+
+  <path d="M 590,230 L 685,300" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#bw-arrow)"/>
+  <text x="630" y="260" font-family="Arial, sans-serif" font-size="11" fill="#475569">From CAP</text>
+
+  <!-- Extract CAP Data -->
+  <rect x="620" y="385" width="130" height="45" rx="6" fill="url(#bw-grad-process)" filter="url(#bw-shadow)"/>
+  <text x="685" y="408" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="white">Extract CAP Data</text>
+  <text x="685" y="422" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#dbeafe">Event, area, severity</text>
+
+  <path d="M 685,355 L 685,385" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#bw-arrow)"/>
+
+  <!-- Configure Message -->
+  <rect x="420" y="465" width="160" height="60" rx="6" fill="url(#bw-grad-process)" filter="url(#bw-shadow)"/>
+  <text x="500" y="487" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="white">Configure Message</text>
+  <text x="500" y="505" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">Originator, location codes,</text>
+  <text x="500" y="519" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">duration, station ID</text>
+
+  <path d="M 315,355 L 315,495 L 420,495" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#bw-arrow)"/>
+  <path d="M 685,430 L 685,495 L 580,495" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#bw-arrow)"/>
+
+  <!-- Generate SAME Header -->
+  <rect x="420" y="560" width="160" height="55" rx="6" fill="url(#bw-grad-process)" filter="url(#bw-shadow)"/>
+  <text x="500" y="582" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Generate SAME Header</text>
+  <text x="500" y="601" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">ZCZC-ORG-EEE-PSSCCC+...</text>
+
+  <path d="M 500,525 L 500,560" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#bw-arrow)"/>
+
+  <!-- SAME Valid Decision -->
+  <polygon points="500,655 570,690 500,725 430,690" fill="url(#bw-grad-decision)" filter="url(#bw-shadow)"/>
+  <text x="500" y="687" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">SAME</text>
+  <text x="500" y="703" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="white">Valid?</text>
+
+  <path d="M 500,615 L 500,655" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#bw-arrow)"/>
+
+  <!-- Validation Error -->
+  <rect x="260" y="665" width="110" height="50" rx="6" fill="#fca5a5" stroke="#dc2626" stroke-width="2" filter="url(#bw-shadow)"/>
+  <text x="315" y="685" font-family="Arial, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" fill="#7f1d1d">Validation Error</text>
+  <text x="315" y="703" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#7f1d1d">Show error message</text>
+
+  <path d="M 430,690 L 370,690" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#bw-arrow)"/>
+  <text x="390" y="680" font-family="Arial, sans-serif" font-size="10" fill="#64748b">NO</text>
+
+  <path d="M 315,665 L 315,495 L 420,495" stroke="#334155" stroke-width="2" fill="none" stroke-dasharray="5,5"/>
+
+  <!-- Narration Decision -->
+  <polygon points="500,775 570,810 500,845 430,810" fill="url(#bw-grad-decision)" filter="url(#bw-shadow)"/>
+  <text x="500" y="807" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Include</text>
+  <text x="500" y="823" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="white">Narration?</text>
+
+  <path d="M 500,725 L 500,775" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#bw-arrow)"/>
+  <text x="510" y="750" font-family="Arial, sans-serif" font-size="10" fill="#10b981">YES</text>
+
+  <!-- Generate TTS -->
+  <rect x="650" y="785" width="120" height="50" rx="6" fill="url(#bw-grad-process)" filter="url(#bw-shadow)"/>
+  <text x="710" y="805" font-family="Arial, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" fill="white">Generate TTS</text>
+  <text x="710" y="822" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#dbeafe">Google/AWS voice</text>
+
+  <path d="M 570,810 L 650,810" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#bw-arrow)"/>
+  <text x="600" y="800" font-family="Arial, sans-serif" font-size="10" fill="#10b981">YES</text>
+
+  <!-- Build Audio -->
+  <rect x="420" y="895" width="160" height="60" rx="6" fill="url(#bw-grad-process)" filter="url(#bw-shadow)"/>
+  <text x="500" y="917" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="white">Build Complete Audio</text>
+  <text x="500" y="935" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">Header × 3 + Attention +</text>
+  <text x="500" y="949" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">Narration + EOM × 3</text>
+
+  <path d="M 500,845 L 500,895" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#bw-arrow)"/>
+  <text x="510" y="870" font-family="Arial, sans-serif" font-size="10" fill="#64748b">NO</text>
+
+  <path d="M 710,835 L 710,925 L 580,925" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#bw-arrow)"/>
+
+  <!-- Operator Approval -->
+  <polygon points="500,995 580,1030 500,1065 420,1030" fill="url(#bw-grad-decision)" filter="url(#bw-shadow)"/>
+  <text x="500" y="1027" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Operator</text>
+  <text x="500" y="1043" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="white">Approves?</text>
+
+  <path d="M 500,955 L 500,995" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#bw-arrow)"/>
+
+  <!-- Back to Configure -->
+  <path d="M 420,1030 L 350,1030 L 350,495 L 420,495" stroke="#334155" stroke-width="2" fill="none" stroke-dasharray="5,5"/>
+  <text x="360" y="1020" font-family="Arial, sans-serif" font-size="10" fill="#64748b">NO</text>
+
+  <!-- Transmit Box Group -->
+  <g id="transmit-group">
+    <!-- Store & Transmit -->
+    <rect x="650" y="1000" width="140" height="65" rx="6" fill="url(#bw-grad-complete)" filter="url(#bw-shadow)"/>
+    <text x="720" y="1022" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Store & Transmit</text>
+    <text x="720" y="1040" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#ede9fe">• Save WAV file</text>
+    <text x="720" y="1054" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#ede9fe">• Key transmitter (GPIO)</text>
+
+    <path d="M 580,1030 L 650,1030" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#bw-arrow)"/>
+    <text x="605" y="1020" font-family="Arial, sans-serif" font-size="10" fill="#10b981">YES</text>
+  </g>
+
+  <!-- Success Indicator -->
+  <ellipse cx="860" cy="1032" rx="60" ry="32" fill="#10b981" stroke="#059669" stroke-width="2" filter="url(#bw-shadow)"/>
+  <text x="860" y="1030" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="white">Complete</text>
+  <text x="860" y="1046" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="white">✓ Success</text>
+
+  <path d="M 790,1032 L 800,1032" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#bw-arrow)"/>
+
+  <!-- Side Annotations -->
+  <g id="annotations">
+    <!-- Left side: Process steps -->
+    <text x="50" y="230" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#475569">Step 1:</text>
+    <text x="50" y="245" font-family="Arial, sans-serif" font-size="10" fill="#64748b">Choose source</text>
+
+    <text x="50" y="495" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#475569">Step 2:</text>
+    <text x="50" y="510" font-family="Arial, sans-serif" font-size="10" fill="#64748b">Configure</text>
+
+    <text x="50" y="690" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#475569">Step 3:</text>
+    <text x="50" y="705" font-family="Arial, sans-serif" font-size="10" fill="#64748b">Validate SAME</text>
+
+    <text x="50" y="925" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#475569">Step 4:</text>
+    <text x="50" y="940" font-family="Arial, sans-serif" font-size="10" fill="#64748b">Build audio</text>
+
+    <text x="50" y="1030" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#475569">Step 5:</text>
+    <text x="50" y="1045" font-family="Arial, sans-serif" font-size="10" fill="#64748b">Transmit</text>
+  </g>
+
+  <!-- Footer -->
+  <text x="500" y="1090" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#64748b">
+    Workflow executes in webapp/eas/workflow.py with SAME generation in app_utils/eas.py
+  </text>
+</svg>

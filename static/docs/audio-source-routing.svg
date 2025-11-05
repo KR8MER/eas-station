@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="1100" height="750" viewBox="0 0 1100 750" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="audio-title">
+  <title id="audio-title">Audio Source Routing Architecture</title>
+  <desc>Block diagram showing how audio sources are routed through adapters, controllers, and monitoring systems</desc>
+
+  <defs>
+    <linearGradient id="aud-grad-source" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="aud-grad-adapter" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="aud-grad-controller" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="aud-grad-monitor" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="aud-grad-storage" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#4f46e5;stop-opacity:1" />
+    </linearGradient>
+    <filter id="aud-shadow">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+    <marker id="aud-arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#334155" />
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1100" height="750" fill="#f8fafc"/>
+
+  <!-- Title -->
+  <text x="550" y="35" font-family="Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" fill="#1e293b">
+    Audio Source Routing Architecture
+  </text>
+  <text x="550" y="58" font-family="Arial, sans-serif" font-size="13" text-anchor="middle" fill="#64748b">
+    Multi-source audio ingestion with priority selection and real-time monitoring
+  </text>
+
+  <!-- Audio Sources Column -->
+  <rect x="30" y="90" width="180" height="580" rx="8" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+  <text x="120" y="115" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e40af">
+    Audio Sources
+  </text>
+
+  <!-- SDR Source -->
+  <rect x="50" y="140" width="140" height="90" rx="6" fill="url(#aud-grad-source)" filter="url(#aud-shadow)"/>
+  <text x="120" y="162" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="white">SDR Receiver</text>
+  <text x="120" y="182" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">SoapySDR</text>
+  <text x="120" y="197" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">RTL-SDR/Airspy</text>
+  <text x="120" y="212" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#bfdbfe">Priority: 1 (highest)</text>
+  <text x="120" y="225" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#93c5fd">RadioManager</text>
+
+  <!-- ALSA Source -->
+  <rect x="50" y="250" width="140" height="90" rx="6" fill="url(#aud-grad-source)" filter="url(#aud-shadow)"/>
+  <text x="120" y="272" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="white">ALSA Device</text>
+  <text x="120" y="292" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">Hardware: hw:X,Y</text>
+  <text x="120" y="307" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">USB Sound Card</text>
+  <text x="120" y="322" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#bfdbfe">Priority: 2</text>
+  <text x="120" y="335" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#93c5fd">pyalsaaudio</text>
+
+  <!-- PulseAudio Source -->
+  <rect x="50" y="360" width="140" height="90" rx="6" fill="url(#aud-grad-source)" filter="url(#aud-shadow)"/>
+  <text x="120" y="382" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="white">PulseAudio</text>
+  <text x="120" y="402" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">Device Index</text>
+  <text x="120" y="417" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">Network Stream</text>
+  <text x="120" y="432" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#bfdbfe">Priority: 3</text>
+  <text x="120" y="445" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#93c5fd">pulsectl</text>
+
+  <!-- File Source -->
+  <rect x="50" y="470" width="140" height="90" rx="6" fill="url(#aud-grad-source)" filter="url(#aud-shadow)"/>
+  <text x="120" y="492" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="white">Audio File</text>
+  <text x="120" y="512" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">WAV/MP3</text>
+  <text x="120" y="527" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">Playback Testing</text>
+  <text x="120" y="542" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#bfdbfe">Priority: 4 (lowest)</text>
+  <text x="120" y="555" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#93c5fd">soundfile/scipy</text>
+
+  <!-- Source Adapters Column -->
+  <rect x="250" y="90" width="180" height="580" rx="8" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="2"/>
+  <text x="340" y="115" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#5b21b6">
+    Source Adapters
+  </text>
+
+  <!-- SDR Adapter -->
+  <rect x="270" y="140" width="140" height="70" rx="6" fill="url(#aud-grad-adapter)" filter="url(#aud-shadow)"/>
+  <text x="340" y="162" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">SDRSourceAdapter</text>
+  <text x="340" y="180" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#ede9fe">Convert I/Q → PCM</text>
+  <text x="340" y="195" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#ede9fe">Normalize levels</text>
+
+  <path d="M 190,185 L 270,175" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+
+  <!-- ALSA Adapter -->
+  <rect x="270" y="260" width="140" height="70" rx="6" fill="url(#aud-grad-adapter)" filter="url(#aud-shadow)"/>
+  <text x="340" y="282" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">ALSASourceAdapter</text>
+  <text x="340" y="300" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#ede9fe">Direct PCM capture</text>
+  <text x="340" y="315" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#ede9fe">Buffer management</text>
+
+  <path d="M 190,295 L 270,295" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+
+  <!-- Pulse Adapter -->
+  <rect x="270" y="370" width="140" height="70" rx="6" fill="url(#aud-grad-adapter)" filter="url(#aud-shadow)"/>
+  <text x="340" y="392" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">PulseSourceAdapter</text>
+  <text x="340" y="410" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#ede9fe">Stream capture</text>
+  <text x="340" y="425" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#ede9fe">Resample if needed</text>
+
+  <path d="M 190,405 L 270,405" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+
+  <!-- File Adapter -->
+  <rect x="270" y="480" width="140" height="70" rx="6" fill="url(#aud-grad-adapter)" filter="url(#aud-shadow)"/>
+  <text x="340" y="502" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">FileSourceAdapter</text>
+  <text x="340" y="520" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#ede9fe">Read audio file</text>
+  <text x="340" y="535" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#ede9fe">Chunk into frames</text>
+
+  <path d="M 190,515 L 270,515" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+
+  <!-- Controller Column -->
+  <rect x="470" y="90" width="200" height="320" rx="8" fill="#f0fdf4" stroke="#10b981" stroke-width="2"/>
+  <text x="570" y="115" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#065f46">
+    Audio Controller
+  </text>
+
+  <!-- Controller Box -->
+  <rect x="490" y="140" width="160" height="90" rx="6" fill="url(#aud-grad-controller)" filter="url(#aud-shadow)"/>
+  <text x="570" y="162" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="white">AudioIngestController</text>
+  <text x="570" y="182" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">app_core/audio/</text>
+  <text x="570" y="197" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">ingest.py</text>
+  <text x="570" y="217" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#a7f3d0">Manages all sources</text>
+
+  <path d="M 410,175 L 490,175" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+  <path d="M 410,295 L 450,295 L 450,185 L 490,185" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+  <path d="M 410,405 L 440,405 L 440,195 L 490,195" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+  <path d="M 410,515 L 430,515 L 430,205 L 490,205" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+
+  <!-- Priority Selection -->
+  <rect x="490" y="250" width="160" height="60" rx="6" fill="url(#aud-grad-controller)" filter="url(#aud-shadow)"/>
+  <text x="570" y="272" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Priority Selection</text>
+  <text x="570" y="292" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">Selects highest priority</text>
+  <text x="570" y="305" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#a7f3d0">active source</text>
+
+  <path d="M 570,230 L 570,250" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+
+  <!-- Audio Buffer -->
+  <rect x="490" y="330" width="160" height="60" rx="6" fill="url(#aud-grad-controller)" filter="url(#aud-shadow)"/>
+  <text x="570" y="352" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Audio Buffer Queue</text>
+  <text x="570" y="372" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">Thread-safe queue</text>
+  <text x="570" y="385" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#a7f3d0">Circular buffer</text>
+
+  <path d="M 570,310 L 570,330" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+
+  <!-- Monitoring Column -->
+  <rect x="710" y="90" width="180" height="320" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="800" y="115" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#92400e">
+    Monitoring
+  </text>
+
+  <!-- Audio Meter -->
+  <rect x="730" y="140" width="140" height="70" rx="6" fill="url(#aud-grad-monitor)" filter="url(#aud-shadow)"/>
+  <text x="800" y="162" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">AudioMeter</text>
+  <text x="800" y="180" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#fef9c3">Peak/RMS levels</text>
+  <text x="800" y="195" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#fef9c3">metering.py</text>
+
+  <path d="M 650,360 L 730,180" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+
+  <!-- Silence Detector -->
+  <rect x="730" y="230" width="140" height="70" rx="6" fill="url(#aud-grad-monitor)" filter="url(#aud-shadow)"/>
+  <text x="800" y="252" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">SilenceDetector</text>
+  <text x="800" y="270" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#fef9c3">Threshold detection</text>
+  <text x="800" y="285" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#fef9c3">Alert on silence</text>
+
+  <path d="M 650,360 L 730,265" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+
+  <!-- Health Monitor -->
+  <rect x="730" y="320" width="140" height="70" rx="6" fill="url(#aud-grad-monitor)" filter="url(#aud-shadow)"/>
+  <text x="800" y="342" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">HealthMonitor</text>
+  <text x="800" y="360" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#fef9c3">Health score 0-100</text>
+  <text x="800" y="375" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#fef9c3">Status tracking</text>
+
+  <path d="M 650,360 L 730,355" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+
+  <!-- Database Storage Column -->
+  <rect x="930" y="90" width="140" height="580" rx="8" fill="#eef2ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="1000" y="115" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#3730a3">
+    Database
+  </text>
+
+  <!-- Metrics Table -->
+  <rect x="950" y="140" width="100" height="110" rx="6" fill="url(#aud-grad-storage)" filter="url(#aud-shadow)"/>
+  <text x="1000" y="160" font-family="Arial, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" fill="white">AudioSource</text>
+  <text x="1000" y="175" font-family="Arial, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" fill="white">Metrics</text>
+  <text x="1000" y="195" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#e0e7ff">Peak level</text>
+  <text x="1000" y="208" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#e0e7ff">RMS level</text>
+  <text x="1000" y="221" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#e0e7ff">Timestamp</text>
+  <text x="1000" y="234" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#e0e7ff">Source name</text>
+
+  <path d="M 870,175 L 950,175" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+
+  <!-- Health Table -->
+  <rect x="950" y="270" width="100" height="100" rx="6" fill="url(#aud-grad-storage)" filter="url(#aud-shadow)"/>
+  <text x="1000" y="290" font-family="Arial, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" fill="white">Audio</text>
+  <text x="1000" y="305" font-family="Arial, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" fill="white">HealthStatus</text>
+  <text x="1000" y="325" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#e0e7ff">Health score</text>
+  <text x="1000" y="338" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#e0e7ff">Status</text>
+  <text x="1000" y="351" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#e0e7ff">Last update</text>
+
+  <path d="M 870,355 L 950,320" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+
+  <!-- Alerts Table -->
+  <rect x="950" y="390" width="100" height="90" rx="6" fill="url(#aud-grad-storage)" filter="url(#aud-shadow)"/>
+  <text x="1000" y="410" font-family="Arial, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" fill="white">AudioAlert</text>
+  <text x="1000" y="430" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#e0e7ff">Alert type</text>
+  <text x="1000" y="443" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#e0e7ff">Silence event</text>
+  <text x="1000" y="456" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#e0e7ff">Timestamp</text>
+  <text x="1000" y="469" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#e0e7ff">Details</text>
+
+  <path d="M 870,265 L 920,265 L 920,435 L 950,435" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+
+  <!-- Web UI Output -->
+  <rect x="470" y="450" width="420" height="210" rx="8" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+  <text x="680" y="475" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e40af">
+    Web UI & API
+  </text>
+
+  <!-- UI Box -->
+  <rect x="490" y="495" width="180" height="80" rx="6" fill="#3b82f6" filter="url(#aud-shadow)"/>
+  <text x="580" y="517" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Audio Sources Page</text>
+  <text x="580" y="537" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">/audio/sources</text>
+  <text x="580" y="553" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#bfdbfe">Real-time status</text>
+  <text x="580" y="567" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#bfdbfe">Level meters</text>
+
+  <!-- API Box -->
+  <rect x="690" y="495" width="180" height="80" rx="6" fill="#3b82f6" filter="url(#aud-shadow)"/>
+  <text x="780" y="517" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">REST API</text>
+  <text x="780" y="537" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#dbeafe">/api/audio/*</text>
+  <text x="780" y="553" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#bfdbfe">GET /api/audio/sources</text>
+  <text x="780" y="567" font-family="Arial, sans-serif" font-size="9" text-anchor="middle" fill="#bfdbfe">GET /api/audio/metrics</text>
+
+  <!-- JavaScript Monitor -->
+  <rect x="490" y="595" width="380" height="50" rx="6" fill="#60a5fa" filter="url(#aud-shadow)"/>
+  <text x="680" y="617" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">JavaScript Real-Time Monitor</text>
+  <text x="680" y="635" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="white">Auto-refresh every 5 seconds • WebSocket updates • Level visualization</text>
+
+  <path d="M 580,575 L 580,595" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+  <path d="M 780,575 L 780,595" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+
+  <path d="M 1000,250 L 1020,250 L 1020,535 L 870,535" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+  <path d="M 1000,370 L 1040,370 L 1040,535 L 870,535" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#aud-arrow)"/>
+
+  <!-- Footer -->
+  <text x="550" y="735" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#64748b">
+    Audio architecture: app_core/audio/ | Documentation: docs/audio.md | Web UI: /audio/sources
+  </text>
+</svg>
