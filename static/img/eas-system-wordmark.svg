@@ -1,0 +1,321 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 600" role="img" aria-label="EAS SYSTEM — Professional Wordmark">
+  <title>EAS SYSTEM Wordmark</title>
+  <desc>Professional emergency alert system wordmark with technical visualization</desc>
+
+  <defs>
+    <!-- Brand color gradients -->
+    <linearGradient id="primaryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#1e3a8a"/>
+      <stop offset="100%" stop-color="#0891b2"/>
+    </linearGradient>
+
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#dc2626"/>
+      <stop offset="50%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#eab308"/>
+    </linearGradient>
+
+    <linearGradient id="metalGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#cbd5e1"/>
+      <stop offset="40%" stop-color="#94a3b8"/>
+      <stop offset="60%" stop-color="#64748b"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+
+    <radialGradient id="glowGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.6"/>
+      <stop offset="70%" stop-color="#0891b2" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#0e7490" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Enhanced emboss filter with proper depth -->
+    <filter id="emboss" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="0" result="blur"/>
+      <feOffset in="blur" dx="-2" dy="-2" result="hlOff"/>
+      <feFlood flood-color="#ffffff" flood-opacity="0.4" result="hlColor"/>
+      <feComposite in="hlColor" in2="hlOff" operator="in" result="hl"/>
+
+      <feOffset in="blur" dx="2" dy="2" result="shOff"/>
+      <feFlood flood-color="#000000" flood-opacity="0.5" result="shColor"/>
+      <feComposite in="shColor" in2="shOff" operator="in" result="sh"/>
+
+      <feMerge>
+        <feMergeNode in="sh"/>
+        <feMergeNode in="hl"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Professional glow filter -->
+    <filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur1"/>
+      <feGaussianBlur in="blur1" stdDeviation="8" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Depth shadow -->
+    <filter id="depth" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+      <feOffset dx="0" dy="3" result="offsetblur"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.4"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Subtle grid background -->
+  <g opacity="0.08" stroke="#06b6d4" stroke-width="0.5">
+    <line x1="0" y1="150" x2="1600" y2="150"/>
+    <line x1="0" y1="300" x2="1600" y2="300"/>
+    <line x1="0" y1="450" x2="1600" y2="450"/>
+    <line x1="400" y1="0" x2="400" y2="600"/>
+    <line x1="800" y1="0" x2="800" y2="600"/>
+    <line x1="1200" y1="0" x2="1200" y2="600"/>
+  </g>
+
+  <!-- Corner brackets - modern UI -->
+  <g stroke="url(#accentGrad)" stroke-width="3" fill="none" opacity="0.5" stroke-linecap="round">
+    <path d="M 40,80 L 40,40 L 80,40"/>
+    <path d="M 1520,40 L 1560,40 L 1560,80"/>
+    <path d="M 1560,520 L 1560,560 L 1520,560"/>
+    <path d="M 80,560 L 40,560 L 40,520"/>
+  </g>
+
+  <!-- Wordmark with enhanced styling -->
+  <g transform="translate(100,180) scale(0.82)" filter="url(#emboss)">
+
+    <!-- EAS -->
+    <g fill="url(#primaryGrad)">
+      <!-- E -->
+      <g transform="translate(0,0)">
+        <path d="M0,0 h24 v140 h-24 z"/>
+        <rect x="0" y="0" width="96" height="22"/>
+        <rect x="0" y="59" width="76" height="22"/>
+        <rect x="0" y="118" width="96" height="22"/>
+      </g>
+
+      <!-- A -->
+      <g transform="translate(124,0)">
+        <path d="M0,140 L42,0 H74 L116,140 H86 L74,100 H42 L30,140 Z"/>
+        <rect x="44" y="80" width="36" height="14"/>
+      </g>
+
+      <!-- S -->
+      <g transform="translate(264,0)">
+        <path d="M112,28 C112,10 94,0 70,0 H44 C18,0 0,12 0,30 s18,30 44,30 h26 c24,0 42,12 42,30
+                 s-18,30-42,30H44 C18,120 0,140 0,140 h26 c26,0 52,0 68,0 c22,0 44-16 44-38
+                 s-22-38-48-38 H60 C34,64 16,52 16,34 s18-34 44-34h26 c16,0 26,4 26,28z"/>
+      </g>
+    </g>
+
+    <!-- Divider with accent -->
+    <g transform="translate(400,40)">
+      <rect x="0" y="0" width="4" height="60" rx="2" fill="url(#accentGrad)" opacity="0.7">
+        <animate attributeName="opacity" values="0.7;1;0.7" dur="3s" repeatCount="indefinite"/>
+      </rect>
+    </g>
+
+    <!-- SYSTEM -->
+    <g fill="url(#primaryGrad)">
+      <!-- S -->
+      <g transform="translate(432,0)">
+        <path d="M112,28 C112,10 94,0 70,0 H44 C18,0 0,12 0,30 s18,30 44,30 h26 c24,0 42,12 42,30
+                 s-18,30-42,30H44 C18,120 0,140 0,140 h26 c26,0 52,0 68,0 c22,0 44-16 44-38
+                 s-22-38-48-38 H60 C34,64 16,52 16,34 s18-34 44-34h26 c16,0 26,4 26,28z"/>
+      </g>
+
+      <!-- Y -->
+      <g transform="translate(572,0)">
+        <path d="M0,0 H28 L48,44 L68,0 H96 L60,74 V140 H32 V74 Z"/>
+      </g>
+
+      <!-- S -->
+      <g transform="translate(688,0)">
+        <path d="M112,28 C112,10 94,0 70,0 H44 C18,0 0,12 0,30 s18,30 44,30 h26 c24,0 42,12 42,30
+                 s-18,30-42,30H44 C18,120 0,140 0,140 h26 c26,0 52,0 68,0 c22,0 44-16 44-38
+                 s-22-38-48-38 H60 C34,64 16,52 16,34 s18-34 44-34h26 c16,0 26,4 26,28z"/>
+      </g>
+
+      <!-- T -->
+      <g transform="translate(828,0)">
+        <rect x="0" y="0" width="128" height="22"/>
+        <rect x="52" y="22" width="24" height="118"/>
+      </g>
+
+      <!-- E -->
+      <g transform="translate(972,0)">
+        <path d="M0,0 h24 v140 h-24 z"/>
+        <rect x="0" y="0" width="96" height="22"/>
+        <rect x="0" y="59" width="76" height="22"/>
+        <rect x="0" y="118" width="96" height="22"/>
+      </g>
+
+      <!-- M -->
+      <g transform="translate(1116,0)">
+        <path d="M0,140 V0 H24 L64,70 L104,0 H128 V140 H104 V52 L64,104 L24,52 V140 Z"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- Alert indicator with pulse -->
+  <g transform="translate(1400,100)" filter="url(#depth)">
+    <circle r="20" fill="#0f172a" opacity="0.9"/>
+    <circle r="16" fill="url(#accentGrad)">
+      <animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    <path d="M 0,-8 L 2,3 L -2,3 Z M 0,6 L 2,9 L -2,9 Z" fill="#fff"/>
+  </g>
+
+  <!-- Status indicator -->
+  <g transform="translate(1480,100)">
+    <circle r="14" fill="#0f172a" opacity="0.9"/>
+    <circle r="6" fill="#22c55e">
+      <animate attributeName="opacity" values="1;0.5;1" dur="2.5s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="10" fill="none" stroke="#22c55e" stroke-width="1" opacity="0.5">
+      <animate attributeName="r" values="10;14;10" dur="2.5s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.5;0;0.5" dur="2.5s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- Waveform visualization circles -->
+  <g transform="translate(800,300)" filter="url(#glow)" opacity="0.7">
+    <!-- Inner circle -->
+    <circle r="120" fill="none" stroke="#06b6d4" stroke-width="2">
+      <animate attributeName="opacity" values="0.3;0.7;0.3" dur="4s" repeatCount="indefinite"/>
+    </circle>
+
+    <!-- Middle circle -->
+    <circle r="160" fill="none" stroke="#0891b2" stroke-width="1.5" opacity="0.4">
+      <animate attributeName="opacity" values="0.2;0.5;0.2" dur="4s" begin="0.3s" repeatCount="indefinite"/>
+    </circle>
+
+    <!-- Outer circle -->
+    <circle r="200" fill="none" stroke="#06b6d4" stroke-width="1" opacity="0.25">
+      <animate attributeName="opacity" values="0.1;0.35;0.1" dur="4s" begin="0.6s" repeatCount="indefinite"/>
+    </circle>
+
+    <!-- Central pulse -->
+    <circle r="8" fill="url(#accentGrad)">
+      <animate attributeName="r" values="8;12;8" dur="2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;0.6;1" dur="2s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- Frequency bars - left side -->
+  <g transform="translate(600,250)" filter="url(#glow)">
+    <rect x="0" y="20" width="6" height="60" rx="3" fill="#06b6d4" opacity="0.7">
+      <animate attributeName="height" values="60;35;75;45;60" dur="2.1s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="20;37.5;12.5;32.5;20" dur="2.1s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="10" y="15" width="6" height="70" rx="3" fill="#0891b2" opacity="0.7">
+      <animate attributeName="height" values="70;45;85;55;70" dur="1.9s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="15;30;7.5;25;15" dur="1.9s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="20" y="10" width="6" height="80" rx="3" fill="#06b6d4" opacity="0.7">
+      <animate attributeName="height" values="80;50;95;62;80" dur="2.3s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="10;25;2.5;19;10" dur="2.3s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="30" y="5" width="6" height="90" rx="3" fill="#0891b2" opacity="0.7">
+      <animate attributeName="height" values="90;60;105;72;90" dur="2.0s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="5;20;-2.5;14;5" dur="2.0s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="40" y="18" width="6" height="64" rx="3" fill="#06b6d4" opacity="0.7">
+      <animate attributeName="height" values="64;40;78;50;64" dur="2.4s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="18;30;11;25;18" dur="2.4s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+
+  <!-- Frequency bars - right side -->
+  <g transform="translate(950,250)" filter="url(#glow)">
+    <rect x="0" y="18" width="6" height="64" rx="3" fill="#06b6d4" opacity="0.7">
+      <animate attributeName="height" values="64;42;76;52;64" dur="2.2s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="18;29;12;24;18" dur="2.2s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="10" y="5" width="6" height="90" rx="3" fill="#0891b2" opacity="0.7">
+      <animate attributeName="height" values="90;58;102;70;90" dur="1.8s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="5;21;-1;15;5" dur="1.8s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="20" y="10" width="6" height="80" rx="3" fill="#06b6d4" opacity="0.7">
+      <animate attributeName="height" values="80;52;92;64;80" dur="2.5s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="10;24;4;18;10" dur="2.5s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="30" y="15" width="6" height="70" rx="3" fill="#0891b2" opacity="0.7">
+      <animate attributeName="height" values="70;48;82;58;70" dur="1.7s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="15;26;9;21;15" dur="1.7s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="40" y="20" width="6" height="60" rx="3" fill="#06b6d4" opacity="0.7">
+      <animate attributeName="height" values="60;38;72;48;60" dur="2.6s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="20;31;14;26;20" dur="2.6s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+
+  <!-- Data stream visualization at bottom -->
+  <g transform="translate(200,520)" opacity="0.4">
+    <rect x="0" y="0" width="2" height="8" rx="1" fill="#06b6d4">
+      <animate attributeName="opacity" values="0;1;0" dur="1.5s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="8" y="0" width="2" height="8" rx="1" fill="#06b6d4">
+      <animate attributeName="opacity" values="0;1;0" dur="1.5s" begin="0.1s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="16" y="0" width="2" height="8" rx="1" fill="#0891b2">
+      <animate attributeName="opacity" values="0;1;0" dur="1.5s" begin="0.2s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="24" y="0" width="2" height="8" rx="1" fill="#06b6d4">
+      <animate attributeName="opacity" values="0;1;0" dur="1.5s" begin="0.3s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="32" y="0" width="2" height="8" rx="1" fill="#0891b2">
+      <animate attributeName="opacity" values="0;1;0" dur="1.5s" begin="0.4s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="40" y="0" width="2" height="8" rx="1" fill="#06b6d4">
+      <animate attributeName="opacity" values="0;1;0" dur="1.5s" begin="0.5s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+
+  <g transform="translate(1350,520)" opacity="0.4">
+    <rect x="0" y="0" width="2" height="8" rx="1" fill="#06b6d4">
+      <animate attributeName="opacity" values="0;1;0" dur="1.5s" begin="0.6s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="8" y="0" width="2" height="8" rx="1" fill="#0891b2">
+      <animate attributeName="opacity" values="0;1;0" dur="1.5s" begin="0.7s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="16" y="0" width="2" height="8" rx="1" fill="#06b6d4">
+      <animate attributeName="opacity" values="0;1;0" dur="1.5s" begin="0.8s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="24" y="0" width="2" height="8" rx="1" fill="#06b6d4">
+      <animate attributeName="opacity" values="0;1;0" dur="1.5s" begin="0.9s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="32" y="0" width="2" height="8" rx="1" fill="#0891b2">
+      <animate attributeName="opacity" values="0;1;0" dur="1.5s" begin="1.0s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="40" y="0" width="2" height="8" rx="1" fill="#06b6d4">
+      <animate attributeName="opacity" values="0;1;0" dur="1.5s" begin="1.1s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+
+  <!-- Subtle scan line effect -->
+  <g opacity="0.12">
+    <rect x="0" y="300" width="1600" height="2" fill="url(#accentGrad)">
+      <animate attributeName="y" values="100;500;100" dur="5s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;0.25;0" dur="5s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+
+  <!-- Hexagonal tech elements -->
+  <g stroke="#64748b" stroke-width="1.5" fill="none" opacity="0.3">
+    <polygon points="120,500 140,488 160,500 160,524 140,536 120,524"/>
+    <polygon points="1440,500 1460,488 1480,500 1480,524 1460,536 1440,524"/>
+    <polygon points="120,76 140,64 160,76 160,100 140,112 120,100"/>
+    <polygon points="1440,76 1460,64 1480,76 1480,100 1460,112 1440,100"/>
+  </g>
+</svg>
