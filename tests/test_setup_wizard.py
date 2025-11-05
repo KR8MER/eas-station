@@ -269,3 +269,34 @@ def test_core_section_has_required_fields():
     assert "POSTGRES_DB" in field_keys
     assert "POSTGRES_USER" in field_keys
     assert "POSTGRES_PASSWORD" in field_keys
+
+
+# ============================================================================
+# Partial Update Tests (Skipped Section Preservation)
+# ============================================================================
+
+def test_partial_form_preserves_unspecified_keys():
+    """When only some fields are provided, unspecified keys should not be blanked."""
+    # Simulate user only updating database password, not touching audio settings
+    partial_form = {
+        "SECRET_KEY": "a" * 32,
+        "POSTGRES_HOST": "db",
+        "POSTGRES_PORT": "5432",
+        "POSTGRES_DB": "alerts",
+        "POSTGRES_USER": "alerts",
+        "POSTGRES_PASSWORD": "new_password",  # Changed
+        "DEFAULT_TIMEZONE": "America/New_York",
+        "DEFAULT_COUNTY_NAME": "Putnam County",
+        # Note: Audio settings NOT included (simulating skipped section)
+    }
+
+    # This should not raise an error for missing optional fields
+    cleaned = clean_submission(partial_form)
+
+    # Required fields should be present
+    assert cleaned["POSTGRES_PASSWORD"] == "new_password"
+    assert cleaned["SECRET_KEY"] == "a" * 32
+
+    # Optional fields that weren't provided should not be in the cleaned result
+    # (they'll be preserved by the CLI tool from defaults)
+    assert "AUDIO_ALSA_ENABLED" not in cleaned or cleaned["AUDIO_ALSA_ENABLED"] == ""

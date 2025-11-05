@@ -60,7 +60,12 @@ def _collect_answers(defaults: Dict[str, str]) -> Dict[str, str]:
         # Allow skipping optional sections
         if section.name != "core":
             if not _prompt_yes_no(f"Configure {section.title}?", default=True):
-                print(f"Skipping {section.title} section.\n")
+                print(f"Skipping {section.title} section.")
+                print("Existing configuration values will be preserved.\n")
+                # Preserve existing values for skipped section
+                for field in section.fields:
+                    if field.key in defaults:
+                        answers[field.key] = defaults[field.key]
                 continue
 
         # Collect answers for each field in the section
