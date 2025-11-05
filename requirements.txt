@@ -55,3 +55,7 @@ numpy==2.2.1  # Required for SoapySDR sample processing
 # VFD Display support (Noritake GU140x32F-7000B)
 pyserial==3.5  # Serial communication for VFD display
 Pillow==10.4.0  # Image processing for VFD graphics rendering
+
+# Multi-Factor Authentication (MFA) support
+pyotp==2.9.0  # TOTP (Time-based One-Time Password) generation and verification
+qrcode==8.0  # QR code generation for MFA enrollment

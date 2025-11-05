@@ -18,6 +18,7 @@ from . import (
     routes_monitoring,
     routes_public,
     routes_setup,
+    routes_security,
     template_helpers,
     documentation,
 )
@@ -51,6 +52,7 @@ def iter_route_modules() -> Iterable[RouteModule]:
     yield RouteModule("routes_exports", routes_exports.register)
     yield RouteModule("routes_led", routes_led.register)
     yield RouteModule("routes_vfd", routes_vfd.register)
+    yield RouteModule("routes_security", routes_security.register)
     yield RouteModule("routes_debug", routes_debug.register)
     yield RouteModule("routes_admin", routes_admin.register)
 
