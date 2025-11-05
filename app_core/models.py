@@ -151,6 +151,18 @@ class AdminUser(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
     last_login_at = db.Column(db.DateTime(timezone=True))
 
+    # RBAC fields
+    role_id = db.Column(db.Integer, db.ForeignKey('roles.id', ondelete='SET NULL'), nullable=True)
+
+    # MFA fields
+    mfa_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    mfa_secret = db.Column(db.String(255), nullable=True)  # Base32-encoded TOTP secret
+    mfa_backup_codes_hash = db.Column(db.Text, nullable=True)  # JSON array of hashed backup codes
+    mfa_enrolled_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    role = db.relationship('Role', back_populates='users', lazy='joined')
+
     def set_password(self, password: str) -> None:
         self.password_hash = werkzeug_generate_password_hash(password)
         self.salt = "pbkdf2"
@@ -184,6 +196,10 @@ class AdminUser(db.Model):
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_login_at": self.last_login_at.isoformat() if self.last_login_at else None,
+            "role": self.role.name if self.role else None,
+            "role_id": self.role_id,
+            "mfa_enabled": self.mfa_enabled,
+            "mfa_enrolled_at": self.mfa_enrolled_at.isoformat() if self.mfa_enrolled_at else None,
         }
 
     @property

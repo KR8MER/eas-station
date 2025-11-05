@@ -1,0 +1,648 @@
+{% extends "base.html" %}
+
+{% block title %}Security Settings - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+    .security-header {
+        background: linear-gradient(135deg, #204885, #0d6efd);
+        color: white;
+        padding: 2rem 0;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+
+    .security-section {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    .security-section h3 {
+        color: #204885;
+        margin-bottom: 1.5rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 2px solid #e9ecef;
+    }
+
+    .mfa-status {
+        display: flex;
+        align-items: center;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+    }
+
+    .mfa-status.enabled {
+        background: linear-gradient(135deg, rgba(40, 167, 69, 0.1), rgba(32, 201, 151, 0.1));
+        border-left: 4px solid #28a745;
+    }
+
+    .mfa-status.disabled {
+        background: linear-gradient(135deg, rgba(255, 193, 7, 0.1), rgba(255, 152, 0, 0.1));
+        border-left: 4px solid #ffc107;
+    }
+
+    .mfa-status-icon {
+        font-size: 2.5rem;
+        margin-right: 1rem;
+    }
+
+    .mfa-status.enabled .mfa-status-icon {
+        color: #28a745;
+    }
+
+    .mfa-status.disabled .mfa-status-icon {
+        color: #ffc107;
+    }
+
+    .qr-code-container {
+        text-align: center;
+        padding: 2rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+        margin: 1.5rem 0;
+    }
+
+    .qr-code-img {
+        max-width: 300px;
+        border: 4px solid white;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+
+    .backup-codes-container {
+        background: #fff3cd;
+        border: 2px solid #ffc107;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin: 1.5rem 0;
+    }
+
+    .backup-codes-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 0.75rem;
+        margin-top: 1rem;
+    }
+
+    .backup-code {
+        font-family: 'Courier New', monospace;
+        font-size: 1.1rem;
+        font-weight: bold;
+        padding: 0.75rem;
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        text-align: center;
+        letter-spacing: 0.1em;
+    }
+
+    .secret-code {
+        font-family: 'Courier New', monospace;
+        font-size: 1.2rem;
+        padding: 1rem;
+        background: #f8f9fa;
+        border: 2px dashed #6c757d;
+        border-radius: 8px;
+        text-align: center;
+        letter-spacing: 0.2em;
+        margin: 1rem 0;
+        user-select: all;
+    }
+
+    .step-indicator {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 2rem;
+    }
+
+    .step {
+        flex: 1;
+        text-align: center;
+        padding: 1rem;
+        position: relative;
+    }
+
+    .step::after {
+        content: '';
+        position: absolute;
+        top: 2rem;
+        left: 50%;
+        width: 100%;
+        height: 2px;
+        background: #dee2e6;
+        z-index: -1;
+    }
+
+    .step:last-child::after {
+        display: none;
+    }
+
+    .step-number {
+        display: inline-block;
+        width: 3rem;
+        height: 3rem;
+        line-height: 3rem;
+        border-radius: 50%;
+        background: #dee2e6;
+        color: #6c757d;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+    }
+
+    .step.active .step-number {
+        background: #0d6efd;
+        color: white;
+    }
+
+    .step.complete .step-number {
+        background: #28a745;
+        color: white;
+    }
+
+    .step.complete .step-number::before {
+        content: '✓';
+    }
+
+    .role-badge {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .role-badge.admin {
+        background: linear-gradient(135deg, #dc3545, #c82333);
+        color: white;
+    }
+
+    .role-badge.operator {
+        background: linear-gradient(135deg, #0d6efd, #0056b3);
+        color: white;
+    }
+
+    .role-badge.viewer {
+        background: linear-gradient(135deg, #6c757d, #545b62);
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="security-header">
+    <div class="container">
+        <h1><i class="fas fa-shield-alt"></i> Security Settings</h1>
+        <p class="mb-0">Manage your account security and two-factor authentication</p>
+    </div>
+</div>
+
+<div class="container">
+    {% if current_user %}
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="security-section">
+                <h5><i class="fas fa-user"></i> Account Information</h5>
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Username:</strong> {{ current_user.username }}</p>
+                        <p><strong>Role:</strong>
+                            <span class="role-badge {{ current_user.role.name if current_user.role else 'viewer' }}">
+                                <i class="fas fa-user-tag"></i> {{ current_user.role.name if current_user.role else 'No Role' }}
+                            </span>
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Account Created:</strong> {{ current_user.created_at.strftime('%Y-%m-%d %H:%M UTC') if current_user.created_at else 'N/A' }}</p>
+                        <p><strong>Last Login:</strong> {{ current_user.last_login_at.strftime('%Y-%m-%d %H:%M UTC') if current_user.last_login_at else 'Never' }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- MFA Section -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="security-section">
+                <h3><i class="fas fa-mobile-alt"></i> Two-Factor Authentication (MFA)</h3>
+
+                <!-- MFA Status -->
+                <div class="mfa-status {{ 'enabled' if mfa_enabled else 'disabled' }}" id="mfa-status-display">
+                    <div class="mfa-status-icon">
+                        <i class="fas {{ 'fa-check-circle' if mfa_enabled else 'fa-exclamation-triangle' }}"></i>
+                    </div>
+                    <div>
+                        <h5 class="mb-1">
+                            {% if mfa_enabled %}
+                                Two-Factor Authentication is <strong>Enabled</strong>
+                            {% else %}
+                                Two-Factor Authentication is <strong>Disabled</strong>
+                            {% endif %}
+                        </h5>
+                        <p class="mb-0">
+                            {% if mfa_enabled %}
+                                Your account is protected with TOTP-based authentication.
+                                {% if mfa_enrolled_at %}
+                                    <br><small>Enrolled on: {{ mfa_enrolled_at.strftime('%Y-%m-%d %H:%M UTC') }}</small>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-warning"><strong>Recommended:</strong> Enable MFA to secure your account.</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+
+                {% if not mfa_enabled %}
+                <!-- Enrollment Flow -->
+                <div id="mfa-enrollment-container">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>What is Two-Factor Authentication?</strong><br>
+                        MFA adds an extra layer of security by requiring a code from your phone in addition to your password.
+                        You'll need an authenticator app like:
+                        <ul class="mt-2 mb-0">
+                            <li>Google Authenticator (Android/iOS)</li>
+                            <li>Microsoft Authenticator (Android/iOS)</li>
+                            <li>Authy (Android/iOS/Desktop)</li>
+                        </ul>
+                    </div>
+
+                    <!-- Step 1: Start Enrollment -->
+                    <div id="step1-start" class="enrollment-step">
+                        <button class="btn btn-primary btn-lg" id="start-mfa-btn">
+                            <i class="fas fa-lock"></i> Enable Two-Factor Authentication
+                        </button>
+                    </div>
+
+                    <!-- Step 2: Scan QR Code -->
+                    <div id="step2-scan" class="enrollment-step" style="display:none;">
+                        <div class="step-indicator">
+                            <div class="step complete">
+                                <div class="step-number">1</div>
+                                <div>Start Setup</div>
+                            </div>
+                            <div class="step active">
+                                <div class="step-number">2</div>
+                                <div>Scan QR Code</div>
+                            </div>
+                            <div class="step">
+                                <div class="step-number">3</div>
+                                <div>Verify</div>
+                            </div>
+                            <div class="step">
+                                <div class="step-number">4</div>
+                                <div>Save Backup Codes</div>
+                            </div>
+                        </div>
+
+                        <div class="qr-code-container">
+                            <h5>Scan this QR code with your authenticator app</h5>
+                            <img id="qr-code-img" class="qr-code-img" alt="MFA QR Code">
+                            <p class="text-muted mt-3">
+                                <small>Or manually enter this secret key:</small>
+                            </p>
+                            <div class="secret-code" id="secret-code-display"></div>
+                        </div>
+
+                        <div class="text-center">
+                            <button class="btn btn-secondary" id="cancel-enrollment-btn">
+                                <i class="fas fa-times"></i> Cancel
+                            </button>
+                            <button class="btn btn-primary" id="proceed-verify-btn">
+                                <i class="fas fa-arrow-right"></i> I've Scanned the Code
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Verify Code -->
+                    <div id="step3-verify" class="enrollment-step" style="display:none;">
+                        <div class="step-indicator">
+                            <div class="step complete">
+                                <div class="step-number">1</div>
+                                <div>Start Setup</div>
+                            </div>
+                            <div class="step complete">
+                                <div class="step-number">2</div>
+                                <div>Scan QR Code</div>
+                            </div>
+                            <div class="step active">
+                                <div class="step-number">3</div>
+                                <div>Verify</div>
+                            </div>
+                            <div class="step">
+                                <div class="step-number">4</div>
+                                <div>Save Backup Codes</div>
+                            </div>
+                        </div>
+
+                        <div class="row justify-content-center">
+                            <div class="col-md-6">
+                                <div class="mb-4">
+                                    <label for="verify-code" class="form-label">Enter the 6-digit code from your authenticator app:</label>
+                                    <input
+                                        type="text"
+                                        class="form-control form-control-lg text-center"
+                                        id="verify-code"
+                                        placeholder="000000"
+                                        maxlength="6"
+                                        pattern="[0-9]{6}"
+                                        style="letter-spacing: 0.5em; font-family: monospace; font-size: 1.5rem;"
+                                    >
+                                    <div class="invalid-feedback" id="verify-error"></div>
+                                </div>
+
+                                <div class="text-center">
+                                    <button class="btn btn-secondary" id="back-to-scan-btn">
+                                        <i class="fas fa-arrow-left"></i> Back
+                                    </button>
+                                    <button class="btn btn-success btn-lg" id="complete-enrollment-btn">
+                                        <i class="fas fa-check"></i> Complete Setup
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Backup Codes -->
+                    <div id="step4-backup" class="enrollment-step" style="display:none;">
+                        <div class="step-indicator">
+                            <div class="step complete">
+                                <div class="step-number">1</div>
+                                <div>Start Setup</div>
+                            </div>
+                            <div class="step complete">
+                                <div class="step-number">2</div>
+                                <div>Scan QR Code</div>
+                            </div>
+                            <div class="step complete">
+                                <div class="step-number">3</div>
+                                <div>Verify</div>
+                            </div>
+                            <div class="step active">
+                                <div class="step-number">4</div>
+                                <div>Save Backup Codes</div>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-success">
+                            <i class="fas fa-check-circle"></i>
+                            <strong>Two-Factor Authentication Enabled!</strong><br>
+                            Your account is now protected with MFA.
+                        </div>
+
+                        <div class="backup-codes-container">
+                            <h5><i class="fas fa-key"></i> Backup Recovery Codes</h5>
+                            <p><strong>IMPORTANT:</strong> Save these codes in a secure location. Each code can be used once if you lose access to your authenticator app.</p>
+
+                            <div class="backup-codes-grid" id="backup-codes-display"></div>
+
+                            <div class="mt-3 text-center">
+                                <button class="btn btn-sm btn-outline-primary" id="copy-codes-btn">
+                                    <i class="fas fa-copy"></i> Copy All Codes
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary" id="print-codes-btn">
+                                    <i class="fas fa-print"></i> Print Codes
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="text-center">
+                            <button class="btn btn-primary btn-lg" id="finish-setup-btn">
+                                <i class="fas fa-check"></i> I've Saved My Codes
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <!-- MFA Enabled Actions -->
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>Important:</strong> Disabling MFA will make your account less secure. You will need to enter your password to confirm.
+                </div>
+
+                <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#disable-mfa-modal">
+                    <i class="fas fa-times-circle"></i> Disable Two-Factor Authentication
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Password Change Section -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="security-section">
+                <h3><i class="fas fa-key"></i> Change Password</h3>
+                <p class="text-muted">Update your account password. Choose a strong password with at least 12 characters.</p>
+
+                <form id="change-password-form" class="row g-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <div class="col-md-6">
+                        <label for="current-password" class="form-label">Current Password</label>
+                        <input type="password" class="form-control" id="current-password" required>
+                    </div>
+                    <div class="col-md-6">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="new-password" class="form-label">New Password</label>
+                        <input type="password" class="form-control" id="new-password" required minlength="12">
+                        <div class="form-text">Minimum 12 characters</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="confirm-password" class="form-label">Confirm New Password</label>
+                        <input type="password" class="form-control" id="confirm-password" required>
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Update Password
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Disable MFA Modal -->
+<div class="modal fade" id="disable-mfa-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="fas fa-exclamation-triangle"></i> Disable Two-Factor Authentication</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to disable MFA? This will make your account less secure.</p>
+                <p><strong>Enter your password to confirm:</strong></p>
+                <input type="password" class="form-control" id="disable-mfa-password" placeholder="Your password">
+                <div class="invalid-feedback" id="disable-mfa-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirm-disable-mfa-btn">
+                    <i class="fas fa-times-circle"></i> Disable MFA
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// MFA Enrollment Flow
+let enrollmentSecret = null;
+
+document.getElementById('start-mfa-btn')?.addEventListener('click', async function() {
+    try {
+        const response = await fetch('/security/mfa/enroll/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+            alert('Error: ' + data.error);
+            return;
+        }
+
+        enrollmentSecret = data.secret;
+        document.getElementById('secret-code-display').textContent = data.secret;
+        document.getElementById('qr-code-img').src = '/security/mfa/enroll/qr?' + new Date().getTime();
+
+        document.getElementById('step1-start').style.display = 'none';
+        document.getElementById('step2-scan').style.display = 'block';
+    } catch (error) {
+        alert('Failed to start MFA enrollment: ' + error.message);
+    }
+});
+
+document.getElementById('proceed-verify-btn')?.addEventListener('click', function() {
+    document.getElementById('step2-scan').style.display = 'none';
+    document.getElementById('step3-verify').style.display = 'block';
+    document.getElementById('verify-code').focus();
+});
+
+document.getElementById('back-to-scan-btn')?.addEventListener('click', function() {
+    document.getElementById('step3-verify').style.display = 'none';
+    document.getElementById('step2-scan').style.display = 'block';
+});
+
+document.getElementById('complete-enrollment-btn')?.addEventListener('click', async function() {
+    const code = document.getElementById('verify-code').value;
+
+    if (!/^[0-9]{6}$/.test(code)) {
+        document.getElementById('verify-code').classList.add('is-invalid');
+        document.getElementById('verify-error').textContent = 'Please enter a valid 6-digit code';
+        return;
+    }
+
+    try {
+        const response = await fetch('/security/mfa/enroll/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code })
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+            document.getElementById('verify-code').classList.add('is-invalid');
+            document.getElementById('verify-error').textContent = data.error;
+            return;
+        }
+
+        // Show backup codes
+        const codesHtml = data.backup_codes.map(code =>
+            `<div class="backup-code">${code}</div>`
+        ).join('');
+        document.getElementById('backup-codes-display').innerHTML = codesHtml;
+
+        document.getElementById('step3-verify').style.display = 'none';
+        document.getElementById('step4-backup').style.display = 'block';
+
+        // Store codes for copy/print
+        window.backupCodes = data.backup_codes;
+    } catch (error) {
+        alert('Failed to verify code: ' + error.message);
+    }
+});
+
+document.getElementById('copy-codes-btn')?.addEventListener('click', function() {
+    const codesText = window.backupCodes.join('\n');
+    navigator.clipboard.writeText(codesText).then(() => {
+        alert('Backup codes copied to clipboard!');
+    });
+});
+
+document.getElementById('print-codes-btn')?.addEventListener('click', function() {
+    const printWindow = window.open('', '', 'height=600,width=800');
+    printWindow.document.write('<html><head><title>MFA Backup Codes</title>');
+    printWindow.document.write('<style>body{font-family:Arial;padding:20px;}h1{color:#204885;}.code{font-family:monospace;font-size:18px;padding:10px;margin:5px;border:1px solid #ccc;display:inline-block;width:150px;text-align:center;}</style>');
+    printWindow.document.write('</head><body>');
+    printWindow.document.write('<h1>EAS Station - MFA Backup Codes</h1>');
+    printWindow.document.write('<p>Keep these codes in a secure location. Each code can only be used once.</p>');
+    printWindow.document.write('<div>');
+    window.backupCodes.forEach(code => {
+        printWindow.document.write(`<div class="code">${code}</div>`);
+    });
+    printWindow.document.write('</div>');
+    printWindow.document.write('</body></html>');
+    printWindow.document.close();
+    printWindow.print();
+});
+
+document.getElementById('finish-setup-btn')?.addEventListener('click', function() {
+    window.location.reload();
+});
+
+document.getElementById('cancel-enrollment-btn')?.addEventListener('click', function() {
+    if (confirm('Are you sure you want to cancel MFA setup?')) {
+        window.location.reload();
+    }
+});
+
+// Disable MFA
+document.getElementById('confirm-disable-mfa-btn')?.addEventListener('click', async function() {
+    const password = document.getElementById('disable-mfa-password').value;
+
+    if (!password) {
+        document.getElementById('disable-mfa-password').classList.add('is-invalid');
+        document.getElementById('disable-mfa-error').textContent = 'Password is required';
+        return;
+    }
+
+    try {
+        const response = await fetch('/security/mfa/disable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password })
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+            document.getElementById('disable-mfa-password').classList.add('is-invalid');
+            document.getElementById('disable-mfa-error').textContent = data.error;
+            return;
+        }
+
+        // Success - reload page
+        window.location.reload();
+    } catch (error) {
+        alert('Failed to disable MFA: ' + error.message);
+    }
+});
+
+// Auto-format verification code input
+document.getElementById('verify-code')?.addEventListener('input', function(e) {
+    this.value = this.value.replace(/[^0-9]/g, '');
+    this.classList.remove('is-invalid');
+});
+</script>
+{% endblock %}
