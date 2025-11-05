@@ -1,7 +1,7 @@
 """Add stream support to radio receivers
 
 Revision ID: 20251105_add_stream_support_to_receivers
-Revises: 20251104_add_audio_source_configs
+Revises: 20251104_audio_source_configs
 Create Date: 2025-11-05
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '20251105_add_stream_support_to_receivers'
-down_revision = '20251104_add_audio_source_configs'
+down_revision = '20251104_audio_source_configs'
 branch_labels = None
 depends_on = None
 
