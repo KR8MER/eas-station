@@ -29,6 +29,7 @@ class AudioSourceType(Enum):
     ALSA = "alsa"
     PULSE = "pulse"
     FILE = "file"
+    STREAM = "stream"
 
 
 class AudioSourceStatus(Enum):

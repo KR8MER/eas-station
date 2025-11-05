@@ -631,6 +631,18 @@
                         <div class="col-md-6 col-lg-4">
                             <div class="card shadow-sm h-100">
                                 <div class="card-body text-center">
+                                    <i class="fas fa-cog fa-2x text-warning mb-3"></i>
+                                    <h6>Environment Config</h6>
+                                    <p class="text-muted small">Edit stack.env configuration</p>
+                                    <button onclick="openEnvEditor()" class="btn btn-warning w-100">
+                                        <i class="fas fa-edit"></i> Edit Config
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 col-lg-4">
+                            <div class="card shadow-sm h-100">
+                                <div class="card-body text-center">
                                     <i class="fas fa-heartbeat fa-2x text-danger mb-3"></i>
                                     <h6>Database Health</h6>
                                     <p class="text-muted small">Check database health status</p>
@@ -963,6 +975,49 @@
                 </div>
                 <div class="modal-footer" id="confirmationFooter">
                     <!-- Dynamic buttons -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Environment Config Editor Modal -->
+    <div class="modal fade" id="envEditorModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title">
+                        <i class="fas fa-exclamation-triangle"></i> Environment Configuration Editor
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger" role="alert">
+                        <i class="fas fa-skull-crossbones"></i>
+                        <strong>WARNING:</strong> Editing environment variables can break your application!
+                        <ul class="mb-0 mt-2">
+                            <li>Changes require application restart to take effect</li>
+                            <li>Invalid values may prevent the application from starting</li>
+                            <li>A backup will be created automatically as stack.env.backup</li>
+                            <li>Do NOT expose sensitive values (passwords, API keys) in screenshots or logs</li>
+                        </ul>
+                    </div>
+                    <div class="mb-3">
+                        <label for="envContent" class="form-label fw-bold">stack.env Content</label>
+                        <textarea id="envContent" class="form-control font-monospace" rows="25" style="font-size: 0.85rem;"
+                                  spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+                        <div class="form-text">
+                            <i class="fas fa-info-circle"></i>
+                            Edit the configuration file above. Lines starting with # are comments.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button type="button" class="btn btn-warning" onclick="saveEnvConfig()">
+                        <i class="fas fa-save"></i> Save & Restart Required
+                    </button>
                 </div>
             </div>
         </div>
@@ -5022,6 +5077,88 @@
                 showStatus(`❌ Error: ${error.message}`, 'danger');
             }
         }
+
+        // Environment Config Editor
+        async function openEnvEditor() {
+            try {
+                showStatus('📖 Loading environment configuration...', 'info');
+                const response = await fetch('/admin/env_config', { method: 'GET' });
+
+                // Handle authentication failure
+                if (response.status === 401) {
+                    window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+                    return;
+                }
+
+                const result = await response.json().catch(() => ({}));
+
+                if (response.ok) {
+                    document.getElementById('envContent').value = result.content || '';
+                    const modal = new bootstrap.Modal(document.getElementById('envEditorModal'));
+                    modal.show();
+                    showStatus('✅ Configuration loaded', 'success');
+                } else {
+                    showStatus(`❌ ${result.error || 'Failed to load configuration'}`, 'danger');
+                }
+            } catch (error) {
+                showStatus(`❌ Failed to load configuration: ${error.message}`, 'danger');
+            }
+        }
+
+        async function saveEnvConfig() {
+            const content = document.getElementById('envContent').value;
+
+            if (!content.trim()) {
+                showStatus('❌ Configuration cannot be empty', 'danger');
+                return;
+            }
+
+            // Show confirmation
+            if (!confirm('⚠️ Save changes to stack.env?\n\n' +
+                        'This will:\n' +
+                        '- Create a backup (stack.env.backup)\n' +
+                        '- Update the configuration file\n' +
+                        '- REQUIRE application restart\n\n' +
+                        'Are you sure?')) {
+                return;
+            }
+
+            try {
+                showStatus('💾 Saving configuration...', 'info');
+                const response = await fetch('/admin/env_config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                    },
+                    body: JSON.stringify({ content })
+                });
+
+                // Handle authentication failure
+                if (response.status === 401) {
+                    window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+                    return;
+                }
+
+                const result = await response.json().catch(() => ({}));
+
+                if (response.ok) {
+                    showStatus(`✅ ${result.message || 'Configuration saved'}`, 'success');
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('envEditorModal'));
+                    if (modal) modal.hide();
+
+                    // Show restart reminder
+                    setTimeout(() => {
+                        showStatus('⚠️ Remember to restart the application for changes to take effect!', 'warning');
+                    }, 2000);
+                } else {
+                    showStatus(`❌ ${result.error || 'Failed to save configuration'}`, 'danger');
+                }
+            } catch (error) {
+                showStatus(`❌ Failed to save configuration: ${error.message}`, 'danger');
+            }
+        }
+
         async function recalculateIntersections() {
             showConfirmation({
                 title: 'Recalculate Intersections',
