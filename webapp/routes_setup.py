@@ -14,12 +14,25 @@ from app_utils.setup_wizard import (
     load_wizard_state,
     write_env_file,
 )
+from flask import session
+import secrets
 
 
 SETUP_REASON_MESSAGES = {
     "secret-key": "SECRET_KEY is missing or using a placeholder value.",
     "database": "The application could not connect to the configured database.",
 }
+
+CSRF_SESSION_KEY = '_csrf_token'
+
+
+def _ensure_csrf_token():
+    """Ensure a CSRF token exists in the session and return it."""
+    token = session.get(CSRF_SESSION_KEY)
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session[CSRF_SESSION_KEY] = token
+    return token
 
 
 def register(app, logger):
@@ -49,6 +62,7 @@ def register(app, logger):
             state = load_wizard_state()
         except FileNotFoundError as exc:
             flash(str(exc))
+            csrf_token = _ensure_csrf_token()
             return render_template(
                 "setup_wizard.html",
                 env_fields=WIZARD_FIELDS,
@@ -58,6 +72,7 @@ def register(app, logger):
                 setup_reasons=reason_messages,
                 setup_active=setup_active,
                 secret_present=False,
+                csrf_token=csrf_token,
             )
 
         defaults = {
@@ -107,6 +122,7 @@ def register(app, logger):
                     flash("Configuration saved. Restart the stack to load the new settings.")
                     return redirect(url_for("setup_wizard"))
 
+        csrf_token = _ensure_csrf_token()
         return render_template(
             "setup_wizard.html",
             env_fields=WIZARD_FIELDS,
@@ -116,6 +132,7 @@ def register(app, logger):
             setup_reasons=reason_messages,
             setup_active=setup_active,
             secret_present=has_valid_secret,
+            csrf_token=csrf_token,
         )
 
     @app.route("/setup/generate-secret", methods=["POST"])
