@@ -1,34 +1,88 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
   <title id="title">EAS Station Logo</title>
-  <desc id="desc">Stylized emergency broadcast badge with layered concentric waves and lightning bolt.</desc>
+  <desc id="desc">Emergency Alert System broadcast tower with warning triangle and radio waves</desc>
   <defs>
-    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#204885" />
-      <stop offset="50%" stop-color="#4f6fb3" />
-      <stop offset="100%" stop-color="#872a96" />
+    <linearGradient id="towerGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#dc2626" />
+      <stop offset="100%" stop-color="#b91c1c" />
     </linearGradient>
-    <radialGradient id="innerGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#f4f5fb" stop-opacity="0.95" />
-      <stop offset="55%" stop-color="#d9def4" stop-opacity="0.75" />
-      <stop offset="100%" stop-color="#b3c0e6" stop-opacity="0.1" />
-    </radialGradient>
-    <linearGradient id="boltGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ffe56b" />
-      <stop offset="100%" stop-color="#ff9a6b" />
+    <linearGradient id="triangleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+    <linearGradient id="waveGradient" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.7" />
+      <stop offset="50%" stop-color="#2563eb" stop-opacity="0.5" />
+      <stop offset="100%" stop-color="#1d4ed8" stop-opacity="0.3" />
     </linearGradient>
   </defs>
-  <g fill="none" fill-rule="evenodd">
-    <circle cx="256" cy="256" r="240" fill="url(#bgGradient)" />
-    <circle cx="256" cy="256" r="190" fill="url(#innerGlow)" />
-    <circle cx="256" cy="256" r="150" fill="none" stroke="rgba(32,72,133,0.2)" stroke-width="20" />
-    <circle cx="256" cy="256" r="215" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="16" stroke-dasharray="40 22" />
-    <circle cx="256" cy="256" r="110" fill="none" stroke="rgba(135,42,150,0.45)" stroke-width="18" stroke-dasharray="32 18" />
-    <path d="M160 322c34-42 65-63 96-63s62 21 96 63" stroke="#4f6fb3" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" opacity="0.55" />
-    <path d="M176 352c30-36 58-54 80-54s50 18 80 54" stroke="#872a96" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" opacity="0.6" />
-    <path d="M196 378c24-28 44-42 60-42s36 14 60 42" stroke="#f6b968" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" opacity="0.85" />
-    <path d="M256 128c-16 34-48 64-48 96 0 38 24 68 24 92 0 17-12 36-36 56 32-12 55-18 68-18 13 0 36 6 68 18-24-20-36-39-36-56 0-24 24-54 24-92 0-32-32-62-48-96z" fill="#204885" opacity="0.3" />
-    <path d="M286 112l-66 128h64l-32 116 94-148h-68l32-96z" fill="url(#boltGradient)" stroke="#ffe56b" stroke-width="6" stroke-linejoin="round" />
-    <circle cx="256" cy="256" r="34" fill="#204885" opacity="0.75" />
-    <circle cx="256" cy="256" r="16" fill="#f4f5fb" />
+
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="240" fill="#1e293b" />
+
+  <!-- Radio waves (left side) -->
+  <path d="M 80 256 Q 100 200, 140 160" fill="none" stroke="url(#waveGradient)" stroke-width="12" stroke-linecap="round" opacity="0.6" />
+  <path d="M 60 256 Q 85 185, 130 130" fill="none" stroke="url(#waveGradient)" stroke-width="12" stroke-linecap="round" opacity="0.5" />
+  <path d="M 40 256 Q 70 170, 120 100" fill="none" stroke="url(#waveGradient)" stroke-width="12" stroke-linecap="round" opacity="0.4" />
+
+  <path d="M 80 256 Q 100 312, 140 352" fill="none" stroke="url(#waveGradient)" stroke-width="12" stroke-linecap="round" opacity="0.6" />
+  <path d="M 60 256 Q 85 327, 130 382" fill="none" stroke="url(#waveGradient)" stroke-width="12" stroke-linecap="round" opacity="0.5" />
+  <path d="M 40 256 Q 70 342, 120 412" fill="none" stroke="url(#waveGradient)" stroke-width="12" stroke-linecap="round" opacity="0.4" />
+
+  <!-- Radio waves (right side) -->
+  <path d="M 432 256 Q 412 200, 372 160" fill="none" stroke="url(#waveGradient)" stroke-width="12" stroke-linecap="round" opacity="0.6" />
+  <path d="M 452 256 Q 427 185, 382 130" fill="none" stroke="url(#waveGradient)" stroke-width="12" stroke-linecap="round" opacity="0.5" />
+  <path d="M 472 256 Q 442 170, 392 100" fill="none" stroke="url(#waveGradient)" stroke-width="12" stroke-linecap="round" opacity="0.4" />
+
+  <path d="M 432 256 Q 412 312, 372 352" fill="none" stroke="url(#waveGradient)" stroke-width="12" stroke-linecap="round" opacity="0.6" />
+  <path d="M 452 256 Q 427 327, 382 382" fill="none" stroke="url(#waveGradient)" stroke-width="12" stroke-linecap="round" opacity="0.5" />
+  <path d="M 472 256 Q 442 342, 392 412" fill="none" stroke="url(#waveGradient)" stroke-width="12" stroke-linecap="round" opacity="0.4" />
+
+  <!-- Broadcast tower base -->
+  <rect x="226" y="320" width="60" height="100" fill="url(#towerGradient)" rx="4" />
+
+  <!-- Tower structure (truss) -->
+  <polygon points="240,320 272,320 268,180 244,180" fill="url(#towerGradient)" />
+  <line x1="244" y1="200" x2="268" y2="200" stroke="#7f1d1d" stroke-width="2" />
+  <line x1="244" y1="230" x2="268" y2="230" stroke="#7f1d1d" stroke-width="2" />
+  <line x1="244" y1="260" x2="268" y2="260" stroke="#7f1d1d" stroke-width="2" />
+  <line x1="244" y1="290" x2="268" y2="290" stroke="#7f1d1d" stroke-width="2" />
+
+  <!-- Tower top antenna -->
+  <rect x="252" y="140" width="8" height="40" fill="#dc2626" rx="2" />
+  <circle cx="256" cy="135" r="6" fill="#ef4444" />
+  <circle cx="256" cy="135" r="4" fill="#fca5a5" opacity="0.8" />
+
+  <!-- Antenna crossbars -->
+  <line x1="230" y1="165" x2="282" y2="165" stroke="#dc2626" stroke-width="6" stroke-linecap="round" />
+  <line x1="235" y1="155" x2="277" y2="155" stroke="#dc2626" stroke-width="5" stroke-linecap="round" />
+
+  <!-- Warning triangle (integrated into design) -->
+  <g transform="translate(256, 280)">
+    <!-- Triangle border -->
+    <path d="M 0,-65 L 56,55 L -56,55 Z" fill="url(#triangleGradient)" stroke="#78350f" stroke-width="6" stroke-linejoin="round" />
+    <!-- Inner triangle -->
+    <path d="M 0,-55 L 46,45 L -46,45 Z" fill="#fef3c7" />
+    <!-- Exclamation mark -->
+    <rect x="-6" y="-35" width="12" height="50" fill="#d97706" rx="3" />
+    <circle cx="0" cy="30" r="8" fill="#d97706" />
   </g>
+
+  <!-- Sound wave bars (bottom, representing SAME encoding) -->
+  <g opacity="0.7">
+    <rect x="180" y="440" width="8" height="30" fill="#3b82f6" rx="2" />
+    <rect x="195" y="430" width="8" height="40" fill="#3b82f6" rx="2" />
+    <rect x="210" y="435" width="8" height="35" fill="#3b82f6" rx="2" />
+    <rect x="225" y="425" width="8" height="45" fill="#3b82f6" rx="2" />
+    <rect x="240" y="432" width="8" height="38" fill="#3b82f6" rx="2" />
+
+    <rect x="264" y="432" width="8" height="38" fill="#3b82f6" rx="2" />
+    <rect x="279" y="425" width="8" height="45" fill="#3b82f6" rx="2" />
+    <rect x="294" y="435" width="8" height="35" fill="#3b82f6" rx="2" />
+    <rect x="309" y="430" width="8" height="40" fill="#3b82f6" rx="2" />
+    <rect x="324" y="440" width="8" height="30" fill="#3b82f6" rx="2" />
+  </g>
+
+  <!-- Highlight on tower -->
+  <rect x="245" y="185" width="6" height="130" fill="#fca5a5" opacity="0.3" rx="2" />
 </svg>
