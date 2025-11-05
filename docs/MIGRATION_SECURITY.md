@@ -48,7 +48,7 @@ docker-compose exec alerts-db psql -U postgres -d eas_station -c "\dt" | grep -E
 ```
 
 Expected output:
-```
+```text
  public | audit_logs        | table | postgres
  public | permissions       | table | postgres
  public | role_permissions  | table | postgres
@@ -84,7 +84,7 @@ curl -X POST http://localhost:5000/security/init-roles \
 
 ### 6. Assign Roles to Existing Users
 
-**Option A: Via Flask Shell**
+#### Option A: Via Flask Shell
 
 ```bash
 docker-compose exec app flask shell
@@ -109,7 +109,7 @@ print("All users updated!")
 exit()
 ```
 
-**Option B: Via API**
+#### Option B: Via API
 
 ```bash
 # Get user ID

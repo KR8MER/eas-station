@@ -152,7 +152,11 @@ def _initialize_default_roles_and_permissions(conn):
                 sa.text("SELECT id FROM permissions WHERE name = :name"),
                 {"name": perm_name}
             )
-            perm_id = result.fetchone()[0]
+            perm_row = result.fetchone()
+            if not perm_row:
+                print(f"WARNING: Permission '{perm_name}' not found, skipping")
+                continue
+            perm_id = perm_row[0]
 
             # Check if already assigned
             result = conn.execute(

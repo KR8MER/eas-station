@@ -442,6 +442,7 @@
                 <p class="text-muted">Update your account password. Choose a strong password with at least 12 characters.</p>
 
                 <form id="change-password-form" class="row g-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <div class="col-md-6">
                         <label for="current-password" class="form-label">Current Password</label>
                         <input type="password" class="form-control" id="current-password" required>

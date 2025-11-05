@@ -11,10 +11,11 @@ Provides:
 from flask import Blueprint, request, jsonify, session, send_file, current_app
 from io import BytesIO, StringIO
 import csv
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from app_core.db import db
 from app_core.models import AdminUser
+from app_utils import utc_now
 from app_core.auth.roles import (
     Role, Permission, require_permission, has_permission,
     initialize_default_roles_and_permissions
@@ -84,7 +85,7 @@ def mfa_enroll_start():
     except ImportError as e:
         return jsonify({'error': str(e)}), 500
     except Exception as e:
-        current_app.logger.error(f"MFA enrollment start failed: {e}")
+        current_app.logger.exception("MFA enrollment start failed")
         return jsonify({'error': 'Failed to start MFA enrollment'}), 500
 
 
@@ -114,7 +115,7 @@ def mfa_enroll_qr():
         )
 
     except Exception as e:
-        current_app.logger.error(f"QR code generation failed: {e}")
+        current_app.logger.exception("QR code generation failed")
         return jsonify({'error': 'Failed to generate QR code'}), 500
 
 
@@ -154,7 +155,7 @@ def mfa_enroll_verify():
             return jsonify({'error': 'Invalid verification code'}), 400
 
     except Exception as e:
-        current_app.logger.error(f"MFA enrollment verification failed: {e}")
+        current_app.logger.exception("MFA enrollment verification failed")
         return jsonify({'error': 'Failed to complete MFA enrollment'}), 500
 
 
@@ -199,7 +200,7 @@ def mfa_disable():
         })
 
     except Exception as e:
-        current_app.logger.error(f"MFA disable failed: {e}")
+        current_app.logger.exception("MFA disable failed")
         return jsonify({'error': 'Failed to disable MFA'}), 500
 
 
@@ -265,7 +266,7 @@ def create_role():
 
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Role creation failed: {e}")
+        current_app.logger.exception("Role creation failed")
         return jsonify({'error': 'Failed to create role'}), 500
 
 
@@ -305,7 +306,7 @@ def update_role(role_id):
 
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Role update failed: {e}")
+        current_app.logger.exception("Role update failed")
         return jsonify({'error': 'Failed to update role'}), 500
 
 
@@ -358,7 +359,7 @@ def assign_user_role(user_id):
 
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Role assignment failed: {e}")
+        current_app.logger.exception("Role assignment failed")
         return jsonify({'error': 'Failed to assign role'}), 500
 
 
@@ -371,7 +372,7 @@ def assign_user_role(user_id):
 def list_audit_logs():
     """List audit logs with filtering."""
     page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 50, type=int)
+    per_page = min(request.args.get('per_page', 50, type=int), 1000)  # Cap at 1000
     user_id = request.args.get('user_id', type=int)
     action = request.args.get('action')
     success = request.args.get('success', type=lambda v: v.lower() == 'true')
@@ -390,7 +391,7 @@ def list_audit_logs():
         query = query.filter_by(success=success)
 
     # Time filter
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = utc_now() - timedelta(days=days)
     query = query.filter(AuditLog.timestamp >= cutoff)
 
     # Order by timestamp descending
@@ -420,7 +421,7 @@ def export_audit_logs():
     if user_id:
         query = query.filter_by(user_id=user_id)
 
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = utc_now() - timedelta(days=days)
     query = query.filter(AuditLog.timestamp >= cutoff)
     query = query.order_by(AuditLog.timestamp.desc())
 
@@ -457,7 +458,7 @@ def export_audit_logs():
         csv_bytes,
         mimetype='text/csv',
         as_attachment=True,
-        download_name=f'audit_logs_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}.csv'
+        download_name=f'audit_logs_{utc_now().strftime("%Y%m%d_%H%M%S")}.csv'
     )
 
 
@@ -476,7 +477,7 @@ def init_default_roles():
             'message': 'Default roles and permissions initialized'
         })
     except Exception as e:
-        current_app.logger.error(f"Role initialization failed: {e}")
+        current_app.logger.exception("Role initialization failed")
         return jsonify({'error': 'Failed to initialize roles'}), 500
 
 
