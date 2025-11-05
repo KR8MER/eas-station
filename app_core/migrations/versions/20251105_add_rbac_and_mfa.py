@@ -19,10 +19,198 @@ branch_labels = None
 depends_on = None
 
 
+# Default role-permission mappings
+DEFAULT_ROLES_AND_PERMISSIONS = {
+    'admin': {
+        'description': 'Administrator with full system access',
+        'permissions': [
+            ('alerts.view', 'alerts', 'view'),
+            ('alerts.create', 'alerts', 'create'),
+            ('alerts.delete', 'alerts', 'delete'),
+            ('alerts.export', 'alerts', 'export'),
+            ('eas.view', 'eas', 'view'),
+            ('eas.broadcast', 'eas', 'broadcast'),
+            ('eas.manual_activate', 'eas', 'manual_activate'),
+            ('eas.cancel', 'eas', 'cancel'),
+            ('system.configure', 'system', 'configure'),
+            ('system.view_config', 'system', 'view_config'),
+            ('system.manage_users', 'system', 'manage_users'),
+            ('system.view_users', 'system', 'view_users'),
+            ('logs.view', 'logs', 'view'),
+            ('logs.export', 'logs', 'export'),
+            ('logs.delete', 'logs', 'delete'),
+            ('receivers.view', 'receivers', 'view'),
+            ('receivers.configure', 'receivers', 'configure'),
+            ('receivers.delete', 'receivers', 'delete'),
+            ('gpio.view', 'gpio', 'view'),
+            ('gpio.control', 'gpio', 'control'),
+            ('api.read', 'api', 'read'),
+            ('api.write', 'api', 'write'),
+        ]
+    },
+    'operator': {
+        'description': 'Operator with alert and EAS management access',
+        'permissions': [
+            ('alerts.view', 'alerts', 'view'),
+            ('alerts.create', 'alerts', 'create'),
+            ('alerts.export', 'alerts', 'export'),
+            ('eas.view', 'eas', 'view'),
+            ('eas.broadcast', 'eas', 'broadcast'),
+            ('eas.manual_activate', 'eas', 'manual_activate'),
+            ('eas.cancel', 'eas', 'cancel'),
+            ('system.view_config', 'system', 'view_config'),
+            ('system.view_users', 'system', 'view_users'),
+            ('logs.view', 'logs', 'view'),
+            ('logs.export', 'logs', 'export'),
+            ('receivers.view', 'receivers', 'view'),
+            ('gpio.view', 'gpio', 'view'),
+            ('gpio.control', 'gpio', 'control'),
+            ('api.read', 'api', 'read'),
+            ('api.write', 'api', 'write'),
+        ]
+    },
+    'viewer': {
+        'description': 'Viewer with read-only access',
+        'permissions': [
+            ('alerts.view', 'alerts', 'view'),
+            ('alerts.export', 'alerts', 'export'),
+            ('eas.view', 'eas', 'view'),
+            ('system.view_config', 'system', 'view_config'),
+            ('system.view_users', 'system', 'view_users'),
+            ('logs.view', 'logs', 'view'),
+            ('logs.export', 'logs', 'export'),
+            ('receivers.view', 'receivers', 'view'),
+            ('gpio.view', 'gpio', 'view'),
+            ('api.read', 'api', 'read'),
+        ]
+    }
+}
+
+
+def _initialize_default_roles_and_permissions(conn):
+    """Initialize default roles and permissions if they don't exist."""
+    from datetime import datetime, timezone
+
+    # Create all permissions first (collect unique ones)
+    all_permissions = {}
+    for role_data in DEFAULT_ROLES_AND_PERMISSIONS.values():
+        for perm_name, resource, action in role_data['permissions']:
+            all_permissions[perm_name] = (resource, action)
+
+    # Insert permissions
+    for perm_name, (resource, action) in all_permissions.items():
+        result = conn.execute(
+            sa.text("SELECT id FROM permissions WHERE name = :name"),
+            {"name": perm_name}
+        )
+        if not result.fetchone():
+            conn.execute(
+                sa.text("""
+                    INSERT INTO permissions (name, resource, action, description, created_at)
+                    VALUES (:name, :resource, :action, :description, :created_at)
+                """),
+                {
+                    "name": perm_name,
+                    "resource": resource,
+                    "action": action,
+                    "description": f"Permission to {action} {resource}",
+                    "created_at": datetime.now(timezone.utc)
+                }
+            )
+
+    # Create roles and assign permissions
+    for role_name, role_data in DEFAULT_ROLES_AND_PERMISSIONS.items():
+        # Check if role exists
+        result = conn.execute(
+            sa.text("SELECT id FROM roles WHERE name = :name"),
+            {"name": role_name}
+        )
+        role_row = result.fetchone()
+
+        if not role_row:
+            # Create role
+            result = conn.execute(
+                sa.text("""
+                    INSERT INTO roles (name, description, created_at)
+                    VALUES (:name, :description, :created_at)
+                    RETURNING id
+                """),
+                {
+                    "name": role_name,
+                    "description": role_data['description'],
+                    "created_at": datetime.now(timezone.utc)
+                }
+            )
+            role_id = result.fetchone()[0]
+        else:
+            role_id = role_row[0]
+
+        # Assign permissions to role
+        for perm_name, _, _ in role_data['permissions']:
+            # Get permission ID
+            result = conn.execute(
+                sa.text("SELECT id FROM permissions WHERE name = :name"),
+                {"name": perm_name}
+            )
+            perm_id = result.fetchone()[0]
+
+            # Check if already assigned
+            result = conn.execute(
+                sa.text("""
+                    SELECT 1 FROM role_permissions
+                    WHERE role_id = :role_id AND permission_id = :perm_id
+                """),
+                {"role_id": role_id, "perm_id": perm_id}
+            )
+            if not result.fetchone():
+                conn.execute(
+                    sa.text("""
+                        INSERT INTO role_permissions (role_id, permission_id)
+                        VALUES (:role_id, :perm_id)
+                    """),
+                    {"role_id": role_id, "perm_id": perm_id}
+                )
+
+
+def _assign_admin_role_to_existing_users(conn):
+    """Assign admin role to all existing users who don't have a role."""
+    # Get admin role ID
+    result = conn.execute(
+        sa.text("SELECT id FROM roles WHERE name = 'admin'")
+    )
+    admin_role_row = result.fetchone()
+
+    if not admin_role_row:
+        print("WARNING: Admin role not found, cannot assign to existing users")
+        return
+
+    admin_role_id = admin_role_row[0]
+
+    # Update all users without a role to have admin role
+    result = conn.execute(
+        sa.text("""
+            UPDATE admin_users
+            SET role_id = :role_id
+            WHERE role_id IS NULL
+        """),
+        {"role_id": admin_role_id}
+    )
+
+    users_updated = result.rowcount
+    if users_updated > 0:
+        print(f"INFO: Assigned admin role to {users_updated} existing user(s)")
+
+
 def upgrade() -> None:
     """Add RBAC tables, audit logs, and MFA fields."""
     conn = op.get_bind()
     inspector = inspect(conn)
+
+    # Track if this is a fresh install or upgrade
+    existing_users_count = None
+    if "admin_users" in inspector.get_table_names():
+        result = conn.execute(sa.text("SELECT COUNT(*) FROM admin_users"))
+        existing_users_count = result.scalar()
 
     # Create roles table
     if "roles" not in inspector.get_table_names():
@@ -114,6 +302,13 @@ def upgrade() -> None:
 
     if "mfa_enrolled_at" not in admin_users_columns:
         op.add_column("admin_users", sa.Column("mfa_enrolled_at", sa.DateTime(timezone=True), nullable=True))
+
+    # Initialize default roles and permissions if they don't exist
+    _initialize_default_roles_and_permissions(conn)
+
+    # Auto-assign admin role to existing users (if any existed before migration)
+    if existing_users_count and existing_users_count > 0:
+        _assign_admin_role_to_existing_users(conn)
 
 
 def downgrade() -> None:
