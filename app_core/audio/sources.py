@@ -575,11 +575,13 @@ class StreamSourceAdapter(AudioSourceAdapter):
             try:
                 # Take a chunk from buffer
                 chunk_data = bytes(self._buffer[:16384])  # Try to decode 16KB at a time
+                buffer_io = io.BytesIO(chunk_data)
 
-                audio = AudioSegment.from_file(io.BytesIO(chunk_data), format="mp3")
+                audio = AudioSegment.from_file(buffer_io, format="mp3")
 
-                # Remove decoded data from buffer
-                self._buffer = self._buffer[16384:]
+                # Only remove the bytes that were actually consumed by the decoder
+                bytes_consumed = buffer_io.tell()
+                self._buffer = self._buffer[bytes_consumed:]
 
                 # Convert to numpy array
                 samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
@@ -596,9 +598,9 @@ class StreamSourceAdapter(AudioSourceAdapter):
                 return samples
 
             except Exception as e:
-                # If decode fails, drop some data and try again
+                # If decode fails, drop a small amount and try again next time
                 if len(self._buffer) > 65536:  # If buffer is getting too large
-                    self._buffer = self._buffer[4096:]  # Drop 4KB
+                    self._buffer = self._buffer[1024:]  # Drop only 1KB to minimize data loss
                 return None
 
         except ImportError:
