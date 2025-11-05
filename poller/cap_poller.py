@@ -94,7 +94,7 @@ def format_local_datetime(dt, include_utc=True):
 LED_AVAILABLE = False
 LEDSignController = None
 try:
-    from led_sign_controller import LEDSignController as _LED
+    from scripts.led_sign_controller import LEDSignController as _LED
     LEDSignController = _LED
     LED_AVAILABLE = True
 except Exception as e:

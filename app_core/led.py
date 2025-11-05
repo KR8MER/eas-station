@@ -38,7 +38,7 @@ def _fallback_message_priority():
 
 
 try:  # pragma: no cover - optional dependency
-    import led_sign_controller as _led_module  # type: ignore
+    import scripts.led_sign_controller as _led_module  # type: ignore
 except ImportError as exc:  # pragma: no cover - optional dependency
     LEDSignController = None  # type: ignore
     Color = DisplayMode = Effect = Font = FontSize = Speed = SpecialFunction = None  # type: ignore

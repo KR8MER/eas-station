@@ -50,7 +50,7 @@ def _fallback_vfd_font():
 
 
 try:  # pragma: no cover - optional dependency
-    import vfd_controller as _vfd_module  # type: ignore
+    import scripts.vfd_controller as _vfd_module  # type: ignore
 except ImportError as exc:  # pragma: no cover - optional dependency
     NoritakeVFDController = None  # type: ignore
     VFDBrightness = _fallback_vfd_brightness()  # type: ignore
