@@ -537,11 +537,9 @@ def parse_nws_datetime(dt_string):
 @app.errorhandler(404)
 def not_found_error(error):
     """Enhanced 404 error page"""
-    return render_template_string("""
-    <h1>404 - Page Not Found</h1>
-    <p>The page you're looking for doesn't exist.</p>
-    <p><a href='/'>← Back to Main</a> | <a href='/admin'>Admin</a> | <a href='/alerts'>Alerts</a></p>
-    """), 404
+    return render_template('error.html',
+                         error='404 - Page Not Found',
+                         details='The page you requested does not exist.'), 404
 
 
 @app.errorhandler(500)
@@ -550,31 +548,25 @@ def internal_error(error):
     if hasattr(db, 'session') and db.session:
         db.session.rollback()
 
-    return render_template_string("""
-    <h1>500 - Internal Server Error</h1>
-    <p>Something went wrong on our end. Please try again later.</p>
-    <p><a href='/'>← Back to Main</a> | <a href='/admin'>Admin</a></p>
-    """), 500
+    return render_template('error.html',
+                         error='500 - Internal Server Error',
+                         details='Something went wrong on our end. Please try again later.'), 500
 
 
 @app.errorhandler(403)
 def forbidden_error(error):
     """403 Forbidden error page"""
-    return render_template_string("""
-    <h1>403 - Forbidden</h1>
-    <p>You don't have permission to access this resource.</p>
-    <p><a href='/'>← Back to Main</a></p>
-    """), 403
+    return render_template('error.html',
+                         error='403 - Forbidden',
+                         details='You do not have permission to access this resource.'), 403
 
 
 @app.errorhandler(400)
 def bad_request_error(error):
     """400 Bad Request error page"""
-    return render_template_string("""
-    <h1>400 - Bad Request</h1>
-    <p>The request was malformed or invalid.</p>
-    <p><a href='/'>← Back to Main</a></p>
-    """), 400
+    return render_template('error.html',
+                         error='400 - Bad Request',
+                         details='The request was malformed or invalid.'), 400
 
 
 # =============================================================================

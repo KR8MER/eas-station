@@ -201,27 +201,27 @@ def register_documentation_routes(app: Flask, logger_instance: Any) -> None:
     @app.route('/docs/<path:doc_path>')
     def view_doc(doc_path: str):
         """View a specific documentation file."""
+        # Security: prevent directory traversal
+        if '..' in doc_path or doc_path.startswith('/'):
+            abort(404)
+
+        # Construct file path
+        file_path = docs_root / f'{doc_path}.md'
+
+        # Check if file exists
+        if not file_path.exists() or not file_path.is_file():
+            logger.warning('Documentation file not found: %s', file_path)
+            abort(404)
+
+        # Check if file is within docs directory (security)
         try:
-            # Security: prevent directory traversal
-            if '..' in doc_path or doc_path.startswith('/'):
-                abort(404)
+            file_path.resolve().relative_to(docs_root.resolve())
+        except ValueError:
+            logger.warning('Attempted access outside docs directory: %s', file_path)
+            abort(404)
 
-            # Construct file path
-            file_path = docs_root / f'{doc_path}.md'
-
-            # Check if file exists
-            if not file_path.exists() or not file_path.is_file():
-                logger.warning('Documentation file not found: %s', file_path)
-                abort(404)
-
-            # Check if file is within docs directory (security)
-            try:
-                file_path.resolve().relative_to(docs_root.resolve())
-            except ValueError:
-                logger.warning('Attempted access outside docs directory: %s', file_path)
-                abort(404)
-
-            # Read and convert markdown
+        # Read and convert markdown
+        try:
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     markdown_content = f.read()
