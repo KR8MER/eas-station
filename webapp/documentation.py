@@ -184,7 +184,7 @@ def register_documentation_routes(app: Flask, logger_instance: Any) -> None:
     global logger
     logger = logger_instance
 
-    docs_root = Path(app.root_path).parent / 'docs'
+    docs_root = Path(app.root_path) / 'docs'
 
     @app.route('/docs')
     def docs_index():
