@@ -6,6 +6,16 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 ### Added
+- Added comprehensive analytics and compliance enhancements with trend analysis and anomaly detection
+  - Implemented `app_core/analytics/` module with metrics aggregation, trend analysis, and anomaly detection
+  - Created `MetricSnapshot`, `TrendRecord`, and `AnomalyRecord` database models for time-series analytics
+  - Built `MetricsAggregator` to collect metrics from alert delivery, audio health, receiver status, and GPIO activity
+  - Implemented `TrendAnalyzer` with linear regression, statistical analysis, and forecasting capabilities
+  - Added `AnomalyDetector` using Z-score based outlier detection, spike/drop detection, and trend break analysis
+  - Created comprehensive API endpoints at `/api/analytics/*` for metrics, trends, and anomalies
+  - Built analytics dashboard UI at `/analytics` with real-time metrics, trend visualization, and anomaly management
+  - Added `AnalyticsScheduler` for automated background processing of metrics aggregation and analysis
+  - Documented complete analytics system architecture and usage in `app_core/analytics/README.md`
 - Added comprehensive audio ingest pipeline for unified capture from SDR, ALSA, and file sources
   - Implemented `app_core/audio/ingest.py` with pluggable source adapters and PCM normalization
   - Added peak/RMS metering and silence detection with PostgreSQL storage

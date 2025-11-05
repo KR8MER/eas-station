@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics Dashboard - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+    .metric-card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    .metric-card h3 {
+        font-size: 1.1rem;
+        color: #666;
+        margin-bottom: 10px;
+    }
+    .metric-value {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #204885;
+    }
+    .metric-trend {
+        font-size: 0.9rem;
+        margin-top: 5px;
+    }
+    .trend-rising { color: #28a745; }
+    .trend-falling { color: #dc3545; }
+    .trend-stable { color: #6c757d; }
+    .anomaly-badge {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+    .severity-critical { background-color: #dc3545; color: white; }
+    .severity-high { background-color: #fd7e14; color: white; }
+    .severity-medium { background-color: #ffc107; color: black; }
+    .severity-low { background-color: #17a2b8; color: white; }
+    .chart-container {
+        position: relative;
+        height: 300px;
+        margin-top: 15px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1><i class="fas fa-chart-line me-2"></i>Analytics Dashboard</h1>
+            <p class="text-muted">System trends and anomaly detection</p>
+        </div>
+    </div>
+
+    <!-- Key Metrics -->
+    <div class="row">
+        <div class="col-md-3">
+            <div class="metric-card">
+                <h3>Alert Delivery Rate</h3>
+                <div class="metric-value" id="delivery-rate">--</div>
+                <div class="metric-trend" id="delivery-trend"></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="metric-card">
+                <h3>Audio Health Score</h3>
+                <div class="metric-value" id="audio-health">--</div>
+                <div class="metric-trend" id="audio-trend"></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="metric-card">
+                <h3>Receiver Availability</h3>
+                <div class="metric-value" id="receiver-availability">--</div>
+                <div class="metric-trend" id="receiver-trend"></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="metric-card">
+                <h3>Active Anomalies</h3>
+                <div class="metric-value" id="active-anomalies">--</div>
+                <div class="metric-trend" id="anomaly-breakdown"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Trends -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-trending-up me-2"></i>Recent Trends</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="trends-table">
+                            <thead>
+                                <tr>
+                                    <th>Metric</th>
+                                    <th>Direction</th>
+                                    <th>Strength</th>
+                                    <th>Change</th>
+                                    <th>Analysis Date</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Anomalies -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Active Anomalies</h5>
+                    <button class="btn btn-sm btn-primary" onclick="refreshData()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="anomalies-table">
+                            <thead>
+                                <tr>
+                                    <th>Severity</th>
+                                    <th>Metric</th>
+                                    <th>Type</th>
+                                    <th>Description</th>
+                                    <th>Detected</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let dashboardData = null;
+
+    async function loadDashboard() {
+        try {
+            const response = await fetch('/api/analytics/dashboard');
+            const data = await response.json();
+
+            if (data.success) {
+                dashboardData = data;
+                updateDashboard(data);
+            } else {
+                console.error('Failed to load dashboard:', data.error);
+            }
+        } catch (error) {
+            console.error('Error loading dashboard:', error);
+        }
+    }
+
+    function updateDashboard(data) {
+        // Update key metrics
+        if (data.key_metrics) {
+            data.key_metrics.forEach(metric => {
+                if (metric.category === 'alert_delivery' && metric.name === 'delivery_success_rate') {
+                    document.getElementById('delivery-rate').textContent = metric.value.toFixed(1) + '%';
+                } else if (metric.category === 'audio_health' && metric.name === 'avg_health_score') {
+                    document.getElementById('audio-health').textContent = metric.value.toFixed(1);
+                } else if (metric.category === 'receiver_status' && metric.name === 'availability_rate') {
+                    document.getElementById('receiver-availability').textContent = metric.value.toFixed(1) + '%';
+                }
+            });
+        }
+
+        // Update anomaly count
+        document.getElementById('active-anomalies').textContent = data.summary.active_anomalies;
+
+        // Update anomaly breakdown
+        const breakdown = data.summary.anomalies_by_severity;
+        const breakdownText = `Critical: ${breakdown.critical}, High: ${breakdown.high}, Medium: ${breakdown.medium}, Low: ${breakdown.low}`;
+        document.getElementById('anomaly-breakdown').textContent = breakdownText;
+
+        // Update trends table
+        updateTrendsTable(data.trends);
+
+        // Update anomalies table
+        updateAnomaliesTable(data.anomalies);
+    }
+
+    function updateTrendsTable(trends) {
+        const tbody = document.getElementById('trends-table').querySelector('tbody');
+        tbody.innerHTML = '';
+
+        trends.forEach(trend => {
+            const row = document.createElement('tr');
+
+            const trendClass = trend.trend_direction === 'rising' ? 'trend-rising' :
+                               trend.trend_direction === 'falling' ? 'trend-falling' : 'trend-stable';
+
+            row.innerHTML = `
+                <td>${trend.metric_category}.${trend.metric_name}</td>
+                <td><span class="${trendClass}"><i class="fas fa-arrow-${trend.trend_direction === 'rising' ? 'up' : trend.trend_direction === 'falling' ? 'down' : 'right'}"></i> ${trend.trend_direction}</span></td>
+                <td>${trend.trend_strength || 'N/A'}</td>
+                <td>${trend.percent_change ? trend.percent_change.toFixed(2) + '%' : 'N/A'}</td>
+                <td>${new Date(trend.analysis_time).toLocaleString()}</td>
+            `;
+            tbody.appendChild(row);
+        });
+    }
+
+    function updateAnomaliesTable(anomalies) {
+        const tbody = document.getElementById('anomalies-table').querySelector('tbody');
+        tbody.innerHTML = '';
+
+        if (anomalies.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No active anomalies</td></tr>';
+            return;
+        }
+
+        anomalies.forEach(anomaly => {
+            const row = document.createElement('tr');
+
+            row.innerHTML = `
+                <td><span class="anomaly-badge severity-${anomaly.severity}">${anomaly.severity.toUpperCase()}</span></td>
+                <td>${anomaly.metric_category}.${anomaly.metric_name}</td>
+                <td>${anomaly.anomaly_type}</td>
+                <td>${anomaly.description || 'N/A'}</td>
+                <td>${new Date(anomaly.detected_at).toLocaleString()}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary" onclick="acknowledgeAnomaly(${anomaly.id})">
+                        <i class="fas fa-check"></i> Acknowledge
+                    </button>
+                    <button class="btn btn-sm btn-outline-success" onclick="resolveAnomaly(${anomaly.id})">
+                        <i class="fas fa-check-double"></i> Resolve
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+    }
+
+    async function acknowledgeAnomaly(id) {
+        try {
+            const response = await fetch(`/api/analytics/anomalies/${id}/acknowledge`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                loadDashboard();
+            } else {
+                alert('Failed to acknowledge anomaly: ' + data.error);
+            }
+        } catch (error) {
+            console.error('Error acknowledging anomaly:', error);
+            alert('Error acknowledging anomaly');
+        }
+    }
+
+    async function resolveAnomaly(id) {
+        const notes = prompt('Resolution notes (optional):');
+        try {
+            const response = await fetch(`/api/analytics/anomalies/${id}/resolve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ resolution_notes: notes })
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                loadDashboard();
+            } else {
+                alert('Failed to resolve anomaly: ' + data.error);
+            }
+        } catch (error) {
+            console.error('Error resolving anomaly:', error);
+            alert('Error resolving anomaly');
+        }
+    }
+
+    function refreshData() {
+        loadDashboard();
+    }
+
+    // Load dashboard on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        loadDashboard();
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadDashboard, 30000);
+    });
+</script>
+{% endblock %}
