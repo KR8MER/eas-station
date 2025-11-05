@@ -1,0 +1,120 @@
+# Docker Compose override for development and testing
+#
+# This configuration enables debugging, testing tools, and relaxed security
+# for development environments. DO NOT use in production.
+#
+# Copy this file to the project root as docker-compose.override.yml:
+#   cp examples/docker-compose/docker-compose.development.yml docker-compose.override.yml
+#   docker-compose up -d
+
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      target: development  # Use development stage if multi-stage Dockerfile
+      args:
+        SOAPYSDR_DRIVERS: ${SOAPYSDR_DRIVERS:-rtlsdr,airspy}
+
+    environment:
+      # Flask debug mode
+      FLASK_DEBUG: "true"
+      FLASK_ENV: "development"
+      LOG_LEVEL: "DEBUG"
+
+      # Use loopback audio for testing without hardware
+      AUDIO_INGEST_ENABLED: "true"
+      AUDIO_FILE_ENABLED: "true"
+      AUDIO_FILE_PATH: "/app/test_audio/test_eas_header.wav"
+      AUDIO_FILE_LOOP: "true"
+
+      # Disable real hardware to avoid accidental activation
+      EAS_BROADCAST_ENABLED: "false"
+      EAS_GPIO_PIN: ""
+      LED_SIGN_IP: ""
+      VFD_PORT: ""
+
+    volumes:
+      # Mount source code for live reloading
+      - ./app.py:/app/app.py:ro
+      - ./app_core:/app/app_core:ro
+      - ./app_utils:/app/app_utils:ro
+      - ./webapp:/app/webapp:ro
+      - ./templates:/app/templates:ro
+      - ./static:/app/static:ro
+
+      # Mount test audio files
+      - ./test_audio:/app/test_audio:ro
+
+      # Persistent development database
+      - ./dev_data:/app/dev_data
+
+    ports:
+      # Expose additional ports for debugging
+      - "5000:5000"  # Flask app
+      - "5678:5678"  # Python debugger (debugpy)
+
+    command: >
+      python -m debugpy --listen 0.0.0.0:5678 --wait-for-client app.py
+
+    # Development doesn't need privileged mode
+    privileged: false
+
+  poller:
+    environment:
+      LOG_LEVEL: "DEBUG"
+
+    volumes:
+      - ./poller:/app/poller:ro
+      - ./app_core:/app/app_core:ro
+      - ./app_utils:/app/app_utils:ro
+
+    # Run with longer interval for development
+    command: >
+      python poller/cap_poller.py --continuous --interval 300
+
+  ipaws-poller:
+    environment:
+      LOG_LEVEL: "DEBUG"
+
+    volumes:
+      - ./poller:/app/poller:ro
+      - ./app_core:/app/app_core:ro
+      - ./app_utils:/app/app_utils:ro
+
+    command: >
+      python poller/cap_poller.py --continuous --interval 300
+
+  # Development database with exposed port for external access
+  alerts-db:
+    profiles:
+      - embedded-db
+    ports:
+      - "5432:5432"  # Expose PostgreSQL for external tools
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-alerts_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
+    volumes:
+      - dev-db-data:/var/lib/postgresql/data
+
+  # Optional: pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    profiles:
+      - development
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@localhost
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_LISTEN_PORT: 5050
+    ports:
+      - "5050:5050"
+    depends_on:
+      - alerts-db
+    networks:
+      - default
+
+volumes:
+  dev-db-data:
+    driver: local

@@ -1,0 +1,74 @@
+# Docker Compose override for ALSA direct access (recommended for production)
+#
+# This configuration bypasses PulseAudio and provides direct ALSA access
+# for lower latency and better reliability.
+#
+# Copy this file to the project root as docker-compose.override.yml:
+#   cp examples/docker-compose/docker-compose.audio-alsa.yml docker-compose.override.yml
+#   docker-compose up -d
+
+version: '3.8'
+
+services:
+  app:
+    environment:
+      # Enable ALSA direct access
+      AUDIO_ALSA_ENABLED: "true"
+      AUDIO_ALSA_DEVICE: "hw:1,0"  # Adjust to match your USB audio interface
+      AUDIO_ALSA_PRIORITY: "100"
+
+      # Disable PulseAudio
+      AUDIO_PULSE_ENABLED: "false"
+
+    volumes:
+      # Mount ALSA configuration
+      - /etc/asound.conf:/etc/asound.conf:ro
+      - ~/.asoundrc:/home/appuser/.asoundrc:ro
+
+    group_add:
+      # Add container user to audio group for device access
+      - audio
+
+    devices:
+      # Expose all ALSA devices
+      - /dev/snd:/dev/snd
+
+    # Optional: Grant real-time priority for audio processing
+    cap_add:
+      - SYS_NICE
+
+  poller:
+    environment:
+      AUDIO_ALSA_ENABLED: "true"
+      AUDIO_ALSA_DEVICE: "hw:1,0"
+      AUDIO_PULSE_ENABLED: "false"
+
+    volumes:
+      - /etc/asound.conf:/etc/asound.conf:ro
+
+    group_add:
+      - audio
+
+    devices:
+      - /dev/snd:/dev/snd
+
+    cap_add:
+      - SYS_NICE
+
+  ipaws-poller:
+    environment:
+      AUDIO_ALSA_ENABLED: "true"
+      AUDIO_ALSA_DEVICE: "hw:1,0"
+      AUDIO_PULSE_ENABLED: "false"
+
+    volumes:
+      - /etc/asound.conf:/etc/asound.conf:ro
+
+    group_add:
+      - audio
+
+    devices:
+      - /dev/snd:/dev/snd
+
+    cap_add:
+      - SYS_NICE

@@ -7,6 +7,7 @@ from typing import Dict
 
 from app_utils.setup_wizard import (
     WIZARD_FIELDS,
+    WIZARD_SECTIONS,
     clean_submission,
     generate_secret_key,
     load_wizard_state,
@@ -48,15 +49,55 @@ def _prompt_yes_no(message: str, default: bool = True) -> bool:
 
 def _collect_answers(defaults: Dict[str, str]) -> Dict[str, str]:
     answers: Dict[str, str] = {}
-    for field in WIZARD_FIELDS:
-        default_value = defaults.get(field.key, "")
-        if field.key == "SECRET_KEY" and (not default_value or "replace" in default_value.lower()):
-            if _prompt_yes_no("Generate a random Flask SECRET_KEY?", True):
-                default_value = generate_secret_key()
-                print("Generated SECRET_KEY; you may accept or overwrite it.")
-        prompt_message = f"{field.label}"
-        answers[field.key] = _prompt(prompt_message, default_value)
+
+    # Process sections one at a time
+    for section_idx, section in enumerate(WIZARD_SECTIONS, 1):
+        print(f"\n{'='*70}")
+        print(f"Section {section_idx}/{len(WIZARD_SECTIONS)}: {section.title}")
+        print(f"{section.description}")
+        print(f"{'='*70}\n")
+
+        # Allow skipping optional sections
+        if section.name != "core":
+            if not _prompt_yes_no(f"Configure {section.title}?", default=True):
+                print(f"Skipping {section.title} section.")
+                print("Existing configuration values will be preserved.\n")
+                # Preserve existing values for skipped section
+                for field in section.fields:
+                    if field.key in defaults:
+                        answers[field.key] = defaults[field.key]
+                continue
+
+        # Collect answers for each field in the section
+        for field in section.fields:
+            default_value = defaults.get(field.key, "")
+
+            # Special handling for SECRET_KEY generation
+            if field.key == "SECRET_KEY" and (not default_value or "replace" in default_value.lower()):
+                if _prompt_yes_no("Generate a random Flask SECRET_KEY?", True):
+                    default_value = generate_secret_key()
+                    print("Generated SECRET_KEY; you may accept or overwrite it.")
+
+            # Show field description
+            print(f"\n{field.description}")
+            prompt_message = f"{field.label}"
+
+            # Get user input
+            user_input = _prompt(prompt_message, default_value) if field.required else _prompt_optional(prompt_message, default_value)
+            answers[field.key] = user_input
+
     return answers
+
+
+def _prompt_optional(message: str, default: str | None = None) -> str:
+    """Prompt for optional value, allowing empty responses."""
+    suffix = f" [{default}]" if default else " (optional, press Enter to skip)"
+    response = input(f"{message}{suffix}: ").strip()
+    if not response and default:
+        return default
+    if response.lower() == "exit":
+        raise WizardAbort("Operator aborted the wizard")
+    return response
 
 
 def main() -> int:
@@ -66,11 +107,25 @@ def main() -> int:
         print(exc)
         return 1
 
-    print("EAS Station setup wizard (CLI)")
-    print("Type 'exit' at any prompt to cancel.\n")
+    print("\n" + "="*70)
+    print("EAS Station Interactive Setup Wizard")
+    print("="*70)
+    print("\nThis wizard will guide you through configuring your EAS Station.")
+    print("The configuration will be saved to .env in the project root.")
+    print("\nTips:")
+    print("  - Press Enter to accept default values shown in [brackets]")
+    print("  - Type 'exit' at any prompt to cancel the wizard")
+    print("  - Optional sections can be skipped and configured later")
+    if state.env_exists:
+        print("\nNote: Existing .env detected - defaults will be loaded from it.")
+    print()
 
     defaults = state.defaults
     answers = _collect_answers(defaults)
+
+    print("\n" + "="*70)
+    print("Configuration Complete")
+    print("="*70)
 
     try:
         cleaned = clean_submission(answers)
