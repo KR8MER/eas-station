@@ -15,7 +15,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, Tex
 from sqlalchemy.orm import relationship
 
 from app_core.extensions import db
-from app_utils.timestamp import utc_now
+from app_utils import utc_now
 
 
 # Association table for many-to-many relationship
