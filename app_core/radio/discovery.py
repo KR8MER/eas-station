@@ -62,16 +62,18 @@ def enumerate_devices() -> List[Dict[str, Any]]:
 
         results = []
         for idx, device_info in enumerate(devices):
+            # Convert SoapySDRKwargs to dict first (doesn't support .get() method directly)
+            device_dict = dict(device_info)
             parsed = {
                 "index": idx,
-                "driver": device_info.get("driver", "unknown"),
-                "label": device_info.get("label", f"Device {idx}"),
-                "serial": device_info.get("serial", None),
-                "manufacturer": device_info.get("manufacturer", None),
-                "product": device_info.get("product", None),
-                "hardware": device_info.get("hardware", None),
-                "device_id": device_info.get("device_id", None),
-                "raw_info": dict(device_info),
+                "driver": device_dict.get("driver", "unknown"),
+                "label": device_dict.get("label", f"Device {idx}"),
+                "serial": device_dict.get("serial", None),
+                "manufacturer": device_dict.get("manufacturer", None),
+                "product": device_dict.get("product", None),
+                "hardware": device_dict.get("hardware", None),
+                "device_id": device_dict.get("device_id", None),
+                "raw_info": device_dict,
             }
             results.append(parsed)
 
