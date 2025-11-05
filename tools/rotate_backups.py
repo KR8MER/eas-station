@@ -87,7 +87,7 @@ def apply_retention_policy(
     deleted = 0
 
     # Keep the most recent daily backups
-    for i, (timestamp, path) in enumerate(backups):
+    for i, (_, path) in enumerate(backups):
         if i < keep_daily:
             kept.add(path)
 

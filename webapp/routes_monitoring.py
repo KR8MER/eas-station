@@ -179,8 +179,8 @@ def register(app: Flask, logger) -> None:
                         rev_obj = script.get_revision(current_rev)
                         if rev_obj:
                             migration_description = rev_obj.doc or "No description"
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        route_logger.debug("Failed to get revision description for %s: %s", current_rev, exc)
 
                 # Check for pending migrations
                 try:

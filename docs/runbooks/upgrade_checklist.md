@@ -40,7 +40,13 @@ Expected output:
     "revision_description": "Add RBAC and MFA support",
     "pending_migrations": [],
     "pending_count": 0
-  }
+  },
+  "system": {
+    "led_available": true,
+    "timezone": "America/New_York"
+  },
+  "timestamp": "2025-11-05T18:30:00.000000Z",
+  "local_timestamp": "2025-11-05T13:30:00.000000-05:00"
 }
 ```
 
@@ -211,8 +217,8 @@ docker compose ps
 
 **Test key features:**
 ```bash
-# Check recent alerts
-curl http://localhost:8080/api/recent_alerts | jq '.[] | .identifier'
+# Check recent alerts (GeoJSON format)
+curl http://localhost:8080/api/alerts | jq '.features[] | .properties.identifier'
 
 # Check radio receivers (if configured)
 curl http://localhost:8080/api/monitoring/radio | jq '.receivers | length'
@@ -318,7 +324,7 @@ After rollback, verify:
 ### Issue: Migration Fails
 
 **Symptom:**
-```
+```text
 alembic.util.exc.CommandError: Can't locate revision identified by 'abc123'
 ```
 
@@ -337,7 +343,7 @@ docker compose exec app python -m alembic upgrade head
 ### Issue: Container Won't Start
 
 **Symptom:**
-```
+```text
 Error: Container exits immediately after start
 ```
 
@@ -360,7 +366,7 @@ sudo netstat -tlnp | grep 8080
 ### Issue: Database Connection Errors
 
 **Symptom:**
-```
+```text
 sqlalchemy.exc.OperationalError: could not connect to server
 ```
 
@@ -382,7 +388,7 @@ docker compose exec alerts-db pg_isready -U postgres
 ### Issue: Disk Space Full
 
 **Symptom:**
-```
+```text
 no space left on device
 ```
 
@@ -516,8 +522,7 @@ EOF
 
 ## Related Documentation
 
-- [Backup Strategy](backup_strategy.md) - Pre-upgrade backup procedures
-- [Disaster Recovery](outage_response.md) - Emergency rollback procedures
+- [Backup Strategy](backup_strategy.md) - Pre-upgrade backup and restore procedures
 - [Release Governance](../../roadmap/master_todo.md) - Version policy and testing requirements
 - [CHANGELOG](../reference/CHANGELOG.md) - Detailed release notes
 
@@ -527,4 +532,4 @@ EOF
 - **System Administrator**: [Contact info]
 - **Database Administrator**: [Contact info]
 - **On-Call Engineer**: [Contact info]
-- **GitHub Issues**: https://github.com/KR8MER/eas-station/issues
+- **GitHub Issues**: <https://github.com/KR8MER/eas-station/issues>

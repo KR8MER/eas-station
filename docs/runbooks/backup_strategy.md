@@ -197,8 +197,9 @@ cp $BACKUP_DIR/docker-compose.yml docker-compose.yml
 docker compose up -d alerts-db
 docker compose exec -T alerts-db psql -U postgres -d alerts < $BACKUP_DIR/alerts_database.sql
 
-# Option B: Using pg_restore directly
-pg_restore -h localhost -U postgres -d alerts $BACKUP_DIR/alerts_database.sql
+# Option B: Using psql directly
+PGPASSWORD=$(grep POSTGRES_PASSWORD .env | cut -d= -f2 | tr -d '"') \
+  psql -h localhost -U postgres -d alerts < $BACKUP_DIR/alerts_database.sql
 ```
 
 **4. Restart services:**
