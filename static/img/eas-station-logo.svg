@@ -1,34 +1,122 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
   <title id="title">EAS Station Logo</title>
-  <desc id="desc">Stylized emergency broadcast badge with layered concentric waves and lightning bolt.</desc>
+  <desc id="desc">Emergency Alert System broadcast tower with radio waves and alert indicator</desc>
+
   <defs>
-    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#204885" />
-      <stop offset="50%" stop-color="#4f6fb3" />
-      <stop offset="100%" stop-color="#872a96" />
+    <!-- Gradient for alert banner -->
+    <linearGradient id="alertGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#dc2626" />
+      <stop offset="50%" stop-color="#ef4444" />
+      <stop offset="100%" stop-color="#dc2626" />
     </linearGradient>
-    <radialGradient id="innerGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#f4f5fb" stop-opacity="0.95" />
-      <stop offset="55%" stop-color="#d9def4" stop-opacity="0.75" />
-      <stop offset="100%" stop-color="#b3c0e6" stop-opacity="0.1" />
+
+    <!-- Gradient for tower -->
+    <linearGradient id="towerGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#475569" />
+      <stop offset="100%" stop-color="#1e293b" />
+    </linearGradient>
+
+    <!-- Gradient for background -->
+    <radialGradient id="bgGradient" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1e3a8a" />
+      <stop offset="100%" stop-color="#1e40af" />
     </radialGradient>
-    <linearGradient id="boltGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ffe56b" />
-      <stop offset="100%" stop-color="#ff9a6b" />
-    </linearGradient>
   </defs>
-  <g fill="none" fill-rule="evenodd">
-    <circle cx="256" cy="256" r="240" fill="url(#bgGradient)" />
-    <circle cx="256" cy="256" r="190" fill="url(#innerGlow)" />
-    <circle cx="256" cy="256" r="150" fill="none" stroke="rgba(32,72,133,0.2)" stroke-width="20" />
-    <circle cx="256" cy="256" r="215" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="16" stroke-dasharray="40 22" />
-    <circle cx="256" cy="256" r="110" fill="none" stroke="rgba(135,42,150,0.45)" stroke-width="18" stroke-dasharray="32 18" />
-    <path d="M160 322c34-42 65-63 96-63s62 21 96 63" stroke="#4f6fb3" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" opacity="0.55" />
-    <path d="M176 352c30-36 58-54 80-54s50 18 80 54" stroke="#872a96" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" opacity="0.6" />
-    <path d="M196 378c24-28 44-42 60-42s36 14 60 42" stroke="#f6b968" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" opacity="0.85" />
-    <path d="M256 128c-16 34-48 64-48 96 0 38 24 68 24 92 0 17-12 36-36 56 32-12 55-18 68-18 13 0 36 6 68 18-24-20-36-39-36-56 0-24 24-54 24-92 0-32-32-62-48-96z" fill="#204885" opacity="0.3" />
-    <path d="M286 112l-66 128h64l-32 116 94-148h-68l32-96z" fill="url(#boltGradient)" stroke="#ffe56b" stroke-width="6" stroke-linejoin="round" />
-    <circle cx="256" cy="256" r="34" fill="#204885" opacity="0.75" />
-    <circle cx="256" cy="256" r="16" fill="#f4f5fb" />
+
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="240" fill="url(#bgGradient)" />
+
+  <!-- Radio waves (emanating from tower) -->
+  <g opacity="0.3">
+    <!-- Outer wave -->
+    <path d="M 100 256 Q 100 150, 256 150 Q 412 150, 412 256 Q 412 362, 256 362 Q 100 362, 100 256"
+          fill="none" stroke="#60a5fa" stroke-width="3" stroke-linecap="round"/>
+    <!-- Middle wave -->
+    <path d="M 140 256 Q 140 180, 256 180 Q 372 180, 372 256 Q 372 332, 256 332 Q 140 332, 140 256"
+          fill="none" stroke="#60a5fa" stroke-width="3" stroke-linecap="round"/>
+    <!-- Inner wave -->
+    <path d="M 180 256 Q 180 210, 256 210 Q 332 210, 332 256 Q 332 302, 256 302 Q 180 302, 180 256"
+          fill="none" stroke="#60a5fa" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <!-- Broadcast tower structure -->
+  <g>
+    <!-- Tower base platform -->
+    <rect x="226" y="380" width="60" height="8" fill="#334155" rx="2"/>
+
+    <!-- Tower main body (trapezoid) -->
+    <path d="M 246 380 L 256 200 L 256 200 L 266 380 Z" fill="url(#towerGradient)" stroke="#1e293b" stroke-width="2"/>
+
+    <!-- Tower cross-beams -->
+    <line x1="246" y1="280" x2="266" y2="280" stroke="#64748b" stroke-width="2"/>
+    <line x1="246" y1="320" x2="266" y2="320" stroke="#64748b" stroke-width="2"/>
+    <line x1="246" y1="340" x2="266" y2="340" stroke="#64748b" stroke-width="2"/>
+    <line x1="246" y1="360" x2="266" y2="360" stroke="#64748b" stroke-width="2"/>
+
+    <!-- Diagonal supports -->
+    <line x1="246" y1="280" x2="256" y2="300" stroke="#64748b" stroke-width="1.5"/>
+    <line x1="266" y1="280" x2="256" y2="300" stroke="#64748b" stroke-width="1.5"/>
+    <line x1="246" y1="320" x2="256" y2="340" stroke="#64748b" stroke-width="1.5"/>
+    <line x1="266" y1="320" x2="256" y2="340" stroke="#64748b" stroke-width="1.5"/>
+
+    <!-- Antenna top -->
+    <rect x="252" y="180" width="8" height="20" fill="#64748b" rx="1"/>
+    <circle cx="256" cy="175" r="6" fill="#ef4444"/>
+    <circle cx="256" cy="175" r="4" fill="#dc2626"/>
+
+    <!-- Antenna segments -->
+    <line x1="236" y1="200" x2="276" y2="200" stroke="#475569" stroke-width="3" stroke-linecap="round"/>
+    <line x1="230" y1="215" x2="282" y2="215" stroke="#475569" stroke-width="3" stroke-linecap="round"/>
+    <line x1="226" y1="230" x2="286" y2="230" stroke="#475569" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <!-- EAS Alert banner across top -->
+  <g>
+    <!-- Banner background -->
+    <rect x="80" y="90" width="352" height="50" fill="url(#alertGradient)" rx="8"/>
+    <rect x="80" y="90" width="352" height="50" fill="none" stroke="#991b1b" stroke-width="3" rx="8"/>
+
+    <!-- Alert triangles on sides -->
+    <g>
+      <!-- Left triangle -->
+      <path d="M 110 115 L 100 130 L 120 130 Z" fill="#fef08a" stroke="#eab308" stroke-width="2"/>
+      <text x="110" y="127" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#dc2626" text-anchor="middle">!</text>
+
+      <!-- Right triangle -->
+      <path d="M 402 115 L 392 130 L 412 130 Z" fill="#fef08a" stroke="#eab308" stroke-width="2"/>
+      <text x="402" y="127" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#dc2626" text-anchor="middle">!</text>
+    </g>
+
+    <!-- EAS text -->
+    <text x="256" y="125" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#ffffff" text-anchor="middle" letter-spacing="8">EAS</text>
+  </g>
+
+  <!-- Signal indicator dots -->
+  <g opacity="0.8">
+    <circle cx="256" cy="250" r="4" fill="#22c55e">
+      <animate attributeName="opacity" values="1;0.3;1" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="268" cy="260" r="3" fill="#22c55e">
+      <animate attributeName="opacity" values="0.3;1;0.3" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="244" cy="260" r="3" fill="#22c55e">
+      <animate attributeName="opacity" values="0.3;1;0.3" dur="2s" begin="0.5s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- Radio wave pulse animations -->
+  <g opacity="0.5">
+    <circle cx="256" cy="256" r="60" fill="none" stroke="#60a5fa" stroke-width="2">
+      <animate attributeName="r" values="60;120;180" dur="3s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.5;0.2;0" dur="3s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="256" cy="256" r="60" fill="none" stroke="#60a5fa" stroke-width="2">
+      <animate attributeName="r" values="60;120;180" dur="3s" begin="1s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.5;0.2;0" dur="3s" begin="1s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="256" cy="256" r="60" fill="none" stroke="#60a5fa" stroke-width="2">
+      <animate attributeName="r" values="60;120;180" dur="3s" begin="2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.5;0.2;0" dur="3s" begin="2s" repeatCount="indefinite"/>
+    </circle>
   </g>
 </svg>
