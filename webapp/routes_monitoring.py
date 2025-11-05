@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
+
 from flask import Flask, jsonify
 from sqlalchemy import text
+from alembic import command, config as alembic_config
+from alembic.script import ScriptDirectory
+from alembic.runtime.migration import MigrationContext
 
 from app_core.extensions import db
 from app_core.models import RadioReceiver
@@ -88,6 +94,134 @@ def register(app: Flask, logger) -> None:
                 ),
                 "timezone": get_location_timezone_name(),
                 "led_available": LED_AVAILABLE,
+                "timestamp": utc_now().isoformat(),
+                "local_timestamp": local_now().isoformat(),
+            }
+        )
+
+    @app.route("/api/release-manifest")
+    def release_manifest():
+        """Release manifest endpoint for deployment auditing and version tracking.
+
+        Reports the running version, git commit hash, database migration level,
+        and deployment metadata to aid in audit trails and troubleshooting.
+        """
+
+        # Read version from VERSION file and determine repository root
+        try:
+            repo_root = Path(__file__).resolve().parents[1]
+            version_path = repo_root / "VERSION"
+            version = version_path.read_text(encoding="utf-8").strip()
+        except Exception:
+            version = _system_version()
+            repo_root = Path(__file__).resolve().parents[1]  # Still needed for git commands
+
+        # Get current git commit hash
+        try:
+            git_hash = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+                cwd=repo_root,
+            ).stdout.strip()
+            if not git_hash:
+                git_hash = "unknown"
+        except Exception:
+            git_hash = "unknown"
+
+        # Get git branch
+        try:
+            git_branch = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+                cwd=repo_root,
+            ).stdout.strip()
+            if not git_branch:
+                git_branch = "unknown"
+        except Exception:
+            git_branch = "unknown"
+
+        # Get git status (clean/dirty)
+        try:
+            git_status_output = subprocess.run(
+                ["git", "status", "--porcelain"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+                cwd=repo_root,
+            ).stdout.strip()
+            git_clean = not bool(git_status_output)
+        except Exception:
+            git_clean = None
+
+        # Get current database migration revision
+        migration_revision = "unknown"
+        migration_description = "unknown"
+        pending_migrations = []
+
+        try:
+            # Get current revision from database
+            with db.engine.connect() as connection:
+                context = MigrationContext.configure(connection)
+                current_rev = context.get_current_revision()
+                migration_revision = current_rev or "none"
+
+            # Load Alembic configuration
+            alembic_ini = Path(__file__).resolve().parents[1] / "alembic.ini"
+            if alembic_ini.exists():
+                config = alembic_config.Config(str(alembic_ini))
+                script = ScriptDirectory.from_config(config)
+
+                # Get description of current revision
+                if current_rev:
+                    try:
+                        rev_obj = script.get_revision(current_rev)
+                        if rev_obj:
+                            migration_description = rev_obj.doc or "No description"
+                    except Exception as exc:
+                        route_logger.debug("Failed to get revision description for %s: %s", current_rev, exc)
+
+                # Check for pending migrations
+                try:
+                    head_rev = script.get_current_head()
+                    if current_rev != head_rev:
+                        # There are pending migrations
+                        for rev in script.iterate_revisions(head_rev, current_rev):
+                            if rev.revision != current_rev:
+                                pending_migrations.append({
+                                    "revision": rev.revision,
+                                    "description": rev.doc or "No description",
+                                })
+                except Exception as exc:
+                    route_logger.debug("Failed to check pending migrations: %s", exc)
+
+        except Exception as exc:
+            route_logger.debug("Failed to get migration info: %s", exc)
+
+        return jsonify(
+            {
+                "version": version,
+                "git": {
+                    "commit": git_hash,
+                    "branch": git_branch,
+                    "clean": git_clean,
+                },
+                "database": {
+                    "current_revision": migration_revision,
+                    "revision_description": migration_description,
+                    "pending_migrations": pending_migrations,
+                    "pending_count": len(pending_migrations),
+                },
+                "system": {
+                    "led_available": LED_AVAILABLE,
+                    "timezone": get_location_timezone_name(),
+                },
                 "timestamp": utc_now().isoformat(),
                 "local_timestamp": local_now().isoformat(),
             }

@@ -6,6 +6,12 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 ### Added
+- Added complete release governance and audit trail capabilities
+  - Created `/api/release-manifest` endpoint reporting version, git status, and database migration state
+  - Built `tools/rotate_backups.py` with tiered retention policy (7 daily, 4 weekly, 6 monthly)
+  - Added systemd timer and cron examples for automated backup scheduling
+  - Published comprehensive backup strategy documentation in `docs/runbooks/backup_strategy.md`
+  - Published operator upgrade checklist in `docs/runbooks/upgrade_checklist.md`
 - Added comprehensive audio ingest pipeline for unified capture from SDR, ALSA, and file sources
   - Implemented `app_core/audio/ingest.py` with pluggable source adapters and PCM normalization
   - Added peak/RMS metering and silence detection with PostgreSQL storage

@@ -100,14 +100,16 @@ Each roadmap item below references the requirement(s) it unlocks so contributors
   3. Integrate long-duration reliability soak tests into CI or scheduled workflows, storing telemetry and fault reports for review.
   4. Assemble a Part 11 compliance dossier (schematics, BOM, firmware/software versions) and version it alongside release candidates.
 
-## 10. Release Governance & Audit Trails (Requirement 10)
+## 10. Release Governance & Audit Trails (Requirement 10) ✅ COMPLETE
 - **Goal**: Guarantee every deployment is identifiable, auditable, and recoverable without destroying infrastructure.
-- **Status**: Manual guidelines existed; scripts for in-place upgrades and snapshots now land in `tools/`, but enforcement remains ad-hoc.
-- **Plan**:
-  1. ✅ Add `tests/test_release_metadata.py` to fail builds lacking an `[Unreleased]` changelog entry or up-to-date version metadata; wire it into CI alongside the existing test suite.
-  2. Expose an `/api/release-manifest` endpoint that reports the running version, git hash, and migration level to aid audits.
-  3. Expand `tools/create_backup.py` into a scheduled task (systemd timer or cron example) and document automated retention/rotation in `docs/runbooks/backup_strategy.md`.
-  4. Publish an operator-facing upgrade checklist referencing `tools/inplace_upgrade.py`, verification tests, and rollback procedures.
+- **Status**: ✅ **Completed** – Full release governance with automated backup, audit trails, and upgrade procedures delivered.
+- **Delivered**:
+  1. ✅ Added `tests/test_release_metadata.py` enforcing changelog and version consistency, integrated into test suite.
+  2. ✅ Created `/api/release-manifest` endpoint reporting version, git hash, branch, migration status, and pending migrations in `webapp/routes_monitoring.py`.
+  3. ✅ Built `tools/rotate_backups.py` with grandfather-father-son retention policy (daily/weekly/monthly).
+  4. ✅ Created systemd timer (`examples/systemd/eas-backup.timer`) and cron examples (`examples/cron/eas-backup.cron`) for automated backup scheduling.
+  5. ✅ Published comprehensive `docs/runbooks/backup_strategy.md` covering backup creation, restoration, rotation, off-site storage, and monitoring.
+  6. ✅ Published operator `docs/runbooks/upgrade_checklist.md` with pre-upgrade verification, automated upgrade via `tools/inplace_upgrade.py`, post-upgrade validation, and rollback procedures.
 
 ---
 

@@ -1,0 +1,22 @@
+[Unit]
+Description=EAS Station Backup Service
+Documentation=https://github.com/KR8MER/eas-station
+After=network.target docker.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/eas-station
+ExecStart=/usr/bin/python3 /opt/eas-station/tools/create_backup.py --output-dir /var/backups/eas-station --label scheduled
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=eas-backup
+
+# Security hardening
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

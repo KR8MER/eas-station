@@ -1,0 +1,9 @@
+# EAS Station Daily Backup
+# Add this to your crontab with: sudo crontab -e
+# This example runs daily at 2:00 AM
+
+# Daily backup at 2:00 AM
+0 2 * * * cd /opt/eas-station && /usr/bin/python3 tools/create_backup.py --output-dir /var/backups/eas-station --label scheduled >> /var/log/eas-backup.log 2>&1
+
+# Alternative: Weekly backup on Sundays at 3:00 AM
+# 0 3 * * 0 cd /opt/eas-station && /usr/bin/python3 tools/create_backup.py --output-dir /var/backups/eas-station --label weekly >> /var/log/eas-backup.log 2>&1
