@@ -569,6 +569,65 @@ def register_maintenance_routes(app, logger):
             }
         )
 
+    @app.route("/admin/optimize_db", methods=["POST"])
+    def optimize_database():
+        """Optimize database performance using VACUUM and ANALYZE."""
+
+        try:
+            # Get database size before optimization
+            size_before = db.session.execute(
+                text("SELECT pg_database_size(current_database())")
+            ).scalar()
+
+            # Run VACUUM to reclaim space and optimize
+            # Note: VACUUM cannot run inside a transaction block
+            db.session.commit()  # Ensure any pending transaction is committed
+            connection = db.engine.raw_connection()
+            try:
+                connection.set_isolation_level(0)  # AUTOCOMMIT mode
+                cursor = connection.cursor()
+                cursor.execute("VACUUM ANALYZE")
+                cursor.close()
+            finally:
+                connection.close()
+
+            # Get database size after optimization
+            size_after = db.session.execute(
+                text("SELECT pg_database_size(current_database())")
+            ).scalar()
+
+            space_reclaimed = size_before - size_after if size_before and size_after else 0
+
+            # Log the optimization
+            log_entry = SystemLog(
+                level="INFO",
+                message="Database optimization completed",
+                module="admin",
+                details={
+                    "optimized_at_utc": utc_now().isoformat(),
+                    "optimized_at_local": local_now().isoformat(),
+                    "size_before": format_bytes(size_before) if size_before else "Unknown",
+                    "size_after": format_bytes(size_after) if size_after else "Unknown",
+                    "space_reclaimed": format_bytes(space_reclaimed) if space_reclaimed > 0 else "0 bytes",
+                },
+            )
+            db.session.add(log_entry)
+            db.session.commit()
+
+            logger.info("Database optimized successfully. Space reclaimed: %s", format_bytes(space_reclaimed) if space_reclaimed > 0 else "0 bytes")
+
+            return jsonify({
+                "message": "Database optimized successfully",
+                "size_before": format_bytes(size_before) if size_before else "Unknown",
+                "size_after": format_bytes(size_after) if size_after else "Unknown",
+                "space_reclaimed": format_bytes(space_reclaimed) if space_reclaimed > 0 else "0 bytes",
+            })
+
+        except Exception as exc:
+            logger.error("Error optimizing database: %s", exc)
+            db.session.rollback()
+            return jsonify({"error": f"Database optimization failed: {exc}"}), 500
+
     @app.route("/admin/trigger_poll", methods=["POST"])
     def trigger_poll():
         try:
