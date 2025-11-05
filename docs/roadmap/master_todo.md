@@ -18,41 +18,41 @@ To match the expectations of purpose-built EAS appliances, the project must deli
 
 Each roadmap item below references the requirement(s) it unlocks so contributors can tie deliverables directly to hardware parity.
 
-## 1. Audio Ingest Unification (Requirement 1)
+## 1. Audio Ingest Unification (Requirement 1) ✅ COMPLETE
 - **Goal**: Normalize capture from SDR, ALSA/Pulse, and file inputs into a single managed pipeline.
-- **Status**: SAME capture flows exist per receiver, but there is no shared ingest abstraction.
-- **Plan**:
-  1. Introduce `app_core/audio/ingest.py` with pluggable source adapters and a queue that emits PCM frames.
-  2. Add configuration parsing to `configure.py` for source priorities, failover, and metering thresholds.
-  3. Persist metering data through a lightweight model (e.g., `AudioIngestStatus`) for UI display in system health views.
-  4. Provide calibration and diagnostics utilities under `tools/audio_debug.py` for each adapter.
+- **Status**: ✅ **Completed in PR #315, #343** – Comprehensive audio ingest pipeline delivered.
+- **Delivered**:
+  1. ✅ Created `app_core/audio/ingest.py` with pluggable source adapters (SDR, ALSA, file) and PCM frame queue.
+  2. ✅ Added configuration parsing in `configure.py` for source priorities, failover logic, and metering thresholds.
+  3. ✅ Implemented `AudioSource` models for status tracking with peak/RMS metering displayed in system health views.
+  4. ✅ Built web UI at `/settings/audio-sources` for source management with real-time metering visualization.
 
-## 2. Audio Output & Playout Scheduling (Requirement 2)
+## 2. Audio Output & Playout Scheduling (Requirement 2) ✅ COMPLETE
 - **Goal**: Guarantee deterministic alert playout across tones, voice, GPIO triggers, and archives.
-- **Status**: Manual scripts exist; there is no queue-driven playout engine or precedence enforcement.
-- **Plan**:
-  1. Extend `app_utils/eas.py` with a playout queue orchestrating SAME headers, tones, and recorded content.
-  2. Spin up a dedicated service (e.g., `components/audio_output_service.py`) that can target monitor/program buses through ALSA/JACK.
-  3. Encode precedence logic in `app_core/eas_storage.py` so overlapping alerts follow FCC ordering.
-  4. Update triggering scripts and APIs (`manual_eas_event.py`, `/api/manual-alert`) to report playout status and retention artifacts.
+- **Status**: ✅ **Completed in PR #372** – FCC-compliant priority queue with deterministic playout delivered.
+- **Delivered**:
+  1. ✅ Built `app_core/audio/playout_queue.py` with FCC precedence logic (Presidential > Local > State > National > Test).
+  2. ✅ Created `app_core/audio/output_service.py` background service for deterministic playback with ALSA/JACK support.
+  3. ✅ Implemented precedence calculation in `app_core/eas_storage.py` with automatic preemption for high-priority alerts.
+  4. ✅ Updated `app_utils/eas.py` EASBroadcaster to support queue mode with playout event tracking and GPIO integration.
 
-## 3. GPIO & External Control Hardening (Requirement 3)
+## 3. GPIO & External Control Hardening (Requirement 3) ✅ COMPLETE
 - **Goal**: Provide reliable control over transmitters and peripherals with auditability.
-- **Status**: GPIO helpers are embedded in broader utilities without normalization or history tracking.
-- **Plan**:
-  1. Refactor GPIO logic into `app_utils/gpio.py` with configuration for active-high/low, debounce, and watchdog timers.
-  2. Store activation history via new models in `app_core/models.py` and surface a timeline under `templates/system_health.html`.
-  3. Create operator override views in `webapp/routes/system_controls.py` with proper authentication and audit logs.
-  4. Document wiring and safety practices in `docs/hardware/gpio.md`.
+- **Status**: ✅ **Completed in PR #371** – Full GPIO hardening with audit trails and operator controls delivered.
+- **Delivered**:
+  1. ✅ Created unified `app_utils/gpio.py` GPIOController with active-high/low, debounce, and watchdog timers (default 5 min).
+  2. ✅ Added `GPIOActivationLog` model to `app_core/models.py` tracking pin, timestamps, duration, operator, and success/failure.
+  3. ✅ Built operator override UI at `/admin/gpio` in `webapp/routes/system_controls.py` with authentication and reason logging.
+  4. ✅ Documented complete hardware setup, wiring diagrams, and safety practices in `docs/hardware/gpio.md`.
 
-## 4. Security & Access Controls (Requirement 4)
+## 4. Security & Access Controls (Requirement 4) ✅ COMPLETE
 - **Goal**: Enforce least-privilege access and track operator actions.
-- **Status**: Basic authentication exists, but roles, MFA, and auditing are absent.
-- **Plan**:
-  1. Implement role definitions in `app_core/auth/roles.py` and gate sensitive endpoints accordingly.
-  2. Add TOTP enrollment and verification flows in `webapp/routes/auth.py` with supporting templates under `templates/auth/`.
-  3. Log configuration changes to an `AuditLog` model with retention controls and review pages.
-  4. Publish security guidance in `docs/security_hardening.md` with MFA, firewall, and patching expectations.
+- **Status**: ✅ **Completed in PR #373** – Full RBAC, MFA, and audit logging implementation delivered.
+- **Delivered**:
+  1. ✅ Four-tier role hierarchy (Admin, Operator, Analyst, Viewer) implemented in `app_core/auth/roles.py` with permission-based endpoint gating.
+  2. ✅ TOTP-based MFA enrollment and verification flows added in `webapp/routes_security.py` with QR code setup UI.
+  3. ✅ Comprehensive `AuditLog` model with retention policies, pagination controls, and audit review interface at `/settings/security`.
+  4. ✅ Security migration guide published in `docs/MIGRATION_SECURITY.md` covering MFA setup, role assignment, and deployment considerations.
 
 ## 5. Resilience & Disaster Recovery (Requirement 5)
 - **Goal**: Maintain service continuity during hardware or network outages.

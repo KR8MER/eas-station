@@ -17,25 +17,25 @@
   - [x] Update system health endpoints to report receiver lock, signal metrics, and error states.
 ~~
 
-## 2. Audio Ingest Pipeline
-- [ ] Implement a unified audio ingest pipeline.
-  - Create an ingest controller (e.g., `app_core/audio/ingest.py`) that can subscribe to SDR streams, ALSA/pyaudio devices, or file inputs and normalize them into a standard PCM format.
-  - Add peak/RMS metering and silence detection to guard against dead air, storing recent measurements in Redis or Postgres for UI display.
-  - Expose configuration for capture priority and failover in `.env` parsing (see `configure.py`) and document it in `docs/audio.md`.
-  - Provide CLI utilities in `tools/audio_debug.py` to test and calibrate each source.
+## 2. Audio Ingest Pipeline ✅ COMPLETE
+- [x] Implement a unified audio ingest pipeline.
+  - [x] ✅ Created `app_core/audio/ingest.py` with pluggable adapters for SDR, ALSA/PyAudio, and file inputs with PCM normalization (PR #315).
+  - [x] ✅ Added peak/RMS metering and silence detection with PostgreSQL storage via `AudioSource` models for UI display (PR #315).
+  - [x] ✅ Exposed configuration for capture priority and failover in `.env` with comprehensive documentation (PR #315).
+  - [x] ✅ Built web UI at `/settings/audio-sources` for testing, calibration, and real-time metering visualization (PR #338, #343).
 
-## 3. Audio Output & Playout Scheduling
-- [ ] Build an advanced audio playout engine.
-  - Extend `app_utils/eas.py` with a playout queue that chains SAME headers, tones, voice, and recorded content; allow multi-channel output targets (e.g., GPIO-triggered transmitter, streaming encoder, file archive).
-  - Integrate with JACK/ALSA via a dedicated service (`components/audio_output_service.py`) that can route simultaneous feeds (monitor, program).
-  - Add scheduling/prioritization in `app_core/eas_storage.py` so conflicting alerts follow FCC precedence rules.
-  - Update `manual_eas_event.py` and API endpoints to trigger the new playout path and return delivery status.
+## 3. Audio Output & Playout Scheduling ✅ COMPLETE
+- [x] Build an advanced audio playout engine.
+  - [x] ✅ Extended `app_utils/eas.py` with `AudioPlayoutQueue` for SAME headers, tones, voice, and recorded content with GPIO integration (PR #372).
+  - [x] ✅ Created `app_core/audio/output_service.py` background service with JACK/ALSA support for monitor/program bus routing (PR #372).
+  - [x] ✅ Implemented FCC precedence logic in `app_core/eas_storage.py` (Presidential > Local > State > National > Test) with automatic preemption (PR #372).
+  - [x] ✅ Updated EASBroadcaster to support queue mode with playout event tracking and delivery status reporting (PR #372).
 
-## 4. GPIO Relay & External Control Enhancements
-- [ ] Enhance the relay/GPIO control module.
-  - Refactor GPIO handling in `app_utils/eas.py` into a separate helper (`app_utils/gpio.py`) supporting active-high/low, pre/post delays, and watchdog timeouts.
-  - Add database logging of relay activations in `app_core/models.py` and surface a timeline in `templates/system_health.html`.
-  - Implement a manual override web control in `webapp/routes/system_controls.py`, ensuring proper authentication and audit logging.
+## 4. GPIO Relay & External Control Enhancements ✅ COMPLETE
+- [x] Enhance the relay/GPIO control module.
+  - [x] ✅ Refactored GPIO into unified `app_utils/gpio.py` GPIOController with active-high/low, debounce, and watchdog timers (PR #371).
+  - [x] ✅ Added `GPIOActivationLog` model in `app_core/models.py` with activation timeline displayed in GPIO control panel (PR #371).
+  - [x] ✅ Implemented manual override web UI at `/admin/gpio` in `webapp/routes/system_controls.py` with authentication and reason logging (PR #371).
 
 ## 5. Compliance & Monitoring Dashboard
 - [x] Create a compliance dashboard.
@@ -57,12 +57,12 @@
 - [x] Ship CSV exports from the verification view using shared utilities in `app_utils/export.py`.
   - [x] Create a way to ingest .WAV and .MP3 files containing EAS Headers and display and possibly store the results of the decode.
 
-## 8. Security & Access Controls
-- [ ] Harden operator access and system security.
-  - Implement role-based access controls in `app_core/auth/roles.py` and enforce them across admin routes.
-  - Require MFA enrollment for operator accounts, adding TOTP enrollment flows in `webapp/routes/auth.py` and templates under `templates/auth/`.
-  - Add security auditing hooks that log configuration and control changes to a dedicated table with retention policies.
-  - Document security procedures in `docs/security_hardening.md`, including recommended firewall rules and patch cadence.
+## 8. Security & Access Controls ✅ COMPLETE
+- [x] Harden operator access and system security.
+  - [x] ✅ Implemented four-tier RBAC (Admin, Operator, Analyst, Viewer) in `app_core/auth/roles.py` with permission-gated admin routes (PR #373).
+  - [x] ✅ Added TOTP-based MFA enrollment flows in `webapp/routes_security.py` with QR code setup UI under `/settings/security` (PR #373).
+  - [x] ✅ Built comprehensive audit logging system with dedicated `AuditLog` table, retention policies, and review interface (PR #373).
+  - [x] ✅ Documented security migration procedures in `docs/MIGRATION_SECURITY.md` with role assignment, MFA setup, and deployment guidance (PR #373).
 
 ## 9. Resilience & Disaster Recovery
 - [ ] Improve resilience for severe weather outages.
