@@ -852,6 +852,59 @@ class AudioSourceConfigDB(db.Model):
         }
 
 
+class GPIOActivationLog(db.Model):
+    """Audit log for GPIO relay activations.
+
+    This table provides a complete history of all GPIO pin activations
+    for compliance, debugging, and security auditing purposes.
+    """
+    __tablename__ = "gpio_activation_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Pin identification
+    pin = db.Column(db.Integer, nullable=False, index=True)
+
+    # Activation classification
+    activation_type = db.Column(db.String(20), nullable=False, index=True)  # 'manual', 'automatic', 'test', 'override'
+
+    # Timing information
+    activated_at = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
+    deactivated_at = db.Column(db.DateTime(timezone=True))
+    duration_seconds = db.Column(db.Float)
+
+    # Attribution
+    operator = db.Column(db.String(100))  # Username for manual/override activations
+    alert_id = db.Column(db.String(255))  # Alert identifier for automatic activations
+
+    # Context
+    reason = db.Column(db.Text)  # Human-readable reason
+
+    # Status
+    success = db.Column(db.Boolean, default=True, nullable=False)
+    error_message = db.Column(db.Text)
+
+    # Timestamps
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+
+    def to_dict(self):
+        """Convert to dictionary for API responses."""
+        return {
+            'id': self.id,
+            'pin': self.pin,
+            'activation_type': self.activation_type,
+            'activated_at': self.activated_at.isoformat() if self.activated_at else None,
+            'deactivated_at': self.deactivated_at.isoformat() if self.deactivated_at else None,
+            'duration_seconds': self.duration_seconds,
+            'operator': self.operator,
+            'alert_id': self.alert_id,
+            'reason': self.reason,
+            'success': self.success,
+            'error_message': self.error_message,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 __all__ = [
     "Boundary",
     "CAPAlert",
@@ -869,4 +922,5 @@ __all__ = [
     "AudioHealthStatus",
     "AudioAlert",
     "AudioSourceConfigDB",
+    "GPIOActivationLog",
 ]
