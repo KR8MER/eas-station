@@ -670,6 +670,8 @@ class LEDSignStatus(db.Model):
     last_error = db.Column(db.Text)
     last_update = db.Column(db.DateTime(timezone=True), default=utc_now)
     is_connected = db.Column(db.Boolean, default=False)
+    serial_mode = db.Column(db.String(10), default="RS232")  # RS232 or RS485
+    baud_rate = db.Column(db.Integer, default=9600)  # Serial baud rate
 
 
 class AudioSourceMetrics(db.Model):

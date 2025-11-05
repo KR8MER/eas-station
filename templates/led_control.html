@@ -247,6 +247,10 @@
                         <strong>Last Update:</strong> <span id="last-update-time">Just now</span><br>
                         <strong>Features:</strong> RGB Support, Graphics, 4 Lines × 20 Chars
                     </div>
+                    <div class="alert alert-info">
+                        <strong><i class="fas fa-network-wired"></i> Connection Type:</strong> Serial-to-Ethernet Adapter<br>
+                        <small class="text-muted">This system uses a Lantronix (or compatible) serial-to-Ethernet adapter to connect the LED sign. The adapter emulates a serial port over TCP/IP, allowing network-based control of RS232/RS485 LED signs.</small>
+                    </div>
                 </div>
             </div>
             <div class="col-md-6">
@@ -929,12 +933,50 @@
                             <table class="table table-sm">
                                 <tr><td><strong>Model:</strong></td><td>Alpha 9120C</td></tr>
                                 <tr><td><strong>Protocol:</strong></td><td>M-Protocol</td></tr>
+                                <tr><td><strong>Connection:</strong></td><td>Lantronix Serial-to-Ethernet</td></tr>
                                 <tr><td><strong>Display:</strong></td><td>4 Lines × 20 Characters</td></tr>
                                 <tr><td><strong>Colors:</strong></td><td>12 Standard + RGB</td></tr>
                                 <tr><td><strong>Fonts:</strong></td><td>10 Different Sizes</td></tr>
                                 <tr><td><strong>Effects:</strong></td><td>20+ Display Modes</td></tr>
                                 <tr><td><strong>Special:</strong></td><td>8 Special Functions</td></tr>
                             </table>
+                        </div>
+                    </div>
+
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6><i class="fas fa-plug"></i> Serial Port Configuration</h6>
+                        </div>
+                        <div class="card-body">
+                            <p class="small text-muted mb-3">Configure the serial communication mode on your Lantronix adapter to match your LED sign's hardware interface.</p>
+                            <div class="mb-3">
+                                <label for="serial-mode" class="form-label">Serial Mode</label>
+                                <select class="form-select" id="serial-mode">
+                                    <option value="RS232" selected>RS232 (Standard Serial)</option>
+                                    <option value="RS485">RS485 (Multi-drop / Long Distance)</option>
+                                </select>
+                                <small class="form-text text-muted">
+                                    <strong>RS232:</strong> Standard serial, short distances (&lt;50ft), single device<br>
+                                    <strong>RS485:</strong> Long distances (up to 4000ft), multiple devices, industrial
+                                </small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Common Baud Rates</label>
+                                <select class="form-select" id="baud-rate">
+                                    <option value="9600" selected>9600 (Standard)</option>
+                                    <option value="19200">19200 (Fast)</option>
+                                    <option value="38400">38400</option>
+                                    <option value="57600">57600</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-primary btn-sm" onclick="saveSerialConfig()">
+                                <i class="fas fa-save"></i> Save Configuration
+                            </button>
+                            <div class="mt-2">
+                                <small class="text-info">
+                                    <i class="fas fa-info-circle"></i> Note: These settings must match your Lantronix adapter configuration.
+                                </small>
+                            </div>
                         </div>
                     </div>
 
@@ -1289,6 +1331,7 @@ function initLEDControl() {
     loadLEDStatus();
     loadCannedMessages();
     loadMessageHistory();
+    loadSerialConfig();
     setupFormHandlers();
     initLineEditors();
     updateTimePreview();
@@ -1900,6 +1943,32 @@ function resetSign() {
     });
 }
 
+function saveSerialConfig() {
+    const serialMode = document.getElementById('serial-mode').value;
+    const baudRate = document.getElementById('baud-rate').value;
+
+    fetch('/api/led/serial_config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            serial_mode: serialMode,
+            baud_rate: parseInt(baudRate)
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showToast(`Serial configuration saved: ${serialMode} @ ${baudRate} baud`, 'success');
+        } else {
+            showToast('Failed to save serial configuration: ' + result.error, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('Error saving serial configuration', 'error');
+        console.error('Error:', error);
+    });
+}
+
 // Loading functions
 function loadLEDStatus() {
     fetch('/api/led/status')
@@ -1929,6 +1998,26 @@ function loadMessageHistory() {
         displayMessageHistory();
     })
     .catch(error => console.error('Error loading message history:', error));
+}
+
+function loadSerialConfig() {
+    fetch('/api/led/serial_config')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.config) {
+            const serialModeSelect = document.getElementById('serial-mode');
+            const baudRateSelect = document.getElementById('baud-rate');
+
+            if (serialModeSelect && data.config.serial_mode) {
+                serialModeSelect.value = data.config.serial_mode;
+            }
+
+            if (baudRateSelect && data.config.baud_rate) {
+                baudRateSelect.value = data.config.baud_rate.toString();
+            }
+        }
+    })
+    .catch(error => console.error('Error loading serial configuration:', error));
 }
 
 function updateStatusDisplay() {

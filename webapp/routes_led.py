@@ -501,6 +501,107 @@ def register(app: Flask, logger) -> None:
 
         return jsonify({"success": True, "messages": canned})
 
+    @app.route("/api/led/serial_config", methods=["GET", "POST"])
+    def api_led_serial_config():
+        """Get or set serial configuration for the LED sign adapter."""
+        import os
+
+        if request.method == "GET":
+            # Return current serial configuration from database, falling back to environment
+            try:
+                ensure_led_tables()
+                status_record = LEDSignStatus.query.first()
+
+                if status_record and status_record.serial_mode and status_record.baud_rate:
+                    # Use database values if available
+                    config = {
+                        "serial_mode": status_record.serial_mode,
+                        "baud_rate": status_record.baud_rate,
+                        "led_sign_ip": os.getenv("LED_SIGN_IP", ""),
+                        "led_sign_port": int(os.getenv("LED_SIGN_PORT", "10001")),
+                    }
+                else:
+                    # Fall back to environment variables
+                    config = {
+                        "serial_mode": os.getenv("LED_SERIAL_MODE", "RS232"),
+                        "baud_rate": int(os.getenv("LED_BAUD_RATE", "9600")),
+                        "led_sign_ip": os.getenv("LED_SIGN_IP", ""),
+                        "led_sign_port": int(os.getenv("LED_SIGN_PORT", "10001")),
+                    }
+
+                return jsonify({"success": True, "config": config})
+
+            except Exception as db_error:
+                route_logger.warning(f"Could not retrieve serial config from database: {db_error}")
+                # Fall back to environment variables on error
+                config = {
+                    "serial_mode": os.getenv("LED_SERIAL_MODE", "RS232"),
+                    "baud_rate": int(os.getenv("LED_BAUD_RATE", "9600")),
+                    "led_sign_ip": os.getenv("LED_SIGN_IP", ""),
+                    "led_sign_port": int(os.getenv("LED_SIGN_PORT", "10001")),
+                }
+                return jsonify({"success": True, "config": config})
+
+        elif request.method == "POST":
+            try:
+                data = request.get_json(silent=True) or {}
+                serial_mode = data.get("serial_mode", "RS232")
+                baud_rate = int(data.get("baud_rate", 9600))
+
+                # Validate serial mode
+                if serial_mode not in ["RS232", "RS485"]:
+                    return jsonify({"success": False, "error": "Invalid serial mode. Must be RS232 or RS485."})
+
+                # Validate baud rate
+                valid_baud_rates = [9600, 19200, 38400, 57600, 115200]
+                if baud_rate not in valid_baud_rates:
+                    return jsonify({"success": False, "error": f"Invalid baud rate. Must be one of {valid_baud_rates}."})
+
+                # Note: These settings are informational only and stored in the database
+                # The actual serial configuration must be set on the Lantronix adapter
+                route_logger.info(f"LED serial configuration updated: {serial_mode} @ {baud_rate} baud")
+
+                # Store configuration in LEDSignStatus table
+                try:
+                    ensure_led_tables()
+
+                    # Check if there's an existing status record
+                    status_record = LEDSignStatus.query.first()
+                    if not status_record:
+                        status_record = LEDSignStatus(
+                            sign_ip=os.getenv("LED_SIGN_IP", "192.168.1.100"),
+                            serial_mode=serial_mode,
+                            baud_rate=baud_rate,
+                            brightness_level=10,
+                            is_connected=False,
+                            last_update=utc_now(),
+                        )
+                        db.session.add(status_record)
+                    else:
+                        # Update existing record with new serial configuration
+                        status_record.serial_mode = serial_mode
+                        status_record.baud_rate = baud_rate
+                        status_record.last_update = utc_now()
+
+                    db.session.commit()
+
+                except Exception as db_error:
+                    route_logger.warning(f"Could not store serial config in database: {db_error}")
+                    return jsonify({"success": False, "error": f"Database error: {str(db_error)}"})
+
+                return jsonify({
+                    "success": True,
+                    "message": f"Serial configuration saved: {serial_mode} @ {baud_rate} baud",
+                    "config": {
+                        "serial_mode": serial_mode,
+                        "baud_rate": baud_rate,
+                    },
+                    "note": "Remember to configure these same settings on your Lantronix adapter."
+                })
+            except Exception as exc:
+                route_logger.error(f"Error saving serial configuration: {exc}")
+                return jsonify({"success": False, "error": str(exc)})
+
 
 def _enum_label(value: Any) -> str:
     if hasattr(value, "name"):
