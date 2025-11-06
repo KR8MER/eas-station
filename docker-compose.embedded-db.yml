@@ -1,26 +1,93 @@
+# Complete standalone docker-compose file with embedded PostgreSQL database
+# This file can be used directly in Portainer or with: docker-compose -f docker-compose.embedded-db.yml up
+
 services:
   app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SOAPYSDR_DRIVERS: ${SOAPYSDR_DRIVERS:-rtlsdr,airspy}
+    image: eas-station:latest
     depends_on:
       alerts-db:
         condition: service_healthy
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      SDR_ARGS: ${SDR_ARGS:-driver=airspy}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+      - /dev/bus/usb/003/002:/dev/bus/usb/003/002
+    cap_add:
+      - SYS_RAWIO
+    security_opt:
+      - no-new-privileges:true
 
   poller:
+    image: eas-station:latest
     depends_on:
       app:
         condition: service_started
       alerts-db:
         condition: service_healthy
+    command: ["python", "poller/cap_poller.py", "--continuous"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      SDR_ARGS: ${SDR_ARGS:-driver=airspy}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    cap_add:
+      - SYS_RAWIO
+    security_opt:
+      - no-new-privileges:true
 
   ipaws-poller:
+    image: eas-station:latest
     depends_on:
       app:
         condition: service_started
       alerts-db:
         condition: service_healthy
+    command:
+      - python
+      - poller/cap_poller.py
+      - --continuous
+      - --interval
+      - "120"
+      - --log-level
+      - "${LOG_LEVEL:-INFO}"
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      CAP_POLLER_MODE: IPAWS
+      CAP_ENDPOINTS: ${IPAWS_CAP_FEED_URLS:-}
+      SDR_ARGS: ${SDR_ARGS:-driver=airspy}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    cap_add:
+      - SYS_RAWIO
+    security_opt:
+      - no-new-privileges:true
 
   alerts-db:
     image: ${ALERTS_DB_IMAGE:-postgis/postgis:17-3.4}
     restart: unless-stopped
+    networks:
+      default:
+        aliases:
+          - postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
