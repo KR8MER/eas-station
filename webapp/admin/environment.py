@@ -873,17 +873,22 @@ def register_environment_routes(app, logger):
     @require_permission('system.view_config')
     def environment_settings():
         """Render environment settings management page."""
+        from app_core.auth.roles import has_permission
+
         try:
             location_settings = get_location_settings()
+            can_configure = has_permission('system.configure')
             return render_template(
                 'settings/environment.html',
                 location_settings=location_settings,
+                can_configure=can_configure,
             )
         except Exception as exc:
             logger.error(f'Error rendering environment settings: {exc}')
             return render_template(
                 'settings/environment.html',
                 location_settings=None,
+                can_configure=False,
             )
 
     @app.route('/admin/environment/download-env')
