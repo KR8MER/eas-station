@@ -23,6 +23,38 @@ if [ ! -f "/app/.env" ]; then
     touch /app/.env
 fi
 
+# Initialize persistent .env file if using CONFIG_PATH (persistent volume)
+if [ -n "$CONFIG_PATH" ]; then
+    CONFIG_DIR=$(dirname "$CONFIG_PATH")
+
+    echo "Using persistent config location: $CONFIG_PATH"
+
+    # Create directory if it doesn't exist
+    if [ ! -d "$CONFIG_DIR" ]; then
+        echo "Creating config directory: $CONFIG_DIR"
+        mkdir -p "$CONFIG_DIR"
+    fi
+
+    # Create empty .env file if it doesn't exist
+    if [ ! -f "$CONFIG_PATH" ]; then
+        echo "Initializing persistent .env file at: $CONFIG_PATH"
+        cat > "$CONFIG_PATH" <<'EOF'
+# EAS Station Environment Configuration
+#
+# This file is managed by the Setup Wizard and persists across deployments.
+# Navigate to http://localhost/setup to configure.
+#
+
+EOF
+        chmod 666 "$CONFIG_PATH"
+        echo "✅ Created empty .env file at $CONFIG_PATH"
+    else
+        echo "✅ Using existing .env file at: $CONFIG_PATH ($(stat -f%z "$CONFIG_PATH" 2>/dev/null || stat -c%s "$CONFIG_PATH" 2>/dev/null || echo "unknown") bytes)"
+        # Ensure it's writable
+        chmod 666 "$CONFIG_PATH" 2>/dev/null || echo "⚠️  Warning: Could not set permissions on $CONFIG_PATH"
+    fi
+fi
+
 # Run database migrations with retry logic
 # This is safe to run concurrently - Alembic handles locking
 echo "Running database migrations..."

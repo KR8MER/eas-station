@@ -11,6 +11,8 @@ services:
     env_file:
       - stack.env  # For Portainer Git deployments
       - .env       # For local docker-compose and setup wizard
+    volumes:
+      - app-config:/app-config  # Persistent volume for .env file
     environment:
       # Database connection - external database (change POSTGRES_HOST to your database server)
       POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
@@ -23,6 +25,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:-}
       FLASK_ENV: ${FLASK_ENV:-production}
       FLASK_DEBUG: ${FLASK_DEBUG:-false}
+      CONFIG_PATH: /app-config/.env  # Point to persistent location
 
       # Location defaults
       DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-America/New_York}
@@ -130,3 +133,4 @@ services:
 
 volumes:
   alerts-db-data:
+  app-config:  # Persistent storage for wizard-generated .env file

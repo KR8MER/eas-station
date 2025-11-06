@@ -12,13 +12,20 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
+import os
 
 import secrets
 from dotenv import dotenv_values
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ENV_TEMPLATE_PATH = PROJECT_ROOT / ".env.example"
-ENV_OUTPUT_PATH = PROJECT_ROOT / ".env"
+
+# Use CONFIG_PATH if set (persistent volume), otherwise use default location
+_config_path_override = os.environ.get('CONFIG_PATH')
+if _config_path_override:
+    ENV_OUTPUT_PATH = Path(_config_path_override)
+else:
+    ENV_OUTPUT_PATH = PROJECT_ROOT / ".env"
 
 # Known placeholder values that should never be persisted as SECRET_KEY.
 PLACEHOLDER_SECRET_VALUES = {
