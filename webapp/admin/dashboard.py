@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app_core.extensions import db
 from app_core.models import AdminUser, Boundary, CAPAlert, EASMessage, SystemLog
+from app_core.auth.roles import Role
 from app_core.alerts import get_active_alerts_query, get_expired_alerts_query
 from app_core.location import get_location_settings
 from app_core.zones import build_county_forecast_zone_map
@@ -187,8 +188,14 @@ def register_dashboard_routes(app, logger, eas_config):
         if existing:
             return jsonify({'error': 'Username already exists.'}), 400
 
+        # Get the admin role to assign to the new user
+        admin_role = Role.query.filter_by(name='admin').first()
+        if not admin_role:
+            return jsonify({'error': 'Admin role not found. Database may not be properly initialized.'}), 500
+
         new_user = AdminUser(username=username)
         new_user.set_password(password)
+        new_user.role_id = admin_role.id
         db.session.add(new_user)
         db.session.add(SystemLog(
             level='INFO',
