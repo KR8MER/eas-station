@@ -1,0 +1,911 @@
+{% extends "base.html" %}
+
+{% block title %}Custom Display Screens - EAS Station{% endblock %}
+
+{% block nav_title %}Custom Display Screens{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Custom screens management styles */
+.screen-card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.screen-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="dark"] .screen-card:hover {
+    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.05);
+}
+
+.screen-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.screen-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.badge-led {
+    background-color: #17a2b8;
+    color: white;
+}
+
+.badge-vfd {
+    background-color: #6f42c1;
+    color: white;
+}
+
+.badge-enabled {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.badge-disabled {
+    background-color: #6c757d;
+    color: white;
+}
+
+.screen-stats {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-top: 0.75rem;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-screen-action {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+}
+
+.preview-container {
+    background: #000;
+    color: #0f0;
+    font-family: 'Courier New', monospace;
+    padding: 1rem;
+    border-radius: 4px;
+    margin-top: 1rem;
+    min-height: 100px;
+}
+
+.vfd-preview {
+    background: #1a1a1a;
+    color: #00ff88;
+    border: 2px solid #333;
+}
+
+.rotation-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem;
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+}
+
+.rotation-order {
+    font-weight: bold;
+    color: var(--primary-color);
+    min-width: 30px;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-secondary);
+}
+
+.empty-state i {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    opacity: 0.3;
+}
+
+.tab-pane {
+    padding-top: 1.5rem;
+}
+
+.json-editor {
+    font-family: 'Courier New', monospace;
+    font-size: 0.875rem;
+    min-height: 200px;
+}
+
+.help-text {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-top: 0.5rem;
+}
+
+.priority-badge {
+    padding: 0.125rem 0.5rem;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.priority-0 { background-color: #dc3545; color: white; }
+.priority-1 { background-color: #fd7e14; color: white; }
+.priority-2 { background-color: #0dcaf0; color: white; }
+.priority-3 { background-color: #6c757d; color: white; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1><i class="fas fa-display"></i> Custom Display Screens</h1>
+                    <p class="text-muted">
+                        Manage dynamic content templates for LED signs and VFD displays
+                    </p>
+                </div>
+                <div>
+                    <button class="btn btn-primary" onclick="showCreateScreenModal()">
+                        <i class="fas fa-plus"></i> Create Screen
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <ul class="nav nav-tabs mb-4" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="screens-tab" data-bs-toggle="tab" data-bs-target="#screens-pane" type="button" role="tab">
+                <i class="fas fa-list"></i> Screens
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="rotations-tab" data-bs-toggle="tab" data-bs-target="#rotations-pane" type="button" role="tab">
+                <i class="fas fa-sync"></i> Rotations
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="docs-tab" data-bs-toggle="tab" data-bs-target="#docs-pane" type="button" role="tab">
+                <i class="fas fa-book"></i> Documentation
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- Screens Tab -->
+        <div class="tab-pane fade show active" id="screens-pane" role="tabpanel">
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <input type="text" class="form-control" id="screen-search" placeholder="Search screens...">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" id="display-type-filter">
+                        <option value="">All Display Types</option>
+                        <option value="led">LED Only</option>
+                        <option value="vfd">VFD Only</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" id="enabled-filter">
+                        <option value="">All Screens</option>
+                        <option value="true">Enabled Only</option>
+                        <option value="false">Disabled Only</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="screens-list">
+                <div class="empty-state">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>Loading screens...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rotations Tab -->
+        <div class="tab-pane fade" id="rotations-pane" role="tabpanel">
+            <div class="row mb-3">
+                <div class="col-12">
+                    <button class="btn btn-primary" onclick="showCreateRotationModal()">
+                        <i class="fas fa-plus"></i> Create Rotation
+                    </button>
+                </div>
+            </div>
+
+            <div id="rotations-list">
+                <div class="empty-state">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>Loading rotations...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Documentation Tab -->
+        <div class="tab-pane fade" id="docs-pane" role="tabpanel">
+            <div class="card">
+                <div class="card-body">
+                    <h3><i class="fas fa-book"></i> Custom Screens Documentation</h3>
+                    <p class="lead">Create dynamic display templates with API data integration.</p>
+
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Quick Start:</strong> Click "Create Screen" to build a custom template. Choose LED or VFD, add data sources, and define your layout.
+                        For complete documentation, see <a href="/static/docs/guides/CUSTOM_DISPLAY_SCREENS.md" target="_blank">Custom Display Screens Guide</a>.
+                    </div>
+
+                    <h4><i class="fas fa-code"></i> Template Variables</h4>
+                    <p>Use these variables in your screen templates:</p>
+
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Variable</th>
+                                <th>Description</th>
+                                <th>Example</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>{status.status}</code></td>
+                                <td>System health status</td>
+                                <td>healthy, warning, critical</td>
+                            </tr>
+                            <tr>
+                                <td><code>{status.active_alerts_count}</code></td>
+                                <td>Number of active alerts</td>
+                                <td>3</td>
+                            </tr>
+                            <tr>
+                                <td><code>{status.system_resources.cpu_usage_percent}</code></td>
+                                <td>CPU usage percentage</td>
+                                <td>45.2</td>
+                            </tr>
+                            <tr>
+                                <td><code>{alerts.features[0].properties.event}</code></td>
+                                <td>Latest alert event type</td>
+                                <td>Tornado Warning</td>
+                            </tr>
+                            <tr>
+                                <td><code>{now.time}</code></td>
+                                <td>Current time (12-hour)</td>
+                                <td>03:45 PM</td>
+                            </tr>
+                            <tr>
+                                <td><code>{now.date}</code></td>
+                                <td>Current date</td>
+                                <td>11/06/2025</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h4><i class="fas fa-database"></i> Available Data Sources</h4>
+                    <ul>
+                        <li><code>/api/system_status</code> - System health and resources</li>
+                        <li><code>/api/alerts</code> - Active emergency alerts</li>
+                        <li><code>/api/monitoring/radio</code> - Radio receiver status</li>
+                        <li><code>/health</code> - Basic health check</li>
+                        <li><code>/version</code> - System version info</li>
+                    </ul>
+
+                    <h4><i class="fas fa-tv"></i> LED Screen Example</h4>
+                    <pre class="bg-dark text-light p-3 rounded"><code>{
+  "lines": [
+    "SYSTEM STATUS",
+    "Health: {status.status}",
+    "CPU: {status.system_resources.cpu_usage_percent}%",
+    "Alerts: {status.active_alerts_count}"
+  ],
+  "color": "GREEN",
+  "mode": "HOLD",
+  "speed": "SPEED_3"
+}</code></pre>
+
+                    <h4><i class="fas fa-desktop"></i> VFD Screen Example (VU Meters)</h4>
+                    <pre class="bg-dark text-light p-3 rounded"><code>{
+  "elements": [
+    {
+      "type": "text",
+      "x": 2,
+      "y": 1,
+      "text": "SYSTEM RESOURCES"
+    },
+    {
+      "type": "progress_bar",
+      "x": 10,
+      "y": 8,
+      "width": 120,
+      "height": 6,
+      "value": "{status.system_resources.cpu_usage_percent}",
+      "label": "CPU"
+    }
+  ]
+}</code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create/Edit Screen Modal -->
+<div class="modal fade" id="screenModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="screenModalTitle">Create Screen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="screenForm">
+                    <input type="hidden" id="screen-id">
+
+                    <div class="mb-3">
+                        <label for="screen-name" class="form-label">Screen Name *</label>
+                        <input type="text" class="form-control" id="screen-name" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="screen-description" class="form-label">Description</label>
+                        <textarea class="form-control" id="screen-description" rows="2"></textarea>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="screen-display-type" class="form-label">Display Type *</label>
+                            <select class="form-select" id="screen-display-type" required>
+                                <option value="led">LED Sign</option>
+                                <option value="vfd">VFD Display</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="screen-enabled" class="form-label">Status</label>
+                            <select class="form-select" id="screen-enabled">
+                                <option value="true">Enabled</option>
+                                <option value="false">Disabled</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="screen-priority" class="form-label">Priority</label>
+                            <select class="form-select" id="screen-priority">
+                                <option value="0">Emergency (0)</option>
+                                <option value="1">High (1)</option>
+                                <option value="2" selected>Normal (2)</option>
+                                <option value="3">Low (3)</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="screen-refresh" class="form-label">Refresh (sec)</label>
+                            <input type="number" class="form-control" id="screen-refresh" value="30" min="1">
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label for="screen-duration" class="form-label">Duration (sec)</label>
+                            <input type="number" class="form-control" id="screen-duration" value="10" min="1">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="screen-template" class="form-label">Template Data (JSON) *</label>
+                        <textarea class="form-control json-editor" id="screen-template" rows="8" required></textarea>
+                        <div class="help-text">
+                            Enter JSON template. Example: {"lines": ["Line 1", "Line 2"], "color": "GREEN"}
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="screen-sources" class="form-label">Data Sources (JSON)</label>
+                        <textarea class="form-control json-editor" id="screen-sources" rows="4"></textarea>
+                        <div class="help-text">
+                            Example: [{"endpoint": "/api/system_status", "var_name": "status"}]
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveScreen()">Save Screen</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create/Edit Rotation Modal -->
+<div class="modal fade" id="rotationModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="rotationModalTitle">Create Rotation</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="rotationForm">
+                    <input type="hidden" id="rotation-id">
+
+                    <div class="mb-3">
+                        <label for="rotation-name" class="form-label">Rotation Name *</label>
+                        <input type="text" class="form-control" id="rotation-name" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="rotation-description" class="form-label">Description</label>
+                        <textarea class="form-control" id="rotation-description" rows="2"></textarea>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="rotation-display-type" class="form-label">Display Type *</label>
+                            <select class="form-select" id="rotation-display-type" required onchange="loadScreensForRotation()">
+                                <option value="led">LED Sign</option>
+                                <option value="vfd">VFD Display</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="rotation-enabled" class="form-label">Status</label>
+                            <select class="form-select" id="rotation-enabled">
+                                <option value="true">Enabled</option>
+                                <option value="false">Disabled</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="rotation-randomize">
+                        <label class="form-check-label" for="rotation-randomize">
+                            Randomize screen order
+                        </label>
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="rotation-skip-alert" checked>
+                        <label class="form-check-label" for="rotation-skip-alert">
+                            Pause rotation when alerts are active
+                        </label>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Screen Sequence</label>
+                        <div id="rotation-screens-list" class="mb-2"></div>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="addScreenToRotation()">
+                            <i class="fas fa-plus"></i> Add Screen
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveRotation()">Save Rotation</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let allScreens = [];
+let allRotations = [];
+let availableScreensForRotation = [];
+
+// Load screens on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadScreens();
+    loadRotations();
+});
+
+// Load all screens
+function loadScreens() {
+    fetch('/api/screens')
+        .then(response => response.json())
+        .then(data => {
+            allScreens = data.screens || [];
+            renderScreens();
+        })
+        .catch(error => {
+            console.error('Error loading screens:', error);
+            document.getElementById('screens-list').innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-exclamation-triangle text-warning"></i>
+                    <p>Error loading screens</p>
+                </div>
+            `;
+        });
+}
+
+// Render screens list
+function renderScreens() {
+    const searchTerm = document.getElementById('screen-search')?.value.toLowerCase() || '';
+    const displayTypeFilter = document.getElementById('display-type-filter')?.value || '';
+    const enabledFilter = document.getElementById('enabled-filter')?.value || '';
+
+    let filtered = allScreens.filter(screen => {
+        const matchesSearch = !searchTerm ||
+            screen.name.toLowerCase().includes(searchTerm) ||
+            (screen.description && screen.description.toLowerCase().includes(searchTerm));
+
+        const matchesType = !displayTypeFilter || screen.display_type === displayTypeFilter;
+
+        const matchesEnabled = !enabledFilter ||
+            (enabledFilter === 'true' && screen.enabled) ||
+            (enabledFilter === 'false' && !screen.enabled);
+
+        return matchesSearch && matchesType && matchesEnabled;
+    });
+
+    const container = document.getElementById('screens-list');
+
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-display"></i>
+                <p>No screens found</p>
+                <button class="btn btn-primary mt-3" onclick="showCreateScreenModal()">
+                    <i class="fas fa-plus"></i> Create Your First Screen
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = filtered.map(screen => `
+        <div class="screen-card">
+            <div class="screen-header">
+                <div>
+                    <h5 class="mb-1">
+                        <span class="screen-badge badge-${screen.display_type}">${screen.display_type.toUpperCase()}</span>
+                        ${screen.name}
+                        <span class="screen-badge badge-${screen.enabled ? 'enabled' : 'disabled'}">
+                            ${screen.enabled ? 'Enabled' : 'Disabled'}
+                        </span>
+                        <span class="priority-badge priority-${screen.priority}">
+                            P${screen.priority}
+                        </span>
+                    </h5>
+                    ${screen.description ? `<p class="text-muted mb-0">${screen.description}</p>` : ''}
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-primary" onclick="displayScreen(${screen.id})">
+                        <i class="fas fa-play"></i> Display
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="editScreen(${screen.id})">
+                        <i class="fas fa-edit"></i> Edit
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteScreen(${screen.id}, '${screen.name}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="screen-stats">
+                <div class="stat-item">
+                    <i class="fas fa-clock"></i>
+                    <span>Refresh: ${screen.refresh_interval}s</span>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-hourglass-half"></i>
+                    <span>Duration: ${screen.duration}s</span>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Displayed: ${screen.display_count || 0} times</span>
+                </div>
+                ${screen.last_displayed_at ? `
+                <div class="stat-item">
+                    <i class="fas fa-calendar"></i>
+                    <span>Last: ${new Date(screen.last_displayed_at).toLocaleString()}</span>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+// Load rotations
+function loadRotations() {
+    fetch('/api/rotations')
+        .then(response => response.json())
+        .then(data => {
+            allRotations = data.rotations || [];
+            renderRotations();
+        })
+        .catch(error => {
+            console.error('Error loading rotations:', error);
+            document.getElementById('rotations-list').innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-exclamation-triangle text-warning"></i>
+                    <p>Error loading rotations</p>
+                </div>
+            `;
+        });
+}
+
+// Render rotations
+function renderRotations() {
+    const container = document.getElementById('rotations-list');
+
+    if (allRotations.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-sync"></i>
+                <p>No rotations configured</p>
+                <button class="btn btn-primary mt-3" onclick="showCreateRotationModal()">
+                    <i class="fas fa-plus"></i> Create First Rotation
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = allRotations.map(rotation => `
+        <div class="screen-card">
+            <div class="screen-header">
+                <div>
+                    <h5 class="mb-1">
+                        <span class="screen-badge badge-${rotation.display_type}">${rotation.display_type.toUpperCase()}</span>
+                        ${rotation.name}
+                        <span class="screen-badge badge-${rotation.enabled ? 'enabled' : 'disabled'}">
+                            ${rotation.enabled ? 'Active' : 'Inactive'}
+                        </span>
+                    </h5>
+                    ${rotation.description ? `<p class="text-muted mb-0">${rotation.description}</p>` : ''}
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="editRotation(${rotation.id})">
+                        <i class="fas fa-edit"></i> Edit
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteRotation(${rotation.id}, '${rotation.name}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="mt-2">
+                <strong><i class="fas fa-list-ol"></i> Screen Sequence (${rotation.screens.length} screens):</strong>
+                ${rotation.screens.map((item, idx) => `
+                    <div class="rotation-item mt-1">
+                        <span class="rotation-order">${idx + 1}.</span>
+                        <span>Screen ID: ${item.screen_id}</span>
+                        <span class="ms-auto">${item.duration}s</span>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="screen-stats mt-2">
+                ${rotation.randomize ? '<div class="stat-item"><i class="fas fa-random"></i> Randomized</div>' : ''}
+                ${rotation.skip_on_alert ? '<div class="stat-item"><i class="fas fa-pause"></i> Pauses on alerts</div>' : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+// Show create screen modal
+function showCreateScreenModal() {
+    document.getElementById('screenModalTitle').textContent = 'Create Screen';
+    document.getElementById('screenForm').reset();
+    document.getElementById('screen-id').value = '';
+    document.getElementById('screen-template').value = '{\n  "lines": ["Line 1", "Line 2"],\n  "color": "GREEN",\n  "mode": "HOLD"\n}';
+    document.getElementById('screen-sources').value = '[{"endpoint": "/api/system_status", "var_name": "status"}]';
+    new bootstrap.Modal(document.getElementById('screenModal')).show();
+}
+
+// Save screen
+function saveScreen() {
+    const id = document.getElementById('screen-id').value;
+    const isEdit = !!id;
+
+    try {
+        const data = {
+            name: document.getElementById('screen-name').value,
+            description: document.getElementById('screen-description').value,
+            display_type: document.getElementById('screen-display-type').value,
+            enabled: document.getElementById('screen-enabled').value === 'true',
+            priority: parseInt(document.getElementById('screen-priority').value),
+            refresh_interval: parseInt(document.getElementById('screen-refresh').value),
+            duration: parseInt(document.getElementById('screen-duration').value),
+            template_data: JSON.parse(document.getElementById('screen-template').value),
+            data_sources: JSON.parse(document.getElementById('screen-sources').value || '[]')
+        };
+
+        const url = isEdit ? `/api/screens/${id}` : '/api/screens';
+        const method = isEdit ? 'PUT' : 'POST';
+
+        fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.error) {
+                showToast(result.error, 'error');
+            } else {
+                showToast(`Screen ${isEdit ? 'updated' : 'created'} successfully`, 'success');
+                bootstrap.Modal.getInstance(document.getElementById('screenModal')).hide();
+                loadScreens();
+            }
+        })
+        .catch(error => {
+            showToast('Error saving screen: ' + error, 'error');
+        });
+
+    } catch (error) {
+        showToast('Invalid JSON: ' + error.message, 'error');
+    }
+}
+
+// Display screen immediately
+function displayScreen(id) {
+    if (!confirm('Display this screen now?')) return;
+
+    fetch(`/api/screens/${id}/display`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            showToast(data.error, 'error');
+        } else {
+            showToast('Screen displayed successfully', 'success');
+            loadScreens();
+        }
+    })
+    .catch(error => {
+        showToast('Error displaying screen: ' + error, 'error');
+    });
+}
+
+// Delete screen
+function deleteScreen(id, name) {
+    if (!confirm(`Delete screen "${name}"?`)) return;
+
+    fetch(`/api/screens/${id}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        showToast('Screen deleted successfully', 'success');
+        loadScreens();
+    })
+    .catch(error => {
+        showToast('Error deleting screen: ' + error, 'error');
+    });
+}
+
+// Show create rotation modal
+function showCreateRotationModal() {
+    document.getElementById('rotationModalTitle').textContent = 'Create Rotation';
+    document.getElementById('rotationForm').reset();
+    document.getElementById('rotation-id').value = '';
+    document.getElementById('rotation-screens-list').innerHTML = '';
+    loadScreensForRotation();
+    new bootstrap.Modal(document.getElementById('rotationModal')).show();
+}
+
+// Load screens for rotation picker
+function loadScreensForRotation() {
+    const displayType = document.getElementById('rotation-display-type').value;
+    fetch(`/api/screens?display_type=${displayType}&enabled=true`)
+        .then(response => response.json())
+        .then(data => {
+            availableScreensForRotation = data.screens || [];
+        });
+}
+
+// Add screen to rotation
+function addScreenToRotation() {
+    const container = document.getElementById('rotation-screens-list');
+    const index = container.children.length;
+
+    const item = document.createElement('div');
+    item.className = 'rotation-item mb-2';
+    item.innerHTML = `
+        <span class="rotation-order">${index + 1}.</span>
+        <select class="form-select form-select-sm" style="flex: 1;" required>
+            <option value="">Select screen...</option>
+            ${availableScreensForRotation.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+        </select>
+        <input type="number" class="form-control form-control-sm" placeholder="Duration (sec)" value="10" min="1" style="width: 120px;">
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.parentElement.remove()">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    container.appendChild(item);
+}
+
+// Save rotation
+function saveRotation() {
+    const id = document.getElementById('rotation-id').value;
+    const isEdit = !!id;
+
+    const screensItems = document.querySelectorAll('#rotation-screens-list .rotation-item');
+    const screens = Array.from(screensItems).map(item => ({
+        screen_id: parseInt(item.querySelector('select').value),
+        duration: parseInt(item.querySelector('input').value)
+    }));
+
+    if (screens.length === 0) {
+        showToast('Add at least one screen to the rotation', 'error');
+        return;
+    }
+
+    const data = {
+        name: document.getElementById('rotation-name').value,
+        description: document.getElementById('rotation-description').value,
+        display_type: document.getElementById('rotation-display-type').value,
+        enabled: document.getElementById('rotation-enabled').value === 'true',
+        screens: screens,
+        randomize: document.getElementById('rotation-randomize').checked,
+        skip_on_alert: document.getElementById('rotation-skip-alert').checked
+    };
+
+    const url = isEdit ? `/api/rotations/${id}` : '/api/rotations';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.error) {
+            showToast(result.error, 'error');
+        } else {
+            showToast(`Rotation ${isEdit ? 'updated' : 'created'} successfully`, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('rotationModal')).hide();
+            loadRotations();
+        }
+    })
+    .catch(error => {
+        showToast('Error saving rotation: ' + error, 'error');
+    });
+}
+
+// Delete rotation
+function deleteRotation(id, name) {
+    if (!confirm(`Delete rotation "${name}"?`)) return;
+
+    fetch(`/api/rotations/${id}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        showToast('Rotation deleted successfully', 'success');
+        loadRotations();
+    })
+    .catch(error => {
+        showToast('Error deleting rotation: ' + error, 'error');
+    });
+}
+
+// Add event listeners for filters
+document.getElementById('screen-search')?.addEventListener('input', renderScreens);
+document.getElementById('display-type-filter')?.addEventListener('change', renderScreens);
+document.getElementById('enabled-filter')?.addEventListener('change', renderScreens);
+</script>
+{% endblock %}
