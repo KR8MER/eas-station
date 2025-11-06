@@ -12,8 +12,8 @@ docs_dir: docs
 theme:
   name: material
   language: en
-  logo: static/img/eas-station-logo.svg
-  favicon: static/img/eas-station-logo.svg
+  logo: static/img/eas-system-wordmark.svg
+  favicon: static/img/eas-system-wordmark.svg
   palette:
     # Light mode
     - media: "(prefers-color-scheme: light)"

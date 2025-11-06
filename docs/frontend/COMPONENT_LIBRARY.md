@@ -56,7 +56,7 @@ The primary navigation provides access to main application areas.
   <div class="container-fluid">
     <!-- Logo and Brand -->
     <a class="navbar-brand" href="/">
-      <img src="/static/img/eas-station-logo.svg" alt="EAS Station" height="32">
+      <img src="/static/img/eas-system-wordmark.svg" alt="EAS Station" height="32">
       <span class="brand-text">EAS Station</span>
     </a>
 

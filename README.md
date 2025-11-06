@@ -1,4 +1,4 @@
-# <img src="static/img/eas-station-logo.svg" alt="EAS Station" width="48" height="48" style="vertical-align: middle;"> EAS Station
+# <img src="static/img/eas-system-wordmark.svg" alt="EAS Station" width="48" height="48" style="vertical-align: middle;"> EAS Station
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/docker-supported-blue.svg)](https://www.docker.com/)
@@ -251,7 +251,7 @@ Professional flowcharts and block diagrams illustrating system architecture and 
 <table>
 <tr>
 <td width="50%">
-<img src="static/img/eas-station-logo.svg" alt="Dashboard" />
+<img src="static/img/eas-system-wordmark.svg" alt="Dashboard" />
 <p align="center"><em>Main Dashboard</em></p>
 </td>
 <td width="50%">
