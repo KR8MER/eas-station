@@ -36,9 +36,6 @@ services:
       - SYS_RAWIO
     security_opt:
       - no-new-privileges:true
-    volumes:
-      # Mount .env file so setup wizard can persist configuration
-      - ./.env:/app/.env
 
   poller:
     image: eas-station:latest
