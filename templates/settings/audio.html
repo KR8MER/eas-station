@@ -129,20 +129,20 @@
 <div class="modal fade" id="addSourceModal" tabindex="-1" aria-labelledby="audioSourceModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
-            <form id="audioSourceForm">
+            <form id="addSourceForm">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="audioSourceModalLabel">Audio Source</h5>
+                    <h5 class="modal-title" id="audioSourceModalLabel">Add Audio Source</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <input type="hidden" id="sourceName" name="name">
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label for="sourceDisplayName" class="form-label">Display Name</label>
-                            <input type="text" class="form-control" id="sourceDisplayName" name="display_name" required>
+                            <label for="sourceName" class="form-label">Source Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="sourceName" name="name" required>
+                            <small class="form-text text-muted">Unique identifier for this source</small>
                         </div>
                         <div class="col-md-6">
-                            <label for="sourceType" class="form-label">Source Type</label>
+                            <label for="sourceType" class="form-label">Source Type <span class="text-danger">*</span></label>
                             <select class="form-select" id="sourceType" name="type" required>
                                 <option value="">Select type...</option>
                                 <option value="sdr">SDR (Software-Defined Radio)</option>
@@ -153,44 +153,34 @@
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label for="sourceSampleRate" class="form-label">Sample Rate (Hz)</label>
-                            <input type="number" class="form-control" id="sourceSampleRate" name="sample_rate" value="44100" min="8000" max="192000" step="1" required>
+                            <label for="sampleRate" class="form-label">Sample Rate (Hz) <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="sampleRate" name="sample_rate" value="44100" min="8000" max="192000" step="1" required>
                         </div>
                         <div class="col-md-6">
-                            <label for="sourceChannels" class="form-label">Channels</label>
-                            <select class="form-select" id="sourceChannels" name="channels">
+                            <label for="channels" class="form-label">Channels <span class="text-danger">*</span></label>
+                            <select class="form-select" id="channels" name="channels">
                                 <option value="1" selected>Mono (1)</option>
                                 <option value="2">Stereo (2)</option>
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label for="sourcePriority" class="form-label">Priority</label>
-                            <input type="number" class="form-control" id="sourcePriority" name="priority" value="100" min="1" max="1000">
-                            <small class="form-text text-muted">Lower numbers = higher priority</small>
+                            <label for="silenceThreshold" class="form-label">Silence Threshold (dBFS)</label>
+                            <input type="number" class="form-control" id="silenceThreshold" name="silence_threshold_db" value="-60" step="1">
+                            <small class="form-text text-muted">Audio level below which silence is detected</small>
                         </div>
                         <div class="col-md-6">
-                            <label for="sourceSilenceThreshold" class="form-label">Silence Threshold (dBFS)</label>
-                            <input type="number" class="form-control" id="sourceSilenceThreshold" name="silence_threshold_db" value="-60" step="1">
+                            <label for="silenceDuration" class="form-label">Silence Duration (seconds)</label>
+                            <input type="number" class="form-control" id="silenceDuration" name="silence_duration_seconds" value="5" min="1" step="1">
+                            <small class="form-text text-muted">How long silence must persist before alert</small>
                         </div>
 
                         <!-- Device-specific parameters -->
-                        <div id="deviceParamsContainer" class="col-12"></div>
-
-                        <div class="col-md-6 d-flex align-items-center gap-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="sourceEnabled" name="enabled" checked>
-                                <label class="form-check-label" for="sourceEnabled">Enabled</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="sourceAutoStart" name="auto_start">
-                                <label class="form-check-label" for="sourceAutoStart">Auto-start</label>
-                            </div>
-                        </div>
+                        <div id="sourceTypeConfig" class="col-12"></div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary" id="saveSourceBtn">Save Source</button>
+                    <button type="button" class="btn btn-primary" onclick="addAudioSource()">Add Source</button>
                 </div>
             </form>
         </div>
