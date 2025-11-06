@@ -214,7 +214,7 @@
             </div>
         </div>
 
-        {% if not has_permission('system.configure') %}
+        {% if current_user and not has_permission('system.configure') %}
         <div class="alert alert-warning">
             <i class="fas fa-eye"></i>
             <strong>Read-Only Mode:</strong> You have view-only access to environment settings. All fields are disabled. Contact your administrator to request the <code>system.configure</code> permission if you need to make changes.
@@ -245,6 +245,16 @@
 
 {% block extra_js %}
 <script>
+    // Debug logging
+    console.log('Environment settings page loading...');
+    {% if current_user %}
+    console.log('Current user:', {{ current_user.username|tojson }});
+    console.log('User role:', {{ current_user.role.name|tojson if current_user.role else 'null' }});
+    {% else %}
+    console.log('No current user');
+    {% endif %}
+    console.log('Has configure permission:', {{ 'true' if current_user and has_permission('system.configure') else 'false' }});
+
     // Ensure required utility functions are available
     if (typeof showLoading !== 'function' || typeof hideLoading !== 'function' || typeof showToast !== 'function') {
         console.error('Required utility functions are not available. Check that loading-error-utils.js is loaded.');
@@ -257,7 +267,9 @@
     let categoriesData = {};
     let currentValues = {};
     let hasChanges = false;
-    const canEdit = {{ 'true' if has_permission('system.configure') else 'false' }};
+    // Default to true (editable) for administrators
+    const canEdit = {{ 'true' if current_user and has_permission('system.configure') else 'false' }};
+    console.log('canEdit =', canEdit);
 
     // Load categories and variables on page load
     async function loadSettings() {
