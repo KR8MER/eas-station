@@ -365,6 +365,84 @@ def register(app: Flask, logger) -> None:
             # Don't leak sensitive exception details to client
             return jsonify({"error": "Failed to generate waveform data"}), 500
 
+    @app.route("/api/radio/stream/check/<int:receiver_id>", methods=["GET"])
+    def api_check_stream_connection(receiver_id: int) -> Any:
+        """Check if a stream receiver's URL is reachable."""
+        try:
+            receiver = RadioReceiver.query.get_or_404(receiver_id)
+
+            # Only check stream-type receivers
+            if receiver.source_type != "stream":
+                return jsonify({"error": "Receiver is not a stream type"}), 400
+
+            if not receiver.stream_url:
+                return jsonify({"error": "No stream URL configured"}), 400
+
+            # Try to check stream connectivity
+            try:
+                import requests
+                from urllib.parse import urlparse
+
+                # Validate URL
+                parsed = urlparse(receiver.stream_url)
+                if parsed.scheme not in ('http', 'https'):
+                    return jsonify({
+                        "receiver_id": receiver_id,
+                        "connected": False,
+                        "status": "invalid_url",
+                        "message": "Invalid URL scheme (must be http or https)",
+                        "url": receiver.stream_url
+                    })
+
+                # Try HEAD request first (lighter weight)
+                try:
+                    response = requests.head(receiver.stream_url, timeout=5, allow_redirects=True)
+                    status_code = response.status_code
+                    connected = 200 <= status_code < 400
+                except requests.exceptions.RequestException:
+                    # If HEAD fails, try GET with minimal data
+                    try:
+                        response = requests.get(receiver.stream_url, timeout=5, stream=True, allow_redirects=True)
+                        status_code = response.status_code
+                        connected = 200 <= status_code < 400
+                        response.close()
+                    except requests.exceptions.RequestException as e:
+                        return jsonify({
+                            "receiver_id": receiver_id,
+                            "connected": False,
+                            "status": "connection_failed",
+                            "message": str(e),
+                            "url": receiver.stream_url
+                        })
+
+                if connected:
+                    content_type = response.headers.get('Content-Type', 'unknown')
+                    return jsonify({
+                        "receiver_id": receiver_id,
+                        "connected": True,
+                        "status": "reachable",
+                        "status_code": status_code,
+                        "content_type": content_type,
+                        "message": "Stream URL is reachable",
+                        "url": receiver.stream_url
+                    })
+                else:
+                    return jsonify({
+                        "receiver_id": receiver_id,
+                        "connected": False,
+                        "status": "http_error",
+                        "status_code": status_code,
+                        "message": f"HTTP {status_code}",
+                        "url": receiver.stream_url
+                    })
+
+            except ImportError:
+                return jsonify({"error": "Requests library not available"}), 503
+
+        except Exception as exc:
+            route_logger.error("Failed to check stream connection for receiver %s: %s", receiver_id, exc)
+            return jsonify({"error": "Failed to check stream connection"}), 500
+
     @app.route("/api/monitoring/radio", methods=["GET"])
     def api_monitoring_radio() -> Any:
         """Get monitoring status for all radio receivers (includes latest status updates)."""

@@ -6,8 +6,8 @@
 <div class="container py-4">
     <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between mb-4">
         <div>
-            <h1 class="h3 mb-1">Multi-SDR Receiver Configuration</h1>
-            <p class="text-muted mb-0">Manage USB SDR front-ends used for SAME captures and monitoring.</p>
+            <h1 class="h3 mb-1">Radio Receiver Configuration</h1>
+            <p class="text-muted mb-0">Manage SDR hardware receivers and internet stream sources for SAME monitoring.</p>
         </div>
         <button class="btn btn-primary mt-3 mt-md-0" id="addReceiverBtn">
             <i class="fas fa-plus"></i> Add Receiver
@@ -17,11 +17,11 @@
     <div class="alert alert-info" role="alert">
         <div class="d-flex">
             <div class="me-3">
-                <i class="fas fa-plug fa-lg"></i>
+                <i class="fas fa-broadcast-tower fa-lg"></i>
             </div>
             <div>
-                <strong>Hardware tip:</strong> map your USB interfaces into the container without privileged mode. Follow the
-                <a href="{{ url_for('static', filename='docs/radio_usb_passthrough.html') }}" target="_blank" rel="noopener">USB passthrough guide</a>
+                <strong>Source Types:</strong> Configure SDR hardware devices (RTL-SDR, Airspy) for direct RF monitoring, or add internet stream sources (HTTP/M3U) for remote monitoring.
+                For SDR hardware setup, follow the <a href="{{ url_for('static', filename='docs/radio_usb_passthrough.html') }}" target="_blank" rel="noopener">USB passthrough guide</a>
                 to expose <code>/dev/bus/usb</code> safely.
             </div>
         </div>
@@ -114,8 +114,8 @@
                     <div class="d-flex align-items-center mb-3">
                         <div class="display-6 fw-bold text-success me-3" id="summaryLocked">0</div>
                         <div>
-                            <div class="fw-semibold">Locked</div>
-                            <div class="text-muted small">Reporting carrier lock / valid samples.</div>
+                            <div class="fw-semibold">Connected/Locked</div>
+                            <div class="text-muted small">SDR receivers with signal lock or streams connected.</div>
                         </div>
                     </div>
                     <div class="d-flex align-items-center">
@@ -487,7 +487,21 @@
         return numeric.toLocaleString();
     }
 
-    function renderStatusBadge(status) {
+    function renderStatusBadge(receiver) {
+        const status = receiver.latest_status;
+        const isStream = receiver.source_type === 'stream';
+
+        // For stream receivers without status, show a stream-specific placeholder
+        if (!status && isStream) {
+            return `
+                <span class="badge bg-info" id="stream-status-${receiver.id}">
+                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    Checking...
+                </span>
+            `;
+        }
+
+        // For SDR receivers without status, show the traditional message
         if (!status) {
             return '<span class="badge bg-secondary">No samples</span>';
         }
@@ -525,6 +539,39 @@
             ${error}
             ${timestamp}
         `;
+    }
+
+    async function checkStreamConnection(receiver) {
+        try {
+            const response = await fetch(`/api/radio/stream/check/${receiver.id}`);
+            const data = await response.json();
+
+            const statusElement = document.getElementById(`stream-status-${receiver.id}`);
+            if (!statusElement) {
+                return;
+            }
+
+            if (data.connected) {
+                statusElement.className = 'badge bg-success';
+                statusElement.innerHTML = `
+                    <i class="fas fa-check-circle"></i> Connected
+                    <div class="small mt-1">${escapeHtml(data.content_type)}</div>
+                `;
+            } else {
+                statusElement.className = 'badge bg-danger';
+                statusElement.innerHTML = `
+                    <i class="fas fa-times-circle"></i> Disconnected
+                    <div class="small mt-1">${escapeHtml(data.message)}</div>
+                `;
+            }
+        } catch (error) {
+            console.error(`Failed to check stream connection for receiver ${receiver.id}:`, error);
+            const statusElement = document.getElementById(`stream-status-${receiver.id}`);
+            if (statusElement) {
+                statusElement.className = 'badge bg-warning text-dark';
+                statusElement.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Check failed';
+            }
+        }
     }
 
     function updateSummary() {
@@ -566,9 +613,18 @@
             const row = document.createElement('tr');
             const displayName = escapeHtml(receiver.display_name || '—');
             const identifier = escapeHtml(receiver.identifier || '—');
-            const driver = escapeHtml(receiver.driver || '—');
-            const frequency = formatFrequency(receiver.frequency_hz);
-            const sampleRate = formatSampleRate(receiver.sample_rate);
+            const isStream = receiver.source_type === 'stream';
+
+            // Show different info based on type
+            const driver = isStream
+                ? '<span class="badge bg-info"><i class="fas fa-stream"></i> Stream</span>'
+                : escapeHtml(receiver.driver || '—');
+            const frequency = isStream
+                ? '<span class="text-muted">—</span>'
+                : formatFrequency(receiver.frequency_hz);
+            const sampleRate = isStream && !receiver.sample_rate
+                ? '<span class="text-muted">Auto</span>'
+                : formatSampleRate(receiver.sample_rate);
 
             row.innerHTML = `
                 <td class="fw-semibold">${displayName}</td>
@@ -576,7 +632,7 @@
                 <td>${driver}</td>
                 <td class="text-end">${frequency}</td>
                 <td class="text-end">${sampleRate}</td>
-                <td>${renderStatusBadge(receiver.latest_status)}</td>
+                <td>${renderStatusBadge(receiver)}</td>
                 <td class="text-end">
                     <div class="btn-group btn-group-sm" role="group">
                         <button type="button" class="btn btn-outline-secondary" data-action="edit" data-id="${receiver.id}">
@@ -590,6 +646,11 @@
             `;
 
             tableBody.appendChild(row);
+
+            // For stream receivers without status, check connectivity
+            if (isStream && !receiver.latest_status) {
+                checkStreamConnection(receiver);
+            }
         });
 
         updateSummary();
@@ -752,6 +813,12 @@
             receivers = data;
             renderReceivers();
             setLastUpdated(deriveLatestStatusTimestamp() || new Date());
+
+            // Check stream connections for all stream receivers during refresh
+            receivers.filter(r => r.source_type === 'stream' && !r.latest_status).forEach(receiver => {
+                checkStreamConnection(receiver);
+            });
+
             if (!silent) {
                 setStatus('Receiver status updated.', 'info');
             }
