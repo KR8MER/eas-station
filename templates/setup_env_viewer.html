@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}.env File Viewer - EAS Station{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <div class="card shadow border-0">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <h3 class="mb-0"><i class="fas fa-file-code me-2"></i>.env File Viewer</h3>
+                    <a href="{{ url_for('setup_wizard') }}" class="btn btn-sm btn-light">
+                        <i class="fas fa-arrow-left me-1"></i> Back to Setup
+                    </a>
+                </div>
+                <div class="card-body p-4">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        This page shows the current .env file state for debugging purposes.
+                    </div>
+
+                    <!-- File Information -->
+                    <div class="card mb-4">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>File Information</h5>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-sm mb-0">
+                                <tbody>
+                                    <tr>
+                                        <th style="width: 30%;">File Path:</th>
+                                        <td><code>{{ env_info.path }}</code></td>
+                                    </tr>
+                                    <tr>
+                                        <th>Absolute Path:</th>
+                                        <td><code>{{ env_info.absolute_path }}</code></td>
+                                    </tr>
+                                    <tr>
+                                        <th>Container ID:</th>
+                                        <td><code>{{ env_info.container_id }}</code></td>
+                                    </tr>
+                                    <tr>
+                                        <th>Working Directory:</th>
+                                        <td><code>{{ env_info.working_dir }}</code></td>
+                                    </tr>
+                                    <tr>
+                                        <th>File Exists:</th>
+                                        <td>
+                                            {% if env_info.exists %}
+                                                <span class="badge bg-success">Yes</span>
+                                            {% else %}
+                                                <span class="badge bg-danger">No</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% if env_info.exists %}
+                                    <tr>
+                                        <th>Is File:</th>
+                                        <td>
+                                            {% if env_info.is_file %}
+                                                <span class="badge bg-success">Yes</span>
+                                            {% else %}
+                                                <span class="badge bg-danger">No (Directory!)</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th>File Size:</th>
+                                        <td>{{ env_info.size }} bytes</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Permissions:</th>
+                                        <td><code>{{ env_info.permissions }}</code></td>
+                                    </tr>
+                                    <tr>
+                                        <th>Last Modified:</th>
+                                        <td>{{ env_info.modified }}</td>
+                                    </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- File Content -->
+                    <div class="card">
+                        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="fas fa-file-alt me-2"></i>File Contents</h5>
+                            {% if env_info.exists and env_info.is_file %}
+                            <button class="btn btn-sm btn-outline-light" onclick="copyContent()">
+                                <i class="fas fa-copy me-1"></i> Copy
+                            </button>
+                            {% endif %}
+                        </div>
+                        <div class="card-body p-0">
+                            {% if env_info.exists and env_info.is_file %}
+                            <pre class="bg-dark text-light p-3 mb-0" style="max-height: 600px; overflow-y: auto;"><code id="env-content">{{ env_info.content }}</code></pre>
+                            {% else %}
+                            <div class="p-3">
+                                <div class="alert alert-warning mb-0">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                    {{ env_info.content }}
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Help Section -->
+                    <div class="card mt-4 border-info">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0"><i class="fas fa-question-circle me-2"></i>Troubleshooting</h5>
+                        </div>
+                        <div class="card-body">
+                            <h6>If the file doesn't exist or changes aren't saved:</h6>
+                            <ul>
+                                <li><strong>Check the Container ID</strong> above - make sure you're viewing the same container that's serving the web app</li>
+                                <li><strong>Check logs</strong> - Look for "Successfully wrote .env file" messages in the container logs</li>
+                                <li><strong>Verify write permissions</strong> - The container should have write access to <code>/app/.env</code></li>
+                                <li><strong>Check if it's a directory</strong> - If "Is File" shows "No", the path is a directory, not a file (this is an error)</li>
+                            </ul>
+
+                            <h6 class="mt-3">If configuration doesn't persist across restarts:</h6>
+                            <ul>
+                                <li><strong>Container Restart</strong> - Changes should persist</li>
+                                <li><strong>Container Recreate/Redeploy</strong> - Changes will be lost (use Portainer environment variables for permanent config)</li>
+                                <li>Check the Container ID before and after restart - if it changes, you're recreating (not restarting)</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <a href="{{ url_for('setup_wizard') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left me-2"></i>Back to Setup Wizard
+                        </a>
+                        <button class="btn btn-primary" onclick="location.reload()">
+                            <i class="fas fa-sync me-2"></i>Refresh View
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function copyContent() {
+    const content = document.getElementById('env-content').textContent;
+    navigator.clipboard.writeText(content).then(() => {
+        const btn = event.target.closest('button');
+        const originalHTML = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check me-1"></i> Copied!';
+        btn.classList.remove('btn-outline-light');
+        btn.classList.add('btn-success');
+
+        setTimeout(() => {
+            btn.innerHTML = originalHTML;
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-outline-light');
+        }, 2000);
+    }).catch(err => {
+        alert('Failed to copy: ' + err);
+    });
+}
+</script>
+{% endblock %}
