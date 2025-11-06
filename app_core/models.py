@@ -921,6 +921,117 @@ class GPIOActivationLog(db.Model):
         }
 
 
+class DisplayScreen(db.Model):
+    """Custom screen templates for LED and VFD displays.
+
+    Defines reusable screen layouts with dynamic content populated from API endpoints.
+    Supports conditional display logic and scheduled rotation.
+    """
+    __tablename__ = "display_screens"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Screen identification
+    name = db.Column(db.String(100), nullable=False, unique=True, index=True)
+    description = db.Column(db.Text)
+    display_type = db.Column(db.String(10), nullable=False, index=True)  # 'led' or 'vfd'
+
+    # Screen behavior
+    enabled = db.Column(db.Boolean, default=True, nullable=False)
+    priority = db.Column(db.Integer, default=2)  # 0=emergency, 1=high, 2=normal, 3=low
+    refresh_interval = db.Column(db.Integer, default=30)  # Seconds between data refreshes
+    duration = db.Column(db.Integer, default=10)  # Seconds to display screen in rotation
+
+    # Template configuration (JSON)
+    template_data = db.Column(JSONB, nullable=False)  # Layout, lines, graphics, formatting
+    data_sources = db.Column(JSONB, default=list)  # Array of {endpoint, var_name, params}
+    conditions = db.Column(JSONB)  # Display conditions (if/then/else logic)
+
+    # Timestamps
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    last_displayed_at = db.Column(db.DateTime(timezone=True))
+
+    # Statistics
+    display_count = db.Column(db.Integer, default=0)
+    error_count = db.Column(db.Integer, default=0)
+    last_error = db.Column(db.Text)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert screen to dictionary for API responses."""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'display_type': self.display_type,
+            'enabled': self.enabled,
+            'priority': self.priority,
+            'refresh_interval': self.refresh_interval,
+            'duration': self.duration,
+            'template_data': dict(self.template_data or {}),
+            'data_sources': list(self.data_sources or []),
+            'conditions': dict(self.conditions or {}) if self.conditions else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'last_displayed_at': self.last_displayed_at.isoformat() if self.last_displayed_at else None,
+            'display_count': self.display_count,
+            'error_count': self.error_count,
+            'last_error': self.last_error,
+        }
+
+
+class ScreenRotation(db.Model):
+    """Screen rotation schedule for automatic display cycling.
+
+    Manages ordered sequences of screens that rotate at defined intervals.
+    Can be enabled/disabled and supports different rotations for LED vs VFD.
+    """
+    __tablename__ = "screen_rotations"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Rotation identification
+    name = db.Column(db.String(100), nullable=False, unique=True, index=True)
+    description = db.Column(db.Text)
+    display_type = db.Column(db.String(10), nullable=False, index=True)  # 'led' or 'vfd'
+
+    # Rotation behavior
+    enabled = db.Column(db.Boolean, default=True, nullable=False)
+
+    # Screen sequence (JSON array of screen configurations)
+    # Format: [{"screen_id": 1, "duration": 10}, {"screen_id": 2, "duration": 15}, ...]
+    screens = db.Column(JSONB, nullable=False, default=list)
+
+    # Advanced settings
+    randomize = db.Column(db.Boolean, default=False)  # Randomize screen order
+    skip_on_alert = db.Column(db.Boolean, default=True)  # Skip rotation when alert active
+
+    # Timestamps
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    # Runtime state
+    current_screen_index = db.Column(db.Integer, default=0)
+    last_rotation_at = db.Column(db.DateTime(timezone=True))
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert rotation to dictionary for API responses."""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'display_type': self.display_type,
+            'enabled': self.enabled,
+            'screens': list(self.screens or []),
+            'randomize': self.randomize,
+            'skip_on_alert': self.skip_on_alert,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'current_screen_index': self.current_screen_index,
+            'last_rotation_at': self.last_rotation_at.isoformat() if self.last_rotation_at else None,
+        }
+
+
 __all__ = [
     "Boundary",
     "CAPAlert",
@@ -939,4 +1050,8 @@ __all__ = [
     "AudioAlert",
     "AudioSourceConfigDB",
     "GPIOActivationLog",
+    "DisplayScreen",
+    "ScreenRotation",
+    "VFDDisplay",
+    "VFDStatus",
 ]
