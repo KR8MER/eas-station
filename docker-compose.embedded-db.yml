@@ -22,6 +22,9 @@ services:
         condition: service_healthy
     ports:
       - "80:5000"
+    env_file:
+      - stack.env  # For Portainer Git deployments
+      - .env       # For local docker-compose and setup wizard
     environment:
       # Database connection - embedded database
       POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
@@ -60,6 +63,9 @@ services:
         condition: service_healthy
     command: ["python", "poller/cap_poller.py", "--continuous"]
     restart: unless-stopped
+    env_file:
+      - stack.env  # For Portainer Git deployments
+      - .env       # For local docker-compose and setup wizard
     environment:
       # Database connection - embedded database
       POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
@@ -95,6 +101,9 @@ services:
       - --log-level
       - "${LOG_LEVEL:-INFO}"
     restart: unless-stopped
+    env_file:
+      - stack.env  # For Portainer Git deployments
+      - .env       # For local docker-compose and setup wizard
     environment:
       # Database connection - embedded database
       POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}

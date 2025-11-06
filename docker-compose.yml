@@ -8,6 +8,9 @@ services:
     image: eas-station:latest
     ports:
       - "80:5000"
+    env_file:
+      - stack.env  # For Portainer Git deployments
+      - .env       # For local docker-compose and setup wizard
     environment:
       # Database connection - external database (change POSTGRES_HOST to your database server)
       POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
@@ -43,6 +46,9 @@ services:
       - app
     command: ["python", "poller/cap_poller.py", "--continuous"]
     restart: unless-stopped
+    env_file:
+      - stack.env  # For Portainer Git deployments
+      - .env       # For local docker-compose and setup wizard
     environment:
       # Database connection - external database
       POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
@@ -75,6 +81,9 @@ services:
       - --log-level
       - "${LOG_LEVEL:-INFO}"
     restart: unless-stopped
+    env_file:
+      - stack.env  # For Portainer Git deployments
+      - .env       # For local docker-compose and setup wizard
     environment:
       # Database connection - external database
       POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
