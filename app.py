@@ -515,6 +515,16 @@ if app.config.get('SETUP_MODE'):
 else:
     start_health_alert_worker(app, logger)
 
+# Start screen manager for LED/VFD display rotation
+try:
+    from scripts.screen_manager import screen_manager
+    screen_manager.init_app(app)
+    if not app.config.get('SETUP_MODE'):
+        screen_manager.start()
+        logger.info('Screen manager started for display rotation')
+except Exception as screen_mgr_error:
+    logger.warning('Screen manager could not be started: %s', screen_mgr_error)
+
 # =============================================================================
 # BOUNDARY TYPE METADATA
 # =============================================================================

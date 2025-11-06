@@ -13,6 +13,31 @@ from app_utils import utc_now
 from scripts.screen_renderer import ScreenRenderer
 
 
+def _convert_led_enum(enum_class, value_str: str, default):
+    """Convert a string to an LED enum value.
+
+    Args:
+        enum_class: The enum class (Color, DisplayMode, Speed, etc.)
+        value_str: String name of the enum value
+        default: Default value if conversion fails
+
+    Returns:
+        Enum value or default
+    """
+    if enum_class is None:
+        return default
+
+    # If already an enum, return as-is
+    if isinstance(value_str, enum_class):
+        return value_str
+
+    # Try to get enum by name
+    try:
+        return getattr(enum_class, value_str)
+    except AttributeError:
+        return default
+
+
 def register(app: Flask, logger) -> None:
     """Register custom screen management endpoints."""
 
@@ -232,17 +257,22 @@ def register(app: Flask, logger) -> None:
 
             # Display on appropriate device
             if screen.display_type == "led":
-                from app_core.led import led_controller
+                import app_core.led as led_module
 
-                if not led_controller:
+                if not led_module.led_controller:
                     return jsonify({"error": "LED controller not available"}), 503
 
                 lines = rendered.get("lines", [])
-                color = rendered.get("color", "AMBER")
-                mode = rendered.get("mode", "HOLD")
-                speed = rendered.get("speed", "SPEED_3")
+                color_str = rendered.get("color", "AMBER")
+                mode_str = rendered.get("mode", "HOLD")
+                speed_str = rendered.get("speed", "SPEED_3")
 
-                led_controller.send_message(
+                # Convert strings to enum values
+                color = _convert_led_enum(led_module.Color, color_str, led_module.Color.AMBER if led_module.Color else color_str)
+                mode = _convert_led_enum(led_module.DisplayMode, mode_str, led_module.DisplayMode.HOLD if led_module.DisplayMode else mode_str)
+                speed = _convert_led_enum(led_module.Speed, speed_str, led_module.Speed.SPEED_3 if led_module.Speed else speed_str)
+
+                led_module.led_controller.send_message(
                     lines=lines,
                     color=color,
                     mode=mode,

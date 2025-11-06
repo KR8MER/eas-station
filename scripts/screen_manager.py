@@ -92,6 +92,9 @@ class ScreenManager:
 
             if led_rotation:
                 self._led_rotation = led_rotation.to_dict()
+            else:
+                # Clear cache if no active rotation found
+                self._led_rotation = None
 
             # Get active VFD rotation
             vfd_rotation = ScreenRotation.query.filter_by(
@@ -101,6 +104,9 @@ class ScreenManager:
 
             if vfd_rotation:
                 self._vfd_rotation = vfd_rotation.to_dict()
+            else:
+                # Clear cache if no active rotation found
+                self._vfd_rotation = None
 
         except Exception as e:
             logger.error(f"Error loading rotations: {e}")
@@ -197,6 +203,31 @@ class ScreenManager:
             # Update database
             self._update_rotation_state('vfd', current_index, now)
 
+    def _convert_led_enum(self, enum_class, value_str: str, default):
+        """Convert a string to an LED enum value.
+
+        Args:
+            enum_class: The enum class (Color, DisplayMode, Speed, etc.)
+            value_str: String name of the enum value
+            default: Default value if conversion fails
+
+        Returns:
+            Enum value or default
+        """
+        if enum_class is None:
+            return default
+
+        # If already an enum, return as-is
+        if isinstance(value_str, enum_class):
+            return value_str
+
+        # Try to get enum by name
+        try:
+            return getattr(enum_class, value_str)
+        except AttributeError:
+            logger.warning(f"Unknown enum value '{value_str}' for {enum_class.__name__}, using default")
+            return default
+
     def _display_led_screen(self, screen_config: Dict):
         """Display a screen on the LED sign.
 
@@ -227,9 +258,14 @@ class ScreenManager:
             # Send to LED display
             if led_module.led_controller:
                 lines = rendered.get('lines', [])
-                color = rendered.get('color', 'AMBER')
-                mode = rendered.get('mode', 'HOLD')
-                speed = rendered.get('speed', 'SPEED_3')
+                color_str = rendered.get('color', 'AMBER')
+                mode_str = rendered.get('mode', 'HOLD')
+                speed_str = rendered.get('speed', 'SPEED_3')
+
+                # Convert strings to enum values
+                color = self._convert_led_enum(led_module.Color, color_str, led_module.Color.AMBER if led_module.Color else color_str)
+                mode = self._convert_led_enum(led_module.DisplayMode, mode_str, led_module.DisplayMode.HOLD if led_module.DisplayMode else mode_str)
+                speed = self._convert_led_enum(led_module.Speed, speed_str, led_module.Speed.SPEED_3 if led_module.Speed else speed_str)
 
                 led_module.led_controller.send_message(
                     lines=lines,

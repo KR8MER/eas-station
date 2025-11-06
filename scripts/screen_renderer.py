@@ -8,14 +8,22 @@ import logging
 import re
 import requests
 from datetime import datetime
-from typing import Any, Dict, List, Optional
-from urllib.parse import urljoin
+from typing import Any, Dict, List, Optional, Set
+from urllib.parse import urljoin, urlparse
 
 logger = logging.getLogger(__name__)
 
 
 class ScreenRenderer:
     """Renders custom screen templates with dynamic API data."""
+
+    # Allowed API endpoint prefixes to prevent SSRF attacks
+    ALLOWED_ENDPOINT_PREFIXES: Set[str] = {
+        '/api/',
+        '/health',
+        '/ping',
+        '/version',
+    }
 
     def __init__(self, base_url: str = "http://localhost:5000"):
         """Initialize the screen renderer.
@@ -27,6 +35,33 @@ class ScreenRenderer:
         self._data_cache: Dict[str, Any] = {}
         self._cache_timestamp: Dict[str, datetime] = {}
 
+    def _validate_endpoint(self, endpoint: str) -> bool:
+        """Validate that an endpoint is safe to fetch from.
+
+        Args:
+            endpoint: API endpoint path to validate
+
+        Returns:
+            True if endpoint is allowed, False otherwise
+        """
+        # Ensure endpoint is a relative path (starts with /)
+        if not endpoint.startswith('/'):
+            logger.warning(f"Endpoint must be a relative path: {endpoint}")
+            return False
+
+        # Check for absolute URLs or protocol prefixes
+        if '://' in endpoint or endpoint.startswith('//'):
+            logger.warning(f"Absolute URLs not allowed: {endpoint}")
+            return False
+
+        # Check if endpoint starts with allowed prefix
+        for prefix in self.ALLOWED_ENDPOINT_PREFIXES:
+            if endpoint.startswith(prefix):
+                return True
+
+        logger.warning(f"Endpoint not in allowed list: {endpoint}")
+        return False
+
     def fetch_data_source(self, endpoint: str, var_name: str, params: Optional[Dict] = None) -> None:
         """Fetch data from an API endpoint and cache it.
 
@@ -35,6 +70,12 @@ class ScreenRenderer:
             var_name: Variable name to store data under
             params: Optional query parameters
         """
+        # Validate endpoint to prevent SSRF attacks
+        if not self._validate_endpoint(endpoint):
+            logger.error(f"Endpoint rejected for security reasons: {endpoint}")
+            self._data_cache[var_name] = {}
+            return
+
         try:
             url = urljoin(self.base_url, endpoint)
             response = requests.get(url, params=params or {}, timeout=5)
