@@ -299,24 +299,27 @@ function renderRoles() {
         return;
     }
 
-    container.innerHTML = rolesData.map(role => `
+    container.innerHTML = rolesData.map(role => {
+        // Sanitize class name to only allow safe characters
+        const safeClassName = String(role.name).toLowerCase().replace(/[^a-z0-9-_]/g, '');
+        return `
         <div class="col-md-4 mb-3">
-            <div class="card role-card ${role.name}">
+            <div class="card role-card ${safeClassName}" data-role-id="${role.id}">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <h5 class="card-title text-capitalize mb-0">
-                            <i class="fas fa-user-tag"></i> ${role.name}
+                            <i class="fas fa-user-tag"></i> ${escapeHtml(role.name)}
                         </h5>
                         <span class="user-count-badge">
                             <i class="fas fa-users me-1"></i> ${role.user_count || 0}
                         </span>
                     </div>
-                    <p class="card-text text-muted">${role.description || 'No description'}</p>
+                    <p class="card-text text-muted">${escapeHtml(role.description || 'No description')}</p>
                     <div class="mt-3">
                         <strong>Permissions:</strong> ${role.permissions?.length || 0}
                         <div class="mt-2">
                             ${(role.permissions || []).slice(0, 5).map(p =>
-                                `<span class="permission-badge">${p.name}</span>`
+                                `<span class="permission-badge">${escapeHtml(p.name)}</span>`
                             ).join('')}
                             ${role.permissions?.length > 5 ?
                                 `<span class="permission-badge">+${role.permissions.length - 5} more</span>` : ''
@@ -324,14 +327,23 @@ function renderRoles() {
                         </div>
                     </div>
                     <div class="mt-3">
-                        <button class="btn btn-sm btn-outline-primary" onclick="editRole(${role.id})">
+                        <button class="btn btn-sm btn-outline-primary edit-role-btn" data-role-id="${role.id}">
                             <i class="fas fa-edit"></i> Edit
                         </button>
                     </div>
                 </div>
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
+
+    // Add event delegation for Edit buttons - SECURE: no user data in onclick
+    document.querySelectorAll('.edit-role-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const roleId = parseInt(btn.dataset.roleId);
+            editRole(roleId);
+        });
+    });
 }
 
 async function loadPermissions() {
@@ -363,11 +375,11 @@ function renderPermissions() {
     const container = document.getElementById('permissions-container');
     container.innerHTML = Object.entries(permissionsByCategory).map(([category, perms]) => `
         <div class="permission-group">
-            <h6><i class="fas fa-folder"></i> ${category.toUpperCase()}</h6>
+            <h6><i class="fas fa-folder"></i> ${escapeHtml(category.toUpperCase())}</h6>
             <div>
                 ${perms.map(p => `
-                    <span class="permission-badge" title="${p.description || ''}">
-                        <i class="fas fa-key me-1"></i> ${p.name}
+                    <span class="permission-badge" title="${escapeHtml(p.description || '')}">
+                        <i class="fas fa-key me-1"></i> ${escapeHtml(p.name)}
                     </span>
                 `).join('')}
             </div>
@@ -379,14 +391,14 @@ function renderPermissionsForModal(containerId = 'createRolePermissions', select
     const container = document.getElementById(containerId);
     container.innerHTML = Object.entries(permissionsByCategory).map(([category, perms]) => `
         <div class="permission-group">
-            <h6>${category.toUpperCase()}</h6>
+            <h6>${escapeHtml(category.toUpperCase())}</h6>
             ${perms.map(p => `
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" value="${p.id}"
                            id="perm_${containerId}_${p.id}"
                            ${selectedIds.includes(p.id) ? 'checked' : ''}>
                     <label class="form-check-label" for="perm_${containerId}_${p.id}">
-                        ${p.name} <small class="text-muted">${p.description || ''}</small>
+                        ${escapeHtml(p.name)} <small class="text-muted">${escapeHtml(p.description || '')}</small>
                     </label>
                 </div>
             `).join('')}
@@ -486,7 +498,7 @@ function showChangeRoleModalSecure(userId, username, currentRoleId) {
 function populateRoleSelect() {
     const select = document.getElementById('newRoleSelect');
     select.innerHTML = rolesData.map(role =>
-        `<option value="${role.id}">${role.name}</option>`
+        `<option value="${role.id}">${escapeHtml(role.name)}</option>`
     ).join('');
 }
 
