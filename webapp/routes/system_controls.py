@@ -97,6 +97,52 @@ def register(app: Flask, logger) -> None:
                 except Exception as exc:
                     route_logger.error(f"Failed to parse GPIO config '{pin_config}': {exc}")
 
+        # Load individual GPIO_PIN_<number> environment variables
+        # Format: GPIO_PIN_17=HIGH:5:300:My Pin Name
+        # or just: GPIO_PIN_17=17 (pin number only)
+        import re
+        gpio_pin_pattern = re.compile(r'^GPIO_PIN_(\d+)$')
+        for env_key, env_value in os.environ.items():
+            match = gpio_pin_pattern.match(env_key)
+            if match:
+                try:
+                    pin_number = int(match.group(1))
+                    value = env_value.strip()
+
+                    # Parse value - could be just pin number or colon-separated config
+                    # Format: [ACTIVE_STATE]:[HOLD_SECONDS]:[WATCHDOG_SECONDS]:[NAME]
+                    if ':' in value:
+                        parts = value.split(':')
+                        active_high = parts[0].upper() != "LOW" if parts[0] else True
+                        hold_seconds = float(parts[1]) if len(parts) > 1 and parts[1] else 5.0
+                        watchdog_seconds = float(parts[2]) if len(parts) > 2 and parts[2] else 300.0
+                        name = parts[3] if len(parts) > 3 and parts[3] else f"GPIO Pin {pin_number}"
+                    else:
+                        # Simple format - just validate it's a number or HIGH/LOW
+                        if value.upper() in ('HIGH', 'LOW'):
+                            active_high = value.upper() != "LOW"
+                        else:
+                            # Assume it's the pin number confirmation
+                            int(value)  # Validate it's a number
+                            active_high = True
+                        name = f"GPIO Pin {pin_number}"
+                        hold_seconds = 5.0
+                        watchdog_seconds = 300.0
+
+                    config = GPIOPinConfig(
+                        pin=pin_number,
+                        name=name,
+                        active_high=active_high,
+                        hold_seconds=hold_seconds,
+                        watchdog_seconds=watchdog_seconds,
+                        enabled=True,
+                    )
+
+                    controller.add_pin(config)
+                    route_logger.info(f"Loaded GPIO pin from {env_key}: pin {pin_number} ({name})")
+                except Exception as exc:
+                    route_logger.error(f"Failed to parse {env_key}={env_value}: {exc}")
+
     def _get_current_user() -> str:
         """Get current username from session."""
         return session.get("username", "anonymous")

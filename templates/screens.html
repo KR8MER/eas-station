@@ -522,22 +522,24 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Load all screens
-function loadScreens() {
-    fetch('/api/screens')
-        .then(response => response.json())
-        .then(data => {
-            allScreens = data.screens || [];
-            renderScreens();
-        })
-        .catch(error => {
-            console.error('Error loading screens:', error);
-            document.getElementById('screens-list').innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-exclamation-triangle text-warning"></i>
-                    <p>Error loading screens</p>
-                </div>
-            `;
-        });
+async function loadScreens() {
+    try {
+        const response = await fetch('/api/screens');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        const data = await response.json();
+        allScreens = data.screens || [];
+        renderScreens();
+    } catch (error) {
+        console.error('Error loading screens:', error);
+        document.getElementById('screens-list').innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-exclamation-triangle text-warning"></i>
+                <p>Error loading screens: ${error.message}</p>
+            </div>
+        `;
+    }
 }
 
 // Render screens list
@@ -628,22 +630,24 @@ function renderScreens() {
 }
 
 // Load rotations
-function loadRotations() {
-    fetch('/api/rotations')
-        .then(response => response.json())
-        .then(data => {
-            allRotations = data.rotations || [];
-            renderRotations();
-        })
-        .catch(error => {
-            console.error('Error loading rotations:', error);
-            document.getElementById('rotations-list').innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-exclamation-triangle text-warning"></i>
-                    <p>Error loading rotations</p>
-                </div>
-            `;
-        });
+async function loadRotations() {
+    try {
+        const response = await fetch('/api/rotations');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        const data = await response.json();
+        allRotations = data.rotations || [];
+        renderRotations();
+    } catch (error) {
+        console.error('Error loading rotations:', error);
+        document.getElementById('rotations-list').innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-exclamation-triangle text-warning"></i>
+                <p>Error loading rotations: ${error.message}</p>
+            </div>
+        `;
+    }
 }
 
 // Render rotations
@@ -711,6 +715,37 @@ function showCreateScreenModal() {
     document.getElementById('screen-template').value = '{\n  "lines": ["Line 1", "Line 2"],\n  "color": "GREEN",\n  "mode": "HOLD"\n}';
     document.getElementById('screen-sources').value = '[{"endpoint": "/api/system_status", "var_name": "status"}]';
     new bootstrap.Modal(document.getElementById('screenModal')).show();
+}
+
+// Edit screen
+async function editScreen(id) {
+    try {
+        const response = await fetch(`/api/screens/${id}`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        const data = await response.json();
+        const screen = data.screen;
+
+        // Populate form
+        document.getElementById('screenModalTitle').textContent = 'Edit Screen';
+        document.getElementById('screen-id').value = screen.id;
+        document.getElementById('screen-name').value = screen.name || '';
+        document.getElementById('screen-description').value = screen.description || '';
+        document.getElementById('screen-display-type').value = screen.display_type || '';
+        document.getElementById('screen-enabled').value = screen.enabled ? 'true' : 'false';
+        document.getElementById('screen-priority').value = screen.priority || 1;
+        document.getElementById('screen-refresh').value = screen.refresh_interval || 60;
+        document.getElementById('screen-duration').value = screen.duration || 10;
+        document.getElementById('screen-template').value = JSON.stringify(screen.template_data || {}, null, 2);
+        document.getElementById('screen-sources').value = JSON.stringify(screen.data_sources || [], null, 2);
+
+        // Show modal
+        new bootstrap.Modal(document.getElementById('screenModal')).show();
+    } catch (error) {
+        console.error('Error loading screen:', error);
+        showToast(`Error loading screen: ${error.message}`, 'danger');
+    }
 }
 
 // Save screen
@@ -804,6 +839,46 @@ function showCreateRotationModal() {
     document.getElementById('rotation-screens-list').innerHTML = '';
     loadScreensForRotation();
     new bootstrap.Modal(document.getElementById('rotationModal')).show();
+}
+
+// Edit rotation
+async function editRotation(id) {
+    try {
+        const response = await fetch(`/api/rotations/${id}`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        const data = await response.json();
+        const rotation = data.rotation;
+
+        // Populate form
+        document.getElementById('rotationModalTitle').textContent = 'Edit Rotation';
+        document.getElementById('rotation-id').value = rotation.id;
+        document.getElementById('rotation-name').value = rotation.name || '';
+        document.getElementById('rotation-description').value = rotation.description || '';
+        document.getElementById('rotation-display-type').value = rotation.display_type || '';
+        document.getElementById('rotation-enabled').value = rotation.enabled ? 'true' : 'false';
+        document.getElementById('rotation-randomize').checked = rotation.randomize || false;
+        document.getElementById('rotation-skip-alert').checked = rotation.skip_on_alert || false;
+
+        // Load available screens
+        await loadScreensForRotation();
+
+        // Clear and repopulate screens list
+        const screensList = document.getElementById('rotation-screens-list');
+        screensList.innerHTML = '';
+        if (rotation.screens && rotation.screens.length > 0) {
+            rotation.screens.forEach(item => {
+                addScreenToRotation(item.screen_id, item.duration);
+            });
+        }
+
+        // Show modal
+        new bootstrap.Modal(document.getElementById('rotationModal')).show();
+    } catch (error) {
+        console.error('Error loading rotation:', error);
+        showToast(`Error loading rotation: ${error.message}`, 'danger');
+    }
 }
 
 // Load screens for rotation picker
