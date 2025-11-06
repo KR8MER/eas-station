@@ -90,6 +90,11 @@ tracks releases under the 2.x series.
   - Missing dependencies show installation instructions (e.g., "install pydub")
   - Error messages displayed in red alert boxes on source cards
   - Added disconnected status alert showing reconnection attempts
+- **Fixed numpy float32 JSON serialization error** - Audio APIs were returning 500 errors due to numpy types not being JSON-serializable
+  - Updated `_sanitize_float()` to detect and convert numpy.floating and numpy.integer types to Python float
+  - Fixes "Object of type float32 is not JSON serializable" errors on `/api/audio/sources` and `/api/audio/metrics`
+- **Added pydub dependency** for MP3/AAC/OGG stream decoding from HTTP/Icecast sources
+  - Added `pydub==0.25.1` to requirements.txt (requires ffmpeg system package already in Dockerfile)
 - Fixed module import paths in scripts/manual_eas_event.py and scripts/manual_alert_fetch.py by adding repository root to sys.path
 - Fixed CSRF token protection in password change form (security settings)
 - Fixed audit log pagination to cap per_page parameter at 1000 to prevent DoS attacks
