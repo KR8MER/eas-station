@@ -1,5 +1,13 @@
 # Complete standalone docker-compose file with embedded PostgreSQL database
 # This file can be used directly in Portainer or with: docker-compose -f docker-compose.embedded-db.yml up
+#
+# IMPORTANT SECURITY NOTE:
+# The default database password is "postgres" which is NOT SECURE for production.
+# You MUST set a secure password by configuring these environment variables in Portainer:
+#   - SECRET_KEY (generate with: python3 -c "import secrets; print(secrets.token_hex(32))")
+#   - POSTGRES_PASSWORD (use a strong password)
+#
+# See PORTAINER_DATABASE_SETUP.md for complete instructions.
 
 services:
   app:
