@@ -247,5 +247,20 @@ def register_dashboard_routes(app, logger, eas_config):
         db.session.commit()
         return jsonify({'message': 'User deleted successfully.'})
 
+    @app.route('/admin/rbac')
+    def rbac_management():
+        """RBAC management interface for roles, permissions, and user assignments"""
+        return render_template('admin/rbac_management.html')
+
+    @app.route('/admin/audit-logs')
+    def audit_logs_page():
+        """Audit logs viewer with filtering and export"""
+        return render_template('admin/audit_logs.html')
+
+    @app.route('/admin/gpio/statistics')
+    def gpio_statistics():
+        """GPIO activation statistics and analytics"""
+        return render_template('admin/gpio_statistics.html')
+
 
 __all__ = ['register_dashboard_routes']

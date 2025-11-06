@@ -1,0 +1,568 @@
+{% extends "base.html" %}
+
+{% block title %}RBAC Management - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+    .rbac-header {
+        background: linear-gradient(135deg, #204885, #0d6efd);
+        color: white;
+        padding: 2rem 0;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+
+    .role-card {
+        border-left: 4px solid #0d6efd;
+        transition: all 0.3s ease;
+        height: 100%;
+    }
+
+    .role-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .role-card.admin { border-left-color: #dc3545; }
+    .role-card.operator { border-left-color: #0d6efd; }
+    .role-card.viewer { border-left-color: #6c757d; }
+
+    .permission-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        margin: 0.25rem;
+        background: #e9ecef;
+        color: #495057;
+    }
+
+    .permission-group {
+        margin-bottom: 1.5rem;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+    }
+
+    .permission-group h6 {
+        color: #204885;
+        font-weight: bold;
+        margin-bottom: 0.75rem;
+    }
+
+    .user-count-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.5rem 1rem;
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+        border-radius: 20px;
+        font-weight: 600;
+    }
+
+    .table-hover tbody tr {
+        cursor: pointer;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="rbac-header">
+    <div class="container">
+        <h1><i class="fas fa-user-shield"></i> Role-Based Access Control</h1>
+        <p class="mb-0">Manage roles, permissions, and user access</p>
+    </div>
+</div>
+
+<div class="container">
+    <!-- Tab Navigation -->
+    <ul class="nav nav-tabs mb-4" id="rbacTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="roles-tab" data-bs-toggle="tab" data-bs-target="#roles" type="button" role="tab">
+                <i class="fas fa-user-tag"></i> Roles
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="permissions-tab" data-bs-toggle="tab" data-bs-target="#permissions" type="button" role="tab">
+                <i class="fas fa-key"></i> Permissions
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="assignments-tab" data-bs-toggle="tab" data-bs-target="#assignments" type="button" role="tab">
+                <i class="fas fa-users"></i> User Assignments
+            </button>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="rbacTabContent">
+        <!-- Roles Tab -->
+        <div class="tab-pane fade show active" id="roles" role="tabpanel">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h3>Roles</h3>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createRoleModal">
+                    <i class="fas fa-plus"></i> Create Role
+                </button>
+            </div>
+
+            <div class="row" id="roles-container">
+                <div class="col-12 text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="text-muted mt-2">Loading roles...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Permissions Tab -->
+        <div class="tab-pane fade" id="permissions" role="tabpanel">
+            <div class="mb-4">
+                <h3>Available Permissions</h3>
+                <p class="text-muted">System permissions grouped by resource type</p>
+            </div>
+
+            <div id="permissions-container">
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="text-muted mt-2">Loading permissions...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- User Assignments Tab -->
+        <div class="tab-pane fade" id="assignments" role="tabpanel">
+            <div class="mb-4">
+                <h3>User Role Assignments</h3>
+                <p class="text-muted">Manage which users have which roles</p>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover" id="users-table">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Current Role</th>
+                            <th>Active</th>
+                            <th>Last Login</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="5" class="text-center">
+                                <div class="spinner-border text-primary" role="status"></div>
+                                <p class="text-muted mt-2">Loading users...</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Role Modal -->
+<div class="modal fade" id="createRoleModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-plus"></i> Create New Role</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createRoleForm">
+                    <div class="mb-3">
+                        <label for="roleName" class="form-label">Role Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="roleName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="roleDescription" class="form-label">Description</label>
+                        <textarea class="form-control" id="roleDescription" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Permissions</label>
+                        <div id="createRolePermissions" style="max-height: 300px; overflow-y: auto;">
+                            <p class="text-muted">Loading permissions...</p>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="createRole()">
+                    <i class="fas fa-save"></i> Create Role
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Role Modal -->
+<div class="modal fade" id="editRoleModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-edit"></i> Edit Role</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editRoleForm">
+                    <input type="hidden" id="editRoleId">
+                    <div class="mb-3">
+                        <label for="editRoleName" class="form-label">Role Name</label>
+                        <input type="text" class="form-control" id="editRoleName" readonly>
+                        <small class="text-muted">Role name cannot be changed</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editRoleDescription" class="form-label">Description</label>
+                        <textarea class="form-control" id="editRoleDescription" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Permissions</label>
+                        <div id="editRolePermissions" style="max-height: 300px; overflow-y: auto;">
+                            <p class="text-muted">Loading permissions...</p>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveRole()">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Change User Role Modal -->
+<div class="modal fade" id="changeUserRoleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-user-tag"></i> Change User Role</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="changeRoleUserId">
+                <p>Change role for user: <strong id="changeRoleUsername"></strong></p>
+                <div class="mb-3">
+                    <label for="newRoleSelect" class="form-label">Select New Role</label>
+                    <select class="form-select" id="newRoleSelect">
+                        <option value="">Loading roles...</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="changeUserRole()">
+                    <i class="fas fa-save"></i> Change Role
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let rolesData = [];
+let permissionsData = [];
+let usersData = [];
+let permissionsByCategory = {};
+
+// Load all data on page load
+document.addEventListener('DOMContentLoaded', async function() {
+    await loadRoles();
+    await loadPermissions();
+    await loadUsers();
+});
+
+async function loadRoles() {
+    try {
+        const response = await fetch('/security/roles');
+        const data = await response.json();
+        rolesData = data.roles;
+        renderRoles();
+    } catch (error) {
+        console.error('Failed to load roles:', error);
+        document.getElementById('roles-container').innerHTML =
+            '<div class="col-12"><div class="alert alert-danger">Failed to load roles</div></div>';
+    }
+}
+
+function renderRoles() {
+    const container = document.getElementById('roles-container');
+    if (rolesData.length === 0) {
+        container.innerHTML = '<div class="col-12"><p class="text-muted">No roles found</p></div>';
+        return;
+    }
+
+    container.innerHTML = rolesData.map(role => `
+        <div class="col-md-4 mb-3">
+            <div class="card role-card ${role.name}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h5 class="card-title text-capitalize mb-0">
+                            <i class="fas fa-user-tag"></i> ${role.name}
+                        </h5>
+                        <span class="user-count-badge">
+                            <i class="fas fa-users me-1"></i> ${role.user_count || 0}
+                        </span>
+                    </div>
+                    <p class="card-text text-muted">${role.description || 'No description'}</p>
+                    <div class="mt-3">
+                        <strong>Permissions:</strong> ${role.permissions?.length || 0}
+                        <div class="mt-2">
+                            ${(role.permissions || []).slice(0, 5).map(p =>
+                                `<span class="permission-badge">${p.name}</span>`
+                            ).join('')}
+                            ${role.permissions?.length > 5 ?
+                                `<span class="permission-badge">+${role.permissions.length - 5} more</span>` : ''
+                            }
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <button class="btn btn-sm btn-outline-primary" onclick="editRole(${role.id})">
+                            <i class="fas fa-edit"></i> Edit
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function loadPermissions() {
+    try {
+        const response = await fetch('/security/permissions');
+        const data = await response.json();
+        permissionsData = data.permissions;
+
+        // Group by category
+        permissionsByCategory = {};
+        permissionsData.forEach(perm => {
+            const [category] = perm.name.split('.');
+            if (!permissionsByCategory[category]) {
+                permissionsByCategory[category] = [];
+            }
+            permissionsByCategory[category].push(perm);
+        });
+
+        renderPermissions();
+        renderPermissionsForModal();
+    } catch (error) {
+        console.error('Failed to load permissions:', error);
+        document.getElementById('permissions-container').innerHTML =
+            '<div class="alert alert-danger">Failed to load permissions</div>';
+    }
+}
+
+function renderPermissions() {
+    const container = document.getElementById('permissions-container');
+    container.innerHTML = Object.entries(permissionsByCategory).map(([category, perms]) => `
+        <div class="permission-group">
+            <h6><i class="fas fa-folder"></i> ${category.toUpperCase()}</h6>
+            <div>
+                ${perms.map(p => `
+                    <span class="permission-badge" title="${p.description || ''}">
+                        <i class="fas fa-key me-1"></i> ${p.name}
+                    </span>
+                `).join('')}
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderPermissionsForModal(containerId = 'createRolePermissions', selectedIds = []) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = Object.entries(permissionsByCategory).map(([category, perms]) => `
+        <div class="permission-group">
+            <h6>${category.toUpperCase()}</h6>
+            ${perms.map(p => `
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="${p.id}"
+                           id="perm_${containerId}_${p.id}"
+                           ${selectedIds.includes(p.id) ? 'checked' : ''}>
+                    <label class="form-check-label" for="perm_${containerId}_${p.id}">
+                        ${p.name} <small class="text-muted">${p.description || ''}</small>
+                    </label>
+                </div>
+            `).join('')}
+        </div>
+    `).join('');
+}
+
+async function loadUsers() {
+    try {
+        const response = await fetch('/admin/users');
+        const data = await response.json();
+        usersData = data.users || [];
+        renderUsers();
+        populateRoleSelect();
+    } catch (error) {
+        console.error('Failed to load users:', error);
+        document.querySelector('#users-table tbody').innerHTML =
+            '<tr><td colspan="5"><div class="alert alert-danger">Failed to load users</div></td></tr>';
+    }
+}
+
+function renderUsers() {
+    const tbody = document.querySelector('#users-table tbody');
+    if (usersData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-muted">No users found</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = usersData.map(user => `
+        <tr onclick="showChangeRoleModal(${user.id}, '${user.username}', ${user.role_id || 'null'})">
+            <td><strong>${user.username}</strong></td>
+            <td>
+                ${user.role_name ?
+                    `<span class="badge bg-primary">${user.role_name}</span>` :
+                    '<span class="badge bg-secondary">No Role</span>'
+                }
+            </td>
+            <td>
+                ${user.is_active ?
+                    '<span class="badge bg-success">Active</span>' :
+                    '<span class="badge bg-danger">Inactive</span>'
+                }
+            </td>
+            <td>${user.last_login_at ? new Date(user.last_login_at).toLocaleString() : 'Never'}</td>
+            <td>
+                <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); showChangeRoleModal(${user.id}, '${user.username}', ${user.role_id || 'null'})">
+                    <i class="fas fa-user-tag"></i> Change Role
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function populateRoleSelect() {
+    const select = document.getElementById('newRoleSelect');
+    select.innerHTML = rolesData.map(role =>
+        `<option value="${role.id}">${role.name}</option>`
+    ).join('');
+}
+
+function showChangeRoleModal(userId, username, currentRoleId) {
+    document.getElementById('changeRoleUserId').value = userId;
+    document.getElementById('changeRoleUsername').textContent = username;
+    document.getElementById('newRoleSelect').value = currentRoleId || '';
+    new bootstrap.Modal(document.getElementById('changeUserRoleModal')).show();
+}
+
+async function changeUserRole() {
+    const userId = document.getElementById('changeRoleUserId').value;
+    const roleId = document.getElementById('newRoleSelect').value;
+
+    if (!roleId) {
+        alert('Please select a role');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/security/users/${userId}/role`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role_id: parseInt(roleId) })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('changeUserRoleModal')).hide();
+            await loadUsers();
+            alert('User role updated successfully!');
+        } else {
+            alert('Error: ' + (data.error || 'Failed to update role'));
+        }
+    } catch (error) {
+        console.error('Failed to change user role:', error);
+        alert('Failed to change user role');
+    }
+}
+
+async function createRole() {
+    const name = document.getElementById('roleName').value.trim();
+    const description = document.getElementById('roleDescription').value.trim();
+
+    const permissionCheckboxes = document.querySelectorAll('#createRolePermissions input[type="checkbox"]:checked');
+    const permissionIds = Array.from(permissionCheckboxes).map(cb => parseInt(cb.value));
+
+    if (!name) {
+        alert('Role name is required');
+        return;
+    }
+
+    try {
+        const response = await fetch('/security/roles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description, permission_ids: permissionIds })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('createRoleModal')).hide();
+            await loadRoles();
+            document.getElementById('createRoleForm').reset();
+            alert('Role created successfully!');
+        } else {
+            alert('Error: ' + (data.error || 'Failed to create role'));
+        }
+    } catch (error) {
+        console.error('Failed to create role:', error);
+        alert('Failed to create role');
+    }
+}
+
+async function editRole(roleId) {
+    const role = rolesData.find(r => r.id === roleId);
+    if (!role) return;
+
+    document.getElementById('editRoleId').value = role.id;
+    document.getElementById('editRoleName').value = role.name;
+    document.getElementById('editRoleDescription').value = role.description || '';
+
+    const selectedIds = (role.permissions || []).map(p => p.id);
+    renderPermissionsForModal('editRolePermissions', selectedIds);
+
+    new bootstrap.Modal(document.getElementById('editRoleModal')).show();
+}
+
+async function saveRole() {
+    const roleId = document.getElementById('editRoleId').value;
+    const description = document.getElementById('editRoleDescription').value.trim();
+
+    const permissionCheckboxes = document.querySelectorAll('#editRolePermissions input[type="checkbox"]:checked');
+    const permissionIds = Array.from(permissionCheckboxes).map(cb => parseInt(cb.value));
+
+    try {
+        const response = await fetch(`/security/roles/${roleId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ description, permission_ids: permissionIds })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('editRoleModal')).hide();
+            await loadRoles();
+            alert('Role updated successfully!');
+        } else {
+            alert('Error: ' + (data.error || 'Failed to update role'));
+        }
+    } catch (error) {
+        console.error('Failed to update role:', error);
+        alert('Failed to update role');
+    }
+}
+
+// Load permissions when create modal opens
+document.getElementById('createRoleModal')?.addEventListener('show.bs.modal', function() {
+    renderPermissionsForModal('createRolePermissions', []);
+});
+</script>
+{% endblock %}

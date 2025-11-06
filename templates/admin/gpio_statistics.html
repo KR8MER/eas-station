@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+
+{% block title %}GPIO Statistics - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stats-header {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+        padding: 2rem 0;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        text-align: center;
+        transition: transform 0.3s ease;
+        height: 100%;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    }
+
+    .stat-number {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #204885;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .chart-container {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        margin-bottom: 2rem;
+    }
+
+    .pin-usage-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        margin-bottom: 1rem;
+        border-left: 4px solid #0d6efd;
+    }
+
+    .usage-bar {
+        height: 8px;
+        background: #e9ecef;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-top: 0.5rem;
+    }
+
+    .usage-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #28a745, #20c997);
+        transition: width 0.3s ease;
+    }
+
+    .activation-type-badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin: 0.25rem;
+        display: inline-block;
+    }
+
+    .type-manual { background: #cfe2ff; color: #084298; }
+    .type-automatic { background: #d1e7dd; color: #0f5132; }
+    .type-test { background: #fff3cd; color: #664d03; }
+    .type-override { background: #f8d7da; color: #842029; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="stats-header">
+    <div class="container">
+        <h1><i class="fas fa-chart-pie"></i> GPIO Statistics</h1>
+        <p class="mb-0">Relay activation analytics and usage patterns</p>
+    </div>
+</div>
+
+<div class="container">
+    <!-- Summary Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-number" id="total-activations">--</div>
+                <div class="stat-label">Total Activations</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-number" id="success-rate">--%</div>
+                <div class="stat-label">Success Rate</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-number" id="avg-duration">--s</div>
+                <div class="stat-label">Avg Duration</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-number" id="total-pins">--</div>
+                <div class="stat-label">Configured Pins</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Time Period Selector -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="chart-container">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">Time Period</h5>
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadStatistics(1)">24h</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary active" onclick="loadStatistics(7)">7d</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadStatistics(30)">30d</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadStatistics(90)">90d</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activation Types Breakdown -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="chart-container">
+                <h5 class="mb-3">Activations by Type</h5>
+                <div class="row" id="activation-types-container">
+                    <div class="col-md-3 text-center">
+                        <div class="spinner-border text-primary" role="status"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Per-Pin Usage Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="chart-container">
+                <h5 class="mb-3">Usage by Pin</h5>
+                <div id="pin-usage-container">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="text-muted mt-2">Loading pin statistics...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Errors -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="chart-container">
+                <h5 class="mb-3"><i class="fas fa-exclamation-triangle"></i> Recent Errors</h5>
+                <div class="table-responsive">
+                    <table class="table table-hover" id="errors-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Pin</th>
+                                <th>Type</th>
+                                <th>Error Message</th>
+                                <th>Operator</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="5" class="text-center">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentDays = 7;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadStatistics(7);
+});
+
+async function loadStatistics(days = 7) {
+    currentDays = days;
+
+    // Update active button
+    document.querySelectorAll('.btn-group button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event?.target?.classList?.add('active');
+
+    try {
+        const response = await fetch(`/api/gpio/statistics?days=${days}`);
+        const data = await response.json();
+
+        if (data.success) {
+            updateSummaryStats(data.summary);
+            updateActivationTypes(data.by_type);
+            updatePinUsage(data.by_pin);
+            updateRecentErrors(data.recent_errors);
+        } else {
+            console.error('Failed to load statistics:', data.error);
+        }
+    } catch (error) {
+        console.error('Error loading statistics:', error);
+        showError('Failed to load GPIO statistics');
+    }
+}
+
+function updateSummaryStats(summary) {
+    document.getElementById('total-activations').textContent = summary.total_activations || 0;
+
+    const successRate = summary.total_activations > 0
+        ? ((summary.successful_activations / summary.total_activations) * 100).toFixed(1)
+        : 0;
+    document.getElementById('success-rate').textContent = successRate + '%';
+
+    const avgDuration = summary.average_duration_seconds || 0;
+    document.getElementById('avg-duration').textContent = avgDuration.toFixed(1) + 's';
+
+    document.getElementById('total-pins').textContent = summary.unique_pins || 0;
+}
+
+function updateActivationTypes(byType) {
+    const container = document.getElementById('activation-types-container');
+
+    if (!byType || Object.keys(byType).length === 0) {
+        container.innerHTML = '<div class="col-12"><p class="text-muted">No activation data available</p></div>';
+        return;
+    }
+
+    const types = {
+        manual: { label: 'Manual', icon: 'hand-pointer', class: 'type-manual' },
+        automatic: { label: 'Automatic', icon: 'robot', class: 'type-automatic' },
+        test: { label: 'Test', icon: 'vial', class: 'type-test' },
+        override: { label: 'Override', icon: 'exclamation-triangle', class: 'type-override' }
+    };
+
+    container.innerHTML = Object.entries(byType).map(([type, count]) => {
+        const typeInfo = types[type] || { label: type, icon: 'question', class: 'type-manual' };
+        return `
+            <div class="col-md-3 mb-3">
+                <div class="stat-card">
+                    <div class="activation-type-badge ${typeInfo.class}">
+                        <i class="fas fa-${typeInfo.icon}"></i> ${typeInfo.label}
+                    </div>
+                    <div class="stat-number mt-2">${count}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function updatePinUsage(byPin) {
+    const container = document.getElementById('pin-usage-container');
+
+    if (!byPin || byPin.length === 0) {
+        container.innerHTML = '<p class="text-muted">No pin usage data available</p>';
+        return;
+    }
+
+    // Find max count for scaling bars
+    const maxCount = Math.max(...byPin.map(p => p.count));
+
+    container.innerHTML = byPin.map(pin => {
+        const percentage = maxCount > 0 ? (pin.count / maxCount * 100) : 0;
+        const successRate = pin.count > 0
+            ? ((pin.successful / pin.count) * 100).toFixed(1)
+            : 0;
+        const avgDuration = pin.avg_duration || 0;
+
+        return `
+            <div class="pin-usage-card">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="mb-0"><i class="fas fa-microchip"></i> GPIO Pin ${pin.pin}</h6>
+                    <div>
+                        <span class="badge bg-primary">${pin.count} activations</span>
+                        <span class="badge bg-success">${successRate}% success</span>
+                        <span class="badge bg-info">${avgDuration.toFixed(1)}s avg</span>
+                    </div>
+                </div>
+                <div class="usage-bar">
+                    <div class="usage-fill" style="width: ${percentage}%"></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function updateRecentErrors(errors) {
+    const tbody = document.querySelector('#errors-table tbody');
+
+    if (!errors || errors.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No recent errors</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = errors.map(error => `
+        <tr>
+            <td><small>${new Date(error.activated_at).toLocaleString()}</small></td>
+            <td><strong>GPIO ${error.pin}</strong></td>
+            <td><span class="activation-type-badge type-${error.activation_type}">${error.activation_type}</span></td>
+            <td><small class="text-danger">${error.error_message || 'Unknown error'}</small></td>
+            <td><small>${error.operator || '<em>—</em>'}</small></td>
+        </tr>
+    `).join('');
+}
+
+function showError(message) {
+    alert(message);
+}
+</script>
+{% endblock %}

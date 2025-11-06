@@ -1,0 +1,504 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Logs - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+    .audit-header {
+        background: linear-gradient(135deg, #6610f2, #6f42c1);
+        color: white;
+        padding: 2rem 0;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+
+    .filter-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        margin-bottom: 2rem;
+    }
+
+    .audit-table {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    .status-badge {
+        padding: 0.35rem 0.75rem;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .status-success {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .status-failure {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .action-badge {
+        padding: 0.35rem 0.75rem;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        background: #e7f1ff;
+        color: #004085;
+    }
+
+    .log-details {
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        background: #f8f9fa;
+        padding: 0.5rem;
+        border-radius: 4px;
+        max-height: 100px;
+        overflow-y: auto;
+    }
+
+    .pagination-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-top: 1px solid #dee2e6;
+    }
+
+    .stats-row {
+        margin-bottom: 2rem;
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        text-align: center;
+        transition: transform 0.3s ease;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-5px);
+    }
+
+    .stat-number {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #204885;
+    }
+
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .export-buttons {
+        display: flex;
+        gap: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="audit-header">
+    <div class="container">
+        <h1><i class="fas fa-clipboard-list"></i> Audit Logs</h1>
+        <p class="mb-0">Security audit trail and event logging</p>
+    </div>
+</div>
+
+<div class="container">
+    <!-- Statistics Row -->
+    <div class="row stats-row">
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-number" id="total-logs-count">--</div>
+                <div class="stat-label">Total Logs</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-number text-success" id="success-logs-count">--</div>
+                <div class="stat-label">Successful</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-number text-danger" id="failure-logs-count">--</div>
+                <div class="stat-label">Failed</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-number text-info" id="today-logs-count">--</div>
+                <div class="stat-label">Today</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-card">
+        <h5 class="mb-3"><i class="fas fa-filter"></i> Filters</h5>
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label for="filter-action" class="form-label">Action</label>
+                <select class="form-select" id="filter-action">
+                    <option value="">All Actions</option>
+                    <option value="login_success">Login Success</option>
+                    <option value="login_failure">Login Failure</option>
+                    <option value="logout">Logout</option>
+                    <option value="mfa_enrolled">MFA Enrolled</option>
+                    <option value="mfa_disabled">MFA Disabled</option>
+                    <option value="user_created">User Created</option>
+                    <option value="user_updated">User Updated</option>
+                    <option value="user_deleted">User Deleted</option>
+                    <option value="role_created">Role Created</option>
+                    <option value="role_updated">Role Updated</option>
+                    <option value="permission_denied">Permission Denied</option>
+                    <option value="eas_broadcast">EAS Broadcast</option>
+                    <option value="gpio_activated">GPIO Activated</option>
+                    <option value="config_updated">Config Updated</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="filter-success" class="form-label">Status</label>
+                <select class="form-select" id="filter-success">
+                    <option value="">All</option>
+                    <option value="true">Success Only</option>
+                    <option value="false">Failures Only</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="filter-days" class="form-label">Time Period</label>
+                <select class="form-select" id="filter-days">
+                    <option value="1">Last 24 Hours</option>
+                    <option value="7">Last 7 Days</option>
+                    <option value="30" selected>Last 30 Days</option>
+                    <option value="90">Last 90 Days</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="filter-user" class="form-label">User</label>
+                <input type="text" class="form-control" id="filter-user" placeholder="Username...">
+            </div>
+        </div>
+        <div class="row mt-3">
+            <div class="col-12 d-flex justify-content-between">
+                <div class="export-buttons">
+                    <button class="btn btn-outline-primary" onclick="loadLogs()">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="resetFilters()">
+                        <i class="fas fa-undo"></i> Reset
+                    </button>
+                </div>
+                <div class="export-buttons">
+                    <button class="btn btn-success" onclick="exportLogs()">
+                        <i class="fas fa-download"></i> Export CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audit Logs Table -->
+    <div class="audit-table">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>User</th>
+                        <th>Action</th>
+                        <th>Resource</th>
+                        <th>IP Address</th>
+                        <th>Status</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="logs-tbody">
+                    <tr>
+                        <td colspan="7" class="text-center py-5">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="text-muted mt-2">Loading audit logs...</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="pagination-container" id="pagination-container">
+            <div id="pagination-info">Loading...</div>
+            <nav aria-label="Audit log pagination">
+                <ul class="pagination mb-0" id="pagination-controls"></ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+<!-- Log Details Modal -->
+<div class="modal fade" id="logDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-info-circle"></i> Audit Log Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <table class="table table-borderless">
+                    <tbody id="log-details-body">
+                        <!-- Will be populated by JavaScript -->
+                    </tbody>
+                </table>
+                <div id="log-details-json"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentPage = 1;
+let currentLogs = [];
+let totalPages = 1;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadLogs();
+    loadStatistics();
+});
+
+async function loadLogs(page = 1) {
+    currentPage = page;
+
+    const action = document.getElementById('filter-action').value;
+    const success = document.getElementById('filter-success').value;
+    const days = document.getElementById('filter-days').value;
+    const user = document.getElementById('filter-user').value.trim();
+
+    const params = new URLSearchParams({
+        page: page,
+        per_page: 50,
+        days: days
+    });
+
+    if (action) params.append('action', action);
+    if (success) params.append('success', success);
+    if (user) params.append('username', user);
+
+    try {
+        const response = await fetch(`/security/audit-logs?${params}`);
+        const data = await response.json();
+
+        currentLogs = data.logs;
+        totalPages = data.pages;
+
+        renderLogs(data.logs);
+        renderPagination(data);
+    } catch (error) {
+        console.error('Failed to load audit logs:', error);
+        document.getElementById('logs-tbody').innerHTML =
+            '<tr><td colspan="7" class="text-center"><div class="alert alert-danger m-3">Failed to load audit logs</div></td></tr>';
+    }
+}
+
+function renderLogs(logs) {
+    const tbody = document.getElementById('logs-tbody');
+
+    if (logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No audit logs found</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = logs.map(log => {
+        const timestamp = new Date(log.timestamp).toLocaleString();
+        const statusClass = log.success ? 'status-success' : 'status-failure';
+        const statusIcon = log.success ? 'fa-check-circle' : 'fa-times-circle';
+        const statusText = log.success ? 'Success' : 'Failed';
+
+        const detailsPreview = log.details ?
+            JSON.stringify(log.details).substring(0, 50) + '...' :
+            '<em class="text-muted">None</em>';
+
+        return `
+            <tr onclick="showLogDetails(${log.id})" style="cursor: pointer;">
+                <td><small>${timestamp}</small></td>
+                <td>
+                    ${log.username ?
+                        `<strong>${log.username}</strong>` :
+                        '<em class="text-muted">System</em>'
+                    }
+                </td>
+                <td><span class="action-badge">${log.action}</span></td>
+                <td>
+                    ${log.resource_type ?
+                        `${log.resource_type}${log.resource_id ? `:${log.resource_id}` : ''}` :
+                        '<em class="text-muted">—</em>'
+                    }
+                </td>
+                <td><small>${log.ip_address || '<em class="text-muted">—</em>'}</small></td>
+                <td>
+                    <span class="status-badge ${statusClass}">
+                        <i class="fas ${statusIcon}"></i> ${statusText}
+                    </span>
+                </td>
+                <td><small>${detailsPreview}</small></td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderPagination(data) {
+    const info = document.getElementById('pagination-info');
+    const start = (data.page - 1) * data.per_page + 1;
+    const end = Math.min(data.page * data.per_page, data.total);
+    info.textContent = `Showing ${start}-${end} of ${data.total} logs`;
+
+    const controls = document.getElementById('pagination-controls');
+    const pages = [];
+
+    // Previous button
+    pages.push(`
+        <li class="page-item ${data.page === 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="event.preventDefault(); loadLogs(${data.page - 1})">
+                <i class="fas fa-chevron-left"></i>
+            </a>
+        </li>
+    `);
+
+    // Page numbers
+    const maxVisible = 5;
+    let startPage = Math.max(1, data.page - Math.floor(maxVisible / 2));
+    let endPage = Math.min(data.pages, startPage + maxVisible - 1);
+
+    if (endPage - startPage < maxVisible - 1) {
+        startPage = Math.max(1, endPage - maxVisible + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+        pages.push(`
+            <li class="page-item ${i === data.page ? 'active' : ''}">
+                <a class="page-link" href="#" onclick="event.preventDefault(); loadLogs(${i})">${i}</a>
+            </li>
+        `);
+    }
+
+    // Next button
+    pages.push(`
+        <li class="page-item ${data.page === data.pages ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="event.preventDefault(); loadLogs(${data.page + 1})">
+                <i class="fas fa-chevron-right"></i>
+            </a>
+        </li>
+    `);
+
+    controls.innerHTML = pages.join('');
+}
+
+function showLogDetails(logId) {
+    const log = currentLogs.find(l => l.id === logId);
+    if (!log) return;
+
+    const tbody = document.getElementById('log-details-body');
+    tbody.innerHTML = `
+        <tr>
+            <th style="width: 150px;">Timestamp:</th>
+            <td>${new Date(log.timestamp).toLocaleString()}</td>
+        </tr>
+        <tr>
+            <th>User:</th>
+            <td>${log.username || '<em>System</em>'} ${log.user_id ? `(ID: ${log.user_id})` : ''}</td>
+        </tr>
+        <tr>
+            <th>Action:</th>
+            <td><span class="action-badge">${log.action}</span></td>
+        </tr>
+        <tr>
+            <th>Resource:</th>
+            <td>${log.resource_type || '—'} ${log.resource_id ? ` (ID: ${log.resource_id})` : ''}</td>
+        </tr>
+        <tr>
+            <th>IP Address:</th>
+            <td>${log.ip_address || '—'}</td>
+        </tr>
+        <tr>
+            <th>User Agent:</th>
+            <td><small>${log.user_agent || '—'}</small></td>
+        </tr>
+        <tr>
+            <th>Status:</th>
+            <td>
+                <span class="status-badge ${log.success ? 'status-success' : 'status-failure'}">
+                    <i class="fas ${log.success ? 'fa-check-circle' : 'fa-times-circle'}"></i>
+                    ${log.success ? 'Success' : 'Failed'}
+                </span>
+            </td>
+        </tr>
+    `;
+
+    const jsonContainer = document.getElementById('log-details-json');
+    if (log.details) {
+        jsonContainer.innerHTML = `
+            <h6>Details:</h6>
+            <pre class="log-details">${JSON.stringify(log.details, null, 2)}</pre>
+        `;
+    } else {
+        jsonContainer.innerHTML = '';
+    }
+
+    new bootstrap.Modal(document.getElementById('logDetailsModal')).show();
+}
+
+async function loadStatistics() {
+    try {
+        const response = await fetch('/security/audit-logs?per_page=1');
+        const data = await response.json();
+
+        document.getElementById('total-logs-count').textContent = data.total;
+
+        // Load success/failure counts
+        const successResp = await fetch('/security/audit-logs?success=true&per_page=1');
+        const successData = await successResp.json();
+        document.getElementById('success-logs-count').textContent = successData.total;
+
+        const failureResp = await fetch('/security/audit-logs?success=false&per_page=1');
+        const failureData = await failureResp.json();
+        document.getElementById('failure-logs-count').textContent = failureData.total;
+
+        const todayResp = await fetch('/security/audit-logs?days=1&per_page=1');
+        const todayData = await todayResp.json();
+        document.getElementById('today-logs-count').textContent = todayData.total;
+    } catch (error) {
+        console.error('Failed to load statistics:', error);
+    }
+}
+
+function resetFilters() {
+    document.getElementById('filter-action').value = '';
+    document.getElementById('filter-success').value = '';
+    document.getElementById('filter-days').value = '30';
+    document.getElementById('filter-user').value = '';
+    loadLogs(1);
+}
+
+async function exportLogs() {
+    const days = document.getElementById('filter-days').value;
+    const action = document.getElementById('filter-action').value;
+    const params = new URLSearchParams({ days });
+    if (action) params.append('action', action);
+
+    window.location.href = `/security/audit-logs/export?${params}`;
+}
+</script>
+{% endblock %}
