@@ -509,6 +509,7 @@ class StreamSourceAdapter(AudioSourceAdapter):
             else:
                 # Max reconnection attempts reached
                 self.status = AudioSourceStatus.ERROR
+                self.error_message = f"Max reconnection attempts ({self._max_reconnect_attempts}) reached"
                 return None
 
         try:
@@ -534,6 +535,7 @@ class StreamSourceAdapter(AudioSourceAdapter):
                         return None
                 else:
                     self.status = AudioSourceStatus.ERROR
+                    self.error_message = f"Read error after {self._max_reconnect_attempts} reconnect attempts: {str(e)}"
                     return None
 
             if not data:
@@ -606,6 +608,7 @@ class StreamSourceAdapter(AudioSourceAdapter):
         except ImportError:
             logger.error("pydub not available for MP3 stream decoding")
             self.status = AudioSourceStatus.ERROR
+            self.error_message = "pydub library not available for MP3 decoding (install with: pip install pydub)"
             return None
 
     def _decode_aac_chunk(self) -> Optional[np.ndarray]:

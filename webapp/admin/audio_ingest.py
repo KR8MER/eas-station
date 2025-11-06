@@ -99,6 +99,7 @@ def _serialize_audio_source(source_name: str, adapter: Any) -> Dict[str, Any]:
         'name': config.name,
         'type': config.source_type.value,
         'status': adapter.status.value,
+        'error_message': adapter.error_message,
         'enabled': config.enabled,
         'priority': config.priority,
         'auto_start': db_config.auto_start if db_config else False,

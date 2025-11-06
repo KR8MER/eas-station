@@ -152,6 +152,16 @@ function createSourceCard(source) {
                     <i class="fas fa-volume-mute"></i> Silence detected on this source
                 </div>
                 ` : ''}
+                ${source.status === 'error' && source.error_message ? `
+                <div class="alert alert-danger mt-3 mb-0">
+                    <i class="fas fa-exclamation-triangle"></i> <strong>Error:</strong> ${escapeHtml(source.error_message)}
+                </div>
+                ` : ''}
+                ${source.status === 'disconnected' ? `
+                <div class="alert alert-warning mt-3 mb-0">
+                    <i class="fas fa-plug-circle-xmark"></i> Disconnected - attempting to reconnect...
+                </div>
+                ` : ''}
             </div>
         </div>
     `;

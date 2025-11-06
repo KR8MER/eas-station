@@ -80,6 +80,16 @@ tracks releases under the 2.x series.
   - Changed `healthScore` → `overall-health-score`
   - Changed `silenceAlerts` → `alerts-count`
   - Added hidden `overall-health-circle` and `alerts-list` elements required by JavaScript
+- **Fixed Edit Audio Source button failing** - Edit modal didn't exist in HTML template
+  - Added complete `editSourceModal` with all required fields (priority, silence threshold/duration, description, enabled, auto-start)
+  - Source name and type are readonly (can't be changed after creation)
+  - Fixed device discovery modal to have `discoveredDevices` div for JavaScript
+- **Added detailed error messages for audio source failures** - Users now see exactly why sources fail instead of generic "error" status
+  - Added `error_message` field to `AudioSourceAdapter` to track failure details
+  - Stream connection failures show max reconnection attempts message
+  - Missing dependencies show installation instructions (e.g., "install pydub")
+  - Error messages displayed in red alert boxes on source cards
+  - Added disconnected status alert showing reconnection attempts
 - Fixed module import paths in scripts/manual_eas_event.py and scripts/manual_alert_fetch.py by adding repository root to sys.path
 - Fixed CSRF token protection in password change form (security settings)
 - Fixed audit log pagination to cap per_page parameter at 1000 to prevent DoS attacks
