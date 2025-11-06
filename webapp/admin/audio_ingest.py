@@ -77,6 +77,16 @@ def _initialize_audio_sources(controller: AudioIngestController) -> None:
         logger.error('Error initializing audio sources from database: %s', exc)
 
 
+def _sanitize_float(value: float) -> float:
+    """Sanitize float values to be JSON-safe (no inf/nan)."""
+    import math
+    if math.isinf(value):
+        return -120.0 if value < 0 else 120.0
+    if math.isnan(value):
+        return -120.0
+    return value
+
+
 def _serialize_audio_source(source_name: str, adapter: Any) -> Dict[str, Any]:
     """Serialize an audio source adapter to JSON-compatible dict."""
     config = adapter.config
@@ -103,13 +113,13 @@ def _serialize_audio_source(source_name: str, adapter: Any) -> Dict[str, Any]:
         },
         'metrics': {
             'timestamp': adapter.metrics.timestamp,
-            'peak_level_db': adapter.metrics.peak_level_db,
-            'rms_level_db': adapter.metrics.rms_level_db,
+            'peak_level_db': _sanitize_float(adapter.metrics.peak_level_db),
+            'rms_level_db': _sanitize_float(adapter.metrics.rms_level_db),
             'sample_rate': adapter.metrics.sample_rate,
             'channels': adapter.metrics.channels,
             'frames_captured': adapter.metrics.frames_captured,
             'silence_detected': adapter.metrics.silence_detected,
-            'buffer_utilization': adapter.metrics.buffer_utilization,
+            'buffer_utilization': _sanitize_float(adapter.metrics.buffer_utilization),
         } if adapter.metrics else None,
     }
 
@@ -412,13 +422,13 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
                         'source_name': adapter.config.name,
                         'source_type': adapter.config.source_type.value,
                         'timestamp': adapter.metrics.timestamp,
-                        'peak_level_db': adapter.metrics.peak_level_db,
-                        'rms_level_db': adapter.metrics.rms_level_db,
+                        'peak_level_db': _sanitize_float(adapter.metrics.peak_level_db),
+                        'rms_level_db': _sanitize_float(adapter.metrics.rms_level_db),
                         'sample_rate': adapter.metrics.sample_rate,
                         'channels': adapter.metrics.channels,
                         'frames_captured': adapter.metrics.frames_captured,
                         'silence_detected': adapter.metrics.silence_detected,
-                        'buffer_utilization': adapter.metrics.buffer_utilization,
+                        'buffer_utilization': _sanitize_float(adapter.metrics.buffer_utilization),
                     })
 
             # Also get recent database metrics
@@ -435,14 +445,14 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
                     'id': metric.id,
                     'source_name': metric.source_name,
                     'source_type': metric.source_type,
-                    'peak_level_db': metric.peak_level_db,
-                    'rms_level_db': metric.rms_level_db,
+                    'peak_level_db': _sanitize_float(metric.peak_level_db) if metric.peak_level_db is not None else -120.0,
+                    'rms_level_db': _sanitize_float(metric.rms_level_db) if metric.rms_level_db is not None else -120.0,
                     'sample_rate': metric.sample_rate,
                     'channels': metric.channels,
                     'frames_captured': metric.frames_captured,
                     'silence_detected': metric.silence_detected,
                     'clipping_detected': metric.clipping_detected,
-                    'buffer_utilization': metric.buffer_utilization,
+                    'buffer_utilization': _sanitize_float(metric.buffer_utilization) if metric.buffer_utilization is not None else 0.0,
                     'timestamp': metric.timestamp.isoformat() if metric.timestamp else None,
                 })
 
@@ -473,16 +483,16 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
                 health_list.append({
                     'id': record.id,
                     'source_name': record.source_name,
-                    'health_score': record.health_score,
+                    'health_score': _sanitize_float(record.health_score) if record.health_score is not None else 0.0,
                     'is_active': record.is_active,
                     'is_healthy': record.is_healthy,
                     'silence_detected': record.silence_detected,
                     'error_detected': record.error_detected,
-                    'uptime_seconds': record.uptime_seconds,
-                    'silence_duration_seconds': record.silence_duration_seconds,
-                    'time_since_last_signal_seconds': record.time_since_last_signal_seconds,
+                    'uptime_seconds': _sanitize_float(record.uptime_seconds) if record.uptime_seconds is not None else 0.0,
+                    'silence_duration_seconds': _sanitize_float(record.silence_duration_seconds) if record.silence_duration_seconds is not None else 0.0,
+                    'time_since_last_signal_seconds': _sanitize_float(record.time_since_last_signal_seconds) if record.time_since_last_signal_seconds is not None else 0.0,
                     'level_trend': record.level_trend,
-                    'trend_value_db': record.trend_value_db,
+                    'trend_value_db': _sanitize_float(record.trend_value_db) if record.trend_value_db is not None else 0.0,
                     'timestamp': record.timestamp.isoformat() if record.timestamp else None,
                 })
 
@@ -496,9 +506,10 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             # Calculate overall health
             if health_list:
                 avg_health = sum(h['health_score'] for h in health_list[:10]) / min(len(health_list), 10)
+                avg_health = _sanitize_float(avg_health)
                 overall_status = 'healthy' if avg_health >= 80 else 'degraded' if avg_health >= 50 else 'critical'
             else:
-                avg_health = 0
+                avg_health = 0.0
                 overall_status = 'unknown'
 
             return jsonify({
