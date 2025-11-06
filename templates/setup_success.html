@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block title %}Setup Complete - EAS Station{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-10 col-xl-9">
+            <div class="card shadow border-0">
+                <div class="card-header bg-success text-white">
+                    <h3 class="mb-0"><i class="fas fa-check-circle me-2"></i>Configuration Saved Successfully!</h3>
+                </div>
+                <div class="card-body p-4">
+                    <!-- Important notice about persistence -->
+                    <div class="alert alert-warning border-warning" role="alert">
+                        <h5 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Important: Configuration Persistence</h5>
+                        <p class="mb-3">Your configuration has been saved to <code>/app/.env</code> inside the container.</p>
+
+                        <strong>How this works:</strong>
+                        <ul class="mb-3">
+                            <li><strong>Container Restart</strong> (Stop/Start): ✅ Configuration persists</li>
+                            <li><strong>Container Redeploy</strong> (Recreate from Git): ❌ Configuration is lost</li>
+                        </ul>
+
+                        <p class="mb-0"><strong>To make your configuration permanent across redeployments, follow the instructions below.</strong></p>
+                    </div>
+
+                    <!-- Instructions for Portainer -->
+                    <div class="card mb-4">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fab fa-docker me-2"></i>For Permanent Configuration (Portainer)</h5>
+                        </div>
+                        <div class="card-body">
+                            <p>To ensure your configuration persists across all redeployments:</p>
+                            <ol>
+                                <li>Go to your stack in Portainer</li>
+                                <li>Click <strong>"Editor"</strong> tab</li>
+                                <li>Scroll down to <strong>"Environment variables"</strong> section</li>
+                                <li>Add the variables below (copy them from the table)</li>
+                                <li>Click <strong>"Update the stack"</strong></li>
+                            </ol>
+                            <p class="mb-0 text-muted"><small>💡 Environment variables set in Portainer override the .env file and persist across all deployments.</small></p>
+                        </div>
+                    </div>
+
+                    <!-- Configuration table -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="fas fa-list me-2"></i>Your Configuration Values</h5>
+                            <button class="btn btn-sm btn-outline-primary" onclick="copyAllToClipboard()">
+                                <i class="fas fa-copy me-1"></i> Copy All
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width: 30%;">Variable Name</th>
+                                            <th style="width: 60%;">Value</th>
+                                            <th style="width: 10%;" class="text-center">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for var in env_vars %}
+                                        <tr>
+                                            <td><code>{{ var.key }}</code></td>
+                                            <td>
+                                                <span class="d-inline-block text-truncate" style="max-width: 500px;" title="{{ var.value }}">
+                                                    {% if var.is_sensitive %}
+                                                        <span class="text-muted" id="display-{{ var.key }}">{{ var.display_value }}</span>
+                                                        <button class="btn btn-sm btn-link p-0 ms-1" onclick="toggleVisibility('{{ var.key }}')" title="Show full value">
+                                                            <i class="fas fa-eye" id="icon-{{ var.key }}"></i>
+                                                        </button>
+                                                    {% else %}
+                                                        <code>{{ var.value }}</code>
+                                                    {% endif %}
+                                                </span>
+                                                <input type="hidden" id="value-{{ var.key }}" value="{{ var.value }}">
+                                            </td>
+                                            <td class="text-center">
+                                                <button class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard('{{ var.key }}')" title="Copy to clipboard">
+                                                    <i class="fas fa-copy"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-light">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Click <i class="fas fa-copy"></i> to copy individual values, or "Copy All" to copy in Portainer format.
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- Portainer format for copy-paste -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0"><i class="fas fa-terminal me-2"></i>Portainer Format (Ready to Paste)</h6>
+                            <button class="btn btn-sm btn-outline-primary" onclick="copyPortainerFormat()">
+                                <i class="fas fa-copy me-1"></i> Copy Format
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <pre class="bg-dark text-light p-3 rounded mb-0" id="portainer-format" style="max-height: 300px; overflow-y: auto;"><code>{% for var in env_vars %}{{ var.key }}={{ var.value }}
+{% endfor %}</code></pre>
+                        </div>
+                        <div class="card-footer bg-light">
+                            <small class="text-muted">
+                                Copy the above text and paste it into Portainer's "Environment variables" section (one per line).
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- Next steps -->
+                    <div class="card border-info">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0"><i class="fas fa-forward me-2"></i>Next Steps</h5>
+                        </div>
+                        <div class="card-body">
+                            <h6>For Temporary Testing (Current Session Only):</h6>
+                            <ol>
+                                <li><strong>Restart</strong> your container (not redeploy)</li>
+                                <li>Access your EAS Station dashboard</li>
+                                <li>Changes will work until you redeploy from Git</li>
+                            </ol>
+
+                            <h6 class="mt-4">For Permanent Configuration (Recommended):</h6>
+                            <ol>
+                                <li>Copy the environment variables above into Portainer</li>
+                                <li>Update your stack in Portainer</li>
+                                <li>Your configuration will persist across all future deployments</li>
+                            </ol>
+                        </div>
+                    </div>
+
+                    <!-- Action buttons -->
+                    <div class="d-flex gap-3 mt-4">
+                        <a href="{{ url_for('setup_wizard') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left me-2"></i>Back to Setup
+                        </a>
+                        <a href="/" class="btn btn-primary">
+                            <i class="fas fa-home me-2"></i>Go to Dashboard
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Store visibility state for sensitive fields
+const visibilityState = {};
+
+function toggleVisibility(key) {
+    const displaySpan = document.getElementById(`display-${key}`);
+    const icon = document.getElementById(`icon-${key}`);
+    const valueInput = document.getElementById(`value-${key}`);
+
+    if (!visibilityState[key]) {
+        // Show full value
+        displaySpan.textContent = valueInput.value;
+        icon.className = 'fas fa-eye-slash';
+        visibilityState[key] = true;
+    } else {
+        // Hide value
+        const value = valueInput.value;
+        const masked = value.length > 12
+            ? value.substring(0, 8) + '...' + value.substring(value.length - 4)
+            : '***';
+        displaySpan.textContent = masked;
+        icon.className = 'fas fa-eye';
+        visibilityState[key] = false;
+    }
+}
+
+function copyToClipboard(key) {
+    const valueInput = document.getElementById(`value-${key}`);
+    const value = valueInput.value;
+
+    navigator.clipboard.writeText(value).then(() => {
+        // Show success feedback
+        const btn = event.target.closest('button');
+        const originalHTML = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check"></i>';
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-success');
+
+        setTimeout(() => {
+            btn.innerHTML = originalHTML;
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-outline-secondary');
+        }, 2000);
+    }).catch(err => {
+        alert('Failed to copy: ' + err);
+    });
+}
+
+function copyPortainerFormat() {
+    const formatEl = document.getElementById('portainer-format');
+    const text = formatEl.textContent;
+
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = event.target.closest('button');
+        const originalHTML = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check me-1"></i> Copied!';
+        btn.classList.remove('btn-outline-primary');
+        btn.classList.add('btn-success');
+
+        setTimeout(() => {
+            btn.innerHTML = originalHTML;
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-outline-primary');
+        }, 2000);
+    }).catch(err => {
+        alert('Failed to copy: ' + err);
+    });
+}
+
+function copyAllToClipboard() {
+    const formatEl = document.getElementById('portainer-format');
+    const text = formatEl.textContent;
+
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = event.target.closest('button');
+        const originalHTML = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check me-1"></i> Copied!';
+        btn.classList.remove('btn-outline-primary');
+        btn.classList.add('btn-success');
+
+        setTimeout(() => {
+            btn.innerHTML = originalHTML;
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-outline-primary');
+        }, 2000);
+    }).catch(err => {
+        alert('Failed to copy: ' + err);
+    });
+}
+</script>
+{% endblock %}
