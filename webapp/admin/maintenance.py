@@ -635,14 +635,17 @@ def register_maintenance_routes(app, logger):
 
     @app.route("/admin/env_config", methods=["GET", "POST"])
     def env_config():
-        """Read or update the stack.env file."""
+        """Read or update the environment configuration file (.env or stack.env)."""
 
-        env_file_path = repo_root / "stack.env"
+        # Support both .env (CLI deployments) and stack.env (Portainer deployments)
+        env_file_path = repo_root / ".env"
+        if not env_file_path.exists():
+            env_file_path = repo_root / "stack.env"
 
         if request.method == "GET":
             try:
                 if not env_file_path.exists():
-                    return jsonify({"error": "stack.env file not found"}), 404
+                    return jsonify({"error": f"Environment file not found (checked .env and stack.env)"}), 404
 
                 with open(env_file_path, "r") as f:
                     content = f.read()
@@ -681,7 +684,7 @@ def register_maintenance_routes(app, logger):
                 backup_path = env_file_path.with_suffix(".env.backup")
                 import shutil
                 shutil.copy2(env_file_path, backup_path)
-                logger.info("Created backup of stack.env at %s", backup_path)
+                logger.info("Created backup of %s at %s", env_file_path.name, backup_path)
 
             # Write new content
             with open(env_file_path, "w") as f:
