@@ -619,6 +619,68 @@ Simplifies codebase by ~60 lines.
 
 ---
 
+## 📖 Code Navigation & Architecture Reference
+
+### Function Tree Documentation
+
+For quick navigation and understanding of the codebase structure, refer to the comprehensive function tree documentation:
+
+- **`/FUNCTION_TREE.md`** (Primary Reference)
+  - Complete catalog of all major modules, classes, and functions
+  - 24 database models, 150+ functions, 98+ classes documented
+  - Every entry includes file path, line number, and signature
+  - Module dependency graph and database schema overview
+  - **Use this to:** Find where specific functions are defined, understand module organization
+
+- **`/FUNCTION_TREE_INDEX.md`** (Quick Reference)
+  - Quick navigation guide for different user types (developers, agents, operators)
+  - Task-based lookup table (e.g., "Add API endpoint" → relevant files)
+  - Complete module file structure tree
+  - Search tips and common patterns
+  - **Use this to:** Quickly find where to add new features or fix bugs
+
+- **`/FUNCTION_TREE_SUMMARY.txt`** (Overview)
+  - Overview of documentation contents
+  - Key statistics and metrics
+  - Maintenance guidelines
+  - **Use this to:** Understand the scope and coverage of the function tree
+
+### How to Use Function Tree for Development
+
+**When adding a new feature:**
+1. Search FUNCTION_TREE_INDEX.md for similar features
+2. Identify the module pattern (e.g., routes in `webapp/`, models in `app_core/`)
+3. Follow the established patterns from similar functions
+4. Update FUNCTION_TREE.md if you add new significant functions or modules
+
+**When fixing a bug:**
+1. Search FUNCTION_TREE.md for the function/class mentioned in the bug report
+2. Note the file path and line number
+3. Check related functions in the same module
+4. Look for similar patterns in other modules for consistency
+
+**When exploring unfamiliar code:**
+1. Start with FUNCTION_TREE_SUMMARY.txt to understand subsystem coverage
+2. Use FUNCTION_TREE_INDEX.md to find the subsystem you're interested in
+3. Dive into FUNCTION_TREE.md for detailed function signatures and locations
+
+### Known Bugs Documentation
+
+**`/KNOWN_BUGS.md`** contains a comprehensive list of identified issues:
+- RBAC (Role-Based Access Control) issues
+- Text-to-Speech (TTS) configuration issues
+- Display Screens page issues
+- Environment Settings page issues
+- GPIO configuration parsing issues
+- Docker/Portainer deployment issues
+
+**Before starting any work:**
+1. Check KNOWN_BUGS.md to see if your issue is already documented
+2. If fixing a bug, remove it from KNOWN_BUGS.md in your commit
+3. If discovering a new bug, add it to KNOWN_BUGS.md with detailed analysis
+
+---
+
 ## 🎓 Learning Resources
 
 ### Python & Flask
