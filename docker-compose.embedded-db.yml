@@ -14,8 +14,6 @@ services:
         condition: service_healthy
     ports:
       - "5000:5000"
-    env_file:
-      - .env
     environment:
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
     extra_hosts:
@@ -37,8 +35,6 @@ services:
         condition: service_healthy
     command: ["python", "poller/cap_poller.py", "--continuous"]
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
     extra_hosts:
@@ -66,8 +62,6 @@ services:
       - --log-level
       - "${LOG_LEVEL:-INFO}"
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       CAP_POLLER_MODE: IPAWS
       CAP_ENDPOINTS: ${IPAWS_CAP_FEED_URLS:-}
