@@ -73,6 +73,14 @@ function renderAudioSources() {
 }
 
 /**
+ * Sanitize ID for use in HTML element IDs and CSS selectors
+ */
+function sanitizeId(id) {
+    // Replace characters that are problematic in CSS selectors and HTML IDs
+    return id.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+/**
  * Create HTML for a source card
  */
 function createSourceCard(source) {
@@ -80,14 +88,20 @@ function createSourceCard(source) {
     const statusBadge = getStatusBadge(source.status);
     const metrics = source.metrics || {};
 
+    // Sanitize source ID for use in HTML element IDs
+    const safeId = sanitizeId(source.id);
+
+    // Escape source ID for safe use in JavaScript strings (onclick attributes)
+    const escapedId = escapeHtml(source.id).replace(/'/g, "\\'").replace(/\\/g, '\\\\');
+
     return `
-        <div class="source-card card mb-3 ${statusClass}" id="source-${source.id}">
+        <div class="source-card card mb-3 ${statusClass}" id="source-${safeId}">
             <div class="card-body">
                 <div class="row align-items-center">
                     <div class="col-md-4">
                         <h5 class="mb-1">${escapeHtml(source.name)}</h5>
                         <p class="mb-1">
-                            <span class="badge bg-secondary">${source.type.toUpperCase()}</span>
+                            <span class="badge bg-secondary">${escapeHtml(source.type.toUpperCase())}</span>
                             ${statusBadge}
                         </p>
                         <small class="text-muted">
@@ -99,9 +113,9 @@ function createSourceCard(source) {
                             <small class="text-muted d-block mb-1">Peak Level</small>
                             <div class="audio-meter">
                                 <div class="audio-meter-bar peak"
-                                     id="peak-${source.id}"
+                                     id="peak-${safeId}"
                                      style="width: 0%">
-                                    <span class="audio-meter-value" id="peak-value-${source.id}">-- dB</span>
+                                    <span class="audio-meter-value" id="peak-value-${safeId}">-- dB</span>
                                 </div>
                             </div>
                         </div>
@@ -109,26 +123,26 @@ function createSourceCard(source) {
                             <small class="text-muted d-block mb-1">RMS Level</small>
                             <div class="audio-meter">
                                 <div class="audio-meter-bar rms"
-                                     id="rms-${source.id}"
+                                     id="rms-${safeId}"
                                      style="width: 0%">
-                                    <span class="audio-meter-value" id="rms-value-${source.id}">-- dB</span>
+                                    <span class="audio-meter-value" id="rms-value-${safeId}">-- dB</span>
                                 </div>
                             </div>
                         </div>
                     </div>
                     <div class="col-md-3 text-end">
                         ${source.status === 'running'
-                            ? `<button class="btn btn-sm btn-warning" onclick="stopSource('${source.id}')">
+                            ? `<button class="btn btn-sm btn-warning" onclick="stopSource('${escapedId}')">
                                 <i class="fas fa-stop"></i> Stop
                                </button>`
-                            : `<button class="btn btn-sm btn-success" onclick="startSource('${source.id}')">
+                            : `<button class="btn btn-sm btn-success" onclick="startSource('${escapedId}')">
                                 <i class="fas fa-play"></i> Start
                                </button>`
                         }
-                        <button class="btn btn-sm btn-primary" onclick="editSource('${source.id}')">
+                        <button class="btn btn-sm btn-primary" onclick="editSource('${escapedId}')">
                             <i class="fas fa-edit"></i>
                         </button>
-                        <button class="btn btn-sm btn-danger" onclick="deleteSource('${source.id}')">
+                        <button class="btn btn-sm btn-danger" onclick="deleteSource('${escapedId}')">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
@@ -180,8 +194,9 @@ async function updateMetrics() {
  * Update a meter display
  */
 function updateMeterDisplay(sourceId, type, levelDb) {
-    const bar = document.getElementById(`${type}-${sourceId}`);
-    const value = document.getElementById(`${type}-value-${sourceId}`);
+    const safeId = sanitizeId(sourceId);
+    const bar = document.getElementById(`${type}-${safeId}`);
+    const value = document.getElementById(`${type}-value-${safeId}`);
 
     if (!bar || !value) return;
 
@@ -468,7 +483,7 @@ async function addAudioSource() {
  */
 async function startSource(sourceId) {
     try {
-        const response = await fetch(`/api/audio/sources/${sourceId}/start`, {
+        const response = await fetch(`/api/audio/sources/${encodeURIComponent(sourceId)}/start`, {
             method: 'POST',
         });
 
@@ -490,7 +505,7 @@ async function startSource(sourceId) {
  */
 async function stopSource(sourceId) {
     try {
-        const response = await fetch(`/api/audio/sources/${sourceId}/stop`, {
+        const response = await fetch(`/api/audio/sources/${encodeURIComponent(sourceId)}/stop`, {
             method: 'POST',
         });
 
@@ -516,7 +531,7 @@ async function deleteSource(sourceId) {
     }
 
     try {
-        const response = await fetch(`/api/audio/sources/${sourceId}`, {
+        const response = await fetch(`/api/audio/sources/${encodeURIComponent(sourceId)}`, {
             method: 'DELETE',
         });
 
@@ -539,7 +554,7 @@ async function deleteSource(sourceId) {
 async function editSource(sourceId) {
     try {
         // Fetch current source configuration
-        const response = await fetch(`/api/audio/sources/${sourceId}`);
+        const response = await fetch(`/api/audio/sources/${encodeURIComponent(sourceId)}`);
         if (!response.ok) {
             showError('Failed to load source configuration');
             return;
@@ -588,7 +603,7 @@ async function saveEditedSource() {
             description: document.getElementById('editDescription').value,
         };
 
-        const response = await fetch(`/api/audio/sources/${sourceId}`, {
+        const response = await fetch(`/api/audio/sources/${encodeURIComponent(sourceId)}`, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
