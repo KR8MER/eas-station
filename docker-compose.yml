@@ -8,8 +8,6 @@ services:
     image: eas-station:latest
     ports:
       - "80:5000"
-    networks:
-      - default
     environment:
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
     extra_hosts:
@@ -27,8 +25,6 @@ services:
       - app
     command: ["python", "poller/cap_poller.py", "--continuous"]
     restart: unless-stopped
-    networks:
-      - default
     environment:
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
     extra_hosts:
@@ -53,8 +49,6 @@ services:
       - --log-level
       - "${LOG_LEVEL:-INFO}"
     restart: unless-stopped
-    networks:
-      - default
     environment:
       CAP_POLLER_MODE: IPAWS
       CAP_ENDPOINTS: ${IPAWS_CAP_FEED_URLS:-}
@@ -91,8 +85,3 @@ services:
 
 volumes:
   alerts-db-data:
-
-networks:
-  default:
-    name: ${DOCKER_NETWORK:-bridge}
-    external: ${DOCKER_NETWORK_EXTERNAL:-false}
