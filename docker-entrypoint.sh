@@ -35,9 +35,10 @@ if [ -n "$CONFIG_PATH" ]; then
         mkdir -p "$CONFIG_DIR"
     fi
 
-    # Create empty .env file if it doesn't exist
+    # Create .env file if it doesn't exist or initialize from environment if empty
     if [ ! -f "$CONFIG_PATH" ]; then
         echo "Initializing persistent .env file at: $CONFIG_PATH"
+        # Create with header
         cat > "$CONFIG_PATH" <<'EOF'
 # EAS Station Environment Configuration
 #
@@ -47,11 +48,143 @@ if [ -n "$CONFIG_PATH" ]; then
 
 EOF
         chmod 666 "$CONFIG_PATH"
-        echo "✅ Created empty .env file at $CONFIG_PATH"
+        echo "✅ Created .env file at $CONFIG_PATH"
     else
         echo "✅ Using existing .env file at: $CONFIG_PATH ($(stat -f%z "$CONFIG_PATH" 2>/dev/null || stat -c%s "$CONFIG_PATH" 2>/dev/null || echo "unknown") bytes)"
         # Ensure it's writable
         chmod 666 "$CONFIG_PATH" 2>/dev/null || echo "⚠️  Warning: Could not set permissions on $CONFIG_PATH"
+    fi
+
+    # Check if the file is essentially empty (no SECRET_KEY) and populate from environment
+    if ! grep -q "^SECRET_KEY=" "$CONFIG_PATH" 2>/dev/null; then
+        echo "⚙️  Persistent .env file is empty or missing configuration"
+        echo "   Initializing from environment variables (stack.env)..."
+
+        # Append environment variables to the config file
+        # This transfers configuration from stack.env (loaded as env vars) to the persistent file
+        cat >> "$CONFIG_PATH" <<EOF
+
+# =============================================================================
+# CORE SETTINGS (REQUIRED) - Auto-populated from environment
+# =============================================================================
+SECRET_KEY=${SECRET_KEY:-}
+APP_BUILD_VERSION=${APP_BUILD_VERSION:-}
+
+# Flask configuration
+FLASK_DEBUG=${FLASK_DEBUG:-false}
+FLASK_APP=${FLASK_APP:-app.py}
+FLASK_RUN_HOST=${FLASK_RUN_HOST:-0.0.0.0}
+FLASK_RUN_PORT=${FLASK_RUN_PORT:-5000}
+FLASK_ENV=${FLASK_ENV:-production}
+
+# =============================================================================
+# DATABASE (PostgreSQL + PostGIS)
+# =============================================================================
+POSTGRES_HOST=${POSTGRES_HOST:-alerts-db}
+POSTGRES_PORT=${POSTGRES_PORT:-5432}
+POSTGRES_DB=${POSTGRES_DB:-alerts}
+POSTGRES_USER=${POSTGRES_USER:-postgres}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-change-me}
+
+# =============================================================================
+# ALERT POLLING
+# =============================================================================
+POLL_INTERVAL_SEC=${POLL_INTERVAL_SEC:-180}
+CAP_TIMEOUT=${CAP_TIMEOUT:-30}
+NOAA_USER_AGENT=${NOAA_USER_AGENT:-}
+CAP_ENDPOINTS=${CAP_ENDPOINTS:-}
+IPAWS_CAP_FEED_URLS=${IPAWS_CAP_FEED_URLS:-}
+IPAWS_DEFAULT_LOOKBACK_HOURS=${IPAWS_DEFAULT_LOOKBACK_HOURS:-12}
+
+# =============================================================================
+# LOCATION SETTINGS
+# =============================================================================
+DEFAULT_TIMEZONE=${DEFAULT_TIMEZONE:-America/New_York}
+DEFAULT_COUNTY_NAME=${DEFAULT_COUNTY_NAME:-}
+DEFAULT_STATE_CODE=${DEFAULT_STATE_CODE:-}
+DEFAULT_ZONE_CODES=${DEFAULT_ZONE_CODES:-}
+DEFAULT_AREA_TERMS=${DEFAULT_AREA_TERMS:-}
+DEFAULT_MAP_CENTER_LAT=${DEFAULT_MAP_CENTER_LAT:-}
+DEFAULT_MAP_CENTER_LNG=${DEFAULT_MAP_CENTER_LNG:-}
+DEFAULT_MAP_ZOOM=${DEFAULT_MAP_ZOOM:-9}
+
+# =============================================================================
+# EAS BROADCAST (SAME/EAS ENCODER)
+# =============================================================================
+EAS_BROADCAST_ENABLED=${EAS_BROADCAST_ENABLED:-true}
+EAS_ORIGINATOR=${EAS_ORIGINATOR:-EAS}
+EAS_STATION_ID=${EAS_STATION_ID:-}
+EAS_OUTPUT_DIR=${EAS_OUTPUT_DIR:-static/eas_messages}
+EAS_ATTENTION_TONE_SECONDS=${EAS_ATTENTION_TONE_SECONDS:-8}
+EAS_SAMPLE_RATE=${EAS_SAMPLE_RATE:-44100}
+EAS_AUDIO_PLAYER=${EAS_AUDIO_PLAYER:-aplay}
+EAS_MANUAL_FIPS_CODES=${EAS_MANUAL_FIPS_CODES:-}
+EAS_MANUAL_EVENT_CODES=${EAS_MANUAL_EVENT_CODES:-}
+EAS_GPIO_PIN=${EAS_GPIO_PIN:-}
+EAS_GPIO_ACTIVE_STATE=${EAS_GPIO_ACTIVE_STATE:-HIGH}
+EAS_GPIO_HOLD_SECONDS=${EAS_GPIO_HOLD_SECONDS:-5}
+
+# =============================================================================
+# TEXT-TO-SPEECH (OPTIONAL)
+# =============================================================================
+EAS_TTS_PROVIDER=${EAS_TTS_PROVIDER:-}
+AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+AZURE_OPENAI_KEY=${AZURE_OPENAI_KEY:-}
+AZURE_OPENAI_VOICE=${AZURE_OPENAI_VOICE:-alloy}
+AZURE_OPENAI_MODEL=${AZURE_OPENAI_MODEL:-tts-1-hd}
+AZURE_OPENAI_SPEED=${AZURE_OPENAI_SPEED:-1.0}
+AZURE_SPEECH_KEY=${AZURE_SPEECH_KEY:-}
+AZURE_SPEECH_REGION=${AZURE_SPEECH_REGION:-}
+
+# =============================================================================
+# LED DISPLAY (OPTIONAL)
+# =============================================================================
+LED_SIGN_IP=${LED_SIGN_IP:-}
+LED_SIGN_PORT=${LED_SIGN_PORT:-10001}
+DEFAULT_LED_LINES=${DEFAULT_LED_LINES:-}
+
+# =============================================================================
+# VFD DISPLAY (OPTIONAL)
+# =============================================================================
+VFD_PORT=${VFD_PORT:-}
+VFD_BAUDRATE=${VFD_BAUDRATE:-38400}
+
+# =============================================================================
+# NOTIFICATIONS (OPTIONAL)
+# =============================================================================
+ENABLE_EMAIL_NOTIFICATIONS=${ENABLE_EMAIL_NOTIFICATIONS:-false}
+ENABLE_SMS_NOTIFICATIONS=${ENABLE_SMS_NOTIFICATIONS:-false}
+MAIL_SERVER=${MAIL_SERVER:-}
+MAIL_PORT=${MAIL_PORT:-587}
+MAIL_USE_TLS=${MAIL_USE_TLS:-true}
+MAIL_USERNAME=${MAIL_USERNAME:-}
+MAIL_PASSWORD=${MAIL_PASSWORD:-}
+
+# =============================================================================
+# LOGGING & PERFORMANCE
+# =============================================================================
+LOG_LEVEL=${LOG_LEVEL:-INFO}
+LOG_FILE=${LOG_FILE:-logs/eas_station.log}
+CACHE_TIMEOUT=${CACHE_TIMEOUT:-300}
+MAX_WORKERS=${MAX_WORKERS:-2}
+UPLOAD_FOLDER=${UPLOAD_FOLDER:-/app/uploads}
+
+# =============================================================================
+# DOCKER/INFRASTRUCTURE
+# =============================================================================
+TZ=${TZ:-America/New_York}
+WATCHTOWER_LABEL_ENABLE=${WATCHTOWER_LABEL_ENABLE:-true}
+WATCHTOWER_MONITOR_ONLY=${WATCHTOWER_MONITOR_ONLY:-false}
+ALERTS_DB_IMAGE=${ALERTS_DB_IMAGE:-postgis/postgis:17-3.4}
+AUDIO_INGEST_ENABLED=${AUDIO_INGEST_ENABLED:-true}
+AUDIO_ALSA_ENABLED=${AUDIO_ALSA_ENABLED:-false}
+AUDIO_ALSA_DEVICE=${AUDIO_ALSA_DEVICE:-}
+AUDIO_SDR_ENABLED=${AUDIO_SDR_ENABLED:-false}
+EOF
+
+        echo "   ✅ Initialized persistent config with values from stack.env"
+        echo "   📝 File location: $CONFIG_PATH"
+        echo "   ℹ️  The application will now start normally without setup wizard"
     fi
 fi
 
