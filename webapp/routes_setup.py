@@ -115,15 +115,53 @@ def register(app, logger):
             else:
                 create_backup = request.form.get("create_backup", "yes") == "yes"
                 try:
+                    from app_utils.setup_wizard import ENV_OUTPUT_PATH
+                    import os
+
+                    # Check BEFORE write
+                    setup_logger.info("=== PRE-WRITE DIAGNOSTICS ===")
+                    setup_logger.info(f"Current user: uid={os.getuid()}, gid={os.getgid()}")
+                    setup_logger.info(f"ENV_OUTPUT_PATH: {ENV_OUTPUT_PATH}")
+                    if ENV_OUTPUT_PATH.exists():
+                        stat_before = ENV_OUTPUT_PATH.stat()
+                        setup_logger.info(f"File exists - size: {stat_before.st_size}, perms: {oct(stat_before.st_mode)}, owner: uid={stat_before.st_uid}")
+                        setup_logger.info(f"File is writable: {os.access(ENV_OUTPUT_PATH, os.W_OK)}")
+                    else:
+                        setup_logger.info("File does not exist yet")
+                        parent_dir = ENV_OUTPUT_PATH.parent
+                        setup_logger.info(f"Parent dir writable: {os.access(parent_dir, os.W_OK)}")
+
                     result_path = write_env_file(state=state, updates=cleaned, create_backup=create_backup)
 
-                    # Debug logging
+                    # Check AFTER write
+                    setup_logger.info("=== POST-WRITE DIAGNOSTICS ===")
                     setup_logger.info(f"Successfully wrote .env file to: {result_path}")
                     setup_logger.info(f".env file exists: {result_path.exists()}")
                     if result_path.exists():
-                        setup_logger.info(f".env file size: {result_path.stat().st_size} bytes")
-                        setup_logger.info(f".env file permissions: {oct(result_path.stat().st_mode)}")
+                        stat_after = result_path.stat()
+                        setup_logger.info(f".env file size: {stat_after.st_size} bytes")
+                        setup_logger.info(f".env file permissions: {oct(stat_after.st_mode)}")
+                        setup_logger.info(f".env file owner: uid={stat_after.st_uid}, gid={stat_after.st_gid}")
 
+                        # Try to read back what we just wrote
+                        try:
+                            content_check = result_path.read_text(encoding='utf-8')
+                            setup_logger.info(f".env file content length: {len(content_check)} chars")
+                            if 'SECRET_KEY=' in content_check:
+                                # Find the SECRET_KEY line to verify it's not empty
+                                for line in content_check.split('\n'):
+                                    if line.startswith('SECRET_KEY='):
+                                        key_value = line.split('=', 1)[1] if '=' in line else ''
+                                        setup_logger.info(f"✅ SECRET_KEY found, length: {len(key_value)}")
+                                        break
+                            else:
+                                setup_logger.error("❌ SECRET_KEY NOT found in written file!")
+                        except Exception as read_exc:
+                            setup_logger.error(f"Failed to read back .env file: {read_exc}")
+
+                except PermissionError as perm_exc:
+                    setup_logger.exception("Permission denied writing .env file")
+                    flash(f"Permission denied: Cannot write to .env file. File may be read-only or owned by different user. Error: {perm_exc}")
                 except Exception as exc:  # pragma: no cover - unexpected filesystem errors
                     setup_logger.exception("Failed to write .env from setup wizard")
                     flash(f"Unable to update configuration: {exc}")
@@ -222,6 +260,7 @@ def register(app, logger):
             'is_dir': ENV_OUTPUT_PATH.is_dir() if ENV_OUTPUT_PATH.exists() else False,
             'container_id': os.environ.get('HOSTNAME', 'unknown'),
             'working_dir': os.getcwd(),
+            'current_user': f"uid={os.getuid()}, gid={os.getgid()}",
         }
 
         if ENV_OUTPUT_PATH.exists():
@@ -229,6 +268,8 @@ def register(app, logger):
             env_info['size'] = stat_info.st_size
             env_info['permissions'] = oct(stat_info.st_mode)
             env_info['modified'] = stat_info.st_mtime
+            env_info['owner'] = f"uid={stat_info.st_uid}, gid={stat_info.st_gid}"
+            env_info['writable'] = os.access(ENV_OUTPUT_PATH, os.W_OK)
 
             if ENV_OUTPUT_PATH.is_file():
                 try:
@@ -239,6 +280,10 @@ def register(app, logger):
                 env_info['content'] = "(path is a directory, not a file)"
         else:
             env_info['content'] = "(file does not exist)"
+            # Check parent directory permissions
+            parent_dir = ENV_OUTPUT_PATH.parent
+            env_info['parent_dir'] = str(parent_dir)
+            env_info['parent_writable'] = os.access(parent_dir, os.W_OK)
 
         return render_template(
             "setup_env_viewer.html",
