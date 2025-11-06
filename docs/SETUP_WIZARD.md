@@ -183,10 +183,18 @@ After initial configuration, administrators can access the wizard at:
 9. **Save Configuration**
    - Click "Save configuration" button
    - Wait for confirmation message
-   - Restart Docker services to apply changes:
-     ```bash
-     docker compose restart
-     ```
+
+10. **Download Your Configuration Backup (CRITICAL for Portainer!)**
+    - You'll be redirected to the success page
+    - **Click the big red "Download Backup Now" button**
+    - Save the `.env` backup file securely
+    - This backup is essential for Portainer deployments where config resets on redeploy
+
+11. **Restart Docker Services**
+    ```bash
+    docker compose restart
+    ```
+    Or in Portainer: Stop → Start (NOT Redeploy)
 
 ### Updating Configuration
 
@@ -206,6 +214,78 @@ To modify existing configuration:
    ```bash
    docker compose restart
    ```
+
+### Configuration Backup and Restore
+
+#### Understanding Configuration Persistence
+
+The setup wizard saves configuration to `/app/.env` inside the container:
+
+- **Container Restart** (Stop/Start in Portainer): ✅ Configuration persists
+- **Container Redeploy** (Git update/recreate): ❌ Configuration resets to empty
+
+This is by design! The `.env` file in Git is intentionally empty to prevent secrets from being committed.
+
+#### Backup Your Configuration
+
+There are three ways to backup your configuration:
+
+**1. Setup Wizard Success Page (Recommended)**
+- After completing the wizard, click "Download Backup Now"
+- Saves timestamped file: `eas-station-backup-20250106-143022.env`
+- Store this file securely (contains passwords and secret keys!)
+
+**2. Admin Environment Settings Page**
+- Navigate to Settings → Environment Settings
+- Click "Download .env Backup" button in top-right corner
+- Same timestamped backup file is created
+
+**3. Direct Download** (while in setup mode)
+- Visit `/setup/view-env` to view current configuration
+- Click download button to save
+
+#### Restore Configuration After Redeployment
+
+When you redeploy your stack from Git (e.g., to get updates), the `.env` file resets. To restore your configuration:
+
+**Method 1: Upload Backup File (Fastest)**
+
+1. After redeployment, visit `/setup` (setup wizard)
+2. At the top, you'll see "Have a backup? Restore it here"
+3. Click "Choose File" and select your backup `.env` file
+4. Click "Restore & Skip Wizard"
+5. Restart the container (Stop/Start in Portainer)
+
+**Method 2: Paste into Portainer Environment Variables (Permanent)**
+
+This method makes configuration permanent - no restore needed after redeployments:
+
+1. Complete the setup wizard
+2. On the success page, scroll to "Portainer Format (Ready to Paste)"
+3. Click "Copy Format"
+4. In Portainer, go to Stack → Editor tab
+5. Scroll to "Environment variables" section
+6. Paste the copied values
+7. Click "Update the stack"
+
+Now your configuration persists across all future deployments!
+
+#### Download from Admin Panel
+
+After logging in as administrator:
+
+1. Navigate to **Settings → Environment Settings**
+2. Click **"Download .env Backup"** button (top-right)
+3. Backup file is saved with timestamp
+4. Keep this file safe - it contains sensitive credentials
+
+#### Backup Best Practices
+
+- **Download backup immediately** after completing wizard
+- **Store securely**: Backups contain SECRET_KEY, database passwords, API keys
+- **Keep one backup per deployment**: Delete old backups to avoid confusion
+- **Never commit backups to Git**: Add `*.env` to `.gitignore` (already configured)
+- **Rotate backups**: When you update config, download a new backup
 
 ---
 
@@ -390,6 +470,42 @@ def _validate_my_field(value: str) -> str:
   }
   ```
 
+#### `GET /setup/download-env`
+- **Purpose**: Download current .env file as backup
+- **Auth**: Required unless SETUP_MODE=true
+- **Returns**: File download with timestamped filename
+- **Filename Format**: `eas-station-backup-YYYYMMDD-HHMMSS.env`
+
+#### `POST /setup/upload-env`
+- **Purpose**: Restore .env file from backup
+- **Auth**: Required unless SETUP_MODE=true
+- **Body**: Multipart form data with `env_file` field
+- **Returns**: JSON with success/error message
+- **Example Response**:
+  ```json
+  {
+    "success": true,
+    "message": "Configuration restored successfully. Please restart the container for changes to take effect."
+  }
+  ```
+- **Validation**: File must have `.env` extension and contain `SECRET_KEY=`
+
+#### `GET /setup/success`
+- **Purpose**: Display configuration success page with backup download
+- **Auth**: Required unless SETUP_MODE=true
+- **Returns**: HTML page with download button and restore instructions
+
+#### `GET /setup/view-env`
+- **Purpose**: View current .env file contents for debugging
+- **Auth**: Required unless SETUP_MODE=true
+- **Returns**: HTML page showing file metadata and contents
+
+#### `GET /admin/environment/download-env`
+- **Purpose**: Download .env backup from admin environment settings page
+- **Auth**: Required (admin user with system.view_config permission)
+- **Returns**: File download with timestamped filename
+- **Access**: Settings → Environment Settings → "Download .env Backup" button
+
 ### CSRF Protection
 
 All POST requests require CSRF token:
@@ -490,5 +606,5 @@ A: All users will be logged out and need to log in again. Sessions are encrypted
 
 ---
 
-**Last Updated**: 2025-01-06
-**Version**: 2.0.0 (Post-Fix)
+**Last Updated**: 2025-01-06 (Added backup/restore functionality)
+**Version**: 2.1.0 (Backup/Restore Support)

@@ -28,6 +28,30 @@
                         {% endif %}
                     </div>
                     {% endif %}
+
+                    <!-- Restore from backup option -->
+                    <div class="card mb-3 border-info">
+                        <div class="card-header bg-info text-white">
+                            <h6 class="mb-0"><i class="fas fa-upload me-2"></i>Have a backup? Restore it here</h6>
+                        </div>
+                        <div class="card-body">
+                            <p class="mb-2">If you previously downloaded a configuration backup, you can restore it instead of filling out the wizard:</p>
+                            <form id="wizard-restore-form" enctype="multipart/form-data">
+                                <div class="row align-items-end">
+                                    <div class="col-md-8">
+                                        <input type="file" class="form-control" id="wizard-env-file-input" name="env_file" accept=".env">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <button type="submit" class="btn btn-info w-100">
+                                            <i class="fas fa-upload me-2"></i>Restore & Skip Wizard
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="wizard-restore-status" class="mt-2"></div>
+                            </form>
+                        </div>
+                    </div>
+
                     {% if not env_exists %}
                     <div class="alert alert-warning" role="alert">
                         <i class="fas fa-exclamation-triangle me-2"></i>
@@ -157,6 +181,63 @@
 </div>
 
 <script>
+// Handle restore form on wizard page
+document.addEventListener('DOMContentLoaded', function() {
+    const wizardRestoreForm = document.getElementById('wizard-restore-form');
+    if (wizardRestoreForm) {
+        wizardRestoreForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const fileInput = document.getElementById('wizard-env-file-input');
+            const file = fileInput.files[0];
+            const statusDiv = document.getElementById('wizard-restore-status');
+
+            if (!file) {
+                statusDiv.innerHTML = '<div class="alert alert-danger">Please select a file.</div>';
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('env_file', file);
+
+            try {
+                statusDiv.innerHTML = '<div class="alert alert-info">Uploading and restoring configuration...</div>';
+
+                const response = await fetch('{{ url_for("setup_upload_env") }}', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    statusDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <strong>Success!</strong> ${result.message || 'Configuration restored successfully!'}
+                            <br><strong>Next step:</strong> Restart your container for changes to take effect.
+                        </div>
+                    `;
+                    fileInput.value = '';
+                    // Reload page after 3 seconds to show restored values
+                    setTimeout(() => window.location.reload(), 3000);
+                } else {
+                    statusDiv.innerHTML = `
+                        <div class="alert alert-danger">
+                            <strong>Error:</strong> ${result.error || 'Failed to restore configuration.'}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <strong>Error:</strong> ${error.message}
+                    </div>
+                `;
+            }
+        });
+    }
+});
+
 const secretButton = document.getElementById('generate-secret');
 if (secretButton) {
     secretButton.addEventListener('click', async () => {

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flask import flash, g, jsonify, redirect, render_template, request, url_for
+from flask import flash, g, jsonify, redirect, render_template, request, send_file, url_for
 
 from app_utils.setup_wizard import (
     PLACEHOLDER_SECRET_VALUES,
@@ -16,6 +16,7 @@ from app_utils.setup_wizard import (
 )
 from flask import session
 import secrets
+from datetime import datetime
 
 
 SETUP_REASON_MESSAGES = {
@@ -243,6 +244,81 @@ def register(app, logger):
             "setup_env_viewer.html",
             env_info=env_info,
         )
+
+    @app.route("/setup/download-env")
+    def setup_download_env():
+        """Download the current .env file as a backup."""
+        setup_active = app.config.get("SETUP_MODE", False)
+        current_user = getattr(g, "current_user", None)
+        is_authenticated = bool(current_user and current_user.is_authenticated)
+
+        if not setup_active and not is_authenticated:
+            return redirect(url_for("login"))
+
+        from app_utils.setup_wizard import ENV_OUTPUT_PATH
+
+        if not ENV_OUTPUT_PATH.exists():
+            flash("No .env file exists to download.")
+            return redirect(url_for("setup_wizard"))
+
+        # Create a timestamped filename for the download
+        timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        download_name = f"eas-station-backup-{timestamp}.env"
+
+        return send_file(
+            ENV_OUTPUT_PATH,
+            as_attachment=True,
+            download_name=download_name,
+            mimetype='text/plain'
+        )
+
+    @app.route("/setup/upload-env", methods=["POST"])
+    def setup_upload_env():
+        """Upload and restore a .env file from backup."""
+        setup_active = app.config.get("SETUP_MODE", False)
+        current_user = getattr(g, "current_user", None)
+        is_authenticated = bool(current_user and current_user.is_authenticated)
+
+        if not setup_active and not is_authenticated:
+            return jsonify({"error": "Authentication required"}), 401
+
+        if 'env_file' not in request.files:
+            return jsonify({"error": "No file provided"}), 400
+
+        file = request.files['env_file']
+        if file.filename == '':
+            return jsonify({"error": "No file selected"}), 400
+
+        if not file.filename.endswith('.env'):
+            return jsonify({"error": "File must have .env extension"}), 400
+
+        try:
+            from app_utils.setup_wizard import ENV_OUTPUT_PATH, create_env_backup
+
+            # Create backup of existing file if it exists
+            if ENV_OUTPUT_PATH.exists():
+                backup_path = create_env_backup()
+                setup_logger.info(f"Created backup before restore: {backup_path}")
+
+            # Read and validate the uploaded content
+            content = file.read().decode('utf-8')
+
+            # Basic validation - check for SECRET_KEY
+            if 'SECRET_KEY=' not in content:
+                return jsonify({"error": "Invalid .env file: missing SECRET_KEY"}), 400
+
+            # Write the uploaded content
+            ENV_OUTPUT_PATH.write_text(content, encoding='utf-8')
+            setup_logger.info(f"Restored .env file from upload: {file.filename}")
+
+            return jsonify({
+                "success": True,
+                "message": "Configuration restored successfully. Please restart the container for changes to take effect."
+            })
+
+        except Exception as exc:
+            setup_logger.exception("Failed to restore .env file from upload")
+            return jsonify({"error": f"Failed to restore file: {str(exc)}"}), 500
 
     @app.route("/setup/lookup-county-fips", methods=["POST"])
     def setup_lookup_county_fips():

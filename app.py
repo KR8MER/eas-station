@@ -648,6 +648,8 @@ def before_request():
             'setup_lookup_county_fips',
             'setup_success',
             'setup_view_env',
+            'setup_download_env',
+            'setup_upload_env',
             'static'
         }
         allowed_paths = {
@@ -656,7 +658,9 @@ def before_request():
             '/setup/derive-zone-codes',
             '/setup/lookup-county-fips',
             '/setup/success',
-            '/setup/view-env'
+            '/setup/view-env',
+            '/setup/download-env',
+            '/setup/upload-env'
         }
         is_allowed_endpoint = request.endpoint in allowed_endpoints if request.endpoint else False
         is_allowed_path = request.path in allowed_paths or request.path.startswith('/static/')

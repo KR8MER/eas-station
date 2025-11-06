@@ -202,8 +202,17 @@
 <div class="settings-container">
     <!-- Header -->
     <div class="settings-header">
-        <h1><i class="fas fa-cog"></i> Environment Settings</h1>
-        <p>Manage application configuration and environment variables. Changes require a restart to take effect.</p>
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <h1><i class="fas fa-cog"></i> Environment Settings</h1>
+                <p>Manage application configuration and environment variables. Changes require a restart to take effect.</p>
+            </div>
+            <div>
+                <a href="{{ url_for('admin_download_env') }}" class="btn btn-primary">
+                    <i class="fas fa-download me-2"></i>Download .env Backup
+                </a>
+            </div>
+        </div>
 
         <!-- Validation Banner -->
         <div id="validation-banner" class="validation-banner"></div>
