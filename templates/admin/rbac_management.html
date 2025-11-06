@@ -415,12 +415,23 @@ function renderUsers() {
         return;
     }
 
+    // Helper function to escape HTML to prevent XSS
+    const escapeHtml = (unsafe) => {
+        if (!unsafe) return '';
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    };
+
     tbody.innerHTML = usersData.map(user => `
-        <tr onclick="showChangeRoleModal(${user.id}, '${user.username}', ${user.role_id || 'null'})">
-            <td><strong>${user.username}</strong></td>
+        <tr class="user-row" style="cursor: pointer;" data-user-id="${user.id}" data-user-role-id="${user.role_id || ''}">
+            <td><strong>${escapeHtml(user.username)}</strong></td>
             <td>
                 ${user.role_name ?
-                    `<span class="badge bg-primary">${user.role_name}</span>` :
+                    `<span class="badge bg-primary">${escapeHtml(user.role_name)}</span>` :
                     '<span class="badge bg-secondary">No Role</span>'
                 }
             </td>
@@ -432,12 +443,44 @@ function renderUsers() {
             </td>
             <td>${user.last_login_at ? new Date(user.last_login_at).toLocaleString() : 'Never'}</td>
             <td>
-                <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); showChangeRoleModal(${user.id}, '${user.username}', ${user.role_id || 'null'})">
+                <button class="btn btn-sm btn-primary change-role-btn" data-user-id="${user.id}" data-user-role-id="${user.role_id || ''}">
                     <i class="fas fa-user-tag"></i> Change Role
                 </button>
             </td>
         </tr>
     `).join('');
+
+    // Event delegation for row clicks - SECURE: no user data in onclick
+    tbody.querySelectorAll('.user-row').forEach(row => {
+        row.addEventListener('click', (e) => {
+            // Don't trigger if clicking the button
+            if (e.target.closest('.change-role-btn')) return;
+
+            const userId = parseInt(row.dataset.userId);
+            const roleId = row.dataset.userRoleId ? parseInt(row.dataset.userRoleId) : null;
+            const username = row.querySelector('strong').textContent; // Get from DOM, not data attribute
+            showChangeRoleModalSecure(userId, username, roleId);
+        });
+    });
+
+    // Event delegation for button clicks - SECURE: no user data in onclick
+    tbody.querySelectorAll('.change-role-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const userId = parseInt(btn.dataset.userId);
+            const roleId = btn.dataset.userRoleId ? parseInt(btn.dataset.userRoleId) : null;
+            const username = btn.closest('tr').querySelector('strong').textContent;
+            showChangeRoleModalSecure(userId, username, roleId);
+        });
+    });
+}
+
+function showChangeRoleModalSecure(userId, username, currentRoleId) {
+    // SECURE: Using textContent instead of innerHTML prevents XSS
+    document.getElementById('changeRoleUserId').value = userId;
+    document.getElementById('changeRoleUsername').textContent = username;
+    document.getElementById('newRoleSelect').value = currentRoleId || '';
+    new bootstrap.Modal(document.getElementById('changeUserRoleModal')).show();
 }
 
 function populateRoleSelect() {

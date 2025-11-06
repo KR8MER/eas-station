@@ -222,17 +222,61 @@ async function loadStatistics(days = 7) {
         const data = await response.json();
 
         if (data.success) {
-            updateSummaryStats(data.summary);
-            updateActivationTypes(data.by_type);
+            // Compute summary from by_pin data (API doesn't return summary object)
+            const summary = computeSummary(data.by_pin);
+            updateSummaryStats(summary);
+
+            // Convert by_type array to object for easier processing
+            const typeObject = {};
+            (data.by_type || []).forEach(item => {
+                typeObject[item.activation_type] = item.count;
+            });
+            updateActivationTypes(typeObject);
+
             updatePinUsage(data.by_pin);
-            updateRecentErrors(data.recent_errors);
+
+            // Load recent errors from history endpoint (not in statistics API)
+            loadRecentErrors();
         } else {
             console.error('Failed to load statistics:', data.error);
+            showError('Failed to load GPIO statistics');
         }
     } catch (error) {
         console.error('Error loading statistics:', error);
         showError('Failed to load GPIO statistics');
     }
+}
+
+function computeSummary(byPinData) {
+    if (!byPinData || byPinData.length === 0) {
+        return {
+            total_activations: 0,
+            successful_activations: 0,
+            average_duration_seconds: 0,
+            unique_pins: 0
+        };
+    }
+
+    let totalActivations = 0;
+    let totalFailures = 0;
+    let totalDuration = 0;
+    let uniquePins = byPinData.length;
+
+    byPinData.forEach(pin => {
+        totalActivations += pin.activation_count || 0;
+        totalFailures += pin.failure_count || 0;
+        totalDuration += (pin.avg_duration_seconds || 0) * (pin.activation_count || 0);
+    });
+
+    const successfulActivations = totalActivations - totalFailures;
+    const avgDuration = totalActivations > 0 ? totalDuration / totalActivations : 0;
+
+    return {
+        total_activations: totalActivations,
+        successful_activations: successfulActivations,
+        average_duration_seconds: avgDuration,
+        unique_pins: uniquePins
+    };
 }
 
 function updateSummaryStats(summary) {
@@ -247,6 +291,24 @@ function updateSummaryStats(summary) {
     document.getElementById('avg-duration').textContent = avgDuration.toFixed(1) + 's';
 
     document.getElementById('total-pins').textContent = summary.unique_pins || 0;
+}
+
+async function loadRecentErrors() {
+    try {
+        // Load from history endpoint with failure filter
+        const response = await fetch('/api/gpio/history?limit=10&success=false');
+        const data = await response.json();
+
+        if (data.success && data.logs) {
+            updateRecentErrors(data.logs);
+        } else {
+            // No errors endpoint available, show empty state
+            updateRecentErrors([]);
+        }
+    } catch (error) {
+        console.error('Failed to load recent errors:', error);
+        updateRecentErrors([]);
+    }
 }
 
 function updateActivationTypes(byType) {
@@ -287,22 +349,26 @@ function updatePinUsage(byPin) {
         return;
     }
 
-    // Find max count for scaling bars
-    const maxCount = Math.max(...byPin.map(p => p.count));
+    // Find max count for scaling bars - FIX: use activation_count not count
+    const maxCount = Math.max(...byPin.map(p => p.activation_count || 0));
 
     container.innerHTML = byPin.map(pin => {
-        const percentage = maxCount > 0 ? (pin.count / maxCount * 100) : 0;
-        const successRate = pin.count > 0
-            ? ((pin.successful / pin.count) * 100).toFixed(1)
+        const activationCount = pin.activation_count || 0;
+        const failureCount = pin.failure_count || 0;
+        const successfulCount = activationCount - failureCount;
+
+        const percentage = maxCount > 0 ? (activationCount / maxCount * 100) : 0;
+        const successRate = activationCount > 0
+            ? ((successfulCount / activationCount) * 100).toFixed(1)
             : 0;
-        const avgDuration = pin.avg_duration || 0;
+        const avgDuration = pin.avg_duration_seconds || 0;
 
         return `
             <div class="pin-usage-card">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <h6 class="mb-0"><i class="fas fa-microchip"></i> GPIO Pin ${pin.pin}</h6>
                     <div>
-                        <span class="badge bg-primary">${pin.count} activations</span>
+                        <span class="badge bg-primary">${activationCount} activations</span>
                         <span class="badge bg-success">${successRate}% success</span>
                         <span class="badge bg-info">${avgDuration.toFixed(1)}s avg</span>
                     </div>
