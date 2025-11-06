@@ -425,34 +425,41 @@ async function addAudioSource() {
             break;
     }
 
+    const requestBody = {
+        type: sourceType,
+        name: sourceName,
+        sample_rate: sampleRate,
+        channels: channels,
+        silence_threshold_db: silenceThreshold,
+        silence_duration_seconds: silenceDuration,
+        device_params: deviceParams,
+    };
+
+    console.log('Creating audio source with config:', requestBody);
+
     try {
         const response = await fetch('/api/audio/sources', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                type: sourceType,
-                name: sourceName,
-                sample_rate: sampleRate,
-                channels: channels,
-                silence_threshold_db: silenceThreshold,
-                silence_duration_seconds: silenceDuration,
-                device_params: deviceParams,
-            }),
+            body: JSON.stringify(requestBody),
         });
+
+        console.log('Response status:', response.status, response.statusText);
 
         if (response.ok) {
             bootstrap.Modal.getInstance(document.getElementById('addSourceModal')).hide();
             showSuccess('Audio source added successfully');
             loadAudioSources();
         } else {
-            const error = await response.json();
-            showError(`Failed to add source: ${error.error}`);
+            const error = await response.json().catch(() => ({ error: 'Unknown error - invalid JSON response' }));
+            console.error('Server error response:', error);
+            showError(`Failed to add source: ${error.error || 'Unknown error'}`);
         }
     } catch (error) {
         console.error('Error adding audio source:', error);
-        showError('Failed to add audio source');
+        showError(`Failed to add audio source: ${error.message || 'Network or connection error'}`);
     }
 }
 
