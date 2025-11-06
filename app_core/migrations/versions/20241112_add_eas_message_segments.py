@@ -18,6 +18,11 @@ def upgrade() -> None:
     conn = op.get_bind()
     inspector = inspect(conn)
 
+    # Check if the table exists first
+    if "eas_messages" not in inspector.get_table_names():
+        # Table doesn't exist yet, skip this migration
+        return
+
     # Check existing columns
     existing_columns = {col['name'] for col in inspector.get_columns('eas_messages')}
 

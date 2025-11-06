@@ -671,6 +671,10 @@ def before_request():
     if (request.endpoint in CSRF_EXEMPT_ENDPOINTS) or (request.path in CSRF_EXEMPT_PATHS):
         return
 
+    # Exempt setup routes from CSRF validation when in setup mode
+    if setup_mode_active and request.path.startswith('/setup'):
+        return
+
     if request.method in CSRF_PROTECTED_METHODS:
         session_token = session.get(CSRF_SESSION_KEY)
         request_token = None
