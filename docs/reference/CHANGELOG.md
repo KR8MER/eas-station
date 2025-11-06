@@ -93,6 +93,10 @@ tracks releases under the 2.x series.
 - **Fixed numpy float32 JSON serialization error** - Audio APIs were returning 500 errors due to numpy types not being JSON-serializable
   - Updated `_sanitize_float()` to detect and convert numpy.floating and numpy.integer types to Python float
   - Fixes "Object of type float32 is not JSON serializable" errors on `/api/audio/sources` and `/api/audio/metrics`
+- **Fixed numpy bool_ JSON serialization error** - Audio APIs were returning intermittent 500 errors due to numpy boolean types not being JSON-serializable
+  - Added `_sanitize_bool()` helper to convert numpy.bool_ types to Python bool
+  - Applied to all boolean fields: silence_detected, clipping_detected, enabled, auto_start, acknowledged, resolved, is_active, is_healthy, error_detected
+  - Fixes "Object of type bool is not JSON serializable" errors on `/api/audio/metrics`, `/api/audio/health`, and `/api/audio/alerts`
 - **Added pydub dependency** for MP3/AAC/OGG stream decoding from HTTP/Icecast sources
   - Added `pydub==0.25.1` to requirements.txt (requires ffmpeg system package already in Dockerfile)
 - Fixed module import paths in scripts/manual_eas_event.py and scripts/manual_alert_fetch.py by adding repository root to sys.path
