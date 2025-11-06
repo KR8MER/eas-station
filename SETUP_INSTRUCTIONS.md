@@ -2,26 +2,43 @@
 
 ## Quick Start
 
-### First-Time Setup
+### Portainer Deployment (Recommended)
 
-**Important:** Before starting the Docker containers, you must initialize the environment:
+The repository now includes an empty `.env` file, making Portainer deployments seamless:
+
+1. **Deploy the stack in Portainer**
+   - Add the Git repository
+   - Deploy using `docker-compose.yml` or `docker-compose.embedded-db.yml`
+   - No pre-configuration needed!
+
+2. **Access the setup wizard**
+   - Navigate to: `http://your-server/setup`
+   - Complete the configuration using the web interface
+
+3. **Restart the stack** in Portainer after saving configuration
+
+That's it! The `.env` file is now included in the repository and will persist your configuration.
+
+### Docker Compose (Command Line)
+
+For command-line deployments:
 
 ```bash
-# 1. Initialize the environment (creates empty .env file)
-./init-env.sh
+# 1. Clone the repository
+git clone https://github.com/KR8MER/eas-station.git
+cd eas-station
 
 # 2. Start the Docker stack
 docker-compose up -d
 
-# 3. Access the setup wizard in your browser
+# 3. Access the setup wizard
 # Navigate to: http://localhost/setup
+
+# 4. After configuration, restart
+docker-compose restart
 ```
 
-The setup wizard will guide you through configuring your `.env` file without needing to edit it manually.
-
-### Why the init-env.sh Script?
-
-Docker creates the `.env` file as a directory if it doesn't exist on the host before mounting it. This causes the setup wizard to fail when trying to write configuration. The `init-env.sh` script ensures `.env` exists as a file before Docker starts.
+The `.env` file is already included in the repository, so no initialization script is needed.
 
 ## Setup Wizard Features
 
@@ -51,19 +68,20 @@ The web-based setup wizard provides:
 
 ### Error: ".env was created as a directory by Docker"
 
-If you see this error in the logs:
+This should no longer occur with the latest repository version (which includes .env).
 
+If you deployed from an older version and see this error:
+
+**Portainer:**
+1. Stop and remove the stack in Portainer
+2. Redeploy from the latest Git repository
+3. The .env file is now included automatically
+
+**Docker Compose:**
 ```bash
-# 1. Stop the containers
 docker-compose down
-
-# 2. Remove the .env directory
 rm -rf .env
-
-# 3. Run the initialization script
-./init-env.sh
-
-# 4. Start the containers again
+git pull
 docker-compose up -d
 ```
 

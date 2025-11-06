@@ -3,23 +3,23 @@ set -e
 
 echo "Starting EAS Station..."
 
-# Check if .env is mounted as a directory (Docker does this if file doesn't exist on host)
+# Verify .env is a file, not a directory
+# (Should not happen anymore since we include .env in the repo)
 if [ -d "/app/.env" ]; then
-    echo "ERROR: .env was created as a directory by Docker."
-    echo "This happens when .env doesn't exist on the host before starting containers."
+    echo "ERROR: .env is a directory instead of a file."
+    echo "This should not happen with the latest repository version."
     echo ""
-    echo "To fix this:"
-    echo "  1. Stop the containers: docker-compose down"
-    echo "  2. Create an empty .env file: touch .env"
-    echo "  3. Start the containers: docker-compose up -d"
+    echo "To fix this in Portainer:"
+    echo "  1. Stop and remove the stack"
+    echo "  2. Redeploy from the latest Git repository"
+    echo "  3. The .env file is now included in the repo"
     echo ""
-    echo "After setup, the setup wizard will populate the .env file."
     exit 1
 fi
 
-# Create .env file if it doesn't exist
+# Ensure .env exists (should already exist from Git)
 if [ ! -f "/app/.env" ]; then
-    echo "Creating empty .env file..."
+    echo "WARNING: .env file not found, creating empty file..."
     touch /app/.env
 fi
 
