@@ -258,7 +258,7 @@ def register_dashboard_routes(app, logger, eas_config):
         return render_template('admin/audit_logs.html')
 
     @app.route('/admin/gpio/statistics')
-    def gpio_statistics():
+    def gpio_statistics_page():
         """GPIO activation statistics and analytics"""
         return render_template('admin/gpio_statistics.html')
 
