@@ -11,6 +11,7 @@ from flask import jsonify, render_template, request
 from werkzeug.exceptions import BadRequest
 
 from app_core.location import get_location_settings
+from app_core.auth.roles import require_permission
 
 
 # Environment variable categories and their configurations
@@ -670,6 +671,7 @@ def register_environment_routes(app, logger):
     """Register environment settings management routes."""
 
     @app.route('/api/environment/categories')
+    @require_permission('system.view_config')
     def get_environment_categories():
         """Get list of environment variable categories."""
         categories = []
@@ -684,6 +686,7 @@ def register_environment_routes(app, logger):
         return jsonify(categories)
 
     @app.route('/api/environment/variables')
+    @require_permission('system.view_config')
     def get_environment_variables():
         """Get all environment variables with current values."""
         # Read current values from .env or environment
@@ -737,6 +740,7 @@ def register_environment_routes(app, logger):
         return jsonify(response)
 
     @app.route('/api/environment/variables', methods=['PUT'])
+    @require_permission('system.configure')
     def update_environment_variables():
         """Update environment variables."""
         try:
@@ -793,6 +797,7 @@ def register_environment_routes(app, logger):
             return jsonify({'error': 'Failed to update environment variables'}), 500
 
     @app.route('/api/environment/validate')
+    @require_permission('system.view_config')
     def validate_environment():
         """Validate current environment configuration."""
         env_vars = read_env_file()
@@ -865,6 +870,7 @@ def register_environment_routes(app, logger):
         })
 
     @app.route('/settings/environment')
+    @require_permission('system.view_config')
     def environment_settings():
         """Render environment settings management page."""
         try:

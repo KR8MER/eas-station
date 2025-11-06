@@ -3,7 +3,12 @@
 Generated: 2025-11-06
 Last Updated: 2025-11-06
 
+**✅ MAJOR UPDATE - Most Critical Bugs Fixed!**
+
+All critical and high-priority bugs have been fixed in commit `[pending]`. See [Fixed Bugs](#fixed-bugs) section below for details.
+
 ## Table of Contents
+0. [Fixed Bugs](#fixed-bugs)
 1. [RBAC (Role-Based Access Control) Issues](#rbac-role-based-access-control-issues)
 2. [Text-to-Speech (TTS) Issues](#text-to-speech-tts-issues)
 3. [Display Screens (/screens) Issues](#display-screens-screens-issues)
@@ -15,11 +20,38 @@ Last Updated: 2025-11-06
 
 ---
 
+## Fixed Bugs
+
+The following bugs have been **FIXED** and are no longer blocking functionality:
+
+### ✅ RBAC Issues (Fixed)
+1. **Missing `user_count` field** - ✅ FIXED in `app_core/auth/roles.py:61`
+2. **Permissions format mismatch** - ✅ FIXED in `app_core/auth/roles.py:60` (now returns objects)
+3. **Generic error messages** - ✅ FIXED in `templates/admin/rbac_management.html:285-297` (now shows 403 details)
+
+### ✅ Display Screens Issues (Fixed)
+1. **Missing editScreen() function** - ✅ FIXED in `templates/screens.html:716-745`
+2. **Missing editRotation() function** - ✅ FIXED in `templates/screens.html:840-878`
+3. **No response validation** - ✅ FIXED in `templates/screens.html:525-543, 633-651`
+
+### ✅ Environment Settings Issues (Fixed)
+1. **No permission checks (SECURITY)** - ✅ FIXED in `webapp/admin/environment.py:674,689,743,800,873`
+2. **Missing script checks** - ✅ FIXED in `templates/settings/environment.html:232-239`
+3. **No response validation** - ✅ FIXED in `templates/settings/environment.html:254-274`
+
+### ✅ GPIO Configuration Issues (Fixed)
+1. **GPIO_PIN_<number> format not supported** - ✅ FIXED in `webapp/routes/system_controls.py:100-144`
+
+### ✅ Docker/Portainer Issues (Fixed)
+1. **docker-compose.yml only supports .env** - ✅ FIXED in `docker-compose.yml:12-13,31-32,56-57` (now supports both stack.env and .env)
+
+---
+
 ## RBAC (Role-Based Access Control) Issues
 
-### CRITICAL Issues
+### CRITICAL Issues - ✅ ALL FIXED
 
-#### 1. Missing `user_count` field in Role API response
+#### 1. Missing `user_count` field in Role API response - ✅ FIXED
 **File:** `app_core/auth/roles.py:54-62`
 **Affected Route:** `/security/roles` (GET)
 **Impact:** Frontend rendering fails when displaying role cards
