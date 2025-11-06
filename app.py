@@ -152,7 +152,12 @@ from app_core.models import (
 # =============================================================================
 
 # Load environment variables early for local CLI usage
-load_dotenv()
+# Use CONFIG_PATH if set (for persistent volume), otherwise use default .env location
+_config_path = os.environ.get('CONFIG_PATH')
+if _config_path:
+    load_dotenv(_config_path)
+else:
+    load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
