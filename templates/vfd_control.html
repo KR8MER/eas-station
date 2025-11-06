@@ -68,27 +68,27 @@
     <!-- Control Tabs -->
     <ul class="nav nav-tabs" id="vfdTabs" role="tablist">
         <li class="nav-item">
-            <a class="nav-link active" id="text-tab" data-toggle="tab" href="#text" role="tab">
+            <a class="nav-link active" id="text-tab" data-bs-toggle="tab" href="#text" role="tab">
                 <i class="fas fa-font"></i> Text
             </a>
         </li>
         <li class="nav-item">
-            <a class="nav-link" id="image-tab" data-toggle="tab" href="#image" role="tab">
+            <a class="nav-link" id="image-tab" data-bs-toggle="tab" href="#image" role="tab">
                 <i class="fas fa-image"></i> Image
             </a>
         </li>
         <li class="nav-item">
-            <a class="nav-link" id="graphics-tab" data-toggle="tab" href="#graphics" role="tab">
+            <a class="nav-link" id="graphics-tab" data-bs-toggle="tab" href="#graphics" role="tab">
                 <i class="fas fa-draw-polygon"></i> Graphics
             </a>
         </li>
         <li class="nav-item">
-            <a class="nav-link" id="settings-tab" data-toggle="tab" href="#settings" role="tab">
+            <a class="nav-link" id="settings-tab" data-bs-toggle="tab" href="#settings" role="tab">
                 <i class="fas fa-cog"></i> Settings
             </a>
         </li>
         <li class="nav-item">
-            <a class="nav-link" id="history-tab" data-toggle="tab" href="#history" role="tab">
+            <a class="nav-link" id="history-tab" data-bs-toggle="tab" href="#history" role="tab">
                 <i class="fas fa-history"></i> History
             </a>
         </li>
@@ -331,13 +331,22 @@
 </div>
 
 <!-- Status Toast -->
-<div class="toast" id="statusToast" style="position: fixed; top: 80px; right: 20px; z-index: 9999;" data-delay="3000">
+<div class="toast" id="statusToast" style="position: fixed; top: 80px; right: 20px; z-index: 9999;" data-bs-delay="3000">
     <div class="toast-header">
-        <strong class="mr-auto">VFD Status</strong>
-        <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button>
+        <strong class="me-auto">VFD Status</strong>
+        <button type="button" class="ms-2 mb-1 btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
     </div>
     <div class="toast-body" id="toastBody"></div>
 </div>
+
+<script>
+// Load jQuery for this page (needed for AJAX calls)
+if (typeof jQuery === 'undefined') {
+    const jqueryScript = document.createElement('script');
+    jqueryScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.0/jquery.min.js';
+    document.head.appendChild(jqueryScript);
+}
+</script>
 
 <script>
 // Toast helper

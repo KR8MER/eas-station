@@ -243,24 +243,31 @@
                             <input type="text" class="form-control" id="receiverStreamUrl" name="stream_url" placeholder="https://example.com/stream.m3u or https://example.com/live.mp3">
                             <small class="form-text text-muted">Enter M3U playlist URL or direct stream URL (MP3, AAC, OGG)</small>
                         </div>
-                        <div class="col-md-6">
-                            <label for="receiverFrequency" class="form-label">Frequency (Hz)</label>
-                            <input type="number" class="form-control" id="receiverFrequency" name="frequency_hz" step="any" min="0.001" placeholder="e.g., 162400000 for 162.4 MHz" required>
-                            <small class="form-text text-muted">Enter frequency in Hertz (e.g., 162.4 MHz = 162400000 Hz)</small>
+                        <div class="col-md-6" id="receiverFrequencyField">
+                            <label for="receiverFrequency" class="form-label">Frequency</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="receiverFrequencyMHz" step="0.001" min="0.000001" placeholder="162.4" aria-label="Frequency in MHz">
+                                <span class="input-group-text">MHz</span>
+                                <button class="btn btn-outline-secondary" type="button" id="swapFreqUnit" title="Switch to Hz input">
+                                    <i class="fas fa-exchange-alt"></i>
+                                </button>
+                            </div>
+                            <input type="number" class="form-control d-none" id="receiverFrequency" name="frequency_hz" step="1" min="1" required>
+                            <small class="form-text text-muted">Enter frequency in MHz (e.g., 162.4 for NOAA Weather Radio)</small>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-6" id="receiverSampleRateField">
                             <label for="receiverSampleRate" class="form-label">Sample Rate (samples/sec)</label>
                             <input type="number" class="form-control" id="receiverSampleRate" name="sample_rate" step="1" min="1" required>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-3" id="receiverGainField">
                             <label for="receiverGain" class="form-label">Gain (dB)</label>
                             <input type="number" class="form-control" id="receiverGain" name="gain" step="0.1">
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-3" id="receiverChannelField">
                             <label for="receiverChannel" class="form-label">Device Channel</label>
                             <input type="number" class="form-control" id="receiverChannel" name="channel" min="0">
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-6" id="receiverSerialField">
                             <label for="receiverSerial" class="form-label">Device Serial</label>
                             <input type="text" class="form-control" id="receiverSerial" name="serial" placeholder="Hardware serial number">
                             <small class="form-text text-muted">Optional: Serial number for precise device identification</small>
@@ -596,24 +603,46 @@
         const sourceType = document.getElementById('receiverSourceType').value;
         const driverField = document.getElementById('receiverDriverField');
         const streamUrlField = document.getElementById('receiverStreamUrlField');
-        const frequencyField = document.getElementById('receiverFrequency');
-        const sampleRateField = document.getElementById('receiverSampleRate');
+        const frequencyField = document.getElementById('receiverFrequencyField');
+        const sampleRateField = document.getElementById('receiverSampleRateField');
+        const gainField = document.getElementById('receiverGainField');
+        const channelField = document.getElementById('receiverChannelField');
+        const serialField = document.getElementById('receiverSerialField');
 
         if (sourceType === 'stream') {
+            // Hide SDR-specific fields
             driverField.style.display = 'none';
+            frequencyField.style.display = 'none';
+            sampleRateField.style.display = 'none';
+            gainField.style.display = 'none';
+            channelField.style.display = 'none';
+            serialField.style.display = 'none';
+
+            // Show stream field
             streamUrlField.style.display = 'block';
+
+            // Update required status
             document.getElementById('receiverDriver').required = false;
             document.getElementById('receiverStreamUrl').required = true;
-            // Make frequency optional for streams
-            frequencyField.required = false;
-            sampleRateField.required = false;
+            document.getElementById('receiverFrequency').required = false;
+            document.getElementById('receiverSampleRate').required = false;
         } else {
+            // Show SDR-specific fields
             driverField.style.display = 'block';
+            frequencyField.style.display = 'block';
+            sampleRateField.style.display = 'block';
+            gainField.style.display = 'block';
+            channelField.style.display = 'block';
+            serialField.style.display = 'block';
+
+            // Hide stream field
             streamUrlField.style.display = 'none';
+
+            // Update required status
             document.getElementById('receiverDriver').required = true;
             document.getElementById('receiverStreamUrl').required = false;
-            frequencyField.required = true;
-            sampleRateField.required = true;
+            document.getElementById('receiverFrequency').required = true;
+            document.getElementById('receiverSampleRate').required = true;
         }
     }
 
@@ -625,7 +654,17 @@
         document.getElementById('receiverSourceType').value = receiver?.source_type || 'sdr';
         document.getElementById('receiverDriver').value = receiver?.driver || '';
         document.getElementById('receiverStreamUrl').value = receiver?.stream_url || '';
-        document.getElementById('receiverFrequency').value = receiver?.frequency_hz ?? '';
+
+        // Handle frequency - convert Hz to MHz for display
+        const freqHz = receiver?.frequency_hz;
+        if (freqHz) {
+            document.getElementById('receiverFrequency').value = freqHz;
+            document.getElementById('receiverFrequencyMHz').value = (freqHz / 1e6).toFixed(3);
+        } else {
+            document.getElementById('receiverFrequency').value = '';
+            document.getElementById('receiverFrequencyMHz').value = '';
+        }
+
         document.getElementById('receiverSampleRate').value = receiver?.sample_rate ?? '';
         document.getElementById('receiverGain').value = receiver?.gain ?? '';
         document.getElementById('receiverChannel').value = receiver?.channel ?? '';
@@ -645,6 +684,43 @@
 
     // Add event listener for source type changes
     document.getElementById('receiverSourceType')?.addEventListener('change', updateSourceTypeFields);
+
+    // Frequency MHz to Hz conversion
+    const freqMHzInput = document.getElementById('receiverFrequencyMHz');
+    const freqHzInput = document.getElementById('receiverFrequency');
+    const swapFreqBtn = document.getElementById('swapFreqUnit');
+
+    freqMHzInput?.addEventListener('input', (e) => {
+        const mhz = parseFloat(e.target.value);
+        if (!isNaN(mhz) && mhz > 0) {
+            freqHzInput.value = Math.round(mhz * 1e6);
+        } else {
+            freqHzInput.value = '';
+        }
+    });
+
+    swapFreqBtn?.addEventListener('click', () => {
+        const mhzField = freqMHzInput.parentElement;
+        const hzField = freqHzInput;
+        const isShowingMHz = !freqMHzInput.classList.contains('d-none');
+
+        if (isShowingMHz) {
+            // Switch to Hz input
+            mhzField.classList.add('d-none');
+            hzField.classList.remove('d-none');
+            swapFreqBtn.title = 'Switch to MHz input';
+        } else {
+            // Switch to MHz input
+            hzField.classList.add('d-none');
+            mhzField.classList.remove('d-none');
+            // Update MHz field from Hz field
+            const hz = parseFloat(hzField.value);
+            if (!isNaN(hz) && hz > 0) {
+                freqMHzInput.value = (hz / 1e6).toFixed(3);
+            }
+            swapFreqBtn.title = 'Switch to Hz input';
+        }
+    });
 
     async function loadReceivers(endpoint = CRUD_ENDPOINT) {
         const response = await fetch(endpoint);
@@ -1103,6 +1179,7 @@
 
         // Set default frequency for NOAA Weather Radio
         document.getElementById('receiverFrequency').value = '162550000';
+        document.getElementById('receiverFrequencyMHz').value = '162.550';
 
         if (device.device_id) {
             document.getElementById('receiverChannel').value = device.device_id;
@@ -1232,6 +1309,7 @@
         document.getElementById('receiverIdentifier').value = presetKey;
         document.getElementById('receiverDriver').value = preset.driver;
         document.getElementById('receiverFrequency').value = preset.frequency_hz;
+        document.getElementById('receiverFrequencyMHz').value = (preset.frequency_hz / 1e6).toFixed(3);
         document.getElementById('receiverSampleRate').value = preset.sample_rate;
         document.getElementById('receiverGain').value = preset.gain;
         document.getElementById('receiverNotes').value = preset.notes || '';
