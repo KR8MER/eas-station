@@ -7,7 +7,7 @@ services:
         SOAPYSDR_DRIVERS: ${SOAPYSDR_DRIVERS:-rtlsdr,airspy}
     image: eas-station:latest
     ports:
-      - "5000:5000"
+      - "80:5000"
     environment:
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
     extra_hosts:

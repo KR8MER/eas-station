@@ -13,7 +13,7 @@ services:
       alerts-db:
         condition: service_healthy
     ports:
-      - "5000:5000"
+      - "80:5000"
     environment:
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
     extra_hosts:
