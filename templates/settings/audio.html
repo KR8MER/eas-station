@@ -199,17 +199,79 @@
                 <h5 class="modal-title" id="discoveryModalLabel">Discovered Audio Devices</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body" id="discoveryModalBody">
-                <div class="text-center py-4">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Searching for devices...</span>
+            <div class="modal-body">
+                <div id="discoveredDevices">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Searching for devices...</span>
+                        </div>
+                        <p class="mt-3">Searching for available audio input devices...</p>
                     </div>
-                    <p class="mt-3">Searching for available audio input devices...</p>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Audio Source Modal -->
+<div class="modal fade" id="editSourceModal" tabindex="-1" aria-labelledby="editSourceModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <form id="editSourceForm">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editSourceModalLabel">Edit Audio Source</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="editSourceId">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="editSourceName" class="form-label">Source Name</label>
+                            <input type="text" class="form-control" id="editSourceName" readonly>
+                            <small class="form-text text-muted">Source name cannot be changed</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="editSourceType" class="form-label">Source Type</label>
+                            <input type="text" class="form-control" id="editSourceType" readonly>
+                            <small class="form-text text-muted">Source type cannot be changed</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="editPriority" class="form-label">Priority</label>
+                            <input type="number" class="form-control" id="editPriority" min="1" max="1000">
+                            <small class="form-text text-muted">Lower numbers = higher priority</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="editSilenceThreshold" class="form-label">Silence Threshold (dBFS)</label>
+                            <input type="number" class="form-control" id="editSilenceThreshold" step="1">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="editSilenceDuration" class="form-label">Silence Duration (seconds)</label>
+                            <input type="number" class="form-control" id="editSilenceDuration" min="1" step="1">
+                        </div>
+                        <div class="col-md-12">
+                            <label for="editDescription" class="form-label">Description (optional)</label>
+                            <textarea class="form-control" id="editDescription" rows="2"></textarea>
+                        </div>
+                        <div class="col-md-6 d-flex align-items-center gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="editEnabled">
+                                <label class="form-check-label" for="editEnabled">Enabled</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="editAutoStart">
+                                <label class="form-check-label" for="editAutoStart">Auto-start</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveEditedSource()">Save Changes</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
