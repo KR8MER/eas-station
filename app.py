@@ -64,7 +64,7 @@ from app_core.system_health import get_system_health, start_health_alert_worker
 from app_core.poller_debug import ensure_poll_debug_table
 from app_core.radio import ensure_radio_tables
 from app_core.zones import ensure_zone_catalog
-from app_core.auth.roles import initialize_default_roles_and_permissions
+from app_core.auth.roles import initialize_default_roles_and_permissions, Role
 from webapp import register_routes
 from webapp.admin.boundaries import (
     ensure_alert_source_columns,
@@ -927,8 +927,14 @@ def create_admin_user_cli(username: str, password: str):
     if existing:
         raise click.ClickException('That username already exists.')
 
+    # Get the admin role to assign to the new user
+    admin_role = Role.query.filter_by(name='admin').first()
+    if not admin_role:
+        raise click.ClickException('Admin role not found. Database may not be properly initialized.')
+
     user = AdminUser(username=username)
     user.set_password(password)
+    user.role_id = admin_role.id
     db.session.add(user)
     db.session.add(SystemLog(
         level='INFO',
