@@ -131,7 +131,8 @@ if (secretButton) {
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-Token': csrfToken
-                }
+                },
+                credentials: 'same-origin'
             });
             if (!response.ok) {
                 throw new Error('Failed to generate secret key.');
