@@ -14,7 +14,6 @@ services:
       - "host.docker.internal:host-gateway"
     devices:
       - /dev/bus/usb:/dev/bus/usb
-      - /dev/bus/usb/003/002:/dev/bus/usb/003/002
     cap_add:
       - SYS_RAWIO
     security_opt:
