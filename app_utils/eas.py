@@ -635,6 +635,9 @@ class EASAudioGenerator:
 
         voice_samples = self.tts_engine.generate(message_text)
         tts_segment: List[int] = []
+        tts_warning: Optional[str] = None
+        provider = self.tts_engine.provider
+
         if voice_samples:
             # Normalize TTS audio to match SAME/AFSK amplitude
             normalized_voice_samples = _normalize_audio_amplitude(voice_samples, amplitude)
@@ -644,13 +647,30 @@ class EASAudioGenerator:
             samples.extend(normalized_voice_samples)
             tts_segment = list(normalized_voice_samples)
         else:
-            # Log TTS failure for debugging
-            provider = self.tts_engine.provider
+            # Capture TTS failure for database storage and logging
             error_detail = self.tts_engine.last_error
+            if provider == 'azure':
+                base_message = 'Azure Speech is configured but synthesis failed.'
+                tts_warning = f"{base_message} {error_detail}" if error_detail else base_message
+            elif provider == 'azure_openai':
+                base_message = 'Azure OpenAI TTS is configured but synthesis failed.'
+                tts_warning = f"{base_message} {error_detail}" if error_detail else base_message
+            elif provider == 'pyttsx3':
+                base_message = 'pyttsx3 is configured but synthesis failed.'
+                tts_warning = f"{base_message} {error_detail}" if error_detail else base_message
+            elif provider:
+                base_message = f'TTS provider "{provider}" is configured but synthesis failed.'
+                tts_warning = f"{base_message} {error_detail}" if error_detail else base_message
+            else:
+                tts_warning = 'No TTS provider configured.'
+
+            # Log the TTS failure for debugging
             if provider and error_detail:
                 self.logger.error(f"TTS synthesis failed with provider '{provider}': {error_detail}")
             elif provider:
                 self.logger.warning(f"TTS provider '{provider}' is configured but produced no audio")
+            else:
+                self.logger.info("TTS is not configured for this alert")
 
         trailing_silence = _generate_silence(1.0, self.sample_rate)
         samples.extend(trailing_silence)
@@ -693,7 +713,8 @@ class EASAudioGenerator:
             'instruction': getattr(alert, 'instruction', ''),
             'message_text': message_text,
         }
-        text_body['voiceover_provider'] = self.config.get('tts_provider') or None
+        text_body['voiceover_provider'] = provider or None
+        text_body['tts_warning'] = tts_warning
 
         with open(text_path, 'w', encoding='utf-8') as handle:
             json.dump(text_body, handle, indent=2)
@@ -1073,6 +1094,8 @@ class EASBroadcaster:
             attention_audio_data=(segment_payload.get('attention') or {}).get('wav_bytes'),
             tts_audio_data=(segment_payload.get('tts') or {}).get('wav_bytes'),
             buffer_audio_data=(segment_payload.get('buffer') or {}).get('wav_bytes'),
+            tts_warning=text_payload.get('tts_warning'),
+            tts_provider=text_payload.get('voiceover_provider'),
             text_payload=text_payload,
             created_at=datetime.now(timezone.utc),
             metadata_payload={
