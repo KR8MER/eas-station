@@ -64,6 +64,7 @@ from app_core.system_health import get_system_health, start_health_alert_worker
 from app_core.poller_debug import ensure_poll_debug_table
 from app_core.radio import ensure_radio_tables
 from app_core.zones import ensure_zone_catalog
+from app_core.auth.roles import initialize_default_roles_and_permissions
 from webapp import register_routes
 from webapp.admin.boundaries import (
     ensure_alert_source_columns,
@@ -813,6 +814,12 @@ def initialize_database():
             if not VFD_AVAILABLE:
                 initialise_vfd_controller(logger)
                 ensure_vfd_tables()
+            # Initialize RBAC roles and permissions
+            try:
+                initialize_default_roles_and_permissions()
+                logger.info("RBAC roles and permissions initialized")
+            except Exception as rbac_error:
+                logger.warning("Failed to initialize RBAC roles: %s", rbac_error)
         except OperationalError as db_error:
             _db_initialization_error = db_error
             logger.error("Database initialization failed: %s", db_error)
