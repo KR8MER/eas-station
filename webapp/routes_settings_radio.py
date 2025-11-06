@@ -25,9 +25,7 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
         "id": receiver.id,
         "identifier": receiver.identifier,
         "display_name": receiver.display_name,
-        "source_type": receiver.source_type or "sdr",
         "driver": receiver.driver,
-        "stream_url": receiver.stream_url,
         "frequency_hz": receiver.frequency_hz,
         "sample_rate": receiver.sample_rate,
         "gain": receiver.gain,
@@ -52,6 +50,11 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
 
 
 def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Parse and validate SDR receiver configuration payload.
+
+    Note: Streams are no longer supported via RadioReceiver. Use the AudioSource
+    system for stream configuration instead.
+    """
     data: Dict[str, Any] = {}
 
     def _coerce_bool(value: Any, default: bool) -> bool:
@@ -79,57 +82,38 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
             return None, "Display name is required."
         data["display_name"] = display_name
 
-    # Get source type (defaults to 'sdr')
-    source_type = str(payload.get("source_type", "sdr")).strip().lower()
-    if source_type not in ("sdr", "stream"):
-        return None, "Source type must be 'sdr' or 'stream'."
-    data["source_type"] = source_type
-
-    # Validate driver (required for SDR, not for stream)
+    # Driver is required
     if not partial or "driver" in payload:
         driver = str(payload.get("driver", "")).strip()
-        if source_type == "sdr" and not driver:
-            return None, "Driver is required for SDR sources."
-        data["driver"] = driver if driver else None
+        if not driver:
+            return None, "Driver is required."
+        data["driver"] = driver
 
-    # Validate stream URL (required for stream, not for SDR)
-    if not partial or "stream_url" in payload:
-        stream_url = str(payload.get("stream_url", "")).strip()
-        if source_type == "stream" and not stream_url:
-            return None, "Stream URL is required for stream sources."
-        data["stream_url"] = stream_url if stream_url else None
-
-    # Frequency is required for SDR, optional for stream
+    # Frequency is required
     if not partial or "frequency_hz" in payload:
         frequency_val = payload.get("frequency_hz")
         if frequency_val in (None, "", []):
-            if source_type == "sdr":
-                return None, "Frequency is required for SDR sources."
-            data["frequency_hz"] = None
-        else:
-            try:
-                frequency = float(frequency_val)
-                if frequency <= 0:
-                    raise ValueError
-                data["frequency_hz"] = frequency
-            except Exception:
-                return None, "Frequency must be a positive number of hertz."
+            return None, "Frequency is required."
+        try:
+            frequency = float(frequency_val)
+            if frequency <= 0:
+                raise ValueError
+            data["frequency_hz"] = frequency
+        except Exception:
+            return None, "Frequency must be a positive number of hertz."
 
-    # Sample rate is required for SDR, optional for stream
+    # Sample rate is required
     if not partial or "sample_rate" in payload:
         sample_rate_val = payload.get("sample_rate")
         if sample_rate_val in (None, "", []):
-            if source_type == "sdr":
-                return None, "Sample rate is required for SDR sources."
-            data["sample_rate"] = None
-        else:
-            try:
-                sample_rate = int(sample_rate_val)
-                if sample_rate <= 0:
-                    raise ValueError
-                data["sample_rate"] = sample_rate
-            except Exception:
-                return None, "Sample rate must be a positive integer."
+            return None, "Sample rate is required."
+        try:
+            sample_rate = int(sample_rate_val)
+            if sample_rate <= 0:
+                raise ValueError
+            data["sample_rate"] = sample_rate
+        except Exception:
+            return None, "Sample rate must be a positive integer."
 
     if "gain" in payload:
         gain = payload.get("gain")
@@ -364,84 +348,6 @@ def register(app: Flask, logger) -> None:
             route_logger.error("Failed to get waveform data for receiver %s: %s", receiver_id, exc)
             # Don't leak sensitive exception details to client
             return jsonify({"error": "Failed to generate waveform data"}), 500
-
-    @app.route("/api/radio/stream/check/<int:receiver_id>", methods=["GET"])
-    def api_check_stream_connection(receiver_id: int) -> Any:
-        """Check if a stream receiver's URL is reachable."""
-        try:
-            receiver = RadioReceiver.query.get_or_404(receiver_id)
-
-            # Only check stream-type receivers
-            if receiver.source_type != "stream":
-                return jsonify({"error": "Receiver is not a stream type"}), 400
-
-            if not receiver.stream_url:
-                return jsonify({"error": "No stream URL configured"}), 400
-
-            # Try to check stream connectivity
-            try:
-                import requests
-                from urllib.parse import urlparse
-
-                # Validate URL
-                parsed = urlparse(receiver.stream_url)
-                if parsed.scheme not in ('http', 'https'):
-                    return jsonify({
-                        "receiver_id": receiver_id,
-                        "connected": False,
-                        "status": "invalid_url",
-                        "message": "Invalid URL scheme (must be http or https)",
-                        "url": receiver.stream_url
-                    })
-
-                # Try HEAD request first (lighter weight)
-                try:
-                    response = requests.head(receiver.stream_url, timeout=5, allow_redirects=True)
-                    status_code = response.status_code
-                    connected = 200 <= status_code < 400
-                except requests.exceptions.RequestException:
-                    # If HEAD fails, try GET with minimal data
-                    try:
-                        response = requests.get(receiver.stream_url, timeout=5, stream=True, allow_redirects=True)
-                        status_code = response.status_code
-                        connected = 200 <= status_code < 400
-                        response.close()
-                    except requests.exceptions.RequestException as e:
-                        return jsonify({
-                            "receiver_id": receiver_id,
-                            "connected": False,
-                            "status": "connection_failed",
-                            "message": str(e),
-                            "url": receiver.stream_url
-                        })
-
-                if connected:
-                    content_type = response.headers.get('Content-Type', 'unknown')
-                    return jsonify({
-                        "receiver_id": receiver_id,
-                        "connected": True,
-                        "status": "reachable",
-                        "status_code": status_code,
-                        "content_type": content_type,
-                        "message": "Stream URL is reachable",
-                        "url": receiver.stream_url
-                    })
-                else:
-                    return jsonify({
-                        "receiver_id": receiver_id,
-                        "connected": False,
-                        "status": "http_error",
-                        "status_code": status_code,
-                        "message": f"HTTP {status_code}",
-                        "url": receiver.stream_url
-                    })
-
-            except ImportError:
-                return jsonify({"error": "Requests library not available"}), 503
-
-        except Exception as exc:
-            route_logger.error("Failed to check stream connection for receiver %s: %s", receiver_id, exc)
-            return jsonify({"error": "Failed to check stream connection"}), 500
 
     @app.route("/api/monitoring/radio", methods=["GET"])
     def api_monitoring_radio() -> Any:
