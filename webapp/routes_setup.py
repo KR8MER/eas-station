@@ -114,7 +114,15 @@ def register(app, logger):
             else:
                 create_backup = request.form.get("create_backup", "yes") == "yes"
                 try:
-                    write_env_file(state=state, updates=cleaned, create_backup=create_backup)
+                    result_path = write_env_file(state=state, updates=cleaned, create_backup=create_backup)
+
+                    # Debug logging
+                    setup_logger.info(f"Successfully wrote .env file to: {result_path}")
+                    setup_logger.info(f".env file exists: {result_path.exists()}")
+                    if result_path.exists():
+                        setup_logger.info(f".env file size: {result_path.stat().st_size} bytes")
+                        setup_logger.info(f".env file permissions: {oct(result_path.stat().st_mode)}")
+
                 except Exception as exc:  # pragma: no cover - unexpected filesystem errors
                     setup_logger.exception("Failed to write .env from setup wizard")
                     flash(f"Unable to update configuration: {exc}")
@@ -191,6 +199,110 @@ def register(app, logger):
             "setup_success.html",
             env_vars=portainer_env_vars,
         )
+
+    @app.route("/setup/view-env")
+    def setup_view_env():
+        """View the current .env file contents for debugging."""
+        setup_active = app.config.get("SETUP_MODE", False)
+        current_user = getattr(g, "current_user", None)
+        is_authenticated = bool(current_user and current_user.is_authenticated)
+
+        if not setup_active and not is_authenticated:
+            return redirect(url_for("login"))
+
+        from app_utils.setup_wizard import ENV_OUTPUT_PATH
+        import os
+
+        env_info = {
+            'path': str(ENV_OUTPUT_PATH),
+            'absolute_path': str(ENV_OUTPUT_PATH.resolve()),
+            'exists': ENV_OUTPUT_PATH.exists(),
+            'is_file': ENV_OUTPUT_PATH.is_file() if ENV_OUTPUT_PATH.exists() else False,
+            'is_dir': ENV_OUTPUT_PATH.is_dir() if ENV_OUTPUT_PATH.exists() else False,
+            'container_id': os.environ.get('HOSTNAME', 'unknown'),
+            'working_dir': os.getcwd(),
+        }
+
+        if ENV_OUTPUT_PATH.exists():
+            stat_info = ENV_OUTPUT_PATH.stat()
+            env_info['size'] = stat_info.st_size
+            env_info['permissions'] = oct(stat_info.st_mode)
+            env_info['modified'] = stat_info.st_mtime
+
+            if ENV_OUTPUT_PATH.is_file():
+                try:
+                    env_info['content'] = ENV_OUTPUT_PATH.read_text(encoding='utf-8')
+                except Exception as e:
+                    env_info['content'] = f"Error reading file: {e}"
+            else:
+                env_info['content'] = "(path is a directory, not a file)"
+        else:
+            env_info['content'] = "(file does not exist)"
+
+        return render_template(
+            "setup_env_viewer.html",
+            env_info=env_info,
+        )
+
+    @app.route("/setup/lookup-county-fips", methods=["POST"])
+    def setup_lookup_county_fips():
+        """Look up FIPS codes for counties by state and county name."""
+        setup_active = app.config.get("SETUP_MODE", False)
+        current_user = getattr(g, "current_user", None)
+        is_authenticated = bool(current_user and current_user.is_authenticated)
+
+        if not setup_active and not is_authenticated:
+            return jsonify({"error": "Authentication required"}), 401
+
+        try:
+            from app_utils.fips_codes import get_us_state_county_tree
+
+            data = request.get_json() or {}
+            state_code = data.get("state_code", "").strip().upper()
+            county_query = data.get("county_name", "").strip().lower()
+
+            if not state_code:
+                return jsonify({"error": "State code is required"}), 400
+
+            # Get the state/county tree
+            state_tree = get_us_state_county_tree()
+
+            # Find the state
+            state_data = None
+            for state in state_tree:
+                if state.get("abbr", "").upper() == state_code:
+                    state_data = state
+                    break
+
+            if not state_data:
+                return jsonify({"error": f"State {state_code} not found"}), 404
+
+            # If no county query, return all counties for the state
+            if not county_query:
+                counties = [
+                    {
+                        "name": county.get("name", ""),
+                        "fips": county.get("same", "")
+                    }
+                    for county in state_data.get("counties", [])
+                ]
+                return jsonify({"counties": counties})
+
+            # Search for matching counties
+            matching_counties = []
+            for county in state_data.get("counties", []):
+                county_name = county.get("name", "").lower()
+                if county_query in county_name:
+                    matching_counties.append({
+                        "name": county.get("name", ""),
+                        "fips": county.get("same", "")
+                    })
+
+            return jsonify({"counties": matching_counties})
+
+        except Exception as exc:
+            setup_logger.exception("Failed to lookup county FIPS codes")
+            return jsonify({"error": str(exc)}), 500
 
     @app.route("/setup/derive-zone-codes", methods=["POST"])
     def setup_derive_zone_codes():

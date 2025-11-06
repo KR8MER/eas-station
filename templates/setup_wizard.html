@@ -105,6 +105,10 @@
                                 <button class="btn btn-outline-secondary" type="button" id="generate-secret">
                                     <i class="fas fa-magic me-1"></i> Generate
                                 </button>
+                                {% elif field.key == 'EAS_MANUAL_FIPS_CODES' %}
+                                <button class="btn btn-outline-secondary" type="button" id="lookup-fips" title="Look up FIPS code from state and county">
+                                    <i class="fas fa-search me-1"></i> Lookup from County
+                                </button>
                                 {% elif field.key == 'DEFAULT_ZONE_CODES' %}
                                 <button class="btn btn-outline-secondary" type="button" id="derive-zones" title="Auto-derive zone codes from FIPS codes">
                                     <i class="fas fa-map-marked-alt me-1"></i> Auto-Derive
@@ -140,9 +144,14 @@
                     </form>
                 </div>
             </div>
-            <p class="text-muted text-center mt-3 mb-0">
-                Changes take effect after restarting the Docker services or reloading the Flask process.
-            </p>
+            <div class="text-center mt-3">
+                <p class="text-muted mb-2">
+                    Changes take effect after restarting the Docker services or reloading the Flask process.
+                </p>
+                <a href="{{ url_for('setup_view_env') }}" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-file-code me-1"></i> View .env File (Debug)
+                </a>
+            </div>
         </div>
     </div>
 </div>
@@ -226,6 +235,87 @@ if (deriveZonesButton) {
         } finally {
             deriveZonesButton.disabled = false;
             deriveZonesButton.innerHTML = '<i class="fas fa-map-marked-alt me-1"></i> Auto-Derive';
+        }
+    });
+}
+
+const lookupFipsButton = document.getElementById('lookup-fips');
+if (lookupFipsButton) {
+    lookupFipsButton.addEventListener('click', async () => {
+        lookupFipsButton.disabled = true;
+        lookupFipsButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Looking up';
+        try {
+            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+            const stateInput = document.getElementById('field-DEFAULT_STATE_CODE');
+            const countyInput = document.getElementById('field-DEFAULT_COUNTY_NAME');
+
+            const stateCode = stateInput ? stateInput.value : '';
+            const countyName = countyInput ? countyInput.value : '';
+
+            if (!stateCode.trim()) {
+                alert('Please select a state in "Default State Code" first.');
+                return;
+            }
+
+            if (!countyName.trim()) {
+                alert('Please enter a county name in "Default County Name" first.');
+                return;
+            }
+
+            const response = await fetch('{{ url_for('setup_lookup_county_fips') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    state_code: stateCode,
+                    county_name: countyName
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to lookup FIPS code.');
+            }
+
+            const data = await response.json();
+            const target = document.getElementById('field-EAS_MANUAL_FIPS_CODES');
+
+            if (data.counties && data.counties.length > 0) {
+                if (data.counties.length === 1) {
+                    // Exact match, auto-fill
+                    if (target) {
+                        target.value = data.counties[0].fips;
+                        target.classList.remove('is-invalid');
+                        alert(`FIPS code found: ${data.counties[0].fips} for ${data.counties[0].name}`);
+                    }
+                } else {
+                    // Multiple matches, let user choose
+                    const countyList = data.counties.map((c, i) => `${i+1}. ${c.name}: ${c.fips}`).join('\n');
+                    const choice = prompt(`Multiple counties found. Enter the number of your choice:\n\n${countyList}`);
+
+                    if (choice) {
+                        const index = parseInt(choice) - 1;
+                        if (index >= 0 && index < data.counties.length) {
+                            if (target) {
+                                target.value = data.counties[index].fips;
+                                target.classList.remove('is-invalid');
+                            }
+                        } else {
+                            alert('Invalid choice.');
+                        }
+                    }
+                }
+            } else {
+                alert('No FIPS code found for the specified county. Please check the county name or enter the FIPS code manually.');
+            }
+        } catch (error) {
+            alert(error.message || 'Unable to lookup FIPS code.');
+        } finally {
+            lookupFipsButton.disabled = false;
+            lookupFipsButton.innerHTML = '<i class="fas fa-search me-1"></i> Lookup from County';
         }
     });
 }
