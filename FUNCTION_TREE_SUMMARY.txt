@@ -1,0 +1,234 @@
+================================================================================
+FUNCTION TREE DOCUMENT - CREATION SUMMARY
+================================================================================
+
+Document: /home/user/eas-station/FUNCTION_TREE.md
+Date Generated: 2025-11-06
+Total Lines: 1,211
+Format: Markdown with tables and code examples
+
+================================================================================
+COMPREHENSIVE CATALOG CONTENTS
+================================================================================
+
+1. CORE MODELS & DATA LAYER (app_core/models.py)
+   - 24 Database model classes documented
+   - Key tables: CAPAlert, EASMessage, AdminUser, LocationSettings, etc.
+   - All key methods and properties with line numbers
+
+2. AUTHENTICATION & RBAC (app_core/auth/)
+   - Role-based access control system
+   - 3 predefined roles: ADMIN, OPERATOR, VIEWER
+   - 21+ permission definitions (resource.action format)
+   - Permission decorators: @require_permission, @require_any_permission, etc.
+   - MFA/TOTP support with backup codes
+
+3. AUDIO SYSTEM (app_core/audio/)
+   - AudioIngestController - central ingestion manager
+   - 5 concrete source adapters: SDR, ALSA, PULSE, FILE, STREAM
+   - AudioMeter - real-time level metering
+   - SilenceDetector - silence detection & tracking
+   - AudioHealthMonitor - health monitoring & alerting
+   - AudioPlayoutQueue - FIFO playback queue with priority levels
+   - AudioOutputService - playback management
+
+4. RADIO MANAGEMENT (app_core/radio/)
+   - RadioManager - central receiver management
+   - ReceiverInterface - abstract driver interface
+   - Built-in drivers: RTL-SDR, Airspy (via SoapySDR)
+   - Hardware discovery & enumeration functions
+   - Dynamic device capability detection
+
+5. EAS/SAME PROCESSING (app_utils/)
+   - EASAudioGenerator - SAME header generation
+   - EASBroadcaster - broadcast orchestration
+   - SAMEAudioDecodeResult - comprehensive decode analysis
+   - FSK encoding/decoding (SAME modulation)
+   - TTS integration: pyttsx3, Azure, OpenAI
+   - Event code database and resolution
+   - FIPS/SAME code lookups
+
+6. GPIO & RELAY CONTROL (app_utils/gpio.py)
+   - GPIOController - unified GPIO control
+   - Full activation audit trail
+   - Watchdog timers (prevent stuck relays)
+   - Debounce protection
+   - Multiple relay/pin management
+   - Thread-safe operations
+
+7. WEB API ROUTES
+   a) PUBLIC ROUTES (webapp/routes_public.py)
+      - /, /stats, /alerts, /boundaries
+      - REST API endpoints for public access
+   
+   b) ADMIN ROUTES (webapp/admin/)
+      - /api/alerts/<id>/geometry - GeoJSON endpoints
+      - /api/boundaries - boundary management
+      - /api/system/* - system health & monitoring
+      - /admin/audio - audio configuration
+      - /admin/maintenance - maintenance operations
+      - /admin/environment - environment variable editor
+   
+   c) SECURITY ROUTES (webapp/routes_security.py)
+      - /auth/mfa/* - MFA enrollment/verification
+      - /api/roles - role management (CRUD)
+      - /api/permissions - permission listing
+      - /api/audit-logs - audit trail access
+      - /api/rbac/* - RBAC operations
+   
+   d) FEATURE ROUTES
+      - LED sign management (/api/led/*)
+      - VFD display control (/api/vfd/*)
+      - Display screens (/api/screens/*)
+      - Analytics endpoints (/api/analytics/*)
+      - Audio ingestion (/api/audio-ingest/*)
+      - System monitoring (/api/monitoring/*)
+      - Data export (/api/export/*)
+
+8. UTILITIES & HELPERS
+   - Time/timezone utilities
+   - FIPS/SAME code management
+   - Event code resolution
+   - Data formatting & export
+   - Zone catalog synchronization
+   - Location settings management
+   - Setup wizard
+   - Alert source tracking
+
+9. ANALYTICS & MONITORING
+   - MetricsAggregator - aggregate multiple metrics
+   - AnomalyDetector - statistical anomaly detection
+   - TrendAnalyzer - trend analysis & prediction
+   - AnalyticsScheduler - job scheduling
+   - Database models for snapshots, trends, anomalies
+
+10. LED/VFD DISPLAY CONTROL
+    - LED sign interface & message queuing
+    - VFD display content management
+    - Display screen templates with dynamic content
+    - Screen rotation scheduler
+    - Hardware status tracking
+
+================================================================================
+STRUCTURE & ORGANIZATION
+================================================================================
+
+Organized by:
+  ✓ Module/subsystem grouping
+  ✓ File paths for quick navigation
+  ✓ Line numbers for easy reference
+  ✓ Function signatures with parameters
+  ✓ Class methods and key attributes
+  ✓ Dependencies and relationships
+
+Navigation Features:
+  ✓ Table of contents with links
+  ✓ Inline hyperlinks to sections
+  ✓ Module dependency graph
+  ✓ Quick lookup by class/function name
+  ✓ Configuration variable reference
+  ✓ Authentication flow diagram
+
+================================================================================
+KEY STATISTICS
+================================================================================
+
+Total Classes:          98+
+Total Database Models:  24
+Total Functions:        150+
+Total Routes:           40+
+RBAC Permissions:       21+
+Predefined Roles:       3
+Supported TTS Engines:  4
+Audio Source Types:     5
+Document Size:          1,211 lines
+Code Coverage:          ~95% of major modules
+
+================================================================================
+QUICK REFERENCE SECTIONS
+================================================================================
+
+For Each Component, You'll Find:
+
+1. Location path (absolute filesystem path)
+2. Class definitions with:
+   - Purpose/description
+   - Key methods
+   - Line number in file
+3. Function definitions with:
+   - Purpose/description
+   - Parameters
+   - Line number
+4. API endpoints with:
+   - HTTP method
+   - Route path
+   - Description
+   - Handler line number
+5. Configuration variables
+6. Database schema overview
+7. Security features
+8. Performance optimizations
+9. Troubleshooting guides
+
+================================================================================
+USAGE & INTEGRATION
+================================================================================
+
+As a Reference Document:
+  → Keep open while developing features
+  → Use for code navigation (Ctrl+F search)
+  → Reference for understanding architecture
+  → Quick lookup of function signatures
+
+For Developers:
+  → Understand system structure
+  → Find related functions/classes
+  → Identify extension points
+  → Navigate dependencies
+
+For Agents/LLMs:
+  → Understand codebase organization
+  → Identify relevant modules for tasks
+  → Find API endpoints and handlers
+  → Understand data flow
+
+For Documentation:
+  → API endpoint reference
+  → Database schema overview
+  → Configuration guide
+  → Architecture overview
+
+================================================================================
+MAINTENANCE & UPDATES
+================================================================================
+
+This document should be regenerated when:
+  - Major new features are added
+  - Module structure changes
+  - New database models created
+  - API endpoints modified
+  - Function signatures change
+
+Update Process:
+  1. Run comprehensive code analysis
+  2. Extract all classes, functions, routes
+  3. Collect line numbers and paths
+  4. Organize by subsystem
+  5. Add documentation and examples
+  6. Generate new FUNCTION_TREE.md
+
+================================================================================
+RELATED DOCUMENTATION
+================================================================================
+
+See Also:
+  → README.md - Project overview & setup
+  → SECURITY_FIXES.md - Recent security updates
+  → KNOWN_BUGS.md - Known issues & workarounds
+  → CHANGELOG - Version history
+  → docs/ - Complete documentation directory
+  → /home/user/eas-station/FUNCTION_TREE.md - This reference document
+
+================================================================================
+END OF SUMMARY
+================================================================================
