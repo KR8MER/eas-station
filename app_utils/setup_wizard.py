@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 import secrets
 from dotenv import dotenv_values
@@ -25,6 +25,88 @@ PLACEHOLDER_SECRET_VALUES = {
     "dev-key-change-in-production",
     "replace-with-a-long-random-string",
 }
+
+# Common US timezones for dropdown selection
+US_TIMEZONES: List[Tuple[str, str]] = [
+    ("America/New_York", "America/New_York (Eastern)"),
+    ("America/Chicago", "America/Chicago (Central)"),
+    ("America/Denver", "America/Denver (Mountain)"),
+    ("America/Phoenix", "America/Phoenix (Arizona - no DST)"),
+    ("America/Los_Angeles", "America/Los_Angeles (Pacific)"),
+    ("America/Anchorage", "America/Anchorage (Alaska)"),
+    ("America/Adak", "America/Adak (Hawaii-Aleutian)"),
+    ("Pacific/Honolulu", "Pacific/Honolulu (Hawaii)"),
+    ("America/Puerto_Rico", "America/Puerto_Rico (Atlantic)"),
+    ("Pacific/Guam", "Pacific/Guam (Chamorro)"),
+    ("Pacific/Pago_Pago", "Pacific/Pago_Pago (Samoa)"),
+    ("America/Boise", "America/Boise (Mountain)"),
+    ("America/Detroit", "America/Detroit (Eastern)"),
+    ("America/Indiana/Indianapolis", "America/Indiana/Indianapolis (Eastern)"),
+    ("America/Kentucky/Louisville", "America/Kentucky/Louisville (Eastern)"),
+    ("America/Juneau", "America/Juneau (Alaska)"),
+    ("America/Nome", "America/Nome (Alaska)"),
+    ("America/Sitka", "America/Sitka (Alaska)"),
+]
+
+# US State codes with names
+US_STATE_CODES: List[Tuple[str, str]] = [
+    ("AL", "Alabama"),
+    ("AK", "Alaska"),
+    ("AZ", "Arizona"),
+    ("AR", "Arkansas"),
+    ("CA", "California"),
+    ("CO", "Colorado"),
+    ("CT", "Connecticut"),
+    ("DE", "Delaware"),
+    ("DC", "District of Columbia"),
+    ("FL", "Florida"),
+    ("GA", "Georgia"),
+    ("HI", "Hawaii"),
+    ("ID", "Idaho"),
+    ("IL", "Illinois"),
+    ("IN", "Indiana"),
+    ("IA", "Iowa"),
+    ("KS", "Kansas"),
+    ("KY", "Kentucky"),
+    ("LA", "Louisiana"),
+    ("ME", "Maine"),
+    ("MD", "Maryland"),
+    ("MA", "Massachusetts"),
+    ("MI", "Michigan"),
+    ("MN", "Minnesota"),
+    ("MS", "Mississippi"),
+    ("MO", "Missouri"),
+    ("MT", "Montana"),
+    ("NE", "Nebraska"),
+    ("NV", "Nevada"),
+    ("NH", "New Hampshire"),
+    ("NJ", "New Jersey"),
+    ("NM", "New Mexico"),
+    ("NY", "New York"),
+    ("NC", "North Carolina"),
+    ("ND", "North Dakota"),
+    ("OH", "Ohio"),
+    ("OK", "Oklahoma"),
+    ("OR", "Oregon"),
+    ("PA", "Pennsylvania"),
+    ("RI", "Rhode Island"),
+    ("SC", "South Carolina"),
+    ("SD", "South Dakota"),
+    ("TN", "Tennessee"),
+    ("TX", "Texas"),
+    ("UT", "Utah"),
+    ("VT", "Vermont"),
+    ("VA", "Virginia"),
+    ("WA", "Washington"),
+    ("WV", "West Virginia"),
+    ("WI", "Wisconsin"),
+    ("WY", "Wyoming"),
+    ("AS", "American Samoa"),
+    ("GU", "Guam"),
+    ("MP", "Northern Mariana Islands"),
+    ("PR", "Puerto Rico"),
+    ("VI", "U.S. Virgin Islands"),
+]
 
 
 class SetupWizardError(Exception):
@@ -52,6 +134,7 @@ class WizardField:
     widget: str = "input"
     validator: Optional[Callable[[str], str]] = None
     normalizer: Optional[Callable[[str], str]] = None
+    options: Optional[List[Dict[str, str]]] = None  # For select widgets: [{"value": "...", "label": "..."}]
 
     def clean(self, value: str) -> str:
         """Validate and normalise the provided value."""
@@ -135,6 +218,26 @@ def _validate_secret_key(value: str) -> str:
     return value
 
 
+def _validate_station_id(value: str) -> str:
+    """Validate EAS station ID (8 characters max, no dashes)."""
+    if not value:
+        return value
+    if len(value) > 8:
+        raise ValueError("EAS Station ID must be 8 characters or fewer.")
+    if "-" in value:
+        raise ValueError("EAS Station ID cannot contain dashes.")
+    return value.upper()
+
+
+def _validate_state_code(value: str) -> str:
+    """Validate state code is a valid 2-letter US state abbreviation."""
+    if not value:
+        return value
+    if len(value) != 2:
+        raise ValueError("State code must be exactly 2 characters.")
+    return value.upper()
+
+
 def format_led_lines_for_display(value: str) -> str:
     """Convert comma-separated LED lines into a textarea-friendly format."""
 
@@ -215,8 +318,11 @@ LOCATION_FIELDS = [
     WizardField(
         key="DEFAULT_TIMEZONE",
         label="Default Timezone",
-        description="Pre-populates the admin UI location settings. Use Region/City format.",
+        description="Pre-populates the admin UI location settings. Used for timestamps and scheduling.",
         validator=_validate_timezone,
+        widget="select",
+        options=[{"value": "", "label": "-- Select Timezone --"}] +
+                [{"value": tz[0], "label": tz[1]} for tz in US_TIMEZONES],
     ),
     WizardField(
         key="DEFAULT_COUNTY_NAME",
@@ -226,13 +332,17 @@ LOCATION_FIELDS = [
     WizardField(
         key="DEFAULT_STATE_CODE",
         label="Default State Code",
-        description="Two-letter state abbreviation (e.g., OH, CA, NY).",
+        description="Two-letter state abbreviation for your primary location.",
         required=False,
+        validator=_validate_state_code,
+        widget="select",
+        options=[{"value": "", "label": "-- Select State --"}] +
+                [{"value": state[0], "label": f"{state[0]} — {state[1]}"} for state in US_STATE_CODES],
     ),
     WizardField(
         key="DEFAULT_ZONE_CODES",
         label="Default Zone Codes",
-        description="Comma-separated NWS zone codes for your area (e.g., OHZ016,OHC137).",
+        description="Comma-separated NWS zone codes for your area (e.g., OHZ016,OHC137). Leave blank to auto-derive from county FIPS codes.",
         required=False,
     ),
 ]
@@ -249,14 +359,23 @@ EAS_FIELDS = [
     WizardField(
         key="EAS_ORIGINATOR",
         label="EAS Originator Code",
-        description="Three-letter originator code (e.g., WXR, EAS, CIV).",
+        description="Three-letter originator code identifying who initiated the alert.",
         required=False,
+        widget="select",
+        options=[
+            {"value": "", "label": "-- Select --"},
+            {"value": "WXR", "label": "WXR — National Weather Service"},
+            {"value": "EAS", "label": "EAS — EAS Participant / broadcaster"},
+            {"value": "CIV", "label": "CIV — Civil authorities"},
+            {"value": "PEP", "label": "PEP — National Public Warning System (PEP)"},
+        ],
     ),
     WizardField(
         key="EAS_STATION_ID",
         label="EAS Station ID",
-        description="Eight-character station callsign or identifier.",
+        description="Eight-character maximum station callsign or identifier. No dashes allowed (e.g., WXYZ1234, not WXYZ-1234).",
         required=False,
+        validator=_validate_station_id,
     ),
     WizardField(
         key="EAS_MANUAL_FIPS_CODES",
@@ -309,8 +428,15 @@ TTS_FIELDS = [
     WizardField(
         key="EAS_TTS_PROVIDER",
         label="TTS Provider",
-        description="Text-to-speech provider (azure, azure_openai, pyttsx3, or blank).",
+        description="Text-to-speech provider for voice synthesis of alert announcements.",
         required=False,
+        widget="select",
+        options=[
+            {"value": "", "label": "-- None (Disable TTS) --"},
+            {"value": "pyttsx3", "label": "pyttsx3 — Local offline TTS (default)"},
+            {"value": "azure", "label": "azure — Azure Cognitive Services TTS"},
+            {"value": "azure_openai", "label": "azure_openai — Azure OpenAI TTS"},
+        ],
     ),
     WizardField(
         key="AZURE_OPENAI_ENDPOINT",
