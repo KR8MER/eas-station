@@ -23,8 +23,8 @@ services:
     ports:
       - "80:5000"
     env_file:
-      - stack.env  # For Portainer Git deployments
-      - .env       # For local docker-compose and setup wizard
+      - stack.env  # For Portainer Git deployments - provides defaults
+      # NOTE: .env removed - loads empty file from Git. App loads from CONFIG_PATH at runtime.
     volumes:
       - app-config:/app-config  # Persistent volume for .env file
     environment:
@@ -67,8 +67,8 @@ services:
     command: ["python", "poller/cap_poller.py", "--continuous"]
     restart: unless-stopped
     env_file:
-      - stack.env  # For Portainer Git deployments
-      - .env       # For local docker-compose and setup wizard
+      - stack.env  # For Portainer Git deployments - provides defaults
+      # NOTE: .env removed - loads empty file from Git. App loads from CONFIG_PATH at runtime.
     volumes:
       - app-config:/app-config  # Persistent volume for .env file
     environment:
@@ -109,8 +109,8 @@ services:
       - "${LOG_LEVEL:-INFO}"
     restart: unless-stopped
     env_file:
-      - stack.env  # For Portainer Git deployments
-      - .env       # For local docker-compose and setup wizard
+      - stack.env  # For Portainer Git deployments - provides defaults
+      # NOTE: .env removed - loads empty file from Git. App loads from CONFIG_PATH at runtime.
     volumes:
       - app-config:/app-config  # Persistent volume for .env file
     environment:

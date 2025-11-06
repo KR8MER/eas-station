@@ -151,17 +151,19 @@ from app_core.models import (
 # CONFIGURATION AND SETUP
 # =============================================================================
 
-# Load environment variables early for local CLI usage
-# Use CONFIG_PATH if set (for persistent volume), otherwise use default .env location
-_config_path = os.environ.get('CONFIG_PATH')
-if _config_path:
-    load_dotenv(_config_path)
-else:
-    load_dotenv()
-
-# Configure logging
+# Configure logging early
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Load environment variables early for local CLI usage
+# Use CONFIG_PATH if set (for persistent volume), otherwise use default .env location
+# CRITICAL: override=True to override env vars set by docker-compose from empty .env
+_config_path = os.environ.get('CONFIG_PATH')
+if _config_path:
+    logger.info(f"Loading environment from persistent config: {_config_path}")
+    load_dotenv(_config_path, override=True)
+else:
+    load_dotenv(override=True)
 
 # Create Flask app
 app = Flask(__name__)
