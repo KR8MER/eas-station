@@ -46,7 +46,22 @@ tracks releases under the 2.x series.
   - Deep blue to cyan gradient representing signal monitoring and alert processing
   - SVG filters for depth, glow effects, and contemporary design polish
 
+### Changed
+- **Consolidated stream support in Audio Sources system** - Removed stream support from RadioReceiver model and UI, centralizing all HTTP/M3U stream configuration through the Audio Sources page where StreamSourceAdapter already provided full functionality
+  - Removed `source_type` and `stream_url` fields from RadioReceiver database model
+  - RadioReceiver now exclusively handles SDR hardware (RTL-SDR, Airspy)
+  - Added Stream (HTTP/M3U) option to Audio Sources UI dropdown
+  - Added stream configuration fields (URL, format) to Audio Sources modal
+  - Updated navigation to point to `/settings/audio` instead of deprecated `/audio/sources` route
+  - Clear separation of concerns: Radio = RF hardware, Audio = all audio ingestion sources
+
 ### Fixed
+- **Fixed Audio Sources page not loading sources** - Corrected missing element IDs and event listeners that prevented audio sources from displaying on `/settings/audio` page
+  - Fixed element IDs to match JavaScript expectations (`active-sources-count`, `total-sources-count`, `sources-list`)
+  - Fixed modal IDs to match JavaScript (`addSourceModal`, `deviceDiscoveryModal`)
+  - Added event listeners for Add Source, Discover Devices, and Refresh buttons
+  - Added toast container for notification display
+  - Removed deprecated `/audio/sources` page route
 - Fixed module import paths in scripts/manual_eas_event.py and scripts/manual_alert_fetch.py by adding repository root to sys.path
 - Fixed CSRF token protection in password change form (security settings)
 - Fixed audit log pagination to cap per_page parameter at 1000 to prevent DoS attacks

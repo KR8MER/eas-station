@@ -120,15 +120,6 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
     global logger
     logger = logger_instance
 
-    @app.route('/audio/sources')
-    def audio_sources_page():
-        """Audio sources management page."""
-        try:
-            return render_template('audio_sources.html')
-        except Exception as exc:
-            logger.error('Error rendering audio sources page: %s', exc)
-            return f"Error loading page: {exc}", 500
-
     @app.route('/api/audio/sources', methods=['GET'])
     def api_get_audio_sources():
         """List all configured audio sources."""
