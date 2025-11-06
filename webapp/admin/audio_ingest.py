@@ -93,6 +93,17 @@ def _sanitize_float(value: float) -> float:
     return value
 
 
+def _sanitize_bool(value) -> bool:
+    """Sanitize boolean values to be JSON-safe (convert numpy bool_ types)."""
+    import numpy as np
+
+    # Convert numpy bool_ to Python bool
+    if isinstance(value, np.bool_):
+        return bool(value)
+
+    return bool(value)
+
+
 def _serialize_audio_source(source_name: str, adapter: Any) -> Dict[str, Any]:
     """Serialize an audio source adapter to JSON-compatible dict."""
     config = adapter.config
@@ -106,9 +117,9 @@ def _serialize_audio_source(source_name: str, adapter: Any) -> Dict[str, Any]:
         'type': config.source_type.value,
         'status': adapter.status.value,
         'error_message': adapter.error_message,
-        'enabled': config.enabled,
+        'enabled': _sanitize_bool(config.enabled),
         'priority': config.priority,
-        'auto_start': db_config.auto_start if db_config else False,
+        'auto_start': _sanitize_bool(db_config.auto_start) if db_config else False,
         'description': db_config.description if db_config else '',
         'config': {
             'sample_rate': config.sample_rate,
@@ -125,7 +136,7 @@ def _serialize_audio_source(source_name: str, adapter: Any) -> Dict[str, Any]:
             'sample_rate': adapter.metrics.sample_rate,
             'channels': adapter.metrics.channels,
             'frames_captured': adapter.metrics.frames_captured,
-            'silence_detected': adapter.metrics.silence_detected,
+            'silence_detected': _sanitize_bool(adapter.metrics.silence_detected),
             'buffer_utilization': _sanitize_float(adapter.metrics.buffer_utilization),
         } if adapter.metrics else None,
     }
@@ -434,7 +445,7 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
                         'sample_rate': adapter.metrics.sample_rate,
                         'channels': adapter.metrics.channels,
                         'frames_captured': adapter.metrics.frames_captured,
-                        'silence_detected': adapter.metrics.silence_detected,
+                        'silence_detected': _sanitize_bool(adapter.metrics.silence_detected),
                         'buffer_utilization': _sanitize_float(adapter.metrics.buffer_utilization),
                     })
 
@@ -457,8 +468,8 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
                     'sample_rate': metric.sample_rate,
                     'channels': metric.channels,
                     'frames_captured': metric.frames_captured,
-                    'silence_detected': metric.silence_detected,
-                    'clipping_detected': metric.clipping_detected,
+                    'silence_detected': _sanitize_bool(metric.silence_detected) if metric.silence_detected is not None else False,
+                    'clipping_detected': _sanitize_bool(metric.clipping_detected) if metric.clipping_detected is not None else False,
                     'buffer_utilization': _sanitize_float(metric.buffer_utilization) if metric.buffer_utilization is not None else 0.0,
                     'timestamp': metric.timestamp.isoformat() if metric.timestamp else None,
                 })
@@ -491,10 +502,10 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
                     'id': record.id,
                     'source_name': record.source_name,
                     'health_score': _sanitize_float(record.health_score) if record.health_score is not None else 0.0,
-                    'is_active': record.is_active,
-                    'is_healthy': record.is_healthy,
-                    'silence_detected': record.silence_detected,
-                    'error_detected': record.error_detected,
+                    'is_active': _sanitize_bool(record.is_active) if record.is_active is not None else False,
+                    'is_healthy': _sanitize_bool(record.is_healthy) if record.is_healthy is not None else False,
+                    'silence_detected': _sanitize_bool(record.silence_detected) if record.silence_detected is not None else False,
+                    'error_detected': _sanitize_bool(record.error_detected) if record.error_detected is not None else False,
                     'uptime_seconds': _sanitize_float(record.uptime_seconds) if record.uptime_seconds is not None else 0.0,
                     'silence_duration_seconds': _sanitize_float(record.silence_duration_seconds) if record.silence_duration_seconds is not None else 0.0,
                     'time_since_last_signal_seconds': _sanitize_float(record.time_since_last_signal_seconds) if record.time_since_last_signal_seconds is not None else 0.0,
@@ -565,10 +576,10 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
                     'details': alert.details,
                     'threshold_value': alert.threshold_value,
                     'actual_value': alert.actual_value,
-                    'acknowledged': alert.acknowledged,
+                    'acknowledged': _sanitize_bool(alert.acknowledged) if alert.acknowledged is not None else False,
                     'acknowledged_by': alert.acknowledged_by,
                     'acknowledged_at': alert.acknowledged_at.isoformat() if alert.acknowledged_at else None,
-                    'resolved': alert.resolved,
+                    'resolved': _sanitize_bool(alert.resolved) if alert.resolved is not None else False,
                     'resolved_by': alert.resolved_by,
                     'resolved_at': alert.resolved_at.isoformat() if alert.resolved_at else None,
                     'created_at': alert.created_at.isoformat() if alert.created_at else None,
