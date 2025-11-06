@@ -156,10 +156,14 @@ class WizardSection:
 
 
 def _validate_bool(value: str) -> str:
-    """Validate boolean values."""
-    if value.lower() not in {"true", "false"}:
+    """Validate boolean values. Empty strings are allowed for optional fields."""
+    # Empty/whitespace is allowed for optional fields
+    if not value or not value.strip():
+        return ""
+    value_lower = value.lower().strip()
+    if value_lower not in {"true", "false"}:
         raise ValueError("Must be 'true' or 'false'.")
-    return value.lower()
+    return value_lower
 
 
 def _validate_fips(value: str) -> str:

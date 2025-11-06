@@ -37,6 +37,82 @@ When discussing or investigating bugs:
 - **Brand Consistency** – Use `static/img/eas-system-wordmark.svg` for hero sections, headers, and major UI cards when expanding documentation pages. The logo must remain accessible (include `alt` text).
 - **Mermaid-Friendly Markdown** – GitHub-flavoured Mermaid diagrams are welcome in repository docs. Keep them accurate by naming real modules, packages, and endpoints.
 
+### **🚨 MANDATORY: Frontend UI for Every Backend Feature**
+
+**CRITICAL RULE**: Every backend feature MUST have a corresponding frontend user interface. Backend-only features are UNACCEPTABLE.
+
+When implementing ANY new feature:
+
+1. **Backend + Frontend Together**
+   - ✅ **CORRECT**: Create API endpoint `/api/gpio/activate` AND UI page `/gpio_control`
+   - ❌ **WRONG**: Create API endpoint without UI (user cannot access it!)
+
+2. **Navigation Access Required**
+   - Every new page must be accessible from the navigation menu
+   - Add appropriate menu items in `templates/base.html`
+   - Consider: Which dropdown menu does this belong in? (Operations, Analytics, Admin, Settings)
+   - If creating a new major feature, create a new navigation section
+
+3. **Documentation Requirements**
+   - Document the UI access path: "Navigate to Operations → GPIO Control"
+   - Include screenshots showing how to access the feature
+   - Update `docs/NEW_FEATURES.md` or relevant guides
+   - Add inline help text or tooltips in the UI
+
+4. **Form Input Standards**
+   - **Binary choices (true/false, yes/no, enabled/disabled)** MUST use:
+     - Dropdown menus with fixed options, OR
+     - Radio button groups, OR
+     - Toggle switches
+   - ❌ **NEVER use free-text inputs for binary choices** - users will make capitalization errors
+   - ✅ **Example (Dropdown)**:
+     ```html
+     <select class="form-select" name="enabled">
+       <option value="true">Enabled</option>
+       <option value="false">Disabled</option>
+     </select>
+     ```
+   - ✅ **Example (Radio)**:
+     ```html
+     <div class="form-check">
+       <input class="form-check-input" type="radio" name="enabled" value="true" id="enabled-yes">
+       <label class="form-check-label" for="enabled-yes">Enabled</label>
+     </div>
+     <div class="form-check">
+       <input class="form-check-input" type="radio" name="enabled" value="false" id="enabled-no">
+       <label class="form-check-label" for="enabled-no">Disabled</label>
+     </div>
+     ```
+   - ✅ **Example (Toggle Switch)**:
+     ```html
+     <div class="form-check form-switch">
+       <input class="form-check-input" type="checkbox" role="switch" id="enabledSwitch" name="enabled">
+       <label class="form-check-label" for="enabledSwitch">Enable Feature</label>
+     </div>
+     ```
+
+5. **Pre-Commit Checklist for New Features**
+   - [ ] Backend API endpoints created
+   - [ ] Frontend UI page created (HTML template)
+   - [ ] Navigation menu updated to access the page
+   - [ ] Forms use proper input types (no text inputs for binary choices)
+   - [ ] Documentation updated with access instructions
+   - [ ] Feature tested end-to-end through the UI
+   - [ ] Error handling displays user-friendly messages
+
+6. **Examples of Complete Features**
+   - ✅ **RBAC Management**: Backend routes in `/security/roles` + Frontend UI at `/admin/rbac` + Navigation in Admin menu
+   - ✅ **Audit Logs**: Backend routes in `/security/audit-logs` + Frontend UI at `/admin/audit-logs` + Export button + Filtering
+   - ✅ **GPIO Control**: Backend API `/api/gpio/*` + Frontend UI `/gpio_control` + Statistics page `/admin/gpio/statistics`
+
+7. **What Counts as "Accessible"**
+   - User can find and use the feature without reading code
+   - Feature is discoverable through navigation or obvious links
+   - No need to manually type URLs or use API tools
+   - All CRUD operations (Create, Read, Update, Delete) have UI buttons/forms
+
+**Remember**: If a user cannot access a feature through the web interface, the feature doesn't exist for them. Backend-only work is wasted effort.
+
 ### Modularity & File Size
 
 - **Prefer small, focused modules** – Aim to keep Python modules under ~400 lines and HTML templates under ~300 lines.
