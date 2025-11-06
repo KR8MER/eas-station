@@ -641,8 +641,8 @@ def before_request():
 
     if setup_mode_active:
         session.pop('user_id', None)
-        allowed_endpoints = {'setup_wizard', 'setup_generate_secret', 'static'}
-        allowed_paths = {'/setup', '/setup/generate-secret'}
+        allowed_endpoints = {'setup_wizard', 'setup_generate_secret', 'setup_derive_zone_codes', 'static'}
+        allowed_paths = {'/setup', '/setup/generate-secret', '/setup/derive-zone-codes'}
         is_allowed_endpoint = request.endpoint in allowed_endpoints if request.endpoint else False
         is_allowed_path = request.path in allowed_paths or request.path.startswith('/static/')
         if not (is_allowed_endpoint or is_allowed_path):

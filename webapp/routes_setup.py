@@ -147,5 +147,39 @@ def register(app, logger):
         token = generate_secret_key()
         return jsonify({"secret_key": token})
 
+    @app.route("/setup/derive-zone-codes", methods=["POST"])
+    def setup_derive_zone_codes():
+        """Derive NWS zone codes from FIPS county codes."""
+        setup_active = app.config.get("SETUP_MODE", False)
+        current_user = getattr(g, "current_user", None)
+        is_authenticated = bool(current_user and current_user.is_authenticated)
+
+        if not setup_active and not is_authenticated:
+            return jsonify({"error": "Authentication required"}), 401
+
+        try:
+            from app_core.location import _derive_county_zone_codes_from_fips
+            from app_utils.zones import load_zone_lookup
+
+            data = request.get_json() or {}
+            fips_codes_str = data.get("fips_codes", "")
+
+            # Parse comma-separated FIPS codes
+            fips_codes = [code.strip() for code in fips_codes_str.split(",") if code.strip()]
+
+            if not fips_codes:
+                return jsonify({"zone_codes": []})
+
+            # Load zone lookup
+            zone_lookup = load_zone_lookup()
+
+            # Derive zone codes
+            derived = _derive_county_zone_codes_from_fips(fips_codes, zone_lookup)
+
+            return jsonify({"zone_codes": derived})
+        except Exception as exc:
+            setup_logger.exception("Failed to derive zone codes")
+            return jsonify({"error": str(exc)}), 500
+
 
 __all__ = ["register"]

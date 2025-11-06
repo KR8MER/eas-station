@@ -89,6 +89,10 @@
                                 <button class="btn btn-outline-secondary" type="button" id="generate-secret">
                                     <i class="fas fa-magic me-1"></i> Generate
                                 </button>
+                                {% elif field.key == 'DEFAULT_ZONE_CODES' %}
+                                <button class="btn btn-outline-secondary" type="button" id="derive-zones" title="Auto-derive zone codes from FIPS codes">
+                                    <i class="fas fa-map-marked-alt me-1"></i> Auto-Derive
+                                </button>
                                 {% endif %}
                             </div>
                             {% endif %}
@@ -157,6 +161,55 @@ if (secretButton) {
         } finally {
             secretButton.disabled = false;
             secretButton.innerHTML = '<i class="fas fa-magic me-1"></i> Generate';
+        }
+    });
+}
+
+const deriveZonesButton = document.getElementById('derive-zones');
+if (deriveZonesButton) {
+    deriveZonesButton.addEventListener('click', async () => {
+        deriveZonesButton.disabled = true;
+        deriveZonesButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Deriving';
+        try {
+            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+            const fipsInput = document.getElementById('field-EAS_MANUAL_FIPS_CODES');
+            const fipsCodes = fipsInput ? fipsInput.value : '';
+
+            if (!fipsCodes.trim()) {
+                alert('Please enter FIPS codes in the "Authorized FIPS Codes" field first. Zone codes will be derived from these FIPS codes.');
+                return;
+            }
+
+            const response = await fetch('{{ url_for('setup_derive_zone_codes') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({ fips_codes: fipsCodes })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to derive zone codes.');
+            }
+
+            const data = await response.json();
+            const target = document.getElementById('field-DEFAULT_ZONE_CODES');
+            if (target && data.zone_codes) {
+                if (data.zone_codes.length === 0) {
+                    alert('No zone codes could be derived from the provided FIPS codes. You may need to enter them manually.');
+                } else {
+                    target.value = data.zone_codes.join(',');
+                    target.classList.remove('is-invalid');
+                    alert(`Successfully derived ${data.zone_codes.length} zone code(s).`);
+                }
+            }
+        } catch (error) {
+            alert(error.message || 'Unable to derive zone codes.');
+        } finally {
+            deriveZonesButton.disabled = false;
+            deriveZonesButton.innerHTML = '<i class="fas fa-map-marked-alt me-1"></i> Auto-Derive';
         }
     });
 }
