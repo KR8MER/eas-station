@@ -13,7 +13,15 @@ cd /home/user/eas-station
 
 echo "Step 1: Pulling latest changes from Git..."
 git fetch origin
+git checkout claude/update-docs-and-todos-011CUqEUamfTp5er4Q41FgTR
 git pull origin claude/update-docs-and-todos-011CUqEUamfTp5er4Q41FgTR
+
+echo ""
+echo "Step 1b: Preserving .env file..."
+if [ ! -f .env ]; then
+    echo "Warning: .env file not found! Copying from .env.example"
+    cp .env.example .env
+fi
 
 echo ""
 echo "Step 2: Stopping containers..."
