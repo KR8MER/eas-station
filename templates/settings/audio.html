@@ -32,8 +32,8 @@
                 <i class="fas fa-stream fa-lg"></i>
             </div>
             <div>
-                <strong>Internet Streams:</strong> To add an HTTP/M3U stream source (for remote NOAA Weather Radio monitoring), click "Add Audio Source" above and select "Stream (HTTP)" as the source type.
-                Supports MP3, AAC, and OGG formats with automatic reconnection.
+                <strong>Internet Streams:</strong> To add an HTTP/M3U stream source (for remote NOAA Weather Radio monitoring), click "Add Audio Source" above and select <strong>"Stream (HTTP/M3U)"</strong> as the source type.
+                Supports MP3, AAC, and OGG formats with automatic reconnection and M3U playlist parsing.
             </div>
         </div>
     </div>
@@ -160,6 +160,7 @@
                             <select class="form-select" id="sourceType" name="type" required>
                                 <option value="">Select type...</option>
                                 <option value="sdr">SDR (Software-Defined Radio)</option>
+                                <option value="stream">Stream (HTTP/M3U)</option>
                                 <option value="alsa">ALSA (Advanced Linux Sound Architecture)</option>
                                 <option value="pulse">PulseAudio</option>
                                 <option value="file">File (for testing)</option>

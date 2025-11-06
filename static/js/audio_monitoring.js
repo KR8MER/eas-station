@@ -304,6 +304,25 @@ function updateSourceTypeConfig() {
                 </div>
             `;
             break;
+        case 'stream':
+            html = `
+                <div class="mb-3">
+                    <label for="streamUrl" class="form-label">Stream URL <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="streamUrl" placeholder="https://example.com/stream.m3u or https://example.com/live.mp3" required>
+                    <small class="form-text text-muted">HTTP/HTTPS URL to M3U playlist or direct audio stream (MP3, AAC, OGG)</small>
+                </div>
+                <div class="mb-3">
+                    <label for="streamFormat" class="form-label">Stream Format</label>
+                    <select class="form-select" id="streamFormat">
+                        <option value="mp3" selected>MP3 (auto-detect)</option>
+                        <option value="aac">AAC</option>
+                        <option value="ogg">OGG Vorbis</option>
+                        <option value="raw">Raw PCM</option>
+                    </select>
+                    <small class="form-text text-muted">Format will be auto-detected from Content-Type if possible</small>
+                </div>
+            `;
+            break;
         case 'alsa':
             html = `
                 <div class="mb-3">
@@ -371,6 +390,18 @@ async function addAudioSource() {
                 return;
             }
             deviceParams.receiver_id = receiverId;
+            break;
+        case 'stream':
+            const streamUrl = document.getElementById('streamUrl')?.value;
+            const streamFormat = document.getElementById('streamFormat')?.value;
+            if (!streamUrl) {
+                showError('Stream URL is required for stream sources');
+                return;
+            }
+            deviceParams.stream_url = streamUrl;
+            if (streamFormat && streamFormat !== 'mp3') {
+                deviceParams.format = streamFormat;
+            }
             break;
         case 'alsa':
             const deviceName = document.getElementById('deviceName')?.value || 'default';
