@@ -79,6 +79,7 @@ class AudioSourceAdapter(ABC):
     def __init__(self, config: AudioSourceConfig):
         self.config = config
         self.status = AudioSourceStatus.STOPPED
+        self.error_message: Optional[str] = None
         self.metrics = AudioMetrics(
             timestamp=0.0,
             peak_level_db=-np.inf,
@@ -137,6 +138,7 @@ class AudioSourceAdapter(ABC):
             
         except Exception as e:
             self.status = AudioSourceStatus.ERROR
+            self.error_message = str(e)
             logger.error(f"Failed to start audio source {self.config.name}: {e}")
             return False
 
@@ -147,6 +149,7 @@ class AudioSourceAdapter(ABC):
 
         logger.info(f"Stopping audio source: {self.config.name}")
         self.status = AudioSourceStatus.STOPPED
+        self.error_message = None  # Clear any error message
         self._stop_event.set()
         
         if self._capture_thread and self._capture_thread.is_alive():
@@ -196,6 +199,7 @@ class AudioSourceAdapter(ABC):
             except Exception as e:
                 logger.error(f"Error in capture loop for {self.config.name}: {e}")
                 self.status = AudioSourceStatus.ERROR
+                self.error_message = str(e)
                 break
 
         logger.debug(f"Capture loop stopped for {self.config.name}")
