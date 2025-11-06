@@ -55,9 +55,12 @@ EOF
         chmod 666 "$CONFIG_PATH" 2>/dev/null || echo "⚠️  Warning: Could not set permissions on $CONFIG_PATH"
     fi
 
-    # Check if the file is essentially empty (no SECRET_KEY) and populate from environment
-    if ! grep -q "^SECRET_KEY=" "$CONFIG_PATH" 2>/dev/null; then
-        echo "⚙️  Persistent .env file is empty or missing configuration"
+    # Check if the file is essentially empty (< 100 bytes and no non-comment lines) and populate from environment
+    FILE_SIZE=$(stat -c%s "$CONFIG_PATH" 2>/dev/null || stat -f%z "$CONFIG_PATH" 2>/dev/null || echo "0")
+    HAS_CONFIG=$(grep -v "^#" "$CONFIG_PATH" 2>/dev/null | grep -v "^[[:space:]]*$" | wc -l)
+
+    if [ "$FILE_SIZE" -lt 100 ] && [ "$HAS_CONFIG" -eq 0 ]; then
+        echo "⚙️  Persistent .env file is empty (no configuration)"
         echo "   Initializing from environment variables (stack.env)..."
 
         # Append environment variables to the config file
