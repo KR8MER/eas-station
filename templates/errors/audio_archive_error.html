@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Error Loading Audio Archive{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Error Loading Audio Archive</h1>
+    <div class="alert alert-danger" role="alert">
+        {{ error }}
+    </div>
+    <p>
+        <a href="/" class="btn btn-primary">
+            <i class="bi bi-arrow-left"></i> Back to Main
+        </a>
+    </p>
+</div>
+{% endblock %}

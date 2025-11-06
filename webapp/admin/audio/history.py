@@ -6,7 +6,7 @@ import math
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from flask import render_template, render_template_string, request, url_for
+from flask import render_template, request, url_for
 from sqlalchemy import or_
 
 from app_core.extensions import db
@@ -182,12 +182,8 @@ def register_history_routes(app, logger) -> None:
             )
         except Exception as exc:
             logger.error('Error loading audio archive: %s', exc)
-            return render_template_string(
-                """
-                <h1>Error Loading Audio Archive</h1>
-                <div class=\"alert alert-danger\">{{ error }}</div>
-                <p><a href='/' class='btn btn-primary'>← Back to Main</a></p>
-                """,
+            return render_template(
+                'errors/audio_history_error.html',
                 error=str(exc),
             )
 

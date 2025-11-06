@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import base64
 import io
+import os
 from typing import Any, Dict
 
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 from sqlalchemy.exc import OperationalError
+from PIL import Image
 
 from app_core.extensions import db
 from app_core.vfd import (
@@ -229,7 +231,41 @@ def register(app: Flask, logger) -> None:
                 if file.filename == "":
                     return jsonify({"success": False, "error": "No file selected"})
 
+                # Validate file extension
+                ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico'}
+                file_ext = os.path.splitext(file.filename)[1].lower()
+                if file_ext not in ALLOWED_EXTENSIONS:
+                    return jsonify({
+                        "success": False,
+                        "error": f"Invalid file type. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
+                    }), 400
+
+                # Validate file size (max 5MB)
+                MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+                file.seek(0, os.SEEK_END)
+                file_size = file.tell()
+                file.seek(0)
+
+                if file_size > MAX_FILE_SIZE:
+                    return jsonify({
+                        "success": False,
+                        "error": f"File too large. Maximum size: {MAX_FILE_SIZE // (1024*1024)}MB"
+                    }), 400
+
                 image_data = file.read()
+
+                # Validate that it's actually a valid image
+                try:
+                    img = Image.open(io.BytesIO(image_data))
+                    img.verify()  # Verify it's a valid image
+                    # Reset file pointer as verify() consumes the data
+                    file.seek(0)
+                    image_data = file.read()
+                except Exception as img_error:
+                    return jsonify({
+                        "success": False,
+                        "error": f"Invalid or corrupted image file: {str(img_error)}"
+                    }), 400
 
             # Check for base64 data
             elif request.is_json:
@@ -246,6 +282,24 @@ def register(app: Flask, logger) -> None:
                         "success": False,
                         "error": f"Invalid base64 data: {decode_error}"
                     })
+
+                # Validate size (max 5MB)
+                MAX_FILE_SIZE = 5 * 1024 * 1024
+                if len(image_data) > MAX_FILE_SIZE:
+                    return jsonify({
+                        "success": False,
+                        "error": f"Image data too large. Maximum size: {MAX_FILE_SIZE // (1024*1024)}MB"
+                    }), 400
+
+                # Validate that it's actually a valid image
+                try:
+                    img = Image.open(io.BytesIO(image_data))
+                    img.verify()  # Verify it's a valid image
+                except Exception as img_error:
+                    return jsonify({
+                        "success": False,
+                        "error": f"Invalid or corrupted image data: {str(img_error)}"
+                    }), 400
 
                 x = int(payload.get("x", 0))
                 y = int(payload.get("y", 0))

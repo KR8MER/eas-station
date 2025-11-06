@@ -258,8 +258,8 @@ class AudioDebugger:
                     device = alsaaudio.PCM(alsaaudio.PCM_CAPTURE, device=name)
                     print(f"   {i}: {name}")
                     device.close()
-                except:
-                    print(f"   {i}: {name} (may not support capture)")
+                except (OSError, IOError, Exception) as e:
+                    print(f"   {i}: {name} (may not support capture: {type(e).__name__})")
                     
         except ImportError:
             print("❌ ALSA not available - install python3-alsaaudio")
