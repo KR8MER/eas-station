@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Error Loading Audio History{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Error Loading Audio History</h1>
+    <div class="alert alert-danger" role="alert">
+        {{ error }}
+    </div>
+    <p>
+        <a href="/audio" class="btn btn-primary">
+            <i class="bi bi-arrow-left"></i> Back to Audio Archive
+        </a>
+    </p>
+</div>
+{% endblock %}

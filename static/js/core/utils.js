@@ -122,6 +122,66 @@
     }
 
     /**
+     * Escape HTML special characters to prevent XSS
+     * @param {string} text - Text to escape
+     * @returns {string} Escaped text
+     */
+    function escapeHtml(text) {
+        if (text === null || text === undefined) {
+            return '';
+        }
+        const div = document.createElement('div');
+        div.textContent = String(text);
+        return div.innerHTML;
+    }
+
+    /**
+     * Safely set HTML content by escaping user-provided text
+     * @param {HTMLElement|string} element - Element or selector
+     * @param {string} content - Content to set (will be escaped)
+     */
+    function setSafeText(element, content) {
+        const el = typeof element === 'string' ? document.querySelector(element) : element;
+        if (el) {
+            el.textContent = content;
+        }
+    }
+
+    /**
+     * Safely append HTML by creating elements programmatically
+     * @param {HTMLElement} parent - Parent element
+     * @param {string} tag - HTML tag name
+     * @param {Object} attributes - Attributes to set
+     * @param {string} text - Text content (will be escaped)
+     * @returns {HTMLElement} Created element
+     */
+    function createSafeElement(parent, tag, attributes = {}, text = '') {
+        const el = document.createElement(tag);
+
+        // Set attributes safely
+        Object.keys(attributes).forEach(key => {
+            if (key === 'className') {
+                el.className = attributes[key];
+            } else if (key.startsWith('data-')) {
+                el.setAttribute(key, attributes[key]);
+            } else {
+                el[key] = attributes[key];
+            }
+        });
+
+        // Set text content (automatically escaped)
+        if (text) {
+            el.textContent = text;
+        }
+
+        if (parent) {
+            parent.appendChild(el);
+        }
+
+        return el;
+    }
+
+    /**
      * Initialize utility functions
      */
     function init() {
@@ -143,6 +203,9 @@
         updateCurrentTime: updateCurrentTime,
         exportToExcel: exportToExcel,
         formatDate: formatDate,
-        debounce: debounce
+        debounce: debounce,
+        escapeHtml: escapeHtml,
+        setSafeText: setSafeText,
+        createSafeElement: createSafeElement
     };
 })();

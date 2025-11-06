@@ -19,7 +19,6 @@ from flask import (
     jsonify,
     redirect,
     render_template,
-    render_template_string,
     request,
     send_file,
     url_for,
@@ -375,12 +374,8 @@ def register_audio_routes(app, logger, eas_config):
 
         except Exception as exc:
             logger.error('Error loading audio archive: %s', exc)
-            return render_template_string(
-                """
-                <h1>Error Loading Audio Archive</h1>
-                <div class=\"alert alert-danger\">{{ error }}</div>
-                <p><a href='/' class='btn btn-primary'>← Back to Main</a></p>
-                """,
+            return render_template(
+                'errors/audio_archive_error.html',
                 error=str(exc),
             )
 

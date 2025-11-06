@@ -17,7 +17,10 @@ services:
     devices:
       - /dev/bus/usb:/dev/bus/usb
       - /dev/bus/usb/003/002:/dev/bus/usb/003/002
-    privileged: true
+    cap_add:
+      - SYS_RAWIO
+    security_opt:
+      - no-new-privileges:true
 
   poller:
     image: eas-station:latest
@@ -31,7 +34,10 @@ services:
       - "host.docker.internal:host-gateway"
     devices:
       - /dev/bus/usb:/dev/bus/usb
-    privileged: true
+    cap_add:
+      - SYS_RAWIO
+    security_opt:
+      - no-new-privileges:true
 
   ipaws-poller:
     image: eas-station:latest
@@ -54,7 +60,10 @@ services:
       - "host.docker.internal:host-gateway"
     devices:
       - /dev/bus/usb:/dev/bus/usb
-    privileged: true
+    cap_add:
+      - SYS_RAWIO
+    security_opt:
+      - no-new-privileges:true
 
   alerts-db:
     image: ${ALERTS_DB_IMAGE:-postgis/postgis:17-3.4}
