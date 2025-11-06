@@ -3,12 +3,21 @@ set -e
 
 echo "Starting EAS Station..."
 
-# Ensure .env exists as a file (not a directory)
-# Docker may create it as a directory if it doesn't exist on the host
+# Check if .env is mounted as a directory (Docker does this if file doesn't exist on host)
 if [ -d "/app/.env" ]; then
-    echo "Removing .env directory created by Docker..."
-    rmdir /app/.env
+    echo "ERROR: .env was created as a directory by Docker."
+    echo "This happens when .env doesn't exist on the host before starting containers."
+    echo ""
+    echo "To fix this:"
+    echo "  1. Stop the containers: docker-compose down"
+    echo "  2. Create an empty .env file: touch .env"
+    echo "  3. Start the containers: docker-compose up -d"
+    echo ""
+    echo "After setup, the setup wizard will populate the .env file."
+    exit 1
 fi
+
+# Create .env file if it doesn't exist
 if [ ! -f "/app/.env" ]; then
     echo "Creating empty .env file..."
     touch /app/.env
