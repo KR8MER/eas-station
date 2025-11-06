@@ -214,6 +214,13 @@
             </div>
         </div>
 
+        {% if current_user and not has_permission('system.configure') %}
+        <div class="alert alert-warning">
+            <i class="fas fa-eye"></i>
+            <strong>Read-Only Mode:</strong> You have view-only access to environment settings. All fields are disabled. Contact your administrator to request the <code>system.configure</code> permission if you need to make changes.
+        </div>
+        {% endif %}
+
         <!-- Validation Banner -->
         <div id="validation-banner" class="validation-banner"></div>
     </div>
@@ -238,6 +245,16 @@
 
 {% block extra_js %}
 <script>
+    // Debug logging
+    console.log('Environment settings page loading...');
+    {% if current_user %}
+    console.log('Current user:', {{ current_user.username|tojson }});
+    console.log('User role:', {{ current_user.role.name|tojson if current_user.role else 'null' }});
+    {% else %}
+    console.log('No current user');
+    {% endif %}
+    console.log('Has configure permission:', {{ 'true' if current_user and has_permission('system.configure') else 'false' }});
+
     // Ensure required utility functions are available
     if (typeof showLoading !== 'function' || typeof hideLoading !== 'function' || typeof showToast !== 'function') {
         console.error('Required utility functions are not available. Check that loading-error-utils.js is loaded.');
@@ -250,6 +267,9 @@
     let categoriesData = {};
     let currentValues = {};
     let hasChanges = false;
+    // Default to true (editable) for administrators
+    const canEdit = {{ 'true' if current_user and has_permission('system.configure') else 'false' }};
+    console.log('canEdit =', canEdit);
 
     // Load categories and variables on page load
     async function loadSettings() {
@@ -426,6 +446,7 @@
 
             html += `
                         <div class="actions-bar">
+                            ${canEdit ? `
                             <div class="changed-indicator" id="changed-${catId}">
                                 <i class="fas fa-exclamation-circle"></i>
                                 <span>Unsaved changes</span>
@@ -438,6 +459,12 @@
                                     <i class="fas fa-save"></i> Save Changes
                                 </button>
                             </div>
+                            ` : `
+                            <div class="alert alert-info mb-0">
+                                <i class="fas fa-info-circle"></i>
+                                You have view-only access to environment settings. Contact your administrator to request edit permissions.
+                            </div>
+                            `}
                         </div>
                     </form>
                 </div>
@@ -465,6 +492,7 @@
     function renderVariable(variable) {
         const required = variable.required ? '<span class="variable-required">*</span>' : '';
         const sensitive = variable.sensitive ? '<span class="variable-sensitive"><i class="fas fa-lock"></i> Sensitive</span>' : '';
+        const disabledAttr = !canEdit ? 'disabled' : '';
 
         let inputHtml = '';
         const inputId = `var-${variable.key}`;
@@ -474,19 +502,19 @@
             const checked = value === 'true' ? 'checked' : '';
             inputHtml = `
                 <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="${inputId}" name="${variable.key}" ${checked}>
+                    <input class="form-check-input" type="checkbox" id="${inputId}" name="${variable.key}" ${checked} ${disabledAttr}>
                     <label class="form-check-label" for="${inputId}">${variable.description || variable.label}</label>
                 </div>
             `;
         } else if (variable.type === 'select') {
-            inputHtml = `<select class="form-select" id="${inputId}" name="${variable.key}" ${variable.required ? 'required' : ''}>`;
+            inputHtml = `<select class="form-select" id="${inputId}" name="${variable.key}" ${variable.required ? 'required' : ''} ${disabledAttr}>`;
             for (const option of variable.options || []) {
                 const selected = value === option ? 'selected' : '';
                 inputHtml += `<option value="${option}" ${selected}>${option}</option>`;
             }
             inputHtml += `</select>`;
         } else if (variable.type === 'textarea') {
-            inputHtml = `<textarea class="form-control" id="${inputId}" name="${variable.key}" rows="3" placeholder="${variable.placeholder || ''}" ${variable.required ? 'required' : ''}>${value}</textarea>`;
+            inputHtml = `<textarea class="form-control" id="${inputId}" name="${variable.key}" rows="3" placeholder="${variable.placeholder || ''}" ${variable.required ? 'required' : ''} ${disabledAttr}>${value}</textarea>`;
         } else {
             const inputType = variable.type || 'text';
             const step = variable.step ? `step="${variable.step}"` : '';
@@ -495,7 +523,7 @@
             const maxlength = variable.maxlength ? `maxlength="${variable.maxlength}"` : '';
             const placeholder = variable.placeholder ? `placeholder="${variable.placeholder}"` : '';
 
-            inputHtml = `<input type="${inputType}" class="form-control" id="${inputId}" name="${variable.key}" value="${value}" ${step} ${min} ${max} ${maxlength} ${placeholder} ${variable.required ? 'required' : ''}>`;
+            inputHtml = `<input type="${inputType}" class="form-control" id="${inputId}" name="${variable.key}" value="${value}" ${step} ${min} ${max} ${maxlength} ${placeholder} ${variable.required ? 'required' : ''} ${disabledAttr}>`;
         }
 
         return `

@@ -613,6 +613,8 @@ def bad_request_error(error):
 @app.context_processor
 def inject_global_vars():
     """Inject global variables into all templates"""
+    from app_core.auth.roles import has_permission
+
     setup_mode_active = app.config.get('SETUP_MODE', False)
     location_settings = {}
     if not setup_mode_active:
@@ -636,6 +638,7 @@ def inject_global_vars():
         'setup_mode': setup_mode_active,
         'setup_mode_reasons': app.config.get('SETUP_MODE_REASONS', ()),
         'csrf_token': generate_csrf_token(),
+        'has_permission': has_permission,
     }
 
 
