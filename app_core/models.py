@@ -534,18 +534,20 @@ class LocationSettings(db.Model):
 
 
 class RadioReceiver(db.Model):
-    """Persistent configuration for a hardware or virtual radio receiver."""
+    """Persistent configuration for SDR hardware receivers.
+
+    Note: For internet stream sources (HTTP/M3U), use the AudioSource system instead.
+    RadioReceiver is exclusively for SDR hardware like RTL-SDR and Airspy.
+    """
 
     __tablename__ = "radio_receivers"
 
     id = db.Column(db.Integer, primary_key=True)
     identifier = db.Column(db.String(64), nullable=False)
     display_name = db.Column(db.String(128), nullable=False)
-    source_type = db.Column(db.String(16), nullable=False, default='sdr')  # 'sdr' or 'stream'
-    driver = db.Column(db.String(64))  # Required for SDR, null for stream
-    stream_url = db.Column(db.String(512))  # Required for stream, null for SDR
-    frequency_hz = db.Column(db.Float)  # Required for SDR, optional for stream
-    sample_rate = db.Column(db.Integer)  # Required for SDR, optional for stream
+    driver = db.Column(db.String(64), nullable=False)
+    frequency_hz = db.Column(db.Float, nullable=False)
+    sample_rate = db.Column(db.Integer, nullable=False)
     gain = db.Column(db.Float)
     channel = db.Column(db.Integer)
     serial = db.Column(db.String(128))
@@ -576,15 +578,11 @@ class RadioReceiver(db.Model):
 
         from app_core.radio import ReceiverConfig
 
-        # Handle nullable fields for stream sources
-        frequency = float(self.frequency_hz) if self.frequency_hz is not None else 0.0
-        sample_rate = int(self.sample_rate) if self.sample_rate is not None else 0
-
         return ReceiverConfig(
             identifier=self.identifier,
-            driver=self.driver or "",
-            frequency_hz=frequency,
-            sample_rate=sample_rate,
+            driver=self.driver,
+            frequency_hz=float(self.frequency_hz),
+            sample_rate=int(self.sample_rate),
             gain=self.gain,
             channel=self.channel,
             serial=self.serial,

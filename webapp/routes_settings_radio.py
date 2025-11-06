@@ -25,9 +25,7 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
         "id": receiver.id,
         "identifier": receiver.identifier,
         "display_name": receiver.display_name,
-        "source_type": receiver.source_type or "sdr",
         "driver": receiver.driver,
-        "stream_url": receiver.stream_url,
         "frequency_hz": receiver.frequency_hz,
         "sample_rate": receiver.sample_rate,
         "gain": receiver.gain,
@@ -52,6 +50,11 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
 
 
 def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Parse and validate SDR receiver configuration payload.
+
+    Note: Streams are no longer supported via RadioReceiver. Use the AudioSource
+    system for stream configuration instead.
+    """
     data: Dict[str, Any] = {}
 
     def _coerce_bool(value: Any, default: bool) -> bool:
@@ -79,57 +82,38 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
             return None, "Display name is required."
         data["display_name"] = display_name
 
-    # Get source type (defaults to 'sdr')
-    source_type = str(payload.get("source_type", "sdr")).strip().lower()
-    if source_type not in ("sdr", "stream"):
-        return None, "Source type must be 'sdr' or 'stream'."
-    data["source_type"] = source_type
-
-    # Validate driver (required for SDR, not for stream)
+    # Driver is required
     if not partial or "driver" in payload:
         driver = str(payload.get("driver", "")).strip()
-        if source_type == "sdr" and not driver:
-            return None, "Driver is required for SDR sources."
-        data["driver"] = driver if driver else None
+        if not driver:
+            return None, "Driver is required."
+        data["driver"] = driver
 
-    # Validate stream URL (required for stream, not for SDR)
-    if not partial or "stream_url" in payload:
-        stream_url = str(payload.get("stream_url", "")).strip()
-        if source_type == "stream" and not stream_url:
-            return None, "Stream URL is required for stream sources."
-        data["stream_url"] = stream_url if stream_url else None
-
-    # Frequency is required for SDR, optional for stream
+    # Frequency is required
     if not partial or "frequency_hz" in payload:
         frequency_val = payload.get("frequency_hz")
         if frequency_val in (None, "", []):
-            if source_type == "sdr":
-                return None, "Frequency is required for SDR sources."
-            data["frequency_hz"] = None
-        else:
-            try:
-                frequency = float(frequency_val)
-                if frequency <= 0:
-                    raise ValueError
-                data["frequency_hz"] = frequency
-            except Exception:
-                return None, "Frequency must be a positive number of hertz."
+            return None, "Frequency is required."
+        try:
+            frequency = float(frequency_val)
+            if frequency <= 0:
+                raise ValueError
+            data["frequency_hz"] = frequency
+        except Exception:
+            return None, "Frequency must be a positive number of hertz."
 
-    # Sample rate is required for SDR, optional for stream
+    # Sample rate is required
     if not partial or "sample_rate" in payload:
         sample_rate_val = payload.get("sample_rate")
         if sample_rate_val in (None, "", []):
-            if source_type == "sdr":
-                return None, "Sample rate is required for SDR sources."
-            data["sample_rate"] = None
-        else:
-            try:
-                sample_rate = int(sample_rate_val)
-                if sample_rate <= 0:
-                    raise ValueError
-                data["sample_rate"] = sample_rate
-            except Exception:
-                return None, "Sample rate must be a positive integer."
+            return None, "Sample rate is required."
+        try:
+            sample_rate = int(sample_rate_val)
+            if sample_rate <= 0:
+                raise ValueError
+            data["sample_rate"] = sample_rate
+        except Exception:
+            return None, "Sample rate must be a positive integer."
 
     if "gain" in payload:
         gain = payload.get("gain")

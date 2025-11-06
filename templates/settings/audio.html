@@ -20,8 +20,20 @@
                 <i class="fas fa-microphone fa-lg"></i>
             </div>
             <div>
-                <strong>Audio Sources:</strong> Configure multiple audio input sources including SDR receivers, ALSA/PulseAudio devices, and file inputs.
+                <strong>Audio Sources:</strong> Configure multiple audio input sources including SDR receivers, <strong>internet streams (HTTP/M3U)</strong>, ALSA/PulseAudio devices, and file inputs.
                 The system automatically selects the highest priority active source.
+            </div>
+        </div>
+    </div>
+
+    <div class="alert alert-success" role="alert">
+        <div class="d-flex">
+            <div class="me-3">
+                <i class="fas fa-stream fa-lg"></i>
+            </div>
+            <div>
+                <strong>Internet Streams:</strong> To add an HTTP/M3U stream source (for remote NOAA Weather Radio monitoring), click "Add Audio Source" above and select "Stream (HTTP)" as the source type.
+                Supports MP3, AAC, and OGG formats with automatic reconnection.
             </div>
         </div>
     </div>

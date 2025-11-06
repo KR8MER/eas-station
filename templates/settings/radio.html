@@ -27,6 +27,18 @@
         </div>
     </div>
 
+    <div class="alert alert-primary" role="alert">
+        <div class="d-flex">
+            <div class="me-3">
+                <i class="fas fa-stream fa-lg"></i>
+            </div>
+            <div>
+                <strong>Looking for internet streams?</strong> HTTP/M3U stream sources are now configured through the
+                <a href="/settings/audio" class="alert-link">Audio Sources</a> page. This page is exclusively for SDR hardware configuration.
+            </div>
+        </div>
+    </div>
+
     <div class="card mb-4 shadow-sm border-0">
         <div class="card-header bg-primary text-white">
             <div class="d-flex justify-content-between align-items-center">
@@ -227,23 +239,10 @@
                             <input type="text" class="form-control" id="receiverIdentifier" name="identifier" required>
                         </div>
                         <div class="col-md-6">
-                            <label for="receiverSourceType" class="form-label">Source Type</label>
-                            <select class="form-select" id="receiverSourceType" name="source_type">
-                                <option value="sdr">SDR (Hardware)</option>
-                                <option value="stream">Stream (M3U/HTTP)</option>
-                            </select>
-                            <small class="form-text text-muted">Choose between hardware SDR or internet stream</small>
-                        </div>
-                        <div class="col-md-6" id="receiverDriverField">
                             <label for="receiverDriver" class="form-label">Driver</label>
-                            <input type="text" class="form-control" id="receiverDriver" name="driver" placeholder="rtlsdr or airspy">
+                            <input type="text" class="form-control" id="receiverDriver" name="driver" placeholder="rtlsdr or airspy" required>
                         </div>
-                        <div class="col-md-12" id="receiverStreamUrlField" style="display: none;">
-                            <label for="receiverStreamUrl" class="form-label">Stream URL</label>
-                            <input type="text" class="form-control" id="receiverStreamUrl" name="stream_url" placeholder="https://example.com/stream.m3u or https://example.com/live.mp3">
-                            <small class="form-text text-muted">Enter M3U playlist URL or direct stream URL (MP3, AAC, OGG)</small>
-                        </div>
-                        <div class="col-md-6" id="receiverFrequencyField">
+                        <div class="col-md-6">
                             <label for="receiverFrequency" class="form-label">Frequency</label>
                             <div class="input-group">
                                 <input type="number" class="form-control" id="receiverFrequencyMHz" step="0.001" min="0.000001" placeholder="162.4" aria-label="Frequency in MHz">
@@ -599,61 +598,12 @@
         return receivers.find((item) => String(item.id) === String(id));
     }
 
-    function updateSourceTypeFields() {
-        const sourceType = document.getElementById('receiverSourceType').value;
-        const driverField = document.getElementById('receiverDriverField');
-        const streamUrlField = document.getElementById('receiverStreamUrlField');
-        const frequencyField = document.getElementById('receiverFrequencyField');
-        const sampleRateField = document.getElementById('receiverSampleRateField');
-        const gainField = document.getElementById('receiverGainField');
-        const channelField = document.getElementById('receiverChannelField');
-        const serialField = document.getElementById('receiverSerialField');
-
-        if (sourceType === 'stream') {
-            // Hide SDR-specific fields
-            driverField.style.display = 'none';
-            frequencyField.style.display = 'none';
-            sampleRateField.style.display = 'none';
-            gainField.style.display = 'none';
-            channelField.style.display = 'none';
-            serialField.style.display = 'none';
-
-            // Show stream field
-            streamUrlField.style.display = 'block';
-
-            // Update required status
-            document.getElementById('receiverDriver').required = false;
-            document.getElementById('receiverStreamUrl').required = true;
-            document.getElementById('receiverFrequency').required = false;
-            document.getElementById('receiverSampleRate').required = false;
-        } else {
-            // Show SDR-specific fields
-            driverField.style.display = 'block';
-            frequencyField.style.display = 'block';
-            sampleRateField.style.display = 'block';
-            gainField.style.display = 'block';
-            channelField.style.display = 'block';
-            serialField.style.display = 'block';
-
-            // Hide stream field
-            streamUrlField.style.display = 'none';
-
-            // Update required status
-            document.getElementById('receiverDriver').required = true;
-            document.getElementById('receiverStreamUrl').required = false;
-            document.getElementById('receiverFrequency').required = true;
-            document.getElementById('receiverSampleRate').required = true;
-        }
-    }
-
     function openModal(receiver = null) {
         form.reset();
         document.getElementById('receiverId').value = receiver?.id || '';
         document.getElementById('receiverDisplayName').value = receiver?.display_name || '';
         document.getElementById('receiverIdentifier').value = receiver?.identifier || '';
-        document.getElementById('receiverSourceType').value = receiver?.source_type || 'sdr';
         document.getElementById('receiverDriver').value = receiver?.driver || '';
-        document.getElementById('receiverStreamUrl').value = receiver?.stream_url || '';
 
         // Handle frequency - convert Hz to MHz for display
         const freqHz = receiver?.frequency_hz;
@@ -676,14 +626,8 @@
         document.getElementById('receiverIdentifier').disabled = Boolean(receiver);
         document.getElementById('radioReceiverModalLabel').textContent = receiver ? 'Edit Receiver' : 'Add Receiver';
 
-        // Update field visibility based on source type
-        updateSourceTypeFields();
-
         receiverModal.show();
     }
-
-    // Add event listener for source type changes
-    document.getElementById('receiverSourceType')?.addEventListener('change', updateSourceTypeFields);
 
     // Frequency MHz to Hz conversion
     const freqMHzInput = document.getElementById('receiverFrequencyMHz');
