@@ -270,6 +270,36 @@
                             </div>
                         </div>
 
+                        <!-- Custom Display Screens -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="screensHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#screensCollapse">
+                                    <i class="fas fa-display me-2"></i>Custom Display Screens
+                                </button>
+                            </h2>
+                            <div id="screensCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p>Create dynamic content templates for LED signs and VFD displays with API data integration.</p>
+                                    <ul>
+                                        <li><strong>Screen Templates:</strong> Define custom layouts with variable substitution from API endpoints like <code>/api/system_status</code>, <code>/api/alerts</code>, and <code>/api/monitoring/radio</code></li>
+                                        <li><strong>LED Displays:</strong> Configure text content (4 lines × 20 chars) with color, animation mode, and speed settings</li>
+                                        <li><strong>VFD Graphics:</strong> Build graphical screens with progress bars, VU meters, text, shapes, and images on 140×32 pixel displays</li>
+                                        <li><strong>Screen Rotation:</strong> Set up automatic cycling between multiple screens with configurable durations</li>
+                                        <li><strong>Dynamic Data:</strong> Display system health, CPU/memory usage, alert counts, network info, signal strength, and more</li>
+                                        <li><strong>Priority Management:</strong> Emergency screens override rotation; alerts pause normal displays</li>
+                                    </ul>
+                                    <div class="alert alert-light">
+                                        <i class="fas fa-link me-2"></i>
+                                        <strong>Access:</strong> Navigate to <strong>System &rarr; Custom Screens</strong> from the main menu or visit <code>/screens</code>
+                                    </div>
+                                    <div class="alert alert-info">
+                                        <i class="fas fa-book me-2"></i>
+                                        <strong>Documentation:</strong> See <a href="/static/docs/guides/CUSTOM_DISPLAY_SCREENS.md" target="_blank">Custom Display Screens Guide</a> for template syntax, variable reference, and examples
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Generating Sample Audio -->
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="audioHeading">
