@@ -171,6 +171,21 @@ class TTSEngine:
                 self.logger.warning("Azure OpenAI TTS credentials not configured; skipping TTS voiceover.")
             return None
 
+        # Validate endpoint format and provide helpful hints
+        if self.logger:
+            if 'azure.com' in endpoint.lower():
+                if '/audio/speech' not in endpoint:
+                    self.logger.warning(
+                        "Azure OpenAI endpoint may be incomplete. "
+                        "Expected format: https://YOUR_RESOURCE.openai.azure.com/openai/deployments/YOUR_DEPLOYMENT/audio/speech?api-version=2024-02-15-preview"
+                    )
+            elif 'api.openai.com' in endpoint.lower():
+                if endpoint != 'https://api.openai.com/v1/audio/speech':
+                    self.logger.warning(
+                        "OpenAI endpoint may be incorrect. "
+                        "Expected: https://api.openai.com/v1/audio/speech"
+                    )
+
         voice = (self.config.get("azure_openai_voice") or "alloy").strip()
         model = (self.config.get("azure_openai_model") or "tts-1-hd").strip()
         speed = float(self.config.get("azure_openai_speed", 1.0) or 1.0)
@@ -190,12 +205,23 @@ class TTSEngine:
                 "response_format": "wav",  # Request WAV format
             }
 
+            # Log the request for debugging
+            if self.logger:
+                self.logger.debug(f"Azure OpenAI TTS request to: {endpoint}")
+                self.logger.debug(f"Azure OpenAI TTS payload: model={model}, voice={voice}, speed={speed}")
+
             response = requests.post(
                 endpoint,
                 headers=headers,
                 json=payload,
                 timeout=30,
             )
+
+            # Log response details for debugging
+            if self.logger:
+                self.logger.debug(f"Azure OpenAI TTS response status: {response.status_code}")
+                self.logger.debug(f"Azure OpenAI TTS response content-type: {response.headers.get('content-type', 'unknown')}")
+                self.logger.debug(f"Azure OpenAI TTS response size: {len(response.content)} bytes")
 
             if response.status_code != 200:
                 error_msg = f"Azure OpenAI TTS API returned status {response.status_code}"
@@ -213,9 +239,30 @@ class TTSEngine:
             audio_bytes = response.content
 
             if not audio_bytes:
-                self._remember_error("Azure OpenAI TTS returned no audio data.")
+                error_msg = "Azure OpenAI TTS returned no audio data."
+                # Try to show what we actually got
+                try:
+                    response_preview = response.text[:500] if response.text else "(empty response)"
+                    error_msg += f" Response preview: {response_preview}"
+                except Exception:
+                    pass
+
+                self._remember_error(error_msg)
                 if self.logger:
-                    self.logger.warning("Azure OpenAI TTS returned no audio data.")
+                    self.logger.error(error_msg)
+                return None
+
+            # Check if response looks like audio or an error message
+            content_type = response.headers.get('content-type', '')
+            if 'json' in content_type.lower() or 'html' in content_type.lower() or 'text' in content_type.lower():
+                error_msg = f"Azure OpenAI TTS returned wrong content type: {content_type}. "
+                try:
+                    error_msg += f"Response: {response.text[:500]}"
+                except Exception:
+                    pass
+                self._remember_error(error_msg)
+                if self.logger:
+                    self.logger.error(error_msg)
                 return None
 
         except requests.exceptions.RequestException as exc:
