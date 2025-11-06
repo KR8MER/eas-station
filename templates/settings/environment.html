@@ -214,7 +214,7 @@
             </div>
         </div>
 
-        {% if current_user and not has_permission('system.configure') %}
+        {% if not can_configure %}
         <div class="alert alert-warning">
             <i class="fas fa-eye"></i>
             <strong>Read-Only Mode:</strong> You have view-only access to environment settings. All fields are disabled. Contact your administrator to request the <code>system.configure</code> permission if you need to make changes.
@@ -253,7 +253,7 @@
     {% else %}
     console.log('No current user');
     {% endif %}
-    console.log('Has configure permission:', {{ 'true' if current_user and has_permission('system.configure') else 'false' }});
+    console.log('Has configure permission:', {{ 'true' if can_configure else 'false' }});
 
     // Ensure required utility functions are available
     if (typeof showLoading !== 'function' || typeof hideLoading !== 'function' || typeof showToast !== 'function') {
@@ -267,8 +267,8 @@
     let categoriesData = {};
     let currentValues = {};
     let hasChanges = false;
-    // Default to true (editable) for administrators
-    const canEdit = {{ 'true' if current_user and has_permission('system.configure') else 'false' }};
+    // Permission check passed from backend
+    const canEdit = {{ 'true' if can_configure else 'false' }};
     console.log('canEdit =', canEdit);
 
     // Load categories and variables on page load
