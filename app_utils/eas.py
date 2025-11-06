@@ -643,6 +643,14 @@ class EASAudioGenerator:
             segment_samples['buffer'].extend(pre_voice_silence)
             samples.extend(normalized_voice_samples)
             tts_segment = list(normalized_voice_samples)
+        else:
+            # Log TTS failure for debugging
+            provider = self.tts_engine.provider
+            error_detail = self.tts_engine.last_error
+            if provider and error_detail:
+                self.logger.error(f"TTS synthesis failed with provider '{provider}': {error_detail}")
+            elif provider:
+                self.logger.warning(f"TTS provider '{provider}' is configured but produced no audio")
 
         trailing_silence = _generate_silence(1.0, self.sample_rate)
         samples.extend(trailing_silence)
@@ -795,13 +803,21 @@ class EASAudioGenerator:
                 if provider == 'azure':
                     base_message = 'Azure Speech is configured but synthesis failed.'
                     tts_warning = f"{base_message} {error_detail}" if error_detail else base_message
+                elif provider == 'azure_openai':
+                    base_message = 'Azure OpenAI TTS is configured but synthesis failed.'
+                    tts_warning = f"{base_message} {error_detail}" if error_detail else base_message
                 elif provider == 'pyttsx3':
                     base_message = 'pyttsx3 is configured but synthesis failed.'
                     tts_warning = f"{base_message} {error_detail}" if error_detail else base_message
                 elif provider:
-                    tts_warning = f'TTS provider "{provider}" is configured but synthesis failed.'
+                    base_message = f'TTS provider "{provider}" is configured but synthesis failed.'
+                    tts_warning = f"{base_message} {error_detail}" if error_detail else base_message
                 else:
                     tts_warning = 'No TTS provider configured; supply narration manually.'
+
+                # Log the TTS failure for debugging
+                if self.logger and error_detail:
+                    self.logger.error(f"TTS synthesis failed with provider '{provider}': {error_detail}")
 
         eom_header = build_eom_header(self.config)
         eom_bits = encode_same_bits(eom_header, include_preamble=True)
