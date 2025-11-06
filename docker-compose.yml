@@ -9,7 +9,8 @@ services:
     ports:
       - "5000:5000"
     env_file:
-      - .env
+      - stack.env  # For Portainer Git deployments
+      - .env       # For local docker-compose up
     environment:
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
     extra_hosts:
@@ -29,7 +30,8 @@ services:
     command: ["python", "poller/cap_poller.py", "--continuous"]
     restart: unless-stopped
     env_file:
-      - .env
+      - stack.env  # For Portainer Git deployments
+      - .env       # For local docker-compose up
     environment:
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
     extra_hosts:
@@ -55,7 +57,8 @@ services:
       - "${LOG_LEVEL:-INFO}"
     restart: unless-stopped
     env_file:
-      - .env
+      - stack.env  # For Portainer Git deployments
+      - .env       # For local docker-compose up
     environment:
       CAP_POLLER_MODE: IPAWS
       CAP_ENDPOINTS: ${IPAWS_CAP_FEED_URLS:-}

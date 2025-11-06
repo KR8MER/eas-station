@@ -282,13 +282,19 @@ document.addEventListener('DOMContentLoaded', async function() {
 async function loadRoles() {
     try {
         const response = await fetch('/security/roles');
+        if (!response.ok) {
+            if (response.status === 403) {
+                throw new Error('You do not have permission to view roles. Contact your administrator to grant you the "system.view_users" permission.');
+            }
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
         const data = await response.json();
         rolesData = data.roles;
         renderRoles();
     } catch (error) {
         console.error('Failed to load roles:', error);
         document.getElementById('roles-container').innerHTML =
-            '<div class="col-12"><div class="alert alert-danger">Failed to load roles</div></div>';
+            `<div class="col-12"><div class="alert alert-danger"><strong>Error loading roles:</strong> ${error.message}</div></div>`;
     }
 }
 
@@ -349,6 +355,12 @@ function renderRoles() {
 async function loadPermissions() {
     try {
         const response = await fetch('/security/permissions');
+        if (!response.ok) {
+            if (response.status === 403) {
+                throw new Error('You do not have permission to view permissions. Contact your administrator.');
+            }
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
         const data = await response.json();
         permissionsData = data.permissions;
 
@@ -409,6 +421,12 @@ function renderPermissionsForModal(containerId = 'createRolePermissions', select
 async function loadUsers() {
     try {
         const response = await fetch('/admin/users');
+        if (!response.ok) {
+            if (response.status === 403) {
+                throw new Error('You do not have permission to view users. Contact your administrator.');
+            }
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
         const data = await response.json();
         usersData = data.users || [];
         renderUsers();
@@ -416,7 +434,7 @@ async function loadUsers() {
     } catch (error) {
         console.error('Failed to load users:', error);
         document.querySelector('#users-table tbody').innerHTML =
-            '<tr><td colspan="5"><div class="alert alert-danger">Failed to load users</div></td></tr>';
+            `<tr><td colspan="5"><div class="alert alert-danger"><strong>Error loading users:</strong> ${error.message}</div></td></tr>`;
     }
 }
 

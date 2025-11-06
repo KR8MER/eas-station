@@ -229,6 +229,15 @@
 
 {% block extra_js %}
 <script>
+    // Ensure required utility functions are available
+    if (typeof showLoading !== 'function' || typeof hideLoading !== 'function' || typeof showToast !== 'function') {
+        console.error('Required utility functions are not available. Check that loading-error-utils.js is loaded.');
+        // Define fallback functions
+        window.showLoading = function(message) { console.log('Loading:', message || '...'); };
+        window.hideLoading = function() { console.log('Loading complete'); };
+        window.showToast = function(message, type) { alert(message); };
+    }
+
     let categoriesData = {};
     let currentValues = {};
     let hasChanges = false;
@@ -243,7 +252,11 @@
             console.log('Fetching validation status...');
             const validationResp = await fetch('/api/environment/validate');
             if (!validationResp.ok) {
+                if (validationResp.status === 403) {
+                    throw new Error('You do not have permission to view environment settings. Contact your administrator to grant you the "system.view_config" permission.');
+                }
                 console.error('Validation API failed:', validationResp.status, validationResp.statusText);
+                throw new Error(`Validation API returned ${validationResp.status}: ${validationResp.statusText}`);
             }
             const validation = await validationResp.json();
             console.log('Validation result:', validation);
@@ -253,6 +266,9 @@
             console.log('Fetching environment variables...');
             const resp = await fetch('/api/environment/variables');
             if (!resp.ok) {
+                if (resp.status === 403) {
+                    throw new Error('You do not have permission to view environment settings. Contact your administrator to grant you the "system.view_config" permission.');
+                }
                 console.error('Variables API failed:', resp.status, resp.statusText);
                 throw new Error(`API returned ${resp.status}: ${resp.statusText}`);
             }
