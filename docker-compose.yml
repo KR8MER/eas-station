@@ -9,6 +9,24 @@ services:
     ports:
       - "80:5000"
     environment:
+      # Database connection - external database (change POSTGRES_HOST to your database server)
+      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-alerts}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+
+      # Application settings
+      SECRET_KEY: ${SECRET_KEY:-}
+      FLASK_ENV: ${FLASK_ENV:-production}
+      FLASK_DEBUG: ${FLASK_DEBUG:-false}
+
+      # Location defaults
+      DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-America/New_York}
+      DEFAULT_COUNTY_NAME: ${DEFAULT_COUNTY_NAME:-}
+      DEFAULT_STATE_CODE: ${DEFAULT_STATE_CODE:-}
+
+      # SDR settings
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -27,6 +45,14 @@ services:
     command: ["python", "poller/cap_poller.py", "--continuous"]
     restart: unless-stopped
     environment:
+      # Database connection - external database
+      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-alerts}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+
+      # SDR settings
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -51,8 +77,18 @@ services:
       - "${LOG_LEVEL:-INFO}"
     restart: unless-stopped
     environment:
+      # Database connection - external database
+      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-alerts}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+
+      # Poller configuration
       CAP_POLLER_MODE: IPAWS
       CAP_ENDPOINTS: ${IPAWS_CAP_FEED_URLS:-}
+
+      # SDR settings
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
