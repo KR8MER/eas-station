@@ -886,5 +886,29 @@ def register_environment_routes(app, logger):
                 location_settings=None,
             )
 
+    @app.route('/admin/environment/download-env')
+    @require_permission('system.view_config')
+    def admin_download_env():
+        """Download the current .env file as a backup."""
+        from flask import send_file
+        from datetime import datetime
+
+        env_path = get_env_file_path()
+
+        if not env_path.exists():
+            flash("No .env file exists to download.")
+            return redirect(url_for("environment_settings"))
+
+        # Create a timestamped filename for the download
+        timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        download_name = f"eas-station-backup-{timestamp}.env"
+
+        return send_file(
+            env_path,
+            as_attachment=True,
+            download_name=download_name,
+            mimetype='text/plain'
+        )
+
 
 __all__ = ['register_environment_routes', 'ENV_CATEGORIES']
