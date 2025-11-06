@@ -55,6 +55,15 @@
                                       name="{{ field.key }}"
                                       rows="4"
                                       placeholder="{{ field.placeholder or '' }}">{{ form_data.get(field.key, '') }}</textarea>
+                            {% elif field.widget == 'select' %}
+                            {# Dropdown for fields with predefined options #}
+                            <select class="form-select {% if errors.get(field.key) %}is-invalid{% endif %}"
+                                    id="field-{{ field.key }}"
+                                    name="{{ field.key }}">
+                                {% for option in field.options %}
+                                <option value="{{ option.value }}" {% if form_data.get(field.key, '') == option.value %}selected{% endif %}>{{ option.label }}</option>
+                                {% endfor %}
+                            </select>
                             {% elif field.key in ['EAS_BROADCAST_ENABLED', 'AUDIO_INGEST_ENABLED', 'AUDIO_ALSA_ENABLED', 'AUDIO_SDR_ENABLED'] %}
                             {# Binary dropdown for boolean fields #}
                             <select class="form-select {% if errors.get(field.key) %}is-invalid{% endif %}"

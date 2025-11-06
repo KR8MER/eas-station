@@ -3,6 +3,17 @@ set -e
 
 echo "Starting EAS Station..."
 
+# Ensure .env exists as a file (not a directory)
+# Docker may create it as a directory if it doesn't exist on the host
+if [ -d "/app/.env" ]; then
+    echo "Removing .env directory created by Docker..."
+    rmdir /app/.env
+fi
+if [ ! -f "/app/.env" ]; then
+    echo "Creating empty .env file..."
+    touch /app/.env
+fi
+
 # Run database migrations with retry logic
 # This is safe to run concurrently - Alembic handles locking
 echo "Running database migrations..."

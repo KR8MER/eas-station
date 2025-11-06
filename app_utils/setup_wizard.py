@@ -52,6 +52,7 @@ class WizardField:
     widget: str = "input"
     validator: Optional[Callable[[str], str]] = None
     normalizer: Optional[Callable[[str], str]] = None
+    options: Optional[List[Dict[str, str]]] = None  # For select widgets: [{"value": "...", "label": "..."}]
 
     def clean(self, value: str) -> str:
         """Validate and normalise the provided value."""
@@ -249,8 +250,16 @@ EAS_FIELDS = [
     WizardField(
         key="EAS_ORIGINATOR",
         label="EAS Originator Code",
-        description="Three-letter originator code (e.g., WXR, EAS, CIV).",
+        description="Three-letter originator code identifying who initiated the alert.",
         required=False,
+        widget="select",
+        options=[
+            {"value": "", "label": "-- Select --"},
+            {"value": "WXR", "label": "WXR — National Weather Service"},
+            {"value": "EAS", "label": "EAS — EAS Participant / broadcaster"},
+            {"value": "CIV", "label": "CIV — Civil authorities"},
+            {"value": "PEP", "label": "PEP — National Public Warning System (PEP)"},
+        ],
     ),
     WizardField(
         key="EAS_STATION_ID",
@@ -309,8 +318,15 @@ TTS_FIELDS = [
     WizardField(
         key="EAS_TTS_PROVIDER",
         label="TTS Provider",
-        description="Text-to-speech provider (azure, azure_openai, pyttsx3, or blank).",
+        description="Text-to-speech provider for voice synthesis of alert announcements.",
         required=False,
+        widget="select",
+        options=[
+            {"value": "", "label": "-- None (Disable TTS) --"},
+            {"value": "pyttsx3", "label": "pyttsx3 — Local offline TTS (default)"},
+            {"value": "azure", "label": "azure — Azure Cognitive Services TTS"},
+            {"value": "azure_openai", "label": "azure_openai — Azure OpenAI TTS"},
+        ],
     ),
     WizardField(
         key="AZURE_OPENAI_ENDPOINT",
