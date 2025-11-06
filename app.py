@@ -440,6 +440,15 @@ os.environ.setdefault('DATABASE_URL', DATABASE_URL)
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# Add connection timeout and pool settings to prevent startup hangs
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'connect_args': {
+        'connect_timeout': 10,  # 10 second timeout for initial connection
+    },
+    'pool_pre_ping': True,  # Verify connections before using them
+    'pool_recycle': 3600,   # Recycle connections after 1 hour
+}
+
 # Initialize database
 db.init_app(app)
 
