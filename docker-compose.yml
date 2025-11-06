@@ -24,6 +24,8 @@ services:
 
   poller:
     image: eas-station:latest
+    depends_on:
+      - app
     command: ["python", "poller/cap_poller.py", "--continuous"]
     restart: unless-stopped
     env_file:
@@ -41,6 +43,8 @@ services:
 
   ipaws-poller:
     image: eas-station:latest
+    depends_on:
+      - app
     command:
       - python
       - poller/cap_poller.py
