@@ -62,6 +62,24 @@ tracks releases under the 2.x series.
   - Added event listeners for Add Source, Discover Devices, and Refresh buttons
   - Added toast container for notification display
   - Removed deprecated `/audio/sources` page route
+- **Fixed JSON serialization errors in audio APIs** - Backend was returning -np.inf (negative infinity) for dB levels when no audio present, causing "No number after minus sign in JSON" errors in frontend
+  - Added `_sanitize_float()` helper that converts infinity/NaN to valid numbers (-120.0 dB for silence)
+  - Applied sanitization to all audio API endpoints: `/api/audio/sources`, `/api/audio/metrics`, `/api/audio/health`
+  - Ensures all API responses are valid JSON that browsers can parse
+- **Fixed Add Audio Source button not working** - Form element IDs didn't match JavaScript expectations
+  - Changed form ID from `audioSourceForm` to `addSourceForm`
+  - Changed container ID from `deviceParamsContainer` to `sourceTypeConfig`
+  - Updated field IDs to match JavaScript (`sourceName`, `sampleRate`, `channels`, `silenceThreshold`, `silenceDuration`)
+  - Added missing `silenceDuration` field for silence detection configuration
+- **Fixed audio source delete, start, and stop operations failing with 404 errors**
+  - Added `encodeURIComponent()` to all fetch URLs for proper URL encoding of source names with special characters
+  - Added `sanitizeId()` helper to create safe HTML element IDs (replaces special chars with underscores)
+  - Fixed onclick handler escaping to prevent JavaScript injection vulnerabilities
+  - Updated `updateMeterDisplay()` to use sanitized IDs when finding meter elements
+- **Fixed DOM element ID mismatches** - JavaScript was looking for elements with IDs that didn't exist in HTML template
+  - Changed `healthScore` → `overall-health-score`
+  - Changed `silenceAlerts` → `alerts-count`
+  - Added hidden `overall-health-circle` and `alerts-list` elements required by JavaScript
 - Fixed module import paths in scripts/manual_eas_event.py and scripts/manual_alert_fetch.py by adding repository root to sys.path
 - Fixed CSRF token protection in password change form (security settings)
 - Fixed audit log pagination to cap per_page parameter at 1000 to prevent DoS attacks
