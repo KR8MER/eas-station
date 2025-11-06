@@ -78,8 +78,14 @@ def _initialize_audio_sources(controller: AudioIngestController) -> None:
 
 
 def _sanitize_float(value: float) -> float:
-    """Sanitize float values to be JSON-safe (no inf/nan)."""
+    """Sanitize float values to be JSON-safe (no inf/nan, convert numpy types)."""
     import math
+    import numpy as np
+
+    # Convert numpy types to regular Python float first
+    if isinstance(value, (np.floating, np.integer)):
+        value = float(value)
+
     if math.isinf(value):
         return -120.0 if value < 0 else 120.0
     if math.isnan(value):
