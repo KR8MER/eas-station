@@ -131,11 +131,11 @@
             <div class="chart-container">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="mb-0">Time Period</h5>
-                    <div class="btn-group" role="group">
-                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadStatistics(1)">24h</button>
-                        <button type="button" class="btn btn-sm btn-outline-primary active" onclick="loadStatistics(7)">7d</button>
-                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadStatistics(30)">30d</button>
-                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadStatistics(90)">90d</button>
+                    <div class="btn-group" role="group" aria-label="Time period selection">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadStatistics(1, this)">24h</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary active" onclick="loadStatistics(7, this)">7d</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadStatistics(30, this)">30d</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadStatistics(90, this)">90d</button>
                     </div>
                 </div>
             </div>
@@ -149,7 +149,7 @@
                 <h5 class="mb-3">Activations by Type</h5>
                 <div class="row" id="activation-types-container">
                     <div class="col-md-3 text-center">
-                        <div class="spinner-border text-primary" role="status"></div>
+                        <div class="spinner-border text-primary" role="status" aria-label="Loading activation types"></div>
                     </div>
                 </div>
             </div>
@@ -163,7 +163,7 @@
                 <h5 class="mb-3">Usage by Pin</h5>
                 <div id="pin-usage-container">
                     <div class="text-center">
-                        <div class="spinner-border text-primary" role="status"></div>
+                        <div class="spinner-border text-primary" role="status" aria-label="Loading pin statistics"></div>
                         <p class="text-muted mt-2">Loading pin statistics...</p>
                     </div>
                 </div>
@@ -190,7 +190,7 @@
                         <tbody>
                             <tr>
                                 <td colspan="5" class="text-center">
-                                    <div class="spinner-border text-primary" role="status"></div>
+                                    <div class="spinner-border text-primary" role="status" aria-label="Loading recent errors"></div>
                                 </td>
                             </tr>
                         </tbody>
@@ -204,18 +204,31 @@
 <script>
 let currentDays = 7;
 
+// Helper function to escape HTML to prevent XSS attacks
+function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return String(unsafe)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     loadStatistics(7);
 });
 
-async function loadStatistics(days = 7) {
+async function loadStatistics(days = 7, clickedButton = null) {
     currentDays = days;
 
     // Update active button
     document.querySelectorAll('.btn-group button').forEach(btn => {
         btn.classList.remove('active');
     });
-    event?.target?.classList?.add('active');
+    if (clickedButton) {
+        clickedButton.classList.add('active');
+    }
 
     try {
         const response = await fetch(`/api/gpio/statistics?days=${days}`);
@@ -295,12 +308,15 @@ function updateSummaryStats(summary) {
 
 async function loadRecentErrors() {
     try {
-        // Load from history endpoint with failure filter
-        const response = await fetch('/api/gpio/history?limit=10&success=false');
+        // Load from history endpoint - fetch more records to filter client-side
+        // Backend doesn't support success parameter, so we filter locally
+        const response = await fetch('/api/gpio/history?limit=50');
         const data = await response.json();
 
         if (data.success && data.logs) {
-            updateRecentErrors(data.logs);
+            // Filter for failures only (success === false) and take first 10
+            const failures = data.logs.filter(log => log.success === false).slice(0, 10);
+            updateRecentErrors(failures);
         } else {
             // No errors endpoint available, show empty state
             updateRecentErrors([]);
@@ -392,10 +408,10 @@ function updateRecentErrors(errors) {
     tbody.innerHTML = errors.map(error => `
         <tr>
             <td><small>${new Date(error.activated_at).toLocaleString()}</small></td>
-            <td><strong>GPIO ${error.pin}</strong></td>
-            <td><span class="activation-type-badge type-${error.activation_type}">${error.activation_type}</span></td>
-            <td><small class="text-danger">${error.error_message || 'Unknown error'}</small></td>
-            <td><small>${error.operator || '<em>—</em>'}</small></td>
+            <td><strong>GPIO ${escapeHtml(error.pin)}</strong></td>
+            <td><span class="activation-type-badge type-${escapeHtml(error.activation_type)}">${escapeHtml(error.activation_type)}</span></td>
+            <td><small class="text-danger">${escapeHtml(error.error_message || 'Unknown error')}</small></td>
+            <td><small>${error.operator ? escapeHtml(error.operator) : '<em>—</em>'}</small></td>
         </tr>
     `).join('');
 }
