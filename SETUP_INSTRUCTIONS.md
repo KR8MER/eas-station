@@ -4,7 +4,7 @@
 
 ### Portainer Deployment (Recommended)
 
-The repository now includes an empty `.env` file, making Portainer deployments seamless:
+The repository includes an empty `.env` file that the setup wizard can write to:
 
 1. **Deploy the stack in Portainer**
    - Add the Git repository
@@ -17,7 +17,16 @@ The repository now includes an empty `.env` file, making Portainer deployments s
 
 3. **Restart the stack** in Portainer after saving configuration
 
-That's it! The `.env` file is now included in the repository and will persist your configuration.
+**Important:** Configuration persists across container restarts but NOT across redeployments from Git (which resets the container). For permanent configuration:
+
+- **Option 1 (Recommended):** After configuring via the wizard, copy your values into Portainer's "Environment variables" section:
+  - Edit your stack in Portainer
+  - Scroll to "Environment variables"
+  - Add: `SECRET_KEY=your-generated-key`, `POSTGRES_PASSWORD=your-password`, etc.
+
+- **Option 2:** Edit the stack's docker-compose file in Portainer to include your environment values directly
+
+This approach ensures your configuration persists across Git redeployments.
 
 ### Docker Compose (Command Line)
 
@@ -68,22 +77,23 @@ The web-based setup wizard provides:
 
 ### Error: ".env was created as a directory by Docker"
 
-This should no longer occur with the latest repository version (which includes .env).
+**This issue is fixed in the latest version** by removing the volume mount.
 
-If you deployed from an older version and see this error:
+If you see this error, you're on an older commit. To fix:
 
 **Portainer:**
-1. Stop and remove the stack in Portainer
-2. Redeploy from the latest Git repository
-3. The .env file is now included automatically
+1. Stop and remove the stack completely
+2. Update the Git reference to the latest commit on your branch
+3. Redeploy from the latest Git repository
 
 **Docker Compose:**
 ```bash
 docker-compose down
-rm -rf .env
 git pull
 docker-compose up -d
 ```
+
+The `.env` file now lives in the container (from the Git repo) instead of being mounted from the host.
 
 ### Configuration Not Persisting
 
