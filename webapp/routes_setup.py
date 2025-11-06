@@ -119,8 +119,17 @@ def register(app, logger):
                     setup_logger.exception("Failed to write .env from setup wizard")
                     flash(f"Unable to update configuration: {exc}")
                 else:
-                    flash("Configuration saved. Restart the stack to load the new settings.")
-                    return redirect(url_for("setup_wizard"))
+                    # Provide detailed instructions based on deployment type
+                    flash(
+                        "Configuration saved successfully! "
+                        "⚠️ IMPORTANT: For Portainer deployments, changes persist on container RESTART "
+                        "but are lost on REDEPLOY. For permanent config, copy your values to Portainer's "
+                        "Environment Variables section.",
+                        "success"
+                    )
+                    # Store the cleaned values in session so we can show them on the success page
+                    session['_setup_saved_config'] = cleaned
+                    return redirect(url_for("setup_success"))
 
         csrf_token = _ensure_csrf_token()
         return render_template(
@@ -146,6 +155,42 @@ def register(app, logger):
 
         token = generate_secret_key()
         return jsonify({"secret_key": token})
+
+    @app.route("/setup/success")
+    def setup_success():
+        """Show configuration success page with export instructions."""
+        setup_active = app.config.get("SETUP_MODE", False)
+        current_user = getattr(g, "current_user", None)
+        is_authenticated = bool(current_user and current_user.is_authenticated)
+
+        if not setup_active and not is_authenticated:
+            return redirect(url_for("login"))
+
+        # Get the saved config from session
+        saved_config = session.pop('_setup_saved_config', {})
+        if not saved_config:
+            flash("No configuration to display. Please complete the setup wizard first.")
+            return redirect(url_for("setup_wizard"))
+
+        # Filter out empty values and format for Portainer
+        portainer_env_vars = []
+        for key, value in sorted(saved_config.items()):
+            if value and value.strip():
+                # Mask sensitive values
+                display_value = value
+                if key in ('SECRET_KEY', 'POSTGRES_PASSWORD', 'AZURE_OPENAI_KEY'):
+                    display_value = value[:8] + '...' + value[-4:] if len(value) > 12 else '***'
+                portainer_env_vars.append({
+                    'key': key,
+                    'value': value,
+                    'display_value': display_value,
+                    'is_sensitive': key in ('SECRET_KEY', 'POSTGRES_PASSWORD', 'AZURE_OPENAI_KEY')
+                })
+
+        return render_template(
+            "setup_success.html",
+            env_vars=portainer_env_vars,
+        )
 
     @app.route("/setup/derive-zone-codes", methods=["POST"])
     def setup_derive_zone_codes():
