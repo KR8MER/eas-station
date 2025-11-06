@@ -84,7 +84,7 @@ POSTGRES_HOST=${POSTGRES_HOST:-alerts-db}
 POSTGRES_PORT=${POSTGRES_PORT:-5432}
 POSTGRES_DB=${POSTGRES_DB:-alerts}
 POSTGRES_USER=${POSTGRES_USER:-postgres}
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-change-me}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
 
 # =============================================================================
 # ALERT POLLING
