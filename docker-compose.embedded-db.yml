@@ -6,11 +6,15 @@ services:
 
   poller:
     depends_on:
+      app:
+        condition: service_started
       alerts-db:
         condition: service_healthy
 
   ipaws-poller:
     depends_on:
+      app:
+        condition: service_started
       alerts-db:
         condition: service_healthy
 
