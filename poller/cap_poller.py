@@ -42,7 +42,12 @@ PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, os.pardir))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-load_dotenv()
+# Load from CONFIG_PATH if set (persistent volume), with override=True
+_config_path = os.environ.get('CONFIG_PATH')
+if _config_path:
+    load_dotenv(_config_path, override=True)
+else:
+    load_dotenv(override=True)
 from sqlalchemy import create_engine, text, func, or_
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError, OperationalError

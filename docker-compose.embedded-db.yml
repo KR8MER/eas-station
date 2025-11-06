@@ -23,8 +23,8 @@ services:
     ports:
       - "80:5000"
     env_file:
-      - stack.env  # For Portainer Git deployments
-      - .env       # For local docker-compose and setup wizard
+      - stack.env  # For Portainer Git deployments - provides defaults
+      # NOTE: .env removed - loads empty file from Git. App loads from CONFIG_PATH at runtime.
     volumes:
       - app-config:/app-config  # Persistent volume for .env file
     environment:
@@ -67,8 +67,10 @@ services:
     command: ["python", "poller/cap_poller.py", "--continuous"]
     restart: unless-stopped
     env_file:
-      - stack.env  # For Portainer Git deployments
-      - .env       # For local docker-compose and setup wizard
+      - stack.env  # For Portainer Git deployments - provides defaults
+      # NOTE: .env removed - loads empty file from Git. App loads from CONFIG_PATH at runtime.
+    volumes:
+      - app-config:/app-config  # Persistent volume for .env file
     environment:
       # Database connection - embedded database
       POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
@@ -76,6 +78,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+
+      CONFIG_PATH: /app-config/.env  # Point to persistent location
 
       # SDR settings
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
@@ -105,8 +109,10 @@ services:
       - "${LOG_LEVEL:-INFO}"
     restart: unless-stopped
     env_file:
-      - stack.env  # For Portainer Git deployments
-      - .env       # For local docker-compose and setup wizard
+      - stack.env  # For Portainer Git deployments - provides defaults
+      # NOTE: .env removed - loads empty file from Git. App loads from CONFIG_PATH at runtime.
+    volumes:
+      - app-config:/app-config  # Persistent volume for .env file
     environment:
       # Database connection - embedded database
       POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
@@ -114,6 +120,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+
+      CONFIG_PATH: /app-config/.env  # Point to persistent location
 
       # Poller configuration
       CAP_POLLER_MODE: IPAWS
