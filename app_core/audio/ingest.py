@@ -92,7 +92,7 @@ class AudioSourceAdapter(ABC):
         )
         self._stop_event = threading.Event()
         self._capture_thread: Optional[threading.Thread] = None
-        self._audio_queue = queue.Queue(maxsize=100)
+        self._audio_queue = queue.Queue(maxsize=500)  # Increased from 100 to handle network jitter
         self._last_metrics_update = 0.0
         # Waveform buffer for visualization (stores last 2048 samples)
         self._waveform_buffer = np.zeros(2048, dtype=np.float32)
