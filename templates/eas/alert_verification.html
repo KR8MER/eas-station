@@ -98,7 +98,15 @@
                             <ul class="list-unstyled small mb-0">
                                 {% for name, segment in decode_result.segments.items() %}
                                     <li>
-                                        <strong>{{ name|capitalize }}</strong>
+                                        {% set segment_labels = {
+                                            'header': 'SAME Header Bursts',
+                                            'attention_tone': 'Attention Tone (EBS/NWS)',
+                                            'narration': 'Voice Narration',
+                                            'eom': 'End-of-Message (EOM)',
+                                            'buffer': 'Buffer/Lead Audio',
+                                            'message': 'Message (Legacy)'
+                                        } %}
+                                        <strong>{{ segment_labels.get(name, name|capitalize) }}</strong>
                                         · {{ '%.2f'|format(segment.duration_seconds) }}s
                                         ({{ '%.2f'|format(segment.start_seconds) }}s –
                                         {{ '%.2f'|format(segment.end_seconds) }}s)
