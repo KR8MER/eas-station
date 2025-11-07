@@ -171,13 +171,18 @@ class TTSEngine:
                 self.logger.warning("Azure OpenAI TTS credentials not configured; skipping TTS voiceover.")
             return None
 
+        # Log endpoint for debugging
+        if self.logger:
+            self.logger.debug(f"Azure OpenAI TTS endpoint: {endpoint}")
+
         # Validate endpoint format and provide helpful hints
         if self.logger:
             if 'azure.com' in endpoint.lower():
                 if '/audio/speech' not in endpoint:
-                    self.logger.warning(
-                        "Azure OpenAI endpoint may be incomplete. "
-                        "Expected format: https://YOUR_RESOURCE.openai.azure.com/openai/deployments/YOUR_DEPLOYMENT/audio/speech?api-version=2024-02-15-preview"
+                    self.logger.error(
+                        f"Azure OpenAI endpoint is incomplete: {endpoint}\n"
+                        "Expected full format: https://YOUR_RESOURCE.openai.azure.com/openai/deployments/YOUR_DEPLOYMENT/audio/speech?api-version=2024-02-15-preview\n"
+                        "Your endpoint should include '/openai/deployments/YOUR_DEPLOYMENT/audio/speech?api-version=...'"
                     )
             elif 'api.openai.com' in endpoint.lower():
                 if endpoint != 'https://api.openai.com/v1/audio/speech':
@@ -202,9 +207,10 @@ class TTSEngine:
                     self.logger.debug(f"Extracted deployment name from endpoint: {deployment_name}")
             else:
                 if self.logger:
-                    self.logger.warning(
-                        "Could not extract deployment name from Azure endpoint. "
-                        "Using configured model name, which may cause errors if it doesn't match the deployment."
+                    self.logger.error(
+                        f"Could not extract deployment name from Azure endpoint: {endpoint}\n"
+                        f"The endpoint must include '/deployments/YOUR_DEPLOYMENT/' in the path.\n"
+                        f"Using configured model name '{model}' instead, which may cause errors if it doesn't match the deployment."
                     )
 
         # Use deployment name as model for Azure, or configured model for OpenAI
