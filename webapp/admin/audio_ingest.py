@@ -24,6 +24,9 @@ _audio_controller: Optional[AudioIngestController] = None
 # Global auto-streaming service instance
 _auto_streaming_service = None
 
+# Global lock file to prevent duplicate streaming services across workers
+_streaming_lock_file = None
+
 
 def _get_audio_controller() -> AudioIngestController:
     """Get or create the global audio ingest controller."""
@@ -42,7 +45,31 @@ def _get_auto_streaming_service():
 
 def _initialize_auto_streaming() -> None:
     """Initialize the auto-streaming service from environment variables."""
-    global _auto_streaming_service
+    global _auto_streaming_service, _streaming_lock_file
+
+    # CRITICAL: Prevent duplicate streaming services in multi-worker environments
+    # With multiple gunicorn workers, each worker would initialize its own streaming
+    # service, causing multiple FFmpeg processes to fight for the same Icecast mount.
+    # Use a file lock to ensure only ONE worker starts the streaming service.
+    import fcntl
+    import os
+
+    lock_file_path = '/tmp/eas-auto-streaming.lock'
+
+    try:
+        # Try to acquire exclusive lock (non-blocking)
+        _streaming_lock_file = open(lock_file_path, 'w')
+        fcntl.flock(_streaming_lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        # If we got here, we have the lock - this worker is responsible for streaming
+        # Keep lock file open for the lifetime of the process to maintain the lock
+        logger.info(f"Acquired streaming lock (PID {os.getpid()}) - initializing auto-streaming service")
+
+    except (IOError, OSError) as e:
+        # Lock is already held by another worker - skip initialization
+        logger.info(f"Auto-streaming already initialized by another worker (PID {os.getpid()}) - skipping")
+        _auto_streaming_service = None
+        return
 
     try:
         from app_core.audio.icecast_auto_config import get_icecast_auto_config
