@@ -48,6 +48,13 @@ services:
 
       # SDR settings
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
+
+      # Icecast auto-configuration (optional - enables automatic streaming)
+      ICECAST_SERVER: ${ICECAST_SERVER:-icecast}
+      ICECAST_PORT: ${ICECAST_INTERNAL_PORT:-8000}
+      ICECAST_EXTERNAL_PORT: ${ICECAST_PORT:-8001}
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-}
+      ICECAST_ENABLED: ${ICECAST_ENABLED:-true}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     devices:
@@ -157,6 +164,49 @@ services:
       timeout: 5s
       retries: 5
 
+  icecast:
+    image: infiniteproject/icecast:latest
+    container_name: eas-icecast
+    restart: unless-stopped
+    ports:
+      - "${ICECAST_PORT:-8001}:8000"  # Icecast web interface and streams (port 8001 to avoid Portainer conflict)
+    environment:
+      # Admin credentials (CHANGE THESE IN PRODUCTION!)
+      - ICECAST_ADMIN_USER=${ICECAST_ADMIN_USER:-admin}
+      - ICECAST_ADMIN_PASSWORD=${ICECAST_ADMIN_PASSWORD:-changeme_admin}
+
+      # Source credentials for EAS Station to publish streams
+      - ICECAST_SOURCE_PASSWORD=${ICECAST_SOURCE_PASSWORD:-changeme_source}
+
+      # Relay password
+      - ICECAST_RELAY_PASSWORD=${ICECAST_RELAY_PASSWORD:-changeme_relay}
+
+      # Server settings
+      - ICECAST_HOSTNAME=${ICECAST_HOSTNAME:-localhost}
+      - ICECAST_LOCATION=EAS Monitoring Station
+      - ICECAST_CONTACT=${ICECAST_CONTACT:-admin@example.com}
+
+      # Performance limits
+      - ICECAST_MAX_CLIENTS=100
+      - ICECAST_MAX_SOURCES=50
+    volumes:
+      - icecast-logs:/var/log/icecast
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    # Note: Configure EAS Station to use Icecast:
+    #   1. Go to /settings/audio in the web interface
+    #   2. Scroll to "Icecast Streaming Output"
+    #   3. Server: icecast (or localhost if accessing from host)
+    #   4. Port: 8000 (internal) / 8001 (external/host access)
+    #   5. Source Password: (value from ICECAST_SOURCE_PASSWORD above)
+    #   6. Save configuration
+    # Streams will be available at: http://localhost:8001/source-name
+
 volumes:
   alerts-db-data:
   app-config:  # Persistent storage for wizard-generated .env file
+  icecast-logs:  # Icecast server logs
