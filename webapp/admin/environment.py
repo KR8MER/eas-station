@@ -28,6 +28,9 @@ ENV_CATEGORIES = {
                 'required': True,
                 'description': 'Flask session security key (generate with: python -c "import secrets; print(secrets.token_hex(32))")',
                 'sensitive': True,
+                'minlength': 32,
+                'pattern': '^[A-Za-z0-9]{32,}$',
+                'title': 'SECRET_KEY must be at least 32 characters long and contain only alphanumeric characters.',
             },
             {
                 'key': 'FLASK_ENV',
@@ -40,7 +43,8 @@ ENV_CATEGORIES = {
             {
                 'key': 'FLASK_DEBUG',
                 'label': 'Debug Mode',
-                'type': 'boolean',
+                'type': 'select',
+                'options': ['false', 'true'],
                 'default': 'false',
                 'description': 'Enable Flask debug mode (should be false in production)',
             },
@@ -58,6 +62,14 @@ ENV_CATEGORIES = {
                 'type': 'text',
                 'default': 'logs/eas_station.log',
                 'description': 'Path to application log file',
+            },
+            {
+                'key': 'WEB_ACCESS_LOG',
+                'label': 'Web Server Access Logs',
+                'type': 'select',
+                'options': ['false', 'true'],
+                'default': 'false',
+                'description': 'Enable web server access logs (shows all HTTP requests). Set to false to reduce log clutter and only show errors.',
             },
         ],
     },
@@ -80,6 +92,8 @@ ENV_CATEGORIES = {
                 'type': 'number',
                 'default': '5432',
                 'description': 'Database server port',
+                'min': 1,
+                'max': 65535,
             },
             {
                 'key': 'POSTGRES_DB',
@@ -233,25 +247,30 @@ ENV_CATEGORIES = {
             {
                 'key': 'EAS_BROADCAST_ENABLED',
                 'label': 'Enable EAS Broadcasting',
-                'type': 'boolean',
+                'type': 'select',
+                'options': ['false', 'true'],
                 'default': 'false',
                 'description': 'Enable SAME/EAS audio generation',
             },
             {
                 'key': 'EAS_ORIGINATOR',
                 'label': 'Originator Code',
-                'type': 'text',
+                'type': 'select',
+                'options': ['WXR', 'EAS', 'PEP', 'CIV'],
                 'default': 'WXR',
-                'description': 'EAS originator code (e.g., WXR, EAS, PEP)',
-                'maxlength': 3,
+                'description': 'EAS originator code: WXR (Weather), EAS (Broadcast), PEP (Primary Entry Point), CIV (Civil Authority)',
+                'category': 'eas_enabled',
             },
             {
                 'key': 'EAS_STATION_ID',
                 'label': 'Station ID',
                 'type': 'text',
                 'default': 'EASNODES',
-                'description': 'Your station callsign or identifier',
+                'description': 'Your station callsign or identifier (8 characters max, uppercase letters/numbers/forward slash only)',
                 'maxlength': 8,
+                'pattern': '^[A-Z0-9/]{1,8}$',
+                'title': 'Must contain only uppercase letters (A-Z), numbers (0-9), and forward slash (/). No hyphens or lowercase letters.',
+                'category': 'eas_enabled',
             },
             {
                 'key': 'EAS_OUTPUT_DIR',
@@ -259,6 +278,7 @@ ENV_CATEGORIES = {
                 'type': 'text',
                 'default': 'static/eas_messages',
                 'description': 'Directory for generated EAS audio files',
+                'category': 'eas_enabled',
             },
             {
                 'key': 'EAS_ATTENTION_TONE_SECONDS',
@@ -268,6 +288,7 @@ ENV_CATEGORIES = {
                 'description': 'Attention tone length in seconds',
                 'min': 1,
                 'max': 60,
+                'category': 'eas_enabled',
             },
             {
                 'key': 'EAS_SAMPLE_RATE',
@@ -276,6 +297,7 @@ ENV_CATEGORIES = {
                 'options': ['8000', '16000', '22050', '44100', '48000'],
                 'default': '44100',
                 'description': 'Audio sample rate in Hz',
+                'category': 'eas_enabled',
             },
             {
                 'key': 'EAS_AUDIO_PLAYER',
@@ -283,6 +305,7 @@ ENV_CATEGORIES = {
                 'type': 'text',
                 'default': 'aplay',
                 'description': 'Command to play audio files',
+                'category': 'eas_enabled',
             },
             {
                 'key': 'EAS_MANUAL_FIPS_CODES',
@@ -290,6 +313,7 @@ ENV_CATEGORIES = {
                 'type': 'textarea',
                 'description': 'Comma-separated FIPS codes for manual broadcasts',
                 'placeholder': '039137,039003',
+                'category': 'eas_enabled',
             },
             {
                 'key': 'EAS_MANUAL_EVENT_CODES',
@@ -297,6 +321,7 @@ ENV_CATEGORIES = {
                 'type': 'textarea',
                 'description': 'Comma-separated event codes for manual broadcasts',
                 'placeholder': 'RWT,DMO,SVR',
+                'category': 'eas_enabled',
             },
         ],
     },
@@ -309,8 +334,10 @@ ENV_CATEGORIES = {
                 'key': 'EAS_GPIO_PIN',
                 'label': 'GPIO Pin',
                 'type': 'number',
-                'description': 'GPIO pin number for relay control (leave empty to disable)',
+                'description': 'GPIO pin number for relay control (leave empty to disable). Disabling this will gray out other GPIO settings.',
                 'placeholder': 'e.g., 17',
+                'min': 2,
+                'max': 27,
             },
             {
                 'key': 'EAS_GPIO_ACTIVE_STATE',
@@ -319,6 +346,7 @@ ENV_CATEGORIES = {
                 'options': ['HIGH', 'LOW'],
                 'default': 'HIGH',
                 'description': 'GPIO active state',
+                'category': 'gpio_enabled',
             },
             {
                 'key': 'EAS_GPIO_HOLD_SECONDS',
@@ -328,6 +356,7 @@ ENV_CATEGORIES = {
                 'description': 'How long to activate GPIO relay',
                 'min': 1,
                 'max': 300,
+                'category': 'gpio_enabled',
             },
         ],
     },
@@ -414,8 +443,10 @@ ENV_CATEGORIES = {
                 'key': 'LED_SIGN_IP',
                 'label': 'LED Sign IP Address',
                 'type': 'text',
-                'description': 'IP address of LED sign (leave empty to disable)',
+                'description': 'IP address of LED sign (leave empty to disable). Disabling this will gray out other LED settings.',
                 'placeholder': '192.168.1.100',
+                'pattern': '^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$',
+                'title': 'Must be a valid IPv4 address (e.g., 192.168.1.100)',
             },
             {
                 'key': 'LED_SIGN_PORT',
@@ -423,6 +454,9 @@ ENV_CATEGORIES = {
                 'type': 'number',
                 'default': '10001',
                 'description': 'TCP port for LED sign',
+                'min': 1,
+                'max': 65535,
+                'category': 'led_enabled',
             },
             {
                 'key': 'DEFAULT_LED_LINES',
@@ -430,6 +464,7 @@ ENV_CATEGORIES = {
                 'type': 'textarea',
                 'description': 'Comma-separated lines for idle display',
                 'placeholder': 'PUTNAM COUNTY,EMERGENCY MGMT,NO ALERTS,SYSTEM READY',
+                'category': 'led_enabled',
             },
         ],
     },
@@ -442,7 +477,7 @@ ENV_CATEGORIES = {
                 'key': 'VFD_PORT',
                 'label': 'Serial Port',
                 'type': 'text',
-                'description': 'Serial port for VFD (leave empty to disable)',
+                'description': 'Serial port for VFD (leave empty to disable). Disabling this will gray out other VFD settings.',
                 'placeholder': '/dev/ttyUSB0',
             },
             {
@@ -452,6 +487,7 @@ ENV_CATEGORIES = {
                 'options': ['9600', '19200', '38400', '57600', '115200'],
                 'default': '38400',
                 'description': 'Serial communication speed',
+                'category': 'vfd_enabled',
             },
         ],
     },
@@ -463,14 +499,16 @@ ENV_CATEGORIES = {
             {
                 'key': 'ENABLE_EMAIL_NOTIFICATIONS',
                 'label': 'Enable Email Notifications',
-                'type': 'boolean',
+                'type': 'select',
+                'options': ['false', 'true'],
                 'default': 'false',
                 'description': 'Send email alerts for new notifications',
             },
             {
                 'key': 'ENABLE_SMS_NOTIFICATIONS',
                 'label': 'Enable SMS Notifications',
-                'type': 'boolean',
+                'type': 'select',
+                'options': ['false', 'true'],
                 'default': 'false',
                 'description': 'Send SMS alerts (requires configuration)',
             },
@@ -488,11 +526,14 @@ ENV_CATEGORIES = {
                 'default': '587',
                 'description': 'SMTP server port',
                 'category': 'email',
+                'min': 1,
+                'max': 65535,
             },
             {
                 'key': 'MAIL_USE_TLS',
                 'label': 'Use TLS',
-                'type': 'boolean',
+                'type': 'select',
+                'options': ['false', 'true'],
                 'default': 'true',
                 'description': 'Enable TLS encryption',
                 'category': 'email',
@@ -561,14 +602,16 @@ ENV_CATEGORIES = {
             {
                 'key': 'WATCHTOWER_LABEL_ENABLE',
                 'label': 'Watchtower Auto-Update',
-                'type': 'boolean',
+                'type': 'select',
+                'options': ['false', 'true'],
                 'default': 'true',
                 'description': 'Enable automatic updates via Watchtower',
             },
             {
                 'key': 'WATCHTOWER_MONITOR_ONLY',
                 'label': 'Monitor Only Mode',
-                'type': 'boolean',
+                'type': 'select',
+                'options': ['false', 'true'],
                 'default': 'false',
                 'description': 'Only check for updates, do not apply',
             },
@@ -937,6 +980,14 @@ def register_environment_routes(app, logger):
             download_name=download_name,
             mimetype='text/plain'
         )
+
+    @app.route('/api/environment/generate-secret', methods=['POST'])
+    @require_permission('system.configure')
+    def generate_secret_key_api():
+        """Generate a new secret key."""
+        import secrets
+        secret_key = secrets.token_hex(32)  # 64-character hex string
+        return jsonify({'secret_key': secret_key})
 
 
 __all__ = ['register_environment_routes', 'ENV_CATEGORIES']

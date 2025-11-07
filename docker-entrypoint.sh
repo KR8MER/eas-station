@@ -168,6 +168,7 @@ MAIL_PASSWORD=${MAIL_PASSWORD:-}
 # =============================================================================
 LOG_LEVEL=${LOG_LEVEL:-INFO}
 LOG_FILE=${LOG_FILE:-logs/eas_station.log}
+WEB_ACCESS_LOG=${WEB_ACCESS_LOG:-false}
 CACHE_TIMEOUT=${CACHE_TIMEOUT:-300}
 MAX_WORKERS=${MAX_WORKERS:-2}
 UPLOAD_FOLDER=${UPLOAD_FOLDER:-/app/uploads}
@@ -219,6 +220,39 @@ done
 unset SKIP_DB_INIT
 
 echo "Starting application..."
+
+# Handle Gunicorn access log configuration
+# If WEB_ACCESS_LOG is set to "false" or "off", disable access logs (only show errors)
+if [ "$1" = "gunicorn" ]; then
+    # Check if access logs should be disabled
+    if [ "${WEB_ACCESS_LOG:-true}" = "false" ] || [ "${WEB_ACCESS_LOG:-true}" = "off" ]; then
+        echo "Web server access logging is DISABLED (only errors will be logged)"
+        echo "Set WEB_ACCESS_LOG=true to enable access logs"
+
+        # Reconstruct the command with access-logfile set to /dev/null
+        NEW_ARGS=()
+        SKIP_NEXT=false
+        for arg in "$@"; do
+            if [ "$SKIP_NEXT" = true ]; then
+                SKIP_NEXT=false
+                NEW_ARGS+=("/dev/null")
+                continue
+            fi
+
+            if [ "$arg" = "--access-logfile" ]; then
+                SKIP_NEXT=true
+                NEW_ARGS+=("$arg")
+            else
+                NEW_ARGS+=("$arg")
+            fi
+        done
+
+        set -- "${NEW_ARGS[@]}"
+    else
+        echo "Web server access logging is ENABLED"
+        echo "Set WEB_ACCESS_LOG=false to disable access logs and reduce log clutter"
+    fi
+fi
 
 # Execute the main command (gunicorn, poller, etc.)
 exec "$@"

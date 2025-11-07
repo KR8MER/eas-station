@@ -226,13 +226,15 @@ def _validate_secret_key(value: str) -> str:
 
 
 def _validate_station_id(value: str) -> str:
-    """Validate EAS station ID (8 characters max, no dashes)."""
+    """Validate EAS station ID (8 characters max, uppercase letters/numbers/forward slash only)."""
+    import re
     if not value:
         return value
     if len(value) > 8:
         raise ValueError("EAS Station ID must be 8 characters or fewer.")
-    if "-" in value:
-        raise ValueError("EAS Station ID cannot contain dashes.")
+    # Must contain only uppercase letters, numbers, and forward slash
+    if not re.match(r'^[A-Z0-9/]+$', value.upper()):
+        raise ValueError("EAS Station ID must contain only uppercase letters (A-Z), numbers (0-9), and forward slash (/). No hyphens or lowercase letters.")
     return value.upper()
 
 
@@ -278,9 +280,34 @@ def _validate_bool(value: str) -> str:
 
 def _validate_fips(value: str) -> str:
     """Validate FIPS codes (numeric only)."""
-    if value and not value.replace(",", "").isdigit():
+    if value and not value.replace(",", "").replace(" ", "").isdigit():
         raise ValueError("FIPS codes must be numeric, comma-separated.")
     return value
+
+
+def _validate_ipv4(value: str) -> str:
+    """Validate IPv4 address format."""
+    import re
+    if not value:
+        return value
+    # IPv4 pattern
+    ipv4_pattern = r'^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$'
+    if not re.match(ipv4_pattern, value):
+        raise ValueError("Must be a valid IPv4 address (e.g., 192.168.1.100).")
+    return value
+
+
+def _validate_gpio_pin(value: str) -> str:
+    """Validate GPIO pin number (Raspberry Pi BCM numbering: 2-27)."""
+    if not value:
+        return value
+    try:
+        pin = int(value)
+    except ValueError:
+        raise ValueError("GPIO pin must be a number.")
+    if not 2 <= pin <= 27:
+        raise ValueError("GPIO pin must be between 2 and 27 (Raspberry Pi BCM numbering).")
+    return str(pin)
 
 
 # Core section - Required settings
@@ -394,8 +421,9 @@ EAS_FIELDS = [
     WizardField(
         key="EAS_GPIO_PIN",
         label="GPIO Relay Pin",
-        description="GPIO pin number for relay control (leave blank to disable).",
+        description="GPIO pin number for relay control (2-27, leave blank to disable).",
         required=False,
+        validator=_validate_gpio_pin,
     ),
 ]
 
@@ -475,6 +503,7 @@ HARDWARE_FIELDS = [
         label="LED Sign IP Address",
         description="IP address of Alpha protocol LED sign (leave blank to disable).",
         required=False,
+        validator=_validate_ipv4,
     ),
     WizardField(
         key="VFD_PORT",

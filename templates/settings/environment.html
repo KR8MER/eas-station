@@ -521,9 +521,24 @@
             const min = variable.min !== undefined ? `min="${variable.min}"` : '';
             const max = variable.max !== undefined ? `max="${variable.max}"` : '';
             const maxlength = variable.maxlength ? `maxlength="${variable.maxlength}"` : '';
+            const minlength = variable.minlength ? `minlength="${variable.minlength}"` : '';
+            const pattern = variable.pattern ? `pattern="${variable.pattern}"` : '';
+            const title = variable.title ? `title="${escapeHtml(variable.title)}"` : '';
             const placeholder = variable.placeholder ? `placeholder="${variable.placeholder}"` : '';
 
-            inputHtml = `<input type="${inputType}" class="form-control" id="${inputId}" name="${variable.key}" value="${value}" ${step} ${min} ${max} ${maxlength} ${placeholder} ${variable.required ? 'required' : ''} ${disabledAttr}>`;
+            // Add generate button for SECRET_KEY
+            if (variable.key === 'SECRET_KEY' && canEdit) {
+                inputHtml = `
+                    <div class="input-group">
+                        <input type="${inputType}" class="form-control" id="${inputId}" name="${variable.key}" value="${value}" ${step} ${min} ${max} ${maxlength} ${minlength} ${pattern} ${title} ${placeholder} ${variable.required ? 'required' : ''} ${disabledAttr}>
+                        <button class="btn btn-outline-secondary" type="button" id="generate-secret-btn" onclick="generateSecretKey()">
+                            <i class="fas fa-magic me-1"></i> Generate
+                        </button>
+                    </div>
+                `;
+            } else {
+                inputHtml = `<input type="${inputType}" class="form-control" id="${inputId}" name="${variable.key}" value="${value}" ${step} ${min} ${max} ${maxlength} ${minlength} ${pattern} ${title} ${placeholder} ${variable.required ? 'required' : ''} ${disabledAttr}>`;
+            }
         }
 
         return `
@@ -656,6 +671,44 @@
             console.error('Error saving settings:', error);
             showToast('Error saving settings', 'danger');
             hideLoading();
+        }
+    }
+
+    async function generateSecretKey() {
+        const button = document.getElementById('generate-secret-btn');
+        const input = document.getElementById('var-SECRET_KEY');
+
+        if (!button || !input) return;
+
+        const originalHtml = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Generating...';
+
+        try {
+            const response = await fetch('/api/environment/generate-secret', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to generate secret key');
+            }
+
+            const result = await response.json();
+            input.value = result.secret_key;
+
+            // Trigger change event to mark category as changed
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+
+            showToast('New secret key generated successfully', 'success');
+        } catch (error) {
+            console.error('Error generating secret key:', error);
+            showToast('Failed to generate secret key', 'danger');
+        } finally {
+            button.disabled = false;
+            button.innerHTML = originalHtml;
         }
     }
 
