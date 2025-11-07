@@ -275,6 +275,51 @@
                             <label for="receiverNotes" class="form-label">Notes</label>
                             <textarea class="form-control" id="receiverNotes" name="notes" rows="2"></textarea>
                         </div>
+                        <div class="col-12"><hr class="my-3"></div>
+                        <div class="col-12">
+                            <h6 class="text-primary"><i class="fas fa-broadcast-tower"></i> Audio Demodulation Settings</h6>
+                            <p class="text-muted small mb-3">Configure real-time audio output from the SDR receiver</p>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="receiverModulation" class="form-label">Modulation Type</label>
+                            <select class="form-select" id="receiverModulation" name="modulation_type">
+                                <option value="IQ" selected>IQ (Raw samples, no demod)</option>
+                                <option value="FM">FM (Broadcast FM)</option>
+                                <option value="WFM">WFM (Wideband FM)</option>
+                                <option value="NFM">NFM (Narrowband FM)</option>
+                                <option value="AM">AM (Amplitude Modulation)</option>
+                            </select>
+                            <small class="form-text text-muted">Select signal modulation type</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="receiverDeemphasis" class="form-label">De-emphasis (μs)</label>
+                            <select class="form-select" id="receiverDeemphasis" name="deemphasis_us">
+                                <option value="0">None (Disabled)</option>
+                                <option value="50">50 μs (Europe/Asia)</option>
+                                <option value="75" selected>75 μs (North America)</option>
+                            </select>
+                            <small class="form-text text-muted">FM de-emphasis filter</small>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="receiverAudioOutput" name="audio_output">
+                                <label class="form-check-label" for="receiverAudioOutput">
+                                    <strong>Enable Audio Output</strong>
+                                </label>
+                                <small class="form-text text-muted d-block">Output demodulated audio</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6 d-flex align-items-center">
+                            <div class="form-check me-3">
+                                <input class="form-check-input" type="checkbox" id="receiverStereo" name="stereo_enabled" checked>
+                                <label class="form-check-label" for="receiverStereo">FM Stereo Decoding</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="receiverRBDS" name="enable_rbds">
+                                <label class="form-check-label" for="receiverRBDS">Extract RBDS/RDS</label>
+                            </div>
+                        </div>
+                        <div class="col-12"><hr class="my-3"></div>
                         <div class="col-md-6 d-flex align-items-center">
                             <div class="form-check me-3">
                                 <input class="form-check-input" type="checkbox" id="receiverEnabled" name="enabled" checked>
@@ -620,6 +665,12 @@
         document.getElementById('receiverChannel').value = receiver?.channel ?? '';
         document.getElementById('receiverSerial').value = receiver?.serial ?? '';
         document.getElementById('receiverNotes').value = receiver?.notes ?? '';
+        // Audio demodulation settings
+        document.getElementById('receiverModulation').value = receiver?.modulation_type ?? 'IQ';
+        document.getElementById('receiverDeemphasis').value = receiver?.deemphasis_us ?? '75';
+        document.getElementById('receiverAudioOutput').checked = receiver?.audio_output === true;
+        document.getElementById('receiverStereo').checked = receiver?.stereo_enabled !== false;
+        document.getElementById('receiverRBDS').checked = receiver?.enable_rbds === true;
         document.getElementById('receiverEnabled').checked = receiver?.enabled !== false;
         document.getElementById('receiverAutoStart').checked = receiver?.auto_start !== false;
 

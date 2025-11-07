@@ -25,6 +25,12 @@ class ReceiverConfig:
     channel: Optional[int] = None
     serial: Optional[str] = None
     enabled: bool = True
+    # Audio demodulation settings
+    modulation_type: str = 'IQ'  # IQ, FM, AM, NFM, WFM
+    audio_output: bool = False  # Enable demodulated audio output
+    stereo_enabled: bool = True  # FM stereo decoding
+    deemphasis_us: float = 75.0  # De-emphasis time constant
+    enable_rbds: bool = False  # Extract RBDS data
 
 
 @dataclass
@@ -38,6 +44,9 @@ class ReceiverStatus:
     capture_mode: Optional[str] = None
     capture_path: Optional[str] = None
     reported_at: Optional[datetime] = None
+    # RBDS data (if available from FM demodulation)
+    rbds_ps_name: Optional[str] = None  # Program Service name
+    rbds_radio_text: Optional[str] = None  # Radio Text
 
 
 class ReceiverInterface(ABC):

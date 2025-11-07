@@ -558,6 +558,12 @@ class RadioReceiver(db.Model):
     auto_start = db.Column(db.Boolean, nullable=False, default=True)
     enabled = db.Column(db.Boolean, nullable=False, default=True)
     notes = db.Column(db.Text)
+    # Audio demodulation settings
+    modulation_type = db.Column(db.String(16), nullable=False, default='IQ')  # IQ, FM, AM, NFM, WFM
+    audio_output = db.Column(db.Boolean, nullable=False, default=False)  # Enable demodulated audio output
+    stereo_enabled = db.Column(db.Boolean, nullable=False, default=True)  # FM stereo decoding
+    deemphasis_us = db.Column(db.Float, nullable=False, default=75.0)  # De-emphasis (75μs NA, 50μs EU)
+    enable_rbds = db.Column(db.Boolean, nullable=False, default=False)  # Extract RBDS/RDS from FM
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = db.Column(
         db.DateTime(timezone=True),
@@ -591,6 +597,11 @@ class RadioReceiver(db.Model):
             channel=self.channel,
             serial=self.serial,
             enabled=bool(self.enabled and self.auto_start),
+            modulation_type=self.modulation_type or 'IQ',
+            audio_output=bool(self.audio_output),
+            stereo_enabled=bool(self.stereo_enabled),
+            deemphasis_us=float(self.deemphasis_us) if self.deemphasis_us else 75.0,
+            enable_rbds=bool(self.enable_rbds),
         )
 
     def latest_status(self) -> Optional["RadioReceiverStatus"]:
