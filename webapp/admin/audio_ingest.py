@@ -157,13 +157,36 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             controller = _get_audio_controller()
             sources = []
 
-            for source_name, adapter in controller._sources.items():
-                sources.append(_serialize_audio_source(source_name, adapter))
+            # Query DATABASE for all sources (source of truth)
+            db_configs = AudioSourceConfigDB.query.all()
+
+            for db_config in db_configs:
+                # Check if source is loaded in memory
+                adapter = controller._sources.get(db_config.name)
+
+                if adapter:
+                    # Source is in memory, serialize it normally
+                    sources.append(_serialize_audio_source(db_config.name, adapter))
+                else:
+                    # Source exists in DB but not in memory - show as stopped
+                    sources.append({
+                        'name': db_config.name,
+                        'type': db_config.source_type,
+                        'status': 'stopped',
+                        'enabled': db_config.enabled,
+                        'priority': db_config.priority,
+                        'auto_start': db_config.auto_start,
+                        'description': db_config.description or '',
+                        'metrics': None,
+                        'error_message': 'Not loaded in memory (restart required)',
+                        'in_memory': False  # Flag to indicate sync issue
+                    })
 
             return jsonify({
                 'sources': sources,
                 'total': len(sources),
                 'active_count': sum(1 for s in sources if s['status'] == 'running'),
+                'db_only_count': sum(1 for s in sources if not s.get('in_memory', True))
             })
         except Exception as exc:
             logger.error('Error getting audio sources: %s', exc)
@@ -193,9 +216,20 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             # (prevents duplicate adapter creation when controller initializes from DB)
             controller = _get_audio_controller()
 
-            # Check if source already exists
+            # Check if source already exists in DATABASE (source of truth)
+            existing_db_config = AudioSourceConfigDB.query.filter_by(name=name).first()
+            if existing_db_config:
+                return jsonify({
+                    'error': f'Source "{name}" already exists in database',
+                    'hint': 'Use DELETE /api/audio/sources/{name} first, or use PATCH to update'
+                }), 400
+
+            # Also check if source exists in memory (shouldn't happen, but be safe)
             if name in controller._sources:
-                return jsonify({'error': f'Source "{name}" already exists'}), 400
+                return jsonify({
+                    'error': f'Source "{name}" exists in memory but not in database (inconsistent state)',
+                    'hint': 'Contact system administrator - database sync issue'
+                }), 500
 
             # Create configuration
             config = AudioSourceConfig(
@@ -344,30 +378,34 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
         """Delete an audio source."""
         try:
             controller = _get_audio_controller()
+
+            # Check DATABASE first (source of truth)
+            db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+            if not db_config:
+                return jsonify({'error': 'Source not found in database'}), 404
+
+            # Check if source is in memory
             adapter = controller._sources.get(source_name)
 
-            if not adapter:
-                return jsonify({'error': 'Source not found'}), 404
-
-            # Stop if running
-            if adapter.status == AudioSourceStatus.RUNNING:
+            # Stop if running (only if in memory)
+            if adapter and adapter.status == AudioSourceStatus.RUNNING:
                 controller.stop_source(source_name)
 
-            # Remove from database FIRST, before touching the controller
-            db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
-            if db_config:
-                db.session.delete(db_config)
-                try:
-                    db.session.commit()
-                except Exception:
-                    db.session.rollback()
-                    raise
+            # Remove from database FIRST
+            db.session.delete(db_config)
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                raise
 
-            # Remove from controller AFTER the database transaction succeeds
-            # This prevents zombie sources if the commit fails
-            controller.remove_source(source_name)
-
-            logger.info('Deleted audio source: %s', source_name)
+            # Remove from controller AFTER database transaction succeeds
+            # (only if it was in memory)
+            if adapter:
+                controller.remove_source(source_name)
+                logger.info('Deleted audio source from both database and memory: %s', source_name)
+            else:
+                logger.info('Deleted audio source from database (was not in memory): %s', source_name)
 
             return jsonify({'message': 'Audio source deleted successfully'})
 
