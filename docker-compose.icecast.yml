@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  icecast:
+    image: infiniteproject/icecast:latest
+    container_name: eas-icecast
+    restart: unless-stopped
+    ports:
+      - "8000:8000"  # Icecast web interface and streams
+    environment:
+      # Admin credentials
+      - ICECAST_ADMIN_USER=admin
+      - ICECAST_ADMIN_PASSWORD=changeme_admin_pass
+
+      # Source credentials (for EAS Station to publish streams)
+      - ICECAST_SOURCE_PASSWORD=changeme_source_pass
+
+      # Relay password (optional)
+      - ICECAST_RELAY_PASSWORD=changeme_relay_pass
+
+      # Server settings
+      - ICECAST_HOSTNAME=localhost
+      - ICECAST_LOCATION=EAS Monitoring Station
+      - ICECAST_CONTACT=admin@example.com
+
+      # Limits
+      - ICECAST_MAX_CLIENTS=100
+      - ICECAST_MAX_SOURCES=50
+    volumes:
+      - ./icecast-logs:/var/log/icecast
+    networks:
+      - eas-network
+
+networks:
+  eas-network:
+    name: eas-network
+    driver: bridge
+
+# USAGE:
+# 1. Start Icecast server:
+#    docker-compose -f docker-compose.icecast.yml up -d
+#
+# 2. Access Icecast admin interface:
+#    http://localhost:8000/admin/
+#    Username: admin
+#    Password: changeme_admin_pass  (CHANGE THIS!)
+#
+# 3. Configure EAS Station to use Icecast:
+#    - Go to: /settings/audio
+#    - Configure Icecast settings:
+#      Server: localhost (or icecast container name if running in same network)
+#      Port: 8000
+#      Source Password: changeme_source_pass (must match above)
+#      Mount: /eas-monitor (or any name you want)
+#
+# 4. Streams will be available at:
+#    http://localhost:8000/eas-monitor (main stream)
+#    http://localhost:8000/source-name (per-source streams)
+#
+# 5. Stop Icecast:
+#    docker-compose -f docker-compose.icecast.yml down
+#
+# SECURITY NOTES:
+# - CHANGE ALL PASSWORDS before production use!
+# - Restrict port 8000 access using firewall rules
+# - Use reverse proxy (nginx) with SSL for external access
+# - Consider running on internal network only
