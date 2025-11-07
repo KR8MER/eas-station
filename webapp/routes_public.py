@@ -13,11 +13,17 @@ from app_core.alerts import get_active_alerts_query, get_expired_alerts_query
 from app_core.eas_storage import get_eas_static_prefix
 from app_core.extensions import db
 from app_core.models import (
+    AudioAlert,
+    AudioHealthStatus,
+    AudioSourceMetrics,
     Boundary,
     CAPAlert,
     EASMessage,
+    GPIOActivationLog,
     Intersection,
     ManualEASActivation,
+    PollDebugRecord,
+    PollHistory,
     SystemLog,
 )
 from app_core.system_health import get_system_health
@@ -529,11 +535,175 @@ def register(app: Flask, logger) -> None:
 
     @app.route("/logs")
     def logs():
+        """Comprehensive log viewer with filtering by log type."""
         try:
-            logs_result = (
-                SystemLog.query.order_by(SystemLog.timestamp.desc()).limit(100).all()
+            # Get filter parameters
+            log_type = request.args.get('type', 'system')
+            limit = min(int(request.args.get('limit', 100)), 500)  # Max 500 records
+
+            logs_data = []
+
+            if log_type == 'system':
+                # System logs
+                logs_result = (
+                    SystemLog.query
+                    .order_by(SystemLog.timestamp.desc())
+                    .limit(limit)
+                    .all()
+                )
+                logs_data = [{
+                    'timestamp': log.timestamp,
+                    'level': log.level,
+                    'module': log.module or 'system',
+                    'message': log.message,
+                    'details': log.details
+                } for log in logs_result]
+
+            elif log_type == 'polling':
+                # CAP polling logs
+                logs_result = (
+                    PollHistory.query
+                    .order_by(PollHistory.timestamp.desc())
+                    .limit(limit)
+                    .all()
+                )
+                logs_data = [{
+                    'timestamp': log.timestamp,
+                    'level': 'ERROR' if log.error_message else 'SUCCESS' if log.status == 'success' else 'INFO',
+                    'module': 'CAP Polling',
+                    'message': f"Status: {log.status} | Fetched: {log.alerts_fetched} | New: {log.alerts_new} | Updated: {log.alerts_updated}",
+                    'details': {
+                        'execution_time_ms': log.execution_time_ms,
+                        'error': log.error_message,
+                        'data_source': log.data_source
+                    }
+                } for log in logs_result]
+
+            elif log_type == 'polling_debug':
+                # Detailed polling debug logs
+                logs_result = (
+                    PollDebugRecord.query
+                    .order_by(PollDebugRecord.timestamp.desc())
+                    .limit(limit)
+                    .all()
+                )
+                logs_data = [{
+                    'timestamp': log.timestamp,
+                    'level': 'DEBUG',
+                    'module': 'Polling Debug',
+                    'message': f"Alert: {log.alert_identifier} | Relevant: {log.is_relevant}",
+                    'details': {
+                        'alert_id': log.alert_id,
+                        'parse_success': log.parse_success,
+                        'geometry_valid': log.geometry_valid,
+                        'relevance_reason': log.relevance_reason,
+                        'zone_matches': log.zone_matches,
+                        'county_matches': log.county_matches
+                    }
+                } for log in logs_result]
+
+            elif log_type == 'audio':
+                # Audio system alerts
+                logs_result = (
+                    AudioAlert.query
+                    .order_by(AudioAlert.created_at.desc())
+                    .limit(limit)
+                    .all()
+                )
+                logs_data = [{
+                    'timestamp': log.created_at,
+                    'level': log.alert_level.upper(),
+                    'module': f'Audio: {log.source_name}',
+                    'message': f"[{log.alert_type}] {log.message}",
+                    'details': {
+                        'source': log.source_name,
+                        'type': log.alert_type,
+                        'threshold': log.threshold_value,
+                        'actual': log.actual_value,
+                        'acknowledged': log.acknowledged,
+                        'resolved': log.resolved,
+                        'metadata': log.alert_metadata
+                    }
+                } for log in logs_result]
+
+            elif log_type == 'audio_metrics':
+                # Audio source metrics
+                logs_result = (
+                    AudioSourceMetrics.query
+                    .order_by(AudioSourceMetrics.timestamp.desc())
+                    .limit(limit)
+                    .all()
+                )
+                logs_data = [{
+                    'timestamp': log.timestamp,
+                    'level': 'WARNING' if log.silence_detected or log.clipping_detected else 'INFO',
+                    'module': f'Audio Metrics: {log.source_name}',
+                    'message': f"Peak: {log.peak_level_db:.1f}dB | RMS: {log.rms_level_db:.1f}dB | SR: {log.sample_rate}Hz",
+                    'details': {
+                        'source_type': log.source_type,
+                        'channels': log.channels,
+                        'frames': log.frames_captured,
+                        'silence': log.silence_detected,
+                        'clipping': log.clipping_detected,
+                        'buffer_utilization': log.buffer_utilization,
+                        'stream_info': log.source_metadata  # Using the mapped column name
+                    }
+                } for log in logs_result]
+
+            elif log_type == 'audio_health':
+                # Audio health status
+                logs_result = (
+                    AudioHealthStatus.query
+                    .order_by(AudioHealthStatus.timestamp.desc())
+                    .limit(limit)
+                    .all()
+                )
+                logs_data = [{
+                    'timestamp': log.timestamp,
+                    'level': 'ERROR' if log.error_detected else 'WARNING' if not log.is_healthy else 'INFO',
+                    'module': f'Audio Health: {log.source_name}',
+                    'message': f"Health Score: {log.health_score:.1f}/100 | Active: {log.is_active} | Uptime: {log.uptime_seconds:.1f}s",
+                    'details': {
+                        'healthy': log.is_healthy,
+                        'silence_detected': log.silence_detected,
+                        'silence_duration': log.silence_duration_seconds,
+                        'time_since_signal': log.time_since_last_signal_seconds,
+                        'trend': f"{log.level_trend} ({log.trend_value_db:.1f}dB)" if log.level_trend else None,
+                        'metadata': log.health_metadata
+                    }
+                } for log in logs_result]
+
+            elif log_type == 'gpio':
+                # GPIO activation logs
+                logs_result = (
+                    GPIOActivationLog.query
+                    .order_by(GPIOActivationLog.activated_at.desc())
+                    .limit(limit)
+                    .all()
+                )
+                logs_data = [{
+                    'timestamp': log.activated_at,
+                    'level': 'INFO',
+                    'module': f'GPIO Pin {log.pin}',
+                    'message': f"Type: {log.activation_type} | Operator: {log.operator or 'System'} | Duration: {log.duration_seconds or 'Active'}s",
+                    'details': {
+                        'pin': log.pin,
+                        'activation_type': log.activation_type,
+                        'activated_at': log.activated_at.isoformat() if log.activated_at else None,
+                        'deactivated_at': log.deactivated_at.isoformat() if log.deactivated_at else None,
+                        'duration': log.duration_seconds,
+                        'alert_id': log.alert_id,
+                        'reason': log.reason
+                    }
+                } for log in logs_result]
+
+            return render_template(
+                "logs.html",
+                logs=logs_data,
+                log_type=log_type,
+                limit=limit
             )
-            return render_template("logs.html", logs=logs_result)
+
         except Exception as exc:  # pragma: no cover - fallback content
             route_logger.error("Error loading logs: %s", exc)
             return (

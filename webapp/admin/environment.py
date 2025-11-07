@@ -10,7 +10,7 @@ from pathlib import Path
 from flask import jsonify, render_template, request
 from werkzeug.exceptions import BadRequest
 
-from app_core.location import get_location_settings
+from app_core.location import get_location_settings, _derive_county_zone_codes_from_fips
 from app_core.auth.roles import require_permission
 
 
@@ -783,6 +783,24 @@ def register_environment_routes(app, logger):
 
                 # Update value
                 env_vars[key] = str(value)
+
+            # Auto-populate zone codes from FIPS codes if zone codes are empty
+            fips_codes_raw = env_vars.get("EAS_MANUAL_FIPS_CODES", "").strip()
+            zone_codes_raw = env_vars.get("DEFAULT_ZONE_CODES", "").strip()
+
+            if fips_codes_raw and not zone_codes_raw:
+                try:
+                    # Parse FIPS codes (comma-separated)
+                    fips_list = [code.strip() for code in fips_codes_raw.split(",") if code.strip()]
+
+                    # Derive zone codes from FIPS
+                    derived_zones = _derive_county_zone_codes_from_fips(fips_list)
+
+                    if derived_zones:
+                        env_vars["DEFAULT_ZONE_CODES"] = ",".join(derived_zones)
+                        logger.info(f"Auto-derived {len(derived_zones)} zone codes from {len(fips_list)} FIPS codes")
+                except Exception as zone_exc:
+                    logger.warning(f"Failed to auto-derive zone codes from FIPS: {zone_exc}")
 
             # Write to .env file
             write_env_file(env_vars)

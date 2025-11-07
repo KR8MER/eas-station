@@ -3,45 +3,215 @@
 {% block title %}EAS Station - System Logs{% endblock %}
 
 {% block content %}
+<div class="row mb-3">
+    <div class="col-12">
+        <h2><i class="fas fa-file-alt"></i> System Logs</h2>
+        <p class="text-muted">View and filter system logs by category</p>
+    </div>
+</div>
+
 <div class="row">
     <div class="col-12">
         <div class="card">
             <div class="card-header">
-                <h5>System Logs</h5>
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <h5 class="mb-0">Log Viewer</h5>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">
+                            <i class="fas fa-sync"></i> Refresh
+                        </button>
+                    </div>
+                </div>
             </div>
             <div class="card-body">
+                <!-- Filter Tabs -->
+                <ul class="nav nav-pills mb-3" id="logTypeTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link {% if log_type == 'system' %}active{% endif %}"
+                           href="?type=system&limit={{ limit }}">
+                            <i class="fas fa-cog"></i> System
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link {% if log_type == 'polling' %}active{% endif %}"
+                           href="?type=polling&limit={{ limit }}">
+                            <i class="fas fa-satellite-dish"></i> Polling
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link {% if log_type == 'polling_debug' %}active{% endif %}"
+                           href="?type=polling_debug&limit={{ limit }}">
+                            <i class="fas fa-bug"></i> Polling Debug
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link {% if log_type == 'audio' %}active{% endif %}"
+                           href="?type=audio&limit={{ limit }}">
+                            <i class="fas fa-volume-up"></i> Audio Alerts
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link {% if log_type == 'audio_metrics' %}active{% endif %}"
+                           href="?type=audio_metrics&limit={{ limit }}">
+                            <i class="fas fa-chart-line"></i> Audio Metrics
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link {% if log_type == 'audio_health' %}active{% endif %}"
+                           href="?type=audio_health&limit={{ limit }}">
+                            <i class="fas fa-heartbeat"></i> Audio Health
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link {% if log_type == 'gpio' %}active{% endif %}"
+                           href="?type=gpio&limit={{ limit }}">
+                            <i class="fas fa-plug"></i> GPIO
+                        </a>
+                    </li>
+                </ul>
+
+                <!-- Limit Selector -->
+                <div class="mb-3">
+                    <label for="limitSelect" class="form-label">Records to show:</label>
+                    <select id="limitSelect" class="form-select form-select-sm" style="width: auto; display: inline-block;"
+                            onchange="window.location.href='?type={{ log_type }}&limit=' + this.value">
+                        <option value="50" {% if limit == 50 %}selected{% endif %}>50</option>
+                        <option value="100" {% if limit == 100 %}selected{% endif %}>100</option>
+                        <option value="250" {% if limit == 250 %}selected{% endif %}>250</option>
+                        <option value="500" {% if limit == 500 %}selected{% endif %}>500</option>
+                    </select>
+                </div>
+
+                <!-- Log Type Description -->
+                <div class="alert alert-info mb-3">
+                    {% if log_type == 'system' %}
+                        <strong>System Logs:</strong> General application logs including errors, warnings, and informational messages.
+                    {% elif log_type == 'polling' %}
+                        <strong>Polling Logs:</strong> CAP alert polling history showing fetch attempts, new alerts, and errors.
+                    {% elif log_type == 'polling_debug' %}
+                        <strong>Polling Debug:</strong> Detailed debug information about alert parsing, geometry validation, and relevance checking.
+                    {% elif log_type == 'audio' %}
+                        <strong>Audio Alerts:</strong> Audio system alerts for issues like silence detection, clipping, or disconnections.
+                    {% elif log_type == 'audio_metrics' %}
+                        <strong>Audio Metrics:</strong> Real-time audio level measurements including peak, RMS, and stream information.
+                    {% elif log_type == 'audio_health' %}
+                        <strong>Audio Health:</strong> Overall audio system health scores and status snapshots.
+                    {% elif log_type == 'gpio' %}
+                        <strong>GPIO Logs:</strong> Relay activation audit trail showing pin activations, operators, and durations.
+                    {% endif %}
+                </div>
+
+                <!-- Logs Table -->
                 {% if logs %}
                     <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
+                        <table class="table table-sm table-hover" id="logsTable">
+                            <thead class="table-light">
                                 <tr>
-                                    <th>Time</th>
-                                    <th>Level</th>
-                                    <th>Module</th>
+                                    <th style="width: 180px;">Timestamp</th>
+                                    <th style="width: 100px;">Level</th>
+                                    <th style="width: 200px;">Module</th>
                                     <th>Message</th>
+                                    <th style="width: 80px;">Details</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for log in logs %}
                                 <tr>
-                                    <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                    <td><small>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') if log.timestamp else 'N/A' }}</small></td>
                                     <td>
-                                        <span class="badge bg-{{ 'success' if log.level == 'INFO' else 'warning' if log.level == 'WARNING' else 'danger' }}">
+                                        <span class="badge bg-{{
+                                            'success' if log.level == 'SUCCESS' or log.level == 'INFO'
+                                            else 'warning' if log.level == 'WARNING'
+                                            else 'danger' if log.level == 'ERROR' or log.level == 'CRITICAL'
+                                            else 'secondary' if log.level == 'DEBUG'
+                                            else 'primary'
+                                        }}">
                                             {{ log.level }}
                                         </span>
                                     </td>
-                                    <td>{{ log.module or 'system' }}</td>
+                                    <td><small>{{ log.module }}</small></td>
                                     <td>{{ log.message }}</td>
+                                    <td>
+                                        {% if log.details %}
+                                        <button class="btn btn-sm btn-outline-secondary" type="button"
+                                                data-bs-toggle="collapse"
+                                                data-bs-target="#details-{{ loop.index }}"
+                                                aria-expanded="false">
+                                            <i class="fas fa-chevron-down"></i>
+                                        </button>
+                                        {% endif %}
+                                    </td>
                                 </tr>
+                                {% if log.details %}
+                                <tr class="collapse" id="details-{{ loop.index }}">
+                                    <td colspan="5">
+                                        <div class="card card-body bg-light">
+                                            <h6>Details:</h6>
+                                            <pre class="mb-0" style="font-size: 0.85rem;">{{ log.details | tojson(indent=2) }}</pre>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endif %}
                                 {% endfor %}
                             </tbody>
                         </table>
                     </div>
+
+                    <div class="mt-3">
+                        <small class="text-muted">Showing {{ logs|length }} most recent records</small>
+                    </div>
                 {% else %}
-                    <p class="text-muted">No logs available</p>
+                    <div class="alert alert-secondary">
+                        <i class="fas fa-info-circle"></i> No logs available for this category.
+                    </div>
                 {% endif %}
             </div>
         </div>
     </div>
 </div>
+
+<style>
+    .nav-pills .nav-link {
+        color: #6c757d;
+        border: 1px solid transparent;
+        margin-right: 0.25rem;
+    }
+
+    .nav-pills .nav-link:hover {
+        background-color: #e9ecef;
+    }
+
+    .nav-pills .nav-link.active {
+        background-color: #0d6efd;
+        color: white;
+    }
+
+    #logsTable tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+
+    pre {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+</style>
+
+<script>
+    // Auto-refresh option (optional, can be enabled by user)
+    let autoRefresh = false;
+    let refreshInterval = null;
+
+    function toggleAutoRefresh() {
+        autoRefresh = !autoRefresh;
+        if (autoRefresh) {
+            refreshInterval = setInterval(() => {
+                location.reload();
+            }, 10000); // Refresh every 10 seconds
+        } else {
+            clearInterval(refreshInterval);
+        }
+    }
+</script>
 {% endblock %}

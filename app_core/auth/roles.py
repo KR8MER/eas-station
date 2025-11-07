@@ -137,6 +137,45 @@ class PermissionDefinition(Enum):
     API_WRITE = 'api.write'
 
 
+# Detailed role descriptions for user guidance
+ROLE_DESCRIPTIONS = {
+    'admin': 'Full system administrator with unrestricted access to all features, settings, and user management. Can configure system, manage users, control broadcasts, and access all logs and data.',
+    'operator': 'Alert operator with access to broadcast operations and monitoring. Can initiate EAS broadcasts, control GPIO relays, view alerts and logs, but cannot modify system configuration or manage users.',
+    'viewer': 'Read-only access for monitoring and reporting. Can view alerts, logs, statistics, and system status but cannot make any changes or initiate broadcasts.',
+}
+
+# Detailed permission descriptions for user guidance
+PERMISSION_DESCRIPTIONS = {
+    'alerts.view': 'View CAP alerts, alert history, and alert details on the map and alerts page',
+    'alerts.create': 'Create new manual CAP alerts and override automatic alert filtering',
+    'alerts.delete': 'Delete CAP alerts from the system (use with caution)',
+    'alerts.export': 'Export alert data to CSV, JSON, or other formats for reporting',
+
+    'eas.view': 'View EAS broadcast operations, message history, and transmission status',
+    'eas.broadcast': 'Initiate EAS broadcasts manually or automatically based on alerts',
+    'eas.manual_activate': 'Manually activate EAS equipment and override automated triggers',
+    'eas.cancel': 'Cancel active or scheduled EAS broadcasts (emergency stop)',
+
+    'system.configure': 'Modify system settings, environment variables, and core configuration',
+    'system.view_config': 'View system configuration, settings, and environment status (read-only)',
+    'system.manage_users': 'Create, modify, and delete user accounts and assign roles',
+    'system.view_users': 'View user list, roles, and login history (read-only)',
+
+    'logs.view': 'View system logs, polling logs, audio logs, and GPIO activation logs',
+    'logs.export': 'Export log data for auditing, compliance, or troubleshooting purposes',
+    'logs.delete': 'Delete log entries (use with caution, may affect audit trails)',
+
+    'receivers.view': 'View configured receivers, SDR status, and receiver health metrics',
+    'receivers.configure': 'Add, modify, or configure SDR receivers and audio sources',
+    'receivers.delete': 'Remove receivers from the system configuration',
+
+    'gpio.view': 'View GPIO pin status, relay states, and activation history',
+    'gpio.control': 'Control GPIO pins, activate/deactivate relays, and test equipment',
+
+    'api.read': 'Read data via REST API endpoints (GET requests)',
+    'api.write': 'Modify data via REST API endpoints (POST, PUT, DELETE requests)',
+}
+
 # Default role-permission mappings
 DEFAULT_ROLE_PERMISSIONS = {
     RoleDefinition.ADMIN.value: [
@@ -330,13 +369,23 @@ def initialize_default_roles_and_permissions():
 
         perm = Permission.query.filter_by(name=perm_name).first()
         if not perm:
+            # Use detailed description from map, or fallback to generic
+            description = PERMISSION_DESCRIPTIONS.get(
+                perm_name,
+                f"Permission to {action} {resource}"
+            )
             perm = Permission(
                 name=perm_name,
                 resource=resource,
                 action=action,
-                description=f"Permission to {action} {resource}"
+                description=description
             )
             db.session.add(perm)
+        else:
+            # Update description for existing permissions
+            new_description = PERMISSION_DESCRIPTIONS.get(perm_name)
+            if new_description and perm.description != new_description:
+                perm.description = new_description
         permissions_map[perm_name] = perm
 
     db.session.flush()
@@ -345,12 +394,22 @@ def initialize_default_roles_and_permissions():
     for role_name, perm_defs in DEFAULT_ROLE_PERMISSIONS.items():
         role = Role.query.filter_by(name=role_name).first()
         if not role:
+            # Use detailed description from map, or fallback to generic
+            description = ROLE_DESCRIPTIONS.get(
+                role_name,
+                f"{role_name.capitalize()} role with predefined permissions"
+            )
             role = Role(
                 name=role_name,
-                description=f"{role_name.capitalize()} role with predefined permissions"
+                description=description
             )
             db.session.add(role)
             db.session.flush()
+        else:
+            # Update description for existing roles
+            new_description = ROLE_DESCRIPTIONS.get(role_name)
+            if new_description and role.description != new_description:
+                role.description = new_description
 
         # Assign permissions to role
         for perm_def in perm_defs:

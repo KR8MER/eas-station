@@ -14,6 +14,7 @@ from app_utils.setup_wizard import (
     load_wizard_state,
     write_env_file,
 )
+from app_core.location import _derive_county_zone_codes_from_fips
 from flask import session
 import secrets
 from datetime import datetime
@@ -106,6 +107,24 @@ def register(app, logger):
 
             if has_valid_secret and not submitted["SECRET_KEY"].strip():
                 submitted["SECRET_KEY"] = existing_secret
+
+            # Auto-populate zone codes from FIPS codes if zone codes are empty
+            fips_codes_raw = submitted.get("EAS_MANUAL_FIPS_CODES", "").strip()
+            zone_codes_raw = submitted.get("DEFAULT_ZONE_CODES", "").strip()
+
+            if fips_codes_raw and not zone_codes_raw:
+                try:
+                    # Parse FIPS codes (comma-separated)
+                    fips_list = [code.strip() for code in fips_codes_raw.split(",") if code.strip()]
+
+                    # Derive zone codes from FIPS
+                    derived_zones = _derive_county_zone_codes_from_fips(fips_list)
+
+                    if derived_zones:
+                        submitted["DEFAULT_ZONE_CODES"] = ",".join(derived_zones)
+                        setup_logger.info(f"Auto-derived {len(derived_zones)} zone codes from {len(fips_list)} FIPS codes")
+                except Exception as zone_exc:
+                    setup_logger.warning(f"Failed to auto-derive zone codes from FIPS: {zone_exc}")
 
             try:
                 cleaned = clean_submission(submitted)
