@@ -595,12 +595,12 @@ def register(app: Flask, logger) -> None:
                 # Detailed polling debug logs
                 logs_result = (
                     PollDebugRecord.query
-                    .order_by(PollDebugRecord.timestamp.desc())
+                    .order_by(PollDebugRecord.created_at.desc())
                     .limit(limit)
                     .all()
                 )
                 logs_data = [{
-                    'timestamp': log.timestamp,
+                    'timestamp': log.created_at,
                     'level': 'DEBUG',
                     'module': 'Polling Debug',
                     'message': f"Alert: {log.alert_identifier} | Relevant: {log.is_relevant}",
