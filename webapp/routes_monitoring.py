@@ -66,6 +66,12 @@ def register(app: Flask, logger) -> None:
                 500,
             )
 
+    @app.route("/api/health")
+    def api_health_check():
+        """API health check endpoint (alias for /health)."""
+        # Delegate to the main health check
+        return health_check()
+
     @app.route("/ping")
     def ping():
         """Simple ping endpoint."""

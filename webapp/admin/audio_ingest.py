@@ -362,7 +362,18 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             adapter = controller._sources.get(source_name)
 
             if not adapter:
-                return jsonify({'error': 'Source not found'}), 404
+                # Check if source exists in database but not loaded
+                db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+                if db_config:
+                    return jsonify({
+                        'error': 'Source exists in database but not loaded in memory',
+                        'hint': 'Restart the application to reload audio sources from database'
+                    }), 503  # Service Unavailable
+                else:
+                    return jsonify({
+                        'error': f'Audio source "{source_name}" not found',
+                        'hint': 'Check /api/audio/sources for available sources'
+                    }), 404
 
             return jsonify(_serialize_audio_source(source_name, adapter))
 
@@ -378,7 +389,18 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             adapter = controller._sources.get(source_name)
 
             if not adapter:
-                return jsonify({'error': 'Source not found'}), 404
+                # Check if source exists in database but not loaded
+                db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+                if db_config:
+                    return jsonify({
+                        'error': 'Source exists in database but not loaded in memory',
+                        'hint': 'Restart the application to reload audio sources from database'
+                    }), 503  # Service Unavailable
+                else:
+                    return jsonify({
+                        'error': f'Audio source "{source_name}" not found',
+                        'hint': 'Check /api/audio/sources for available sources'
+                    }), 404
 
             config = adapter.config
             data = request.get_json()
@@ -487,7 +509,18 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             adapter = controller._sources.get(source_name)
 
             if not adapter:
-                return jsonify({'error': 'Source not found'}), 404
+                # Check if source exists in database but not loaded
+                db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+                if db_config:
+                    return jsonify({
+                        'error': 'Source exists in database but not loaded in memory',
+                        'hint': 'Restart the application to reload audio sources from database'
+                    }), 503  # Service Unavailable
+                else:
+                    return jsonify({
+                        'error': f'Audio source "{source_name}" not found',
+                        'hint': 'Create the source first using POST /api/audio/sources'
+                    }), 404
 
             if adapter.status == AudioSourceStatus.RUNNING:
                 return jsonify({'message': 'Source is already running'}), 200
@@ -522,7 +555,18 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             adapter = controller._sources.get(source_name)
 
             if not adapter:
-                return jsonify({'error': 'Source not found'}), 404
+                # Check if source exists in database but not loaded
+                db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+                if db_config:
+                    return jsonify({
+                        'error': 'Source exists in database but not loaded in memory',
+                        'hint': 'Restart the application to reload audio sources from database'
+                    }), 503  # Service Unavailable
+                else:
+                    return jsonify({
+                        'error': f'Audio source "{source_name}" not found',
+                        'hint': 'Create the source first using POST /api/audio/sources'
+                    }), 404
 
             if adapter.status == AudioSourceStatus.STOPPED:
                 return jsonify({'message': 'Source is already stopped'}), 200
@@ -839,7 +883,18 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             adapter = controller._sources.get(source_name)
 
             if not adapter:
-                return jsonify({'error': 'Source not found'}), 404
+                # Check if source exists in database but not loaded
+                db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+                if db_config:
+                    return jsonify({
+                        'error': 'Source exists in database but not loaded in memory',
+                        'hint': 'Restart the application to reload audio sources from database'
+                    }), 503  # Service Unavailable
+                else:
+                    return jsonify({
+                        'error': f'Audio source "{source_name}" not found',
+                        'hint': 'Check /api/audio/sources for available sources'
+                    }), 404
 
             # Get waveform data from adapter
             waveform_data = adapter.get_waveform_data()
@@ -867,7 +922,18 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             adapter = controller._sources.get(source_name)
 
             if not adapter:
-                return jsonify({'error': 'Source not found'}), 404
+                # Check if source exists in database but not loaded
+                db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+                if db_config:
+                    return jsonify({
+                        'error': 'Source exists in database but not loaded in memory',
+                        'hint': 'Restart the application to reload audio sources from database'
+                    }), 503  # Service Unavailable
+                else:
+                    return jsonify({
+                        'error': f'Audio source "{source_name}" not found',
+                        'hint': 'Check /api/audio/sources for available sources'
+                    }), 404
 
             # Get spectrogram data from adapter
             spectrogram_data = adapter.get_spectrogram_data()
