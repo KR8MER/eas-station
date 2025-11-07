@@ -49,6 +49,8 @@ If you're new to EAS Station, start here:
 |----------|-------------|
 | [⚡ GPIO Relay Control](guides/HELP.md#managing-receivers) | Transmitter keying setup |
 | [🔊 Audio Configuration](guides/HELP.md#audio-generation-errors) | Sound card and audio routing |
+| [🎧 Professional Audio Subsystem](PROFESSIONAL_AUDIO_SUBSYSTEM.md) | **NEW:** 24/7 audio monitoring architecture |
+| [🔗 Audio System Access Guide](AUDIO_SYSTEM_ACCESS_GUIDE.md) | **NEW:** Quick reference for audio features |
 | [💡 LED Sign Integration](guides/HELP.md#led-sign-not-responding) | Alpha Protocol signage |
 | [📻 Radio Management](guides/radio_usb_passthrough.md) | USB radio devices |
 
@@ -95,6 +97,7 @@ If you're new to EAS Station, start here:
 |----------|-------------|
 | [📖 About EAS Station](reference/ABOUT.md) | Project background and goals |
 | [📄 Changelog](reference/CHANGELOG.md) | Version history and changes |
+| [🎵 Audio System Changelog (2025-11-07)](CHANGELOG_2025-11-07.md) | **NEW:** Professional audio subsystem build log |
 | [🔐 Security Policy](development/AGENTS.md#security) | Security considerations |
 | [📜 License](../LICENSE) | MIT License terms |
 
@@ -161,13 +164,14 @@ docs/
 | API Reference | ✅ Complete | 2025-01-28 |
 | Compliance Docs | ✅ Complete | 2025-01-28 |
 | Architecture | ✅ Complete | 2025-01-28 |
+| Audio Subsystem | ✅ Complete | 2025-11-07 |
 
 ## 📊 Documentation Metrics
 
 | Metric | Value |
 |--------|-------|
-| Total Markdown Files | 40+ |
-| Total Documentation Lines | 8,000+ |
+| Total Markdown Files | 43+ |
+| Total Documentation Lines | 9,500+ |
 | PDF Documents | 3 (vendor references) |
 | XML Reference Documents | 1 (FCC regulations) |
 | Documentation Directories | 8 |
