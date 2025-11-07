@@ -36,17 +36,7 @@ echo "DEBUG: ICECAST_SOURCE_PASSWORD environment variable is: ${ICECAST_SOURCE_P
 echo "DEBUG: Authentication section BEFORE updates:"
 grep -A5 "<authentication>" "$CONFIG_FILE" || echo "Could not extract authentication section"
 
-# Check if perl is available
-if ! command -v perl &> /dev/null; then
-    echo "ERROR: perl not found! Cannot update Icecast config. Please rebuild the Icecast image:"
-    echo "  docker-compose build icecast"
-    echo "Falling back to default passwords (this will cause 403 errors!)"
-else
-    echo "perl found, updating configuration..."
-fi
-
 # Update passwords
-echo "Setting source-password to: ${ICECAST_SOURCE_PASSWORD:-hackme}"
 update_config "source-password" "${ICECAST_SOURCE_PASSWORD:-hackme}"
 update_config "relay-password" "${ICECAST_RELAY_PASSWORD:-hackme}"
 update_config "admin-password" "${ICECAST_ADMIN_PASSWORD:-hackme}"
