@@ -1,15 +1,19 @@
 FROM debian:bookworm-slim
 
-# Install Icecast
+# Install Icecast and gosu for privilege dropping
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         icecast2 \
         wget \
         curl \
+        gosu \
     && rm -rf /var/lib/apt/lists/*
 
-# Configure Icecast to run in foreground (keep changeowner enabled for security)
+# Configure Icecast to run in foreground
 RUN sed -i 's/<background>1<\/background>/<background>0<\/background>/' /etc/icecast2/icecast.xml
+
+# Make config writable by icecast2 user
+RUN chown icecast2:icecast /etc/icecast2/icecast.xml
 
 # Expose Icecast port
 EXPOSE 8000
