@@ -64,6 +64,9 @@ update_config "sources" "${ICECAST_MAX_SOURCES:-2}"
 # Enable changeowner for security (allows Icecast to drop root privileges)
 update_config "changeowner" "true"
 
+# Set logging to maximum verbosity for debugging
+update_config "loglevel" "4"  # 4 = DEBUG level (most verbose)
+
 # CRITICAL: Restore file ownership one final time after ALL updates
 echo "DEBUG: Final ownership restoration"
 chown icecast2:icecast "$CONFIG_FILE"
