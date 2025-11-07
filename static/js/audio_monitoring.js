@@ -278,9 +278,20 @@ async function updateWaveform(sourceId) {
     if (useWaterfall) {
         try {
             const response = await fetch(`/api/audio/spectrogram/${encodeURIComponent(sourceId)}`);
-            if (!response.ok) return;
+            if (!response.ok) {
+                console.warn(`Spectrogram fetch failed for ${sourceId}, status: ${response.status}`);
+                // Fall back to waveform on error
+                return await updateWaveformFallback(sourceId);
+            }
 
             const data = await response.json();
+
+            // Validate we have spectrogram data
+            if (!data.spectrogram || data.spectrogram.length === 0) {
+                console.warn(`No spectrogram data for ${sourceId}, falling back to waveform`);
+                return await updateWaveformFallback(sourceId);
+            }
+
             drawWaterfall(sourceId, data.spectrogram, data.sample_rate, data.fft_size);
 
             // Update data flow indicator
@@ -292,8 +303,9 @@ async function updateWaveform(sourceId) {
                 indicator.className = 'text-success fw-bold';
             }
         } catch (error) {
-            // Silently fail for individual spectrogram updates
-            console.debug('Error updating spectrogram for', sourceId, error);
+            // Log error and fall back to waveform
+            console.error('Error updating spectrogram for', sourceId, error);
+            return await updateWaveformFallback(sourceId);
         }
     } else {
         try {
@@ -315,6 +327,30 @@ async function updateWaveform(sourceId) {
             // Silently fail for individual waveform updates
             console.debug('Error updating waveform for', sourceId, error);
         }
+    }
+}
+
+/**
+ * Fallback to waveform display when spectrogram fails
+ */
+async function updateWaveformFallback(sourceId) {
+    try {
+        const response = await fetch(`/api/audio/waveform/${encodeURIComponent(sourceId)}`);
+        if (!response.ok) return;
+
+        const data = await response.json();
+        drawWaveform(sourceId, data.waveform);
+
+        // Update data flow indicator
+        const safeId = sanitizeId(sourceId);
+        const indicator = document.getElementById(`data-indicator-${safeId}`);
+        if (indicator) {
+            const now = new Date();
+            indicator.textContent = `${now.toLocaleTimeString()} (${data.sample_count} samples) [waveform]`;
+            indicator.className = 'text-warning fw-bold';
+        }
+    } catch (error) {
+        console.debug('Error updating waveform fallback for', sourceId, error);
     }
 }
 
