@@ -17,6 +17,14 @@ from app_core.radio import (
     get_recommended_settings,
     SDR_PRESETS,
 )
+from app_core.radio.service_config import (
+    get_service_config,
+    validate_frequency,
+    format_frequency_display,
+    get_frequency_placeholder,
+    get_frequency_help_text,
+    NOAA_FREQUENCIES,
+)
 
 
 def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
@@ -34,6 +42,11 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
         "auto_start": receiver.auto_start,
         "enabled": receiver.enabled,
         "notes": receiver.notes,
+        "modulation_type": receiver.modulation_type,
+        "audio_output": receiver.audio_output,
+        "stereo_enabled": receiver.stereo_enabled,
+        "deemphasis_us": receiver.deemphasis_us,
+        "enable_rbds": receiver.enable_rbds,
         "latest_status": (
             {
                 "reported_at": latest.reported_at.isoformat() if latest and latest.reported_at else None,
@@ -253,6 +266,98 @@ def register(app: Flask, logger) -> None:
         except Exception as exc:
             route_logger.error("Device enumeration failed: %s", exc)
             return jsonify({"error": str(exc), "devices": []}), 500
+
+    @app.route("/api/radio/devices/simple", methods=["GET"])
+    def api_list_devices_simple() -> Any:
+        """List detected SDR devices in simplified format for dropdown selection."""
+        try:
+            devices = enumerate_devices()
+
+            # Simplify device list for dropdown
+            simple_devices = []
+            for device in devices:
+                driver = device.get('driver', 'unknown')
+                serial = device.get('serial', '')
+                label = device.get('label', '')
+
+                # Create user-friendly label
+                if 'rtl' in driver.lower():
+                    device_type = 'RTL-SDR'
+                elif 'airspy' in driver.lower():
+                    device_type = 'Airspy'
+                elif 'hackrf' in driver.lower():
+                    device_type = 'HackRF'
+                else:
+                    device_type = driver.upper()
+
+                display_name = f"{device_type}"
+                if serial:
+                    display_name += f" (S/N: {serial})"
+                elif label:
+                    display_name += f" ({label})"
+
+                simple_devices.append({
+                    'driver': driver,
+                    'serial': serial,
+                    'display_name': display_name,
+                    'value': f"{driver}:{serial}" if serial else driver
+                })
+
+            return jsonify({"devices": simple_devices, "count": len(simple_devices)})
+        except Exception as exc:
+            route_logger.error("Device enumeration failed: %s", exc)
+            return jsonify({"error": str(exc), "devices": []}), 500
+
+    @app.route("/api/radio/validate-frequency", methods=["POST"])
+    def api_validate_frequency() -> Any:
+        """Validate frequency input based on service type."""
+        try:
+            payload = request.get_json() or {}
+            service_type = payload.get('service_type', '').upper()
+            frequency_input = payload.get('frequency', '')
+
+            if not service_type or service_type not in ['AM', 'FM', 'NOAA']:
+                return jsonify({"error": "Invalid service type"}), 400
+
+            valid, frequency_hz, error_msg = validate_frequency(service_type, frequency_input)
+
+            if valid:
+                frequency_display = format_frequency_display(service_type, frequency_hz)
+                return jsonify({
+                    "valid": True,
+                    "frequency_hz": frequency_hz,
+                    "frequency_display": frequency_display
+                })
+            else:
+                return jsonify({"valid": False, "error": error_msg}), 400
+
+        except Exception as exc:
+            route_logger.error("Frequency validation failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/radio/service-config/<service_type>", methods=["GET"])
+    def api_get_service_config(service_type: str) -> Any:
+        """Get automatic configuration for a service type."""
+        try:
+            service_type = service_type.upper()
+            if service_type not in ['AM', 'FM', 'NOAA']:
+                return jsonify({"error": "Invalid service type"}), 400
+
+            # Get config with placeholder frequency
+            placeholder_freq = 97.9 if service_type == 'FM' else (162.4 if service_type == 'NOAA' else 0.8)
+            config = get_service_config(service_type, placeholder_freq)
+
+            # Add helper info
+            config['frequency_placeholder'] = get_frequency_placeholder(service_type)
+            config['frequency_help'] = get_frequency_help_text(service_type)
+
+            if service_type == 'NOAA':
+                config['valid_frequencies'] = NOAA_FREQUENCIES
+
+            return jsonify(config)
+        except Exception as exc:
+            route_logger.error("Failed to get service config: %s", exc)
+            return jsonify({"error": str(exc)}), 500
 
     @app.route("/api/radio/diagnostics", methods=["GET"])
     def api_radio_diagnostics() -> Any:
