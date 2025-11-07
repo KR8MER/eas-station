@@ -533,6 +533,18 @@ def register(app: Flask, logger) -> None:
                 f"<p>{exc}</p><p><a href='/'>← Back to Main</a></p>"
             )
 
+    @app.route("/audio-monitor")
+    def audio_monitoring():
+        """Audio monitoring page with live audio playback."""
+        try:
+            return render_template("audio_monitoring.html")
+        except Exception as exc:  # pragma: no cover - fallback content
+            route_logger.error("Error loading audio monitoring: %s", exc)
+            return (
+                "<h1>Error loading audio monitoring</h1>"
+                f"<p>{exc}</p><p><a href='/'>← Back to Main</a></p>"
+            )
+
     @app.route("/logs")
     def logs():
         """Comprehensive log viewer with filtering by log type."""
