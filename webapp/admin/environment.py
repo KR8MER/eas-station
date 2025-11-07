@@ -59,6 +59,14 @@ ENV_CATEGORIES = {
                 'default': 'logs/eas_station.log',
                 'description': 'Path to application log file',
             },
+            {
+                'key': 'WEB_ACCESS_LOG',
+                'label': 'Web Server Access Logs',
+                'type': 'select',
+                'options': ['false', 'true'],
+                'default': 'false',
+                'description': 'Enable web server access logs (shows all HTTP requests). Set to false to reduce log clutter and only show errors.',
+            },
         ],
     },
     'database': {
