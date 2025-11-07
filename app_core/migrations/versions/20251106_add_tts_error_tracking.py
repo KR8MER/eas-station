@@ -1,7 +1,7 @@
 """Add TTS error tracking to EASMessage model
 
 Revision ID: 20251106_add_tts_error_tracking
-Revises: 20251106_remove_stream_support
+Revises: 20251106_remove_stream_support_from_receivers
 Create Date: 2025-11-06
 
 Adds tts_warning and tts_provider columns to track TTS failures in automated alerts.
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '20251106_add_tts_error_tracking'
-down_revision = '20251106_remove_stream_support'
+down_revision = '20251106_remove_stream_support_from_receivers'
 branch_labels = None
 depends_on = None
 
