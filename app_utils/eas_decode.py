@@ -457,14 +457,16 @@ def _correlate_and_decode_with_dll(samples: List[float], sample_rate: int) -> Tu
     """
     Decode SAME messages using correlation and DLL timing recovery (multimon-ng algorithm).
 
+    Improved version with better noise handling and error correction.
+
     Returns tuple of (decoded_messages, confidence)
     """
 
-    # Constants based on multimon-ng
+    # Constants based on multimon-ng with improvements
     SUBSAMP = 2  # Downsampling factor
     PREAMBLE_BYTE = 0xAB  # Preamble pattern
-    DLL_GAIN = 0.5  # DLL loop gain
-    INTEGRATOR_MAX = 10  # Integrator bounds
+    DLL_GAIN = 0.4  # Reduced from 0.5 for more stable timing recovery
+    INTEGRATOR_MAX = 12  # Increased from 10 for better noise immunity
     MAX_MSG_LEN = 268  # Maximum message length
 
     baud_rate = float(SAME_BAUD)
@@ -697,16 +699,25 @@ def _extract_bits(
 def _extract_bytes_from_bits(
     bits: List[int], start_pos: int, max_bytes: int, *, confidence_threshold: float = 0.3
 ) -> Tuple[List[int], List[int]]:
-    """Extract byte values and their positions from a bit stream starting at start_pos."""
+    """Extract byte values and their positions from a bit stream starting at start_pos.
+
+    Improved version with adaptive threshold and better frame validation.
+    """
 
     confidences: List[float] = list(getattr(_extract_bits, "bit_confidences", []))
     byte_values: List[int] = []
     byte_positions: List[int] = []
 
     i = start_pos
+    consecutive_failures = 0
+    max_consecutive_failures = 5  # Allow up to 5 failed frames in a row
+
     while i + 10 <= len(bits) and len(byte_values) < max_bytes:
         # Check for valid frame: start bit (0) and stop bit (1)
         if bits[i] != 0:
+            consecutive_failures += 1
+            if consecutive_failures > max_consecutive_failures:
+                break  # Too many errors, likely end of valid data
             i += 1
             continue
 
@@ -714,11 +725,21 @@ def _extract_bytes_from_bits(
         frame_confidence = 0.0
         if i + 10 <= len(confidences):
             frame_confidence = sum(confidences[i:i + 10]) / 10.0
-        if frame_confidence < confidence_threshold:
+
+        # Adaptive threshold: lower threshold if we're already decoding successfully
+        adaptive_threshold = confidence_threshold if len(byte_values) < 5 else confidence_threshold * 0.8
+
+        if frame_confidence < adaptive_threshold:
+            consecutive_failures += 1
+            if consecutive_failures > max_consecutive_failures:
+                break
             i += 1
             continue
 
         if bits[i + 9] != 1:
+            consecutive_failures += 1
+            if consecutive_failures > max_consecutive_failures:
+                break
             i += 1
             continue
 
@@ -731,8 +752,16 @@ def _extract_bytes_from_bits(
         for position, bit in enumerate(data_bits):
             value |= (bit & 1) << position
 
-        byte_values.append(value)
-        byte_positions.append(i)
+        # Validate that it's a printable ASCII character or control character
+        if 32 <= value <= 126 or value in (10, 13, 45):  # Printable ASCII, LF, CR, dash
+            byte_values.append(value)
+            byte_positions.append(i)
+            consecutive_failures = 0  # Reset on success
+        else:
+            consecutive_failures += 1
+            if consecutive_failures > max_consecutive_failures:
+                break
+
         i += 10
 
     return byte_values, byte_positions
