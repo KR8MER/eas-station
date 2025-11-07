@@ -698,8 +698,8 @@ class StreamSourceAdapter(AudioSourceAdapter):
                 return None
 
         try:
-            # Read data from stream (increased chunk size for better throughput)
-            chunk_size = self.config.buffer_size * 8  # Increased from 4x to 8x for better streaming
+            # Read data from stream (smaller chunks for more continuous flow)
+            chunk_size = self.config.buffer_size * 4  # Balanced size for low latency and efficiency
 
             try:
                 data = self._stream_response.raw.read(chunk_size)
@@ -766,8 +766,8 @@ class StreamSourceAdapter(AudioSourceAdapter):
             from pydub import AudioSegment
             import io
 
-            # Need minimum data to attempt decode (reduced from 4096 to 2048 for faster startup)
-            min_buffer_size = 2048
+            # Need minimum data to attempt decode (reduced to 1024 for faster, more continuous streaming)
+            min_buffer_size = 1024
             if len(self._buffer) < min_buffer_size:
                 return None
 
