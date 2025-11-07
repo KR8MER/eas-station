@@ -28,6 +28,9 @@ update_config "admin" "${ICECAST_ADMIN:-icemaster@localhost}"
 update_config "clients" "${ICECAST_MAX_CLIENTS:-100}"
 update_config "sources" "${ICECAST_MAX_SOURCES:-2}"
 
+# Enable changeowner for security (allows Icecast to drop root privileges)
+update_config "changeowner" "true"
+
 echo "Icecast configuration complete. Starting server..."
 
 # Execute the command
