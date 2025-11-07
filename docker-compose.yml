@@ -41,6 +41,7 @@ services:
       ICECAST_EXTERNAL_PORT: ${ICECAST_PORT:-8001}
       ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-eas_station_source_password}
       ICECAST_ENABLED: ${ICECAST_ENABLED:-true}
+      ICECAST_PUBLIC_HOSTNAME: ${ICECAST_PUBLIC_HOSTNAME:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     devices:
