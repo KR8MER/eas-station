@@ -673,79 +673,223 @@
         return receivers.find((item) => String(item.id) === String(id));
     }
 
+    // Load detected SDR devices
+    async function loadSDRDevices() {
+        const deviceSelect = document.getElementById('receiverDevice');
+        try {
+            const response = await fetch('/api/radio/devices/simple');
+            const data = await response.json();
+
+            deviceSelect.innerHTML = '<option value="">-- Select a device --</option>';
+
+            if (data.devices && data.devices.length > 0) {
+                data.devices.forEach(device => {
+                    const option = document.createElement('option');
+                    option.value = device.value;
+                    option.textContent = device.display_name;
+                    option.dataset.driver = device.driver;
+                    option.dataset.serial = device.serial || '';
+                    deviceSelect.appendChild(option);
+                });
+            } else {
+                deviceSelect.innerHTML = '<option value="">-- No devices detected --</option>';
+            }
+        } catch (error) {
+            console.error('Failed to load SDR devices:', error);
+            deviceSelect.innerHTML = '<option value="">-- Error loading devices --</option>';
+        }
+    }
+
+    // Handle device selection
+    document.getElementById('receiverDevice')?.addEventListener('change', (e) => {
+        const selectedOption = e.target.selectedOptions[0];
+        if (selectedOption && selectedOption.dataset.driver) {
+            document.getElementById('receiverDriver').value = selectedOption.dataset.driver;
+            document.getElementById('receiverSerial').value = selectedOption.dataset.serial || '';
+
+            // Auto-generate identifier from display name if creating new
+            if (!document.getElementById('receiverId').value) {
+                const displayName = document.getElementById('receiverDisplayName').value;
+                if (displayName) {
+                    const identifier = displayName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+                    document.getElementById('receiverIdentifier').value = identifier;
+                }
+            }
+        }
+    });
+
+    // Auto-generate identifier from display name
+    document.getElementById('receiverDisplayName')?.addEventListener('input', (e) => {
+        if (!document.getElementById('receiverId').value) {
+            const identifier = e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+            document.getElementById('receiverIdentifier').value = identifier;
+        }
+    });
+
+    // Handle service type selection
+    let currentServiceType = null;
+    let currentServiceConfig = null;
+
+    document.querySelectorAll('input[name="serviceType"]').forEach(radio => {
+        radio.addEventListener('change', async (e) => {
+            currentServiceType = e.target.value;
+
+            // Fetch service configuration
+            try {
+                const response = await fetch(`/api/radio/service-config/${currentServiceType}`);
+                currentServiceConfig = await response.json();
+
+                // Enable frequency input and update placeholder
+                const freqInput = document.getElementById('receiverFrequencyInput');
+                freqInput.disabled = false;
+                freqInput.placeholder = currentServiceConfig.frequency_placeholder;
+                freqInput.value = '';
+
+                // Update help text
+                document.getElementById('frequencyHelp').textContent = currentServiceConfig.frequency_help;
+
+                // Reset frequency display
+                document.getElementById('frequencyDisplay').innerHTML = '<i class="fas fa-info-circle"></i> Enter frequency above';
+                document.getElementById('frequencyDisplay').className = 'alert alert-info mb-0';
+
+            } catch (error) {
+                console.error('Failed to load service config:', error);
+            }
+        });
+    });
+
+    // Handle frequency input with validation
+    let validationTimeout = null;
+    document.getElementById('receiverFrequencyInput')?.addEventListener('input', async (e) => {
+        clearTimeout(validationTimeout);
+
+        const freqValue = e.target.value.trim();
+        if (!freqValue || !currentServiceType) return;
+
+        validationTimeout = setTimeout(async () => {
+            try {
+                const response = await fetch('/api/radio/validate-frequency', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        service_type: currentServiceType,
+                        frequency: freqValue
+                    })
+                });
+
+                const data = await response.json();
+                const displayDiv = document.getElementById('frequencyDisplay');
+
+                if (data.valid) {
+                    // Valid frequency
+                    displayDiv.innerHTML = `<i class="fas fa-check-circle"></i> <strong>${data.frequency_display}</strong>`;
+                    displayDiv.className = 'alert alert-success mb-0';
+
+                    // Set hidden field
+                    document.getElementById('receiverFrequency').value = data.frequency_hz;
+
+                    // Apply service config to hidden fields
+                    applyServiceConfig();
+                } else {
+                    // Invalid frequency
+                    displayDiv.innerHTML = `<i class="fas fa-times-circle"></i> ${data.error}`;
+                    displayDiv.className = 'alert alert-danger mb-0';
+                    document.getElementById('receiverFrequency').value = '';
+                }
+            } catch (error) {
+                console.error('Frequency validation error:', error);
+            }
+        }, 500);
+    });
+
+    // Apply service configuration to hidden fields
+    function applyServiceConfig() {
+        if (!currentServiceConfig) return;
+
+        document.getElementById('receiverSampleRate').value = currentServiceConfig.sample_rate;
+        document.getElementById('receiverModulation').value = currentServiceConfig.modulation_type;
+        document.getElementById('receiverAudioOutput').value = currentServiceConfig.audio_output ? '1' : '0';
+        document.getElementById('receiverStereo').value = currentServiceConfig.stereo_enabled ? '1' : '0';
+        document.getElementById('receiverDeemphasis').value = currentServiceConfig.deemphasis_us;
+        document.getElementById('receiverRBDS').value = currentServiceConfig.enable_rbds ? '1' : '0';
+
+        // Show configuration summary
+        showConfigSummary();
+    }
+
+    // Show configuration summary
+    function showConfigSummary() {
+        if (!currentServiceConfig) return;
+
+        const summary = document.getElementById('configSummary');
+        if (summary) {
+            summary.style.display = 'block';
+            document.getElementById('summaryModulation').textContent = currentServiceConfig.modulation_type;
+            document.getElementById('summarySampleRate').textContent = `${(currentServiceConfig.sample_rate / 1e6).toFixed(1)} MHz`;
+            document.getElementById('summaryBandwidth').textContent = `${(currentServiceConfig.bandwidth / 1000).toFixed(0)} kHz`;
+            document.getElementById('summaryAudio').textContent = currentServiceConfig.audio_output ? 'Enabled' : 'Disabled';
+            document.getElementById('summaryStereo').textContent = currentServiceConfig.stereo_enabled ? 'Yes' : 'No';
+            document.getElementById('summaryRBDS').textContent = currentServiceConfig.enable_rbds ? 'Yes' : 'No';
+        }
+    }
+
     function openModal(receiver = null) {
         form.reset();
-        document.getElementById('receiverId').value = receiver?.id || '';
-        document.getElementById('receiverDisplayName').value = receiver?.display_name || '';
-        document.getElementById('receiverIdentifier').value = receiver?.identifier || '';
-        document.getElementById('receiverDriver').value = receiver?.driver || '';
 
-        // Handle frequency - convert Hz to MHz for display
-        const freqHz = receiver?.frequency_hz;
-        if (freqHz) {
-            document.getElementById('receiverFrequency').value = freqHz;
-            document.getElementById('receiverFrequencyMHz').value = (freqHz / 1e6).toFixed(3);
-        } else {
-            document.getElementById('receiverFrequency').value = '';
-            document.getElementById('receiverFrequencyMHz').value = '';
+        // Reset service selection
+        currentServiceType = null;
+        currentServiceConfig = null;
+        document.querySelectorAll('input[name="serviceType"]').forEach(r => r.checked = false);
+        document.getElementById('receiverFrequencyInput').disabled = true;
+        document.getElementById('receiverFrequencyInput').value = '';
+        if (document.getElementById('configSummary')) {
+            document.getElementById('configSummary').style.display = 'none';
         }
 
-        document.getElementById('receiverSampleRate').value = receiver?.sample_rate ?? '';
-        document.getElementById('receiverGain').value = receiver?.gain ?? '';
-        document.getElementById('receiverChannel').value = receiver?.channel ?? '';
-        document.getElementById('receiverSerial').value = receiver?.serial ?? '';
-        document.getElementById('receiverNotes').value = receiver?.notes ?? '';
-        // Audio demodulation settings
-        document.getElementById('receiverModulation').value = receiver?.modulation_type ?? 'IQ';
-        document.getElementById('receiverDeemphasis').value = receiver?.deemphasis_us ?? '75';
-        document.getElementById('receiverAudioOutput').checked = receiver?.audio_output === true;
-        document.getElementById('receiverStereo').checked = receiver?.stereo_enabled !== false;
-        document.getElementById('receiverRBDS').checked = receiver?.enable_rbds === true;
-        document.getElementById('receiverEnabled').checked = receiver?.enabled !== false;
-        document.getElementById('receiverAutoStart').checked = receiver?.auto_start !== false;
+        // Load devices
+        loadSDRDevices();
 
-        document.getElementById('receiverIdentifier').disabled = Boolean(receiver);
+        if (receiver) {
+            // Editing existing receiver
+            document.getElementById('receiverId').value = receiver.id;
+            document.getElementById('receiverDisplayName').value = receiver.display_name;
+            document.getElementById('receiverIdentifier').value = receiver.identifier;
+            document.getElementById('receiverDriver').value = receiver.driver;
+            document.getElementById('receiverSerial').value = receiver.serial || '';
+            document.getElementById('receiverFrequency').value = receiver.frequency_hz;
+            document.getElementById('receiverSampleRate').value = receiver.sample_rate;
+            document.getElementById('receiverGain').value = receiver.gain ?? '';
+            document.getElementById('receiverChannel').value = receiver.channel ?? '';
+            document.getElementById('receiverNotes').value = receiver.notes ?? '';
+            document.getElementById('receiverModulation').value = receiver.modulation_type ?? 'IQ';
+            document.getElementById('receiverDeemphasis').value = receiver.deemphasis_us ?? '75';
+            document.getElementById('receiverAudioOutput').value = receiver.audio_output ? '1' : '0';
+            document.getElementById('receiverStereo').value = receiver.stereo_enabled ? '1' : '0';
+            document.getElementById('receiverRBDS').value = receiver.enable_rbds ? '1' : '0';
+            document.getElementById('receiverEnabled').checked = receiver.enabled !== false;
+            document.getElementById('receiverAutoStart').checked = receiver.auto_start !== false;
+
+            // For editing, show a simplified view with current values
+            const freqMHz = (receiver.frequency_hz / 1e6).toFixed(3);
+            document.getElementById('receiverFrequencyInput').value = freqMHz;
+            document.getElementById('receiverFrequencyInput').disabled = false;
+            document.getElementById('frequencyHelp').textContent = `Current: ${freqMHz} MHz`;
+
+            const freqDisplay = document.getElementById('frequencyDisplay');
+            freqDisplay.innerHTML = `<i class="fas fa-info-circle"></i> <strong>${freqMHz} MHz</strong> (${receiver.frequency_hz.toLocaleString()} Hz)`;
+            freqDisplay.className = 'alert alert-info mb-0';
+        } else {
+            // Creating new receiver - all fields start fresh
+            document.getElementById('receiverId').value = '';
+            document.getElementById('receiverEnabled').checked = true;
+            document.getElementById('receiverAutoStart').checked = true;
+        }
+
         document.getElementById('radioReceiverModalLabel').textContent = receiver ? 'Edit Receiver' : 'Add Receiver';
-
         receiverModal.show();
     }
 
-    // Frequency MHz to Hz conversion
-    const freqMHzInput = document.getElementById('receiverFrequencyMHz');
-    const freqHzInput = document.getElementById('receiverFrequency');
-    const swapFreqBtn = document.getElementById('swapFreqUnit');
-
-    freqMHzInput?.addEventListener('input', (e) => {
-        const mhz = parseFloat(e.target.value);
-        if (!isNaN(mhz) && mhz > 0) {
-            freqHzInput.value = Math.round(mhz * 1e6);
-        } else {
-            freqHzInput.value = '';
-        }
-    });
-
-    swapFreqBtn?.addEventListener('click', () => {
-        const mhzField = freqMHzInput.parentElement;
-        const hzField = freqHzInput;
-        const isShowingMHz = !freqMHzInput.classList.contains('d-none');
-
-        if (isShowingMHz) {
-            // Switch to Hz input
-            mhzField.classList.add('d-none');
-            hzField.classList.remove('d-none');
-            swapFreqBtn.title = 'Switch to MHz input';
-        } else {
-            // Switch to MHz input
-            hzField.classList.add('d-none');
-            mhzField.classList.remove('d-none');
-            // Update MHz field from Hz field
-            const hz = parseFloat(hzField.value);
-            if (!isNaN(hz) && hz > 0) {
-                freqMHzInput.value = (hz / 1e6).toFixed(3);
-            }
-            swapFreqBtn.title = 'Switch to Hz input';
-        }
-    });
+    // Old frequency conversion code removed - now handled by service-based validation
 
     async function loadReceivers(endpoint = CRUD_ENDPOINT) {
         const response = await fetch(endpoint);
