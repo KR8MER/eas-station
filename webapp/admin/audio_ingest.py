@@ -816,9 +816,37 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
 
             yield wav_header.getvalue()
 
+            # Pre-buffer audio for smooth playback (VLC-style buffering)
+            logger.info(f'Pre-buffering audio for {source_name}')
+            prebuffer = []
+            prebuffer_target = int(sample_rate * 2)  # 2 seconds of audio
+            prebuffer_samples = 0
+            prebuffer_timeout = 5.0  # Max 5 seconds to fill prebuffer
+            prebuffer_start = time.time()
+
+            while prebuffer_samples < prebuffer_target:
+                if time.time() - prebuffer_start > prebuffer_timeout:
+                    logger.warning(f'Prebuffer timeout for {source_name}, starting with {prebuffer_samples}/{prebuffer_target} samples')
+                    break
+
+                audio_chunk = adapter.get_audio_chunk(timeout=0.2)
+                if audio_chunk is not None:
+                    import numpy as np
+                    if not isinstance(audio_chunk, np.ndarray):
+                        audio_chunk = np.array(audio_chunk, dtype=np.float32)
+
+                    prebuffer.append(audio_chunk)
+                    prebuffer_samples += len(audio_chunk)
+
+            # Yield pre-buffered audio
+            logger.info(f'Streaming {len(prebuffer)} pre-buffered chunks for {source_name}')
+            for chunk in prebuffer:
+                pcm_data = (np.clip(chunk, -1.0, 1.0) * 32767).astype(np.int16)
+                yield pcm_data.tobytes()
+
             # Stream audio chunks
-            logger.info(f'Starting audio stream for {source_name}')
-            chunk_count = 0
+            logger.info(f'Starting live audio stream for {source_name}')
+            chunk_count = len(prebuffer)
             max_chunks = 6000  # ~2 minutes at typical chunk rate (0.02s per chunk)
             silence_count = 0
             max_consecutive_silence = 20  # Stop after 20 consecutive silent/empty chunks (1 second)

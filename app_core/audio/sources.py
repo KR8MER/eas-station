@@ -535,8 +535,9 @@ class StreamSourceAdapter(AudioSourceAdapter):
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5
         self._stream_metadata = {}  # Store stream metadata (URL, codec, bitrate, etc.)
-        self._frame_analyzer = None  # Frame-level codec/bitrate analyzer
-        self._analyzer_initialized = False  # Track if we've analyzed frames yet
+        self._ffmpeg_process = None  # FFmpeg subprocess for decoding
+        self._pcm_buffer = bytearray()  # Buffer for decoded PCM audio
+        self._ffmpeg_thread = None  # Thread for feeding data to FFmpeg
 
     def _parse_m3u(self, url: str) -> str:
         """Parse M3U playlist and return the first stream URL."""
@@ -658,6 +659,22 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
     def _stop_capture(self) -> None:
         """Stop HTTP stream audio capture."""
+        # Stop FFmpeg process first
+        if self._ffmpeg_process:
+            try:
+                self._ffmpeg_process.terminate()
+                self._ffmpeg_process.wait(timeout=2)
+            except Exception:
+                try:
+                    self._ffmpeg_process.kill()
+                except Exception:
+                    pass
+            self._ffmpeg_process = None
+
+        if self._ffmpeg_thread and self._ffmpeg_thread.is_alive():
+            self._ffmpeg_thread.join(timeout=2)
+        self._ffmpeg_thread = None
+
         if self._stream_response:
             try:
                 self._stream_response.close()
@@ -673,6 +690,7 @@ class StreamSourceAdapter(AudioSourceAdapter):
             self._session = None
 
         self._buffer.clear()
+        self._pcm_buffer.clear()
         self._decoder = None
 
     def _read_audio_chunk(self) -> Optional[np.ndarray]:
@@ -760,121 +778,127 @@ class StreamSourceAdapter(AudioSourceAdapter):
                 return i
         return -1
 
-    def _decode_mp3_chunk(self) -> Optional[np.ndarray]:
-        """Decode MP3 audio from buffer using pydub with improved error recovery."""
-        try:
-            from pydub import AudioSegment
-            import io
+    def _start_ffmpeg_decoder(self) -> None:
+        """Start FFmpeg subprocess for decoding stream audio."""
+        import subprocess
 
-            # Need minimum data to attempt decode (reduced to 1024 for faster, more continuous streaming)
-            min_buffer_size = 1024
-            if len(self._buffer) < min_buffer_size:
+        if self._ffmpeg_process:
+            return  # Already running
+
+        try:
+            # Start FFmpeg to decode stream to raw PCM
+            self._ffmpeg_process = subprocess.Popen([
+                'ffmpeg',
+                '-f', self._stream_format,  # Input format (mp3, aac, etc.)
+                '-i', 'pipe:0',              # Read from stdin
+                '-f', 's16le',               # Output 16-bit PCM little-endian
+                '-ar', str(self.config.sample_rate),  # Sample rate
+                '-ac', '1',                  # Mono output
+                '-loglevel', 'error',        # Only show errors
+                'pipe:1'                     # Output to stdout
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=4096
+            )
+
+            # Start thread to feed data to FFmpeg
+            self._ffmpeg_thread = threading.Thread(
+                target=self._feed_ffmpeg,
+                name=f"ffmpeg-feeder-{self.config.name}",
+                daemon=True
+            )
+            self._ffmpeg_thread.start()
+
+            logger.info(f"Started FFmpeg decoder for {self.config.name}")
+
+        except Exception as e:
+            logger.error(f"Failed to start FFmpeg decoder: {e}")
+            self.status = AudioSourceStatus.ERROR
+            self.error_message = f"FFmpeg decoder error: {e}"
+
+    def _feed_ffmpeg(self) -> None:
+        """Thread function to feed encoded data from buffer to FFmpeg stdin."""
+        while self._ffmpeg_process and self._ffmpeg_process.poll() is None:
+            try:
+                if len(self._buffer) > 0:
+                    # Send data to FFmpeg stdin
+                    chunk = bytes(self._buffer[:4096])
+                    self._buffer = self._buffer[4096:]
+
+                    if self._ffmpeg_process and self._ffmpeg_process.stdin:
+                        self._ffmpeg_process.stdin.write(chunk)
+                        self._ffmpeg_process.stdin.flush()
+                else:
+                    # No data to send, sleep briefly
+                    time.sleep(0.01)
+
+            except Exception as e:
+                logger.error(f"Error feeding FFmpeg: {e}")
+                break
+
+    def _decode_mp3_chunk(self) -> Optional[np.ndarray]:
+        """Decode MP3 audio from buffer using FFmpeg subprocess."""
+        try:
+            # Start FFmpeg decoder if not already running
+            if not self._ffmpeg_process or self._ffmpeg_process.poll() is not None:
+                self._start_ffmpeg_decoder()
+
+            if not self._ffmpeg_process:
                 return None
 
-            # Analyze frame headers to detect actual bitrate/codec (only once)
-            if not self._analyzer_initialized and len(self._buffer) >= 4096:
-                self._analyze_stream_frames()
-                self._analyzer_initialized = True
+            # Read decoded PCM from FFmpeg stdout (non-blocking)
+            import select
+            import os
 
-            # Limit buffer growth to prevent memory issues
-            max_buffer_size = 131072  # 128KB max buffer
-            if len(self._buffer) > max_buffer_size:
-                # Find next frame sync and truncate buffer before it
-                sync_pos = self._find_mp3_frame_sync(self._buffer, len(self._buffer) - max_buffer_size + 1024)
-                if sync_pos > 0:
-                    logger.warning(f"Buffer overflow ({len(self._buffer)} bytes), truncating to sync at {sync_pos}")
-                    self._buffer = self._buffer[sync_pos:]
-                else:
-                    # No sync found, drop first half of buffer
-                    drop_amount = len(self._buffer) // 2
-                    logger.warning(f"Buffer overflow with no sync found, dropping {drop_amount} bytes")
-                    self._buffer = self._buffer[drop_amount:]
-
-            # Try to decode what we have
-            decode_attempts = 0
-            max_decode_attempts = 3
-
-            while decode_attempts < max_decode_attempts and len(self._buffer) >= min_buffer_size:
+            # Check if data is available to read
+            if self._ffmpeg_process.stdout:
+                # Try to read decoded PCM data
                 try:
-                    # Take a chunk from buffer (try up to 32KB for better decoding)
-                    chunk_size = min(32768, len(self._buffer))
-                    chunk_data = bytes(self._buffer[:chunk_size])
-                    buffer_io = io.BytesIO(chunk_data)
+                    # Read up to 16KB of PCM data
+                    chunk = self._ffmpeg_process.stdout.read(16384)
+                    if chunk:
+                        self._pcm_buffer.extend(chunk)
+                except Exception:
+                    pass
 
-                    audio = AudioSegment.from_file(buffer_io, format="mp3")
+            # Convert PCM buffer to numpy array when we have enough data
+            bytes_per_sample = 2  # 16-bit = 2 bytes
+            samples_available = len(self._pcm_buffer) // bytes_per_sample
 
-                    # Only remove the bytes that were actually consumed by the decoder
-                    bytes_consumed = buffer_io.tell()
-                    if bytes_consumed > 0:
-                        self._buffer = self._buffer[bytes_consumed:]
-                    else:
-                        # Decoder didn't consume anything, advance past current position
-                        self._buffer = self._buffer[256:]
+            # Aim for ~0.05 seconds of audio per chunk
+            target_samples = int(self.config.sample_rate * 0.05)
 
-                    # Convert to numpy array
-                    samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
+            if samples_available >= target_samples:
+                # Extract samples
+                bytes_to_extract = target_samples * bytes_per_sample
+                pcm_data = bytes(self._pcm_buffer[:bytes_to_extract])
+                self._pcm_buffer = self._pcm_buffer[bytes_to_extract:]
 
-                    # Convert to mono if needed
-                    if audio.channels == 2:
-                        samples = samples.reshape((-1, 2))
-                        samples = np.mean(samples, axis=1)
+                # Convert to numpy array
+                samples = np.frombuffer(pcm_data, dtype=np.int16)
 
-                    # Normalize
-                    max_val = float(2 ** (audio.sample_width * 8 - 1))
-                    samples = samples / max_val
+                # Convert to float32 normalized to [-1, 1]
+                samples = samples.astype(np.float32) / 32768.0
 
-                    # Successfully decoded
-                    return samples
+                return samples
 
-                except Exception as e:
-                    decode_attempts += 1
-
-                    # Try to find next MP3 frame sync
-                    sync_pos = self._find_mp3_frame_sync(self._buffer, 1)
-
-                    if sync_pos > 0:
-                        # Found sync, skip to it
-                        logger.debug(f"MP3 decode failed (attempt {decode_attempts}), skipping to frame sync at {sync_pos}")
-                        self._buffer = self._buffer[sync_pos:]
-                    elif len(self._buffer) > min_buffer_size:
-                        # No sync found, drop small amount and continue
-                        drop_amount = min(512, len(self._buffer) // 4)
-                        logger.debug(f"MP3 decode failed (attempt {decode_attempts}), dropping {drop_amount} bytes")
-                        self._buffer = self._buffer[drop_amount:]
-                    else:
-                        # Not enough data left
-                        break
-
-            # All decode attempts failed, but don't return None - wait for more data
             return None
 
-        except ImportError:
-            logger.error("pydub not available for MP3 stream decoding")
-            self.status = AudioSourceStatus.ERROR
-            self.error_message = "pydub library not available for MP3 decoding (install with: pip install pydub)"
+        except Exception as e:
+            logger.error(f"Error in FFmpeg decoding: {e}")
             return None
 
     def _decode_aac_chunk(self) -> Optional[np.ndarray]:
-        """Decode AAC audio from buffer."""
-        # Analyze frame headers even if we can't decode yet
-        if not self._analyzer_initialized and len(self._buffer) >= 4096:
-            self._analyze_stream_frames()
-            self._analyzer_initialized = True
-
-        # AAC decoding would require additional libraries like faad
-        logger.warning("AAC decoding not yet implemented - consider using MP3 streams")
-        return None
+        """Decode AAC audio from buffer using FFmpeg."""
+        # FFmpeg handles AAC natively, use the same decoder
+        return self._decode_mp3_chunk()
 
     def _decode_ogg_chunk(self) -> Optional[np.ndarray]:
-        """Decode OGG/Vorbis audio from buffer."""
-        # Analyze frame headers even if we can't decode yet
-        if not self._analyzer_initialized and len(self._buffer) >= 4096:
-            self._analyze_stream_frames()
-            self._analyzer_initialized = True
-
-        # OGG decoding would require additional libraries
-        logger.warning("OGG decoding not yet implemented - consider using MP3 streams")
-        return None
+        """Decode OGG/Vorbis audio from buffer using FFmpeg."""
+        # FFmpeg handles OGG natively, use the same decoder
+        return self._decode_mp3_chunk()
 
     def _decode_raw_chunk(self) -> Optional[np.ndarray]:
         """Decode raw PCM audio from buffer."""
