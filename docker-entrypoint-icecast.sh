@@ -33,5 +33,5 @@ update_config "changeowner" "true"
 
 echo "Icecast configuration complete. Starting server..."
 
-# Execute the command
-exec "$@"
+# Drop privileges and execute icecast as icecast2 user
+exec gosu icecast2 "$@"
