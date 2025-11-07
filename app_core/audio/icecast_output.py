@@ -209,8 +209,19 @@ class IcecastStreamer:
 
         while not self._stop_event.is_set():
             if not self._ffmpeg_process or self._ffmpeg_process.poll() is not None:
-                # FFmpeg died, try to restart
-                logger.warning("FFmpeg process died, restarting...")
+                # FFmpeg died, try to get error output
+                stderr_output = None
+                if self._ffmpeg_process and self._ffmpeg_process.stderr:
+                    try:
+                        stderr_output = self._ffmpeg_process.stderr.read().decode('utf-8', errors='replace')
+                    except Exception as e:
+                        logger.debug(f"Could not read FFmpeg stderr: {e}")
+
+                if stderr_output:
+                    logger.error(f"FFmpeg process died with error:\n{stderr_output}")
+                else:
+                    logger.warning("FFmpeg process died (no error output available)")
+
                 self._reconnect_count += 1
 
                 if self._start_ffmpeg():
