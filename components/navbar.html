@@ -69,7 +69,7 @@
                             </li>
                             <li>
                                 <a class="dropdown-item" href="{{ url_for('audio_history') }}">
-                                    <i class="fas fa-headphones"></i> Audio Archive
+                                    <i class="fas fa-clock-rotate-left"></i> Audio Archive
                                 </a>
                             </li>
                         </ul>
@@ -77,24 +77,24 @@
 
                     <!-- Broadcast Operations -->
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="operationsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <a class="nav-link dropdown-toggle" href="#" id="broadcastDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fas fa-tower-broadcast"></i>
                             <span class="d-none d-md-inline">Broadcast</span>
-                            <span class="d-md-none">Ops</span>
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="operationsDropdown">
+                        <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="broadcastDropdown">
                             <li>
-                                <a class="dropdown-item" href="{{ url_for('eas.workflow_home') }}" {% if current_user is not defined or not current_user.is_authenticated %}title="Sign in required to access the manual EAS workflow."{% endif %}>
-                                    <i class="fas fa-broadcast-tower"></i> EAS Workflow
+                                <a class="dropdown-item" href="{{ url_for('eas.workflow_home') }}" {% if current_user is not defined or not current_user.is_authenticated %}title="Sign in required to create manual broadcasts."{% endif %}>
+                                    <i class="fas fa-broadcast-tower"></i> Broadcast Workflow
                                     {% if current_user is not defined or not current_user.is_authenticated %}
                                     <i class="fas fa-lock small ms-1 text-warning"></i>
                                     {% endif %}
                                 </a>
                             </li>
                             <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">Display Outputs</h6></li>
                             <li>
                                 <a class="dropdown-item" href="{{ url_for('led_control') }}">
-                                    <i class="fas fa-tv"></i> LED Sign Control
+                                    <i class="fas fa-tv"></i> LED Sign
                                 </a>
                             </li>
                             <li>
@@ -108,43 +108,28 @@
                                 </a>
                             </li>
                             <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">Input Sources</h6></li>
                             <li>
                                 <a class="dropdown-item" href="{{ url_for('radio_settings') }}">
-                                    <i class="fas fa-signal"></i> Radio Settings
+                                    <i class="fas fa-signal"></i> Radio/SDR
                                 </a>
                             </li>
                             <li>
                                 <a class="dropdown-item" href="{{ url_for('audio_settings') }}">
-                                    <i class="fas fa-microphone"></i> Audio Sources
+                                    <i class="fas fa-microphone"></i> Audio Streams
                                 </a>
                             </li>
                         </ul>
                     </li>
 
-                    <!-- Tools & Compliance -->
+                    <!-- System Management -->
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="toolsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="fas fa-toolbox"></i>
-                            <span class="d-none d-md-inline">Tools</span>
+                        <a class="nav-link dropdown-toggle" href="#" id="systemDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-server"></i>
+                            <span class="d-none d-md-inline">System</span>
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="toolsDropdown">
-                            <li>
-                                <a class="dropdown-item" href="{{ url_for('alert_verification') }}" {% if current_user is not defined or not current_user.is_authenticated %}title="Sign in required to access alert validation tools."{% endif %}>
-                                    <i class="fas fa-shield-check"></i> Alert Validation
-                                    {% if current_user is not defined or not current_user.is_authenticated %}
-                                    <i class="fas fa-lock small ms-1 text-warning"></i>
-                                    {% endif %}
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="{{ url_for('compliance_dashboard') }}" {% if current_user is not defined or not current_user.is_authenticated %}title="Sign in required to review compliance dashboards."{% endif %}>
-                                    <i class="fas fa-clipboard-check"></i> Compliance
-                                    {% if current_user is not defined or not current_user.is_authenticated %}
-                                    <i class="fas fa-lock small ms-1 text-warning"></i>
-                                    {% endif %}
-                                </a>
-                            </li>
-                            <li><hr class="dropdown-divider"></li>
+                        <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="systemDropdown">
+                            <li><h6 class="dropdown-header">Hardware</h6></li>
                             <li>
                                 <a class="dropdown-item" href="/admin/gpio">
                                     <i class="fas fa-microchip"></i> GPIO Control
@@ -156,6 +141,29 @@
                                 </a>
                             </li>
                             <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">Configuration</h6></li>
+                            <li>
+                                <a class="dropdown-item" href="/admin">
+                                    <i class="fas fa-sliders"></i> System Settings
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/settings/environment">
+                                    <i class="fas fa-cog"></i> Environment
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/debug/ipaws">
+                                    <i class="fas fa-satellite"></i> IPAWS Debug
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">Data & Logs</h6></li>
+                            <li>
+                                <a class="dropdown-item" href="/logs">
+                                    <i class="fas fa-file-alt"></i> System Logs
+                                </a>
+                            </li>
                             <li>
                                 <a class="dropdown-item" href="/export/alerts">
                                     <i class="fas fa-download"></i> Export Alerts
@@ -174,40 +182,15 @@
                         </ul>
                     </li>
 
-                    <!-- Configuration -->
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="configDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="fas fa-cog"></i>
-                            <span class="d-none d-md-inline">Config</span>
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="configDropdown">
-                            <li>
-                                <a class="dropdown-item" href="/admin">
-                                    <i class="fas fa-sliders"></i> System Configuration
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="/settings/environment">
-                                    <i class="fas fa-cog"></i> Environment Settings
-                                </a>
-                            </li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li>
-                                <a class="dropdown-item" href="/debug/ipaws">
-                                    <i class="fas fa-satellite"></i> IPAWS Debug
-                                </a>
-                            </li>
-                        </ul>
-                    </li>
-
-                    <!-- Security & Admin -->
+                    <!-- Admin & Security -->
                     {% if current_user is defined and current_user.is_authenticated %}
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="securityDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fas fa-shield-alt"></i>
-                            <span class="d-none d-md-inline">Security</span>
+                            <span class="d-none d-md-inline">Admin</span>
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="securityDropdown">
+                        <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="adminDropdown">
+                            <li><h6 class="dropdown-header">Security</h6></li>
                             <li>
                                 <a class="dropdown-item" href="/admin/rbac">
                                     <i class="fas fa-user-shield"></i> RBAC Management
@@ -224,46 +207,52 @@
                                 </a>
                             </li>
                             <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">Compliance & Analytics</h6></li>
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('alert_verification') }}">
+                                    <i class="fas fa-shield-check"></i> Alert Validation
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('compliance_dashboard') }}">
+                                    <i class="fas fa-clipboard-check"></i> Compliance Dashboard
+                                </a>
+                            </li>
                             <li>
                                 <a class="dropdown-item" href="/analytics">
-                                    <i class="fas fa-chart-line"></i> Analytics Dashboard
+                                    <i class="fas fa-chart-line"></i> Analytics
                                 </a>
                             </li>
                         </ul>
                     </li>
                     {% endif %}
 
-                    <!-- Information & Help -->
+                    <!-- Help & Information -->
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="infoDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="fas fa-circle-info"></i>
-                            <span class="d-none d-md-inline">Info</span>
+                        <a class="nav-link dropdown-toggle" href="#" id="helpDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-circle-question"></i>
+                            <span class="d-none d-md-inline">Help</span>
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="infoDropdown">
-                            <li>
-                                <a class="dropdown-item" href="/logs">
-                                    <i class="fas fa-file-alt"></i> System Logs
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="/version">
-                                    <i class="fas fa-info-circle"></i> Version Info
-                                </a>
-                            </li>
-                            <li><hr class="dropdown-divider"></li>
+                        <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="helpDropdown">
                             <li>
                                 <a class="dropdown-item" href="{{ url_for('docs_index') }}">
                                     <i class="fas fa-book"></i> Documentation
                                 </a>
                             </li>
                             <li>
+                                <a class="dropdown-item" href="{{ url_for('help_page') }}">
+                                    <i class="fas fa-circle-question"></i> Help & Support
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
                                 <a class="dropdown-item" href="{{ url_for('about_page') }}">
                                     <i class="fas fa-circle-info"></i> About
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item" href="{{ url_for('help_page') }}">
-                                    <i class="fas fa-circle-question"></i> Help
+                                <a class="dropdown-item" href="/version">
+                                    <i class="fas fa-code-branch"></i> Version Info
                                 </a>
                             </li>
                         </ul>
