@@ -790,14 +790,15 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
 
             try:
                 while chunk_count < max_chunks:
-                    # Get audio chunk from adapter
-                    audio_chunk = adapter.get_audio_chunk(timeout=2.0)
+                    # Get audio chunk from adapter (reduced timeout for more responsive streaming)
+                    audio_chunk = adapter.get_audio_chunk(timeout=0.5)
 
                     if audio_chunk is None:
                         # No data available, check if source is still running
                         if adapter.status != AudioSourceStatus.RUNNING:
                             logger.info(f'Audio source stopped: {source_name}')
                             break
+                        # Continue waiting for more data instead of yielding silence
                         continue
 
                     # Convert float32 [-1, 1] to int16 PCM

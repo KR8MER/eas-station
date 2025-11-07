@@ -165,7 +165,7 @@ class ALSASourceAdapter(AudioSourceAdapter):
             if self._reconnect_attempts < self._max_reconnect_attempts:
                 self._reconnect_attempts += 1
                 logger.info(f"ALSA device disconnected, attempting to reconnect (attempt {self._reconnect_attempts}/{self._max_reconnect_attempts})")
-                time.sleep(2)
+                time.sleep(0.5)  # Reduced from 2s to 0.5s for faster recovery
                 try:
                     self._start_capture()
                     self._reconnect_attempts = 0  # Reset on successful reconnect
@@ -265,7 +265,7 @@ class PulseSourceAdapter(AudioSourceAdapter):
             if self._reconnect_attempts < self._max_reconnect_attempts:
                 self._reconnect_attempts += 1
                 logger.info(f"PulseAudio stream disconnected, attempting to reconnect (attempt {self._reconnect_attempts}/{self._max_reconnect_attempts})")
-                time.sleep(2)
+                time.sleep(0.5)  # Reduced from 2s to 0.5s for faster recovery
                 try:
                     # Clean up old resources first
                     if self._stream:
@@ -572,13 +572,13 @@ class StreamSourceAdapter(AudioSourceAdapter):
         self._decoder = None
 
     def _read_audio_chunk(self) -> Optional[np.ndarray]:
-        """Read audio chunk from HTTP stream."""
+        """Read audio chunk from HTTP stream with improved error handling."""
         # If stream is disconnected, attempt reconnection
         if not self._stream_response:
             if self._reconnect_attempts < self._max_reconnect_attempts:
                 self._reconnect_attempts += 1
                 logger.info(f"Stream disconnected, attempting to reconnect (attempt {self._reconnect_attempts}/{self._max_reconnect_attempts})")
-                time.sleep(2)
+                time.sleep(0.5)  # Reduced from 2s to 0.5s for faster recovery
                 try:
                     self._start_capture()
                     # Return None this iteration, will read data on next call
@@ -594,18 +594,18 @@ class StreamSourceAdapter(AudioSourceAdapter):
                 return None
 
         try:
-            # Read data from stream
-            chunk_size = self.config.buffer_size * 4  # Read more data for compressed formats
+            # Read data from stream (increased chunk size for better throughput)
+            chunk_size = self.config.buffer_size * 8  # Increased from 4x to 8x for better streaming
 
             try:
                 data = self._stream_response.raw.read(chunk_size)
             except Exception as e:
                 logger.error(f"Error reading from stream: {e}")
-                # Attempt reconnection
+                # Attempt reconnection with shorter delay
                 if self._reconnect_attempts < self._max_reconnect_attempts:
                     self._reconnect_attempts += 1
                     logger.info(f"Attempting to reconnect to stream (attempt {self._reconnect_attempts}/{self._max_reconnect_attempts})")
-                    time.sleep(2)
+                    time.sleep(0.5)  # Reduced from 2s to 0.5s
                     try:
                         self._stop_capture()
                         self._start_capture()
@@ -644,47 +644,100 @@ class StreamSourceAdapter(AudioSourceAdapter):
             logger.error(f"Error reading stream audio: {e}")
             return None
 
+    def _find_mp3_frame_sync(self, data: bytearray, start_pos: int = 0) -> int:
+        """
+        Find the next MP3 frame sync position in the buffer.
+        MP3 frame sync: 11 bits set to 1 (0xFF 0xE0 or higher for second byte).
+        Returns position of sync, or -1 if not found.
+        """
+        for i in range(start_pos, len(data) - 1):
+            # Check for frame sync pattern: 0xFF followed by 0xE0-0xFF
+            if data[i] == 0xFF and (data[i + 1] & 0xE0) == 0xE0:
+                return i
+        return -1
+
     def _decode_mp3_chunk(self) -> Optional[np.ndarray]:
-        """Decode MP3 audio from buffer using pydub."""
+        """Decode MP3 audio from buffer using pydub with improved error recovery."""
         try:
             from pydub import AudioSegment
             import io
 
-            # Need enough data to decode
-            if len(self._buffer) < 4096:
+            # Need minimum data to attempt decode (reduced from 4096 to 2048 for faster startup)
+            min_buffer_size = 2048
+            if len(self._buffer) < min_buffer_size:
                 return None
+
+            # Limit buffer growth to prevent memory issues
+            max_buffer_size = 131072  # 128KB max buffer
+            if len(self._buffer) > max_buffer_size:
+                # Find next frame sync and truncate buffer before it
+                sync_pos = self._find_mp3_frame_sync(self._buffer, len(self._buffer) - max_buffer_size + 1024)
+                if sync_pos > 0:
+                    logger.warning(f"Buffer overflow ({len(self._buffer)} bytes), truncating to sync at {sync_pos}")
+                    self._buffer = self._buffer[sync_pos:]
+                else:
+                    # No sync found, drop first half of buffer
+                    drop_amount = len(self._buffer) // 2
+                    logger.warning(f"Buffer overflow with no sync found, dropping {drop_amount} bytes")
+                    self._buffer = self._buffer[drop_amount:]
 
             # Try to decode what we have
-            try:
-                # Take a chunk from buffer
-                chunk_data = bytes(self._buffer[:16384])  # Try to decode 16KB at a time
-                buffer_io = io.BytesIO(chunk_data)
+            decode_attempts = 0
+            max_decode_attempts = 3
 
-                audio = AudioSegment.from_file(buffer_io, format="mp3")
+            while decode_attempts < max_decode_attempts and len(self._buffer) >= min_buffer_size:
+                try:
+                    # Take a chunk from buffer (try up to 32KB for better decoding)
+                    chunk_size = min(32768, len(self._buffer))
+                    chunk_data = bytes(self._buffer[:chunk_size])
+                    buffer_io = io.BytesIO(chunk_data)
 
-                # Only remove the bytes that were actually consumed by the decoder
-                bytes_consumed = buffer_io.tell()
-                self._buffer = self._buffer[bytes_consumed:]
+                    audio = AudioSegment.from_file(buffer_io, format="mp3")
 
-                # Convert to numpy array
-                samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
+                    # Only remove the bytes that were actually consumed by the decoder
+                    bytes_consumed = buffer_io.tell()
+                    if bytes_consumed > 0:
+                        self._buffer = self._buffer[bytes_consumed:]
+                    else:
+                        # Decoder didn't consume anything, advance past current position
+                        self._buffer = self._buffer[256:]
 
-                # Convert to mono if needed
-                if audio.channels == 2:
-                    samples = samples.reshape((-1, 2))
-                    samples = np.mean(samples, axis=1)
+                    # Convert to numpy array
+                    samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
 
-                # Normalize
-                max_val = float(2 ** (audio.sample_width * 8 - 1))
-                samples = samples / max_val
+                    # Convert to mono if needed
+                    if audio.channels == 2:
+                        samples = samples.reshape((-1, 2))
+                        samples = np.mean(samples, axis=1)
 
-                return samples
+                    # Normalize
+                    max_val = float(2 ** (audio.sample_width * 8 - 1))
+                    samples = samples / max_val
 
-            except Exception as e:
-                # If decode fails, drop a small amount and try again next time
-                if len(self._buffer) > 65536:  # If buffer is getting too large
-                    self._buffer = self._buffer[1024:]  # Drop only 1KB to minimize data loss
-                return None
+                    # Successfully decoded
+                    return samples
+
+                except Exception as e:
+                    decode_attempts += 1
+
+                    # Try to find next MP3 frame sync
+                    sync_pos = self._find_mp3_frame_sync(self._buffer, 1)
+
+                    if sync_pos > 0:
+                        # Found sync, skip to it
+                        logger.debug(f"MP3 decode failed (attempt {decode_attempts}), skipping to frame sync at {sync_pos}")
+                        self._buffer = self._buffer[sync_pos:]
+                    elif len(self._buffer) > min_buffer_size:
+                        # No sync found, drop small amount and continue
+                        drop_amount = min(512, len(self._buffer) // 4)
+                        logger.debug(f"MP3 decode failed (attempt {decode_attempts}), dropping {drop_amount} bytes")
+                        self._buffer = self._buffer[drop_amount:]
+                    else:
+                        # Not enough data left
+                        break
+
+            # All decode attempts failed, but don't return None - wait for more data
+            return None
 
         except ImportError:
             logger.error("pydub not available for MP3 stream decoding")
