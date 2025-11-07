@@ -820,19 +820,35 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             logger.info(f'Starting audio stream for {source_name}')
             chunk_count = 0
             max_chunks = 6000  # ~2 minutes at typical chunk rate (0.02s per chunk)
+            silence_count = 0
+            max_consecutive_silence = 20  # Stop after 20 consecutive silent/empty chunks (1 second)
 
             try:
                 while chunk_count < max_chunks:
-                    # Get audio chunk from adapter (reduced timeout for more responsive streaming)
-                    audio_chunk = adapter.get_audio_chunk(timeout=0.5)
+                    # Get audio chunk from adapter (very short timeout to keep stream responsive)
+                    audio_chunk = adapter.get_audio_chunk(timeout=0.05)
 
                     if audio_chunk is None:
-                        # No data available, check if source is still running
+                        # No data available - yield silence to keep HTTP stream alive
                         if adapter.status != AudioSourceStatus.RUNNING:
                             logger.info(f'Audio source stopped: {source_name}')
                             break
-                        # Continue waiting for more data instead of yielding silence
+
+                        # Yield a small chunk of silence (0.05 seconds worth)
+                        # This keeps the HTTP connection alive and prevents browser timeout
+                        silence_samples = int(sample_rate * channels * 0.05)
+                        import numpy as np
+                        silence_chunk = np.zeros(silence_samples, dtype=np.int16)
+                        yield silence_chunk.tobytes()
+
+                        silence_count += 1
+                        if silence_count > max_consecutive_silence:
+                            logger.warning(f'Too many consecutive silent chunks for {source_name}, stopping stream')
+                            break
                         continue
+
+                    # Reset silence counter when we get real data
+                    silence_count = 0
 
                     # Convert float32 [-1, 1] to int16 PCM
                     # Ensure we have a numpy array
