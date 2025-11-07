@@ -243,13 +243,23 @@ function renderAudioSources() {
                                     ${source.metrics.metadata.codec ? `
                                         <div class="d-flex justify-content-between mb-1">
                                             <span class="text-muted">Codec:</span>
-                                            <span class="fw-bold text-uppercase">${escapeHtml(source.metrics.metadata.codec)}</span>
+                                            <span class="fw-bold text-uppercase">
+                                                ${escapeHtml(source.metrics.metadata.codec)}
+                                                ${source.metrics.metadata.codec_version ? `
+                                                    <span class="badge bg-secondary text-white small ms-1">${escapeHtml(source.metrics.metadata.codec_version)}</span>
+                                                ` : ''}
+                                            </span>
                                         </div>
                                     ` : ''}
                                     ${source.metrics.metadata.bitrate_kbps ? `
                                         <div class="d-flex justify-content-between mb-1">
                                             <span class="text-muted">Bitrate:</span>
-                                            <span class="fw-bold">${source.metrics.metadata.bitrate_kbps} kbps</span>
+                                            <span class="fw-bold">
+                                                ${source.metrics.metadata.bitrate_kbps} kbps
+                                                ${source.metrics.metadata.is_vbr ? `
+                                                    <span class="badge bg-info text-white small ms-1">VBR</span>
+                                                ` : ''}
+                                            </span>
                                         </div>
                                     ` : ''}
                                     ${source.metrics.metadata.icy_name ? `

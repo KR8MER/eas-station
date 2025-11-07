@@ -535,6 +535,8 @@ class StreamSourceAdapter(AudioSourceAdapter):
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5
         self._stream_metadata = {}  # Store stream metadata (URL, codec, bitrate, etc.)
+        self._frame_analyzer = None  # Frame-level codec/bitrate analyzer
+        self._analyzer_initialized = False  # Track if we've analyzed frames yet
 
     def _parse_m3u(self, url: str) -> str:
         """Parse M3U playlist and return the first stream URL."""
@@ -769,6 +771,11 @@ class StreamSourceAdapter(AudioSourceAdapter):
             if len(self._buffer) < min_buffer_size:
                 return None
 
+            # Analyze frame headers to detect actual bitrate/codec (only once)
+            if not self._analyzer_initialized and len(self._buffer) >= 4096:
+                self._analyze_stream_frames()
+                self._analyzer_initialized = True
+
             # Limit buffer growth to prevent memory issues
             max_buffer_size = 131072  # 128KB max buffer
             if len(self._buffer) > max_buffer_size:
@@ -849,12 +856,22 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
     def _decode_aac_chunk(self) -> Optional[np.ndarray]:
         """Decode AAC audio from buffer."""
+        # Analyze frame headers even if we can't decode yet
+        if not self._analyzer_initialized and len(self._buffer) >= 4096:
+            self._analyze_stream_frames()
+            self._analyzer_initialized = True
+
         # AAC decoding would require additional libraries like faad
         logger.warning("AAC decoding not yet implemented - consider using MP3 streams")
         return None
 
     def _decode_ogg_chunk(self) -> Optional[np.ndarray]:
         """Decode OGG/Vorbis audio from buffer."""
+        # Analyze frame headers even if we can't decode yet
+        if not self._analyzer_initialized and len(self._buffer) >= 4096:
+            self._analyze_stream_frames()
+            self._analyzer_initialized = True
+
         # OGG decoding would require additional libraries
         logger.warning("OGG decoding not yet implemented - consider using MP3 streams")
         return None
@@ -882,6 +899,50 @@ class StreamSourceAdapter(AudioSourceAdapter):
         except Exception as e:
             logger.error(f"Error decoding raw audio: {e}")
             return None
+
+    def _analyze_stream_frames(self) -> None:
+        """
+        Analyze stream buffer to detect codec and bitrate from frame headers.
+        Updates stream metadata with detected values.
+        """
+        try:
+            from app_core.audio.stream_analysis import analyze_stream
+
+            # Analyze the current buffer
+            stream_info = analyze_stream(self._buffer, hint_codec=self._stream_format)
+
+            if stream_info:
+                # Update metadata with detected values
+                if stream_info.codec:
+                    self._stream_metadata['codec'] = stream_info.codec
+                    logger.info(f"  Detected codec from frames: {stream_info.codec}")
+
+                if stream_info.bitrate_kbps:
+                    self._stream_metadata['bitrate_kbps'] = stream_info.bitrate_kbps
+                    vbr_note = " (VBR avg)" if stream_info.is_vbr else ""
+                    logger.info(f"  Detected bitrate from frames: {stream_info.bitrate_kbps} kbps{vbr_note}")
+
+                if stream_info.sample_rate:
+                    self._stream_metadata['detected_sample_rate'] = stream_info.sample_rate
+                    logger.info(f"  Detected sample rate: {stream_info.sample_rate} Hz")
+
+                if stream_info.channels:
+                    self._stream_metadata['detected_channels'] = stream_info.channels
+
+                if stream_info.codec_version:
+                    self._stream_metadata['codec_version'] = stream_info.codec_version
+                    logger.info(f"  Codec version: {stream_info.codec_version}")
+
+                if stream_info.is_vbr:
+                    self._stream_metadata['is_vbr'] = True
+
+                # Update metrics with the enhanced metadata
+                self.metrics.metadata = self._stream_metadata.copy()
+
+        except ImportError:
+            logger.debug("Stream analysis module not available")
+        except Exception as e:
+            logger.debug(f"Error analyzing stream frames: {e}")
 
 
 # Factory function for creating sources
