@@ -1,249 +1,173 @@
 <!-- Navigation Component -->
-<nav class="navbar">
-    <div class="navbar-container">
-        <!-- Brand Section -->
-        <a href="{{ url_for('index') }}" class="navbar-brand">
-            <img src="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}" alt="EAS Station" class="brand-logo" width="42" height="42" loading="lazy">
-            KR8MER CAP Emergency Alerts
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top shadow-sm">
+    <div class="container-fluid">
+        <div class="navbar-brand-group">
+            <a class="navbar-brand" href="/">
+                <img src="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}" alt="EAS Station" class="brand-logo" width="42" height="42" loading="lazy">
+                <span class="brand-text">
+                    <span class="brand-title">EAS Station</span>
+                    <span class="brand-subtitle">KR8MER CAP Emergency Alerts</span>
+                </span>
+            </a>
 
-            <!-- System Health Indicator -->
-            <div class="health-indicator">
-                <div class="health-dot health-good" id="system-health-dot"></div>
-                <span id="system-health-text">System OK</span>
+            <div class="health-indicator status-healthy" id="system-health-indicator" role="status" aria-live="polite" title="System OK">
+                <span class="health-label">Status</span>
+                <span class="health-dot health-good" id="system-health-dot"></span>
+                <span class="health-text" id="system-health-text">System OK</span>
             </div>
-        </a>
+        </div>
 
-        <!-- Mobile Toggle Button -->
-        <button class="navbar-toggle" onclick="toggleMobileNav()" aria-label="Toggle navigation">
-            <i class="fas fa-bars"></i>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
         </button>
 
-        <!-- Navigation Links -->
-        <ul class="navbar-nav" id="navbar-nav">
-            <!-- Monitoring Section -->
-            <li class="nav-item dropdown">
-                <a href="#" class="nav-link dropdown-toggle" onclick="toggleDropdown(event, 'monitoring-dropdown')">
-                    <i class="fas fa-desktop"></i>
-                    Monitoring
-                    <i class="fas fa-chevron-down dropdown-icon"></i>
-                </a>
-                <ul class="dropdown-menu" id="monitoring-dropdown">
-                    <li>
-                        <a href="/" class="dropdown-item {{ 'active' if request.endpoint == 'index' }}">
-                            <i class="fas fa-map"></i>
-                            Interactive Map
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <div class="navbar-sections">
+                <ul class="navbar-nav primary-nav">
+                    <!-- Monitoring Section -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="monitoringDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-desktop"></i>
+                            <span class="d-none d-md-inline">Monitoring</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="monitoringDropdown">
+                            <li>
+                                <a class="dropdown-item" href="/">
+                                    <i class="fas fa-map"></i> Interactive Map
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/alerts">
+                                    <i class="fas fa-history"></i> Alerts History
+                                    <span class="alert-badge" id="alert-count" style="display: none;">0</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/stats">
+                                    <i class="fas fa-chart-bar"></i> Statistics
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/system_health">
+                                    <i class="fas fa-heartbeat"></i> System Health
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/audio-monitor">
+                                    <i class="fas fa-headphones"></i> Audio Monitoring
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+
+                    <!-- Broadcast Operations Section (formerly "EAS Workflow") -->
+                    {% if current_user is defined and current_user.is_authenticated %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('eas.workflow_home') }}">
+                            <i class="fas fa-broadcast-tower"></i>
+                            <span class="d-none d-md-inline">Broadcast Operations</span>
                         </a>
                     </li>
-                    <li>
-                        <a href="/alerts" class="dropdown-item {{ 'active' if request.endpoint == 'alerts' }}">
-                            <i class="fas fa-history"></i>
-                            Alerts History
-                            <span class="alert-badge" id="alert-count" style="display: none;">0</span>
+                    {% else %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('eas.eas_workflow') }}" title="Sign in required to access the manual EAS workflow.">
+                            <i class="fas fa-broadcast-tower"></i>
+                            <span class="d-none d-md-inline">Broadcast Operations</span>
+                            <i class="fas fa-lock small ms-1 text-warning"></i>
                         </a>
                     </li>
-                    <li>
-                        <a href="/stats" class="dropdown-item {{ 'active' if request.endpoint == 'stats' }}">
-                            <i class="fas fa-chart-bar"></i>
-                            Statistics
+                    {% endif %}
+
+                    <!-- System Management Section -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="systemDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-cogs"></i>
+                            <span class="d-none d-md-inline">System</span>
                         </a>
-                    </li>
-                    <li>
-                        <a href="/system_health" class="dropdown-item {{ 'active' if request.endpoint == 'system_health_page' }}">
-                            <i class="fas fa-heartbeat"></i>
-                            System Health
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/audio-monitor" class="dropdown-item {{ 'active' if request.endpoint == 'audio_monitoring' }}">
-                            <i class="fas fa-headphones"></i>
-                            Audio Monitoring
-                        </a>
+                        <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="systemDropdown">
+                            <li>
+                                <a class="dropdown-item" href="/logs">
+                                    <i class="fas fa-file-alt"></i> System Logs
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/admin">
+                                    <i class="fas fa-cog"></i> Configuration
+                                </a>
+                            </li>
+                        </ul>
                     </li>
                 </ul>
-            </li>
 
-            <!-- Broadcast Operations Section (formerly "EAS Workflow") -->
-            {% if current_user is defined and current_user.is_authenticated %}
-            <li class="nav-item">
-                <a href="{{ url_for('eas.workflow_home') }}" class="nav-link {{ 'active' if request.endpoint and request.endpoint.startswith('eas.') }}">
-                    <i class="fas fa-broadcast-tower"></i>
-                    Broadcast Operations
-                </a>
-            </li>
-            {% else %}
-            <li class="nav-item">
-                <a href="{{ url_for('eas.eas_workflow') }}" class="nav-link {{ 'active' if request.endpoint == 'eas.eas_workflow' }}">
-                    <i class="fas fa-broadcast-tower"></i>
-                    Broadcast Operations
-                </a>
-            </li>
-            {% endif %}
-
-            <!-- System Management Section -->
-            <li class="nav-item dropdown">
-                <a href="#" class="nav-link dropdown-toggle" onclick="toggleDropdown(event, 'system-dropdown')">
-                    <i class="fas fa-cogs"></i>
-                    System
-                    <i class="fas fa-chevron-down dropdown-icon"></i>
-                </a>
-                <ul class="dropdown-menu" id="system-dropdown">
-                    <li>
-                        <a href="/logs" class="dropdown-item {{ 'active' if request.endpoint == 'logs' }}">
-                            <i class="fas fa-file-alt"></i>
-                            System Logs
+                <!-- User Navigation -->
+                <ul class="navbar-nav ms-auto user-nav">
+                    {% if current_user is defined and current_user.is_authenticated %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-user-circle"></i>
+                            <span class="username">{{ current_user.username }}</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end" aria-labelledby="userDropdown">
+                            <li><h6 class="dropdown-header">{{ current_user.username }}</h6></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('auth.profile') }}">
+                                    <i class="fas fa-user"></i> Profile
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('auth.logout') }}">
+                                    <i class="fas fa-sign-out-alt"></i> Sign Out
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                    {% else %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('auth.login') }}">
+                            <i class="fas fa-sign-in-alt"></i>
+                            <span class="d-none d-md-inline">Sign In</span>
                         </a>
                     </li>
-                    <li>
-                        <a href="/admin" class="dropdown-item {{ 'active' if request.endpoint == 'admin' }}">
-                            <i class="fas fa-cog"></i>
-                            Configuration
-                        </a>
+                    {% endif %}
+
+                    <!-- Theme Toggle -->
+                    <li class="nav-item">
+                        <button class="nav-link btn btn-link theme-toggle" id="theme-toggle" aria-label="Toggle dark mode">
+                            <i class="fas fa-moon" id="theme-icon"></i>
+                        </button>
                     </li>
                 </ul>
-            </li>
-        </ul>
+            </div>
+        </div>
     </div>
 </nav>
 
-<style>
-/* Dropdown styling */
-.nav-item.dropdown {
-    position: relative;
-}
-
-.nav-link.dropdown-toggle {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-}
-
-.dropdown-icon {
-    font-size: 0.75rem;
-    margin-left: 0.25rem;
-    transition: transform 0.3s ease;
-}
-
-.dropdown-menu {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    background-color: white;
-    border: 1px solid #dee2e6;
-    border-radius: 0.375rem;
-    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-    min-width: 200px;
-    padding: 0.5rem 0;
-    margin-top: 0.25rem;
-    z-index: 1000;
-    list-style: none;
-}
-
-.dropdown-menu.show {
-    display: block;
-}
-
-.dropdown-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    color: #212529;
-    text-decoration: none;
-    transition: background-color 0.15s ease-in-out;
-}
-
-.dropdown-item:hover {
-    background-color: #f8f9fa;
-    color: #0d6efd;
-}
-
-.dropdown-item.active {
-    background-color: #e7f1ff;
-    color: #0d6efd;
-}
-
-.dropdown-item i {
-    width: 1.25rem;
-    text-align: center;
-}
-
-/* Mobile responsive */
-@media (max-width: 768px) {
-    .dropdown-menu {
-        position: static;
-        box-shadow: none;
-        border: none;
-        border-left: 2px solid #0d6efd;
-        margin-left: 1rem;
-        padding-left: 0.5rem;
-    }
-}
-</style>
-
 <script>
-// Mobile navigation toggle
-function toggleMobileNav() {
-    const nav = document.getElementById('navbar-nav');
-    nav.classList.toggle('show');
-}
-
-// Dropdown toggle
-function toggleDropdown(event, dropdownId) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    const dropdown = document.getElementById(dropdownId);
-    const allDropdowns = document.querySelectorAll('.dropdown-menu');
-    const icon = event.currentTarget.querySelector('.dropdown-icon');
-
-    // Close all other dropdowns
-    allDropdowns.forEach(d => {
-        if (d.id !== dropdownId) {
-            d.classList.remove('show');
-            // Reset other icons
-            const otherIcon = d.previousElementSibling?.querySelector('.dropdown-icon');
-            if (otherIcon) otherIcon.style.transform = '';
-        }
-    });
-
-    // Toggle current dropdown
-    dropdown.classList.toggle('show');
-
-    // Rotate icon
-    if (dropdown.classList.contains('show')) {
-        icon.style.transform = 'rotate(180deg)';
-    } else {
-        icon.style.transform = '';
-    }
-}
-
-// Close dropdowns when clicking outside
-document.addEventListener('click', function(event) {
-    if (!event.target.closest('.nav-item.dropdown')) {
-        const allDropdowns = document.querySelectorAll('.dropdown-menu');
-        allDropdowns.forEach(d => {
-            d.classList.remove('show');
-        });
-        // Reset all icons
-        document.querySelectorAll('.dropdown-icon').forEach(icon => {
-            icon.style.transform = '';
-        });
-    }
-});
-
 // Update system health indicator
 function updateSystemHealth(status = 'good', message = 'System OK') {
     const dot = document.getElementById('system-health-dot');
     const text = document.getElementById('system-health-text');
+    const indicator = document.getElementById('system-health-indicator');
 
-    if (dot && text) {
+    if (dot && text && indicator) {
         // Remove existing classes
         dot.classList.remove('health-good', 'health-warning', 'health-danger');
+        indicator.classList.remove('status-healthy', 'status-degraded', 'status-critical');
 
         // Add new status class
         dot.classList.add(`health-${status}`);
+
+        if (status === 'good') {
+            indicator.classList.add('status-healthy');
+        } else if (status === 'warning') {
+            indicator.classList.add('status-degraded');
+        } else {
+            indicator.classList.add('status-critical');
+        }
+
         text.textContent = message;
+        indicator.title = message;
     }
 }
 
@@ -253,7 +177,7 @@ function updateAlertCount(count) {
     if (badge) {
         if (count > 0) {
             badge.textContent = count > 99 ? '99+' : count;
-            badge.style.display = 'flex';
+            badge.style.display = 'inline';
         } else {
             badge.style.display = 'none';
         }
@@ -262,8 +186,7 @@ function updateAlertCount(count) {
 
 // Check system health on load
 document.addEventListener('DOMContentLoaded', function() {
-    // You can implement actual health checking here
-    // For now, simulate a health check
+    // Check system health
     setTimeout(() => {
         fetch('/api/health')
             .then(response => response.json())
