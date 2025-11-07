@@ -8,9 +8,8 @@ RUN apt-get update && \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Configure Icecast to run in foreground
-RUN sed -i 's/<background>1<\/background>/<background>0<\/background>/' /etc/icecast2/icecast.xml && \
-    sed -i 's/<changeowner>true<\/changeowner>/<changeowner>false<\/changeowner>/' /etc/icecast2/icecast.xml
+# Configure Icecast to run in foreground (keep changeowner enabled for security)
+RUN sed -i 's/<background>1<\/background>/<background>0<\/background>/' /etc/icecast2/icecast.xml
 
 # Expose Icecast port
 EXPOSE 8000

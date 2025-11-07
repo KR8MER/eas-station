@@ -252,6 +252,7 @@ Variables are organized into categories in `webapp/admin/environment.py`:
 - **notifications** - Email and SMS alerts
 - **performance** - Caching and worker settings
 - **docker** - Container and infrastructure settings
+- **icecast** - Icecast streaming server configuration
 
 Choose the most appropriate category for your variable, or create a new one if needed.
 
@@ -271,6 +272,25 @@ Choose the most appropriate category for your variable, or create a new one if n
 - Common levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 ## Docker and Deployment
+
+### Docker Compose Files - CRITICAL
+
+**IMPORTANT:** When editing Docker Compose files, you MUST update BOTH files:
+
+1. **`docker-compose.yml`** - Main compose file
+2. **`docker-compose.embedded-db.yml`** - Embedded database variant
+
+These files have parallel structure but different configurations (external vs embedded database). Any changes to service definitions, environment variables, ports, volumes, etc. must be applied to **BOTH** files to maintain consistency.
+
+**Example:** If you add `ICECAST_PUBLIC_HOSTNAME` to the `app` service environment in `docker-compose.yml`, you must also add it to `docker-compose.embedded-db.yml`.
+
+Common sections that must stay synchronized:
+- Service environment variables
+- Port mappings
+- Volume mounts
+- Health checks
+- Command arguments
+- Build configurations
 
 ### Environment Variable Loading
 
