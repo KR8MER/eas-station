@@ -146,6 +146,13 @@ class AutoStreamingService:
                 return False
 
             try:
+                # Detect sample rate from audio source
+                sample_rate = 44100  # Default
+                if hasattr(audio_source, 'config') and hasattr(audio_source.config, 'sample_rate'):
+                    sample_rate = audio_source.config.sample_rate
+                elif hasattr(audio_source, 'sample_rate'):
+                    sample_rate = audio_source.sample_rate
+
                 # Create Icecast configuration
                 config = IcecastConfig(
                     server=self.icecast_server,
@@ -157,7 +164,8 @@ class AutoStreamingService:
                     genre="Emergency Alert System",
                     bitrate=bitrate or self.default_bitrate,
                     format=self.default_format,
-                    public=False
+                    public=False,
+                    sample_rate=sample_rate
                 )
 
                 # Create and start streamer
