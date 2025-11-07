@@ -1,0 +1,128 @@
+"""
+Automatic Icecast Configuration from Environment Variables
+
+Detects Icecast settings from environment and automatically enables streaming
+for all audio sources with zero user configuration required.
+"""
+
+import logging
+import os
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+
+class IcecastAutoConfig:
+    """Auto-configure Icecast from environment variables."""
+
+    def __init__(self):
+        """Initialize and detect Icecast configuration."""
+        self.enabled = False
+        self.server = "icecast"
+        self.port = 8000
+        self.source_password = ""
+        self.external_port = 8001  # For generating URLs accessible from browser
+
+        self._detect_config()
+
+    def _detect_config(self) -> None:
+        """Detect Icecast configuration from environment variables."""
+        try:
+            # Check if Icecast is explicitly disabled
+            enabled_str = os.environ.get('ICECAST_ENABLED', 'true').lower()
+            if enabled_str in ('false', '0', 'no', 'disabled'):
+                logger.info("Icecast auto-configuration disabled via ICECAST_ENABLED")
+                self.enabled = False
+                return
+
+            # Get Icecast source password (required)
+            self.source_password = os.environ.get('ICECAST_SOURCE_PASSWORD', '')
+            if not self.source_password or self.source_password == 'changeme_source':
+                logger.warning(
+                    "Icecast auto-configuration: No source password configured "
+                    "(ICECAST_SOURCE_PASSWORD not set or using default). "
+                    "Icecast streaming will not be enabled automatically."
+                )
+                self.enabled = False
+                return
+
+            # Get server and port
+            self.server = os.environ.get('ICECAST_SERVER', 'icecast')
+            self.port = int(os.environ.get('ICECAST_PORT', '8000'))
+
+            # For external URLs (browser access), use the external port
+            external_port_str = os.environ.get('ICECAST_EXTERNAL_PORT')
+            if external_port_str:
+                self.external_port = int(external_port_str)
+            else:
+                # Default: if server is 'icecast' (container), external is 8001
+                # If server is 'localhost', it's probably already the external mapping
+                self.external_port = 8001 if self.server == 'icecast' else self.port
+
+            self.enabled = True
+
+            logger.info(
+                f"Icecast auto-configuration enabled: "
+                f"server={self.server}, port={self.port}, "
+                f"external_port={self.external_port}"
+            )
+
+        except Exception as e:
+            logger.error(f"Error detecting Icecast configuration: {e}")
+            self.enabled = False
+
+    def is_enabled(self) -> bool:
+        """Check if Icecast auto-configuration is enabled."""
+        return self.enabled
+
+    def get_stream_url(self, source_name: str, external: bool = True) -> Optional[str]:
+        """
+        Get the Icecast stream URL for a source.
+
+        Args:
+            source_name: Name of the audio source
+            external: If True, return URL for browser access (with external port)
+                     If False, return URL for internal app use
+
+        Returns:
+            Stream URL if enabled, None otherwise
+        """
+        if not self.enabled:
+            return None
+
+        if external:
+            # Browser/external access - use external port and localhost
+            # (or the configured hostname)
+            hostname = 'localhost' if self.server == 'icecast' else self.server
+            port = self.external_port
+        else:
+            # Internal app access - use container name and internal port
+            hostname = self.server
+            port = self.port
+
+        return f"http://{hostname}:{port}/{source_name}"
+
+    def get_config_dict(self) -> dict:
+        """Get configuration as dictionary."""
+        return {
+            'enabled': self.enabled,
+            'server': self.server,
+            'port': self.port,
+            'external_port': self.external_port,
+            'has_password': bool(self.source_password),
+        }
+
+
+# Global instance
+_auto_config: Optional[IcecastAutoConfig] = None
+
+
+def get_icecast_auto_config() -> IcecastAutoConfig:
+    """Get the global Icecast auto-configuration instance."""
+    global _auto_config
+    if _auto_config is None:
+        _auto_config = IcecastAutoConfig()
+    return _auto_config
+
+
+__all__ = ['IcecastAutoConfig', 'get_icecast_auto_config']

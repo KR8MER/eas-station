@@ -34,6 +34,13 @@ services:
 
       # SDR settings
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
+
+      # Icecast auto-configuration (optional - enables automatic streaming)
+      ICECAST_SERVER: ${ICECAST_SERVER:-icecast}
+      ICECAST_PORT: ${ICECAST_INTERNAL_PORT:-8000}
+      ICECAST_EXTERNAL_PORT: ${ICECAST_PORT:-8001}
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-}
+      ICECAST_ENABLED: ${ICECAST_ENABLED:-true}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     devices:
@@ -144,7 +151,7 @@ services:
     container_name: eas-icecast
     restart: unless-stopped
     ports:
-      - "${ICECAST_PORT:-8000}:8000"  # Icecast web interface and streams
+      - "${ICECAST_PORT:-8001}:8000"  # Icecast web interface and streams (port 8001 to avoid Portainer conflict)
     environment:
       # Admin credentials (CHANGE THESE IN PRODUCTION!)
       - ICECAST_ADMIN_USER=${ICECAST_ADMIN_USER:-admin}
@@ -176,10 +183,10 @@ services:
     #   1. Go to /settings/audio in the web interface
     #   2. Scroll to "Icecast Streaming Output"
     #   3. Server: icecast (or localhost if accessing from host)
-    #   4. Port: 8000
+    #   4. Port: 8000 (internal) / 8001 (external/host access)
     #   5. Source Password: (value from ICECAST_SOURCE_PASSWORD above)
     #   6. Save configuration
-    # Streams will be available at: http://localhost:8000/source-name
+    # Streams will be available at: http://localhost:8001/source-name
 
 volumes:
   alerts-db-data:

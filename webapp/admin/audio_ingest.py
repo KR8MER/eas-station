@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 # Global audio ingest controller instance
 _audio_controller: Optional[AudioIngestController] = None
 
+# Global auto-streaming service instance
+_auto_streaming_service = None
+
 
 def _get_audio_controller() -> AudioIngestController:
     """Get or create the global audio ingest controller."""
@@ -28,7 +31,53 @@ def _get_audio_controller() -> AudioIngestController:
     if _audio_controller is None:
         _audio_controller = AudioIngestController()
         _initialize_audio_sources(_audio_controller)
+        _initialize_auto_streaming()
     return _audio_controller
+
+
+def _get_auto_streaming_service():
+    """Get the global auto-streaming service (may be None if not initialized)."""
+    return _auto_streaming_service
+
+
+def _initialize_auto_streaming() -> None:
+    """Initialize the auto-streaming service from environment variables."""
+    global _auto_streaming_service
+
+    try:
+        from app_core.audio.icecast_auto_config import get_icecast_auto_config
+        from app_core.audio.auto_streaming import AutoStreamingService
+
+        auto_config = get_icecast_auto_config()
+
+        if auto_config.is_enabled():
+            logger.info("Initializing auto-streaming service from environment config")
+            _auto_streaming_service = AutoStreamingService(
+                icecast_server=auto_config.server,
+                icecast_port=auto_config.port,
+                icecast_password=auto_config.source_password,
+                default_bitrate=128,
+                enabled=True
+            )
+            _auto_streaming_service.start()
+            logger.info("Auto-streaming service initialized and started")
+
+            # Start streaming for any already-running sources
+            controller = _get_audio_controller()
+            for source_name, adapter in controller._sources.items():
+                if adapter.status == AudioSourceStatus.RUNNING:
+                    try:
+                        _auto_streaming_service.add_source(source_name, adapter)
+                        logger.info(f'Auto-started Icecast stream for already-running source: {source_name}')
+                    except Exception as e:
+                        logger.warning(f'Failed to auto-start Icecast stream for {source_name}: {e}')
+        else:
+            logger.info("Icecast auto-config not enabled, auto-streaming disabled")
+            _auto_streaming_service = None
+
+    except Exception as e:
+        logger.warning(f"Failed to initialize auto-streaming service: {e}")
+        _auto_streaming_service = None
 
 
 def _initialize_audio_sources(controller: AudioIngestController) -> None:
@@ -66,6 +115,9 @@ def _initialize_audio_sources(controller: AudioIngestController) -> None:
                 if db_config.enabled and db_config.auto_start:
                     controller.start_source(db_config.name)
                     logger.info('Auto-started audio source: %s', db_config.name)
+
+                    # Auto-start Icecast streaming if available (will be initialized later)
+                    # Note: We'll try to add streams after auto-streaming service is initialized
                 else:
                     logger.info('Loaded audio source: %s (not auto-started)', db_config.name)
 
@@ -115,14 +167,12 @@ def _serialize_audio_source(source_name: str, adapter: Any) -> Dict[str, Any]:
     # Check if Icecast streaming is available for this source
     icecast_url = None
     try:
-        # Try to get Icecast config from settings
-        from app_core.config import get_config_value
-        icecast_enabled = get_config_value('icecast_enabled', False)
-        if icecast_enabled:
-            icecast_server = get_config_value('icecast_server', 'localhost')
-            icecast_port = get_config_value('icecast_port', 8000)
-            # Construct potential Icecast URL
-            icecast_url = f"http://{icecast_server}:{icecast_port}/{source_name}"
+        # Use auto-config to detect Icecast from environment
+        from app_core.audio.icecast_auto_config import get_icecast_auto_config
+        auto_config = get_icecast_auto_config()
+        if auto_config.is_enabled():
+            # Get external URL for browser access
+            icecast_url = auto_config.get_stream_url(source_name, external=True)
     except Exception:
         # Silently fail - Icecast just won't be available
         pass
@@ -444,6 +494,15 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
 
             controller.start_source(source_name)
 
+            # Auto-start Icecast streaming if available
+            auto_streaming = _get_auto_streaming_service()
+            if auto_streaming and auto_streaming.is_available():
+                try:
+                    auto_streaming.add_source(source_name, adapter)
+                    logger.info('Auto-started Icecast stream for: %s', source_name)
+                except Exception as e:
+                    logger.warning(f'Failed to auto-start Icecast stream for {source_name}: {e}')
+
             logger.info('Started audio source: %s', source_name)
 
             return jsonify({
@@ -467,6 +526,15 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
 
             if adapter.status == AudioSourceStatus.STOPPED:
                 return jsonify({'message': 'Source is already stopped'}), 200
+
+            # Auto-stop Icecast streaming if available
+            auto_streaming = _get_auto_streaming_service()
+            if auto_streaming:
+                try:
+                    auto_streaming.remove_source(source_name)
+                    logger.info('Auto-stopped Icecast stream for: %s', source_name)
+                except Exception as e:
+                    logger.warning(f'Failed to auto-stop Icecast stream for {source_name}: {e}')
 
             controller.stop_source(source_name)
 
