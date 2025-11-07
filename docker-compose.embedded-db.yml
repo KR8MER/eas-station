@@ -165,38 +165,31 @@ services:
       retries: 5
 
   icecast:
-    image: moul/icecast:latest
+    image: icecast/icecast:latest
     container_name: eas-icecast
     restart: unless-stopped
     ports:
       - "${ICECAST_PORT:-8001}:8000"  # Icecast web interface and streams (port 8001 to avoid Portainer conflict)
     environment:
-      # Admin credentials (CHANGE THESE IN PRODUCTION!)
-      ICECAST_ADMIN_USERNAME: ${ICECAST_ADMIN_USER:-admin}
-      ICECAST_ADMIN_PASSWORD: ${ICECAST_ADMIN_PASSWORD:-changeme_admin}
+      # Icecast configuration via environment variables
+      ICECAST_LOCATION: "EAS Monitoring Station"
+      ICECAST_ADMIN: "${ICECAST_CONTACT:-admin@example.com}"
+      ICECAST_HOSTNAME: "${ICECAST_HOSTNAME:-localhost}"
+      ICECAST_MAX_CLIENTS: "${ICECAST_MAX_CLIENTS:-100}"
+      ICECAST_MAX_SOURCES: "${ICECAST_MAX_SOURCES:-50}"
 
-      # Source credentials for EAS Station to publish streams
-      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-eas_station_source_password}
-
-      # Relay password
-      ICECAST_RELAY_PASSWORD: ${ICECAST_RELAY_PASSWORD:-changeme_relay}
-
-      # Server settings
-      ICECAST_HOSTNAME: ${ICECAST_HOSTNAME:-localhost}
-      ICECAST_LOCATION: EAS Monitoring Station
-      ICECAST_ADMIN: ${ICECAST_CONTACT:-admin@example.com}
-
-      # Performance limits
-      ICECAST_MAX_CLIENTS: ${ICECAST_MAX_CLIENTS:-100}
-      ICECAST_MAX_SOURCES: ${ICECAST_MAX_SOURCES:-50}
+      # Authentication - using password directly for simplicity
+      ICECAST_SOURCE_PASSWORD: "${ICECAST_SOURCE_PASSWORD:-eas_station_source_password}"
+      ICECAST_RELAY_PASSWORD: "${ICECAST_RELAY_PASSWORD:-changeme_relay}"
+      ICECAST_ADMIN_PASSWORD: "${ICECAST_ADMIN_PASSWORD:-changeme_admin}"
     volumes:
-      - icecast-logs:/var/log/icecast
+      - icecast-logs:/var/log/icecast2
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8000 || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8000 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
     # Note: Configure EAS Station to use Icecast:
     #   1. Go to /settings/audio in the web interface
     #   2. Scroll to "Icecast Streaming Output"
