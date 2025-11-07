@@ -57,6 +57,9 @@ class SDRSourceAdapter(AudioSourceAdapter):
         self._radio_manager: Optional[RadioManager] = None
         self._receiver_id: Optional[str] = None
         self._capture_handle: Optional[Any] = None
+        self._demodulator = None  # Audio demodulator (if enabled)
+        self._rbds_data = None  # Latest RBDS data
+        self._receiver_config = None  # Receiver configuration
 
     def _start_capture(self) -> None:
         """Start SDR audio capture via radio manager."""
@@ -70,12 +73,35 @@ class SDRSourceAdapter(AudioSourceAdapter):
         self._radio_manager = RadioManager()
         self._receiver_id = receiver_id
 
-        # Start audio capture from the specified receiver
+        # Get receiver configuration to check demodulation settings
+        from app_core.models import RadioReceiver
+        from app_core.radio.demodulation import create_demodulator, DemodulatorConfig
+
+        db_receiver = RadioReceiver.query.filter_by(identifier=receiver_id).first()
+        if db_receiver:
+            self._receiver_config = db_receiver.to_receiver_config()
+
+            # Create demodulator if audio output is enabled and modulation is not IQ
+            if self._receiver_config.audio_output and self._receiver_config.modulation_type != 'IQ':
+                demod_config = DemodulatorConfig(
+                    modulation_type=self._receiver_config.modulation_type,
+                    sample_rate=self._receiver_config.sample_rate,
+                    audio_sample_rate=self.config.sample_rate,
+                    stereo_enabled=self._receiver_config.stereo_enabled,
+                    deemphasis_us=self._receiver_config.deemphasis_us,
+                    enable_rbds=self._receiver_config.enable_rbds
+                )
+                self._demodulator = create_demodulator(demod_config)
+                logger.info(f"Created {self._receiver_config.modulation_type} demodulator for receiver: {receiver_id}")
+
+        # Start IQ capture from the specified receiver
+        # Note: This requires the radio manager to support IQ streaming,
+        # which would need to be implemented in the receiver drivers
         self._capture_handle = self._radio_manager.start_audio_capture(
             receiver_id=self._receiver_id,
             sample_rate=self.config.sample_rate,
             channels=self.config.channels,
-            format='pcm'  # Get PCM audio instead of IQ
+            format='iq' if self._demodulator else 'pcm'
         )
 
         self.status = AudioSourceStatus.RUNNING
@@ -95,27 +121,58 @@ class SDRSourceAdapter(AudioSourceAdapter):
             return None
 
         try:
-            # Get audio data from radio manager
+            # Get data from radio manager (IQ or PCM depending on mode)
             audio_data = self._radio_manager.get_audio_data(
                 self._capture_handle,
                 chunk_size=self.config.buffer_size
             )
-            
+
             if audio_data is not None:
-                # Convert to numpy array if needed
-                if isinstance(audio_data, bytes):
-                    # Assume 16-bit PCM
-                    audio_array = np.frombuffer(audio_data, dtype=np.int16)
-                    # Convert to float32 normalized to [-1, 1]
-                    audio_array = audio_array.astype(np.float32) / 32768.0
+                # If we have a demodulator, the data is IQ samples
+                if self._demodulator:
+                    # Convert to complex IQ samples
+                    if isinstance(audio_data, bytes):
+                        # Assume interleaved I/Q as float32 or int16
+                        try:
+                            iq_array = np.frombuffer(audio_data, dtype=np.float32)
+                        except:
+                            raw = np.frombuffer(audio_data, dtype=np.int16)
+                            iq_array = raw.astype(np.float32) / 32768.0
+
+                        # Convert interleaved I/Q to complex
+                        iq_complex = iq_array[0::2] + 1j * iq_array[1::2]
+                    else:
+                        iq_complex = np.array(audio_data, dtype=np.complex64)
+
+                    # Demodulate to audio
+                    audio_array, rbds_data = self._demodulator.demodulate(iq_complex)
+
+                    # Update RBDS data and metadata if available
+                    if rbds_data:
+                        self._rbds_data = rbds_data
+                        if self.metrics.metadata is None:
+                            self.metrics.metadata = {}
+                        self.metrics.metadata['rbds_ps_name'] = rbds_data.ps_name
+                        self.metrics.metadata['rbds_radio_text'] = rbds_data.radio_text
+                        self.metrics.metadata['rbds_pty'] = rbds_data.pty
+
+                    return audio_array
+
                 else:
-                    audio_array = np.array(audio_data, dtype=np.float32)
-                
-                return audio_array
-                
+                    # No demodulation, just convert PCM to float32
+                    if isinstance(audio_data, bytes):
+                        # Assume 16-bit PCM
+                        audio_array = np.frombuffer(audio_data, dtype=np.int16)
+                        # Convert to float32 normalized to [-1, 1]
+                        audio_array = audio_array.astype(np.float32) / 32768.0
+                    else:
+                        audio_array = np.array(audio_data, dtype=np.float32)
+
+                    return audio_array
+
         except Exception as e:
             logger.error(f"Error reading SDR audio: {e}")
-            
+
         return None
 
 
@@ -477,6 +534,10 @@ class StreamSourceAdapter(AudioSourceAdapter):
         self._decoder = None
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5
+        self._stream_metadata = {}  # Store stream metadata (URL, codec, bitrate, etc.)
+        self._ffmpeg_process = None  # FFmpeg subprocess for decoding
+        self._pcm_buffer = bytearray()  # Buffer for decoded PCM audio
+        self._ffmpeg_thread = None  # Thread for feeding data to FFmpeg
 
     def _parse_m3u(self, url: str) -> str:
         """Parse M3U playlist and return the first stream URL."""
@@ -533,17 +594,61 @@ class StreamSourceAdapter(AudioSourceAdapter):
             self._stream_response = self._session.get(stream_url, stream=True, timeout=30)
             self._stream_response.raise_for_status()
 
-            # Log stream metadata
-            content_type = self._stream_response.headers.get('Content-Type', 'unknown')
-            logger.info(f"Stream content-type: {content_type}")
+            # Extract comprehensive stream metadata from headers
+            headers = self._stream_response.headers
+            content_type = headers.get('Content-Type', 'unknown')
 
             # Auto-detect format from content-type if not specified
+            detected_codec = self._stream_format
             if 'audio/mpeg' in content_type or 'audio/mp3' in content_type:
+                detected_codec = 'mp3'
                 self._stream_format = 'mp3'
             elif 'audio/aac' in content_type:
+                detected_codec = 'aac'
                 self._stream_format = 'aac'
             elif 'audio/ogg' in content_type:
+                detected_codec = 'ogg'
                 self._stream_format = 'ogg'
+
+            # Extract bitrate from headers if available
+            icy_br = headers.get('icy-br', headers.get('Icy-Br', headers.get('ice-audio-info', '')))
+            bitrate = None
+            if icy_br:
+                try:
+                    # Handle formats like "128" or "bitrate=128"
+                    if 'bitrate=' in icy_br:
+                        bitrate = int(icy_br.split('bitrate=')[1].split(';')[0])
+                    else:
+                        bitrate = int(icy_br)
+                except (ValueError, IndexError):
+                    pass
+
+            # Build metadata dictionary
+            self._stream_metadata = {
+                'stream_url': stream_url,
+                'resolved_url': stream_url,
+                'codec': detected_codec,
+                'content_type': content_type,
+                'bitrate_kbps': bitrate,
+                'icy_name': headers.get('icy-name', headers.get('Icy-Name')),
+                'icy_genre': headers.get('icy-genre', headers.get('Icy-Genre')),
+                'icy_description': headers.get('icy-description', headers.get('Icy-Description')),
+                'server': headers.get('Server'),
+                'connection_timestamp': time.time(),
+            }
+
+            # Update metrics with stream metadata
+            self.metrics.metadata = self._stream_metadata.copy()
+
+            # Log comprehensive stream metadata
+            logger.info(f"Stream connected: {stream_url}")
+            logger.info(f"  Codec: {detected_codec} | Content-Type: {content_type}")
+            if bitrate:
+                logger.info(f"  Bitrate: {bitrate} kbps")
+            if self._stream_metadata.get('icy_name'):
+                logger.info(f"  Station: {self._stream_metadata['icy_name']}")
+            if self._stream_metadata.get('icy_genre'):
+                logger.info(f"  Genre: {self._stream_metadata['icy_genre']}")
 
             self.status = AudioSourceStatus.RUNNING
             self._reconnect_attempts = 0
@@ -554,6 +659,22 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
     def _stop_capture(self) -> None:
         """Stop HTTP stream audio capture."""
+        # Stop FFmpeg process first
+        if self._ffmpeg_process:
+            try:
+                self._ffmpeg_process.terminate()
+                self._ffmpeg_process.wait(timeout=2)
+            except Exception:
+                try:
+                    self._ffmpeg_process.kill()
+                except Exception:
+                    pass
+            self._ffmpeg_process = None
+
+        if self._ffmpeg_thread and self._ffmpeg_thread.is_alive():
+            self._ffmpeg_thread.join(timeout=2)
+        self._ffmpeg_thread = None
+
         if self._stream_response:
             try:
                 self._stream_response.close()
@@ -569,6 +690,7 @@ class StreamSourceAdapter(AudioSourceAdapter):
             self._session = None
 
         self._buffer.clear()
+        self._pcm_buffer.clear()
         self._decoder = None
 
     def _read_audio_chunk(self) -> Optional[np.ndarray]:
@@ -594,8 +716,8 @@ class StreamSourceAdapter(AudioSourceAdapter):
                 return None
 
         try:
-            # Read data from stream (increased chunk size for better throughput)
-            chunk_size = self.config.buffer_size * 8  # Increased from 4x to 8x for better streaming
+            # Read data from stream (smaller chunks for more continuous flow)
+            chunk_size = self.config.buffer_size * 4  # Balanced size for low latency and efficiency
 
             try:
                 data = self._stream_response.raw.read(chunk_size)
@@ -656,106 +778,149 @@ class StreamSourceAdapter(AudioSourceAdapter):
                 return i
         return -1
 
-    def _decode_mp3_chunk(self) -> Optional[np.ndarray]:
-        """Decode MP3 audio from buffer using pydub with improved error recovery."""
-        try:
-            from pydub import AudioSegment
-            import io
+    def _start_ffmpeg_decoder(self) -> None:
+        """Start FFmpeg subprocess for decoding stream audio."""
+        import subprocess
+        import os
 
-            # Need minimum data to attempt decode (reduced from 4096 to 2048 for faster startup)
-            min_buffer_size = 2048
-            if len(self._buffer) < min_buffer_size:
+        if self._ffmpeg_process:
+            return  # Already running
+
+        try:
+            # Start FFmpeg to decode stream to raw PCM
+            self._ffmpeg_process = subprocess.Popen([
+                'ffmpeg',
+                '-f', self._stream_format,  # Input format (mp3, aac, etc.)
+                '-i', 'pipe:0',              # Read from stdin
+                '-f', 's16le',               # Output 16-bit PCM little-endian
+                '-ar', str(self.config.sample_rate),  # Sample rate
+                '-ac', '1',                  # Mono output
+                '-loglevel', 'error',        # Only show errors
+                'pipe:1'                     # Output to stdout
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=4096
+            )
+
+            # Set stdout to non-blocking mode to prevent hangs
+            if self._ffmpeg_process.stdout:
+                os.set_blocking(self._ffmpeg_process.stdout.fileno(), False)
+                logger.debug(f"Set FFmpeg stdout to non-blocking mode for {self.config.name}")
+
+            # Set stdin to non-blocking mode as well
+            if self._ffmpeg_process.stdin:
+                os.set_blocking(self._ffmpeg_process.stdin.fileno(), False)
+                logger.debug(f"Set FFmpeg stdin to non-blocking mode for {self.config.name}")
+
+            # Start thread to feed data to FFmpeg
+            self._ffmpeg_thread = threading.Thread(
+                target=self._feed_ffmpeg,
+                name=f"ffmpeg-feeder-{self.config.name}",
+                daemon=True
+            )
+            self._ffmpeg_thread.start()
+
+            logger.info(f"Started FFmpeg decoder for {self.config.name}")
+
+        except Exception as e:
+            logger.error(f"Failed to start FFmpeg decoder: {e}")
+            self.status = AudioSourceStatus.ERROR
+            self.error_message = f"FFmpeg decoder error: {e}"
+
+    def _feed_ffmpeg(self) -> None:
+        """Thread function to feed encoded data from buffer to FFmpeg stdin."""
+        while self._ffmpeg_process and self._ffmpeg_process.poll() is None:
+            try:
+                if len(self._buffer) > 0:
+                    # Send data to FFmpeg stdin (non-blocking)
+                    chunk = bytes(self._buffer[:4096])
+
+                    if self._ffmpeg_process and self._ffmpeg_process.stdin:
+                        try:
+                            bytes_written = self._ffmpeg_process.stdin.write(chunk)
+                            if bytes_written:
+                                # Only remove the bytes that were actually written
+                                self._buffer = self._buffer[bytes_written:]
+                                self._ffmpeg_process.stdin.flush()
+                            else:
+                                # Write would block, sleep briefly
+                                time.sleep(0.01)
+                        except BlockingIOError:
+                            # Write would block, buffer is full, sleep briefly
+                            time.sleep(0.01)
+                        except BrokenPipeError:
+                            logger.warning("FFmpeg stdin pipe broken, decoder may have exited")
+                            break
+                else:
+                    # No data to send, sleep briefly
+                    time.sleep(0.01)
+
+            except Exception as e:
+                logger.error(f"Error feeding FFmpeg: {e}")
+                break
+
+    def _decode_mp3_chunk(self) -> Optional[np.ndarray]:
+        """Decode MP3 audio from buffer using FFmpeg subprocess."""
+        try:
+            # Start FFmpeg decoder if not already running
+            if not self._ffmpeg_process or self._ffmpeg_process.poll() is not None:
+                self._start_ffmpeg_decoder()
+
+            if not self._ffmpeg_process:
                 return None
 
-            # Limit buffer growth to prevent memory issues
-            max_buffer_size = 131072  # 128KB max buffer
-            if len(self._buffer) > max_buffer_size:
-                # Find next frame sync and truncate buffer before it
-                sync_pos = self._find_mp3_frame_sync(self._buffer, len(self._buffer) - max_buffer_size + 1024)
-                if sync_pos > 0:
-                    logger.warning(f"Buffer overflow ({len(self._buffer)} bytes), truncating to sync at {sync_pos}")
-                    self._buffer = self._buffer[sync_pos:]
-                else:
-                    # No sync found, drop first half of buffer
-                    drop_amount = len(self._buffer) // 2
-                    logger.warning(f"Buffer overflow with no sync found, dropping {drop_amount} bytes")
-                    self._buffer = self._buffer[drop_amount:]
-
-            # Try to decode what we have
-            decode_attempts = 0
-            max_decode_attempts = 3
-
-            while decode_attempts < max_decode_attempts and len(self._buffer) >= min_buffer_size:
+            # Read decoded PCM from FFmpeg stdout (non-blocking)
+            if self._ffmpeg_process.stdout:
+                # Try to read decoded PCM data (non-blocking)
                 try:
-                    # Take a chunk from buffer (try up to 32KB for better decoding)
-                    chunk_size = min(32768, len(self._buffer))
-                    chunk_data = bytes(self._buffer[:chunk_size])
-                    buffer_io = io.BytesIO(chunk_data)
-
-                    audio = AudioSegment.from_file(buffer_io, format="mp3")
-
-                    # Only remove the bytes that were actually consumed by the decoder
-                    bytes_consumed = buffer_io.tell()
-                    if bytes_consumed > 0:
-                        self._buffer = self._buffer[bytes_consumed:]
-                    else:
-                        # Decoder didn't consume anything, advance past current position
-                        self._buffer = self._buffer[256:]
-
-                    # Convert to numpy array
-                    samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
-
-                    # Convert to mono if needed
-                    if audio.channels == 2:
-                        samples = samples.reshape((-1, 2))
-                        samples = np.mean(samples, axis=1)
-
-                    # Normalize
-                    max_val = float(2 ** (audio.sample_width * 8 - 1))
-                    samples = samples / max_val
-
-                    # Successfully decoded
-                    return samples
-
+                    # Read up to 16KB of PCM data
+                    chunk = self._ffmpeg_process.stdout.read(16384)
+                    if chunk:
+                        self._pcm_buffer.extend(chunk)
+                except BlockingIOError:
+                    # No data available yet - this is expected with non-blocking reads
+                    pass
                 except Exception as e:
-                    decode_attempts += 1
+                    logger.debug(f"Error reading from FFmpeg stdout: {e}")
 
-                    # Try to find next MP3 frame sync
-                    sync_pos = self._find_mp3_frame_sync(self._buffer, 1)
+            # Convert PCM buffer to numpy array when we have enough data
+            bytes_per_sample = 2  # 16-bit = 2 bytes
+            samples_available = len(self._pcm_buffer) // bytes_per_sample
 
-                    if sync_pos > 0:
-                        # Found sync, skip to it
-                        logger.debug(f"MP3 decode failed (attempt {decode_attempts}), skipping to frame sync at {sync_pos}")
-                        self._buffer = self._buffer[sync_pos:]
-                    elif len(self._buffer) > min_buffer_size:
-                        # No sync found, drop small amount and continue
-                        drop_amount = min(512, len(self._buffer) // 4)
-                        logger.debug(f"MP3 decode failed (attempt {decode_attempts}), dropping {drop_amount} bytes")
-                        self._buffer = self._buffer[drop_amount:]
-                    else:
-                        # Not enough data left
-                        break
+            # Aim for ~0.05 seconds of audio per chunk
+            target_samples = int(self.config.sample_rate * 0.05)
 
-            # All decode attempts failed, but don't return None - wait for more data
+            if samples_available >= target_samples:
+                # Extract samples
+                bytes_to_extract = target_samples * bytes_per_sample
+                pcm_data = bytes(self._pcm_buffer[:bytes_to_extract])
+                self._pcm_buffer = self._pcm_buffer[bytes_to_extract:]
+
+                # Convert to numpy array
+                samples = np.frombuffer(pcm_data, dtype=np.int16)
+
+                # Convert to float32 normalized to [-1, 1]
+                samples = samples.astype(np.float32) / 32768.0
+
+                return samples
+
             return None
 
-        except ImportError:
-            logger.error("pydub not available for MP3 stream decoding")
-            self.status = AudioSourceStatus.ERROR
-            self.error_message = "pydub library not available for MP3 decoding (install with: pip install pydub)"
+        except Exception as e:
+            logger.error(f"Error in FFmpeg decoding: {e}")
             return None
 
     def _decode_aac_chunk(self) -> Optional[np.ndarray]:
-        """Decode AAC audio from buffer."""
-        # AAC decoding would require additional libraries like faad
-        logger.warning("AAC decoding not yet implemented - consider using MP3 streams")
-        return None
+        """Decode AAC audio from buffer using FFmpeg."""
+        # FFmpeg handles AAC natively, use the same decoder
+        return self._decode_mp3_chunk()
 
     def _decode_ogg_chunk(self) -> Optional[np.ndarray]:
-        """Decode OGG/Vorbis audio from buffer."""
-        # OGG decoding would require additional libraries
-        logger.warning("OGG decoding not yet implemented - consider using MP3 streams")
-        return None
+        """Decode OGG/Vorbis audio from buffer using FFmpeg."""
+        # FFmpeg handles OGG natively, use the same decoder
+        return self._decode_mp3_chunk()
 
     def _decode_raw_chunk(self) -> Optional[np.ndarray]:
         """Decode raw PCM audio from buffer."""
@@ -780,6 +945,50 @@ class StreamSourceAdapter(AudioSourceAdapter):
         except Exception as e:
             logger.error(f"Error decoding raw audio: {e}")
             return None
+
+    def _analyze_stream_frames(self) -> None:
+        """
+        Analyze stream buffer to detect codec and bitrate from frame headers.
+        Updates stream metadata with detected values.
+        """
+        try:
+            from app_core.audio.stream_analysis import analyze_stream
+
+            # Analyze the current buffer
+            stream_info = analyze_stream(self._buffer, hint_codec=self._stream_format)
+
+            if stream_info:
+                # Update metadata with detected values
+                if stream_info.codec:
+                    self._stream_metadata['codec'] = stream_info.codec
+                    logger.info(f"  Detected codec from frames: {stream_info.codec}")
+
+                if stream_info.bitrate_kbps:
+                    self._stream_metadata['bitrate_kbps'] = stream_info.bitrate_kbps
+                    vbr_note = " (VBR avg)" if stream_info.is_vbr else ""
+                    logger.info(f"  Detected bitrate from frames: {stream_info.bitrate_kbps} kbps{vbr_note}")
+
+                if stream_info.sample_rate:
+                    self._stream_metadata['detected_sample_rate'] = stream_info.sample_rate
+                    logger.info(f"  Detected sample rate: {stream_info.sample_rate} Hz")
+
+                if stream_info.channels:
+                    self._stream_metadata['detected_channels'] = stream_info.channels
+
+                if stream_info.codec_version:
+                    self._stream_metadata['codec_version'] = stream_info.codec_version
+                    logger.info(f"  Codec version: {stream_info.codec_version}")
+
+                if stream_info.is_vbr:
+                    self._stream_metadata['is_vbr'] = True
+
+                # Update metrics with the enhanced metadata
+                self.metrics.metadata = self._stream_metadata.copy()
+
+        except ImportError:
+            logger.debug("Stream analysis module not available")
+        except Exception as e:
+            logger.debug(f"Error analyzing stream frames: {e}")
 
 
 # Factory function for creating sources

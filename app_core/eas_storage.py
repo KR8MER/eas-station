@@ -114,12 +114,19 @@ def record_audio_decode_result(
         header_audio_data=(
             segments.get("header").wav_bytes if "header" in segments else None
         ),
-        message_audio_data=(
-            segments.get("message").wav_bytes if "message" in segments else None
+        attention_tone_audio_data=(
+            segments.get("attention_tone").wav_bytes if "attention_tone" in segments else None
+        ),
+        narration_audio_data=(
+            segments.get("narration").wav_bytes if "narration" in segments else None
         ),
         eom_audio_data=(segments.get("eom").wav_bytes if "eom" in segments else None),
         buffer_audio_data=(
             segments.get("buffer").wav_bytes if "buffer" in segments else None
+        ),
+        # Deprecated: keep for backward compatibility
+        message_audio_data=(
+            segments.get("message").wav_bytes if "message" in segments else None
         ),
     )
 

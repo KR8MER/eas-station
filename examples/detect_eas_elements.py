@@ -42,11 +42,8 @@ def main():
         result = detect_eas_from_file(
             audio_path,
             detect_tones=True,
-            detect_narration=True,
-            # Optional tone detection parameters:
-            window_size=0.1,        # 100ms analysis window
-            threshold_db=10.0,      # 10 dB SNR threshold
-            min_duration=0.5        # Minimum 0.5s tone duration
+            detect_narration=True
+            # Use default detection parameters (optimized to reduce false positives)
         )
 
         # Print summary

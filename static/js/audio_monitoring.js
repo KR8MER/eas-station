@@ -272,6 +272,68 @@ async function updateMetrics() {
  * Update waveform display for a source
  */
 async function updateWaveform(sourceId) {
+    // Check if we should display waterfall spectrogram instead
+    const useWaterfall = window.audioVisualizationMode === 'waterfall' || true; // Default to waterfall
+
+    if (useWaterfall) {
+        try {
+            const response = await fetch(`/api/audio/spectrogram/${encodeURIComponent(sourceId)}`);
+            if (!response.ok) {
+                console.warn(`Spectrogram fetch failed for ${sourceId}, status: ${response.status}`);
+                // Fall back to waveform on error
+                return await updateWaveformFallback(sourceId);
+            }
+
+            const data = await response.json();
+
+            // Validate we have spectrogram data
+            if (!data.spectrogram || data.spectrogram.length === 0) {
+                console.warn(`No spectrogram data for ${sourceId}, falling back to waveform`);
+                return await updateWaveformFallback(sourceId);
+            }
+
+            drawWaterfall(sourceId, data.spectrogram, data.sample_rate, data.fft_size);
+
+            // Update data flow indicator
+            const safeId = sanitizeId(sourceId);
+            const indicator = document.getElementById(`data-indicator-${safeId}`);
+            if (indicator) {
+                const now = new Date();
+                indicator.textContent = `${now.toLocaleTimeString()} (${data.frequency_bins} bins × ${data.time_frames} frames)`;
+                indicator.className = 'text-success fw-bold';
+            }
+        } catch (error) {
+            // Log error and fall back to waveform
+            console.error('Error updating spectrogram for', sourceId, error);
+            return await updateWaveformFallback(sourceId);
+        }
+    } else {
+        try {
+            const response = await fetch(`/api/audio/waveform/${encodeURIComponent(sourceId)}`);
+            if (!response.ok) return;
+
+            const data = await response.json();
+            drawWaveform(sourceId, data.waveform);
+
+            // Update data flow indicator
+            const safeId = sanitizeId(sourceId);
+            const indicator = document.getElementById(`data-indicator-${safeId}`);
+            if (indicator) {
+                const now = new Date();
+                indicator.textContent = `${now.toLocaleTimeString()} (${data.sample_count} samples)`;
+                indicator.className = 'text-success fw-bold';
+            }
+        } catch (error) {
+            // Silently fail for individual waveform updates
+            console.debug('Error updating waveform for', sourceId, error);
+        }
+    }
+}
+
+/**
+ * Fallback to waveform display when spectrogram fails
+ */
+async function updateWaveformFallback(sourceId) {
     try {
         const response = await fetch(`/api/audio/waveform/${encodeURIComponent(sourceId)}`);
         if (!response.ok) return;
@@ -284,12 +346,11 @@ async function updateWaveform(sourceId) {
         const indicator = document.getElementById(`data-indicator-${safeId}`);
         if (indicator) {
             const now = new Date();
-            indicator.textContent = `${now.toLocaleTimeString()} (${data.sample_count} samples)`;
-            indicator.className = 'text-success fw-bold';
+            indicator.textContent = `${now.toLocaleTimeString()} (${data.sample_count} samples) [waveform]`;
+            indicator.className = 'text-warning fw-bold';
         }
     } catch (error) {
-        // Silently fail for individual waveform updates
-        console.debug('Error updating waveform for', sourceId, error);
+        console.debug('Error updating waveform fallback for', sourceId, error);
     }
 }
 
@@ -366,6 +427,85 @@ function drawWaveform(sourceId, waveformData) {
     ctx.fillText('+1.0', width - 5, 12);
     ctx.fillText('0.0', width - 5, centerY + 4);
     ctx.fillText('-1.0', width - 5, height - 4);
+}
+
+/**
+ * Draw waterfall spectrogram
+ */
+function drawWaterfall(sourceId, spectrogramData, sampleRate, fftSize) {
+    const safeId = sanitizeId(sourceId);
+    const canvas = document.getElementById(`waveform-${safeId}`);
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // Clear canvas
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, width, height);
+
+    if (!spectrogramData || spectrogramData.length === 0) return;
+
+    const timeFrames = spectrogramData.length;
+    const freqBins = spectrogramData[0].length;
+
+    // Draw spectrogram
+    const pixelWidth = width / freqBins;
+    const pixelHeight = height / timeFrames;
+
+    // Color mapping function (hot colormap: black -> red -> yellow -> white)
+    function getColor(value) {
+        // value is 0-1
+        const v = Math.max(0, Math.min(1, value));
+
+        if (v < 0.25) {
+            // Black to dark red
+            const r = Math.floor(v * 4 * 128);
+            return `rgb(${r}, 0, 0)`;
+        } else if (v < 0.5) {
+            // Dark red to red
+            const r = 128 + Math.floor((v - 0.25) * 4 * 127);
+            return `rgb(${r}, 0, 0)`;
+        } else if (v < 0.75) {
+            // Red to yellow
+            const g = Math.floor((v - 0.5) * 4 * 255);
+            return `rgb(255, ${g}, 0)`;
+        } else {
+            // Yellow to white
+            const b = Math.floor((v - 0.75) * 4 * 255);
+            return `rgb(255, 255, ${b})`;
+        }
+    }
+
+    // Draw from oldest (top) to newest (bottom)
+    for (let t = 0; t < timeFrames; t++) {
+        const y = t * pixelHeight;
+        for (let f = 0; f < freqBins; f++) {
+            const x = f * pixelWidth;
+            const value = spectrogramData[t][f];
+            ctx.fillStyle = getColor(value);
+            ctx.fillRect(x, y, Math.ceil(pixelWidth), Math.ceil(pixelHeight));
+        }
+    }
+
+    // Draw frequency axis labels
+    ctx.fillStyle = '#fff';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'left';
+
+    const nyquist = sampleRate / 2;
+    const freqStep = nyquist / 4;
+
+    for (let i = 0; i <= 4; i++) {
+        const freq = (i * freqStep) / 1000; // Convert to kHz
+        const x = (i / 4) * width;
+        ctx.fillText(freq.toFixed(1) + ' kHz', x + 2, height - 4);
+    }
+
+    // Draw time indicator
+    ctx.textAlign = 'right';
+    ctx.fillText('Time ↓', width - 5, 12);
 }
 
 /**

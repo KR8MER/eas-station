@@ -150,9 +150,9 @@ def detect_ebs_two_tone(
         # Estimate noise floor
         noise_power = _estimate_noise_floor(window, sample_rate, [EBS_TONE_FREQ_1, EBS_TONE_FREQ_2])
 
-        # Calculate SNR for each frequency
-        snr_853 = 10 * math.log10(power_853 / max(noise_power, 1e-10))
-        snr_960 = 10 * math.log10(power_960 / max(noise_power, 1e-10))
+        # Calculate SNR for each frequency (protect against zero power)
+        snr_853 = 10 * math.log10(max(power_853, 1e-10) / max(noise_power, 1e-10))
+        snr_960 = 10 * math.log10(max(power_960, 1e-10) / max(noise_power, 1e-10))
 
         # Both tones must be present simultaneously
         if snr_853 > threshold_db and snr_960 > threshold_db:
@@ -226,8 +226,8 @@ def detect_nws_single_tone(
     samples: np.ndarray,
     sample_rate: int,
     window_size: float = 0.1,
-    threshold_db: float = 10.0,
-    min_duration: float = 0.5
+    threshold_db: float = 18.0,
+    min_duration: float = 2.0
 ) -> List[ToneDetectionResult]:
     """
     Detect NWS 1050 Hz single tone.
@@ -236,8 +236,8 @@ def detect_nws_single_tone(
         samples: Audio samples (mono, float32, normalized to [-1, 1])
         sample_rate: Sample rate in Hz
         window_size: Analysis window size in seconds (default 0.1s / 100ms)
-        threshold_db: SNR threshold in dB for detection (default 10 dB)
-        min_duration: Minimum tone duration in seconds (default 0.5s)
+        threshold_db: SNR threshold in dB for detection (default 18 dB, higher to reduce false positives)
+        min_duration: Minimum tone duration in seconds (default 2.0s, NWS tones are typically 3-10 seconds)
 
     Returns:
         List of detected 1050 Hz tone segments
@@ -260,8 +260,8 @@ def detect_nws_single_tone(
         # Estimate noise floor
         noise_power = _estimate_noise_floor(window, sample_rate, [NWS_TONE_FREQ])
 
-        # Calculate SNR
-        snr = 10 * math.log10(power_1050 / max(noise_power, 1e-10))
+        # Calculate SNR (protect against zero power)
+        snr = 10 * math.log10(max(power_1050, 1e-10) / max(noise_power, 1e-10))
 
         if snr > threshold_db:
             # Check for harmonic purity (reduce false positives)
@@ -273,7 +273,8 @@ def detect_nws_single_tone(
             fundamental_ratio = power_1050 / (power_1050 + power_harmonic2 + power_harmonic3 + 1e-10)
             confidence = min(fundamental_ratio * (snr / 20.0), 1.0)
 
-            if confidence > 0.3:  # Minimum confidence threshold
+            # Stricter confidence threshold to reduce false positives
+            if confidence > 0.5 and fundamental_ratio > 0.7:
                 detections.append((i, snr, confidence))
 
     # Merge consecutive detections into continuous segments

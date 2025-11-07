@@ -234,6 +234,55 @@ function renderAudioSources() {
                                 <div class="metric-value">${source.metrics.channels}</div>
                             </div>
                         </div>
+
+                        <!-- Stream Metadata (if available) -->
+                        ${source.metrics.metadata ? `
+                            <div class="mt-3">
+                                <h6 class="text-muted mb-2"><i class="fas fa-info-circle"></i> Stream Information</h6>
+                                <div class="small">
+                                    ${source.metrics.metadata.codec ? `
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted">Codec:</span>
+                                            <span class="fw-bold text-uppercase">
+                                                ${escapeHtml(source.metrics.metadata.codec)}
+                                                ${source.metrics.metadata.codec_version ? `
+                                                    <span class="badge bg-secondary text-white small ms-1">${escapeHtml(source.metrics.metadata.codec_version)}</span>
+                                                ` : ''}
+                                            </span>
+                                        </div>
+                                    ` : ''}
+                                    ${source.metrics.metadata.bitrate_kbps ? `
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted">Bitrate:</span>
+                                            <span class="fw-bold">
+                                                ${source.metrics.metadata.bitrate_kbps} kbps
+                                                ${source.metrics.metadata.is_vbr ? `
+                                                    <span class="badge bg-info text-white small ms-1">VBR</span>
+                                                ` : ''}
+                                            </span>
+                                        </div>
+                                    ` : ''}
+                                    ${source.metrics.metadata.icy_name ? `
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted">Station:</span>
+                                            <span class="fw-bold">${escapeHtml(source.metrics.metadata.icy_name)}</span>
+                                        </div>
+                                    ` : ''}
+                                    ${source.metrics.metadata.icy_genre ? `
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted">Genre:</span>
+                                            <span>${escapeHtml(source.metrics.metadata.icy_genre)}</span>
+                                        </div>
+                                    ` : ''}
+                                    ${source.metrics.metadata.stream_url ? `
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted">URL:</span>
+                                            <span class="font-monospace small text-break">${escapeHtml(source.metrics.metadata.stream_url)}</span>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        ` : ''}
                     ` : ''}
 
                     <!-- Control Buttons -->

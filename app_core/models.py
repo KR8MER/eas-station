@@ -267,9 +267,12 @@ class EASDecodedAudio(db.Model):
     quality_metrics = db.Column(db.JSON, default=dict)
     segment_metadata = db.Column(db.JSON, default=dict)
     header_audio_data = db.Column(db.LargeBinary)
-    message_audio_data = db.Column(db.LargeBinary)
+    attention_tone_audio_data = db.Column(db.LargeBinary)  # EBS or NWS 1050Hz tone
+    narration_audio_data = db.Column(db.LargeBinary)  # Voice narration segment
     eom_audio_data = db.Column(db.LargeBinary)
     buffer_audio_data = db.Column(db.LargeBinary)
+    # Deprecated: kept for backward compatibility with old decodes
+    message_audio_data = db.Column(db.LargeBinary)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -282,9 +285,11 @@ class EASDecodedAudio(db.Model):
             "quality_metrics": dict(self.quality_metrics or {}),
             "segment_metadata": dict(self.segment_metadata or {}),
             "has_header_audio": self.header_audio_data is not None,
-            "has_message_audio": self.message_audio_data is not None,
+            "has_attention_tone_audio": self.attention_tone_audio_data is not None,
+            "has_narration_audio": self.narration_audio_data is not None,
             "has_eom_audio": self.eom_audio_data is not None,
             "has_buffer_audio": self.buffer_audio_data is not None,
+            "has_message_audio": self.message_audio_data is not None,  # Deprecated
         }
 
 
@@ -558,6 +563,12 @@ class RadioReceiver(db.Model):
     auto_start = db.Column(db.Boolean, nullable=False, default=True)
     enabled = db.Column(db.Boolean, nullable=False, default=True)
     notes = db.Column(db.Text)
+    # Audio demodulation settings
+    modulation_type = db.Column(db.String(16), nullable=False, default='IQ')  # IQ, FM, AM, NFM, WFM
+    audio_output = db.Column(db.Boolean, nullable=False, default=False)  # Enable demodulated audio output
+    stereo_enabled = db.Column(db.Boolean, nullable=False, default=True)  # FM stereo decoding
+    deemphasis_us = db.Column(db.Float, nullable=False, default=75.0)  # De-emphasis (75μs NA, 50μs EU)
+    enable_rbds = db.Column(db.Boolean, nullable=False, default=False)  # Extract RBDS/RDS from FM
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = db.Column(
         db.DateTime(timezone=True),
@@ -591,6 +602,11 @@ class RadioReceiver(db.Model):
             channel=self.channel,
             serial=self.serial,
             enabled=bool(self.enabled and self.auto_start),
+            modulation_type=self.modulation_type or 'IQ',
+            audio_output=bool(self.audio_output),
+            stereo_enabled=bool(self.stereo_enabled),
+            deemphasis_us=float(self.deemphasis_us) if self.deemphasis_us else 75.0,
+            enable_rbds=bool(self.enable_rbds),
         )
 
     def latest_status(self) -> Optional["RadioReceiverStatus"]:

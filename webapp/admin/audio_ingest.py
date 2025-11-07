@@ -139,6 +139,7 @@ def _serialize_audio_source(source_name: str, adapter: Any) -> Dict[str, Any]:
             'frames_captured': adapter.metrics.frames_captured,
             'silence_detected': _sanitize_bool(adapter.metrics.silence_detected),
             'buffer_utilization': _sanitize_float(adapter.metrics.buffer_utilization),
+            'metadata': adapter.metrics.metadata if adapter.metrics.metadata else None,
         } if adapter.metrics else None,
     }
 
@@ -156,13 +157,36 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             controller = _get_audio_controller()
             sources = []
 
-            for source_name, adapter in controller._sources.items():
-                sources.append(_serialize_audio_source(source_name, adapter))
+            # Query DATABASE for all sources (source of truth)
+            db_configs = AudioSourceConfigDB.query.all()
+
+            for db_config in db_configs:
+                # Check if source is loaded in memory
+                adapter = controller._sources.get(db_config.name)
+
+                if adapter:
+                    # Source is in memory, serialize it normally
+                    sources.append(_serialize_audio_source(db_config.name, adapter))
+                else:
+                    # Source exists in DB but not in memory - show as stopped
+                    sources.append({
+                        'name': db_config.name,
+                        'type': db_config.source_type,
+                        'status': 'stopped',
+                        'enabled': db_config.enabled,
+                        'priority': db_config.priority,
+                        'auto_start': db_config.auto_start,
+                        'description': db_config.description or '',
+                        'metrics': None,
+                        'error_message': 'Not loaded in memory (restart required)',
+                        'in_memory': False  # Flag to indicate sync issue
+                    })
 
             return jsonify({
                 'sources': sources,
                 'total': len(sources),
                 'active_count': sum(1 for s in sources if s['status'] == 'running'),
+                'db_only_count': sum(1 for s in sources if not s.get('in_memory', True))
             })
         except Exception as exc:
             logger.error('Error getting audio sources: %s', exc)
@@ -192,9 +216,20 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             # (prevents duplicate adapter creation when controller initializes from DB)
             controller = _get_audio_controller()
 
-            # Check if source already exists
+            # Check if source already exists in DATABASE (source of truth)
+            existing_db_config = AudioSourceConfigDB.query.filter_by(name=name).first()
+            if existing_db_config:
+                return jsonify({
+                    'error': f'Source "{name}" already exists in database',
+                    'hint': 'Use DELETE /api/audio/sources/{name} first, or use PATCH to update'
+                }), 400
+
+            # Also check if source exists in memory (shouldn't happen, but be safe)
             if name in controller._sources:
-                return jsonify({'error': f'Source "{name}" already exists'}), 400
+                return jsonify({
+                    'error': f'Source "{name}" exists in memory but not in database (inconsistent state)',
+                    'hint': 'Contact system administrator - database sync issue'
+                }), 500
 
             # Create configuration
             config = AudioSourceConfig(
@@ -343,30 +378,34 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
         """Delete an audio source."""
         try:
             controller = _get_audio_controller()
+
+            # Check DATABASE first (source of truth)
+            db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+            if not db_config:
+                return jsonify({'error': 'Source not found in database'}), 404
+
+            # Check if source is in memory
             adapter = controller._sources.get(source_name)
 
-            if not adapter:
-                return jsonify({'error': 'Source not found'}), 404
-
-            # Stop if running
-            if adapter.status == AudioSourceStatus.RUNNING:
+            # Stop if running (only if in memory)
+            if adapter and adapter.status == AudioSourceStatus.RUNNING:
                 controller.stop_source(source_name)
 
-            # Remove from database FIRST, before touching the controller
-            db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
-            if db_config:
-                db.session.delete(db_config)
-                try:
-                    db.session.commit()
-                except Exception:
-                    db.session.rollback()
-                    raise
+            # Remove from database FIRST
+            db.session.delete(db_config)
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                raise
 
-            # Remove from controller AFTER the database transaction succeeds
-            # This prevents zombie sources if the commit fails
-            controller.remove_source(source_name)
-
-            logger.info('Deleted audio source: %s', source_name)
+            # Remove from controller AFTER database transaction succeeds
+            # (only if it was in memory)
+            if adapter:
+                controller.remove_source(source_name)
+                logger.info('Deleted audio source from both database and memory: %s', source_name)
+            else:
+                logger.info('Deleted audio source from database (was not in memory): %s', source_name)
 
             return jsonify({'message': 'Audio source deleted successfully'})
 
@@ -736,6 +775,38 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             logger.error('Error getting waveform for %s: %s', source_name, exc)
             return jsonify({'error': str(exc)}), 500
 
+    @app.route('/api/audio/spectrogram/<source_name>')
+    def api_get_spectrogram(source_name: str):
+        """Get spectrogram data for a specific audio source (for waterfall display)."""
+        try:
+            controller = _get_audio_controller()
+            adapter = controller._sources.get(source_name)
+
+            if not adapter:
+                return jsonify({'error': 'Source not found'}), 404
+
+            # Get spectrogram data from adapter
+            spectrogram_data = adapter.get_spectrogram_data()
+
+            # Convert to list for JSON serialization
+            # Shape: [time_frames, frequency_bins]
+            spectrogram_list = spectrogram_data.tolist()
+
+            return jsonify({
+                'source_name': source_name,
+                'spectrogram': spectrogram_list,
+                'time_frames': len(spectrogram_list),
+                'frequency_bins': len(spectrogram_list[0]) if len(spectrogram_list) > 0 else 0,
+                'sample_rate': adapter.config.sample_rate,
+                'fft_size': adapter._fft_size,
+                'timestamp': time.time(),
+                'status': adapter.status.value,
+            })
+
+        except Exception as exc:
+            logger.error('Error getting spectrogram for %s: %s', source_name, exc)
+            return jsonify({'error': str(exc)}), 500
+
     @app.route('/api/audio/stream/<source_name>')
     def api_stream_audio(source_name: str):
         """Stream live audio from a specific source as WAV."""
@@ -783,23 +854,67 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
 
             yield wav_header.getvalue()
 
+            # Pre-buffer audio for smooth playback (VLC-style buffering)
+            logger.info(f'Pre-buffering audio for {source_name}')
+            prebuffer = []
+            prebuffer_target = int(sample_rate * 2)  # 2 seconds of audio
+            prebuffer_samples = 0
+            prebuffer_timeout = 5.0  # Max 5 seconds to fill prebuffer
+            prebuffer_start = time.time()
+
+            while prebuffer_samples < prebuffer_target:
+                if time.time() - prebuffer_start > prebuffer_timeout:
+                    logger.warning(f'Prebuffer timeout for {source_name}, starting with {prebuffer_samples}/{prebuffer_target} samples')
+                    break
+
+                audio_chunk = adapter.get_audio_chunk(timeout=0.2)
+                if audio_chunk is not None:
+                    import numpy as np
+                    if not isinstance(audio_chunk, np.ndarray):
+                        audio_chunk = np.array(audio_chunk, dtype=np.float32)
+
+                    prebuffer.append(audio_chunk)
+                    prebuffer_samples += len(audio_chunk)
+
+            # Yield pre-buffered audio
+            logger.info(f'Streaming {len(prebuffer)} pre-buffered chunks for {source_name}')
+            for chunk in prebuffer:
+                pcm_data = (np.clip(chunk, -1.0, 1.0) * 32767).astype(np.int16)
+                yield pcm_data.tobytes()
+
             # Stream audio chunks
-            logger.info(f'Starting audio stream for {source_name}')
-            chunk_count = 0
+            logger.info(f'Starting live audio stream for {source_name}')
+            chunk_count = len(prebuffer)
             max_chunks = 6000  # ~2 minutes at typical chunk rate (0.02s per chunk)
+            silence_count = 0
+            max_consecutive_silence = 20  # Stop after 20 consecutive silent/empty chunks (1 second)
 
             try:
                 while chunk_count < max_chunks:
-                    # Get audio chunk from adapter (reduced timeout for more responsive streaming)
-                    audio_chunk = adapter.get_audio_chunk(timeout=0.5)
+                    # Get audio chunk from adapter (very short timeout to keep stream responsive)
+                    audio_chunk = adapter.get_audio_chunk(timeout=0.05)
 
                     if audio_chunk is None:
-                        # No data available, check if source is still running
+                        # No data available - yield silence to keep HTTP stream alive
                         if adapter.status != AudioSourceStatus.RUNNING:
                             logger.info(f'Audio source stopped: {source_name}')
                             break
-                        # Continue waiting for more data instead of yielding silence
+
+                        # Yield a small chunk of silence (0.05 seconds worth)
+                        # This keeps the HTTP connection alive and prevents browser timeout
+                        silence_samples = int(sample_rate * channels * 0.05)
+                        import numpy as np
+                        silence_chunk = np.zeros(silence_samples, dtype=np.int16)
+                        yield silence_chunk.tobytes()
+
+                        silence_count += 1
+                        if silence_count > max_consecutive_silence:
+                            logger.warning(f'Too many consecutive silent chunks for {source_name}, stopping stream')
+                            break
                         continue
+
+                    # Reset silence counter when we get real data
+                    silence_count = 0
 
                     # Convert float32 [-1, 1] to int16 PCM
                     # Ensure we have a numpy array
