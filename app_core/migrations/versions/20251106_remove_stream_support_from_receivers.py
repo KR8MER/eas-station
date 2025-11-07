@@ -1,6 +1,6 @@
 """Remove stream support from radio receivers
 
-Revision ID: 20251106_remove_stream_support
+Revision ID: 20251106_remove_stream_support_from_receivers
 Revises: 20251106_add_display_screens
 Create Date: 2025-11-06
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '20251106_remove_stream_support'
+revision = '20251106_remove_stream_support_from_receivers'
 down_revision = '20251106_add_display_screens'
 branch_labels = None
 depends_on = None
