@@ -94,6 +94,13 @@ class AudioSourceAdapter(ABC):
         self._capture_thread: Optional[threading.Thread] = None
         self._audio_queue = queue.Queue(maxsize=100)
         self._last_metrics_update = 0.0
+        # Waveform buffer for visualization (stores last 2048 samples)
+        self._waveform_buffer = np.zeros(2048, dtype=np.float32)
+        self._waveform_lock = threading.Lock()
+        # Reconnection support
+        self._reconnect_attempts = 0
+        self._max_reconnect_attempts = 5
+        self._last_error_time = 0.0
 
     @abstractmethod
     def _start_capture(self) -> None:
@@ -207,23 +214,26 @@ class AudioSourceAdapter(ABC):
     def _update_metrics(self, audio_chunk: np.ndarray) -> None:
         """Update real-time metrics from audio chunk."""
         current_time = time.time()
-        
+
         # Limit update frequency
         if current_time - self._last_metrics_update < 0.1:
             return
-            
+
         # Calculate audio levels
         if len(audio_chunk) > 0:
             # Peak level in dBFS
             peak = np.max(np.abs(audio_chunk))
             peak_db = 20 * np.log10(max(peak, 1e-10))
-            
-            # RMS level in dBFS  
+
+            # RMS level in dBFS
             rms = np.sqrt(np.mean(audio_chunk ** 2))
             rms_db = 20 * np.log10(max(rms, 1e-10))
-            
+
             # Silence detection
             silence_detected = rms_db < self.config.silence_threshold_db
+
+            # Update waveform buffer for visualization
+            self._update_waveform_buffer(audio_chunk)
         else:
             peak_db = rms_db = -np.inf
             silence_detected = True
@@ -239,8 +249,31 @@ class AudioSourceAdapter(ABC):
             silence_detected=silence_detected,
             buffer_utilization=self._audio_queue.qsize() / self._audio_queue.maxsize
         )
-        
+
         self._last_metrics_update = current_time
+
+    def _update_waveform_buffer(self, audio_chunk: np.ndarray) -> None:
+        """Update the waveform buffer with new audio data."""
+        if len(audio_chunk) == 0:
+            return
+
+        with self._waveform_lock:
+            # Downsample if needed to fit in buffer
+            buffer_size = len(self._waveform_buffer)
+            if len(audio_chunk) >= buffer_size:
+                # Take every Nth sample to fit
+                step = len(audio_chunk) // buffer_size
+                self._waveform_buffer[:] = audio_chunk[::step][:buffer_size]
+            else:
+                # Shift existing data and append new
+                shift_amount = len(audio_chunk)
+                self._waveform_buffer[:-shift_amount] = self._waveform_buffer[shift_amount:]
+                self._waveform_buffer[-shift_amount:] = audio_chunk[:shift_amount]
+
+    def get_waveform_data(self) -> np.ndarray:
+        """Get a copy of the current waveform buffer for visualization."""
+        with self._waveform_lock:
+            return self._waveform_buffer.copy()
 
 
 class AudioIngestController:

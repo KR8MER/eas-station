@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 from flask import Flask, jsonify, render_template, request
@@ -705,6 +706,34 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
 
         except Exception as exc:
             logger.error('Error discovering audio devices: %s', exc)
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/audio/waveform/<source_name>', methods=['GET'])
+    def api_get_waveform(source_name: str):
+        """Get waveform data for a specific audio source."""
+        try:
+            controller = _get_audio_controller()
+            adapter = controller._sources.get(source_name)
+
+            if not adapter:
+                return jsonify({'error': 'Source not found'}), 404
+
+            # Get waveform data from adapter
+            waveform_data = adapter.get_waveform_data()
+
+            # Convert to list for JSON serialization
+            waveform_list = waveform_data.tolist()
+
+            return jsonify({
+                'source_name': source_name,
+                'waveform': waveform_list,
+                'sample_count': len(waveform_list),
+                'timestamp': time.time(),
+                'status': adapter.status.value,
+            })
+
+        except Exception as exc:
+            logger.error('Error getting waveform for %s: %s', source_name, exc)
             return jsonify({'error': str(exc)}), 500
 
 
