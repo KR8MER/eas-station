@@ -195,7 +195,7 @@ class TTSEngine:
         try:
             headers = {
                 "Content-Type": "application/json",
-                "api-key": api_key,
+                "Authorization": f"Bearer {api_key}",
             }
             payload = {
                 "model": model,
