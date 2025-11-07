@@ -1051,39 +1051,51 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
         try:
             controller = _get_audio_controller()
 
-            # Get all source metrics
-            source_health = []
-            total_restarts = 0
+            # Get all source metrics and categorize
+            source_health = {}
+            categorized_sources = {
+                'healthy': [],
+                'degraded': [],
+                'failed': []
+            }
             healthy_count = 0
             degraded_count = 0
             failed_count = 0
+            active_source = None
 
             for source_name, adapter in controller._sources.items():
                 metrics = adapter.metrics
                 status = adapter.status
 
-                # Categorize health
+                # Determine health status
                 if status.value == 'running':
                     if not metrics.silence_detected:
-                        healthy_count += 1
                         health_status = 'healthy'
+                        healthy_count += 1
+                        categorized_sources['healthy'].append(source_name)
+                        # Set first healthy source as active
+                        if active_source is None:
+                            active_source = source_name
                     else:
-                        degraded_count += 1
                         health_status = 'degraded'
+                        degraded_count += 1
+                        categorized_sources['degraded'].append(source_name)
                 else:
-                    failed_count += 1
                     health_status = 'failed'
+                    failed_count += 1
+                    categorized_sources['failed'].append(source_name)
 
-                source_health.append({
-                    'name': source_name,
-                    'status': status.value,
-                    'health': health_status,
+                # Build source health data (as dict, not array)
+                source_health[source_name] = {
+                    'status': health_status,
                     'uptime_seconds': time.time() - adapter._start_time if hasattr(adapter, '_start_time') and adapter._start_time > 0 else 0,
                     'peak_level_db': _sanitize_float(metrics.peak_level_db),
                     'rms_level_db': _sanitize_float(metrics.rms_level_db),
-                    'silence_detected': metrics.silence_detected,
-                    'buffer_utilization': _sanitize_float(metrics.buffer_utilization * 100),
-                })
+                    'is_silent': metrics.silence_detected,
+                    'buffer_fill_percentage': _sanitize_float(metrics.buffer_utilization * 100),
+                    'restart_count': getattr(adapter, '_restart_count', 0),
+                    'error_message': getattr(adapter, '_last_error', None),
+                }
 
             # Calculate overall health score (0-100)
             total_sources = len(controller._sources)
@@ -1102,12 +1114,14 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
                 'healthy_count': healthy_count,
                 'degraded_count': degraded_count,
                 'failed_count': failed_count,
+                'categorized_sources': categorized_sources,
                 'source_health': source_health,
+                'active_source': active_source,
                 'timestamp': time.time()
             })
 
         except Exception as exc:
-            logger.error('Error getting health dashboard: %s', exc)
+            logger.error('Error getting health dashboard: %s', exc, exc_info=True)
             return jsonify({'error': str(exc)}), 500
 
     @app.route('/api/audio/health/metrics', methods=['GET'])
