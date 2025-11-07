@@ -615,6 +615,17 @@ function showAddSourceModal() {
     const modal = new bootstrap.Modal(document.getElementById('addSourceModal'));
     document.getElementById('addSourceForm').reset();
     document.getElementById('sourceTypeConfig').innerHTML = '';
+
+    // Set up the sourceType change listener (ensure it's set up every time modal opens)
+    const sourceTypeSelect = document.getElementById('sourceType');
+    if (sourceTypeSelect) {
+        // Remove any existing listeners
+        const newSourceTypeSelect = sourceTypeSelect.cloneNode(true);
+        sourceTypeSelect.parentNode.replaceChild(newSourceTypeSelect, sourceTypeSelect);
+        // Add fresh listener
+        newSourceTypeSelect.addEventListener('change', updateSourceTypeConfig);
+    }
+
     modal.show();
 }
 
@@ -641,8 +652,15 @@ function updateSourceTypeConfig() {
             html = `
                 <div class="mb-3">
                     <label for="streamUrl" class="form-label">Stream URL <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="streamUrl" placeholder="https://example.com/stream.m3u or https://example.com/live.mp3" required>
-                    <small class="form-text text-muted">HTTP/HTTPS URL to M3U playlist or direct audio stream (MP3, AAC, OGG)</small>
+                    <input type="url" class="form-control" id="streamUrl"
+                           placeholder="https://stream.revma.ihrhls.com/zc####" required>
+                    <small class="form-text text-muted">
+                        <strong>Examples:</strong><br>
+                        • iHeartRadio: https://stream.revma.ihrhls.com/zc####<br>
+                        • Direct MP3: https://example.com/stream.mp3<br>
+                        • M3U Playlist: https://example.com/playlist.m3u8<br>
+                        Supports MP3, AAC, and OGG formats with automatic reconnection.
+                    </small>
                 </div>
                 <div class="mb-3">
                     <label for="streamFormat" class="form-label">Stream Format</label>
@@ -652,7 +670,7 @@ function updateSourceTypeConfig() {
                         <option value="ogg">OGG Vorbis</option>
                         <option value="raw">Raw PCM</option>
                     </select>
-                    <small class="form-text text-muted">Format will be auto-detected from Content-Type if possible</small>
+                    <small class="form-text text-muted">Format will be auto-detected from HTTP Content-Type header</small>
                 </div>
             `;
             break;
