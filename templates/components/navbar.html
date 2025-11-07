@@ -1,0 +1,288 @@
+<!-- Navigation Component -->
+<nav class="navbar">
+    <div class="navbar-container">
+        <!-- Brand Section -->
+        <a href="{{ url_for('index') }}" class="navbar-brand">
+            <img src="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}" alt="EAS Station" class="brand-logo" width="42" height="42" loading="lazy">
+            KR8MER CAP Emergency Alerts
+
+            <!-- System Health Indicator -->
+            <div class="health-indicator">
+                <div class="health-dot health-good" id="system-health-dot"></div>
+                <span id="system-health-text">System OK</span>
+            </div>
+        </a>
+
+        <!-- Mobile Toggle Button -->
+        <button class="navbar-toggle" onclick="toggleMobileNav()" aria-label="Toggle navigation">
+            <i class="fas fa-bars"></i>
+        </button>
+
+        <!-- Navigation Links -->
+        <ul class="navbar-nav" id="navbar-nav">
+            <!-- Monitoring Section -->
+            <li class="nav-item dropdown">
+                <a href="#" class="nav-link dropdown-toggle" onclick="toggleDropdown(event, 'monitoring-dropdown')">
+                    <i class="fas fa-desktop"></i>
+                    Monitoring
+                    <i class="fas fa-chevron-down dropdown-icon"></i>
+                </a>
+                <ul class="dropdown-menu" id="monitoring-dropdown">
+                    <li>
+                        <a href="{{ url_for('index') }}" class="dropdown-item {{ 'active' if request.endpoint == 'index' }}">
+                            <i class="fas fa-map"></i>
+                            Interactive Map
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('alerts') if url_for('alerts') else '/alerts' }}" class="dropdown-item {{ 'active' if request.endpoint == 'alerts' }}">
+                            <i class="fas fa-history"></i>
+                            Alerts History
+                            <span class="alert-badge" id="alert-count" style="display: none;">0</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('stats') if url_for('stats') else '/stats' }}" class="dropdown-item {{ 'active' if request.endpoint == 'stats' }}">
+                            <i class="fas fa-chart-bar"></i>
+                            Statistics
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('system_health') if url_for('system_health') else '/health' }}" class="dropdown-item {{ 'active' if request.endpoint == 'system_health' }}">
+                            <i class="fas fa-heartbeat"></i>
+                            System Health
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('audio_monitoring') if url_for('audio_monitoring') else '/audio-monitor' }}" class="dropdown-item {{ 'active' if request.endpoint == 'audio_monitoring' }}">
+                            <i class="fas fa-headphones"></i>
+                            Audio Monitoring
+                        </a>
+                    </li>
+                </ul>
+            </li>
+
+            <!-- Broadcast Operations Section (formerly "EAS Workflow") -->
+            {% if current_user is defined and current_user.is_authenticated %}
+            <li class="nav-item">
+                <a href="{{ url_for('eas.workflow_home') }}" class="nav-link {{ 'active' if request.endpoint and request.endpoint.startswith('eas.') }}">
+                    <i class="fas fa-broadcast-tower"></i>
+                    Broadcast Operations
+                </a>
+            </li>
+            {% else %}
+            <li class="nav-item">
+                <a href="{{ url_for('eas.eas_workflow') }}" class="nav-link {{ 'active' if request.endpoint == 'eas.eas_workflow' }}">
+                    <i class="fas fa-broadcast-tower"></i>
+                    Broadcast Operations
+                </a>
+            </li>
+            {% endif %}
+
+            <!-- System Management Section -->
+            <li class="nav-item dropdown">
+                <a href="#" class="nav-link dropdown-toggle" onclick="toggleDropdown(event, 'system-dropdown')">
+                    <i class="fas fa-cogs"></i>
+                    System
+                    <i class="fas fa-chevron-down dropdown-icon"></i>
+                </a>
+                <ul class="dropdown-menu" id="system-dropdown">
+                    <li>
+                        <a href="{{ url_for('logs') if url_for('logs') else '/logs' }}" class="dropdown-item {{ 'active' if request.endpoint == 'logs' }}">
+                            <i class="fas fa-file-alt"></i>
+                            System Logs
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('admin') if url_for('admin') else '/admin' }}" class="dropdown-item {{ 'active' if request.endpoint == 'admin' }}">
+                            <i class="fas fa-cog"></i>
+                            Configuration
+                        </a>
+                    </li>
+                </ul>
+            </li>
+        </ul>
+    </div>
+</nav>
+
+<style>
+/* Dropdown styling */
+.nav-item.dropdown {
+    position: relative;
+}
+
+.nav-link.dropdown-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.dropdown-icon {
+    font-size: 0.75rem;
+    margin-left: 0.25rem;
+    transition: transform 0.3s ease;
+}
+
+.dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background-color: white;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    min-width: 200px;
+    padding: 0.5rem 0;
+    margin-top: 0.25rem;
+    z-index: 1000;
+    list-style: none;
+}
+
+.dropdown-menu.show {
+    display: block;
+}
+
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    color: #212529;
+    text-decoration: none;
+    transition: background-color 0.15s ease-in-out;
+}
+
+.dropdown-item:hover {
+    background-color: #f8f9fa;
+    color: #0d6efd;
+}
+
+.dropdown-item.active {
+    background-color: #e7f1ff;
+    color: #0d6efd;
+}
+
+.dropdown-item i {
+    width: 1.25rem;
+    text-align: center;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+    .dropdown-menu {
+        position: static;
+        box-shadow: none;
+        border: none;
+        border-left: 2px solid #0d6efd;
+        margin-left: 1rem;
+        padding-left: 0.5rem;
+    }
+}
+</style>
+
+<script>
+// Mobile navigation toggle
+function toggleMobileNav() {
+    const nav = document.getElementById('navbar-nav');
+    nav.classList.toggle('show');
+}
+
+// Dropdown toggle
+function toggleDropdown(event, dropdownId) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const dropdown = document.getElementById(dropdownId);
+    const allDropdowns = document.querySelectorAll('.dropdown-menu');
+    const icon = event.currentTarget.querySelector('.dropdown-icon');
+
+    // Close all other dropdowns
+    allDropdowns.forEach(d => {
+        if (d.id !== dropdownId) {
+            d.classList.remove('show');
+            // Reset other icons
+            const otherIcon = d.previousElementSibling?.querySelector('.dropdown-icon');
+            if (otherIcon) otherIcon.style.transform = '';
+        }
+    });
+
+    // Toggle current dropdown
+    dropdown.classList.toggle('show');
+
+    // Rotate icon
+    if (dropdown.classList.contains('show')) {
+        icon.style.transform = 'rotate(180deg)';
+    } else {
+        icon.style.transform = '';
+    }
+}
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', function(event) {
+    if (!event.target.closest('.nav-item.dropdown')) {
+        const allDropdowns = document.querySelectorAll('.dropdown-menu');
+        allDropdowns.forEach(d => {
+            d.classList.remove('show');
+        });
+        // Reset all icons
+        document.querySelectorAll('.dropdown-icon').forEach(icon => {
+            icon.style.transform = '';
+        });
+    }
+});
+
+// Update system health indicator
+function updateSystemHealth(status = 'good', message = 'System OK') {
+    const dot = document.getElementById('system-health-dot');
+    const text = document.getElementById('system-health-text');
+
+    if (dot && text) {
+        // Remove existing classes
+        dot.classList.remove('health-good', 'health-warning', 'health-danger');
+
+        // Add new status class
+        dot.classList.add(`health-${status}`);
+        text.textContent = message;
+    }
+}
+
+// Update alert count badge
+function updateAlertCount(count) {
+    const badge = document.getElementById('alert-count');
+    if (badge) {
+        if (count > 0) {
+            badge.textContent = count > 99 ? '99+' : count;
+            badge.style.display = 'flex';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+}
+
+// Check system health on load
+document.addEventListener('DOMContentLoaded', function() {
+    // You can implement actual health checking here
+    // For now, simulate a health check
+    setTimeout(() => {
+        fetch('/api/health')
+            .then(response => response.json())
+            .then(data => {
+                updateSystemHealth(data.status, data.message);
+            })
+            .catch(() => {
+                updateSystemHealth('warning', 'Health Check Failed');
+            });
+    }, 1000);
+
+    // Check for active alerts
+    fetch('/api/alert-count')
+        .then(response => response.json())
+        .then(data => {
+            updateAlertCount(data.count);
+        })
+        .catch(() => {
+            // Silently fail for alert count
+        });
+});
+</script>
