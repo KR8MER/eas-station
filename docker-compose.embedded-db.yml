@@ -53,7 +53,7 @@ services:
       ICECAST_SERVER: ${ICECAST_SERVER:-icecast}
       ICECAST_PORT: ${ICECAST_INTERNAL_PORT:-8000}
       ICECAST_EXTERNAL_PORT: ${ICECAST_PORT:-8001}
-      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-}
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-eas_station_source_password}
       ICECAST_ENABLED: ${ICECAST_ENABLED:-true}
     extra_hosts:
       - "host.docker.internal:host-gateway"
