@@ -59,6 +59,8 @@ Here's an example of properly adding an environment variable:
 
 **ALWAYS add validation attributes to prevent invalid input:**
 
+**Important Principle:** If a field has only a fixed set of valid values (e.g., 4 originator codes, specific status codes), use a `select` dropdown instead of a `text` field with regex validation. This provides the best user experience and prevents any possibility of invalid input.
+
 #### Port Numbers
 
 ```python
@@ -113,14 +115,14 @@ Use regex patterns to enforce specific character requirements:
     'title': 'Must contain only uppercase letters (A-Z), numbers (0-9), and forward slash (/). No hyphens or lowercase letters.',
 }
 
-# EAS Originator Code - exactly 3 uppercase letters
+# When there are only specific valid values, use a dropdown instead of text with validation
 {
     'key': 'EAS_ORIGINATOR',
     'label': 'Originator Code',
-    'type': 'text',
-    'maxlength': 3,
-    'pattern': '^[A-Z]{3}$',
-    'title': 'Must be exactly 3 uppercase letters (e.g., WXR, EAS, PEP)',
+    'type': 'select',
+    'options': ['WXR', 'EAS', 'PEP', 'CIV'],
+    'default': 'WXR',
+    'description': 'EAS originator code: WXR (Weather), EAS (Broadcast), PEP (Primary Entry Point), CIV (Civil Authority)',
 }
 ```
 

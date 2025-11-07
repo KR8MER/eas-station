@@ -252,12 +252,10 @@ ENV_CATEGORIES = {
             {
                 'key': 'EAS_ORIGINATOR',
                 'label': 'Originator Code',
-                'type': 'text',
+                'type': 'select',
+                'options': ['WXR', 'EAS', 'PEP', 'CIV'],
                 'default': 'WXR',
-                'description': 'EAS originator code (e.g., WXR, EAS, PEP) - 3 uppercase letters only',
-                'maxlength': 3,
-                'pattern': '^[A-Z]{3}$',
-                'title': 'Must be exactly 3 uppercase letters (e.g., WXR, EAS, PEP, CIV)',
+                'description': 'EAS originator code: WXR (Weather), EAS (Broadcast), PEP (Primary Entry Point), CIV (Civil Authority)',
                 'category': 'eas_enabled',
             },
             {
