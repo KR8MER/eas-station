@@ -57,6 +57,9 @@ class SDRSourceAdapter(AudioSourceAdapter):
         self._radio_manager: Optional[RadioManager] = None
         self._receiver_id: Optional[str] = None
         self._capture_handle: Optional[Any] = None
+        self._demodulator = None  # Audio demodulator (if enabled)
+        self._rbds_data = None  # Latest RBDS data
+        self._receiver_config = None  # Receiver configuration
 
     def _start_capture(self) -> None:
         """Start SDR audio capture via radio manager."""
@@ -70,12 +73,35 @@ class SDRSourceAdapter(AudioSourceAdapter):
         self._radio_manager = RadioManager()
         self._receiver_id = receiver_id
 
-        # Start audio capture from the specified receiver
+        # Get receiver configuration to check demodulation settings
+        from app_core.models import RadioReceiver
+        from app_core.radio.demodulation import create_demodulator, DemodulatorConfig
+
+        db_receiver = RadioReceiver.query.filter_by(identifier=receiver_id).first()
+        if db_receiver:
+            self._receiver_config = db_receiver.to_receiver_config()
+
+            # Create demodulator if audio output is enabled and modulation is not IQ
+            if self._receiver_config.audio_output and self._receiver_config.modulation_type != 'IQ':
+                demod_config = DemodulatorConfig(
+                    modulation_type=self._receiver_config.modulation_type,
+                    sample_rate=self._receiver_config.sample_rate,
+                    audio_sample_rate=self.config.sample_rate,
+                    stereo_enabled=self._receiver_config.stereo_enabled,
+                    deemphasis_us=self._receiver_config.deemphasis_us,
+                    enable_rbds=self._receiver_config.enable_rbds
+                )
+                self._demodulator = create_demodulator(demod_config)
+                logger.info(f"Created {self._receiver_config.modulation_type} demodulator for receiver: {receiver_id}")
+
+        # Start IQ capture from the specified receiver
+        # Note: This requires the radio manager to support IQ streaming,
+        # which would need to be implemented in the receiver drivers
         self._capture_handle = self._radio_manager.start_audio_capture(
             receiver_id=self._receiver_id,
             sample_rate=self.config.sample_rate,
             channels=self.config.channels,
-            format='pcm'  # Get PCM audio instead of IQ
+            format='iq' if self._demodulator else 'pcm'
         )
 
         self.status = AudioSourceStatus.RUNNING
@@ -95,27 +121,58 @@ class SDRSourceAdapter(AudioSourceAdapter):
             return None
 
         try:
-            # Get audio data from radio manager
+            # Get data from radio manager (IQ or PCM depending on mode)
             audio_data = self._radio_manager.get_audio_data(
                 self._capture_handle,
                 chunk_size=self.config.buffer_size
             )
-            
+
             if audio_data is not None:
-                # Convert to numpy array if needed
-                if isinstance(audio_data, bytes):
-                    # Assume 16-bit PCM
-                    audio_array = np.frombuffer(audio_data, dtype=np.int16)
-                    # Convert to float32 normalized to [-1, 1]
-                    audio_array = audio_array.astype(np.float32) / 32768.0
+                # If we have a demodulator, the data is IQ samples
+                if self._demodulator:
+                    # Convert to complex IQ samples
+                    if isinstance(audio_data, bytes):
+                        # Assume interleaved I/Q as float32 or int16
+                        try:
+                            iq_array = np.frombuffer(audio_data, dtype=np.float32)
+                        except:
+                            raw = np.frombuffer(audio_data, dtype=np.int16)
+                            iq_array = raw.astype(np.float32) / 32768.0
+
+                        # Convert interleaved I/Q to complex
+                        iq_complex = iq_array[0::2] + 1j * iq_array[1::2]
+                    else:
+                        iq_complex = np.array(audio_data, dtype=np.complex64)
+
+                    # Demodulate to audio
+                    audio_array, rbds_data = self._demodulator.demodulate(iq_complex)
+
+                    # Update RBDS data and metadata if available
+                    if rbds_data:
+                        self._rbds_data = rbds_data
+                        if self.metrics.metadata is None:
+                            self.metrics.metadata = {}
+                        self.metrics.metadata['rbds_ps_name'] = rbds_data.ps_name
+                        self.metrics.metadata['rbds_radio_text'] = rbds_data.radio_text
+                        self.metrics.metadata['rbds_pty'] = rbds_data.pty
+
+                    return audio_array
+
                 else:
-                    audio_array = np.array(audio_data, dtype=np.float32)
-                
-                return audio_array
-                
+                    # No demodulation, just convert PCM to float32
+                    if isinstance(audio_data, bytes):
+                        # Assume 16-bit PCM
+                        audio_array = np.frombuffer(audio_data, dtype=np.int16)
+                        # Convert to float32 normalized to [-1, 1]
+                        audio_array = audio_array.astype(np.float32) / 32768.0
+                    else:
+                        audio_array = np.array(audio_data, dtype=np.float32)
+
+                    return audio_array
+
         except Exception as e:
             logger.error(f"Error reading SDR audio: {e}")
-            
+
         return None
 
 
@@ -866,6 +923,50 @@ class StreamSourceAdapter(AudioSourceAdapter):
         except Exception as e:
             logger.error(f"Error decoding raw audio: {e}")
             return None
+
+    def _analyze_stream_frames(self) -> None:
+        """
+        Analyze stream buffer to detect codec and bitrate from frame headers.
+        Updates stream metadata with detected values.
+        """
+        try:
+            from app_core.audio.stream_analysis import analyze_stream
+
+            # Analyze the current buffer
+            stream_info = analyze_stream(self._buffer, hint_codec=self._stream_format)
+
+            if stream_info:
+                # Update metadata with detected values
+                if stream_info.codec:
+                    self._stream_metadata['codec'] = stream_info.codec
+                    logger.info(f"  Detected codec from frames: {stream_info.codec}")
+
+                if stream_info.bitrate_kbps:
+                    self._stream_metadata['bitrate_kbps'] = stream_info.bitrate_kbps
+                    vbr_note = " (VBR avg)" if stream_info.is_vbr else ""
+                    logger.info(f"  Detected bitrate from frames: {stream_info.bitrate_kbps} kbps{vbr_note}")
+
+                if stream_info.sample_rate:
+                    self._stream_metadata['detected_sample_rate'] = stream_info.sample_rate
+                    logger.info(f"  Detected sample rate: {stream_info.sample_rate} Hz")
+
+                if stream_info.channels:
+                    self._stream_metadata['detected_channels'] = stream_info.channels
+
+                if stream_info.codec_version:
+                    self._stream_metadata['codec_version'] = stream_info.codec_version
+                    logger.info(f"  Codec version: {stream_info.codec_version}")
+
+                if stream_info.is_vbr:
+                    self._stream_metadata['is_vbr'] = True
+
+                # Update metrics with the enhanced metadata
+                self.metrics.metadata = self._stream_metadata.copy()
+
+        except ImportError:
+            logger.debug("Stream analysis module not available")
+        except Exception as e:
+            logger.debug(f"Error analyzing stream frames: {e}")
 
 
 # Factory function for creating sources
