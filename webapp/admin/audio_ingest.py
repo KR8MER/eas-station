@@ -27,15 +27,49 @@ _auto_streaming_service = None
 # Global lock file to prevent duplicate streaming services across workers
 _streaming_lock_file = None
 
+# Initialization state
+_initialization_started = False
+_initialization_lock = None
+
 
 def _get_audio_controller() -> AudioIngestController:
     """Get or create the global audio ingest controller."""
-    global _audio_controller
+    global _audio_controller, _initialization_started
+
     if _audio_controller is None:
+        # Create the controller immediately (lightweight)
         _audio_controller = AudioIngestController()
+
+        # Start initialization in background thread to avoid blocking worker
+        if not _initialization_started:
+            _initialization_started = True
+            import threading
+            init_thread = threading.Thread(
+                target=_initialize_audio_system_background,
+                daemon=True,
+                name="AudioSystemInit"
+            )
+            init_thread.start()
+            logger.info("Started audio system initialization in background thread")
+
+    return _audio_controller
+
+
+def _initialize_audio_system_background() -> None:
+    """Initialize audio sources and streaming in background to avoid blocking worker."""
+    global _audio_controller
+    try:
+        logger.info("Background audio initialization started")
+
+        if _audio_controller is None:
+            logger.error("Audio controller not initialized - cannot start background init")
+            return
+
         _initialize_audio_sources(_audio_controller)
         _initialize_auto_streaming()
-    return _audio_controller
+        logger.info("Background audio initialization completed successfully")
+    except Exception as e:
+        logger.error(f"Background audio initialization failed: {e}", exc_info=True)
 
 
 def _get_auto_streaming_service():
