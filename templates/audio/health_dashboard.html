@@ -1,0 +1,412 @@
+{% extends "base.html" %}
+
+{% block title %}Audio System Health Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="mb-4">Audio System Health Dashboard</h1>
+
+    <!-- Overall Health Summary -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Overall System Health</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 text-center">
+                            <div id="health-score-container">
+                                <div class="health-score-circle" id="health-score-circle">
+                                    <span class="health-score-value" id="health-score-value">--</span>
+                                </div>
+                                <p class="mt-2 text-muted">Health Score</p>
+                            </div>
+                        </div>
+                        <div class="col-md-9">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="stat-box">
+                                        <h3 id="healthy-count" class="text-success">0</h3>
+                                        <p class="text-muted">Healthy Sources</p>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="stat-box">
+                                        <h3 id="degraded-count" class="text-warning">0</h3>
+                                        <p class="text-muted">Degraded Sources</p>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="stat-box">
+                                        <h3 id="failed-count" class="text-danger">0</h3>
+                                        <p class="text-muted">Failed Sources</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row mt-3">
+                                <div class="col-md-12">
+                                    <p><strong>Active Source:</strong> <span id="active-source" class="badge badge-primary">--</span></p>
+                                    <p><strong>Last Updated:</strong> <span id="last-update">--</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Source Health Details -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Source Health Details</h5>
+                </div>
+                <div class="card-body">
+                    <div id="source-health-list">
+                        <p class="text-muted">Loading source health data...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Real-time Metrics Charts -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Buffer Fill Levels</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="buffer-fill-chart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Restart Counts</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="restart-chart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert History -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Recent Failover Events</h5>
+                </div>
+                <div class="card-body">
+                    <div id="failover-events">
+                        <p class="text-muted">No recent failover events</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.health-score-circle {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    font-weight: bold;
+    border: 8px solid;
+    transition: all 0.3s ease;
+}
+
+.health-score-circle.healthy {
+    border-color: #28a745;
+    color: #28a745;
+    background-color: rgba(40, 167, 69, 0.1);
+}
+
+.health-score-circle.degraded {
+    border-color: #ffc107;
+    color: #ffc107;
+    background-color: rgba(255, 193, 7, 0.1);
+}
+
+.health-score-circle.failed {
+    border-color: #dc3545;
+    color: #dc3545;
+    background-color: rgba(220, 53, 69, 0.1);
+}
+
+.stat-box {
+    padding: 15px;
+    border-left: 4px solid #007bff;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+}
+
+.source-health-item {
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    border-left: 5px solid;
+    background-color: #f8f9fa;
+}
+
+.source-health-item.healthy {
+    border-left-color: #28a745;
+}
+
+.source-health-item.degraded {
+    border-left-color: #ffc107;
+}
+
+.source-health-item.failed {
+    border-left-color: #dc3545;
+}
+
+.metric-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    margin-right: 8px;
+    border-radius: 4px;
+    background-color: #e9ecef;
+    font-size: 12px;
+}
+
+.failover-event {
+    padding: 10px;
+    margin-bottom: 8px;
+    border-left: 4px solid #ffc107;
+    background-color: #fff3cd;
+    border-radius: 4px;
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script>
+// Global chart objects
+let bufferFillChart = null;
+let restartChart = null;
+
+// Initialize dashboard
+document.addEventListener('DOMContentLoaded', function() {
+    initializeCharts();
+    updateDashboard();
+
+    // Auto-refresh every 5 seconds
+    setInterval(updateDashboard, 5000);
+});
+
+function initializeCharts() {
+    // Buffer Fill Chart
+    const bufferCtx = document.getElementById('buffer-fill-chart').getContext('2d');
+    bufferFillChart = new Chart(bufferCtx, {
+        type: 'bar',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Buffer Fill %',
+                data: [],
+                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Restart Chart
+    const restartCtx = document.getElementById('restart-chart').getContext('2d');
+    restartChart = new Chart(restartCtx, {
+        type: 'bar',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Restart Count',
+                data: [],
+                backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                borderColor: 'rgba(255, 99, 132, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+}
+
+async function updateDashboard() {
+    try {
+        // Fetch dashboard data
+        const response = await fetch('/api/audio/health/dashboard');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // Update overall health score
+        updateHealthScore(data.overall_health_score);
+
+        // Update counters
+        const categorized = data.categorized_sources;
+        document.getElementById('healthy-count').textContent = categorized.healthy.length;
+        document.getElementById('degraded-count').textContent = categorized.degraded.length;
+        document.getElementById('failed-count').textContent = categorized.failed.length;
+
+        // Update active source
+        document.getElementById('active-source').textContent = data.active_source || 'None';
+
+        // Update timestamp
+        document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+
+        // Update source health list
+        updateSourceHealthList(data.source_health);
+
+        // Update charts
+        updateCharts(data.source_health);
+
+    } catch (error) {
+        console.error('Error updating dashboard:', error);
+        document.getElementById('health-score-value').textContent = 'ERR';
+        document.getElementById('health-score-circle').className = 'health-score-circle failed';
+    }
+}
+
+function updateHealthScore(score) {
+    const scoreElement = document.getElementById('health-score-value');
+    const circleElement = document.getElementById('health-score-circle');
+
+    scoreElement.textContent = Math.round(score);
+
+    // Update color based on score
+    circleElement.className = 'health-score-circle';
+    if (score >= 80) {
+        circleElement.classList.add('healthy');
+    } else if (score >= 50) {
+        circleElement.classList.add('degraded');
+    } else {
+        circleElement.classList.add('failed');
+    }
+}
+
+function updateSourceHealthList(sourceHealth) {
+    const listElement = document.getElementById('source-health-list');
+
+    if (Object.keys(sourceHealth).length === 0) {
+        listElement.innerHTML = '<p class="text-muted">No audio sources configured</p>';
+        return;
+    }
+
+    let html = '';
+    for (const [sourceName, health] of Object.entries(sourceHealth)) {
+        const healthClass = health.status.toLowerCase();
+        const statusBadge = getStatusBadge(health.status);
+
+        html += `
+            <div class="source-health-item ${healthClass}">
+                <div class="row">
+                    <div class="col-md-3">
+                        <strong>${sourceName}</strong>
+                        <br>
+                        ${statusBadge}
+                    </div>
+                    <div class="col-md-9">
+                        <div class="metrics">
+                            <span class="metric-badge">
+                                <strong>Uptime:</strong> ${formatUptime(health.uptime_seconds)}
+                            </span>
+                            <span class="metric-badge">
+                                <strong>Buffer:</strong> ${health.buffer_fill_percentage.toFixed(1)}%
+                            </span>
+                            <span class="metric-badge">
+                                <strong>Restarts:</strong> ${health.restart_count}
+                            </span>
+                            ${health.is_silent ? '<span class="badge badge-warning">SILENT</span>' : ''}
+                        </div>
+                        ${health.error_message ? `<div class="text-danger mt-2"><small>${health.error_message}</small></div>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    listElement.innerHTML = html;
+}
+
+function updateCharts(sourceHealth) {
+    const labels = [];
+    const bufferData = [];
+    const restartData = [];
+
+    for (const [sourceName, health] of Object.entries(sourceHealth)) {
+        labels.push(sourceName);
+        bufferData.push(health.buffer_fill_percentage);
+        restartData.push(health.restart_count);
+    }
+
+    // Update buffer fill chart
+    bufferFillChart.data.labels = labels;
+    bufferFillChart.data.datasets[0].data = bufferData;
+    bufferFillChart.update();
+
+    // Update restart chart
+    restartChart.data.labels = labels;
+    restartChart.data.datasets[0].data = restartData;
+    restartChart.update();
+}
+
+function getStatusBadge(status) {
+    const statusMap = {
+        'healthy': '<span class="badge badge-success">Healthy</span>',
+        'degraded': '<span class="badge badge-warning">Degraded</span>',
+        'failed': '<span class="badge badge-danger">Failed</span>'
+    };
+    return statusMap[status.toLowerCase()] || '<span class="badge badge-secondary">Unknown</span>';
+}
+
+function formatUptime(seconds) {
+    if (seconds < 60) {
+        return `${Math.round(seconds)}s`;
+    } else if (seconds < 3600) {
+        return `${Math.round(seconds / 60)}m`;
+    } else if (seconds < 86400) {
+        return `${Math.round(seconds / 3600)}h`;
+    } else {
+        return `${Math.round(seconds / 86400)}d`;
+    }
+}
+</script>
+{% endblock %}
