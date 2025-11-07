@@ -1,0 +1,23 @@
+FROM debian:bookworm-slim
+
+# Install Icecast
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        icecast2 \
+        wget \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure Icecast to run in foreground
+RUN sed -i 's/<background>1<\/background>/<background>0<\/background>/' /etc/icecast2/icecast.xml && \
+    sed -i 's/<changeowner>true<\/changeowner>/<changeowner>false<\/changeowner>/' /etc/icecast2/icecast.xml
+
+# Expose Icecast port
+EXPOSE 8000
+
+# Copy entrypoint script
+COPY docker-entrypoint-icecast.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint-icecast.sh
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint-icecast.sh"]
+CMD ["icecast2", "-c", "/etc/icecast2/icecast.xml"]
