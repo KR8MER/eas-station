@@ -202,34 +202,61 @@ def detect_eas_from_file(
     # Step 2: Detect alert tones if requested
     if detect_tones:
         try:
-            # Load audio samples for tone detection
+            # Load audio samples for tone detection (handle both WAV and MP3)
             import wave
             import struct
+            import os
+            from pydub import AudioSegment
 
-            with wave.open(audio_path, 'rb') as wf:
-                sample_rate = wf.getframerate()
-                n_channels = wf.getnchannels()
-                sampwidth = wf.getsampwidth()
-                n_frames = wf.getnframes()
+            file_ext = os.path.splitext(audio_path)[1].lower()
 
-                # Read audio data
-                frames = wf.readframes(n_frames)
+            if file_ext == '.wav':
+                # Direct WAV file loading
+                with wave.open(audio_path, 'rb') as wf:
+                    sample_rate = wf.getframerate()
+                    n_channels = wf.getnchannels()
+                    sampwidth = wf.getsampwidth()
+                    n_frames = wf.getnframes()
 
-                # Convert to numpy array
-                if sampwidth == 2:
-                    samples = np.frombuffer(frames, dtype=np.int16)
-                elif sampwidth == 4:
-                    samples = np.frombuffer(frames, dtype=np.int32)
+                    # Read audio data
+                    frames = wf.readframes(n_frames)
+
+                    # Convert to numpy array
+                    if sampwidth == 2:
+                        samples = np.frombuffer(frames, dtype=np.int16)
+                    elif sampwidth == 4:
+                        samples = np.frombuffer(frames, dtype=np.int32)
+                    else:
+                        raise ValueError(f"Unsupported sample width: {sampwidth}")
+
+                    # Convert to float32 normalized to [-1, 1]
+                    samples = samples.astype(np.float32) / (2 ** (sampwidth * 8 - 1))
+
+                    # Convert to mono if stereo
+                    if n_channels == 2:
+                        samples = samples.reshape((-1, 2))
+                        samples = np.mean(samples, axis=1)
+            else:
+                # Use pydub for MP3 and other formats
+                logger.info(f"Loading {file_ext} file with pydub")
+                audio = AudioSegment.from_file(audio_path)
+
+                # Convert to mono and get parameters
+                if audio.channels > 1:
+                    audio = audio.set_channels(1)
+
+                sample_rate = audio.frame_rate
+
+                # Get raw audio data as numpy array
+                samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
+
+                # Normalize to [-1, 1] based on sample width
+                if audio.sample_width == 2:
+                    samples = samples / 32768.0
+                elif audio.sample_width == 4:
+                    samples = samples / 2147483648.0
                 else:
-                    raise ValueError(f"Unsupported sample width: {sampwidth}")
-
-                # Convert to float32 normalized to [-1, 1]
-                samples = samples.astype(np.float32) / (2 ** (sampwidth * 8 - 1))
-
-                # Convert to mono if stereo
-                if n_channels == 2:
-                    samples = samples.reshape((-1, 2))
-                    samples = np.mean(samples, axis=1)
+                    samples = samples / (2 ** (audio.sample_width * 8 - 1))
 
             logger.info(f"Detecting alert tones in {len(samples)} samples")
             tone_results = detect_alert_tones(samples, sample_rate, **kwargs)
