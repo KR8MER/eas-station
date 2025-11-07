@@ -147,34 +147,34 @@ services:
       retries: 5
 
   icecast:
-    image: infiniteproject/icecast:latest
+    image: moul/icecast:latest
     container_name: eas-icecast
     restart: unless-stopped
     ports:
       - "${ICECAST_PORT:-8001}:8000"  # Icecast web interface and streams (port 8001 to avoid Portainer conflict)
     environment:
       # Admin credentials (CHANGE THESE IN PRODUCTION!)
-      - ICECAST_ADMIN_USER=${ICECAST_ADMIN_USER:-admin}
-      - ICECAST_ADMIN_PASSWORD=${ICECAST_ADMIN_PASSWORD:-changeme_admin}
+      ICECAST_ADMIN_USERNAME: ${ICECAST_ADMIN_USER:-admin}
+      ICECAST_ADMIN_PASSWORD: ${ICECAST_ADMIN_PASSWORD:-changeme_admin}
 
       # Source credentials for EAS Station to publish streams
-      - ICECAST_SOURCE_PASSWORD=${ICECAST_SOURCE_PASSWORD:-eas_station_source_password}
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-eas_station_source_password}
 
       # Relay password
-      - ICECAST_RELAY_PASSWORD=${ICECAST_RELAY_PASSWORD:-changeme_relay}
+      ICECAST_RELAY_PASSWORD: ${ICECAST_RELAY_PASSWORD:-changeme_relay}
 
       # Server settings
-      - ICECAST_HOSTNAME=${ICECAST_HOSTNAME:-localhost}
-      - ICECAST_LOCATION=EAS Monitoring Station
-      - ICECAST_CONTACT=${ICECAST_CONTACT:-admin@example.com}
+      ICECAST_HOSTNAME: ${ICECAST_HOSTNAME:-localhost}
+      ICECAST_LOCATION: EAS Monitoring Station
+      ICECAST_ADMIN: ${ICECAST_CONTACT:-admin@example.com}
 
       # Performance limits
-      - ICECAST_MAX_CLIENTS=100
-      - ICECAST_MAX_SOURCES=50
+      ICECAST_MAX_CLIENTS: ${ICECAST_MAX_CLIENTS:-100}
+      ICECAST_MAX_SOURCES: ${ICECAST_MAX_SOURCES:-50}
     volumes:
       - icecast-logs:/var/log/icecast
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000"]
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8000 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
