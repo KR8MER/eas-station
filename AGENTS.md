@@ -32,10 +32,28 @@ Here's an example of properly adding an environment variable:
 
 - `text` - Text input field
 - `number` - Numeric input with optional min/max/step
-- `boolean` - Checkbox (values: 'true'/'false' as strings)
 - `password` - Password field with masking (set `sensitive: True`)
 - `select` - Dropdown with predefined options
 - `textarea` - Multi-line text input
+
+**IMPORTANT:** Never use `boolean` type. Always use `select` with `options: ['false', 'true']` for yes/no or true/false values. This prevents end users from inputting invalid responses and breaking functionality.
+
+```python
+# ❌ WRONG - Don't use boolean type
+{
+    'key': 'SOME_FLAG',
+    'type': 'boolean',
+    'default': 'false',
+}
+
+# ✅ CORRECT - Use select with explicit options
+{
+    'key': 'SOME_FLAG',
+    'type': 'select',
+    'options': ['false', 'true'],
+    'default': 'false',
+}
+```
 
 ### Variable Categories
 
