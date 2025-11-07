@@ -29,32 +29,32 @@
                 </a>
                 <ul class="dropdown-menu" id="monitoring-dropdown">
                     <li>
-                        <a href="{{ url_for('index') }}" class="dropdown-item {{ 'active' if request.endpoint == 'index' }}">
+                        <a href="/" class="dropdown-item {{ 'active' if request.endpoint == 'index' }}">
                             <i class="fas fa-map"></i>
                             Interactive Map
                         </a>
                     </li>
                     <li>
-                        <a href="{{ url_for('alerts') if url_for('alerts') else '/alerts' }}" class="dropdown-item {{ 'active' if request.endpoint == 'alerts' }}">
+                        <a href="/alerts" class="dropdown-item {{ 'active' if request.endpoint == 'alerts' }}">
                             <i class="fas fa-history"></i>
                             Alerts History
                             <span class="alert-badge" id="alert-count" style="display: none;">0</span>
                         </a>
                     </li>
                     <li>
-                        <a href="{{ url_for('stats') if url_for('stats') else '/stats' }}" class="dropdown-item {{ 'active' if request.endpoint == 'stats' }}">
+                        <a href="/stats" class="dropdown-item {{ 'active' if request.endpoint == 'stats' }}">
                             <i class="fas fa-chart-bar"></i>
                             Statistics
                         </a>
                     </li>
                     <li>
-                        <a href="{{ url_for('system_health') if url_for('system_health') else '/health' }}" class="dropdown-item {{ 'active' if request.endpoint == 'system_health' }}">
+                        <a href="/system_health" class="dropdown-item {{ 'active' if request.endpoint == 'system_health_page' }}">
                             <i class="fas fa-heartbeat"></i>
                             System Health
                         </a>
                     </li>
                     <li>
-                        <a href="{{ url_for('audio_monitoring') if url_for('audio_monitoring') else '/audio-monitor' }}" class="dropdown-item {{ 'active' if request.endpoint == 'audio_monitoring' }}">
+                        <a href="/audio-monitor" class="dropdown-item {{ 'active' if request.endpoint == 'audio_monitoring' }}">
                             <i class="fas fa-headphones"></i>
                             Audio Monitoring
                         </a>
@@ -88,13 +88,13 @@
                 </a>
                 <ul class="dropdown-menu" id="system-dropdown">
                     <li>
-                        <a href="{{ url_for('logs') if url_for('logs') else '/logs' }}" class="dropdown-item {{ 'active' if request.endpoint == 'logs' }}">
+                        <a href="/logs" class="dropdown-item {{ 'active' if request.endpoint == 'logs' }}">
                             <i class="fas fa-file-alt"></i>
                             System Logs
                         </a>
                     </li>
                     <li>
-                        <a href="{{ url_for('admin') if url_for('admin') else '/admin' }}" class="dropdown-item {{ 'active' if request.endpoint == 'admin' }}">
+                        <a href="/admin" class="dropdown-item {{ 'active' if request.endpoint == 'admin' }}">
                             <i class="fas fa-cog"></i>
                             Configuration
                         </a>
