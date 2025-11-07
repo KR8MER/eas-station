@@ -139,6 +139,7 @@ def _serialize_audio_source(source_name: str, adapter: Any) -> Dict[str, Any]:
             'frames_captured': adapter.metrics.frames_captured,
             'silence_detected': _sanitize_bool(adapter.metrics.silence_detected),
             'buffer_utilization': _sanitize_float(adapter.metrics.buffer_utilization),
+            'metadata': adapter.metrics.metadata if adapter.metrics.metadata else None,
         } if adapter.metrics else None,
     }
 
@@ -734,6 +735,38 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
 
         except Exception as exc:
             logger.error('Error getting waveform for %s: %s', source_name, exc)
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/audio/spectrogram/<source_name>')
+    def api_get_spectrogram(source_name: str):
+        """Get spectrogram data for a specific audio source (for waterfall display)."""
+        try:
+            controller = _get_audio_controller()
+            adapter = controller._sources.get(source_name)
+
+            if not adapter:
+                return jsonify({'error': 'Source not found'}), 404
+
+            # Get spectrogram data from adapter
+            spectrogram_data = adapter.get_spectrogram_data()
+
+            # Convert to list for JSON serialization
+            # Shape: [time_frames, frequency_bins]
+            spectrogram_list = spectrogram_data.tolist()
+
+            return jsonify({
+                'source_name': source_name,
+                'spectrogram': spectrogram_list,
+                'time_frames': len(spectrogram_list),
+                'frequency_bins': len(spectrogram_list[0]) if len(spectrogram_list) > 0 else 0,
+                'sample_rate': adapter.config.sample_rate,
+                'fft_size': adapter._fft_size,
+                'timestamp': time.time(),
+                'status': adapter.status.value,
+            })
+
+        except Exception as exc:
+            logger.error('Error getting spectrogram for %s: %s', source_name, exc)
             return jsonify({'error': str(exc)}), 500
 
     @app.route('/api/audio/stream/<source_name>')

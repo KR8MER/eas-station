@@ -477,6 +477,7 @@ class StreamSourceAdapter(AudioSourceAdapter):
         self._decoder = None
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5
+        self._stream_metadata = {}  # Store stream metadata (URL, codec, bitrate, etc.)
 
     def _parse_m3u(self, url: str) -> str:
         """Parse M3U playlist and return the first stream URL."""
@@ -533,17 +534,61 @@ class StreamSourceAdapter(AudioSourceAdapter):
             self._stream_response = self._session.get(stream_url, stream=True, timeout=30)
             self._stream_response.raise_for_status()
 
-            # Log stream metadata
-            content_type = self._stream_response.headers.get('Content-Type', 'unknown')
-            logger.info(f"Stream content-type: {content_type}")
+            # Extract comprehensive stream metadata from headers
+            headers = self._stream_response.headers
+            content_type = headers.get('Content-Type', 'unknown')
 
             # Auto-detect format from content-type if not specified
+            detected_codec = self._stream_format
             if 'audio/mpeg' in content_type or 'audio/mp3' in content_type:
+                detected_codec = 'mp3'
                 self._stream_format = 'mp3'
             elif 'audio/aac' in content_type:
+                detected_codec = 'aac'
                 self._stream_format = 'aac'
             elif 'audio/ogg' in content_type:
+                detected_codec = 'ogg'
                 self._stream_format = 'ogg'
+
+            # Extract bitrate from headers if available
+            icy_br = headers.get('icy-br', headers.get('Icy-Br', headers.get('ice-audio-info', '')))
+            bitrate = None
+            if icy_br:
+                try:
+                    # Handle formats like "128" or "bitrate=128"
+                    if 'bitrate=' in icy_br:
+                        bitrate = int(icy_br.split('bitrate=')[1].split(';')[0])
+                    else:
+                        bitrate = int(icy_br)
+                except (ValueError, IndexError):
+                    pass
+
+            # Build metadata dictionary
+            self._stream_metadata = {
+                'stream_url': stream_url,
+                'resolved_url': stream_url,
+                'codec': detected_codec,
+                'content_type': content_type,
+                'bitrate_kbps': bitrate,
+                'icy_name': headers.get('icy-name', headers.get('Icy-Name')),
+                'icy_genre': headers.get('icy-genre', headers.get('Icy-Genre')),
+                'icy_description': headers.get('icy-description', headers.get('Icy-Description')),
+                'server': headers.get('Server'),
+                'connection_timestamp': time.time(),
+            }
+
+            # Update metrics with stream metadata
+            self.metrics.metadata = self._stream_metadata.copy()
+
+            # Log comprehensive stream metadata
+            logger.info(f"Stream connected: {stream_url}")
+            logger.info(f"  Codec: {detected_codec} | Content-Type: {content_type}")
+            if bitrate:
+                logger.info(f"  Bitrate: {bitrate} kbps")
+            if self._stream_metadata.get('icy_name'):
+                logger.info(f"  Station: {self._stream_metadata['icy_name']}")
+            if self._stream_metadata.get('icy_genre'):
+                logger.info(f"  Genre: {self._stream_metadata['icy_genre']}")
 
             self.status = AudioSourceStatus.RUNNING
             self._reconnect_attempts = 0

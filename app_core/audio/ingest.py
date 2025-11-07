@@ -52,6 +52,7 @@ class AudioMetrics:
     frames_captured: int
     silence_detected: bool
     buffer_utilization: float
+    metadata: Optional[Dict] = None  # Additional source-specific metadata (e.g., stream URL, codec, bitrate)
 
 
 @dataclass
@@ -88,7 +89,8 @@ class AudioSourceAdapter(ABC):
             channels=config.channels,
             frames_captured=0,
             silence_detected=False,
-            buffer_utilization=0.0
+            buffer_utilization=0.0,
+            metadata=None
         )
         self._stop_event = threading.Event()
         self._capture_thread: Optional[threading.Thread] = None
@@ -97,6 +99,11 @@ class AudioSourceAdapter(ABC):
         # Waveform buffer for visualization (stores last 2048 samples)
         self._waveform_buffer = np.zeros(2048, dtype=np.float32)
         self._waveform_lock = threading.Lock()
+        # Spectrogram buffer for waterfall visualization (stores last 100 FFT frames)
+        self._fft_size = 1024  # FFT window size
+        self._spectrogram_history = 100  # Number of FFT frames to keep
+        self._spectrogram_buffer = np.zeros((self._spectrogram_history, self._fft_size // 2), dtype=np.float32)
+        self._spectrogram_lock = threading.Lock()
         # Reconnection support
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5
@@ -232,8 +239,9 @@ class AudioSourceAdapter(ABC):
             # Silence detection
             silence_detected = rms_db < self.config.silence_threshold_db
 
-            # Update waveform buffer for visualization
+            # Update visualization buffers
             self._update_waveform_buffer(audio_chunk)
+            self._update_spectrogram_buffer(audio_chunk)
         else:
             peak_db = rms_db = -np.inf
             silence_detected = True
@@ -274,6 +282,39 @@ class AudioSourceAdapter(ABC):
         """Get a copy of the current waveform buffer for visualization."""
         with self._waveform_lock:
             return self._waveform_buffer.copy()
+
+    def _update_spectrogram_buffer(self, audio_chunk: np.ndarray) -> None:
+        """Update the spectrogram buffer with FFT of new audio data."""
+        if len(audio_chunk) < self._fft_size:
+            return
+
+        with self._spectrogram_lock:
+            # Take the last fft_size samples for FFT computation
+            fft_window = audio_chunk[-self._fft_size:]
+
+            # Apply Hamming window to reduce spectral leakage
+            windowed = fft_window * np.hamming(self._fft_size)
+
+            # Compute FFT and get magnitude spectrum (only positive frequencies)
+            fft_result = np.fft.rfft(windowed)
+            magnitude = np.abs(fft_result)
+
+            # Convert to dB scale (with floor to avoid log(0))
+            magnitude = np.maximum(magnitude, 1e-10)
+            magnitude_db = 20 * np.log10(magnitude)
+
+            # Normalize to 0-1 range for visualization (assuming -120dB to 0dB range)
+            normalized = (magnitude_db + 120) / 120
+            normalized = np.clip(normalized, 0, 1)
+
+            # Shift buffer and add new FFT frame
+            self._spectrogram_buffer[:-1] = self._spectrogram_buffer[1:]
+            self._spectrogram_buffer[-1] = normalized[:self._fft_size // 2]
+
+    def get_spectrogram_data(self) -> np.ndarray:
+        """Get a copy of the current spectrogram buffer for waterfall visualization."""
+        with self._spectrogram_lock:
+            return self._spectrogram_buffer.copy()
 
 
 class AudioIngestController:
