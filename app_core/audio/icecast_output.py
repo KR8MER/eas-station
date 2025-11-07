@@ -222,7 +222,7 @@ class IcecastStreamer:
 
             try:
                 # Read audio from source
-                samples = self.audio_source.read_audio(chunk_samples)
+                samples = self.audio_source.get_audio_chunk(timeout=0.1)
 
                 if samples is not None:
                     # Convert float32 [-1, 1] to int16 PCM
