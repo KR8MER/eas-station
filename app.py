@@ -158,12 +158,24 @@ logger = logging.getLogger(__name__)
 # Load environment variables early for local CLI usage
 # Use CONFIG_PATH if set (for persistent volume), otherwise use default .env location
 # CRITICAL: override=True to override env vars set by docker-compose from empty .env
+# BUT: Preserve Icecast auto-config from docker-compose (don't let persistent .env override it)
+_docker_icecast_password = os.environ.get('ICECAST_SOURCE_PASSWORD')
+_docker_icecast_enabled = os.environ.get('ICECAST_ENABLED')
+
 _config_path = os.environ.get('CONFIG_PATH')
 if _config_path:
     logger.info(f"Loading environment from persistent config: {_config_path}")
     load_dotenv(_config_path, override=True)
 else:
     load_dotenv(override=True)
+
+# Restore Icecast auto-config from docker environment if auto-streaming is enabled
+# This prevents persistent .env from breaking auto-streaming with mismatched passwords
+if _docker_icecast_enabled and _docker_icecast_enabled.lower() in ('true', '1', 'yes', 'enabled'):
+    if _docker_icecast_password:
+        # Preserve docker-compose Icecast password for auto-streaming
+        os.environ['ICECAST_SOURCE_PASSWORD'] = _docker_icecast_password
+        logger.debug("Preserved Icecast auto-config password from docker environment")
 
 # Create Flask app
 app = Flask(__name__)
