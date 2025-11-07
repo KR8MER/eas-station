@@ -34,6 +34,13 @@ services:
 
       # SDR settings
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
+
+      # Icecast auto-configuration (optional - enables automatic streaming)
+      ICECAST_SERVER: ${ICECAST_SERVER:-icecast}
+      ICECAST_PORT: ${ICECAST_INTERNAL_PORT:-8000}
+      ICECAST_EXTERNAL_PORT: ${ICECAST_PORT:-8001}
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-}
+      ICECAST_ENABLED: ${ICECAST_ENABLED:-true}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     devices:
