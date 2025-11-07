@@ -37,10 +37,10 @@ class IcecastAutoConfig:
 
             # Get Icecast source password (required)
             self.source_password = os.environ.get('ICECAST_SOURCE_PASSWORD', '')
-            if not self.source_password or self.source_password == 'changeme_source':
+            if not self.source_password or self.source_password in ('changeme_source', 'changeme'):
                 logger.warning(
                     "Icecast auto-configuration: No source password configured "
-                    "(ICECAST_SOURCE_PASSWORD not set or using default). "
+                    "(ICECAST_SOURCE_PASSWORD not set or using insecure default 'changeme'). "
                     "Icecast streaming will not be enabled automatically."
                 )
                 self.enabled = False
