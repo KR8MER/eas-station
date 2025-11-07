@@ -781,6 +781,7 @@ class StreamSourceAdapter(AudioSourceAdapter):
     def _start_ffmpeg_decoder(self) -> None:
         """Start FFmpeg subprocess for decoding stream audio."""
         import subprocess
+        import os
 
         if self._ffmpeg_process:
             return  # Already running
@@ -803,6 +804,16 @@ class StreamSourceAdapter(AudioSourceAdapter):
             bufsize=4096
             )
 
+            # Set stdout to non-blocking mode to prevent hangs
+            if self._ffmpeg_process.stdout:
+                os.set_blocking(self._ffmpeg_process.stdout.fileno(), False)
+                logger.debug(f"Set FFmpeg stdout to non-blocking mode for {self.config.name}")
+
+            # Set stdin to non-blocking mode as well
+            if self._ffmpeg_process.stdin:
+                os.set_blocking(self._ffmpeg_process.stdin.fileno(), False)
+                logger.debug(f"Set FFmpeg stdin to non-blocking mode for {self.config.name}")
+
             # Start thread to feed data to FFmpeg
             self._ffmpeg_thread = threading.Thread(
                 target=self._feed_ffmpeg,
@@ -823,13 +834,25 @@ class StreamSourceAdapter(AudioSourceAdapter):
         while self._ffmpeg_process and self._ffmpeg_process.poll() is None:
             try:
                 if len(self._buffer) > 0:
-                    # Send data to FFmpeg stdin
+                    # Send data to FFmpeg stdin (non-blocking)
                     chunk = bytes(self._buffer[:4096])
-                    self._buffer = self._buffer[4096:]
 
                     if self._ffmpeg_process and self._ffmpeg_process.stdin:
-                        self._ffmpeg_process.stdin.write(chunk)
-                        self._ffmpeg_process.stdin.flush()
+                        try:
+                            bytes_written = self._ffmpeg_process.stdin.write(chunk)
+                            if bytes_written:
+                                # Only remove the bytes that were actually written
+                                self._buffer = self._buffer[bytes_written:]
+                                self._ffmpeg_process.stdin.flush()
+                            else:
+                                # Write would block, sleep briefly
+                                time.sleep(0.01)
+                        except BlockingIOError:
+                            # Write would block, buffer is full, sleep briefly
+                            time.sleep(0.01)
+                        except BrokenPipeError:
+                            logger.warning("FFmpeg stdin pipe broken, decoder may have exited")
+                            break
                 else:
                     # No data to send, sleep briefly
                     time.sleep(0.01)
@@ -849,19 +872,18 @@ class StreamSourceAdapter(AudioSourceAdapter):
                 return None
 
             # Read decoded PCM from FFmpeg stdout (non-blocking)
-            import select
-            import os
-
-            # Check if data is available to read
             if self._ffmpeg_process.stdout:
-                # Try to read decoded PCM data
+                # Try to read decoded PCM data (non-blocking)
                 try:
                     # Read up to 16KB of PCM data
                     chunk = self._ffmpeg_process.stdout.read(16384)
                     if chunk:
                         self._pcm_buffer.extend(chunk)
-                except Exception:
+                except BlockingIOError:
+                    # No data available yet - this is expected with non-blocking reads
                     pass
+                except Exception as e:
+                    logger.debug(f"Error reading from FFmpeg stdout: {e}")
 
             # Convert PCM buffer to numpy array when we have enough data
             bytes_per_sample = 2  # 16-bit = 2 bytes
