@@ -885,9 +885,9 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             # Stream audio chunks
             logger.info(f'Starting live audio stream for {source_name}')
             chunk_count = len(prebuffer)
-            max_chunks = 6000  # ~2 minutes at typical chunk rate (0.02s per chunk)
+            max_chunks = 999999999  # Effectively unlimited - stream until client disconnects
             silence_count = 0
-            max_consecutive_silence = 20  # Stop after 20 consecutive silent/empty chunks (1 second)
+            max_consecutive_silence = 200  # 10 seconds of silence before stopping (increased from 1s)
 
             try:
                 while chunk_count < max_chunks:

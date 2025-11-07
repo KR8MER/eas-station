@@ -14,8 +14,10 @@
     <div class="col-12">
         <div class="alert alert-info">
             <i class="fas fa-info-circle"></i>
-            <strong>Note:</strong> Audio sources must be running to stream audio. Use the start button if a source is stopped.
-            Streams automatically stop after ~2 minutes to prevent resource exhaustion. Click play again to resume.
+            <strong>Live Audio Monitoring:</strong> Audio sources must be running to stream audio. Use the start button if a source is stopped.
+            <br>
+            <strong>Background Monitoring:</strong> EAS alert detection, waveform visualization, and audio level monitoring run continuously in the background, independent of web playback.
+            Even if you pause or stop web playback, the system continues monitoring for alerts 24/7.
         </div>
     </div>
 </div>
@@ -176,6 +178,17 @@ function renderAudioSources() {
         return;
     }
 
+    // Save playing state of audio players before re-render
+    const playingStates = {};
+    const currentTimes = {};
+    audioSources.forEach(source => {
+        const audioEl = document.getElementById(`audio-${source.name}`);
+        if (audioEl) {
+            playingStates[source.name] = !audioEl.paused;
+            currentTimes[source.name] = audioEl.currentTime;
+        }
+    });
+
     container.innerHTML = audioSources.map(source => `
         <div class="col-lg-6 col-xl-4 mb-3">
             <div class="card audio-source-card status-${source.status}">
@@ -185,9 +198,16 @@ function renderAudioSources() {
                             <i class="fas fa-${getSourceIcon(source.type)}"></i>
                             ${escapeHtml(source.name)}
                         </h5>
-                        <span class="badge status-badge bg-${getStatusColor(source.status)}">
-                            ${source.status.toUpperCase()}
-                        </span>
+                        <div>
+                            <span class="badge status-badge bg-${getStatusColor(source.status)}">
+                                ${source.status.toUpperCase()}
+                            </span>
+                            ${source.status === 'running' ? `
+                                <span class="badge bg-info ms-1" title="Background monitoring (EAS detection, waveforms, audio levels) is active">
+                                    <i class="fas fa-eye"></i> Monitoring
+                                </span>
+                            ` : ''}
+                        </div>
                     </div>
                     <small class="text-muted">${escapeHtml(source.type.toUpperCase())} Source</small>
                 </div>
@@ -233,6 +253,35 @@ function renderAudioSources() {
                                 <div class="metric-label">Channels</div>
                                 <div class="metric-value">${source.metrics.channels}</div>
                             </div>
+                            <div class="metric-item">
+                                <div class="metric-label">Buffer</div>
+                                <div class="metric-value">${(source.metrics.buffer_utilization * 100).toFixed(0)}%</div>
+                            </div>
+                            <div class="metric-item">
+                                <div class="metric-label">Frames</div>
+                                <div class="metric-value">${(source.metrics.frames_captured || 0).toLocaleString()}</div>
+                            </div>
+                        </div>
+
+                        <!-- Buffer Utilization Indicator -->
+                        <div class="mt-2">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <small class="text-muted">Buffer Utilization</small>
+                                <small class="text-muted">${(source.metrics.buffer_utilization * 100).toFixed(1)}%</small>
+                            </div>
+                            <div class="progress" style="height: 6px;">
+                                <div class="progress-bar ${source.metrics.buffer_utilization > 0.8 ? 'bg-warning' : source.metrics.buffer_utilization > 0.95 ? 'bg-danger' : 'bg-success'}"
+                                     role="progressbar"
+                                     style="width: ${(source.metrics.buffer_utilization * 100).toFixed(1)}%"
+                                     aria-valuenow="${(source.metrics.buffer_utilization * 100).toFixed(1)}"
+                                     aria-valuemin="0"
+                                     aria-valuemax="100"></div>
+                            </div>
+                            <small class="text-muted">
+                                ${source.metrics.buffer_utilization < 0.01 ? '⚠️ No data flowing' :
+                                  source.metrics.buffer_utilization > 0.95 ? '⚠️ Buffer nearly full' :
+                                  '✓ Data flowing normally'}
+                            </small>
                         </div>
 
                         <!-- Stream Metadata (if available) -->
@@ -304,6 +353,19 @@ function renderAudioSources() {
             </div>
         </div>
     `).join('');
+
+    // Restore playing state of audio players after re-render
+    audioSources.forEach(source => {
+        const audioEl = document.getElementById(`audio-${source.name}`);
+        if (audioEl && playingStates[source.name]) {
+            // Restore playback state
+            audioEl.currentTime = currentTimes[source.name] || 0;
+            // Use play() with error handling (browser may block autoplay)
+            audioEl.play().catch(err => {
+                console.log(`Could not auto-resume playback for ${source.name}:`, err.message);
+            });
+        }
+    });
 }
 
 function getSourceIcon(type) {
@@ -448,8 +510,9 @@ async function updateWaveform(sourceName) {
 document.addEventListener('DOMContentLoaded', function() {
     loadAudioSources();
 
-    // Auto-refresh every 5 seconds
-    setInterval(loadAudioSources, 5000);
+    // Auto-refresh every 30 seconds (increased from 5s to reduce interruptions)
+    // Only refreshes status/metrics, not the entire player
+    setInterval(loadAudioSources, 30000);
 });
 
 // Clean up intervals when page unloads
