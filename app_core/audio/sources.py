@@ -160,23 +160,52 @@ class ALSASourceAdapter(AudioSourceAdapter):
 
     def _read_audio_chunk(self) -> Optional[np.ndarray]:
         """Read audio chunk from ALSA device."""
+        # If device is not connected, attempt reconnection
         if not self._alsa_device:
-            return None
+            if self._reconnect_attempts < self._max_reconnect_attempts:
+                self._reconnect_attempts += 1
+                logger.info(f"ALSA device disconnected, attempting to reconnect (attempt {self._reconnect_attempts}/{self._max_reconnect_attempts})")
+                time.sleep(2)
+                try:
+                    self._start_capture()
+                    self._reconnect_attempts = 0  # Reset on successful reconnect
+                    return None
+                except Exception as e:
+                    logger.error(f"ALSA reconnection failed: {e}")
+                    self.status = AudioSourceStatus.DISCONNECTED
+                    return None
+            else:
+                # Max reconnection attempts reached
+                self.status = AudioSourceStatus.ERROR
+                self.error_message = f"Max reconnection attempts ({self._max_reconnect_attempts}) reached"
+                return None
 
         try:
             # Read data from ALSA
             length, data = self._alsa_device.read()
-            
+
             if length > 0 and data:
+                # Reset reconnect attempts on successful read
+                self._reconnect_attempts = 0
                 # Convert bytes to numpy array
                 audio_array = np.frombuffer(data, dtype=np.int16)
                 # Convert to float32 normalized to [-1, 1]
                 audio_array = audio_array.astype(np.float32) / 32768.0
                 return audio_array
-                
+
         except Exception as e:
             logger.error(f"Error reading ALSA audio: {e}")
-            
+            # Close the device to trigger reconnection
+            if self._alsa_device:
+                try:
+                    self._alsa_device.close()
+                except Exception:
+                    pass
+                self._alsa_device = None
+            # Attempt reconnection on next call
+            if self._reconnect_attempts < self._max_reconnect_attempts:
+                self.status = AudioSourceStatus.DISCONNECTED
+
         return None
 
 
@@ -231,23 +260,75 @@ class PulseSourceAdapter(AudioSourceAdapter):
 
     def _read_audio_chunk(self) -> Optional[np.ndarray]:
         """Read audio chunk from PulseAudio stream."""
-        if not self._stream:
-            return None
+        # If stream is not connected, attempt reconnection
+        if not self._stream or not self._pyaudio:
+            if self._reconnect_attempts < self._max_reconnect_attempts:
+                self._reconnect_attempts += 1
+                logger.info(f"PulseAudio stream disconnected, attempting to reconnect (attempt {self._reconnect_attempts}/{self._max_reconnect_attempts})")
+                time.sleep(2)
+                try:
+                    # Clean up old resources first
+                    if self._stream:
+                        try:
+                            self._stream.stop_stream()
+                            self._stream.close()
+                        except Exception:
+                            pass
+                        self._stream = None
+                    if self._pyaudio:
+                        try:
+                            self._pyaudio.terminate()
+                        except Exception:
+                            pass
+                        self._pyaudio = None
+
+                    # Attempt to restart
+                    self._start_capture()
+                    self._reconnect_attempts = 0  # Reset on successful reconnect
+                    return None
+                except Exception as e:
+                    logger.error(f"PulseAudio reconnection failed: {e}")
+                    self.status = AudioSourceStatus.DISCONNECTED
+                    return None
+            else:
+                # Max reconnection attempts reached
+                self.status = AudioSourceStatus.ERROR
+                self.error_message = f"Max reconnection attempts ({self._max_reconnect_attempts}) reached"
+                return None
 
         try:
             # Read data from stream
             data = self._stream.read(self.config.buffer_size, exception_on_overflow=False)
-            
+
             if data:
+                # Reset reconnect attempts on successful read
+                self._reconnect_attempts = 0
                 # Convert bytes to numpy array
                 audio_array = np.frombuffer(data, dtype=np.int16)
                 # Convert to float32 normalized to [-1, 1]
                 audio_array = audio_array.astype(np.float32) / 32768.0
                 return audio_array
-                
+
         except Exception as e:
             logger.error(f"Error reading PulseAudio audio: {e}")
-            
+            # Close the stream to trigger reconnection
+            if self._stream:
+                try:
+                    self._stream.stop_stream()
+                    self._stream.close()
+                except Exception:
+                    pass
+                self._stream = None
+            if self._pyaudio:
+                try:
+                    self._pyaudio.terminate()
+                except Exception:
+                    pass
+                self._pyaudio = None
+            # Attempt reconnection on next call
+            if self._reconnect_attempts < self._max_reconnect_attempts:
+                self.status = AudioSourceStatus.DISCONNECTED
+
         return None
 
 

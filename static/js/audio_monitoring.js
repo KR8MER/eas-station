@@ -7,6 +7,8 @@
 let audioSources = [];
 let metricsUpdateInterval = null;
 let healthUpdateInterval = null;
+let deviceMonitorInterval = null;
+let lastDeviceList = [];
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
@@ -25,9 +27,59 @@ function initializeAudioMonitoring() {
     // Start periodic updates (every 1 second)
     metricsUpdateInterval = setInterval(updateMetrics, 1000);
     healthUpdateInterval = setInterval(loadAudioHealth, 5000);
+    // Monitor for device changes every 10 seconds
+    deviceMonitorInterval = setInterval(monitorDeviceChanges, 10000);
 
     // Setup event listeners
     document.getElementById('sourceType')?.addEventListener('change', updateSourceTypeConfig);
+}
+
+/**
+ * Monitor for audio device changes (hot-plug detection)
+ */
+async function monitorDeviceChanges() {
+    try {
+        const response = await fetch('/api/audio/devices');
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const currentDevices = data.devices || [];
+
+        // Only check if we have a previous device list
+        if (lastDeviceList.length > 0) {
+            // Check for new devices
+            const newDevices = currentDevices.filter(curr =>
+                !lastDeviceList.some(prev => prev.device_id === curr.device_id && prev.type === curr.type)
+            );
+
+            // Check for removed devices
+            const removedDevices = lastDeviceList.filter(prev =>
+                !currentDevices.some(curr => curr.device_id === prev.device_id && curr.type === prev.type)
+            );
+
+            // Notify user of changes
+            if (newDevices.length > 0) {
+                console.info('New audio devices detected:', newDevices);
+                newDevices.forEach(device => {
+                    showSuccess(`New device detected: ${device.name}`);
+                });
+            }
+
+            if (removedDevices.length > 0) {
+                console.info('Audio devices removed:', removedDevices);
+                removedDevices.forEach(device => {
+                    showError(`Device disconnected: ${device.name}`);
+                });
+                // Refresh sources to update status
+                loadAudioSources();
+            }
+        }
+
+        // Update the last known device list
+        lastDeviceList = currentDevices;
+    } catch (error) {
+        console.debug('Error monitoring device changes:', error);
+    }
 }
 
 /**
@@ -147,6 +199,18 @@ function createSourceCard(source) {
                         </button>
                     </div>
                 </div>
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <small class="text-muted">
+                                <i class="fas fa-wave-square"></i> Waveform Monitor
+                                ${source.status === 'running' ? '<span class="text-success">● LIVE</span>' : '<span class="text-muted">○ Stopped</span>'}
+                            </small>
+                            <small class="text-muted">Data flowing: <span id="data-indicator-${safeId}">--</span></small>
+                        </div>
+                        <canvas id="waveform-${safeId}" class="waveform-canvas" width="800" height="120"></canvas>
+                    </div>
+                </div>
                 ${metrics.silence_detected ? `
                 <div class="alert alert-warning mt-3 mb-0 silence-warning">
                     <i class="fas fa-volume-mute"></i> Silence detected on this source
@@ -194,10 +258,114 @@ async function updateMetrics() {
         liveMetrics.forEach(metric => {
             updateMeterDisplay(metric.source_id, 'peak', metric.peak_level_db);
             updateMeterDisplay(metric.source_id, 'rms', metric.rms_level_db);
+            // Update waveform for running sources
+            if (audioSources.find(s => s.id === metric.source_id && s.status === 'running')) {
+                updateWaveform(metric.source_id);
+            }
         });
     } catch (error) {
         console.error('Error updating metrics:', error);
     }
+}
+
+/**
+ * Update waveform display for a source
+ */
+async function updateWaveform(sourceId) {
+    try {
+        const response = await fetch(`/api/audio/waveform/${encodeURIComponent(sourceId)}`);
+        if (!response.ok) return;
+
+        const data = await response.json();
+        drawWaveform(sourceId, data.waveform);
+
+        // Update data flow indicator
+        const safeId = sanitizeId(sourceId);
+        const indicator = document.getElementById(`data-indicator-${safeId}`);
+        if (indicator) {
+            const now = new Date();
+            indicator.textContent = `${now.toLocaleTimeString()} (${data.sample_count} samples)`;
+            indicator.className = 'text-success fw-bold';
+        }
+    } catch (error) {
+        // Silently fail for individual waveform updates
+        console.debug('Error updating waveform for', sourceId, error);
+    }
+}
+
+/**
+ * Draw waveform on canvas
+ */
+function drawWaveform(sourceId, waveformData) {
+    const safeId = sanitizeId(sourceId);
+    const canvas = document.getElementById(`waveform-${safeId}`);
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    const centerY = height / 2;
+
+    // Clear canvas
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw center line
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, centerY);
+    ctx.lineTo(width, centerY);
+    ctx.stroke();
+
+    // Draw grid lines
+    ctx.strokeStyle = '#2a2a2a';
+    ctx.lineWidth = 0.5;
+    for (let i = 1; i < 4; i++) {
+        const y = (height / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+    }
+
+    if (!waveformData || waveformData.length === 0) return;
+
+    // Draw waveform
+    const step = width / waveformData.length;
+
+    // Create gradient for waveform
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, '#00ff88');
+    gradient.addColorStop(0.5, '#00cc66');
+    gradient.addColorStop(1, '#00ff88');
+
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+
+    for (let i = 0; i < waveformData.length; i++) {
+        const x = i * step;
+        // Clamp values to [-1, 1] range
+        const sample = Math.max(-1, Math.min(1, waveformData[i]));
+        const y = centerY - (sample * centerY * 0.9); // 0.9 for some padding
+
+        if (i === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    }
+
+    ctx.stroke();
+
+    // Draw amplitude indicators
+    ctx.fillStyle = '#888';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText('+1.0', width - 5, 12);
+    ctx.fillText('0.0', width - 5, centerY + 4);
+    ctx.fillText('-1.0', width - 5, height - 4);
 }
 
 /**
@@ -829,4 +997,5 @@ function formatTimestamp(timestamp) {
 window.addEventListener('beforeunload', function() {
     if (metricsUpdateInterval) clearInterval(metricsUpdateInterval);
     if (healthUpdateInterval) clearInterval(healthUpdateInterval);
+    if (deviceMonitorInterval) clearInterval(deviceMonitorInterval);
 });
