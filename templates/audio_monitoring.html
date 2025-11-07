@@ -223,9 +223,24 @@ function renderAudioSources() {
                     <div class="audio-player-container" id="player-container-${source.name}">
                         ${source.status === 'running' ? `
                             <audio controls id="audio-${source.name}">
+                                ${source.icecast_url ? `
+                                    <source src="${source.icecast_url}" type="audio/mpeg">
+                                ` : ''}
                                 <source src="/api/audio/stream/${encodeURIComponent(source.name)}" type="audio/wav">
                                 Your browser does not support the audio element.
                             </audio>
+                            ${source.icecast_url ? `
+                                <small class="text-success d-block mt-1">
+                                    <i class="fas fa-broadcast-tower"></i> Professional Streaming (Icecast) - Better quality, no dropouts
+                                </small>
+                            ` : `
+                                <small class="text-muted d-block mt-1">
+                                    <i class="fas fa-info-circle"></i> Basic Streaming Mode
+                                    <a href="/settings/audio#icecast" class="text-primary ms-2">
+                                        <i class="fas fa-arrow-up-right-from-square"></i> Enable Icecast for professional quality
+                                    </a>
+                                </small>
+                            `}
                         ` : `
                             <div class="alert alert-secondary mb-0">
                                 <i class="fas fa-pause-circle"></i>

@@ -112,6 +112,21 @@ def _serialize_audio_source(source_name: str, adapter: Any) -> Dict[str, Any]:
     # Fetch database config for additional fields
     db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
 
+    # Check if Icecast streaming is available for this source
+    icecast_url = None
+    try:
+        # Try to get Icecast config from settings
+        from app_core.config import get_config_value
+        icecast_enabled = get_config_value('icecast_enabled', False)
+        if icecast_enabled:
+            icecast_server = get_config_value('icecast_server', 'localhost')
+            icecast_port = get_config_value('icecast_port', 8000)
+            # Construct potential Icecast URL
+            icecast_url = f"http://{icecast_server}:{icecast_port}/{source_name}"
+    except Exception:
+        # Silently fail - Icecast just won't be available
+        pass
+
     return {
         'id': source_name,
         'name': config.name,
@@ -122,6 +137,7 @@ def _serialize_audio_source(source_name: str, adapter: Any) -> Dict[str, Any]:
         'priority': config.priority,
         'auto_start': _sanitize_bool(db_config.auto_start) if db_config else False,
         'description': db_config.description if db_config else '',
+        'icecast_url': icecast_url,  # NEW: Icecast stream URL if available
         'config': {
             'sample_rate': config.sample_rate,
             'channels': config.channels,
