@@ -586,7 +586,12 @@ ENV_CATEGORIES = {
 
 def get_env_file_path() -> Path:
     """Get the path to the .env file."""
-    # Look for .env in the project root
+    # Check if CONFIG_PATH environment variable is set (for persistent storage)
+    config_path = os.environ.get('CONFIG_PATH')
+    if config_path:
+        return Path(config_path)
+
+    # Fallback to .env in the project root
     current_dir = Path(__file__).resolve().parent
     project_root = current_dir.parent.parent
     env_path = project_root / '.env'
