@@ -3,12 +3,14 @@ set -e
 
 CONFIG_FILE="/etc/icecast2/icecast.xml"
 
-# Function to update XML config values
+# Function to update XML config values (handles multiline and whitespace)
 update_config() {
     local tag=$1
     local value=$2
     if [ -n "$value" ]; then
-        sed -i "s|<${tag}>[^<]*</${tag}>|<${tag}>${value}</${tag}>|g" "$CONFIG_FILE"
+        # Use perl for better multiline regex support
+        # This handles: <tag>value</tag>, <tag> value </tag>, and multiline variants
+        perl -i -0777 -pe "s|<${tag}>.*?</${tag}>|<${tag}>${value}</${tag}>|gs" "$CONFIG_FILE"
     fi
 }
 

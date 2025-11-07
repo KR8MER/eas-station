@@ -7,6 +7,7 @@ RUN apt-get update && \
         wget \
         curl \
         gosu \
+        perl \
     && rm -rf /var/lib/apt/lists/*
 
 # Configure Icecast to run in foreground
