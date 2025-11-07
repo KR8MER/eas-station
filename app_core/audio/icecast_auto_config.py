@@ -22,6 +22,7 @@ class IcecastAutoConfig:
         self.port = 8000
         self.source_password = ""
         self.external_port = 8001  # For generating URLs accessible from browser
+        self.public_hostname = None  # Public hostname/IP for browser access
 
         self._detect_config()
 
@@ -59,12 +60,19 @@ class IcecastAutoConfig:
                 # If server is 'localhost', it's probably already the external mapping
                 self.external_port = 8001 if self.server == 'icecast' else self.port
 
+            # Get public hostname for browser access (required for remote servers)
+            # This should be the public IP or hostname of the server
+            self.public_hostname = os.environ.get('ICECAST_PUBLIC_HOSTNAME') or \
+                                  os.environ.get('PUBLIC_HOSTNAME') or \
+                                  os.environ.get('SERVER_NAME')
+
             self.enabled = True
 
             logger.info(
                 f"Icecast auto-configuration enabled: "
                 f"server={self.server}, port={self.port}, "
-                f"external_port={self.external_port}"
+                f"external_port={self.external_port}, "
+                f"public_hostname={self.public_hostname or 'localhost (WARNING: may not work remotely)'}"
             )
 
         except Exception as e:
@@ -91,9 +99,14 @@ class IcecastAutoConfig:
             return None
 
         if external:
-            # Browser/external access - use external port and localhost
-            # (or the configured hostname)
-            hostname = 'localhost' if self.server == 'icecast' else self.server
+            # Browser/external access - use public hostname if configured
+            # Otherwise fall back to localhost (which won't work for remote access)
+            if self.public_hostname:
+                hostname = self.public_hostname
+            elif self.server == 'icecast':
+                hostname = 'localhost'
+            else:
+                hostname = self.server
             port = self.external_port
         else:
             # Internal app access - use container name and internal port
