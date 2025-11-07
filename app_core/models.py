@@ -267,9 +267,12 @@ class EASDecodedAudio(db.Model):
     quality_metrics = db.Column(db.JSON, default=dict)
     segment_metadata = db.Column(db.JSON, default=dict)
     header_audio_data = db.Column(db.LargeBinary)
-    message_audio_data = db.Column(db.LargeBinary)
+    attention_tone_audio_data = db.Column(db.LargeBinary)  # EBS or NWS 1050Hz tone
+    narration_audio_data = db.Column(db.LargeBinary)  # Voice narration segment
     eom_audio_data = db.Column(db.LargeBinary)
     buffer_audio_data = db.Column(db.LargeBinary)
+    # Deprecated: kept for backward compatibility with old decodes
+    message_audio_data = db.Column(db.LargeBinary)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -282,9 +285,11 @@ class EASDecodedAudio(db.Model):
             "quality_metrics": dict(self.quality_metrics or {}),
             "segment_metadata": dict(self.segment_metadata or {}),
             "has_header_audio": self.header_audio_data is not None,
-            "has_message_audio": self.message_audio_data is not None,
+            "has_attention_tone_audio": self.attention_tone_audio_data is not None,
+            "has_narration_audio": self.narration_audio_data is not None,
             "has_eom_audio": self.eom_audio_data is not None,
             "has_buffer_audio": self.buffer_audio_data is not None,
+            "has_message_audio": self.message_audio_data is not None,  # Deprecated
         }
 
 

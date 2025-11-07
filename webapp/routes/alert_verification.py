@@ -18,9 +18,145 @@ from app_core.eas_storage import (
 from app_core.models import EASDecodedAudio
 import base64
 import io
+import wave
+import struct
+import numpy as np
 from app_utils import format_local_datetime
 from app_utils.export import generate_csv
 from app_utils.eas_decode import AudioDecodeError, SAMEAudioDecodeResult, decode_same_audio
+from app_utils.eas_detection import detect_eas_from_file
+
+
+def _extract_audio_segment_wav(audio_path: str, start_sample: int, end_sample: int, sample_rate: int) -> bytes:
+    """Extract a segment of audio and return as WAV bytes."""
+    with wave.open(audio_path, 'rb') as wf:
+        n_channels = wf.getnchannels()
+        sampwidth = wf.getsampwidth()
+
+        # Read the specific segment
+        wf.setpos(start_sample)
+        frames = wf.readframes(end_sample - start_sample)
+
+        # Create WAV file in memory
+        buffer = io.BytesIO()
+        with wave.open(buffer, 'wb') as wav_out:
+            wav_out.setnchannels(n_channels)
+            wav_out.setsampwidth(sampwidth)
+            wav_out.setframerate(sample_rate)
+            wav_out.writeframes(frames)
+
+        return buffer.getvalue()
+
+
+def _detect_comprehensive_eas_segments(audio_path: str, route_logger):
+    """
+    Perform comprehensive EAS detection and return properly separated segments.
+
+    Returns a dict compatible with SAMEAudioDecodeResult format but with additional segments:
+    - header: SAME header bursts
+    - attention_tone: EBS two-tone or NWS 1050 Hz
+    - narration: Voice narration
+    - eom: End-of-Message marker
+    - buffer: Lead-in/lead-out audio
+    """
+    try:
+        # Step 1: Run comprehensive detection
+        detection_result = detect_eas_from_file(
+            audio_path,
+            detect_tones=True,
+            detect_narration=True
+        )
+
+        route_logger.info(f"Comprehensive detection: SAME={detection_result.same_detected}, "
+                         f"EBS={detection_result.has_ebs_tone}, NWS={detection_result.has_nws_tone}, "
+                         f"Narration={detection_result.has_narration}")
+
+        # Get the basic SAME decode result
+        same_result = detection_result.raw_same_result
+        if not same_result:
+            # Fallback to basic decode if comprehensive failed
+            same_result = decode_same_audio(audio_path)
+
+        # Step 2: Build segment dictionary with comprehensive segments
+        segments = {}
+        sample_rate = detection_result.sample_rate or same_result.sample_rate
+
+        # Add SAME header segment (from original decode)
+        if 'header' in same_result.segments:
+            segments['header'] = same_result.segments['header']
+
+        # Add attention tone segment (EBS or NWS 1050Hz)
+        if detection_result.alert_tones:
+            # Take the first/longest tone as the attention tone
+            tone = max(detection_result.alert_tones, key=lambda t: t.duration_seconds)
+
+            tone_wav = _extract_audio_segment_wav(
+                audio_path,
+                tone.start_sample,
+                tone.end_sample,
+                sample_rate
+            )
+
+            # Create a segment object similar to SAMEAudioSegment
+            from app_utils.eas_decode import SAMEAudioSegment
+            tone_segment = SAMEAudioSegment(
+                label='attention_tone',
+                start_sample=tone.start_sample,
+                end_sample=tone.end_sample,
+                sample_rate=sample_rate,
+                wav_bytes=tone_wav
+            )
+            segments['attention_tone'] = tone_segment
+
+            route_logger.info(f"Extracted {tone.tone_type.upper()} tone: "
+                            f"{tone.duration_seconds:.2f}s at {tone.start_sample / sample_rate:.2f}s")
+
+        # Add narration segment
+        if detection_result.narration_segments:
+            # Take the first narration segment with speech
+            narration = next((seg for seg in detection_result.narration_segments if seg.contains_speech),
+                           detection_result.narration_segments[0] if detection_result.narration_segments else None)
+
+            if narration:
+                narration_wav = _extract_audio_segment_wav(
+                    audio_path,
+                    narration.start_sample,
+                    narration.end_sample,
+                    sample_rate
+                )
+
+                from app_utils.eas_decode import SAMEAudioSegment
+                narration_segment = SAMEAudioSegment(
+                    label='narration',
+                    start_sample=narration.start_sample,
+                    end_sample=narration.end_sample,
+                    sample_rate=sample_rate,
+                    wav_bytes=narration_wav
+                )
+                segments['narration'] = narration_segment
+
+                route_logger.info(f"Extracted narration: {narration.duration_seconds:.2f}s "
+                                f"at {narration.start_sample / sample_rate:.2f}s, "
+                                f"speech={narration.contains_speech}")
+
+        # Add EOM segment (from original decode)
+        if 'eom' in same_result.segments:
+            segments['eom'] = same_result.segments['eom']
+
+        # Add buffer segment (from original decode)
+        if 'buffer' in same_result.segments:
+            segments['buffer'] = same_result.segments['buffer']
+
+        # Update the decode result with comprehensive segments
+        same_result.segments.clear()
+        same_result.segments.update(segments)
+
+        return same_result, detection_result
+
+    except Exception as e:
+        route_logger.error(f"Comprehensive detection failed: {e}", exc_info=True)
+        # Fallback to basic decode
+        return decode_same_audio(audio_path), None
 
 
 def register(app: Flask, logger) -> None:
@@ -73,16 +209,27 @@ def register(app: Flask, logger) -> None:
         decode_result: Optional[SAMEAudioDecodeResult] = None
         stored_record = None
 
-        with tempfile.NamedTemporaryFile(suffix=extension) as temp_file:
+        with tempfile.NamedTemporaryFile(suffix=extension, delete=False) as temp_file:
             upload.save(temp_file.name)
+            temp_path = temp_file.name
+
+        try:
+            # Use comprehensive detection to properly separate all EAS elements
+            decode_result, detection_result = _detect_comprehensive_eas_segments(
+                temp_path,
+                route_logger
+            )
+        except AudioDecodeError as exc:
+            errors.append(str(exc))
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            route_logger.error("Unexpected failure decoding SAME audio: %s", exc)
+            errors.append("Unable to decode audio payload. See logs for details.")
+        finally:
+            # Clean up temp file
             try:
-                # Auto-detect sample rate from the WAV file header
-                decode_result = decode_same_audio(temp_file.name)
-            except AudioDecodeError as exc:
-                errors.append(str(exc))
-            except Exception as exc:  # pragma: no cover - defensive fallback
-                route_logger.error("Unexpected failure decoding SAME audio: %s", exc)
-                errors.append("Unable to decode audio payload. See logs for details.")
+                os.unlink(temp_path)
+            except:
+                pass
 
             if decode_result and request.form.get("store_results") == "on":
                 try:
@@ -217,9 +364,12 @@ def register(app: Flask, logger) -> None:
         segment_key = (segment or "").strip().lower()
         column_map = {
             "header": "header_audio_data",
-            "message": "message_audio_data",
+            "attention_tone": "attention_tone_audio_data",
+            "tone": "attention_tone_audio_data",  # Alias
+            "narration": "narration_audio_data",
             "eom": "eom_audio_data",
             "buffer": "buffer_audio_data",
+            "message": "message_audio_data",  # Deprecated, for backward compatibility
         }
 
         if segment_key not in column_map:
