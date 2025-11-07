@@ -981,5 +981,13 @@ def register_environment_routes(app, logger):
             mimetype='text/plain'
         )
 
+    @app.route('/api/environment/generate-secret', methods=['POST'])
+    @require_permission('system.configure')
+    def generate_secret_key_api():
+        """Generate a new secret key."""
+        import secrets
+        secret_key = secrets.token_hex(32)  # 64-character hex string
+        return jsonify({'secret_key': secret_key})
+
 
 __all__ = ['register_environment_routes', 'ENV_CATEGORIES']
