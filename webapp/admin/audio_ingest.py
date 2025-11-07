@@ -961,5 +961,145 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             logger.error('Error setting up audio stream for %s: %s', source_name, exc)
             return jsonify({'error': str(exc)}), 500
 
+    @app.route('/api/audio/health/dashboard', methods=['GET'])
+    def api_get_health_dashboard():
+        """Get comprehensive health metrics for dashboard display."""
+        try:
+            controller = _get_audio_controller()
+
+            # Get all source metrics
+            source_health = []
+            total_restarts = 0
+            healthy_count = 0
+            degraded_count = 0
+            failed_count = 0
+
+            for source_name, adapter in controller._sources.items():
+                metrics = adapter.metrics
+                status = adapter.status
+
+                # Categorize health
+                if status.value == 'running':
+                    if not metrics.silence_detected:
+                        healthy_count += 1
+                        health_status = 'healthy'
+                    else:
+                        degraded_count += 1
+                        health_status = 'degraded'
+                else:
+                    failed_count += 1
+                    health_status = 'failed'
+
+                source_health.append({
+                    'name': source_name,
+                    'status': status.value,
+                    'health': health_status,
+                    'uptime_seconds': time.time() - adapter._start_time if hasattr(adapter, '_start_time') and adapter._start_time > 0 else 0,
+                    'peak_level_db': _sanitize_float(metrics.peak_level_db),
+                    'rms_level_db': _sanitize_float(metrics.rms_level_db),
+                    'silence_detected': metrics.silence_detected,
+                    'buffer_utilization': _sanitize_float(metrics.buffer_utilization * 100),
+                })
+
+            # Calculate overall health score (0-100)
+            total_sources = len(controller._sources)
+            if total_sources > 0:
+                health_score = (
+                    (healthy_count * 100) +
+                    (degraded_count * 50) +
+                    (failed_count * 0)
+                ) / total_sources
+            else:
+                health_score = 0
+
+            return jsonify({
+                'overall_health_score': health_score,
+                'total_sources': total_sources,
+                'healthy_count': healthy_count,
+                'degraded_count': degraded_count,
+                'failed_count': failed_count,
+                'source_health': source_health,
+                'timestamp': time.time()
+            })
+
+        except Exception as exc:
+            logger.error('Error getting health dashboard: %s', exc)
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/audio/health/metrics', methods=['GET'])
+    def api_get_health_metrics():
+        """Get real-time metrics for all sources."""
+        try:
+            controller = _get_audio_controller()
+            metrics_list = []
+
+            for source_name, adapter in controller._sources.items():
+                metrics = adapter.metrics
+
+                metrics_list.append({
+                    'source_name': source_name,
+                    'timestamp': metrics.timestamp,
+                    'peak_level_db': _sanitize_float(metrics.peak_level_db),
+                    'rms_level_db': _sanitize_float(metrics.rms_level_db),
+                    'sample_rate': metrics.sample_rate,
+                    'frames_captured': metrics.frames_captured,
+                    'silence_detected': metrics.silence_detected,
+                    'buffer_utilization': _sanitize_float(metrics.buffer_utilization * 100),
+                })
+
+            return jsonify({
+                'metrics': metrics_list,
+                'timestamp': time.time()
+            })
+
+        except Exception as exc:
+            logger.error('Error getting health metrics: %s', exc)
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/audio/icecast/config', methods=['GET'])
+    def api_get_icecast_config():
+        """Get Icecast rebroadcast configuration."""
+        try:
+            # TODO: Load from database or config file
+            return jsonify({
+                'enabled': False,
+                'server': 'localhost',
+                'port': 8000,
+                'password': '***',
+                'mount': '/eas-station',
+                'name': 'EAS Station Audio',
+                'description': 'Emergency Alert System Audio Monitor',
+                'genre': 'Emergency',
+                'bitrate': 128
+            })
+        except Exception as exc:
+            logger.error('Error getting Icecast config: %s', exc)
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/audio/icecast/config', methods=['POST'])
+    def api_update_icecast_config():
+        """Update Icecast rebroadcast configuration."""
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
+
+            # TODO: Validate and save to database
+            # TODO: Restart Icecast streamer if enabled
+
+            return jsonify({
+                'message': 'Icecast configuration updated',
+                'config': data
+            })
+
+        except Exception as exc:
+            logger.error('Error updating Icecast config: %s', exc)
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/audio/health/dashboard')
+    def audio_health_dashboard():
+        """Render the health monitoring dashboard page."""
+        return render_template('audio/health_dashboard.html')
+
 
 __all__ = ['register_audio_ingest_routes']

@@ -105,7 +105,7 @@
     <div id="alerts-list" style="display:none;"></div>
 
     <!-- Active Audio Sources Table -->
-    <div class="card shadow-sm">
+    <div class="card shadow-sm mb-4">
         <div class="card-header d-flex flex-column flex-md-row gap-2 gap-md-3 align-items-md-center justify-content-between">
             <div>
                 <h2 class="h5 mb-1">Configured Audio Sources</h2>
@@ -125,6 +125,129 @@
                 <i class="fas fa-microphone-slash fa-3x mb-3"></i>
                 <p>Loading audio sources...</p>
             </div>
+        </div>
+    </div>
+
+    <!-- Icecast Streaming Output -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-info text-white d-flex align-items-center justify-content-between">
+            <div>
+                <h2 class="h5 mb-1"><i class="fas fa-broadcast-tower me-2"></i>Audio Output - Icecast Streaming</h2>
+                <div class="small">Rebroadcast audio to network clients via Icecast server</div>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-light btn-sm" id="icecastStartBtn" disabled>
+                    <i class="fas fa-play"></i> Start Stream
+                </button>
+                <button type="button" class="btn btn-light btn-sm" id="icecastStopBtn" disabled>
+                    <i class="fas fa-stop"></i> Stop Stream
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Icecast Streaming:</strong> Configure an Icecast server to rebroadcast monitored audio to multiple network clients.
+                This allows remote listening to the active audio source via standard media players (VLC, iTunes, etc.).
+            </div>
+
+            <form id="icecastConfigForm">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="icecastServer" class="form-label">
+                            Icecast Server <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" class="form-control" id="icecastServer" placeholder="localhost" required>
+                        <small class="form-text text-muted">Hostname or IP address of Icecast server</small>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="icecastPort" class="form-label">
+                            Port <span class="text-danger">*</span>
+                        </label>
+                        <input type="number" class="form-control" id="icecastPort" value="8000" min="1" max="65535" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="icecastPassword" class="form-label">
+                            Source Password <span class="text-danger">*</span>
+                        </label>
+                        <input type="password" class="form-control" id="icecastPassword" required>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="icecastMount" class="form-label">
+                            Mount Point <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" class="form-control" id="icecastMount" placeholder="eas-monitor.mp3" required>
+                        <small class="form-text text-muted">Stream path (e.g., /stream.mp3)</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="icecastName" class="form-label">
+                            Stream Name <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" class="form-control" id="icecastName" placeholder="EAS Monitor Station" required>
+                    </div>
+
+                    <div class="col-md-8">
+                        <label for="icecastDescription" class="form-label">Description</label>
+                        <input type="text" class="form-control" id="icecastDescription" placeholder="Live EAS/SAME Alert Monitoring">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="icecastGenre" class="form-label">Genre</label>
+                        <input type="text" class="form-control" id="icecastGenre" value="Emergency">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="icecastBitrate" class="form-label">Bitrate (kbps)</label>
+                        <select class="form-select" id="icecastBitrate">
+                            <option value="64">64 kbps</option>
+                            <option value="96">96 kbps</option>
+                            <option value="128" selected>128 kbps</option>
+                            <option value="192">192 kbps</option>
+                            <option value="256">256 kbps</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="icecastFormat" class="form-label">Format</label>
+                        <select class="form-select" id="icecastFormat">
+                            <option value="mp3" selected>MP3</option>
+                            <option value="ogg">OGG Vorbis</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="icecastPublic">
+                            <label class="form-check-label" for="icecastPublic">
+                                Public (list in directory)
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-primary" onclick="saveIcecastConfig()">
+                                <i class="fas fa-save"></i> Save Configuration
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="loadIcecastConfig()">
+                                <i class="fas fa-rotate"></i> Reload
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Stream Status -->
+                    <div class="col-12">
+                        <div id="icecastStatus" class="alert d-none" role="alert"></div>
+                        <div id="icecastStreamUrl" class="d-none">
+                            <div class="alert alert-success">
+                                <strong><i class="fas fa-link me-2"></i>Stream URL:</strong>
+                                <code id="icecastUrlDisplay"></code>
+                                <button class="btn btn-sm btn-outline-success ms-2" onclick="copyIcecastUrl()">
+                                    <i class="fas fa-copy"></i> Copy
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -296,6 +419,179 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('refreshBtn')?.addEventListener('click', () => {
         loadAudioSources();
         loadAudioHealth();
+    });
+
+    // Load Icecast config on page load
+    loadIcecastConfig();
+
+    // Icecast start/stop buttons
+    document.getElementById('icecastStartBtn')?.addEventListener('click', startIcecastStream);
+    document.getElementById('icecastStopBtn')?.addEventListener('click', stopIcecastStream);
+});
+
+// Icecast Configuration Functions
+async function loadIcecastConfig() {
+    try {
+        const response = await fetch('/api/audio/icecast/config');
+        if (!response.ok) {
+            console.warn('No Icecast config found, using defaults');
+            document.getElementById('icecastStartBtn').disabled = false;
+            return;
+        }
+
+        const config = await response.json();
+
+        // Populate form fields
+        document.getElementById('icecastServer').value = config.server || 'localhost';
+        document.getElementById('icecastPort').value = config.port || 8000;
+        document.getElementById('icecastPassword').value = config.password || '';
+        document.getElementById('icecastMount').value = config.mount || 'eas-monitor.mp3';
+        document.getElementById('icecastName').value = config.name || 'EAS Monitor Station';
+        document.getElementById('icecastDescription').value = config.description || 'Live EAS/SAME Alert Monitoring';
+        document.getElementById('icecastGenre').value = config.genre || 'Emergency';
+        document.getElementById('icecastBitrate').value = config.bitrate || 128;
+        document.getElementById('icecastFormat').value = config.format || 'mp3';
+        document.getElementById('icecastPublic').checked = config.public || false;
+
+        // Enable buttons
+        document.getElementById('icecastStartBtn').disabled = false;
+        document.getElementById('icecastStopBtn').disabled = false;
+
+        // Update stream URL display
+        updateIcecastUrl();
+
+        showIcecastStatus('Configuration loaded successfully', 'success');
+    } catch (error) {
+        console.error('Error loading Icecast config:', error);
+        showIcecastStatus('Failed to load configuration: ' + error.message, 'warning');
+        document.getElementById('icecastStartBtn').disabled = false;
+    }
+}
+
+async function saveIcecastConfig() {
+    try {
+        const config = {
+            server: document.getElementById('icecastServer').value,
+            port: parseInt(document.getElementById('icecastPort').value),
+            password: document.getElementById('icecastPassword').value,
+            mount: document.getElementById('icecastMount').value,
+            name: document.getElementById('icecastName').value,
+            description: document.getElementById('icecastDescription').value,
+            genre: document.getElementById('icecastGenre').value,
+            bitrate: parseInt(document.getElementById('icecastBitrate').value),
+            format: document.getElementById('icecastFormat').value,
+            public: document.getElementById('icecastPublic').checked
+        };
+
+        // Validate required fields
+        if (!config.server || !config.mount || !config.password) {
+            showIcecastStatus('Please fill in all required fields', 'danger');
+            return;
+        }
+
+        const response = await fetch('/api/audio/icecast/config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(config)
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to save configuration');
+        }
+
+        const result = await response.json();
+        showIcecastStatus('Configuration saved successfully!', 'success');
+        updateIcecastUrl();
+
+        // Enable buttons
+        document.getElementById('icecastStartBtn').disabled = false;
+        document.getElementById('icecastStopBtn').disabled = false;
+
+    } catch (error) {
+        console.error('Error saving Icecast config:', error);
+        showIcecastStatus('Failed to save configuration: ' + error.message, 'danger');
+    }
+}
+
+function updateIcecastUrl() {
+    const server = document.getElementById('icecastServer').value;
+    const port = document.getElementById('icecastPort').value;
+    const mount = document.getElementById('icecastMount').value;
+
+    if (server && port && mount) {
+        const url = `http://${server}:${port}/${mount}`;
+        document.getElementById('icecastUrlDisplay').textContent = url;
+        document.getElementById('icecastStreamUrl').classList.remove('d-none');
+    } else {
+        document.getElementById('icecastStreamUrl').classList.add('d-none');
+    }
+}
+
+async function startIcecastStream() {
+    try {
+        showIcecastStatus('Starting Icecast stream...', 'info');
+
+        // Note: This would require a new API endpoint to control the IcecastStreamer
+        // For now, show a message that it needs to be started via the example script
+        showIcecastStatus(
+            'To start Icecast streaming, use the integration example: ' +
+            'python3 examples/run_with_icecast_streaming.py',
+            'info'
+        );
+
+        // TODO: Implement actual start/stop control via API
+        // const response = await fetch('/api/audio/icecast/start', { method: 'POST' });
+
+    } catch (error) {
+        console.error('Error starting Icecast stream:', error);
+        showIcecastStatus('Failed to start stream: ' + error.message, 'danger');
+    }
+}
+
+async function stopIcecastStream() {
+    try {
+        showIcecastStatus('Stopping Icecast stream...', 'info');
+
+        // TODO: Implement actual start/stop control via API
+        // const response = await fetch('/api/audio/icecast/stop', { method: 'POST' });
+
+        showIcecastStatus('Stream control via API not yet implemented', 'warning');
+
+    } catch (error) {
+        console.error('Error stopping Icecast stream:', error);
+        showIcecastStatus('Failed to stop stream: ' + error.message, 'danger');
+    }
+}
+
+function showIcecastStatus(message, type) {
+    const statusDiv = document.getElementById('icecastStatus');
+    statusDiv.className = `alert alert-${type}`;
+    statusDiv.textContent = message;
+    statusDiv.classList.remove('d-none');
+
+    // Auto-hide success messages after 5 seconds
+    if (type === 'success') {
+        setTimeout(() => {
+            statusDiv.classList.add('d-none');
+        }, 5000);
+    }
+}
+
+function copyIcecastUrl() {
+    const url = document.getElementById('icecastUrlDisplay').textContent;
+    navigator.clipboard.writeText(url).then(() => {
+        showIcecastStatus('Stream URL copied to clipboard!', 'success');
+    }).catch(err => {
+        console.error('Failed to copy URL:', err);
+    });
+}
+
+// Update URL display when fields change
+document.addEventListener('DOMContentLoaded', function() {
+    ['icecastServer', 'icecastPort', 'icecastMount'].forEach(id => {
+        document.getElementById(id)?.addEventListener('input', updateIcecastUrl);
     });
 });
 </script>
