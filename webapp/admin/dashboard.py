@@ -269,5 +269,15 @@ def register_dashboard_routes(app, logger, eas_config):
         """GPIO activation statistics and analytics"""
         return render_template('admin/gpio_statistics.html')
 
+    @app.route('/admin/operations')
+    def admin_operations():
+        """Admin operations dashboard for backup, upgrade, and database maintenance"""
+        return render_template('admin/operations.html')
+
+    @app.route('/admin/intersections')
+    def admin_intersections():
+        """Intersection management for alert-boundary calculations"""
+        return render_template('admin/intersections.html')
+
 
 __all__ = ['register_dashboard_routes']

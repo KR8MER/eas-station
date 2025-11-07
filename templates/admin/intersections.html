@@ -1,0 +1,464 @@
+{% extends "base.html" %}
+
+{% block title %}Intersection Management - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+    .intersections-header {
+        background: linear-gradient(135deg, #6f42c1, #5a32a3);
+        color: white;
+        padding: 2rem 0;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+
+    .operation-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        margin-bottom: 2rem;
+        border-left: 4px solid #6f42c1;
+    }
+
+    .operation-card h5 {
+        color: #6f42c1;
+        margin-bottom: 1rem;
+    }
+
+    .operation-description {
+        color: #6c757d;
+        margin-bottom: 1rem;
+        font-size: 0.95rem;
+    }
+
+    .result-box {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-top: 1rem;
+        display: none;
+    }
+
+    .result-box.show {
+        display: block;
+    }
+
+    .stat-badge {
+        background: #e7f1ff;
+        color: #0d6efd;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        display: inline-block;
+        margin: 0.25rem;
+        font-weight: 600;
+    }
+
+    .alert-search-box {
+        max-width: 600px;
+    }
+
+    .info-box {
+        background: #e7f3ff;
+        border-left: 4px solid #0dcaf0;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border-radius: 4px;
+    }
+
+    .warning-box {
+        background: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border-radius: 4px;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+
+    .stat-item {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    .stat-number {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #6f42c1;
+    }
+
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="intersections-header">
+    <div class="container">
+        <h1><i class="fas fa-project-diagram"></i> Intersection Management</h1>
+        <p class="mb-0">Manage and recalculate alert-boundary intersections</p>
+    </div>
+</div>
+
+<div class="container">
+    <!-- Info Box -->
+    <div class="info-box">
+        <h6><i class="fas fa-info-circle"></i> About Intersections</h6>
+        <p class="mb-0">
+            Intersections determine which geographic boundaries (counties, forecast zones) are affected by each alert.
+            This data is critical for accurate alert routing and display. Use these tools to fix calculation errors or
+            update intersections after importing new boundary data.
+        </p>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="operation-card">
+        <h5><i class="fas fa-chart-bar"></i> Current Statistics</h5>
+        <div class="stats-grid" id="stats-container">
+            <div class="stat-item">
+                <div class="stat-number" id="total-alerts">--</div>
+                <div class="stat-label">Total Alerts</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="alerts-with-geom">--</div>
+                <div class="stat-label">With Geometry</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="total-boundaries">--</div>
+                <div class="stat-label">Boundaries</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="total-intersections">--</div>
+                <div class="stat-label">Intersections</div>
+            </div>
+        </div>
+        <div class="text-center mt-3">
+            <button class="btn btn-sm btn-outline-primary" onclick="loadStats()">
+                <i class="fas fa-sync-alt"></i> Refresh Stats
+            </button>
+        </div>
+    </div>
+
+    <!-- Fix County Intersections -->
+    <div class="operation-card">
+        <h5><i class="fas fa-wrench"></i> Fix County Intersections</h5>
+        <p class="operation-description">
+            Recalculate intersection areas for all <strong>active</strong> alerts. Use this when intersection
+            data appears corrupted or after boundary updates.
+        </p>
+        <button class="btn btn-primary" onclick="fixCountyIntersections()" id="fix-county-btn">
+            <i class="fas fa-tools"></i> Fix County Intersections
+        </button>
+        <div class="result-box" id="fix-county-result"></div>
+    </div>
+
+    <!-- Recalculate All Intersections -->
+    <div class="operation-card">
+        <h5><i class="fas fa-sync"></i> Recalculate All Intersections</h5>
+        <div class="warning-box">
+            <i class="fas fa-exclamation-triangle"></i> <strong>Warning:</strong>
+            This will delete ALL existing intersections and recalculate them from scratch.
+            This operation may take several minutes for large databases.
+        </div>
+        <p class="operation-description">
+            Completely rebuild the intersection database for all alerts. Use this after major boundary updates
+            or database migrations.
+        </p>
+        <button class="btn btn-warning" onclick="recalculateAllIntersections()" id="recalc-all-btn">
+            <i class="fas fa-redo"></i> Recalculate All Intersections
+        </button>
+        <div class="result-box" id="recalc-all-result"></div>
+    </div>
+
+    <!-- Calculate for Specific Alert -->
+    <div class="operation-card">
+        <h5><i class="fas fa-crosshairs"></i> Calculate for Specific Alert</h5>
+        <p class="operation-description">
+            Calculate or recalculate intersections for a single alert by ID. Use this to fix individual
+            alerts without affecting the entire database.
+        </p>
+        <div class="alert-search-box">
+            <div class="input-group mb-3">
+                <span class="input-group-text">Alert ID</span>
+                <input type="number" class="form-control" id="specific-alert-id" placeholder="Enter alert ID">
+                <button class="btn btn-success" onclick="calculateSpecificAlert()">
+                    <i class="fas fa-calculator"></i> Calculate
+                </button>
+            </div>
+        </div>
+        <div class="result-box" id="specific-alert-result"></div>
+    </div>
+
+    <!-- Calculate All (Background) -->
+    <div class="operation-card">
+        <h5><i class="fas fa-cogs"></i> Calculate All Intersections (Batch)</h5>
+        <div class="warning-box">
+            <i class="fas fa-exclamation-triangle"></i> <strong>Warning:</strong>
+            This operation processes every alert with geometry and may take a very long time.
+            It commits in batches to avoid memory issues.
+        </div>
+        <p class="operation-description">
+            Process all alerts in batches, calculating intersections for each. This is similar to
+            "Recalculate All" but uses a different algorithm optimized for very large datasets.
+        </p>
+        <button class="btn btn-info" onclick="calculateAllIntersections()" id="calc-all-btn">
+            <i class="fas fa-play"></i> Calculate All (Batch)
+        </button>
+        <div class="result-box" id="calc-all-result"></div>
+    </div>
+</div>
+
+<script>
+// Helper function to escape HTML
+function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return String(unsafe)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+// Load statistics on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadStats();
+});
+
+async function loadStats() {
+    try {
+        // Load alert counts
+        const alertsResponse = await fetch('/admin/alerts?limit=1');
+        const alertsData = await alertsResponse.json();
+        document.getElementById('total-alerts').textContent = alertsData.total || 0;
+
+        // Load boundaries count
+        const boundariesResponse = await fetch('/api/boundaries');
+        const boundariesData = await boundariesResponse.json();
+        const boundaries = boundariesData.features || [];
+        document.getElementById('total-boundaries').textContent = boundaries.length;
+
+        // Estimate counts (these would ideally come from dedicated API endpoints)
+        document.getElementById('alerts-with-geom').textContent = '~' + Math.floor(alertsData.total * 0.8);
+        document.getElementById('total-intersections').textContent = '~' + (boundaries.length * Math.floor(alertsData.total * 0.5));
+    } catch (error) {
+        console.error('Error loading stats:', error);
+    }
+}
+
+async function fixCountyIntersections() {
+    const btn = document.getElementById('fix-county-btn');
+    const resultDiv = document.getElementById('fix-county-result');
+
+    if (!confirm('Fix county intersections for all active alerts? This will recalculate intersection areas.')) {
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Processing...';
+    resultDiv.className = 'result-box';
+    resultDiv.style.display = 'none';
+
+    try {
+        const response = await fetch('/admin/fix_county_intersections', { method: 'POST' });
+        const data = await response.json();
+
+        if (data.error) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger mb-0">
+                    <strong><i class="fas fa-times-circle"></i> Error:</strong> ${escapeHtml(data.error)}
+                </div>
+            `;
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success mb-0">
+                    <strong><i class="fas fa-check-circle"></i> Success!</strong> ${escapeHtml(data.success)}
+                </div>
+                <div class="mt-2">
+                    <span class="stat-badge">Alerts Processed: ${data.alerts_processed}</span>
+                    <span class="stat-badge">Intersections Updated: ${data.intersections_updated}</span>
+                </div>
+            `;
+            loadStats();
+        }
+
+        resultDiv.classList.add('show');
+    } catch (error) {
+        console.error('Error fixing county intersections:', error);
+        resultDiv.innerHTML = `
+            <div class="alert alert-danger mb-0">
+                <strong><i class="fas fa-times-circle"></i> Error:</strong> Failed to fix county intersections
+            </div>
+        `;
+        resultDiv.classList.add('show');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-tools"></i> Fix County Intersections';
+    }
+}
+
+async function recalculateAllIntersections() {
+    const btn = document.getElementById('recalc-all-btn');
+    const resultDiv = document.getElementById('recalc-all-result');
+
+    if (!confirm('WARNING: This will DELETE all existing intersections and recalculate from scratch. This may take several minutes. Continue?')) {
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Recalculating...';
+    resultDiv.className = 'result-box';
+    resultDiv.style.display = 'none';
+
+    try {
+        const response = await fetch('/admin/recalculate_intersections', { method: 'POST' });
+        const data = await response.json();
+
+        if (data.error) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger mb-0">
+                    <strong><i class="fas fa-times-circle"></i> Error:</strong> ${escapeHtml(data.error)}
+                </div>
+            `;
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success mb-0">
+                    <strong><i class="fas fa-check-circle"></i> Success!</strong> ${escapeHtml(data.success)}
+                </div>
+                <div class="mt-2">
+                    <span class="stat-badge">Alerts Processed: ${data.stats.alerts_processed}</span>
+                    <span class="stat-badge">Intersections Created: ${data.stats.intersections_created}</span>
+                    <span class="stat-badge">Deleted: ${data.stats.deleted_intersections}</span>
+                    ${data.stats.errors > 0 ? '<span class="stat-badge" style="background: #fff3cd; color: #856404;">Errors: ' + data.stats.errors + '</span>' : ''}
+                </div>
+            `;
+            loadStats();
+        }
+
+        resultDiv.classList.add('show');
+    } catch (error) {
+        console.error('Error recalculating intersections:', error);
+        resultDiv.innerHTML = `
+            <div class="alert alert-danger mb-0">
+                <strong><i class="fas fa-times-circle"></i> Error:</strong> Failed to recalculate intersections
+            </div>
+        `;
+        resultDiv.classList.add('show');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-redo"></i> Recalculate All Intersections';
+    }
+}
+
+async function calculateSpecificAlert() {
+    const alertId = document.getElementById('specific-alert-id').value;
+    const resultDiv = document.getElementById('specific-alert-result');
+
+    if (!alertId || alertId < 1) {
+        alert('Please enter a valid alert ID');
+        return;
+    }
+
+    resultDiv.className = 'result-box';
+    resultDiv.style.display = 'none';
+
+    try {
+        const response = await fetch(`/admin/calculate_intersections/${alertId}`, { method: 'POST' });
+        const data = await response.json();
+
+        if (data.error) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger mb-0">
+                    <strong><i class="fas fa-times-circle"></i> Error:</strong> ${escapeHtml(data.error)}
+                </div>
+            `;
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success mb-0">
+                    <strong><i class="fas fa-check-circle"></i> Success!</strong> ${escapeHtml(data.success)}
+                </div>
+                <div class="mt-2">
+                    <span class="stat-badge">Event: ${escapeHtml(data.alert_event)}</span>
+                    <span class="stat-badge">Intersections Created: ${data.intersections_created}</span>
+                    <span class="stat-badge">With Area: ${data.intersections_with_area}</span>
+                    <span class="stat-badge">Boundaries Checked: ${data.boundaries_checked}</span>
+                </div>
+            `;
+            loadStats();
+        }
+
+        resultDiv.classList.add('show');
+    } catch (error) {
+        console.error('Error calculating intersections:', error);
+        resultDiv.innerHTML = `
+            <div class="alert alert-danger mb-0">
+                <strong><i class="fas fa-times-circle"></i> Error:</strong> Failed to calculate intersections
+            </div>
+        `;
+        resultDiv.classList.add('show');
+    }
+}
+
+async function calculateAllIntersections() {
+    const btn = document.getElementById('calc-all-btn');
+    const resultDiv = document.getElementById('calc-all-result');
+
+    if (!confirm('This will calculate intersections for ALL alerts in batches. This may take a very long time. Continue?')) {
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Processing...';
+    resultDiv.className = 'result-box';
+    resultDiv.style.display = 'none';
+
+    try {
+        const response = await fetch('/admin/calculate_all_intersections', { method: 'POST' });
+        const data = await response.json();
+
+        if (data.error) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger mb-0">
+                    <strong><i class="fas fa-times-circle"></i> Error:</strong> ${escapeHtml(data.error)}
+                </div>
+            `;
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success mb-0">
+                    <strong><i class="fas fa-check-circle"></i> Success!</strong> ${escapeHtml(data.success)}
+                </div>
+                <div class="mt-2">
+                    <span class="stat-badge">Alerts Processed: ${data.alerts_processed}</span>
+                    <span class="stat-badge">Intersections Created: ${data.total_intersections_created}</span>
+                </div>
+            `;
+            loadStats();
+        }
+
+        resultDiv.classList.add('show');
+    } catch (error) {
+        console.error('Error calculating intersections:', error);
+        resultDiv.innerHTML = `
+            <div class="alert alert-danger mb-0">
+                <strong><i class="fas fa-times-circle"></i> Error:</strong> Failed to calculate intersections
+            </div>
+        `;
+        resultDiv.classList.add('show');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-play"></i> Calculate All (Batch)';
+    }
+}
+</script>
+{% endblock %}

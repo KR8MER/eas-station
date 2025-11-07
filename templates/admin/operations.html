@@ -1,0 +1,528 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Operations - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+    .operations-header {
+        background: linear-gradient(135deg, #204885, #0066cc);
+        color: white;
+        padding: 2rem 0;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+
+    .operation-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        margin-bottom: 2rem;
+        border-left: 4px solid #0d6efd;
+    }
+
+    .operation-card.backup { border-left-color: #0dcaf0; }
+    .operation-card.upgrade { border-left-color: #ffc107; }
+    .operation-card.database { border-left-color: #198754; }
+
+    .status-badge {
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 0.9rem;
+        display: inline-block;
+    }
+
+    .status-running { background: #cfe2ff; color: #084298; }
+    .status-success { background: #d1e7dd; color: #0f5132; }
+    .status-failed { background: #f8d7da; color: #842029; }
+    .status-idle { background: #e9ecef; color: #495057; }
+
+    .stat-item {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }
+
+    .stat-item strong {
+        color: #204885;
+    }
+
+    .action-btn {
+        min-width: 150px;
+    }
+
+    .output-box {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 1rem;
+        max-height: 200px;
+        overflow-y: auto;
+        font-family: monospace;
+        font-size: 0.85rem;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+
+    .spinner-wrapper {
+        display: inline-block;
+        margin-left: 0.5rem;
+    }
+
+    .health-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 0.5rem;
+    }
+
+    .health-good { background-color: #28a745; }
+    .health-warning { background-color: #ffc107; }
+    .health-error { background-color: #dc3545; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="operations-header">
+    <div class="container">
+        <h1><i class="fas fa-cogs"></i> Admin Operations</h1>
+        <p class="mb-0">System maintenance, backups, and database management</p>
+    </div>
+</div>
+
+<div class="container">
+    <!-- Database Health -->
+    <div class="operation-card database">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4><i class="fas fa-database"></i> Database Health</h4>
+            <button class="btn btn-sm btn-outline-primary" onclick="checkDatabaseHealth()">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+        </div>
+
+        <div class="row" id="db-health-container">
+            <div class="col-md-12 text-center">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="text-muted mt-2">Loading database health...</p>
+            </div>
+        </div>
+
+        <div class="mt-3">
+            <h6>Database Optimization</h6>
+            <p class="text-muted mb-3">Run VACUUM ANALYZE to reclaim space and improve performance</p>
+            <button class="btn btn-success action-btn" onclick="optimizeDatabase()" id="optimize-btn">
+                <i class="fas fa-magic"></i> Optimize Database
+            </button>
+            <div id="optimize-result" class="mt-3" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Backup Operations -->
+    <div class="operation-card backup">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4><i class="fas fa-save"></i> Backup Operations</h4>
+            <span class="status-badge" id="backup-status">Idle</span>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label for="backup-label" class="form-label">Backup Label (optional)</label>
+                <input type="text" class="form-control" id="backup-label" placeholder="e.g., pre-upgrade">
+            </div>
+            <div class="col-md-6">
+                <label for="backup-output-dir" class="form-label">Output Directory (optional)</label>
+                <input type="text" class="form-control" id="backup-output-dir" placeholder="Default location">
+            </div>
+        </div>
+
+        <button class="btn btn-info action-btn" onclick="startBackup()" id="backup-btn">
+            <i class="fas fa-play"></i> Start Backup
+        </button>
+
+        <div id="backup-details" class="mt-3" style="display: none;">
+            <h6>Operation Details</h6>
+            <div class="stat-item">
+                <strong>Started:</strong> <span id="backup-started">—</span>
+            </div>
+            <div class="stat-item">
+                <strong>Finished:</strong> <span id="backup-finished">—</span>
+            </div>
+            <div class="stat-item">
+                <strong>Message:</strong> <span id="backup-message">—</span>
+            </div>
+            <div id="backup-output-container" style="display: none;">
+                <h6 class="mt-3">Output</h6>
+                <div class="output-box" id="backup-output"></div>
+            </div>
+            <div id="backup-error-container" style="display: none;">
+                <h6 class="mt-3">Error Output</h6>
+                <div class="output-box text-danger" id="backup-error"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upgrade Operations -->
+    <div class="operation-card upgrade">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4><i class="fas fa-arrow-up"></i> System Upgrade</h4>
+            <span class="status-badge" id="upgrade-status">Idle</span>
+        </div>
+
+        <div class="alert alert-warning" role="alert">
+            <i class="fas fa-exclamation-triangle"></i> <strong>Warning:</strong> System upgrades may cause temporary downtime. Ensure you have a recent backup before proceeding.
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label for="upgrade-checkout" class="form-label">Git Branch/Tag (optional)</label>
+                <input type="text" class="form-control" id="upgrade-checkout" placeholder="e.g., main, v2.0.0">
+            </div>
+            <div class="col-md-6">
+                <label for="upgrade-compose-file" class="form-label">Compose File (optional)</label>
+                <input type="text" class="form-control" id="upgrade-compose-file" placeholder="docker-compose.yml">
+            </div>
+        </div>
+
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="upgrade-skip-migrations">
+            <label class="form-check-label" for="upgrade-skip-migrations">
+                Skip database migrations
+            </label>
+        </div>
+
+        <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="upgrade-allow-dirty">
+            <label class="form-check-label" for="upgrade-allow-dirty">
+                Allow dirty working tree
+            </label>
+        </div>
+
+        <button class="btn btn-warning action-btn" onclick="startUpgrade()" id="upgrade-btn">
+            <i class="fas fa-rocket"></i> Start Upgrade
+        </button>
+
+        <div id="upgrade-details" class="mt-3" style="display: none;">
+            <h6>Operation Details</h6>
+            <div class="stat-item">
+                <strong>Started:</strong> <span id="upgrade-started">—</span>
+            </div>
+            <div class="stat-item">
+                <strong>Finished:</strong> <span id="upgrade-finished">—</span>
+            </div>
+            <div class="stat-item">
+                <strong>Message:</strong> <span id="upgrade-message">—</span>
+            </div>
+            <div id="upgrade-output-container" style="display: none;">
+                <h6 class="mt-3">Output</h6>
+                <div class="output-box" id="upgrade-output"></div>
+            </div>
+            <div id="upgrade-error-container" style="display: none;">
+                <h6 class="mt-3">Error Output</h6>
+                <div class="output-box text-danger" id="upgrade-error"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Helper function to escape HTML
+function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return String(unsafe)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+// Format timestamps
+function formatTimestamp(timestamp) {
+    if (!timestamp) return '—';
+    return new Date(timestamp).toLocaleString();
+}
+
+// Status polling interval
+let statusPollInterval = null;
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    checkDatabaseHealth();
+    pollOperationStatus();
+    startStatusPolling();
+});
+
+// Start polling for operation status
+function startStatusPolling() {
+    if (statusPollInterval) {
+        clearInterval(statusPollInterval);
+    }
+    statusPollInterval = setInterval(pollOperationStatus, 3000);
+}
+
+// Poll operation status
+async function pollOperationStatus() {
+    try {
+        const response = await fetch('/admin/operations/status');
+        const data = await response.json();
+
+        if (data.operations) {
+            updateOperationStatus('backup', data.operations.backup);
+            updateOperationStatus('upgrade', data.operations.upgrade);
+        }
+    } catch (error) {
+        console.error('Error polling operation status:', error);
+    }
+}
+
+// Update operation status display
+function updateOperationStatus(operationType, operation) {
+    const statusEl = document.getElementById(`${operationType}-status`);
+    const btnEl = document.getElementById(`${operationType}-btn`);
+    const detailsEl = document.getElementById(`${operationType}-details`);
+
+    if (!operation) return;
+
+    // Update status badge
+    statusEl.className = 'status-badge';
+    if (operation.running) {
+        statusEl.classList.add('status-running');
+        statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running';
+        btnEl.disabled = true;
+    } else {
+        statusEl.classList.add(`status-${operation.last_status || 'idle'}`);
+        statusEl.textContent = operation.last_status ? operation.last_status.charAt(0).toUpperCase() + operation.last_status.slice(1) : 'Idle';
+        btnEl.disabled = false;
+    }
+
+    // Show details if there's data
+    if (operation.last_started_at || operation.last_message) {
+        detailsEl.style.display = 'block';
+
+        document.getElementById(`${operationType}-started`).textContent = formatTimestamp(operation.last_started_at);
+        document.getElementById(`${operationType}-finished`).textContent = formatTimestamp(operation.last_finished_at);
+        document.getElementById(`${operationType}-message`).textContent = operation.last_message || '—';
+
+        // Show output if available
+        if (operation.last_output) {
+            document.getElementById(`${operationType}-output-container`).style.display = 'block';
+            document.getElementById(`${operationType}-output`).textContent = operation.last_output;
+        }
+
+        // Show error output if available
+        if (operation.last_error_output) {
+            document.getElementById(`${operationType}-error-container`).style.display = 'block';
+            document.getElementById(`${operationType}-error`).textContent = operation.last_error_output;
+        }
+    }
+}
+
+// Check database health
+async function checkDatabaseHealth() {
+    const container = document.getElementById('db-health-container');
+    container.innerHTML = '<div class="col-md-12 text-center"><div class="spinner-border text-primary" role="status"></div></div>';
+
+    try {
+        const response = await fetch('/admin/check_db_health');
+        const data = await response.json();
+
+        if (data.error) {
+            container.innerHTML = `
+                <div class="col-md-12">
+                    <div class="alert alert-danger" role="alert">
+                        <i class="fas fa-times-circle"></i> ${escapeHtml(data.error)}
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        const isHealthy = data.connectivity === 'Connected';
+        const indicator = isHealthy ? 'health-good' : 'health-error';
+
+        container.innerHTML = `
+            <div class="col-md-4">
+                <div class="stat-item">
+                    <span class="health-indicator ${indicator}"></span>
+                    <strong>Connectivity:</strong> ${escapeHtml(data.connectivity)}
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-item">
+                    <i class="fas fa-hdd"></i> <strong>Database Size:</strong> ${escapeHtml(data.database_size)}
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-item">
+                    <i class="fas fa-plug"></i> <strong>Active Connections:</strong> ${escapeHtml(data.active_connections)}
+                </div>
+            </div>
+            <div class="col-md-12 mt-2">
+                <div class="stat-item">
+                    <i class="fas fa-clock"></i> <strong>Checked at:</strong> ${formatTimestamp(data.checked_at)}
+                </div>
+            </div>
+        `;
+    } catch (error) {
+        console.error('Error checking database health:', error);
+        container.innerHTML = `
+            <div class="col-md-12">
+                <div class="alert alert-danger" role="alert">
+                    <i class="fas fa-times-circle"></i> Failed to check database health
+                </div>
+            </div>
+        `;
+    }
+}
+
+// Optimize database
+async function optimizeDatabase() {
+    const btn = document.getElementById('optimize-btn');
+    const resultDiv = document.getElementById('optimize-result');
+
+    if (!confirm('This will run VACUUM ANALYZE on the database. This may take several minutes. Continue?')) {
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Optimizing...';
+    resultDiv.style.display = 'none';
+
+    try {
+        const response = await fetch('/admin/optimize_db', { method: 'POST' });
+        const data = await response.json();
+
+        if (data.error) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger" role="alert">
+                    <i class="fas fa-times-circle"></i> <strong>Error:</strong> ${escapeHtml(data.error)}
+                </div>
+            `;
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success" role="alert">
+                    <i class="fas fa-check-circle"></i> <strong>${escapeHtml(data.message)}</strong><br>
+                    <small>
+                        Size before: ${escapeHtml(data.size_before)}<br>
+                        Size after: ${escapeHtml(data.size_after)}<br>
+                        Space reclaimed: ${escapeHtml(data.space_reclaimed)}
+                    </small>
+                </div>
+            `;
+
+            // Refresh database health after optimization
+            checkDatabaseHealth();
+        }
+
+        resultDiv.style.display = 'block';
+    } catch (error) {
+        console.error('Error optimizing database:', error);
+        resultDiv.innerHTML = `
+            <div class="alert alert-danger" role="alert">
+                <i class="fas fa-times-circle"></i> Failed to optimize database
+            </div>
+        `;
+        resultDiv.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-magic"></i> Optimize Database';
+    }
+}
+
+// Start backup
+async function startBackup() {
+    const label = document.getElementById('backup-label').value.trim();
+    const outputDir = document.getElementById('backup-output-dir').value.trim();
+    const btn = document.getElementById('backup-btn');
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Starting...';
+
+    const payload = {};
+    if (label) payload.label = label;
+    if (outputDir) payload.output_dir = outputDir;
+
+    try {
+        const response = await fetch('/admin/operations/backup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+            alert('Error: ' + data.error);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-play"></i> Start Backup';
+        } else {
+            alert(data.message);
+            // Poll status immediately
+            pollOperationStatus();
+        }
+    } catch (error) {
+        console.error('Error starting backup:', error);
+        alert('Failed to start backup operation');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-play"></i> Start Backup';
+    }
+}
+
+// Start upgrade
+async function startUpgrade() {
+    const checkout = document.getElementById('upgrade-checkout').value.trim();
+    const composeFile = document.getElementById('upgrade-compose-file').value.trim();
+    const skipMigrations = document.getElementById('upgrade-skip-migrations').checked;
+    const allowDirty = document.getElementById('upgrade-allow-dirty').checked;
+    const btn = document.getElementById('upgrade-btn');
+
+    if (!confirm('WARNING: This will upgrade the system and may cause downtime. Have you created a backup? Continue?')) {
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Starting...';
+
+    const payload = {};
+    if (checkout) payload.checkout = checkout;
+    if (composeFile) payload.compose_file = composeFile;
+    if (skipMigrations) payload.skip_migrations = true;
+    if (allowDirty) payload.allow_dirty = true;
+
+    try {
+        const response = await fetch('/admin/operations/upgrade', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+            alert('Error: ' + data.error);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-rocket"></i> Start Upgrade';
+        } else {
+            alert(data.message + '\n\nYou can monitor the progress below. The application may restart during the upgrade.');
+            // Poll status immediately
+            pollOperationStatus();
+        }
+    } catch (error) {
+        console.error('Error starting upgrade:', error);
+        alert('Failed to start upgrade operation');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-rocket"></i> Start Upgrade';
+    }
+}
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+    if (statusPollInterval) {
+        clearInterval(statusPollInterval);
+    }
+});
+</script>
+{% endblock %}

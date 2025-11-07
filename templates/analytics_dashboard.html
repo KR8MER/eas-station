@@ -127,9 +127,14 @@
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Active Anomalies</h5>
-                    <button class="btn btn-sm btn-primary" onclick="refreshData()">
-                        <i class="fas fa-sync-alt"></i> Refresh
-                    </button>
+                    <div>
+                        <button class="btn btn-sm btn-warning me-2" onclick="triggerAnomalyDetection()">
+                            <i class="fas fa-search"></i> Detect Anomalies
+                        </button>
+                        <button class="btn btn-sm btn-primary" onclick="refreshData()">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
@@ -253,6 +258,9 @@
                     <button class="btn btn-sm btn-outline-success" onclick="resolveAnomaly(${anomaly.id})">
                         <i class="fas fa-check-double"></i> Resolve
                     </button>
+                    <button class="btn btn-sm btn-outline-warning" onclick="markFalsePositive(${anomaly.id})">
+                        <i class="fas fa-times"></i> False Positive
+                    </button>
                 </td>
             `;
             tbody.appendChild(row);
@@ -296,6 +304,56 @@
         } catch (error) {
             console.error('Error resolving anomaly:', error);
             alert('Error resolving anomaly');
+        }
+    }
+
+    async function markFalsePositive(id) {
+        if (!confirm('Mark this anomaly as a false positive? This helps improve detection accuracy.')) {
+            return;
+        }
+
+        const notes = prompt('Notes (optional):');
+        try {
+            const response = await fetch(`/api/analytics/anomalies/${id}/false-positive`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ notes: notes })
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                alert('Anomaly marked as false positive');
+                loadDashboard();
+            } else {
+                alert('Failed to mark anomaly as false positive: ' + data.error);
+            }
+        } catch (error) {
+            console.error('Error marking false positive:', error);
+            alert('Error marking false positive');
+        }
+    }
+
+    async function triggerAnomalyDetection() {
+        if (!confirm('Manually trigger anomaly detection? This will analyze recent metrics.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/analytics/anomalies/detect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                alert(`Anomaly detection completed. Found ${data.anomalies_detected || 0} new anomalies.`);
+                loadDashboard();
+            } else {
+                alert('Failed to trigger anomaly detection: ' + data.error);
+            }
+        } catch (error) {
+            console.error('Error triggering anomaly detection:', error);
+            alert('Error triggering anomaly detection');
         }
     }
 
