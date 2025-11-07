@@ -53,6 +53,12 @@
                             System Health
                         </a>
                     </li>
+                    <li>
+                        <a href="{{ url_for('audio_monitoring') if url_for('audio_monitoring') else '/audio-monitor' }}" class="dropdown-item {{ 'active' if request.endpoint == 'audio_monitoring' }}">
+                            <i class="fas fa-headphones"></i>
+                            Audio Monitoring
+                        </a>
+                    </li>
                 </ul>
             </li>
 

@@ -736,5 +736,114 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             logger.error('Error getting waveform for %s: %s', source_name, exc)
             return jsonify({'error': str(exc)}), 500
 
+    @app.route('/api/audio/stream/<source_name>')
+    def api_stream_audio(source_name: str):
+        """Stream live audio from a specific source as WAV."""
+        import struct
+        import io
+        from flask import Response, stream_with_context
+
+        def generate_wav_stream():
+            """Generator that yields WAV-formatted audio chunks."""
+            controller = _get_audio_controller()
+            adapter = controller._sources.get(source_name)
+
+            if not adapter:
+                logger.error(f'Audio source not found: {source_name}')
+                return
+
+            if adapter.status != AudioSourceStatus.RUNNING:
+                logger.error(f'Audio source not running: {source_name}')
+                return
+
+            # WAV header for streaming (we'll use a placeholder for data size)
+            sample_rate = adapter.config.sample_rate
+            channels = adapter.config.channels
+            bits_per_sample = 16  # 16-bit PCM
+
+            # Build WAV header
+            wav_header = io.BytesIO()
+            wav_header.write(b'RIFF')
+            wav_header.write(struct.pack('<I', 0xFFFFFFFF))  # Placeholder for file size
+            wav_header.write(b'WAVE')
+
+            # fmt chunk
+            wav_header.write(b'fmt ')
+            wav_header.write(struct.pack('<I', 16))  # fmt chunk size
+            wav_header.write(struct.pack('<H', 1))   # PCM format
+            wav_header.write(struct.pack('<H', channels))
+            wav_header.write(struct.pack('<I', sample_rate))
+            wav_header.write(struct.pack('<I', sample_rate * channels * bits_per_sample // 8))  # byte rate
+            wav_header.write(struct.pack('<H', channels * bits_per_sample // 8))  # block align
+            wav_header.write(struct.pack('<H', bits_per_sample))
+
+            # data chunk header
+            wav_header.write(b'data')
+            wav_header.write(struct.pack('<I', 0xFFFFFFFF))  # Placeholder for data size
+
+            yield wav_header.getvalue()
+
+            # Stream audio chunks
+            logger.info(f'Starting audio stream for {source_name}')
+            chunk_count = 0
+            max_chunks = 6000  # ~2 minutes at typical chunk rate (0.02s per chunk)
+
+            try:
+                while chunk_count < max_chunks:
+                    # Get audio chunk from adapter
+                    audio_chunk = adapter.get_audio_chunk(timeout=2.0)
+
+                    if audio_chunk is None:
+                        # No data available, check if source is still running
+                        if adapter.status != AudioSourceStatus.RUNNING:
+                            logger.info(f'Audio source stopped: {source_name}')
+                            break
+                        continue
+
+                    # Convert float32 [-1, 1] to int16 PCM
+                    # Ensure we have a numpy array
+                    import numpy as np
+                    if not isinstance(audio_chunk, np.ndarray):
+                        audio_chunk = np.array(audio_chunk, dtype=np.float32)
+
+                    # Clip to [-1, 1] range and convert to int16
+                    audio_chunk = np.clip(audio_chunk, -1.0, 1.0)
+                    pcm_data = (audio_chunk * 32767).astype(np.int16)
+
+                    # Convert to bytes and yield
+                    yield pcm_data.tobytes()
+
+                    chunk_count += 1
+
+            except GeneratorExit:
+                logger.info(f'Client disconnected from audio stream: {source_name}')
+            except Exception as exc:
+                logger.error(f'Error streaming audio from {source_name}: {exc}')
+
+        try:
+            controller = _get_audio_controller()
+            adapter = controller._sources.get(source_name)
+
+            if not adapter:
+                return jsonify({'error': 'Source not found'}), 404
+
+            if adapter.status != AudioSourceStatus.RUNNING:
+                return jsonify({'error': 'Source not running. Please start the source first.'}), 400
+
+            return Response(
+                stream_with_context(generate_wav_stream()),
+                mimetype='audio/wav',
+                headers={
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0',
+                    'X-Content-Type-Options': 'nosniff',
+                }
+            )
+
+        except Exception as exc:
+            logger.error('Error setting up audio stream for %s: %s', source_name, exc)
+            return jsonify({'error': str(exc)}), 500
+
 
 __all__ = ['register_audio_ingest_routes']
