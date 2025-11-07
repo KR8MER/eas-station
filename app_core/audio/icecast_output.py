@@ -46,6 +46,7 @@ class IcecastConfig:
     bitrate: int = 128
     format: StreamFormat = StreamFormat.MP3
     public: bool = False
+    sample_rate: int = 44100  # Audio sample rate in Hz
 
 
 class IcecastStreamer:
@@ -148,7 +149,7 @@ class IcecastStreamer:
             cmd = [
                 'ffmpeg',
                 '-f', 's16le',  # Input: 16-bit PCM
-                '-ar', '22050',  # Sample rate
+                '-ar', str(self.config.sample_rate),  # Sample rate
                 '-ac', '1',      # Mono
                 '-i', 'pipe:0',  # Read from stdin
             ]
@@ -205,7 +206,7 @@ class IcecastStreamer:
         """Feed audio to FFmpeg for encoding and streaming."""
         logger.debug("Icecast feed loop started")
 
-        chunk_samples = int(22050 * 0.1)  # 100ms chunks at 22050 Hz
+        chunk_samples = int(self.config.sample_rate * 0.1)  # 100ms chunks
 
         while not self._stop_event.is_set():
             if not self._ffmpeg_process or self._ffmpeg_process.poll() is not None:
