@@ -64,6 +64,11 @@ services:
       - SYS_RAWIO
     security_opt:
       - no-new-privileges:true
+    depends_on:
+      alerts-db:
+        condition: service_healthy
+      icecast:
+        condition: service_healthy
 
   poller:
     image: eas-station:latest
