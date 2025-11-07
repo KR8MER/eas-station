@@ -71,6 +71,7 @@ class IcecastStreamer:
         self._ffmpeg_process: Optional[subprocess.Popen] = None
         self._feeder_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
+        self._stop_event.set()  # Start in stopped state
 
         # Statistics
         self._start_time = 0.0
