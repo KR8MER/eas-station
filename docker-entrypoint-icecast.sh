@@ -45,6 +45,13 @@ update_config "admin-password" "${ICECAST_ADMIN_PASSWORD:-hackme}"
 echo "DEBUG: Authentication section AFTER updates:"
 grep -A5 "<authentication>" "$CONFIG_FILE" || echo "Could not extract authentication section"
 
+# CRITICAL: Restore file ownership after perl modifications
+# perl -i creates a new file that might be owned by root
+echo "DEBUG: Restoring config file ownership to icecast2:icecast"
+chown icecast2:icecast "$CONFIG_FILE"
+chmod 644 "$CONFIG_FILE"
+ls -la "$CONFIG_FILE"
+
 # Update server settings
 update_config "hostname" "${ICECAST_HOSTNAME:-localhost}"
 update_config "location" "${ICECAST_LOCATION:-Earth}"
@@ -57,6 +64,11 @@ update_config "sources" "${ICECAST_MAX_SOURCES:-2}"
 # Enable changeowner for security (allows Icecast to drop root privileges)
 update_config "changeowner" "true"
 
+# CRITICAL: Restore file ownership one final time after ALL updates
+echo "DEBUG: Final ownership restoration"
+chown icecast2:icecast "$CONFIG_FILE"
+chmod 644 "$CONFIG_FILE"
+
 # Verify password was updated
 echo "Verifying Icecast configuration..."
 if grep -q "<source-password>${ICECAST_SOURCE_PASSWORD:-hackme}</source-password>" "$CONFIG_FILE"; then
@@ -66,6 +78,15 @@ else
     echo "  Current value in config:"
     grep "source-password" "$CONFIG_FILE" | head -1
 fi
+
+# Final dump of complete authentication block
+echo "DEBUG: ========== FINAL AUTHENTICATION BLOCK =========="
+grep -A10 "<authentication>" "$CONFIG_FILE" | head -15
+echo "DEBUG: ================================================"
+
+# Show final file permissions
+echo "DEBUG: Final config file permissions:"
+ls -la "$CONFIG_FILE"
 
 echo "Icecast configuration complete. Starting server..."
 
