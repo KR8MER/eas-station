@@ -190,6 +190,26 @@ class TTSEngine:
         model = (self.config.get("azure_openai_model") or "tts-1-hd").strip()
         speed = float(self.config.get("azure_openai_speed", 1.0) or 1.0)
 
+        # For Azure OpenAI, extract deployment name from endpoint URL
+        # The model parameter must match the deployment name, not the model type
+        deployment_name = None
+        if 'azure.com' in endpoint.lower():
+            # Extract deployment name from URL like: /deployments/tts-hd/audio/speech
+            deployment_match = re.search(r'/deployments/([^/]+)/', endpoint)
+            if deployment_match:
+                deployment_name = deployment_match.group(1)
+                if self.logger:
+                    self.logger.debug(f"Extracted deployment name from endpoint: {deployment_name}")
+            else:
+                if self.logger:
+                    self.logger.warning(
+                        "Could not extract deployment name from Azure endpoint. "
+                        "Using configured model name, which may cause errors if it doesn't match the deployment."
+                    )
+
+        # Use deployment name as model for Azure, or configured model for OpenAI
+        api_model = deployment_name if deployment_name else model
+
         target_rate = self.sample_rate
 
         try:
@@ -198,7 +218,7 @@ class TTSEngine:
                 "Authorization": f"Bearer {api_key}",
             }
             payload = {
-                "model": model,
+                "model": api_model,
                 "input": text,
                 "voice": voice,
                 "speed": speed,
@@ -208,7 +228,7 @@ class TTSEngine:
             # Log the request for debugging
             if self.logger:
                 self.logger.debug(f"Azure OpenAI TTS request to: {endpoint}")
-                self.logger.debug(f"Azure OpenAI TTS payload: model={model}, voice={voice}, speed={speed}")
+                self.logger.debug(f"Azure OpenAI TTS payload: model={api_model}, voice={voice}, speed={speed}")
 
             response = requests.post(
                 endpoint,
