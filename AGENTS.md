@@ -12,6 +12,19 @@ When adding a new environment variable to the system, you MUST update these file
 2. **`stack.env`** - Add the variable with the default value for Docker deployments
 3. **`docker-entrypoint.sh`** - Add the variable to the initialization section (around line 170) if it needs to be available during container startup
 4. **`webapp/admin/environment.py`** - Add the variable to the appropriate category in `ENV_CATEGORIES` to make it accessible in the web UI settings page
+5. **`app_utils/setup_wizard.py`** - If the variable is part of initial setup, add it to the appropriate wizard section with matching validation
+
+### Keeping Validation in Sync
+
+**CRITICAL:** Validation rules MUST match between `webapp/admin/environment.py` and `app_utils/setup_wizard.py`. Users should not be able to enter invalid values in either interface.
+
+When adding validation:
+- **SECRET_KEY**: Use `_validate_secret_key` in setup wizard (min 32 chars), `minlength: 32, pattern: ^[A-Za-z0-9]{32,}$` in environment.py
+- **Port numbers**: Use `_validate_port` in setup wizard, `min: 1, max: 65535` in environment.py
+- **IP addresses**: Use `_validate_ipv4` in setup wizard, `pattern: IPv4 regex` in environment.py
+- **GPIO pins**: Use `_validate_gpio_pin` in setup wizard, `min: 2, max: 27` in environment.py
+- **Station IDs**: Use `_validate_station_id` in setup wizard, `pattern: ^[A-Z0-9/]{1,8}$` in environment.py
+- **Originator codes**: Use dropdown in both (4 options: WXR, EAS, PEP, CIV)
 
 ### Example: Adding WEB_ACCESS_LOG
 
@@ -105,6 +118,18 @@ Here's an example of properly adding an environment variable:
 Use regex patterns to enforce specific character requirements:
 
 ```python
+# SECRET_KEY - at least 32 alphanumeric characters
+{
+    'key': 'SECRET_KEY',
+    'label': 'Secret Key',
+    'type': 'password',
+    'required': True,
+    'minlength': 32,
+    'pattern': '^[A-Za-z0-9]{32,}$',
+    'title': 'SECRET_KEY must be at least 32 characters long and contain only alphanumeric characters.',
+    'sensitive': True,
+}
+
 # EAS Station ID - uppercase letters, numbers, forward slash only (no hyphens)
 {
     'key': 'EAS_STATION_ID',

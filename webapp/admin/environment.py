@@ -28,6 +28,9 @@ ENV_CATEGORIES = {
                 'required': True,
                 'description': 'Flask session security key (generate with: python -c "import secrets; print(secrets.token_hex(32))")',
                 'sensitive': True,
+                'minlength': 32,
+                'pattern': '^[A-Za-z0-9]{32,}$',
+                'title': 'SECRET_KEY must be at least 32 characters long and contain only alphanumeric characters.',
             },
             {
                 'key': 'FLASK_ENV',
