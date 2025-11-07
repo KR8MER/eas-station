@@ -150,9 +150,9 @@ def detect_ebs_two_tone(
         # Estimate noise floor
         noise_power = _estimate_noise_floor(window, sample_rate, [EBS_TONE_FREQ_1, EBS_TONE_FREQ_2])
 
-        # Calculate SNR for each frequency
-        snr_853 = 10 * math.log10(power_853 / max(noise_power, 1e-10))
-        snr_960 = 10 * math.log10(power_960 / max(noise_power, 1e-10))
+        # Calculate SNR for each frequency (protect against zero power)
+        snr_853 = 10 * math.log10(max(power_853, 1e-10) / max(noise_power, 1e-10))
+        snr_960 = 10 * math.log10(max(power_960, 1e-10) / max(noise_power, 1e-10))
 
         # Both tones must be present simultaneously
         if snr_853 > threshold_db and snr_960 > threshold_db:
@@ -260,8 +260,8 @@ def detect_nws_single_tone(
         # Estimate noise floor
         noise_power = _estimate_noise_floor(window, sample_rate, [NWS_TONE_FREQ])
 
-        # Calculate SNR
-        snr = 10 * math.log10(power_1050 / max(noise_power, 1e-10))
+        # Calculate SNR (protect against zero power)
+        snr = 10 * math.log10(max(power_1050, 1e-10) / max(noise_power, 1e-10))
 
         if snr > threshold_db:
             # Check for harmonic purity (reduce false positives)
