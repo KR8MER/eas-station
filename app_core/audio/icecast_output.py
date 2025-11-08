@@ -240,6 +240,7 @@ class IcecastStreamer:
                 '-ice_name', stream_name,
                 '-ice_description', stream_description,
                 '-ice_genre', stream_genre,
+                '-ice_public', '0',  # Disable directory listing
                 icecast_url
             ])
 

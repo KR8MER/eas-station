@@ -59,6 +59,11 @@ update_config "admin" "${ICECAST_ADMIN:-icemaster@localhost}"
 update_config "clients" "${ICECAST_MAX_CLIENTS:-100}"
 update_config "sources" "${ICECAST_MAX_SOURCES:-2}"
 
+# CRITICAL: Disable source timeout to prevent 10-minute disconnects
+# Default source-timeout is 10 seconds, but we need infinite for persistent streams
+# Setting to -1 (infinite) or very large value prevents automatic disconnection
+update_config "source-timeout" "0"  # 0 = infinite timeout
+
 # Enable changeowner for security (allows Icecast to drop root privileges)
 update_config "changeowner" "true"
 
