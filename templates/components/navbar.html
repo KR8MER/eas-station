@@ -1,16 +1,19 @@
 <!-- Navigation Component -->
 {% set is_authenticated = current_user is defined and current_user and current_user.is_authenticated %}
+{% set can_view_alerts = has_permission('alerts.view') %}
+{% set can_view_logs = has_permission('logs.view') %}
+{% set can_manage_analytics = has_permission('analytics_manage') %}
 {% set can_view_eas = has_permission('eas.view') %}
 {% set can_manage_receivers = has_permission('receivers.view') %}
+{% set can_view_audio_tools = can_manage_receivers %}
+{% set can_review_audio_history = can_view_alerts or can_view_logs %}
+{% set can_view_audio_health = can_manage_receivers or can_view_logs or can_manage_analytics %}
 {% set can_view_gpio = has_permission('gpio.view') %}
 {% set can_view_system_config = has_permission('system.view_config') %}
 {% set can_manage_config = has_permission('system.configure') %}
-{% set can_view_logs = has_permission('logs.view') %}
 {% set can_export_alerts = has_permission('alerts.export') %}
 {% set can_manage_users = has_permission('system.manage_users') %}
 {% set can_view_users = has_permission('system.view_users') or can_manage_users %}
-{% set can_view_alerts = has_permission('alerts.view') %}
-{% set can_manage_analytics = has_permission('analytics_manage') %}
 
 {% set show_broadcast_workflow = can_view_eas %}
 {% set show_led = can_view_eas %}
@@ -19,6 +22,11 @@
 {% set show_radio = can_manage_receivers %}
 {% set show_audio_settings = can_manage_receivers %}
 {% set show_broadcast_dropdown = show_broadcast_workflow or show_led or show_vfd or show_screens or show_radio or show_audio_settings %}
+
+{% set show_audio_monitoring = is_authenticated and can_view_audio_tools %}
+{% set show_audio_archive = is_authenticated and can_review_audio_history %}
+{% set show_audio_health_dashboard = is_authenticated and can_view_audio_health %}
+{% set show_monitoring_audio_section = show_audio_monitoring or show_audio_archive or show_audio_health_dashboard %}
 
 {% set show_gpio_control = can_view_gpio %}
 {% set show_gpio_stats = can_view_gpio %}
@@ -103,22 +111,30 @@
                                     <i class="fas fa-heartbeat"></i> System Health
                                 </a>
                             </li>
+                            {% if show_monitoring_audio_section %}
                             <li><hr class="dropdown-divider"></li>
+                            {% if show_audio_monitoring %}
                             <li>
                                 <a class="dropdown-item" href="/audio-monitor">
                                     <i class="fas fa-headphones"></i> Audio Monitoring
                                 </a>
                             </li>
+                            {% endif %}
+                            {% if show_audio_archive %}
                             <li>
                                 <a class="dropdown-item" href="{{ url_for('audio_history') }}">
                                     <i class="fas fa-clock-rotate-left"></i> Audio Archive
                                 </a>
                             </li>
+                            {% endif %}
+                            {% if show_audio_health_dashboard %}
                             <li>
                                 <a class="dropdown-item" href="/audio/health/dashboard">
                                     <i class="fas fa-heart-pulse"></i> Audio Health Dashboard
                                 </a>
                             </li>
+                            {% endif %}
+                            {% endif %}
                         </ul>
                     </li>
 
