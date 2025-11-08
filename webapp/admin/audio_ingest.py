@@ -249,6 +249,8 @@ def _initialize_auto_streaming() -> None:
                 icecast_server=auto_config.server,
                 icecast_port=auto_config.port,
                 icecast_password=auto_config.source_password,
+                icecast_admin_user=auto_config.admin_user,
+                icecast_admin_password=auto_config.admin_password,
                 default_bitrate=128,
                 enabled=True
             )

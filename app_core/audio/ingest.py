@@ -254,6 +254,9 @@ class AudioSourceAdapter(ABC):
             peak_db = rms_db = -np.inf
             silence_detected = True
 
+        # Preserve existing metadata (e.g., RBDS information) across metric updates
+        current_metadata = self.metrics.metadata if self.metrics else None
+
         # Update metrics
         self.metrics = AudioMetrics(
             timestamp=current_time,
@@ -263,7 +266,8 @@ class AudioSourceAdapter(ABC):
             channels=self.config.channels,
             frames_captured=self.metrics.frames_captured + len(audio_chunk),
             silence_detected=silence_detected,
-            buffer_utilization=self._audio_queue.qsize() / self._audio_queue.maxsize
+            buffer_utilization=self._audio_queue.qsize() / self._audio_queue.maxsize,
+            metadata=current_metadata,
         )
 
         self._last_metrics_update = current_time

@@ -23,6 +23,8 @@ class IcecastAutoConfig:
         self.source_password = ""
         self.external_port = 8001  # For generating URLs accessible from browser
         self.public_hostname = None  # Public hostname/IP for browser access
+        self.admin_user = None
+        self.admin_password = None
 
         self._detect_config()
 
@@ -50,6 +52,16 @@ class IcecastAutoConfig:
             # Get server and port
             self.server = os.environ.get('ICECAST_SERVER', 'icecast')
             self.port = int(os.environ.get('ICECAST_PORT', '8000'))
+
+            # Admin credentials (optional, but required for metadata updates)
+            self.admin_user = os.environ.get('ICECAST_ADMIN_USER')
+            self.admin_password = os.environ.get('ICECAST_ADMIN_PASSWORD')
+            if bool(self.admin_user) ^ bool(self.admin_password):
+                logger.warning(
+                    "Icecast auto-configuration: Admin username/password mismatch. "
+                    "Metadata updates will be disabled until both ICECAST_ADMIN_USER "
+                    "and ICECAST_ADMIN_PASSWORD are provided."
+                )
 
             # For external URLs (browser access), use the external port
             external_port_str = os.environ.get('ICECAST_EXTERNAL_PORT')
@@ -123,6 +135,7 @@ class IcecastAutoConfig:
             'port': self.port,
             'external_port': self.external_port,
             'has_password': bool(self.source_password),
+            'has_admin_credentials': bool(self.admin_user and self.admin_password),
         }
 
 
