@@ -462,6 +462,8 @@ def register_api_routes(app, logger):
                 end_dt = datetime.fromisoformat(end_date).replace(tzinfo=UTC_TZ)
                 query = query.filter(CAPAlert.sent <= end_dt)
 
+            matching_ids = query.with_entities(CAPAlert.id).scalar_subquery()
+
             alerts = db.session.query(
                 CAPAlert.id,
                 CAPAlert.identifier,
@@ -475,7 +477,7 @@ def register_api_routes(app, logger):
                 CAPAlert.area_desc,
                 func.ST_AsGeoJSON(CAPAlert.geom).label('geometry'),
             ).filter(
-                CAPAlert.id.in_(query.with_entities(CAPAlert.id).subquery())
+                CAPAlert.id.in_(matching_ids)
             ).all()
 
             county_boundary = None

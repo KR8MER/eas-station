@@ -1409,6 +1409,7 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             max_chunks = 999999999  # Effectively unlimited - stream until client disconnects
             silence_count = 0
             max_consecutive_silence = 200  # 10 seconds of silence before stopping (increased from 1s)
+            last_reported_status = adapter.status
 
             try:
                 while chunk_count < max_chunks:
@@ -1417,9 +1418,19 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
 
                     if audio_chunk is None:
                         # No data available - yield silence to keep HTTP stream alive
-                        if adapter.status != AudioSourceStatus.RUNNING:
+                        current_status = adapter.status
+                        if current_status == AudioSourceStatus.STOPPED:
                             logger.info(f'Audio source stopped: {source_name}')
                             break
+
+                        if current_status != AudioSourceStatus.RUNNING and current_status != last_reported_status:
+                            logger.warning(
+                                'Audio source %s status transitioned to %s - streaming silence until recovery',
+                                source_name,
+                                current_status.value,
+                            )
+
+                        last_reported_status = current_status
 
                         # Yield a small chunk of silence (0.05 seconds worth)
                         # This keeps the HTTP connection alive and prevents browser timeout
@@ -1436,6 +1447,7 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
 
                     # Reset silence counter when we get real data
                     silence_count = 0
+                    last_reported_status = adapter.status
 
                     # Convert float32 [-1, 1] to int16 PCM
                     # Ensure we have a numpy array
@@ -1464,7 +1476,7 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             if not adapter:
                 return jsonify({'error': 'Source not found'}), 404
 
-            if adapter.status != AudioSourceStatus.RUNNING:
+            if adapter.status == AudioSourceStatus.STOPPED:
                 return jsonify({'error': 'Source not running. Please start the source first.'}), 400
 
             return Response(
