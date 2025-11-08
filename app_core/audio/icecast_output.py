@@ -111,6 +111,13 @@ class IcecastStreamer:
         self._last_song_length: Optional[str] = None
         self._last_album: Optional[str] = None
 
+        # Metadata update coordination
+        self._metadata_update_lock = threading.Lock()
+        self._metadata_update_thread: Optional[threading.Thread] = None
+        self._pending_metadata: Optional[
+            Tuple[Tuple[str, Optional[str]], str, Optional[str]]
+        ] = None
+
         logger.info(
             f"Initialized IcecastStreamer: {config.server}:{config.port}/{config.mount}"
         )
@@ -164,6 +171,15 @@ class IcecastStreamer:
         # Wait for feeder thread
         if self._feeder_thread:
             self._feeder_thread.join(timeout=5.0)
+
+        # Wait for any in-flight metadata updates
+        with self._metadata_update_lock:
+            pending_thread = self._metadata_update_thread
+            self._metadata_update_thread = None
+            self._pending_metadata = None
+
+        if pending_thread and pending_thread.is_alive():
+            pending_thread.join(timeout=2.0)
 
         logger.info("Stopped Icecast streamer")
 
@@ -333,8 +349,22 @@ class IcecastStreamer:
             return
 
         # Extract title and artist for Icecast update
-        title = payload.get('title')
-        artist = payload.get('artist')
+        raw_title = payload.get('title')
+        raw_artist = payload.get('artist')
+
+        # Sanitize metadata before queuing for async update
+        safe_title = self._sanitize_metadata_value(
+            raw_title,
+            self.config.name or self.config.mount or "EAS Station",
+        )
+        if not safe_title:
+            safe_title = self.config.name or self.config.mount or "EAS Station"
+        safe_title = safe_title.strip()
+        safe_artist = self._sanitize_metadata_value(raw_artist, "")
+        if safe_artist:
+            safe_artist = safe_artist.strip()
+        if not safe_artist:
+            safe_artist = None
 
         # Store extended metadata (gracefully)
         try:
@@ -344,34 +374,14 @@ class IcecastStreamer:
         except Exception as e:
             logger.debug(f"Error storing extended metadata: {e}")
 
-        cache_key = (title or "", artist)
+        cache_key = (
+            safe_title.strip() if safe_title else "",
+            safe_artist.strip() if safe_artist else None,
+        )
         if self._last_metadata_payload == cache_key:
             return
 
-        try:
-            sent_value = self._send_metadata_update(title or self.config.name, artist)
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.warning(
-                "Unable to update Icecast metadata for %s: %s\nTraceback:\n%s",
-                self.config.mount,
-                exc,
-                ''.join(traceback.format_tb(exc.__traceback__)),
-            )
-            self._last_error = str(exc)
-            return
-
-        if sent_value:
-            self._last_metadata_payload = cache_key
-            self._last_metadata_song = sent_value
-            # Log extended metadata when available
-            if self._last_artwork_url or self._last_song_length or self._last_album:
-                logger.debug(
-                    "Extended metadata for %s: artwork=%s, length=%s, album=%s",
-                    self.config.mount,
-                    self._last_artwork_url or 'N/A',
-                    self._last_song_length or 'N/A',
-                    self._last_album or 'N/A',
-                )
+        self._queue_metadata_update(cache_key, safe_title, safe_artist)
 
     def _extract_metadata_fields(
         self,
@@ -554,6 +564,91 @@ class IcecastStreamer:
             return sanitized_value
 
         return sanitized_fallback or ""
+
+    def _queue_metadata_update(
+        self,
+        cache_key: Tuple[str, Optional[str]],
+        title: str,
+        artist: Optional[str]
+    ) -> None:
+        """Schedule metadata update on a background thread."""
+
+        if self._stop_event.is_set():
+            return
+
+        with self._metadata_update_lock:
+            # If an update is already running, store the latest metadata and exit.
+            if self._metadata_update_thread and self._metadata_update_thread.is_alive():
+                self._pending_metadata = (cache_key, title, artist)
+                return
+
+            # No update running; start a new thread.
+            self._pending_metadata = None
+            self._metadata_update_thread = threading.Thread(
+                target=self._run_metadata_update,
+                name=f"icecast-metadata-{self.config.mount}",
+                args=(cache_key, title, artist),
+                daemon=True,
+            )
+            self._metadata_update_thread.start()
+
+    def _run_metadata_update(
+        self,
+        cache_key: Tuple[str, Optional[str]],
+        title: str,
+        artist: Optional[str]
+    ) -> None:
+        """Perform metadata updates sequentially without blocking audio."""
+
+        pending: Optional[Tuple[Tuple[str, Optional[str]], str, Optional[str]]] = (
+            cache_key,
+            title,
+            artist,
+        )
+
+        while pending and not self._stop_event.is_set():
+            cache_key, current_title, current_artist = pending
+
+            try:
+                sent_value = self._send_metadata_update(current_title, current_artist)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning(
+                    "Unable to update Icecast metadata for %s: %s\nTraceback:\n%s",
+                    self.config.mount,
+                    exc,
+                    ''.join(traceback.format_tb(exc.__traceback__)),
+                )
+                self._last_error = str(exc)
+                sent_value = None
+
+            if sent_value:
+                self._last_metadata_payload = cache_key
+                self._last_metadata_song = sent_value
+                if self._last_artwork_url or self._last_song_length or self._last_album:
+                    logger.debug(
+                        "Extended metadata for %s: artwork=%s, length=%s, album=%s",
+                        self.config.mount,
+                        self._last_artwork_url or 'N/A',
+                        self._last_song_length or 'N/A',
+                        self._last_album or 'N/A',
+                    )
+
+            with self._metadata_update_lock:
+                if self._stop_event.is_set():
+                    self._pending_metadata = None
+                    self._metadata_update_thread = None
+                    return
+
+                next_pending = self._pending_metadata
+                self._pending_metadata = None
+
+                if next_pending:
+                    next_cache_key, next_title, next_artist = next_pending
+                    pending = (next_cache_key, next_title, next_artist)
+                else:
+                    pending = None
+                    self._metadata_update_thread = None
+
 
     def _send_metadata_update(self, title: str, artist: Optional[str]) -> Optional[str]:
         """Submit metadata to Icecast and return the formatted payload on success."""
