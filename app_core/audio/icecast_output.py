@@ -21,6 +21,7 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Optional, Tuple
+from urllib.parse import quote
 
 import numpy as np
 import requests
@@ -452,17 +453,19 @@ class IcecastStreamer:
         if not mount_path.startswith('/'):
             mount_path = f"/{mount_path}"
 
-        url = f"http://{self.config.server}:{self.config.port}/admin/metadata"
-        params = {
-            'mode': 'updinfo',
-            'mount': mount_path,
-            'song': song_value,
-        }
+        # Manually build URL with UTF-8 encoded parameters to avoid latin-1 encoding issues
+        # quote() with safe='' ensures proper UTF-8 percent-encoding for all special characters
+        encoded_mount = quote(mount_path, safe='/')
+        encoded_song = quote(song_value, safe='')
+
+        url = (
+            f"http://{self.config.server}:{self.config.port}/admin/metadata"
+            f"?mode=updinfo&mount={encoded_mount}&song={encoded_song}"
+        )
 
         try:
             response = requests.get(
                 url,
-                params=params,
                 auth=(self.config.admin_user, self.config.admin_password),
                 timeout=5.0,
             )
