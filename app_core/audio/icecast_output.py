@@ -15,6 +15,7 @@ Key Features:
 from __future__ import annotations
 
 import base64
+import errno
 import logging
 import subprocess
 import threading
@@ -55,6 +56,7 @@ class IcecastConfig:
     admin_user: Optional[str] = None
     admin_password: Optional[str] = None
     metadata_poll_interval: float = 1.0
+    source_timeout: float = 30.0  # Seconds without writes before forcing a restart
 
 
 class IcecastStreamer:
@@ -105,6 +107,8 @@ class IcecastStreamer:
         self._last_metadata_song: Optional[str] = None
         self._last_metadata_check = 0.0
         self._metadata_poll_interval = max(self.config.metadata_poll_interval, 0.5)
+        self._source_timeout = max(getattr(self.config, 'source_timeout', 30.0) or 0.0, 0.0)
+        self._last_write_time = 0.0
 
         # Extended metadata (album art, song length, etc.)
         self._last_artwork_url: Optional[str] = None
@@ -135,10 +139,13 @@ class IcecastStreamer:
 
         self._stop_event.clear()
         self._start_time = time.time()
+        self._last_write_time = self._start_time
 
         # Start FFmpeg encoder
         if not self._start_ffmpeg():
             return False
+
+        self._last_write_time = time.time()
 
         # Start feeder thread
         self._feeder_thread = threading.Thread(
@@ -281,29 +288,13 @@ class IcecastStreamer:
 
         while not self._stop_event.is_set():
             if not self._ffmpeg_process or self._ffmpeg_process.poll() is not None:
-                # FFmpeg died, try to get error output
-                stderr_output = None
-                if self._ffmpeg_process and self._ffmpeg_process.stderr:
-                    try:
-                        stderr_output = self._ffmpeg_process.stderr.read().decode('utf-8', errors='replace')
-                    except Exception as e:
-                        logger.debug(f"Could not read FFmpeg stderr: {e}")
-
-                if stderr_output:
-                    logger.error(f"FFmpeg process died with error:\n{stderr_output}")
-                else:
-                    logger.warning("FFmpeg process died (no error output available)")
-
-                self._reconnect_count += 1
-
-                if self._start_ffmpeg():
-                    logger.info("FFmpeg restarted successfully")
-                else:
-                    logger.error("Failed to restart FFmpeg")
+                reason = "encoder not running" if not self._ffmpeg_process else "encoder exited"
+                if not self._restart_ffmpeg(reason):
                     time.sleep(5.0)
-                    continue
+                continue
 
             try:
+                wrote_chunk = False
                 # Read audio from source and add to buffer
                 samples = self.audio_source.get_audio_chunk(timeout=0.1)
 
@@ -319,20 +310,87 @@ class IcecastStreamer:
                     self._ffmpeg_process.stdin.write(chunk)
                     self._ffmpeg_process.stdin.flush()
                     self._bytes_sent += len(chunk)
+                    wrote_chunk = True
                 elif not buffer:
                     # Buffer empty - slow down to avoid busy loop
                     time.sleep(0.01)
+
+                if wrote_chunk:
+                    self._last_write_time = time.time()
 
                 now = time.time()
                 if now - self._last_metadata_check >= self._metadata_poll_interval:
                     self._last_metadata_check = now
                     self._maybe_update_metadata()
 
+                if (
+                    self._source_timeout
+                    and buffer
+                    and self._last_write_time > 0.0
+                    and now - self._last_write_time > self._source_timeout
+                ):
+                    idle_duration = now - self._last_write_time
+                    logger.warning(
+                        "No audio written to Icecast for %.1f seconds; forcing encoder restart",
+                        idle_duration,
+                    )
+                    if not self._restart_ffmpeg(f"idle writer timeout ({idle_duration:.1f}s)"):
+                        time.sleep(5.0)
+                    continue
+
+            except BrokenPipeError as exc:
+                logger.error("Icecast FFmpeg pipe closed: %s", exc)
+                if not self._restart_ffmpeg("ffmpeg pipe closed"):
+                    time.sleep(5.0)
+            except OSError as exc:
+                if exc.errno == errno.EPIPE:
+                    logger.error("Icecast FFmpeg write EPIPE: %s", exc)
+                    if not self._restart_ffmpeg("ffmpeg EPIPE"):
+                        time.sleep(5.0)
+                else:
+                    logger.error(f"Error feeding Icecast stream: {exc}")
+                    time.sleep(1.0)
             except Exception as e:
                 logger.error(f"Error feeding Icecast stream: {e}")
                 time.sleep(1.0)
 
         logger.debug("Icecast feed loop stopped")
+
+    def _restart_ffmpeg(self, reason: str) -> bool:
+        """Tear down and re-launch the FFmpeg encoder pipeline."""
+
+        if self._stop_event.is_set():
+            return False
+
+        process = self._ffmpeg_process
+        if process:
+            try:
+                process.terminate()
+                try:
+                    process.wait(timeout=2.0)
+                except subprocess.TimeoutExpired:
+                    logger.debug("FFmpeg did not terminate gracefully; killing process")
+                    process.kill()
+                except Exception as exc:  # pylint: disable=broad-except
+                    logger.debug("Error waiting for FFmpeg termination: %s", exc)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.debug("Error terminating FFmpeg: %s", exc)
+
+        self._ffmpeg_process = None
+        self._reconnect_count += 1
+        self._last_error = reason
+        logger.warning("Restarting Icecast FFmpeg pipeline (%s)", reason)
+
+        if self._stop_event.is_set():
+            return False
+
+        if self._start_ffmpeg():
+            self._last_write_time = time.time()
+            logger.info("FFmpeg restarted successfully")
+            return True
+
+        logger.error("Failed to restart FFmpeg (%s)", reason)
+        return False
 
     def _maybe_update_metadata(self) -> None:
         """Push updated now-playing metadata to Icecast when it changes."""
@@ -792,6 +850,7 @@ class IcecastStreamer:
             'public': self.config.public,
             'last_metadata': self._last_metadata_song,
             'metadata_enabled': bool(self.config.admin_user and self.config.admin_password),
+            'source_timeout': self._source_timeout,
             # Extended metadata
             'artwork_url': self._last_artwork_url,
             'song_length': self._last_song_length,
