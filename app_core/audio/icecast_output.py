@@ -211,11 +211,11 @@ class IcecastStreamer:
         # CRITICAL: Pre-buffer audio to prevent stuttering/clipping
         # Build up a buffer before starting to feed FFmpeg
         from collections import deque
-        buffer = deque(maxlen=100)  # Up to 10 seconds of audio (100 * 100ms)
-        prebuffer_target = 40  # Pre-fill with 4 seconds before starting
+        buffer = deque(maxlen=200)  # Up to 10 seconds of audio (200 * 50ms chunks)
+        prebuffer_target = 20  # Pre-fill with 1 second before starting (reduced for faster startup)
 
-        logger.info(f"Pre-buffering {prebuffer_target} chunks (4 seconds) for smooth Icecast streaming")
-        prebuffer_timeout = time.time() + 15.0  # 15 seconds max to prebuffer
+        logger.info(f"Pre-buffering {prebuffer_target} chunks (~1 second) for smooth Icecast streaming")
+        prebuffer_timeout = time.time() + 10.0  # 10 seconds max to prebuffer
 
         while len(buffer) < prebuffer_target and time.time() < prebuffer_timeout:
             samples = self.audio_source.get_audio_chunk(timeout=0.5)
@@ -224,9 +224,9 @@ class IcecastStreamer:
                 buffer.append(pcm_data.tobytes())
 
         if len(buffer) < prebuffer_target:
-            logger.warning(f"Pre-buffer timeout: only filled {len(buffer)}/{prebuffer_target} chunks")
+            logger.warning(f"Pre-buffer timeout: only filled {len(buffer)}/{prebuffer_target} chunks (~{len(buffer)*50}ms of audio)")
         else:
-            logger.info(f"Pre-buffer complete: {len(buffer)} chunks ready")
+            logger.info(f"Pre-buffer complete: {len(buffer)} chunks (~{len(buffer)*50}ms of audio)")
 
         while not self._stop_event.is_set():
             if not self._ffmpeg_process or self._ffmpeg_process.poll() is not None:
