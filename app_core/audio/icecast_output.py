@@ -209,21 +209,22 @@ class IcecastStreamer:
 
                 decoded_line = line.decode('utf-8', errors='replace').strip()
                 if decoded_line:
-                    # Only log important messages to avoid log spam
-                    # FFmpeg is very verbose, so we filter to warnings and errors
-                    if any(keyword in decoded_line.lower() for keyword in ['error', 'failed', 'invalid', 'unable']):
-                        logger.warning(f"FFmpeg [{self.config.mount}]: {decoded_line}")
-                    else:
-                        logger.debug(f"FFmpeg [{self.config.mount}]: {decoded_line}")
+                    # Log ALL messages to see what's happening with Icecast connections
+                    # Use WARNING level for visibility in production logs
+                    logger.warning(f"FFmpeg [{self.config.mount}]: {decoded_line}")
         except Exception as e:
             logger.debug(f"FFmpeg stderr reader stopped: {e}")
 
     def _start_ffmpeg(self) -> bool:
         """Start FFmpeg encoder and Icecast streamer."""
         try:
-            # Build Icecast URL
+            # Build Icecast URL with properly encoded credentials
+            # URL-encode the password to handle special characters like @, :, /, etc.
+            from urllib.parse import quote
+            encoded_password = quote(self.config.password, safe='')
+
             icecast_url = (
-                f"icecast://source:{self.config.password}@"
+                f"icecast://source:{encoded_password}@"
                 f"{self.config.server}:{self.config.port}/{self.config.mount}"
             )
 
