@@ -209,12 +209,9 @@ class IcecastStreamer:
 
                 decoded_line = line.decode('utf-8', errors='replace').strip()
                 if decoded_line:
-                    # Only log important messages to avoid log spam
-                    # FFmpeg is very verbose, so we filter to warnings and errors
-                    if any(keyword in decoded_line.lower() for keyword in ['error', 'failed', 'invalid', 'unable']):
-                        logger.warning(f"FFmpeg [{self.config.mount}]: {decoded_line}")
-                    else:
-                        logger.debug(f"FFmpeg [{self.config.mount}]: {decoded_line}")
+                    # Log ALL messages to see what's happening with Icecast connections
+                    # Use WARNING level for visibility in production logs
+                    logger.warning(f"FFmpeg [{self.config.mount}]: {decoded_line}")
         except Exception as e:
             logger.debug(f"FFmpeg stderr reader stopped: {e}")
 
