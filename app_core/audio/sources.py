@@ -945,6 +945,13 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
         self._last_icy_metadata = metadata_text
 
+        def _strip_wrapping_quotes(value: str) -> str:
+            """Remove a single layer of matching quotes from the ends of a string."""
+
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+                return value[1:-1]
+            return value
+
         fields: Dict[str, Any] = {}
         for part in metadata_text.split(';'):
             part = part.strip()
@@ -953,7 +960,7 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
             key, value = part.split('=', 1)
             key = key.strip()
-            value = value.strip().strip("'\"")
+            value = _strip_wrapping_quotes(value.strip())
             if key:
                 fields[key] = value
 
@@ -968,7 +975,7 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
         stream_title = fields.get('StreamTitle')
         if stream_title:
-            updates['song'] = stream_title
+            updates['song_raw'] = stream_title
 
             # Parse rich metadata from StreamTitle (e.g., iHeartRadio format)
             # Example: text="Golden" song_spot="M" MediaBaseId="3136003" ... amgArtworkURL="..." length="00:03:11"
@@ -976,6 +983,7 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
             title = stream_title.strip()
             artist = None
+            display_song = None
 
             # Try to extract text="" or song="" attribute (iHeartRadio format)
             text_match = re.search(r'text="([^"]+)"', stream_title)
@@ -1006,6 +1014,13 @@ class StreamSourceAdapter(AudioSourceAdapter):
                         artist = artist_candidate
                         updates['artist'] = artist
                         updates['song_artist'] = artist
+
+            if artist and title:
+                display_song = f"{artist} - {title}"
+            elif title:
+                display_song = title
+            elif artist:
+                display_song = artist
 
             # Try to extract album art URL
             artwork_match = re.search(r'(?:amgArtworkURL|artworkURL|artwork_url)="([^"]+)"', stream_title)
@@ -1041,6 +1056,11 @@ class StreamSourceAdapter(AudioSourceAdapter):
                         updates['song_title'] = title
                         updates['title'] = title
 
+            if display_song:
+                updates['song'] = display_song
+            else:
+                updates['song'] = stream_title
+
             now_playing: Dict[str, Any] = {'raw': stream_title}
             if title:
                 now_playing['title'] = title
@@ -1048,6 +1068,20 @@ class StreamSourceAdapter(AudioSourceAdapter):
                 now_playing['artist'] = artist
 
             updates['now_playing'] = now_playing
+
+            # Expose the parsed fields for UI fallbacks without clobbering the raw data
+            if title:
+                fields.setdefault('text', title)
+                fields.setdefault('title', title)
+                fields.setdefault('song', display_song or title)
+            if artist:
+                fields.setdefault('artist', artist)
+            if updates.get('artwork_url'):
+                fields.setdefault('artwork_url', updates['artwork_url'])
+            if updates.get('length'):
+                fields.setdefault('length', updates['length'])
+            if updates.get('album'):
+                fields.setdefault('album', updates['album'])
 
         stream_url = fields.get('StreamUrl')
         if stream_url:

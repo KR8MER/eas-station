@@ -30,11 +30,22 @@ def test_icy_metadata_extracts_artist_from_text_attribute_prefix():
 
     metadata = adapter.metrics.metadata
     assert metadata is not None
+    assert metadata.get('song') == 'Huntr/X - Golden'
+    assert metadata.get('song_raw') == (
+        'Huntr/X - text="Golden" song_spot="M" MediaBaseId="3136003" '
+        'amgArtworkURL="https://example.com/art.jpg" length="00:03:11"'
+    )
     assert metadata.get('artist') == 'Huntr/X'
     assert metadata.get('song_artist') == 'Huntr/X'
     assert metadata.get('song_title') == 'Golden'
+    assert metadata.get('length') == '00:03:11'
 
     now_playing = metadata.get('now_playing')
     assert isinstance(now_playing, dict)
     assert now_playing.get('artist') == 'Huntr/X'
     assert now_playing.get('title') == 'Golden'
+
+    icy_fields = metadata.get('icy', {}).get('fields', {})
+    assert icy_fields.get('text') == 'Golden'
+    assert icy_fields.get('artist') == 'Huntr/X'
+    assert icy_fields.get('length') == '00:03:11'
