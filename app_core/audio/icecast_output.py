@@ -476,6 +476,16 @@ class IcecastStreamer:
         auth_user = str(self.config.admin_user or '')
         auth_pass = str(self.config.admin_password or '')
 
+        # Log credentials info for debugging (mask password)
+        logger.debug(
+            "Auth for %s: user=%r (len=%d), pass=***%s (len=%d)",
+            self.config.mount,
+            auth_user,
+            len(auth_user),
+            auth_pass[-3:] if len(auth_pass) >= 3 else "***",
+            len(auth_pass),
+        )
+
         # Encode credentials as "username:password" in UTF-8, then base64
         credentials = f"{auth_user}:{auth_pass}".encode('utf-8')
         encoded_credentials = base64.b64encode(credentials).decode('ascii')
