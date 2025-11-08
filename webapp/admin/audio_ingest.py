@@ -6,7 +6,7 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, current_app
 from sqlalchemy import desc
 
 from app_core.extensions import db
@@ -48,8 +48,11 @@ def _get_audio_controller() -> AudioIngestController:
         if not _initialization_started:
             _initialization_started = True
             import threading
+            # Capture Flask app for background thread context
+            app = current_app._get_current_object()
             init_thread = threading.Thread(
                 target=_start_audio_sources_background,
+                args=(app,),
                 daemon=True,
                 name="AudioSourceStarter"
             )
@@ -99,33 +102,36 @@ def _load_audio_source_configs(controller: AudioIngestController) -> None:
         logger.error(f'Failed to load audio sources from database: {e}')
 
 
-def _start_audio_sources_background() -> None:
+def _start_audio_sources_background(app: Flask) -> None:
     """Start audio sources and streaming in background (slow, async)."""
     global _audio_controller
-    try:
-        logger.info("Background: Starting audio sources")
 
-        if _audio_controller is None:
-            logger.error("Audio controller not initialized - cannot start sources")
-            return
+    # CRITICAL: Use Flask app context for database access
+    with app.app_context():
+        try:
+            logger.info("Background: Starting audio sources")
 
-        # Start sources that have auto_start enabled (SLOW - network connections)
-        saved_configs = AudioSourceConfigDB.query.all()
-        for db_config in saved_configs:
-            if db_config.enabled and db_config.auto_start:
-                try:
-                    _audio_controller.start_source(db_config.name)
-                    logger.info(f'Background: Auto-started audio source: {db_config.name}')
-                except Exception as e:
-                    logger.error(f'Background: Failed to start audio source {db_config.name}: {e}')
+            if _audio_controller is None:
+                logger.error("Audio controller not initialized - cannot start sources")
+                return
 
-        # Initialize streaming service (SLOW - starts FFmpeg processes)
-        _initialize_auto_streaming()
+            # Start sources that have auto_start enabled (SLOW - network connections)
+            saved_configs = AudioSourceConfigDB.query.all()
+            for db_config in saved_configs:
+                if db_config.enabled and db_config.auto_start:
+                    try:
+                        _audio_controller.start_source(db_config.name)
+                        logger.info(f'Background: Auto-started audio source: {db_config.name}')
+                    except Exception as e:
+                        logger.error(f'Background: Failed to start audio source {db_config.name}: {e}')
 
-        logger.info("Background: Audio source initialization completed successfully")
+            # Initialize streaming service (SLOW - starts FFmpeg processes)
+            _initialize_auto_streaming()
 
-    except Exception as e:
-        logger.error(f"Background: Audio source initialization failed: {e}", exc_info=True)
+            logger.info("Background: Audio source initialization completed successfully")
+
+        except Exception as e:
+            logger.error(f"Background: Audio source initialization failed: {e}", exc_info=True)
 
 
 def _get_auto_streaming_service():
