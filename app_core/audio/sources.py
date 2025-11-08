@@ -843,36 +843,27 @@ class StreamSourceAdapter(AudioSourceAdapter):
             self.error_message = f"FFmpeg decoder error: {e}"
 
     def _feed_ffmpeg(self) -> None:
-        """Thread function to feed encoded data from buffer to FFmpeg stdin at controlled rate."""
+        """Thread function to feed encoded data from buffer to FFmpeg stdin with backpressure."""
         logger.info(f"{self.config.name}: Feeder thread started")
         total_bytes_fed = 0
         last_log_time = time.time()
-        last_feed_time = time.time()
 
-        # Calculate target bytes per second based on stream bitrate (with 10% overhead for safety)
-        # bitrate is in kbps, convert to bytes per second
-        target_bytes_per_sec = (self._stream_bitrate * 1000 / 8) * 1.1 if hasattr(self, '_stream_bitrate') and self._stream_bitrate else 20000
+        # Maximum HTTP buffer size before we stop feeding (backpressure)
+        max_buffer_size = 65536  # 64KB - keep buffer small
 
-        # Feed in small chunks to maintain steady rate
-        chunk_size = 4096  # 4KB chunks
-        bytes_per_chunk = chunk_size
-        target_delay_per_chunk = bytes_per_chunk / target_bytes_per_sec
+        # Feed in 4KB chunks
+        chunk_size = 4096
 
-        logger.info(f"{self.config.name}: Feeder rate limit: {target_bytes_per_sec/1000:.1f} KB/s ({target_delay_per_chunk*1000:.1f}ms per {chunk_size} byte chunk)")
+        logger.info(f"{self.config.name}: Feeder using backpressure control (max buffer: {max_buffer_size} bytes)")
 
         try:
             while self._ffmpeg_process and self._ffmpeg_process.poll() is None:
                 try:
-                    if len(self._buffer) > 0:
-                        # Rate limiting: wait if we're feeding too fast
-                        now = time.time()
-                        time_since_last_feed = now - last_feed_time
-                        if time_since_last_feed < target_delay_per_chunk:
-                            # Need to slow down - sleep for remaining time
-                            sleep_time = target_delay_per_chunk - time_since_last_feed
-                            time.sleep(sleep_time)
-                            now = time.time()
+                    buffer_size = len(self._buffer)
 
+                    # Backpressure: only feed if buffer is below threshold
+                    # This automatically rate-limits based on FFmpeg's actual consumption rate
+                    if buffer_size > 0 and buffer_size < max_buffer_size:
                         # Send data to FFmpeg stdin (non-blocking)
                         chunk = bytes(self._buffer[:chunk_size])
 
@@ -880,44 +871,56 @@ class StreamSourceAdapter(AudioSourceAdapter):
                             try:
                                 bytes_written = self._ffmpeg_process.stdin.write(chunk)
                                 if bytes_written:
-                                    last_feed_time = now  # Update last feed time
                                     # CRITICAL: Use del instead of reassignment to avoid race condition
                                     # The capture loop extends the buffer while we're removing from it
                                     # Must modify in-place, not create new bytearray
                                     del self._buffer[:bytes_written]
-                                    # DON'T flush after every write - let FFmpeg buffer internally
-                                    # Flush only periodically to avoid breaking decoder buffering
                                     total_bytes_fed += bytes_written
 
-                                    # Log feeding rate and flush periodically
+                                    # Log feeding rate periodically
+                                    now = time.time()
                                     if now - last_log_time > 2.0:
-                                        self._ffmpeg_process.stdin.flush()  # Flush periodically, not every write
+                                        self._ffmpeg_process.stdin.flush()  # Flush periodically
                                         rate_kbps = (total_bytes_fed * 8 / 1000) / (now - last_log_time)
                                         logger.info(f"{self.config.name}: Fed {total_bytes_fed} bytes to FFmpeg ({rate_kbps:.1f} kbps), buffer size: {len(self._buffer)} bytes")
                                         total_bytes_fed = 0
                                         last_log_time = now
+
+                                    # Small delay to prevent busy loop
+                                    time.sleep(0.001)
                                 else:
-                                    # Write returned 0 - pipe is full, sleep longer
+                                    # Write returned 0 - pipe is full
                                     if not hasattr(self, '_last_blocked_log'):
                                         self._last_blocked_log = 0
+                                    now = time.time()
                                     if now - self._last_blocked_log > 5.0:
-                                        logger.warning(f"{self.config.name}: FFmpeg stdin write blocked (returned 0), buffer size: {len(self._buffer)} bytes")
+                                        logger.warning(f"{self.config.name}: FFmpeg stdin write blocked (returned 0), buffer size: {buffer_size} bytes, PCM buffer: {len(self._pcm_buffer)} bytes")
                                         self._last_blocked_log = now
-                                    time.sleep(0.1)  # Sleep longer when blocked
+                                    time.sleep(0.01)  # Sleep when blocked
                             except BlockingIOError:
-                                # Write would block, buffer is full, sleep longer
+                                # Write would block
                                 if not hasattr(self, '_last_blocked_log'):
                                     self._last_blocked_log = 0
                                 now = time.time()
                                 if now - self._last_blocked_log > 5.0:
-                                    logger.warning(f"{self.config.name}: FFmpeg stdin BlockingIOError, buffer size: {len(self._buffer)} bytes")
+                                    logger.warning(f"{self.config.name}: FFmpeg stdin BlockingIOError, buffer size: {buffer_size} bytes, PCM buffer: {len(self._pcm_buffer)} bytes")
                                     self._last_blocked_log = now
-                                time.sleep(0.1)  # Sleep longer when blocked
+                                time.sleep(0.01)  # Sleep when blocked
                             except BrokenPipeError:
                                 logger.warning(f"{self.config.name}: FFmpeg stdin pipe broken, decoder may have exited")
                                 break
+                    elif buffer_size >= max_buffer_size:
+                        # Buffer too large - apply backpressure by not feeding
+                        # Log periodically
+                        if not hasattr(self, '_last_backpressure_log'):
+                            self._last_backpressure_log = 0
+                        now = time.time()
+                        if now - self._last_backpressure_log > 5.0:
+                            logger.warning(f"{self.config.name}: Applying backpressure - buffer size: {buffer_size} bytes (max: {max_buffer_size}), PCM buffer: {len(self._pcm_buffer)} bytes")
+                            self._last_backpressure_log = now
+                        time.sleep(0.1)  # Sleep longer when applying backpressure
                     else:
-                        # No data to send, sleep briefly
+                        # No data to send
                         time.sleep(0.01)  # 10ms when no data
 
                 except Exception as e:
@@ -969,8 +972,20 @@ class StreamSourceAdapter(AudioSourceAdapter):
                 # Keep reading until no more data available (non-blocking)
                 total_read = 0
                 drain_iterations = 0
+                max_pcm_buffer_size = 500000  # 500KB max PCM buffer (~5 seconds at 44.1kHz mono)
+
                 while True:
                     drain_iterations += 1
+                    # Stop draining if PCM buffer is too large (backpressure)
+                    if len(self._pcm_buffer) >= max_pcm_buffer_size:
+                        if not hasattr(self, '_last_pcm_backpressure_log'):
+                            self._last_pcm_backpressure_log = 0
+                        now = time.time()
+                        if now - self._last_pcm_backpressure_log > 5.0:
+                            logger.warning(f"{self.config.name}: PCM buffer full ({len(self._pcm_buffer)} bytes), stopping stdout drain (downstream bottleneck)")
+                            self._last_pcm_backpressure_log = now
+                        break
+
                     try:
                         # Read up to 64KB of PCM data per iteration
                         chunk = self._ffmpeg_process.stdout.read(65536)
@@ -1009,7 +1024,8 @@ class StreamSourceAdapter(AudioSourceAdapter):
                 # Extract samples
                 bytes_to_extract = target_samples * bytes_per_sample
                 pcm_data = bytes(self._pcm_buffer[:bytes_to_extract])
-                self._pcm_buffer = self._pcm_buffer[bytes_to_extract:]
+                # CRITICAL: Use del instead of reassignment for in-place modification
+                del self._pcm_buffer[:bytes_to_extract]
 
                 # Convert to numpy array
                 samples = np.frombuffer(pcm_data, dtype=np.int16)
