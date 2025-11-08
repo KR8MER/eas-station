@@ -17,6 +17,23 @@
         .status-badge { font-size: 0.8em; }
         .system-overview { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
         .system-overview .card-body { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); }
+        .stack-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem 1rem; }
+        .stack-summary .metric-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: #6c757d; }
+        .stack-summary .metric-value { display: block; font-size: 1.1rem; font-weight: 600; }
+        .container-table { font-size: 0.85rem; }
+        .container-table th { text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; color: #6c757d; }
+        .container-table td, .container-table th { vertical-align: middle; }
+        .container-image { font-family: 'Courier New', monospace; font-size: 0.75rem; }
+        .container-meta { font-size: 0.75rem; color: #6c757d; }
+        .hardware-badge { display: inline-block; padding: 0.25rem 0.5rem; margin: 0 0.25rem 0.25rem 0; background-color: #f8f9fa; border-radius: 999px; border: 1px solid #dee2e6; font-size: 0.75rem; color: #495057; }
+        .hardware-meta { font-size: 0.8rem; color: #6c757d; }
+        .device-inventory-table { font-size: 0.85rem; }
+        .device-inventory-table td, .device-inventory-table th { vertical-align: top; }
+        .smart-status-badge { font-size: 0.8rem; }
+        .usb-device-table { font-size: 0.85rem; }
+        .usb-device-table td, .usb-device-table th { vertical-align: middle; }
+        .network-traffic-table { font-size: 0.8rem; }
+        .network-traffic-table td, .network-traffic-table th { vertical-align: middle; }
     </style>
 {% endblock %}
 
@@ -36,21 +53,41 @@
                                     <div class="metric-value text-white" id="hostname-value">{{ system.hostname or 'Unknown' }}</div>
                                 </div>
                                 <div class="metric-row">
-                                    <div class="metric-label text-white-50">Operating System</div>
-                                    <div class="metric-value text-white" id="os-value">{{ (system.system or 'Unknown') ~ ' ' ~ (system.release or '') }}</div>
+                                    <div class="metric-label text-white-50">Distribution</div>
+                                    <div class="metric-value text-white" id="distribution-value">
+                                        {% if system.os_pretty_name %}
+                                            {{ system.os_pretty_name }}
+                                        {% elif system.distribution %}
+                                            {{ system.distribution }}{% if system.distribution_version %} {{ system.distribution_version }}{% endif %}
+                                        {% else %}
+                                            {{ (system.system or 'Unknown') ~ ' ' ~ (system.release or '') }}
+                                        {% endif %}
+                                    </div>
                                 </div>
                             </div>
                             <div class="col-md-3">
+                                <div class="metric-row">
+                                    <div class="metric-label text-white-50">Kernel</div>
+                                    <div class="metric-value text-white" id="kernel-value">
+                                        {% if system.kernel_release %}
+                                            {{ system.kernel_release }}{% if system.kernel_version and system.kernel_version != system.kernel_release %} ({{ system.kernel_version }}){% endif %}
+                                        {% elif system.release %}
+                                            {{ system.release }}
+                                        {% else %}
+                                            Unknown
+                                        {% endif %}
+                                    </div>
+                                </div>
                                 <div class="metric-row">
                                     <div class="metric-label text-white-50">Architecture</div>
                                     <div class="metric-value text-white" id="architecture-value">{{ system.machine or 'Unknown' }}</div>
                                 </div>
+                            </div>
+                            <div class="col-md-3">
                                 <div class="metric-row">
                                     <div class="metric-label text-white-50">Uptime</div>
                                     <div class="metric-value text-white" id="uptime-value">{{ format_uptime(system.uptime_seconds or 0) }}</div>
                                 </div>
-                            </div>
-                            <div class="col-md-3">
                                 <div class="metric-row">
                                     <div class="metric-label text-white-50">Load Average</div>
                                     <div class="metric-value text-white" id="load-average-value">
@@ -68,6 +105,16 @@
                             </div>
                             <div class="col-md-3 text-end">
                                 <div class="metric-row">
+                                    <div class="metric-label text-white-50">Virtualization</div>
+                                    <div class="metric-value text-white" id="virtualization-value">
+                                        {% if system.virtualization %}
+                                            {{ system.virtualization }}
+                                        {% else %}
+                                            Bare metal
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="metric-row">
                                     <div class="metric-label text-white-50">Last Updated</div>
                                     <div class="metric-value text-white" id="current-time"></div>
                                 </div>
@@ -75,6 +122,166 @@
                                     <i class="fas fa-sync-alt"></i> Refresh Now
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% set hardware_data = hardware or {} %}
+        {% set hardware_cpu = hardware_data.cpu or {} %}
+        {% set platform_data = hardware_data.platform or {} %}
+
+        <!-- Hardware Summary -->
+        <div class="row mb-4">
+            <div class="col-lg-6 mb-3" id="cpu-hardware-card">
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-microchip section-icon"></i> CPU Details</h5>
+
+                        <div class="metric-row">
+                            <span class="metric-label">Model:</span>
+                            <span class="metric-value">{{ hardware_cpu.model_name or hardware_cpu.processor or 'Unknown' }}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Vendor:</span>
+                            <span class="metric-value">{{ hardware_cpu.vendor_id or 'Unknown' }}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Architecture:</span>
+                            <span class="metric-value">{{ hardware_cpu.architecture or 'Unknown' }}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Virtualization:</span>
+                            {% set virtualization = hardware_cpu.supports_virtualization %}
+                            <span class="metric-value">
+                                {% if virtualization is sameas(true) %}
+                                    Supported
+                                {% elif virtualization is sameas(false) %}
+                                    Not detected
+                                {% else %}
+                                    Unknown
+                                {% endif %}
+                            </span>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-sm-6">
+                                <div class="metric-row">
+                                    <span class="metric-label">Physical Cores:</span>
+                                    <span class="metric-value">{{ hardware_cpu.physical_cores or 'N/A' }}</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Logical Cores:</span>
+                                    <span class="metric-value">{{ hardware_cpu.logical_cores or 'N/A' }}</span>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="metric-row">
+                                    <span class="metric-label">Max Frequency:</span>
+                                    <span class="metric-value">{% if hardware_cpu.max_frequency %}{{ "%.0f"|format(hardware_cpu.max_frequency) }} MHz{% else %}Unknown{% endif %}</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Min Frequency:</span>
+                                    <span class="metric-value">{% if hardware_cpu.min_frequency %}{{ "%.0f"|format(hardware_cpu.min_frequency) }} MHz{% else %}Unknown{% endif %}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {% if hardware_cpu.cache_size or hardware_cpu.microcode %}
+                        <hr>
+                        <div class="row">
+                            {% if hardware_cpu.cache_size %}
+                            <div class="col-sm-6">
+                                <div class="metric-row">
+                                    <span class="metric-label">Cache Size:</span>
+                                    <span class="metric-value">{{ hardware_cpu.cache_size }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if hardware_cpu.microcode %}
+                            <div class="col-sm-6">
+                                <div class="metric-row">
+                                    <span class="metric-label">Microcode:</span>
+                                    <span class="metric-value">{{ hardware_cpu.microcode }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        {% if hardware_cpu.flags %}
+                        <hr>
+                        <h6 class="text-muted">Feature Flags</h6>
+                        <div>
+                            {% for flag in hardware_cpu.flags[:16] %}
+                            <span class="hardware-badge">{{ flag }}</span>
+                            {% endfor %}
+                            {% if hardware_cpu.flags|length > 16 %}
+                            <small class="text-muted d-block mt-1">+ {{ hardware_cpu.flags|length - 16 }} additional flags</small>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6 mb-3" id="platform-card">
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-desktop section-icon"></i> Platform &amp; Firmware</h5>
+
+                        <div class="metric-row">
+                            <span class="metric-label">Manufacturer:</span>
+                            <span class="metric-value">{{ platform_data.sys_vendor or platform_data.board_vendor or 'Unknown' }}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Product:</span>
+                            <span class="metric-value">{{ platform_data.product_name or 'Unknown' }}</span>
+                        </div>
+                        {% if platform_data.product_version %}
+                        <div class="metric-row">
+                            <span class="metric-label">Version:</span>
+                            <span class="metric-value">{{ platform_data.product_version }}</span>
+                        </div>
+                        {% endif %}
+                        {% if platform_data.product_serial %}
+                        <div class="metric-row">
+                            <span class="metric-label">Serial:</span>
+                            <span class="metric-value">{{ platform_data.product_serial }}</span>
+                        </div>
+                        {% endif %}
+
+                        <hr>
+                        <div class="metric-row">
+                            <span class="metric-label">Mainboard:</span>
+                            <span class="metric-value">{{ platform_data.board_name or 'Unknown' }}</span>
+                        </div>
+                        {% if platform_data.board_version %}
+                        <div class="metric-row">
+                            <span class="metric-label">Board Version:</span>
+                            <span class="metric-value">{{ platform_data.board_version }}</span>
+                        </div>
+                        {% endif %}
+                        {% if platform_data.chassis_asset_tag %}
+                        <div class="metric-row">
+                            <span class="metric-label">Asset Tag:</span>
+                            <span class="metric-value">{{ platform_data.chassis_asset_tag }}</span>
+                        </div>
+                        {% endif %}
+
+                        <hr>
+                        <div class="metric-row">
+                            <span class="metric-label">BIOS Vendor:</span>
+                            <span class="metric-value">{{ platform_data.bios_vendor or 'Unknown' }}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">BIOS Version:</span>
+                            <span class="metric-value">{{ platform_data.bios_version or 'Unknown' }}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">BIOS Date:</span>
+                            <span class="metric-value">{{ platform_data.bios_date or 'Unknown' }}</span>
                         </div>
                     </div>
                 </div>
@@ -201,13 +408,19 @@
                 </div>
             </div>
 
-            <!-- Services & Database -->
-            <div class="col-lg-4 mb-3" id="services-card">
+            <!-- Stack Overview -->
+            <div class="col-lg-4 mb-3" id="containers-card">
+                {% set containers_data = containers or {} %}
+                {% set summary = containers_data.summary or {} %}
+                {% set total_containers = summary.get('total', 0) %}
+                {% set running_containers = summary.get('running', 0) %}
+                {% set unhealthy_containers = summary.get('unhealthy', 0) %}
+                {% set stopped_containers = summary.get('stopped', total_containers - running_containers) %}
                 <div class="card health-card h-100">
                     <div class="card-body">
-                        <h5><i class="fas fa-cogs section-icon"></i> Services & Database</h5>
+                        <h5><i class="fas fa-layer-group section-icon"></i> Stack Services</h5>
 
-                        <!-- Database Status -->
+
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <span class="metric-label">Database</span>
                             {% set db_status = database.status or 'Unknown' %}
@@ -224,40 +437,98 @@
                         </div>
                         {% if database.info %}
                             {% if database.info.version %}
-                            <small class="text-muted d-block">Version: {{ database.info.version[:50] }}{% if database.info.version|length > 50 %}...{% endif %}</small>
+                            <small class="text-muted d-block">Version: {{ database.info.version[:60] }}{% if database.info.version|length > 60 %}…{% endif %}</small>
                             {% endif %}
                             {% if database.info.size %}
                             <small class="text-muted d-block">Size: {{ database.info.size }}</small>
                             {% endif %}
-                            {% if database.info.active_connections %}
+                            {% if database.info.active_connections is not none %}
                             <small class="text-muted d-block">Active Connections: {{ database.info.active_connections }}</small>
                             {% endif %}
                         {% endif %}
 
-                        <!-- System Services -->
-                        {% if services %}
+
                         <hr>
-                        <h6 class="text-muted">System Services</h6>
-                        {% for service_name, status in services.items() %}
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span class="metric-label">{{ service_name.title() }}</span>
-                            {% set normalized_status = (status or '')|lower %}
-                            {% if normalized_status == 'active' %}
-                                {% set service_class = 'success' %}
-                            {% elif normalized_status in ['inactive', 'unknown', 'unavailable'] %}
-                                {% set service_class = 'secondary' %}
-                            {% else %}
-                                {% set service_class = 'danger' %}
-                            {% endif %}
-                            <span class="badge bg-{{ service_class }} status-badge">{{ status or 'unknown' }}</span>
+
+                        <div class="stack-summary mb-3">
+                            <div>
+                                <span class="metric-label">Containers</span>
+                                <span class="metric-value">{{ total_containers }}</span>
+                            </div>
+                            <div>
+                                <span class="metric-label text-success">Running</span>
+                                <span class="metric-value text-success">{{ running_containers }}</span>
+                            </div>
+                            <div>
+                                <span class="metric-label text-warning">Stopped</span>
+                                <span class="metric-value text-warning">{{ stopped_containers if stopped_containers >= 0 else 0 }}</span>
+                            </div>
+                            <div>
+                                <span class="metric-label text-danger">Unhealthy</span>
+                                <span class="metric-value text-danger">{{ unhealthy_containers }}</span>
+                            </div>
                         </div>
-                        {% endfor %}
+
+                        {% if containers_data.available %}
+                            {% set preview = containers_data.containers[:4] if containers_data.containers else [] %}
+                            {% for container in preview %}
+                                {% set health = (container.health or '')|lower %}
+                                {% set state = (container.state or '')|lower %}
+                                {% if health == 'healthy' %}
+                                    {% set badge_class = 'success' %}
+                                    {% set status_label = 'Healthy' %}
+                                {% elif health == 'unhealthy' %}
+                                    {% set badge_class = 'danger' %}
+                                    {% set status_label = 'Unhealthy' %}
+                                {% elif health == 'starting' %}
+                                    {% set badge_class = 'warning' %}
+                                    {% set status_label = 'Starting' %}
+                                {% else %}
+                                    {% if state == 'running' %}
+                                        {% set badge_class = 'success' %}
+                                    {% elif state in ['restarting', 'created', 'paused'] %}
+                                        {% set badge_class = 'warning' %}
+                                    {% elif state in ['exited', 'dead'] %}
+                                        {% set badge_class = 'secondary' %}
+                                    {% else %}
+                                        {% set badge_class = 'secondary' %}
+                                    {% endif %}
+                                    {% set status_label = container.status or (state|upper if state else 'Unknown') %}
+                                {% endif %}
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <div>
+                                        <span class="metric-label">{{ container.display_name or container.name }}</span>
+                                        {% if container.service %}
+                                        <small class="text-muted d-block">{{ container.service }}</small>
+                                        {% endif %}
+                                    </div>
+                                    <span class="badge bg-{{ badge_class }} status-badge">{{ status_label }}</span>
+                                </div>
+                            {% endfor %}
+                            {% if containers_data.containers and containers_data.containers|length > 4 %}
+                                <small class="text-muted">… and {{ containers_data.containers|length - 4 }} more containers</small>
+                            {% elif not containers_data.containers %}
+                                <p class="text-muted mb-0">No containers detected for the current engine.</p>
+                            {% endif %}
+                            {% set has_engine = containers_data.engine %}
+                            {% set has_project = containers_data.compose_project %}
+                            {% set has_collector = containers_data.collector %}
+                            {% if has_engine or has_project or has_collector %}
+                                <small class="text-muted d-block mt-2">
+                                    {% if has_engine %}Engine: {{ containers_data.engine|upper }}{% endif %}
+                                    {% if has_project %}{% if has_engine %} • {% endif %}Project: {{ containers_data.compose_project }}{% endif %}
+                                    {% if has_collector %}{% if has_engine or has_project %} • {% endif %}Source: {{ containers_data.collector }}{% endif %}
+                                </small>
+                            {% endif %}
+                        {% else %}
+                            <div class="alert alert-warning mb-0 py-2">
+                                Container information unavailable{% if containers_data.error %}: {{ containers_data.error }}{% endif %}
+                            </div>
                         {% endif %}
                     </div>
                 </div>
             </div>
         </div>
-
         <!-- Storage & Network Row -->
         <div class="row mb-4">
             <!-- Disk Storage -->
@@ -296,29 +567,423 @@
                 <div class="card health-card">
                     <div class="card-body">
                         <h5><i class="fas fa-network-wired section-icon"></i> Network</h5>
-                        
+
                         <div class="metric-row mb-3">
                             <span class="metric-label">Hostname:</span>
                             <span class="metric-value">{{ network.hostname or 'Unknown' }}</span>
                         </div>
 
-                        {% for interface in network.interfaces[:3] %}
-                        <div class="mb-2">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="metric-label">{{ interface.name or 'Unknown' }}</span>
-                                {% set status_class = 'success' if interface.is_up else 'secondary' %}
-                                <span class="badge bg-{{ status_class }} status-badge">{{ 'UP' if interface.is_up else 'DOWN' }}</span>
-                            </div>
-                            {% for addr in interface.addresses[:2] %}
-                                {% if addr.type == 'IPv4' %}
-                                <small class="text-muted d-block">{{ addr.address or 'Unknown' }}</small>
-                                {% endif %}
-                            {% endfor %}
+                        {% set traffic = network.traffic or {} %}
+                        {% set totals = traffic.totals or {} %}
+                        <div class="metric-row mb-2">
+                            <span class="metric-label">Total RX / TX:</span>
+                            <span class="metric-value">{{ format_bytes(totals.bytes_recv or 0) }} / {{ format_bytes(totals.bytes_sent or 0) }}</span>
                         </div>
-                        {% endfor %}
+                        {% if totals.packets_recv is not none or totals.packets_sent is not none %}
+                        <div class="metric-row mb-3">
+                            <span class="metric-label">Packets RX / TX:</span>
+                            <span class="metric-value">{{ (totals.packets_recv or 0) | int }} / {{ (totals.packets_sent or 0) | int }}</span>
+                        </div>
+                        {% endif %}
 
-                        {% if network.interfaces|length > 3 %}
-                        <small class="text-muted">... and {{ network.interfaces|length - 3 }} more interfaces</small>
+                        {% set stats = traffic.interfaces or [] %}
+                        {% if stats %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover network-traffic-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Interface</th>
+                                        <th scope="col">Address</th>
+                                        <th scope="col">RX</th>
+                                        <th scope="col">TX</th>
+                                        <th scope="col">Speed</th>
+                                        <th scope="col">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for iface in stats[:6] %}
+                                    {% set iface_info_list = network.interfaces | selectattr('name', 'equalto', iface.name) | list %}
+                                    {% set iface_info = iface_info_list[0] if iface_info_list else None %}
+                                    {% set address_namespace = namespace(lines=[]) %}
+                                    {% if iface_info and iface_info.addresses %}
+                                        {% for addr in iface_info.addresses %}
+                                            {% if addr.type == 'IPv4' %}
+                                                {% set address_namespace.lines = address_namespace.lines + [addr.address] %}
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% endif %}
+                                    {% set address_display = address_namespace.lines[:2] | join(', ') %}
+                                    {% set status_up = iface.is_up if iface.is_up is not none else (iface_info.is_up if iface_info else None) %}
+                                    <tr>
+                                        <td><strong>{{ iface.name }}</strong></td>
+                                        <td><span class="text-muted">{{ address_display or '—' }}</span></td>
+                                        <td>{{ format_bytes(iface.bytes_recv or 0) }}</td>
+                                        <td>{{ format_bytes(iface.bytes_sent or 0) }}</td>
+                                        <td>
+                                            {% if iface.speed_mbps %}
+                                                {{ '%.0f'|format(iface.speed_mbps) }} Mb/s
+                                            {% else %}
+                                                —
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if status_up is sameas(true) %}
+                                                <span class="badge bg-success status-badge">UP</span>
+                                            {% elif status_up is sameas(false) %}
+                                                <span class="badge bg-secondary status-badge">DOWN</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary status-badge">Unknown</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% if stats|length > 6 %}
+                        <small class="text-muted">… and {{ stats|length - 6 }} more interfaces</small>
+                        {% endif %}
+                        {% else %}
+                            {% if network.interfaces %}
+                                {% for interface in network.interfaces[:3] %}
+                                <div class="mb-2">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="metric-label">{{ interface.name or 'Unknown' }}</span>
+                                        {% set status_class = 'success' if interface.is_up else 'secondary' %}
+                                        <span class="badge bg-{{ status_class }} status-badge">{{ 'UP' if interface.is_up else 'DOWN' }}</span>
+                                    </div>
+                                    {% if interface.addresses %}
+                                        {% for addr in interface.addresses[:2] %}
+                                            {% if addr.type == 'IPv4' %}
+                                            <small class="text-muted d-block">{{ addr.address or 'Unknown' }}</small>
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                                {% endfor %}
+                                {% if network.interfaces|length > 3 %}
+                                <small class="text-muted">… and {{ network.interfaces|length - 3 }} more interfaces</small>
+                                {% endif %}
+                                {% if traffic.error %}
+                                <small class="text-muted d-block mt-2">Traffic counters unavailable: {{ traffic.error }}</small>
+                                {% endif %}
+                            {% else %}
+                                <p class="text-muted mb-0">Network traffic statistics unavailable{% if traffic.error %}: {{ traffic.error }}{% endif %}</p>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% set block_info = hardware_data.block_devices or {} %}
+        {% set smart_info = smart or {} %}
+
+        <!-- Storage Inventory & Health -->
+        <div class="row mb-4">
+            <div class="col-lg-8 mb-3" id="hardware-devices-card">
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-database section-icon"></i> Storage Inventory</h5>
+
+                        {% if block_info.available and (block_info.devices or []) %}
+                        {% set disk_items = block_info.devices | selectattr('type', 'equalto', 'disk') | list %}
+                        {% if block_info.summary %}
+                        <div class="hardware-meta mb-2">
+                            {{ block_info.summary.disks or 0 }} disks • {{ block_info.summary.partitions or 0 }} partitions{% if block_info.summary.virtual %} • {{ block_info.summary.virtual }} virtual{% endif %}
+                        </div>
+                        {% endif %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover device-inventory-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Device</th>
+                                        <th scope="col">Details</th>
+                                        <th scope="col">Mounts</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for disk in disk_items %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ disk.path or ('/dev/' ~ (disk.name or 'unknown')) }}</strong>
+                                            {% if disk.model %}<div class="hardware-meta">{{ disk.model }}</div>{% endif %}
+                                            {% if disk.serial %}<div class="hardware-meta">Serial: {{ disk.serial }}</div>{% endif %}
+                                            {% if disk.vendor %}<div class="hardware-meta">Vendor: {{ disk.vendor }}</div>{% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="hardware-meta">Size: {% if disk.size_bytes %}{{ format_bytes(disk.size_bytes) }}{% else %}Unknown{% endif %}</div>
+                                            {% if disk.transport or disk.is_rotational is not none %}
+                                            <div class="hardware-meta">
+                                                {% if disk.transport %}{{ disk.transport|upper }}{% endif %}
+                                                {% if disk.transport and disk.is_rotational is not none %} • {% endif %}
+                                                {% if disk.is_rotational is sameas(true) %}HDD{% elif disk.is_rotational is sameas(false) %}SSD{% else %}Storage{% endif %}
+                                            </div>
+                                            {% endif %}
+                                            {% if disk.is_read_only is sameas(true) %}<div class="hardware-meta text-danger">Read Only</div>{% endif %}
+                                            {% if disk.is_removable is sameas(true) %}<div class="hardware-meta">Removable media</div>{% endif %}
+                                        </td>
+                                        <td>
+                                            {% if disk.children %}
+                                                {% for child in disk.children %}
+                                                <div class="hardware-meta">
+                                                    {{ child.path or ('/dev/' ~ (child.name or 'unknown')) }}
+                                                    {% if child.filesystem %}<span class="text-muted"> ({{ child.filesystem }})</span>{% endif %}
+                                                    {% if child.mountpoints %}<span class="text-muted"> → {{ child.mountpoints|join(', ') }}</span>{% endif %}
+                                                </div>
+                                                {% endfor %}
+                                            {% else %}
+                                                <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% if disk_items|length == 0 %}
+                        <p class="text-muted mb-0">No physical disks reported.</p>
+                        {% endif %}
+                        {% else %}
+                        <div class="alert alert-warning mb-0 py-2">
+                            Storage inventory unavailable{% if block_info.error %}: {{ block_info.error }}{% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4 mb-3" id="smart-card">
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h5>
+
+                        {% if smart_info.available %}
+                            {% set smart_devices = smart_info.devices or [] %}
+                            {% if smart_devices %}
+                                {% for device in smart_devices[:5] %}
+                                    {% set status_raw = (device.overall_status or 'unknown')|lower %}
+                                    {% if status_raw in ['passed', 'ok', 'healthy', 'success'] %}
+                                        {% set badge_class = 'success' %}
+                                        {% set status_label = 'Passed' %}
+                                    {% elif status_raw in ['failed', 'fail', 'critical'] %}
+                                        {% set badge_class = 'danger' %}
+                                        {% set status_label = 'Failed' %}
+                                    {% else %}
+                                        {% set badge_class = 'warning' %}
+                                        {% set status_label = device.overall_status or 'Unknown' %}
+                                    {% endif %}
+                                    <div class="mb-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <span class="metric-label">{{ device.path or device.name or 'Unknown device' }}</span>
+                                                {% if device.model %}<div class="hardware-meta">{{ device.model }}</div>{% endif %}
+                                                {% if device.serial %}<div class="hardware-meta">Serial: {{ device.serial }}</div>{% endif %}
+                                            </div>
+                                            <span class="badge bg-{{ badge_class }} smart-status-badge">{{ status_label }}</span>
+                                        </div>
+                                        <div class="hardware-meta">
+                                            Temp: {% if device.temperature_celsius is not none %}{{ "%.0f"|format(device.temperature_celsius) }}°C{% else %}N/A{% endif %}
+                                            {% if device.power_on_hours is not none %} • Power On: {{ device.power_on_hours }}h{% endif %}
+                                        </div>
+                                        <div class="hardware-meta">
+                                            {% if device.reallocated_sector_count is not none %}Realloc: {{ device.reallocated_sector_count }}{% else %}Realloc: N/A{% endif %}
+                                            {% if device.media_errors is not none %} • Media Errors: {{ device.media_errors }}{% endif %}
+                                            {% if device.critical_warnings is not none %} • Warnings: {{ device.critical_warnings }}{% endif %}
+                                        </div>
+                                        {% if device.error %}<div class="hardware-meta text-muted">Note: {{ device.error }}</div>{% endif %}
+                                    </div>
+                                {% endfor %}
+                                {% if smart_devices|length > 5 %}
+                                <small class="text-muted">… and {{ smart_devices|length - 5 }} more devices</small>
+                                {% endif %}
+                            {% else %}
+                                <p class="text-muted mb-0">No S.M.A.R.T. capable devices detected.</p>
+                            {% endif %}
+                        {% else %}
+                            <div class="alert alert-warning mb-0 py-2">
+                                S.M.A.R.T. data unavailable{% if smart_info.error %}: {{ smart_info.error }}{% endif %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Peripheral Inventory -->
+        <div class="row mb-4">
+            <div class="col-12" id="usb-card">
+                <div class="card health-card">
+                    <div class="card-body">
+                        <h5><i class="fas fa-usb section-icon"></i> USB Devices</h5>
+
+                        {% set usb_info = hardware_data.usb or {} %}
+                        {% if usb_info.available and usb_info.devices %}
+                            {% set usb_summary = usb_info.summary or {} %}
+                            {% if usb_summary.devices %}
+                            <div class="hardware-meta mb-2">
+                                {{ usb_summary.devices }} devices{% if usb_summary.hubs %} • {{ usb_summary.hubs }} hubs{% endif %}
+                            </div>
+                            {% endif %}
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover usb-device-table">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th scope="col">Device</th>
+                                            <th scope="col">Description</th>
+                                            <th scope="col">Speed</th>
+                                            <th scope="col">Details</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for device in usb_info.devices[:10] %}
+                                        <tr>
+                                            <td>
+                                                <strong>{{ device.path or 'Unknown' }}</strong>
+                                                <div class="hardware-meta">ID {{ (device.vendor_id or '??') }}:{{ (device.product_id or '??') }}</div>
+                                                {% if device.bus_number and device.device_number %}
+                                                <div class="hardware-meta">Bus {{ device.bus_number }} • Device {{ device.device_number }}</div>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if device.manufacturer %}<div class="hardware-meta">{{ device.manufacturer }}</div>{% endif %}
+                                                {% if device.product %}
+                                                    <div class="hardware-meta">{{ device.product }}</div>
+                                                {% else %}
+                                                    <div class="hardware-meta text-muted">Unknown device</div>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if device.speed_mbps %}
+                                                    {{ '%.0f'|format(device.speed_mbps) }} Mb/s
+                                                {% else %}
+                                                    —
+                                                {% endif %}
+                                                {% if device.interfaces %}
+                                                    <div class="hardware-meta">Class: {{ device.interfaces|join(', ') }}</div>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if device.driver %}<div class="hardware-meta">Driver: {{ device.driver }}</div>{% endif %}
+                                                {% if device.serial %}<div class="hardware-meta">Serial: {{ device.serial }}</div>{% endif %}
+                                                {% if device.is_hub %}<div class="hardware-meta">USB Hub</div>{% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% if usb_info.devices|length > 10 %}
+                            <small class="text-muted">… and {{ usb_info.devices|length - 10 }} more devices</small>
+                            {% endif %}
+                        {% else %}
+                            <div class="alert alert-warning mb-0 py-2">
+                                {% if usb_info.error %}
+                                    USB inventory unavailable: {{ usb_info.error }}
+                                {% else %}
+                                    No USB devices detected.
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Container Details -->
+        <div class="row mb-4">
+            <div class="col-12" id="containers-details">
+                <div class="card health-card">
+                    <div class="card-body">
+                        <h5><i class="fas fa-boxes section-icon"></i> Container Details</h5>
+
+                        {% set containers_data = containers or {} %}
+                        {% set container_items = containers_data.containers or [] %}
+
+                        {% if containers_data.available and container_items %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover container-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Container</th>
+                                        <th scope="col">Status</th>
+                                        <th scope="col">Health</th>
+                                        <th scope="col">Uptime</th>
+                                        <th scope="col">Image</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for container in container_items %}
+                                    {% set status_label = container.status or (container.state|upper if container.state else 'Unknown') %}
+                                    {% set state = (container.state or '')|lower %}
+                                    {% set health = (container.health or '')|lower %}
+                                    {% if health == 'healthy' %}
+                                        {% set status_class = 'success' %}
+                                    {% elif health == 'unhealthy' %}
+                                        {% set status_class = 'danger' %}
+                                    {% elif state == 'running' %}
+                                        {% set status_class = 'success' %}
+                                    {% elif state in ['restarting', 'created', 'paused'] %}
+                                        {% set status_class = 'warning' %}
+                                    {% elif state in ['exited', 'dead'] %}
+                                        {% set status_class = 'secondary' %}
+                                    {% else %}
+                                        {% set status_class = 'secondary' %}
+                                    {% endif %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ container.display_name or container.name }}</strong>
+                                            {% if container.service %}
+                                            <div class="container-meta">Service: {{ container.service }}</div>
+                                            {% endif %}
+                                            {% if container.project %}
+                                            <div class="container-meta">Project: {{ container.project }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{{ status_class }} status-badge">{{ status_label }}</span>
+                                        </td>
+                                        <td>
+                                            {% if container.health %}
+                                                {% if container.health == 'healthy' %}
+                                                <span class="badge bg-success status-badge">Healthy</span>
+                                                {% elif container.health == 'unhealthy' %}
+                                                <span class="badge bg-danger status-badge">Unhealthy</span>
+                                                {% elif container.health == 'starting' %}
+                                                <span class="badge bg-warning status-badge">Starting</span>
+                                                {% else %}
+                                                <span class="badge bg-secondary status-badge">{{ container.health }}</span>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                        <td><span class="metric-value">{{ container.running_for or '—' }}</span></td>
+                                        <td>
+                                            {% if container.image %}
+                                            <div class="container-image">{{ container.image }}</div>
+                                            {% else %}
+                                            <span class="text-muted">—</span>
+                                            {% endif %}
+                                            {% if container.ports %}
+                                            <div class="container-meta">Ports: {{ container.ports }}</div>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="text-muted mb-0">
+                            {% if containers_data.available %}
+                                No container information detected for the current engine.
+                            {% elif containers_data.error %}
+                                Container details unavailable: {{ containers_data.error }}
+                            {% else %}
+                                Container details unavailable.
+                            {% endif %}
+                        </p>
                         {% endif %}
                     </div>
                 </div>
@@ -558,7 +1223,32 @@
             const loadAverages = Array.isArray(data.load_averages) ? data.load_averages : [];
 
             setElementText('hostname-value', system.hostname || 'Unknown');
-            setElementText('os-value', `${system.system || 'Unknown'} ${system.release || ''}`.trim());
+            let distributionText = '';
+            if (system.os_pretty_name) {
+                distributionText = system.os_pretty_name;
+            } else {
+                const parts = [];
+                if (system.distribution) {
+                    parts.push(system.distribution);
+                } else if (system.system) {
+                    parts.push(system.system);
+                }
+                if (system.distribution_version) {
+                    parts.push(system.distribution_version);
+                } else if (system.release) {
+                    parts.push(system.release);
+                }
+                distributionText = parts.join(' ').trim();
+            }
+            setElementText('distribution-value', distributionText || 'Unknown');
+
+            const kernelRelease = system.kernel_release || system.release || '';
+            let kernelText = kernelRelease || 'Unknown';
+            if (system.kernel_version && system.kernel_version !== kernelRelease) {
+                kernelText = `${kernelText} (${system.kernel_version})`;
+            }
+            setElementText('kernel-value', kernelText);
+
             setElementText('architecture-value', system.machine || 'Unknown');
             setElementText('uptime-value', formatUptime(system.uptime_seconds));
             setElementText('load-average-value', joinLoadAverages(loadAverages));
@@ -566,6 +1256,9 @@
             const totalProcesses = toNumber(processes.total_processes, 0);
             const runningProcesses = toNumber(processes.running_processes, 0);
             setElementText('processes-summary', `${totalProcesses} total (${runningProcesses} running)`);
+
+            const virtualization = system.virtualization ? String(system.virtualization) : 'Bare metal';
+            setElementText('virtualization-value', virtualization);
         }
 
         function renderCpuCard(cpu) {
@@ -701,8 +1394,437 @@
             `;
         }
 
-        function renderServicesCard(database, services) {
-            const dbStatusRaw = (database && database.status) ? String(database.status) : 'Unknown';
+        function renderCpuHardwareCard(hardwareCpu) {
+            const cpu = hardwareCpu && typeof hardwareCpu === 'object' ? hardwareCpu : {};
+            const model = escapeHtml(cpu.model_name || cpu.processor || 'Unknown');
+            const vendor = escapeHtml(cpu.vendor_id || 'Unknown');
+            const architecture = escapeHtml(cpu.architecture || 'Unknown');
+            const virtualization = cpu.supports_virtualization;
+            const virtualizationLabel = virtualization === true
+                ? 'Supported'
+                : virtualization === false
+                    ? 'Not detected'
+                    : 'Unknown';
+
+            const maxFreq = toNumber(cpu.max_frequency, 0);
+            const minFreq = toNumber(cpu.min_frequency, 0);
+            const maxFreqLabel = maxFreq > 0 ? `${maxFreq.toFixed(0)} MHz` : 'Unknown';
+            const minFreqLabel = minFreq > 0 ? `${minFreq.toFixed(0)} MHz` : 'Unknown';
+
+            const cacheSize = cpu.cache_size ? escapeHtml(String(cpu.cache_size)) : '';
+            const microcode = cpu.microcode ? escapeHtml(String(cpu.microcode)) : '';
+
+            const flagList = Array.isArray(cpu.flags) ? cpu.flags : [];
+            const flagBadges = flagList
+                .slice(0, 16)
+                .map((flag) => `<span class="hardware-badge">${escapeHtml(flag)}</span>`) 
+                .join('');
+            const extraFlags = flagList.length > 16
+                ? `<small class="text-muted d-block mt-1">+ ${flagList.length - 16} additional flags</small>`
+                : '';
+            const flagSection = flagList.length
+                ? `
+                        <hr>
+                        <h6 class="text-muted">Feature Flags</h6>
+                        <div>
+                            ${flagBadges}
+                            ${extraFlags}
+                        </div>
+                    `
+                : '';
+
+            const cacheSection = cacheSize || microcode
+                ? `
+                        <hr>
+                        <div class="row">
+                            ${cacheSize
+                                ? `
+                                    <div class="col-sm-6">
+                                        <div class="metric-row">
+                                            <span class="metric-label">Cache Size:</span>
+                                            <span class="metric-value">${cacheSize}</span>
+                                        </div>
+                                    </div>
+                                `
+                                : ''}
+                            ${microcode
+                                ? `
+                                    <div class="col-sm-6">
+                                        <div class="metric-row">
+                                            <span class="metric-label">Microcode:</span>
+                                            <span class="metric-value">${microcode}</span>
+                                        </div>
+                                    </div>
+                                `
+                                : ''}
+                        </div>
+                    `
+                : '';
+
+            return `
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-microchip section-icon"></i> CPU Details</h5>
+
+                        <div class="metric-row">
+                            <span class="metric-label">Model:</span>
+                            <span class="metric-value">${model}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Vendor:</span>
+                            <span class="metric-value">${vendor}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Architecture:</span>
+                            <span class="metric-value">${architecture}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Virtualization:</span>
+                            <span class="metric-value">${virtualizationLabel}</span>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-sm-6">
+                                <div class="metric-row">
+                                    <span class="metric-label">Physical Cores:</span>
+                                    <span class="metric-value">${cpu.physical_cores ?? 'N/A'}</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Logical Cores:</span>
+                                    <span class="metric-value">${cpu.logical_cores ?? 'N/A'}</span>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="metric-row">
+                                    <span class="metric-label">Max Frequency:</span>
+                                    <span class="metric-value">${maxFreqLabel}</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Min Frequency:</span>
+                                    <span class="metric-value">${minFreqLabel}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        ${cacheSection}
+                        ${flagSection}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderPlatformCard(platform) {
+            const data = platform && typeof platform === 'object' ? platform : {};
+            const manufacturer = escapeHtml(data.sys_vendor || data.board_vendor || 'Unknown');
+            const product = escapeHtml(data.product_name || 'Unknown');
+            const productVersion = data.product_version ? `<div class="metric-row"><span class="metric-label">Version:</span><span class="metric-value">${escapeHtml(String(data.product_version))}</span></div>` : '';
+            const productSerial = data.product_serial ? `<div class="metric-row"><span class="metric-label">Serial:</span><span class="metric-value">${escapeHtml(String(data.product_serial))}</span></div>` : '';
+            const boardName = escapeHtml(data.board_name || 'Unknown');
+            const boardVersion = data.board_version ? `<div class="metric-row"><span class="metric-label">Board Version:</span><span class="metric-value">${escapeHtml(String(data.board_version))}</span></div>` : '';
+            const assetTag = data.chassis_asset_tag ? `<div class="metric-row"><span class="metric-label">Asset Tag:</span><span class="metric-value">${escapeHtml(String(data.chassis_asset_tag))}</span></div>` : '';
+            const biosVendor = escapeHtml(data.bios_vendor || 'Unknown');
+            const biosVersion = escapeHtml(data.bios_version || 'Unknown');
+            const biosDate = escapeHtml(data.bios_date || 'Unknown');
+
+            return `
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-desktop section-icon"></i> Platform &amp; Firmware</h5>
+
+                        <div class="metric-row">
+                            <span class="metric-label">Manufacturer:</span>
+                            <span class="metric-value">${manufacturer}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Product:</span>
+                            <span class="metric-value">${product}</span>
+                        </div>
+                        ${productVersion}
+                        ${productSerial}
+
+                        <hr>
+                        <div class="metric-row">
+                            <span class="metric-label">Mainboard:</span>
+                            <span class="metric-value">${boardName}</span>
+                        </div>
+                        ${boardVersion}
+                        ${assetTag}
+
+                        <hr>
+                        <div class="metric-row">
+                            <span class="metric-label">BIOS Vendor:</span>
+                            <span class="metric-value">${biosVendor}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">BIOS Version:</span>
+                            <span class="metric-value">${biosVersion}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">BIOS Date:</span>
+                            <span class="metric-value">${biosDate}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderHardwareInventoryCard(blockInfo) {
+            const info = blockInfo && typeof blockInfo === 'object' ? blockInfo : {};
+            const available = Boolean(info.available);
+            const devices = Array.isArray(info.devices) ? info.devices : [];
+
+            if (!available || devices.length === 0) {
+                const error = info.error ? `: ${escapeHtml(info.error)}` : '';
+                return `
+                    <div class="card health-card h-100">
+                        <div class="card-body">
+                            <h5><i class="fas fa-database section-icon"></i> Storage Inventory</h5>
+                            <div class="alert alert-warning mb-0 py-2">Storage inventory unavailable${error}</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            const disks = devices.filter((device) => String(device.type || '').toLowerCase() === 'disk');
+            const summary = info.summary && typeof info.summary === 'object' ? info.summary : {};
+            const summaryParts = [];
+            if (summary.disks !== undefined) {
+                summaryParts.push(`${toNumber(summary.disks, 0)} disks`);
+            }
+            if (summary.partitions !== undefined) {
+                summaryParts.push(`${toNumber(summary.partitions, 0)} partitions`);
+            }
+            if (summary.virtual) {
+                summaryParts.push(`${toNumber(summary.virtual, 0)} virtual`);
+            }
+            const summaryHtml = summaryParts.length
+                ? `<div class="hardware-meta mb-2">${summaryParts.map((part) => escapeHtml(part)).join(' • ')}</div>`
+                : '';
+
+            const rows = disks
+                .map((disk) => {
+                    const name = disk && typeof disk === 'object' ? disk : {};
+                    const devicePath = escapeHtml(name.path || (name.name ? `/dev/${name.name}` : 'unknown'));
+                    const model = name.model ? `<div class="hardware-meta">${escapeHtml(name.model)}</div>` : '';
+                    const serial = name.serial ? `<div class="hardware-meta">Serial: ${escapeHtml(name.serial)}</div>` : '';
+                    const vendor = name.vendor ? `<div class="hardware-meta">Vendor: ${escapeHtml(name.vendor)}</div>` : '';
+                    const sizeBytes = name.size_bytes != null ? toNumber(name.size_bytes, 0) : null;
+                    const sizeLabel = sizeBytes && sizeBytes > 0 ? formatBytes(sizeBytes) : 'Unknown';
+                    const transport = name.transport ? escapeHtml(String(name.transport).toUpperCase()) : '';
+                    const hasRotational = name.is_rotational === true || name.is_rotational === false;
+                    let rotational = '';
+                    if (name.is_rotational === true) {
+                        rotational = 'HDD';
+                    } else if (name.is_rotational === false) {
+                        rotational = 'SSD';
+                    }
+                    let transportDetail = '';
+                    if (transport) {
+                        transportDetail = transport;
+                        if (hasRotational) {
+                            transportDetail += ` • ${rotational}`;
+                        }
+                    } else if (hasRotational) {
+                        transportDetail = rotational;
+                    }
+                    const transportLine = transportDetail
+                        ? `<div class="hardware-meta">${transportDetail}</div>`
+                        : '';
+                    const readOnly = name.is_read_only === true ? '<div class="hardware-meta text-danger">Read Only</div>' : '';
+                    const removable = name.is_removable === true ? '<div class="hardware-meta">Removable media</div>' : '';
+
+                    const children = Array.isArray(name.children) ? name.children : [];
+                    const childRows = children.length
+                        ? children
+                            .map((child) => {
+                                const childDevice = child && typeof child === 'object' ? child : {};
+                                const childPath = escapeHtml(childDevice.path || (childDevice.name ? `/dev/${childDevice.name}` : 'unknown'));
+                                const fs = childDevice.filesystem ? ` <span class="text-muted">(${escapeHtml(childDevice.filesystem)})</span>` : '';
+                                const mountpoints = Array.isArray(childDevice.mountpoints) && childDevice.mountpoints.length
+                                    ? ` <span class="text-muted">→ ${childDevice.mountpoints.map((mp) => escapeHtml(mp)).join(', ')}</span>`
+                                    : '';
+                                return `<div class="hardware-meta">${childPath}${fs}${mountpoints}</div>`;
+                            })
+                            .join('')
+                        : '<span class="text-muted">—</span>';
+
+                    return `
+                        <tr>
+                            <td>
+                                <strong>${devicePath}</strong>
+                                ${model}
+                                ${serial}
+                                ${vendor}
+                            </td>
+                            <td>
+                                <div class="hardware-meta">Size: ${sizeLabel}</div>
+                                ${transportLine}
+                                ${readOnly}
+                                ${removable}
+                            </td>
+                            <td>${childRows}</td>
+                        </tr>
+                    `;
+                })
+                .join('');
+
+            const tableContent = disks.length
+                ? `
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover device-inventory-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Device</th>
+                                        <th scope="col">Details</th>
+                                        <th scope="col">Mounts</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${rows}
+                                </tbody>
+                            </table>
+                        </div>
+                    `
+                : '<p class="text-muted mb-0">No physical disks reported.</p>';
+
+            return `
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-database section-icon"></i> Storage Inventory</h5>
+                        ${summaryHtml}
+                        ${tableContent}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderSmartHealthCard(smartInfo) {
+            const info = smartInfo && typeof smartInfo === 'object' ? smartInfo : {};
+            if (!info.available) {
+                const error = info.error ? `: ${escapeHtml(info.error)}` : '';
+                return `
+                    <div class="card health-card h-100">
+                        <div class="card-body">
+                            <h5><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h5>
+                            <div class="alert alert-warning mb-0 py-2">S.M.A.R.T. data unavailable${error}</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            const devices = Array.isArray(info.devices) ? info.devices : [];
+            if (!devices.length) {
+                return `
+                    <div class="card health-card h-100">
+                        <div class="card-body">
+                            <h5><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h5>
+                            <p class="text-muted mb-0">No S.M.A.R.T. capable devices detected.</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            const sections = devices.slice(0, 5).map((device) => {
+                const data = device && typeof device === 'object' ? device : {};
+                const path = escapeHtml(data.path || data.name || 'Unknown device');
+                const model = data.model ? `<div class="hardware-meta">${escapeHtml(data.model)}</div>` : '';
+                const serial = data.serial ? `<div class="hardware-meta">Serial: ${escapeHtml(data.serial)}</div>` : '';
+
+                const statusRaw = String(data.overall_status || 'unknown').toLowerCase();
+                let badgeClass = 'warning';
+                let statusLabel = data.overall_status ? escapeHtml(String(data.overall_status)) : 'Unknown';
+                if (['passed', 'ok', 'healthy', 'success'].includes(statusRaw)) {
+                    badgeClass = 'success';
+                    statusLabel = 'Passed';
+                } else if (['failed', 'fail', 'critical'].includes(statusRaw)) {
+                    badgeClass = 'danger';
+                    statusLabel = 'Failed';
+                }
+
+                const temperature = data.temperature_celsius != null
+                    ? `${toNumber(data.temperature_celsius, 0).toFixed(0)}°C`
+                    : 'N/A';
+                const powerOnHours = data.power_on_hours != null ? `${escapeHtml(String(data.power_on_hours))}h` : '';
+                const reallocated = data.reallocated_sector_count != null ? escapeHtml(String(data.reallocated_sector_count)) : 'N/A';
+                const mediaErrors = data.media_errors != null ? ` • Media Errors: ${escapeHtml(String(data.media_errors))}` : '';
+                const warnings = data.critical_warnings != null ? ` • Warnings: ${escapeHtml(String(data.critical_warnings))}` : '';
+                const note = data.error ? `<div class="hardware-meta text-muted">Note: ${escapeHtml(String(data.error))}</div>` : '';
+
+                return `
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="metric-label">${path}</span>
+                                ${model}
+                                ${serial}
+                            </div>
+                            <span class="badge bg-${badgeClass} smart-status-badge">${statusLabel}</span>
+                        </div>
+                        <div class="hardware-meta">
+                            Temp: ${temperature}${powerOnHours ? ` • Power On: ${powerOnHours}` : ''}
+                        </div>
+                        <div class="hardware-meta">
+                            Realloc: ${reallocated}${mediaErrors}${warnings}
+                        </div>
+                        ${note}
+                    </div>
+                `;
+            }).join('');
+
+            const overflow = devices.length > 5
+                ? `<small class="text-muted">… and ${devices.length - 5} more devices</small>`
+                : '';
+
+            return `
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h5>
+                        ${sections}
+                        ${overflow}
+                    </div>
+                </div>
+            `;
+        }
+
+        function determineContainerBadge(container) {
+            if (!container || typeof container !== 'object') {
+                return { badge: 'secondary', label: 'Unknown' };
+            }
+
+            const state = String(container.state || '').toLowerCase();
+            const rawStatus = container.status || (state ? state.toUpperCase() : 'Unknown');
+            const health = String(container.health || '').toLowerCase();
+
+            if (health === 'healthy') {
+                return { badge: 'success', label: 'Healthy' };
+            }
+            if (health === 'unhealthy') {
+                return { badge: 'danger', label: 'Unhealthy' };
+            }
+            if (health === 'starting') {
+                return { badge: 'warning', label: 'Starting' };
+            }
+            if (state === 'running') {
+                return { badge: 'success', label: rawStatus };
+            }
+            if (['restarting', 'created', 'paused'].includes(state)) {
+                return { badge: 'warning', label: rawStatus };
+            }
+            if (['exited', 'dead'].includes(state)) {
+                return { badge: 'secondary', label: rawStatus };
+            }
+            return { badge: 'secondary', label: rawStatus };
+        }
+
+        function renderStackCard(database, containers) {
+            const containerData = containers && typeof containers === 'object' ? containers : {};
+            const summary = containerData.summary || {};
+            const total = toNumber(summary.total, 0);
+            const running = toNumber(summary.running, 0);
+            const stopped = Math.max(toNumber(summary.stopped, total - running), 0);
+            const unhealthy = toNumber(summary.unhealthy, 0);
+
+            const dbStatusRaw = database && database.status ? String(database.status) : 'Unknown';
             const statusLower = dbStatusRaw.toLowerCase();
             let dbClass = 'warning';
             if (statusLower === 'connected') {
@@ -725,47 +1847,294 @@
                 databaseDetails.push(`<small class="text-muted d-block">Active Connections: ${escapeHtml(dbInfo.active_connections)}</small>`);
             }
 
-            const serviceEntries = services && typeof services === 'object' ? Object.entries(services) : [];
-            const servicesHtml = serviceEntries.length
-                ? `
-                        <hr>
-                        <h6 class="text-muted">System Services</h6>
-                        ${serviceEntries
-                            .map(([name, status]) => {
-                                const normalized = String(status || '').toLowerCase();
-                                let badgeClass = 'danger';
-                                if (normalized === 'active') {
-                                    badgeClass = 'success';
-                                } else if (['inactive', 'unknown', 'unavailable'].includes(normalized)) {
-                                    badgeClass = 'secondary';
-                                }
-                                const rawName = String(name || '');
-                                const displayName = rawName
-                                    ? rawName.replace(/\b\w/g, (char) => char.toUpperCase())
-                                    : 'Unknown';
-                                const safeName = escapeHtml(displayName);
-                                const safeStatus = escapeHtml(status || 'unknown');
-                                return `
-                                    <div class="d-flex justify-content-between align-items-center mb-1">
-                                        <span class="metric-label">${safeName}</span>
-                                        <span class="badge bg-${badgeClass} status-badge">${safeStatus}</span>
+            const isAvailable = Boolean(containerData.available);
+            const containersList = Array.isArray(containerData.containers) ? containerData.containers : [];
+            const previewItems = isAvailable ? containersList.slice(0, 4) : [];
+
+            const previewHtml = previewItems
+                .map((container) => {
+                    const { badge, label } = determineContainerBadge(container);
+                    const displayName = container.display_name || container.name || 'Unknown';
+                    const service = container.service ? `<small class="text-muted d-block">${escapeHtml(container.service)}</small>` : '';
+                    return `
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <div>
+                                        <span class="metric-label">${escapeHtml(displayName)}</span>
+                                        ${service}
                                     </div>
-                                `;
-                            })
-                            .join('')}
-                    `
+                                    <span class="badge bg-${badge} status-badge">${escapeHtml(label)}</span>
+                                </div>
+                            `;
+                })
+                .join('');
+
+            let previewFooter = '';
+            if (isAvailable) {
+                if (containersList.length > previewItems.length) {
+                    previewFooter = `<small class="text-muted">… and ${containersList.length - previewItems.length} more containers</small>`;
+                } else if (!containersList.length) {
+                    previewFooter = '<p class="text-muted mb-0">No containers detected for the current engine.</p>';
+                }
+            }
+
+            const engineBits = [];
+            if (containerData.engine) {
+                engineBits.push(`Engine: ${escapeHtml(String(containerData.engine).toUpperCase())}`);
+            }
+            if (containerData.compose_project) {
+                engineBits.push(`Project: ${escapeHtml(containerData.compose_project)}`);
+            }
+            if (containerData.collector) {
+                engineBits.push(`Source: ${escapeHtml(containerData.collector)}`);
+            }
+
+            const engineInfo = engineBits.length
+                ? `<small class="text-muted d-block mt-2">${engineBits.join(' • ')}</small>`
+                : '';
+
+            const availabilityAlert = !isAvailable
+                ? `<div class="alert alert-warning mb-0 py-2">Container information unavailable${containerData.error ? `: ${escapeHtml(containerData.error)}` : ''}</div>`
                 : '';
 
             return `
                 <div class="card health-card h-100">
                     <div class="card-body">
-                        <h5><i class="fas fa-cogs section-icon"></i> Services &amp; Database</h5>
+                        <h5><i class="fas fa-layer-group section-icon"></i> Stack Services</h5>
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <span class="metric-label">Database</span>
                             <span class="badge bg-${dbClass}">${escapeHtml(dbStatusRaw)}</span>
                         </div>
                         ${databaseDetails.join('')}
-                        ${servicesHtml}
+
+                        <hr>
+
+                        <div class="stack-summary mb-3">
+                            <div>
+                                <span class="metric-label">Containers</span>
+                                <span class="metric-value">${total}</span>
+                            </div>
+                            <div>
+                                <span class="metric-label text-success">Running</span>
+                                <span class="metric-value text-success">${running}</span>
+                            </div>
+                            <div>
+                                <span class="metric-label text-warning">Stopped</span>
+                                <span class="metric-value text-warning">${stopped}</span>
+                            </div>
+                            <div>
+                                <span class="metric-label text-danger">Unhealthy</span>
+                                <span class="metric-value text-danger">${unhealthy}</span>
+                            </div>
+                        </div>
+
+                        ${isAvailable ? previewHtml : ''}
+                        ${isAvailable ? previewFooter : availabilityAlert}
+                        ${isAvailable ? engineInfo : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderContainerDetails(containers) {
+            const containerData = containers && typeof containers === 'object' ? containers : {};
+            const available = Boolean(containerData.available);
+            const items = Array.isArray(containerData.containers) ? containerData.containers : [];
+
+            if (!available || !items.length) {
+                const message = available
+                    ? 'No container information detected for the current engine.'
+                    : containerData.error
+                        ? `Container details unavailable: ${escapeHtml(containerData.error)}`
+                        : 'Container details unavailable.';
+                return `
+                <div class="card health-card">
+                    <div class="card-body">
+                        <h5><i class="fas fa-boxes section-icon"></i> Container Details</h5>
+                        <p class="text-muted mb-0">${message}</p>
+                    </div>
+                </div>`;
+            }
+
+            const rows = items
+                .map((container) => {
+                    const { badge, label } = determineContainerBadge(container);
+                    const displayName = container.display_name || container.name || 'Unknown';
+                    const service = container.service ? `<div class="container-meta">Service: ${escapeHtml(container.service)}</div>` : '';
+                    const project = container.project ? `<div class="container-meta">Project: ${escapeHtml(container.project)}</div>` : '';
+
+                    const healthValue = container.health
+                        ? String(container.health).toLowerCase()
+                        : '';
+                    let healthBadge = '<span class="text-muted">—</span>';
+                    if (healthValue) {
+                        if (healthValue === 'healthy') {
+                            healthBadge = '<span class="badge bg-success status-badge">Healthy</span>';
+                        } else if (healthValue === 'unhealthy') {
+                            healthBadge = '<span class="badge bg-danger status-badge">Unhealthy</span>';
+                        } else if (healthValue === 'starting') {
+                            healthBadge = '<span class="badge bg-warning status-badge">Starting</span>';
+                        } else {
+                            healthBadge = `<span class="badge bg-secondary status-badge">${escapeHtml(container.health)}</span>`;
+                        }
+                    }
+
+                    const image = container.image
+                        ? `<div class="container-image">${escapeHtml(container.image)}</div>`
+                        : '<span class="text-muted">—</span>';
+                    const ports = container.ports
+                        ? `<div class="container-meta">Ports: ${escapeHtml(container.ports)}</div>`
+                        : '';
+
+                    return `
+                        <tr>
+                            <td>
+                                <strong>${escapeHtml(displayName)}</strong>
+                                ${service}
+                                ${project}
+                            </td>
+                            <td><span class="badge bg-${badge} status-badge">${escapeHtml(label)}</span></td>
+                            <td>${healthBadge}</td>
+                            <td><span class="metric-value">${escapeHtml(container.running_for || '—')}</span></td>
+                            <td>
+                                ${image}
+                                ${ports}
+                            </td>
+                        </tr>
+                    `;
+                })
+                .join('');
+
+            return `
+                <div class="card health-card">
+                    <div class="card-body">
+                        <h5><i class="fas fa-boxes section-icon"></i> Container Details</h5>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover container-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Container</th>
+                                        <th scope="col">Status</th>
+                                        <th scope="col">Health</th>
+                                        <th scope="col">Uptime</th>
+                                        <th scope="col">Image</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${rows}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderUsbCard(usbInfo) {
+            const info = usbInfo && typeof usbInfo === 'object' ? usbInfo : {};
+            const available = Boolean(info.available);
+            const devices = Array.isArray(info.devices) ? info.devices : [];
+
+            if (!available || devices.length === 0) {
+                const message = info.error
+                    ? `USB inventory unavailable: ${escapeHtml(info.error)}`
+                    : 'No USB devices detected.';
+                return `
+                    <div class="card health-card">
+                        <div class="card-body">
+                            <h5><i class="fas fa-usb section-icon"></i> USB Devices</h5>
+                            <div class="alert alert-warning mb-0 py-2">${message}</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            const summary = info.summary && typeof info.summary === 'object' ? info.summary : {};
+            const summaryParts = [];
+            if (summary.devices !== undefined) {
+                summaryParts.push(`${toNumber(summary.devices, 0)} devices`);
+            }
+            if (summary.hubs) {
+                summaryParts.push(`${toNumber(summary.hubs, 0)} hubs`);
+            }
+            const summaryHtml = summaryParts.length
+                ? `<div class="hardware-meta mb-2">${summaryParts.map((part) => escapeHtml(part)).join(' • ')}</div>`
+                : '';
+
+            const rows = devices.slice(0, 10).map((device) => {
+                const path = escapeHtml(device && device.path ? device.path : 'Unknown');
+                const vendorId = escapeHtml(device && device.vendor_id ? device.vendor_id : '??');
+                const productId = escapeHtml(device && device.product_id ? device.product_id : '??');
+                const busLine = device && device.bus_number && device.device_number
+                    ? `<div class="hardware-meta">Bus ${escapeHtml(String(device.bus_number))} • Device ${escapeHtml(String(device.device_number))}</div>`
+                    : '';
+                const manufacturer = device && device.manufacturer
+                    ? `<div class="hardware-meta">${escapeHtml(device.manufacturer)}</div>`
+                    : '';
+                const product = device && device.product
+                    ? `<div class="hardware-meta">${escapeHtml(device.product)}</div>`
+                    : '<div class="hardware-meta text-muted">Unknown device</div>';
+                const speed = device && device.speed_mbps != null
+                    ? `${toNumber(device.speed_mbps, 0).toFixed(0)} Mb/s`
+                    : '—';
+                const interfaces = Array.isArray(device && device.interfaces) && device.interfaces.length
+                    ? `<div class="hardware-meta">Class: ${device.interfaces.map((value) => escapeHtml(String(value))).join(', ')}</div>`
+                    : '';
+                const driver = device && device.driver
+                    ? `<div class="hardware-meta">Driver: ${escapeHtml(device.driver)}</div>`
+                    : '';
+                const serial = device && device.serial
+                    ? `<div class="hardware-meta">Serial: ${escapeHtml(device.serial)}</div>`
+                    : '';
+                const hub = device && device.is_hub
+                    ? '<div class="hardware-meta">USB Hub</div>'
+                    : '';
+
+                return `
+                    <tr>
+                        <td>
+                            <strong>${path}</strong>
+                            <div class="hardware-meta">ID ${vendorId}:${productId}</div>
+                            ${busLine}
+                        </td>
+                        <td>
+                            ${manufacturer}${product}
+                        </td>
+                        <td>
+                            ${speed}
+                            ${interfaces}
+                        </td>
+                        <td>
+                            ${driver}${serial}${hub}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            const moreText = devices.length > 10
+                ? `<small class="text-muted">… and ${devices.length - 10} more devices</small>`
+                : '';
+
+            return `
+                <div class="card health-card">
+                    <div class="card-body">
+                        <h5><i class="fas fa-usb section-icon"></i> USB Devices</h5>
+                        ${summaryHtml}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover usb-device-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Device</th>
+                                        <th scope="col">Description</th>
+                                        <th scope="col">Speed</th>
+                                        <th scope="col">Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${rows}
+                                </tbody>
+                            </table>
+                        </div>
+                        ${moreText}
                     </div>
                 </div>
             `;
@@ -810,35 +2179,129 @@
         }
 
         function renderNetworkCard(network) {
-            const hostname = network && network.hostname ? network.hostname : 'Unknown';
-            const interfaces = Array.isArray(network && network.interfaces) ? network.interfaces.slice(0, 3) : [];
-            const moreCount = Array.isArray(network && network.interfaces) && network.interfaces.length > 3
-                ? network.interfaces.length - 3
-                : 0;
+            const safeNetwork = network && typeof network === 'object' ? network : {};
+            const hostname = escapeHtml(safeNetwork.hostname || 'Unknown');
+            const traffic = safeNetwork.traffic && typeof safeNetwork.traffic === 'object' ? safeNetwork.traffic : {};
+            const totals = traffic.totals && typeof traffic.totals === 'object' ? traffic.totals : {};
+            const totalRx = formatBytes(totals.bytes_recv);
+            const totalTx = formatBytes(totals.bytes_sent);
+            const packetsAvailable = totals.packets_recv != null || totals.packets_sent != null;
 
-            const interfaceHtml = interfaces
-                .map((interfaceInfo) => {
-                    const statusClass = interfaceInfo.is_up ? 'success' : 'secondary';
-                    const addresses = Array.isArray(interfaceInfo.addresses)
-                        ? interfaceInfo.addresses.filter((addr) => addr.type === 'IPv4').slice(0, 2)
-                        : [];
-                    const addressHtml = addresses
-                        .map((addr) => `<small class="text-muted d-block">${escapeHtml(addr.address || 'Unknown')}</small>`)
-                        .join('');
-                    return `
-                        <div class="mb-2">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="metric-label">${escapeHtml(interfaceInfo.name || 'Unknown')}</span>
-                                <span class="badge bg-${statusClass} status-badge">${interfaceInfo.is_up ? 'UP' : 'DOWN'}</span>
-                            </div>
-                            ${addressHtml}
+            const interfaceMap = new Map();
+            if (Array.isArray(safeNetwork.interfaces)) {
+                safeNetwork.interfaces.forEach((info) => {
+                    if (info && typeof info === 'object' && info.name) {
+                        interfaceMap.set(info.name, info);
+                    }
+                });
+            }
+
+            const stats = Array.isArray(traffic.interfaces) ? traffic.interfaces : [];
+            const rows = stats.slice(0, 6).map((iface) => {
+                const name = escapeHtml(iface && iface.name ? iface.name : 'Unknown');
+                const ifaceInfo = iface && iface.name ? interfaceMap.get(iface.name) : undefined;
+                const addresses = Array.isArray(ifaceInfo && ifaceInfo.addresses)
+                    ? ifaceInfo.addresses
+                        .filter((addr) => addr && addr.type === 'IPv4' && addr.address)
+                        .slice(0, 2)
+                        .map((addr) => escapeHtml(addr.address))
+                    : [];
+                const addressLabel = addresses.length ? addresses.join(', ') : '—';
+                const rx = formatBytes(iface && iface.bytes_recv);
+                const tx = formatBytes(iface && iface.bytes_sent);
+                const speedValue = iface && iface.speed_mbps != null ? `${toNumber(iface.speed_mbps, 0).toFixed(0)} Mb/s` : '—';
+
+                let status = iface && iface.is_up;
+                if (status === undefined && ifaceInfo) {
+                    status = ifaceInfo.is_up;
+                }
+
+                let statusBadge = '<span class="badge bg-secondary status-badge">Unknown</span>';
+                if (status === true) {
+                    statusBadge = '<span class="badge bg-success status-badge">UP</span>';
+                } else if (status === false) {
+                    statusBadge = '<span class="badge bg-secondary status-badge">DOWN</span>';
+                }
+
+                return `
+                    <tr>
+                        <td><strong>${name}</strong></td>
+                        <td><span class="text-muted">${addressLabel}</span></td>
+                        <td>${rx}</td>
+                        <td>${tx}</td>
+                        <td>${speedValue}</td>
+                        <td>${statusBadge}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            const moreInterfaces = stats.length > 6
+                ? `<small class="text-muted">… and ${stats.length - 6} more interfaces</small>`
+                : '';
+
+            const trafficError = traffic.error ? `: ${escapeHtml(traffic.error)}` : '';
+            const fallbackInterfaces = Array.from(interfaceMap.values());
+            const fallbackRows = fallbackInterfaces.slice(0, 3).map((iface) => {
+                if (!iface || typeof iface !== 'object') {
+                    return '';
+                }
+                const name = escapeHtml(iface.name || 'Unknown');
+                const statusClass = iface.is_up ? 'success' : 'secondary';
+                const addresses = Array.isArray(iface.addresses)
+                    ? iface.addresses.filter((addr) => addr && addr.type === 'IPv4' && addr.address).slice(0, 2)
+                    : [];
+                const addressLines = addresses
+                    .map((addr) => `<small class="text-muted d-block">${escapeHtml(addr.address)}</small>`)
+                    .join('');
+                return `
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="metric-label">${name}</span>
+                            <span class="badge bg-${statusClass} status-badge">${iface.is_up ? 'UP' : 'DOWN'}</span>
                         </div>
-                    `;
-                })
-                .join('');
+                        ${addressLines}
+                    </div>
+                `;
+            }).join('');
+            const fallbackMore = fallbackInterfaces.length > 3
+                ? `<small class="text-muted">… and ${fallbackInterfaces.length - 3} more interfaces</small>`
+                : '';
+            const fallbackError = traffic.error
+                ? `<small class="text-muted d-block mt-2">Traffic counters unavailable: ${escapeHtml(traffic.error)}</small>`
+                : '';
 
-            const moreText = moreCount > 0
-                ? `<small class="text-muted">... and ${moreCount} more interfaces</small>`
+            const statsSection = stats.length
+                ? `
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover network-traffic-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th scope="col">Interface</th>
+                                    <th scope="col">Address</th>
+                                    <th scope="col">RX</th>
+                                    <th scope="col">TX</th>
+                                    <th scope="col">Speed</th>
+                                    <th scope="col">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rows}
+                            </tbody>
+                        </table>
+                    </div>
+                    ${moreInterfaces}
+                `
+                : fallbackInterfaces.length
+                    ? `${fallbackRows}${fallbackMore}${fallbackError}`
+                    : `<p class="text-muted mb-0">Network traffic statistics unavailable${trafficError}</p>`;
+
+            const packetsRow = packetsAvailable
+                ? `
+                        <div class="metric-row mb-3">
+                            <span class="metric-label">Packets RX / TX:</span>
+                            <span class="metric-value">${toNumber(totals.packets_recv, 0)} / ${toNumber(totals.packets_sent, 0)}</span>
+                        </div>
+                    `
                 : '';
 
             return `
@@ -847,10 +2310,14 @@
                         <h5><i class="fas fa-network-wired section-icon"></i> Network</h5>
                         <div class="metric-row mb-3">
                             <span class="metric-label">Hostname:</span>
-                            <span class="metric-value">${escapeHtml(hostname)}</span>
+                            <span class="metric-value">${hostname}</span>
                         </div>
-                        ${interfaceHtml}
-                        ${moreText}
+                        <div class="metric-row mb-2">
+                            <span class="metric-label">Total RX / TX:</span>
+                            <span class="metric-value">${totalRx} / ${totalTx}</span>
+                        </div>
+                        ${packetsRow}
+                        ${statsSection}
                     </div>
                 </div>
             `;
@@ -974,6 +2441,18 @@
 
             updateOverview(data);
 
+            const hardware = data.hardware || {};
+
+            const cpuHardwareContainer = document.getElementById('cpu-hardware-card');
+            if (cpuHardwareContainer) {
+                cpuHardwareContainer.innerHTML = renderCpuHardwareCard(hardware.cpu || {});
+            }
+
+            const platformContainer = document.getElementById('platform-card');
+            if (platformContainer) {
+                platformContainer.innerHTML = renderPlatformCard(hardware.platform || {});
+            }
+
             const cpuContainer = document.getElementById('cpu-card');
             if (cpuContainer) {
                 cpuContainer.innerHTML = renderCpuCard(data.cpu || {});
@@ -984,9 +2463,29 @@
                 memoryContainer.innerHTML = renderMemoryCard(data.memory || {});
             }
 
-            const servicesContainer = document.getElementById('services-card');
-            if (servicesContainer) {
-                servicesContainer.innerHTML = renderServicesCard(data.database || {}, data.services || {});
+            const hardwareDevicesContainer = document.getElementById('hardware-devices-card');
+            if (hardwareDevicesContainer) {
+                hardwareDevicesContainer.innerHTML = renderHardwareInventoryCard(hardware.block_devices || {});
+            }
+
+            const usbContainer = document.getElementById('usb-card');
+            if (usbContainer) {
+                usbContainer.innerHTML = renderUsbCard(hardware.usb || {});
+            }
+
+            const smartContainer = document.getElementById('smart-card');
+            if (smartContainer) {
+                smartContainer.innerHTML = renderSmartHealthCard(data.smart || {});
+            }
+
+            const stackContainer = document.getElementById('containers-card');
+            if (stackContainer) {
+                stackContainer.innerHTML = renderStackCard(data.database || {}, data.containers || {});
+            }
+
+            const containersDetailContainer = document.getElementById('containers-details');
+            if (containersDetailContainer) {
+                containersDetailContainer.innerHTML = renderContainerDetails(data.containers || {});
             }
 
             const storageContainer = document.getElementById('storage-card');
