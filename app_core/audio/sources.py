@@ -539,6 +539,9 @@ class StreamSourceAdapter(AudioSourceAdapter):
         self._pcm_buffer = bytearray()  # Buffer for decoded PCM audio
         self._ffmpeg_thread = None  # Thread for feeding data to FFmpeg
         self._had_data_activity = False  # Track if HTTP data was read (even if decode returned None)
+        # Backpressure thresholds for encoded HTTP buffer management (aligned with FFmpeg stdin pipe size)
+        self._max_http_buffer_size = 65536  # 64KB limit to prevent unbounded growth
+        self._last_http_backpressure_log = 0.0
 
     def _parse_m3u(self, url: str) -> str:
         """Parse M3U playlist and return the first stream URL."""
@@ -723,8 +726,27 @@ class StreamSourceAdapter(AudioSourceAdapter):
                 return None
 
         try:
+            # Determine how much space is available before hitting the HTTP buffer cap
+            available_space = self._max_http_buffer_size - len(self._buffer)
+            if available_space <= 0:
+                # Buffer is full - first try to drain already-decoded PCM before sleeping
+                decoded_chunk = self._decode_stream_chunk()
+                if decoded_chunk is not None:
+                    return decoded_chunk
+
+                # Nothing ready for playback yet; pause reads so the feeder can catch up
+                now = time.time()
+                if now - self._last_http_backpressure_log > 5.0:
+                    logger.warning(
+                        f"{self.config.name}: HTTP buffer full ({len(self._buffer)} bytes), "
+                        "pausing stream reads to apply backpressure"
+                    )
+                    self._last_http_backpressure_log = now
+                time.sleep(0.01)
+                return None
+
             # Read data from stream (smaller chunks for more continuous flow)
-            chunk_size = self.config.buffer_size * 4  # Balanced size for low latency and efficiency
+            chunk_size = min(self.config.buffer_size * 4, available_space)
 
             try:
                 data = self._stream_response.raw.read(chunk_size)
@@ -758,22 +780,25 @@ class StreamSourceAdapter(AudioSourceAdapter):
             # Mark that we successfully read data from the stream
             self._had_data_activity = True
 
-            # Decode audio based on format
-            if self._stream_format == 'mp3':
-                return self._decode_mp3_chunk()
-            elif self._stream_format == 'aac':
-                return self._decode_aac_chunk()
-            elif self._stream_format == 'ogg':
-                return self._decode_ogg_chunk()
-            elif self._stream_format == 'raw':
-                return self._decode_raw_chunk()
-            else:
-                logger.error(f"Unsupported stream format: {self._stream_format}")
-                return None
+            return self._decode_stream_chunk()
 
         except Exception as e:
             logger.error(f"Error reading stream audio: {e}")
             return None
+
+    def _decode_stream_chunk(self) -> Optional[np.ndarray]:
+        """Dispatch decoding based on the configured stream format."""
+        if self._stream_format == 'mp3':
+            return self._decode_mp3_chunk()
+        if self._stream_format == 'aac':
+            return self._decode_aac_chunk()
+        if self._stream_format == 'ogg':
+            return self._decode_ogg_chunk()
+        if self._stream_format == 'raw':
+            return self._decode_raw_chunk()
+
+        logger.error(f"Unsupported stream format: {self._stream_format}")
+        return None
 
     def _find_mp3_frame_sync(self, data: bytearray, start_pos: int = 0) -> int:
         """
@@ -861,11 +886,10 @@ class StreamSourceAdapter(AudioSourceAdapter):
                 try:
                     buffer_size = len(self._buffer)
 
-                    # Backpressure: only feed if buffer is below threshold
-                    # This automatically rate-limits based on FFmpeg's actual consumption rate
-                    if buffer_size > 0 and buffer_size < max_buffer_size:
+                    # Feed whenever buffered data exists; HTTP reads pause upstream once we hit the soft cap
+                    if buffer_size > 0:
                         # Send data to FFmpeg stdin (non-blocking)
-                        chunk = bytes(self._buffer[:chunk_size])
+                        chunk = bytes(self._buffer[: min(chunk_size, buffer_size)])
 
                         if self._ffmpeg_process and self._ffmpeg_process.stdin:
                             try:
@@ -910,18 +934,21 @@ class StreamSourceAdapter(AudioSourceAdapter):
                                 logger.warning(f"{self.config.name}: FFmpeg stdin pipe broken, decoder may have exited")
                                 break
                     elif buffer_size >= max_buffer_size:
-                        # Buffer too large - apply backpressure by not feeding
-                        # Log periodically
+                        # Buffer still above our soft limit even after feeding - log so we can correlate
                         if not hasattr(self, '_last_backpressure_log'):
                             self._last_backpressure_log = 0
                         now = time.time()
                         if now - self._last_backpressure_log > 5.0:
-                            logger.warning(f"{self.config.name}: Applying backpressure - buffer size: {buffer_size} bytes (max: {max_buffer_size}), PCM buffer: {len(self._pcm_buffer)} bytes")
+                            logger.warning(
+                                f"{self.config.name}: HTTP buffer above soft limit while feeding ({buffer_size} bytes >= {max_buffer_size}), PCM buffer: {len(self._pcm_buffer)} bytes"
+                            )
                             self._last_backpressure_log = now
-                        time.sleep(0.1)  # Sleep longer when applying backpressure
+                        # Don't block feeding entirely; just short sleep so loop can re-check buffer
+                        time.sleep(0.01)
                     else:
                         # No data to send
                         time.sleep(0.01)  # 10ms when no data
+
 
                 except Exception as e:
                     logger.error(f"{self.config.name}: Error feeding FFmpeg: {e}")
