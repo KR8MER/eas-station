@@ -1,6 +1,7 @@
 """System monitoring helpers."""
 
 from datetime import datetime
+import http.client
 import json
 import os
 import platform
@@ -8,7 +9,9 @@ import shutil
 import socket
 import subprocess
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+from urllib.parse import urlparse
 
 import psutil
 from sqlalchemy import text
@@ -267,135 +270,466 @@ def _collect_container_statuses(logger) -> Dict[str, Any]:
         "summary": {"total": 0, "running": 0, "healthy": 0, "unhealthy": 0, "stopped": 0},
         "issues": [],
         "error": None,
+        "compose_project": None,
+        "collector": None,
     }
 
     compose_project = os.getenv("COMPOSE_PROJECT_NAME") or os.getenv("STACK_PROJECT_NAME") or os.getenv(
         "STACK_NAME"
     )
-    engines: List[str] = ["docker", "podman"]
-    last_error: Optional[str] = None
 
-    for engine in engines:
-        engine_path = shutil.which(engine)
-        if not engine_path:
+    attempt_errors: List[str] = []
+
+    # Prefer direct API access (Docker/Podman sockets or remote hosts) to avoid CLI dependencies.
+    for target in _candidate_container_api_targets():
+        try:
+            containers = _fetch_containers_via_api(target, compose_project)
+            if containers is None:
+                continue
+            return _build_container_result(
+                containers,
+                engine=target["engine"],
+                compose_project=compose_project,
+                collector=f"{target['engine']}-api",
+            )
+        except Exception as exc:  # pragma: no cover - host specific behaviour
+            message = f"{target['engine']} API ({target['description']}): {exc}"
+            attempt_errors.append(message)
+            if logger:
+                logger.warning("Failed to collect container status via %s", message)
+
+    # Fallback to CLI lookups when API access is unavailable.
+    for engine in ("docker", "podman"):
+        try:
+            containers = _fetch_containers_via_cli(engine, compose_project)
+            if containers is None:
+                attempt_errors.append(f"{engine} CLI not available")
+                continue
+            return _build_container_result(
+                containers,
+                engine=engine,
+                compose_project=compose_project,
+                collector=f"{engine}-cli",
+            )
+        except Exception as exc:  # pragma: no cover - depends on host configuration
+            message = f"{engine} CLI: {exc}"
+            attempt_errors.append(message)
+            if logger:
+                logger.warning("Failed to collect container status via %s", message)
+
+    if attempt_errors:
+        result["error"] = "; ".join(attempt_errors)
+    else:
+        result["error"] = "Container engine not available"
+
+    result["compose_project"] = compose_project
+    return result
+
+
+class _UnixHTTPConnection(http.client.HTTPConnection):
+    """Minimal HTTP connection implementation for UNIX domain sockets."""
+
+    def __init__(self, path: str, timeout: float = 10.0) -> None:
+        super().__init__("localhost", timeout=timeout)
+        self._unix_path = path
+
+    def connect(self) -> None:  # pragma: no cover - requires system socket access
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        if self.timeout is not None:
+            sock.settimeout(self.timeout)
+        sock.connect(self._unix_path)
+        self.sock = sock
+
+
+def _candidate_container_api_targets() -> Iterable[Dict[str, Any]]:
+    """Yield potential container engine API endpoints to query."""
+
+    candidates: List[Tuple[str, str]] = []
+
+    docker_host = os.getenv("DOCKER_HOST")
+    if docker_host:
+        candidates.append(("docker", docker_host.strip()))
+
+    podman_host = os.getenv("PODMAN_HOST")
+    if podman_host:
+        candidates.append(("podman", podman_host.strip()))
+
+    # Common default socket paths
+    candidates.extend(
+        [
+            ("docker", "unix:///var/run/docker.sock"),
+            ("docker", "unix:///run/docker.sock"),
+            ("podman", "unix:///run/podman/podman.sock"),
+        ]
+    )
+
+    runtime_dir = os.getenv("XDG_RUNTIME_DIR")
+    if runtime_dir:
+        podman_socket = os.path.join(runtime_dir, "podman", "podman.sock")
+        candidates.append(("podman", f"unix://{podman_socket}"))
+
+    normalised: List[Dict[str, Any]] = []
+    seen: set = set()
+
+    for engine, raw_value in candidates:
+        if not raw_value:
             continue
 
-        command = [engine_path, "ps", "--all"]
-        if compose_project:
-            if engine == "docker":
-                command.extend(["--filter", f"label=com.docker.compose.project={compose_project}"])
-            else:
-                command.extend(["--filter", f"label=io.podman.compose.project={compose_project}"])
-        command.extend(["--format", "{{json .}}"])  # Return machine-readable output
+        parsed = urlparse(raw_value)
+        scheme = parsed.scheme or "unix"
 
-        try:
-            completed = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=10,
-            )
-
-            if completed.returncode != 0:
-                stderr = completed.stderr.strip() or "unknown error"
-                raise RuntimeError(f"{engine} ps failed: {stderr}")
-
-            lines = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
-            containers: List[Dict[str, Any]] = []
-
-            for raw_line in lines:
-                try:
-                    info = json.loads(raw_line)
-                except json.JSONDecodeError:
-                    last_error = f"Unable to parse {engine} output: {raw_line}"
-                    continue
-
-                labels_text = info.get("Labels") or ""
-                labels: Dict[str, str] = {}
-                if labels_text:
-                    for item in labels_text.split(","):
-                        if "=" in item:
-                            key, value = item.split("=", 1)
-                            labels[key.strip()] = value.strip()
-
-                name = info.get("Names") or "unknown"
-                status_text = info.get("Status") or "unknown"
-                state = (info.get("State") or "").lower()
-                status_lower = status_text.lower()
-                health_state = None
-                if "unhealthy" in status_lower:
-                    health_state = "unhealthy"
-                elif "healthy" in status_lower:
-                    health_state = "healthy"
-                elif "starting" in status_lower:
-                    health_state = "starting"
-
-                is_running = state == "running" or status_lower.startswith("up")
-
-                service = labels.get("com.docker.compose.service") or labels.get("io.podman.compose.service")
-                display_name = None
-                if service:
-                    display_name = service.replace("_", " ").replace("-", " ").title()
-
-                containers.append(
-                    {
-                        "name": name,
-                        "display_name": display_name,
-                        "service": service,
-                        "project": labels.get("com.docker.compose.project")
-                        or labels.get("io.podman.compose.project")
-                        or compose_project,
-                        "status": status_text,
-                        "state": state or None,
-                        "health": health_state,
-                        "is_running": is_running,
-                        "image": info.get("Image"),
-                        "ports": info.get("Ports"),
-                        "running_for": info.get("RunningFor"),
-                        "created_at": info.get("CreatedAt"),
-                        "labels": labels,
-                    }
-                )
-
-            total = len(containers)
-            running = len([item for item in containers if item.get("is_running")])
-            unhealthy = len([item for item in containers if item.get("health") == "unhealthy"])
-            stopped = max(total - running, 0)
-
-            issues = [
-                item
-                for item in containers
-                if not item.get("is_running") or item.get("health") == "unhealthy"
-            ]
-
-            result.update(
+        if scheme == "unix":
+            path = parsed.path or parsed.netloc
+            if not path:
+                continue
+            key = (engine, "unix", path)
+            if key in seen:
+                continue
+            seen.add(key)
+            normalised.append(
                 {
-                    "available": True,
-                    "status": "healthy" if not issues else "degraded",
                     "engine": engine,
-                    "containers": containers,
-                    "summary": {
-                        "total": total,
-                        "running": running,
-                        "healthy": len([item for item in containers if item.get("health") == "healthy"]),
-                        "unhealthy": unhealthy,
-                        "stopped": stopped,
-                    },
-                    "issues": issues,
-                    "error": None,
-                    "compose_project": compose_project,
+                    "scheme": "unix",
+                    "address": path,
+                    "description": path,
+                }
+            )
+        elif scheme in {"tcp", "http", "https"}:
+            host = parsed.hostname or parsed.netloc
+            port = parsed.port or (443 if scheme == "https" else 80)
+            http_scheme = "https" if scheme == "https" else "http"
+            if not host:
+                continue
+            key = (engine, http_scheme, host, port)
+            if key in seen:
+                continue
+            seen.add(key)
+            normalised.append(
+                {
+                    "engine": engine,
+                    "scheme": http_scheme,
+                    "address": host,
+                    "port": port,
+                    "description": f"{http_scheme}://{host}:{port}",
                 }
             )
 
-            return result
+    return normalised
 
-        except Exception as exc:  # pragma: no cover - depends on host environment
-            last_error = str(exc)
-            if logger:
-                logger.warning("Failed to collect container status via %s: %s", engine, exc)
 
-    if not result["available"]:
-        result["error"] = last_error or "Container engine not available"
+def _perform_api_request(target: Dict[str, Any], path: str) -> Any:
+    """Execute an HTTP GET against a container engine endpoint."""
 
-    return result
+    timeout = 5
+
+    if target["scheme"] == "unix":
+        connection: http.client.HTTPConnection = _UnixHTTPConnection(target["address"], timeout=timeout)
+    elif target["scheme"] == "http":
+        connection = http.client.HTTPConnection(target["address"], target.get("port"), timeout=timeout)
+    else:
+        connection = http.client.HTTPSConnection(target["address"], target.get("port"), timeout=timeout)
+
+    try:
+        connection.request("GET", path, headers={"Host": "localhost"})
+        response = connection.getresponse()
+        payload = response.read()
+    finally:  # pragma: no cover - defensive cleanup
+        connection.close()
+
+    if response.status >= 400:
+        raise RuntimeError(f"HTTP {response.status} {response.reason}")
+
+    if not payload:
+        return None
+
+    try:
+        return json.loads(payload.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid JSON response: {exc}") from exc
+
+
+def _fetch_containers_via_api(target: Dict[str, Any], compose_project: Optional[str]) -> Optional[List[Dict[str, Any]]]:
+    """Attempt to load container data from the engine API."""
+
+    if target["engine"] == "docker":
+        candidates = ["/containers/json?all=1", "/v1.41/containers/json?all=1"]
+    else:
+        # Podman exposes both Docker-compatible and libpod endpoints.
+        candidates = [
+            "/containers/json?all=1",
+            "/v1.41/containers/json?all=1",
+            "/v1.0.0/libpod/containers/json?all=true",
+        ]
+
+    last_error: Optional[Exception] = None
+
+    for path in candidates:
+        try:
+            response = _perform_api_request(target, path)
+        except Exception as exc:
+            last_error = exc
+            continue
+
+        if response is None:
+            continue
+
+        if isinstance(response, dict) and "containers" in response:
+            entries = response.get("containers") or []
+        elif isinstance(response, list):
+            entries = response
+        else:
+            raise RuntimeError("Unexpected API response structure")
+
+        containers = [_normalize_api_container(entry, compose_project) for entry in entries]
+
+        # Filter to the compose project when possible. If the filter removes everything and we
+        # had entries, fall back to displaying all containers so operators still see something.
+        if compose_project:
+            filtered = [item for item in containers if item.get("project") == compose_project]
+            if filtered or not containers:
+                containers = filtered
+
+        return containers
+
+    if last_error:
+        raise last_error
+
+    return None
+
+
+def _fetch_containers_via_cli(engine: str, compose_project: Optional[str]) -> Optional[List[Dict[str, Any]]]:
+    """Collect container information using the Docker or Podman CLI."""
+
+    engine_path = shutil.which(engine)
+    if not engine_path:
+        return None
+
+    command = [engine_path, "ps", "--all"]
+    if compose_project:
+        label_key = "com.docker.compose.project" if engine == "docker" else "io.podman.compose.project"
+        command.extend(["--filter", f"label={label_key}={compose_project}"])
+    command.extend(["--format", "{{json .}}"])  # Machine-readable output
+
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+
+    if completed.returncode != 0:
+        stderr = completed.stderr.strip() or "unknown error"
+        raise RuntimeError(stderr)
+
+    lines = [line.strip() for line in (completed.stdout or "").splitlines() if line.strip()]
+    containers: List[Dict[str, Any]] = []
+
+    for raw_line in lines:
+        try:
+            info = json.loads(raw_line)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Unable to parse {engine} output: {raw_line}") from exc
+
+        containers.append(_normalize_cli_container(info, compose_project))
+
+    return containers
+
+
+def _normalize_cli_container(info: Dict[str, Any], compose_project: Optional[str]) -> Dict[str, Any]:
+    labels_text = info.get("Labels") or ""
+    labels: Dict[str, str] = {}
+    for item in labels_text.split(","):
+        if "=" in item:
+            key, value = item.split("=", 1)
+            labels[key.strip()] = value.strip()
+
+    name = info.get("Names") or info.get("Name") or info.get("ID") or info.get("Id") or "unknown"
+    status_text = info.get("Status") or info.get("State") or "unknown"
+    state = (info.get("State") or "").lower() or None
+    health_state = _extract_health(status_text)
+    is_running = (state == "running") or status_text.lower().startswith("up")
+
+    service = labels.get("com.docker.compose.service") or labels.get("io.podman.compose.service")
+    display_name = _format_display_name(service)
+
+    project = (
+        labels.get("com.docker.compose.project")
+        or labels.get("io.podman.compose.project")
+        or compose_project
+    )
+
+    return {
+        "name": name,
+        "display_name": display_name,
+        "service": service,
+        "project": project,
+        "status": status_text,
+        "state": state,
+        "health": health_state,
+        "is_running": is_running,
+        "image": info.get("Image"),
+        "ports": info.get("Ports"),
+        "running_for": info.get("RunningFor"),
+        "created_at": info.get("CreatedAt"),
+        "labels": labels,
+    }
+
+
+def _normalize_api_container(info: Dict[str, Any], compose_project: Optional[str]) -> Dict[str, Any]:
+    labels = info.get("Labels") or {}
+    if not isinstance(labels, dict):
+        labels = {}
+
+    names = info.get("Names")
+    if isinstance(names, list) and names:
+        raw_name = names[0]
+        name = raw_name[1:] if raw_name.startswith("/") else raw_name
+    else:
+        name = info.get("Id") or info.get("ID") or "unknown"
+
+    status_text = info.get("Status") or info.get("State") or "unknown"
+    state = (info.get("State") or "").lower() or None
+    health_state = _extract_health(status_text)
+    is_running = (state == "running") or status_text.lower().startswith("up")
+
+    service = labels.get("com.docker.compose.service") or labels.get("io.podman.compose.service")
+    display_name = _format_display_name(service)
+
+    project = (
+        labels.get("com.docker.compose.project")
+        or labels.get("io.podman.compose.project")
+        or compose_project
+    )
+
+    created = info.get("Created")
+    if isinstance(created, (int, float)):
+        created_dt = datetime.fromtimestamp(created, UTC_TZ)
+        created_iso = created_dt.isoformat()
+        running_for = _format_duration(max((utc_now() - created_dt).total_seconds(), 0))
+    else:
+        created_iso = None
+        running_for = None
+
+    ports_value = info.get("Ports")
+    if isinstance(ports_value, list):
+        ports = _format_ports(ports_value)
+    else:
+        ports = ports_value
+
+    return {
+        "name": name,
+        "display_name": display_name,
+        "service": service,
+        "project": project,
+        "status": status_text,
+        "state": state,
+        "health": health_state,
+        "is_running": is_running,
+        "image": info.get("Image"),
+        "ports": ports,
+        "running_for": running_for,
+        "created_at": created_iso,
+        "labels": labels,
+    }
+
+
+def _format_display_name(service: Optional[str]) -> Optional[str]:
+    if not service:
+        return None
+    return service.replace("_", " ").replace("-", " ").title()
+
+
+def _extract_health(status_text: str) -> Optional[str]:
+    lowered = (status_text or "").lower()
+    if "unhealthy" in lowered:
+        return "unhealthy"
+    if "healthy" in lowered:
+        return "healthy"
+    if "starting" in lowered:
+        return "starting"
+    return None
+
+
+def _format_ports(ports: Iterable[Dict[str, Any]]) -> str:
+    formatted: List[str] = []
+    for entry in ports:
+        if not isinstance(entry, dict):
+            continue
+        private_port = entry.get("PrivatePort")
+        public_port = entry.get("PublicPort")
+        proto = entry.get("Type")
+        ip = entry.get("IP")
+
+        if public_port:
+            if ip and ip not in {"0.0.0.0", "::"}:
+                formatted.append(f"{ip}:{public_port}->{private_port}/{proto or 'tcp'}")
+            else:
+                formatted.append(f"{public_port}->{private_port}/{proto or 'tcp'}")
+        elif private_port:
+            formatted.append(f"{private_port}/{proto or 'tcp'}")
+
+    return ", ".join(formatted)
+
+
+def _format_duration(seconds: float) -> str:
+    total_seconds = int(max(seconds, 0))
+    days, remainder = divmod(total_seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds_left = divmod(remainder, 60)
+
+    parts: List[str] = []
+    if days:
+        parts.append(f"{days}d")
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes:
+        parts.append(f"{minutes}m")
+    if not parts:
+        parts.append(f"{seconds_left}s")
+
+    return " ".join(parts)
+
+
+def _build_container_result(
+    containers: List[Dict[str, Any]],
+    *,
+    engine: Optional[str],
+    compose_project: Optional[str],
+    collector: Optional[str],
+) -> Dict[str, Any]:
+    total = len(containers)
+    running = len([item for item in containers if item.get("is_running")])
+    healthy = len([item for item in containers if item.get("health") == "healthy"])
+    unhealthy = len([item for item in containers if item.get("health") == "unhealthy"])
+    stopped = max(total - running, 0)
+
+    issues = [
+        item
+        for item in containers
+        if not item.get("is_running") or item.get("health") == "unhealthy"
+    ]
+
+    status = "healthy"
+    if issues and running:
+        status = "degraded"
+    elif issues and not running and total:
+        status = "stopped"
+
+    return {
+        "available": True,
+        "status": status,
+        "engine": engine,
+        "containers": containers,
+        "summary": {
+            "total": total,
+            "running": running,
+            "healthy": healthy,
+            "unhealthy": unhealthy,
+            "stopped": stopped,
+        },
+        "issues": issues,
+        "error": None,
+        "compose_project": compose_project,
+        "collector": collector,
+    }

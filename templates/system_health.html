@@ -311,8 +311,15 @@
                             {% elif not containers_data.containers %}
                                 <p class="text-muted mb-0">No containers detected for the current engine.</p>
                             {% endif %}
-                            {% if containers_data.engine %}
-                                <small class="text-muted d-block mt-2">Engine: {{ containers_data.engine|upper }}{% if containers_data.compose_project %} • Project: {{ containers_data.compose_project }}{% endif %}</small>
+                            {% set has_engine = containers_data.engine %}
+                            {% set has_project = containers_data.compose_project %}
+                            {% set has_collector = containers_data.collector %}
+                            {% if has_engine or has_project or has_collector %}
+                                <small class="text-muted d-block mt-2">
+                                    {% if has_engine %}Engine: {{ containers_data.engine|upper }}{% endif %}
+                                    {% if has_project %}{% if has_engine %} • {% endif %}Project: {{ containers_data.compose_project }}{% endif %}
+                                    {% if has_collector %}{% if has_engine or has_project %} • {% endif %}Source: {{ containers_data.collector }}{% endif %}
+                                </small>
                             {% endif %}
                         {% else %}
                             <div class="alert alert-warning mb-0 py-2">
@@ -322,6 +329,7 @@
                     </div>
                 </div>
             </div>
+        </div>
         <!-- Storage & Network Row -->
         <div class="row mb-4">
             <!-- Disk Storage -->
@@ -956,10 +964,19 @@
                 }
             }
 
-            const engineLabel = containerData.engine ? String(containerData.engine).toUpperCase() : '';
-            const projectLabel = containerData.compose_project ? escapeHtml(containerData.compose_project) : '';
-            const engineInfo = engineLabel
-                ? `<small class="text-muted d-block mt-2">Engine: ${escapeHtml(engineLabel)}${projectLabel ? ` • Project: ${projectLabel}` : ''}</small>`
+            const engineBits = [];
+            if (containerData.engine) {
+                engineBits.push(`Engine: ${escapeHtml(String(containerData.engine).toUpperCase())}`);
+            }
+            if (containerData.compose_project) {
+                engineBits.push(`Project: ${escapeHtml(containerData.compose_project)}`);
+            }
+            if (containerData.collector) {
+                engineBits.push(`Source: ${escapeHtml(containerData.collector)}`);
+            }
+
+            const engineInfo = engineBits.length
+                ? `<small class="text-muted d-block mt-2">${engineBits.join(' • ')}</small>`
                 : '';
 
             const availabilityAlert = !isAvailable
