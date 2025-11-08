@@ -84,8 +84,20 @@ class StreamTestHarness:
                 else:
                     chunk_count += 1
 
-                http_buffer = len(getattr(source, "_buffer", bytearray()))
-                pcm_buffer = len(getattr(source, "_pcm_buffer", bytearray()))
+                buffer_attr = getattr(source, "_buffer", None)
+                if isinstance(buffer_attr, (bytes, bytearray)):
+                    http_buffer = len(buffer_attr)
+                else:
+                    http_buffer = 0
+
+                pcm_source = None
+                for attr_name in ("_pcm_buffer", "_pcm_backlog"):
+                    candidate = getattr(source, attr_name, None)
+                    if isinstance(candidate, (bytes, bytearray)):
+                        pcm_source = candidate
+                        break
+
+                pcm_buffer = len(pcm_source) if pcm_source is not None else 0
                 if http_buffer > max_http_buffer:
                     max_http_buffer = http_buffer
                 if pcm_buffer > max_pcm_buffer:

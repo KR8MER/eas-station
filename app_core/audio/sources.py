@@ -7,11 +7,13 @@ Concrete implementations of AudioSourceAdapter for different input types.
 from __future__ import annotations
 
 import logging
-import struct
+import os
+import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
+from urllib.parse import urljoin, urlparse
 
 import numpy as np
 
@@ -522,635 +524,251 @@ class FileSourceAdapter(AudioSourceAdapter):
 
 
 class StreamSourceAdapter(AudioSourceAdapter):
-    """Audio source adapter for HTTP/M3U audio streams."""
+    """Audio source adapter that delegates streaming + decoding to FFmpeg."""
 
     def __init__(self, config: AudioSourceConfig):
         super().__init__(config)
         self._stream_url = self.config.device_params.get('stream_url', '')
-        self._session: Optional[requests.Session] = None
-        self._stream_response = None
-        self._buffer = bytearray()
-        self._stream_format = self.config.device_params.get('format', 'mp3')  # mp3, aac, raw
-        self._decoder = None
-        self._reconnect_attempts = 0
-        self._max_reconnect_attempts = 5
-        self._stream_metadata = {}  # Store stream metadata (URL, codec, bitrate, etc.)
-        self._ffmpeg_process = None  # FFmpeg subprocess for decoding
-        self._pcm_buffer = bytearray()  # Buffer for decoded PCM audio
-        self._ffmpeg_thread = None  # Thread for feeding data to FFmpeg
-        self._had_data_activity = False  # Track if HTTP data was read (even if decode returned None)
-        # Backpressure thresholds for encoded HTTP buffer management (aligned with FFmpeg stdin pipe size)
-        self._max_http_buffer_size = 65536  # 64KB limit to prevent unbounded growth
-        self._last_http_backpressure_log = 0.0
+        self._resolved_stream_url: Optional[str] = None
+        self._ffmpeg_process: Optional[subprocess.Popen] = None
+        self._stderr_thread: Optional[threading.Thread] = None
+        self._pcm_backlog = bytearray()
+        self._stream_metadata: Dict[str, Any] = {}
+        self._last_restart = 0.0
+        self._restart_delay_seconds = 3.0
 
-    def _parse_m3u(self, url: str) -> str:
-        """Parse M3U playlist and return the first stream URL."""
-        try:
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
+    def _resolve_stream_url(self, url: str) -> str:
+        """Validate the configured URL and resolve playlists when needed."""
+        if not url:
+            raise ValueError("stream_url must be configured for stream sources")
 
-            content = response.text
-            # Parse M3U content - look for http/https URLs
-            for line in content.split('\n'):
-                line = line.strip()
-                if line and not line.startswith('#') and (line.startswith('http://') or line.startswith('https://')):
-                    logger.info(f"Found stream URL in M3U: {line}")
-                    return line
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError(f"Unsupported stream URL scheme '{parsed.scheme}'")
+        if not parsed.netloc:
+            raise ValueError("Invalid stream URL: missing hostname")
 
-            raise ValueError("No valid stream URL found in M3U playlist")
-        except Exception as e:
-            raise RuntimeError(f"Failed to parse M3U playlist: {e}")
+        lower_path = parsed.path.lower()
+        if lower_path.endswith('.m3u') or lower_path.endswith('.m3u8'):
+            if not REQUESTS_AVAILABLE:
+                raise RuntimeError("Requests library not available to resolve playlist URLs")
 
-    def _start_capture(self) -> None:
-        """Start HTTP stream audio capture."""
-        if not REQUESTS_AVAILABLE:
-            raise RuntimeError("Requests library not available")
-
-        try:
-            stream_url = self._stream_url
-
-            # Validate URL scheme and netloc
-            from urllib.parse import urlparse
-            parsed = urlparse(stream_url)
-            if parsed.scheme not in ('http', 'https'):
-                raise ValueError(f"Invalid URL scheme '{parsed.scheme}'. Only http and https are allowed.")
-            if not parsed.netloc:
-                raise ValueError(f"Invalid URL: missing hostname")
-
-            # Check if this is an M3U playlist
-            if stream_url.lower().endswith('.m3u') or stream_url.lower().endswith('.m3u8'):
-                stream_url = self._parse_m3u(stream_url)
-                # Validate the resolved stream URL from M3U
-                parsed = urlparse(stream_url)
-                if parsed.scheme not in ('http', 'https'):
-                    raise ValueError(f"Invalid M3U stream URL scheme '{parsed.scheme}'. Only http and https are allowed.")
-                if not parsed.netloc:
-                    raise ValueError(f"Invalid M3U stream URL: missing hostname")
-
-            # Create session and start streaming
-            self._session = requests.Session()
-            self._session.headers.update({
-                'User-Agent': 'EAS-Station/1.0',
-                'Icy-MetaData': '1'  # Request Shoutcast/Icecast metadata
-            })
-
-            logger.info(f"Connecting to stream: {stream_url}")
-            self._stream_response = self._session.get(stream_url, stream=True, timeout=30)
-            self._stream_response.raise_for_status()
-
-            # Extract comprehensive stream metadata from headers
-            headers = self._stream_response.headers
-            content_type = headers.get('Content-Type', 'unknown')
-
-            # Auto-detect format from content-type if not specified
-            detected_codec = self._stream_format
-            if 'audio/mpeg' in content_type or 'audio/mp3' in content_type:
-                detected_codec = 'mp3'
-                self._stream_format = 'mp3'
-            elif 'audio/aac' in content_type:
-                detected_codec = 'aac'
-                self._stream_format = 'aac'
-            elif 'audio/ogg' in content_type:
-                detected_codec = 'ogg'
-                self._stream_format = 'ogg'
-
-            # Extract bitrate from headers if available
-            icy_br = headers.get('icy-br', headers.get('Icy-Br', headers.get('ice-audio-info', '')))
-            bitrate = None
-            if icy_br:
-                try:
-                    # Handle formats like "128" or "bitrate=128"
-                    if 'bitrate=' in icy_br:
-                        bitrate = int(icy_br.split('bitrate=')[1].split(';')[0])
-                    else:
-                        bitrate = int(icy_br)
-                except (ValueError, IndexError):
-                    pass
-
-            # Build metadata dictionary
-            self._stream_metadata = {
-                'stream_url': stream_url,
-                'resolved_url': stream_url,
-                'codec': detected_codec,
-                'content_type': content_type,
-                'bitrate_kbps': bitrate,
-                'icy_name': headers.get('icy-name', headers.get('Icy-Name')),
-                'icy_genre': headers.get('icy-genre', headers.get('Icy-Genre')),
-                'icy_description': headers.get('icy-description', headers.get('Icy-Description')),
-                'server': headers.get('Server'),
-                'connection_timestamp': time.time(),
-            }
-
-            # Update metrics with stream metadata
-            self.metrics.metadata = self._stream_metadata.copy()
-
-            # Store bitrate for rate limiting
-            self._stream_bitrate = bitrate if bitrate else 128  # Default to 128 kbps if not detected
-
-            # Log comprehensive stream metadata
-            logger.info(f"Stream connected: {stream_url}")
-            logger.info(f"  Codec: {detected_codec} | Content-Type: {content_type}")
-            if bitrate:
-                logger.info(f"  Bitrate: {bitrate} kbps")
-            if self._stream_metadata.get('icy_name'):
-                logger.info(f"  Station: {self._stream_metadata['icy_name']}")
-            if self._stream_metadata.get('icy_genre'):
-                logger.info(f"  Genre: {self._stream_metadata['icy_genre']}")
-
-            self.status = AudioSourceStatus.RUNNING
-            self._reconnect_attempts = 0
-            logger.info(f"Started stream audio capture: {stream_url} (format: {self._stream_format})")
-
-        except Exception as e:
-            raise RuntimeError(f"Failed to start stream capture: {e}")
-
-    def _stop_capture(self) -> None:
-        """Stop HTTP stream audio capture."""
-        # Stop FFmpeg process first
-        if self._ffmpeg_process:
             try:
-                self._ffmpeg_process.terminate()
-                self._ffmpeg_process.wait(timeout=2)
-            except Exception:
+                response = requests.get(url, timeout=10)
+                response.raise_for_status()
+            except Exception as exc:
+                raise RuntimeError(f"Failed to fetch playlist {url}: {exc}") from exc
+
+            for line in response.text.splitlines():
+                entry = line.strip()
+                if not entry or entry.startswith('#'):
+                    continue
+
+                candidate = urljoin(url, entry)
+                candidate_parsed = urlparse(candidate)
+                if candidate_parsed.scheme in ("http", "https") and candidate_parsed.netloc:
+                    logger.info(f"Resolved M3U entry to stream URL: {candidate}")
+                    return candidate
+
+            raise RuntimeError(f"Playlist {url} did not contain a playable stream URL")
+
+        return url
+
+    def _build_ffmpeg_command(self, stream_url: str) -> List[str]:
+        """Construct the FFmpeg command used for streaming + decoding."""
+        return [
+            'ffmpeg',
+            '-hide_banner',
+            '-loglevel', 'error',
+            '-nostdin',
+            '-user_agent', 'EAS-Station/1.0',
+            '-headers', 'Icy-MetaData:1\r\n',
+            '-reconnect', '1',
+            '-reconnect_streamed', '1',
+            '-reconnect_on_network_error', '1',
+            '-reconnect_delay_max', '5',
+            '-fflags', '+genpts',
+            '-i', stream_url,
+            '-vn',
+            '-acodec', 'pcm_s16le',
+            '-ar', str(self.config.sample_rate),
+            '-ac', str(self.config.channels),
+            '-f', 's16le',
+            'pipe:1',
+        ]
+
+    def _launch_ffmpeg_process(self) -> None:
+        """Start a fresh FFmpeg process that reads from the resolved stream URL."""
+        if not self._resolved_stream_url:
+            raise RuntimeError("Stream URL has not been resolved yet")
+
+        self._stop_ffmpeg_process()
+        command = self._build_ffmpeg_command(self._resolved_stream_url)
+        logger.info(f"{self.config.name}: launching FFmpeg decoder")
+
+        try:
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                stdin=subprocess.DEVNULL,
+                bufsize=0,
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeError("FFmpeg executable not found in PATH") from exc
+        except Exception as exc:
+            raise RuntimeError(f"Failed to start FFmpeg: {exc}") from exc
+
+        if process.stdout is None:
+            process.kill()
+            raise RuntimeError("FFmpeg stdout pipe was not created")
+
+        # Make stdout non-blocking so the capture loop can poll without hanging
+        os.set_blocking(process.stdout.fileno(), False)
+
+        # Drain stderr in a background thread to avoid the pipe filling up
+        if process.stderr is not None:
+            self._stderr_thread = threading.Thread(
+                target=self._stderr_pump,
+                args=(process,),
+                name=f"ffmpeg-stderr-{self.config.name}",
+                daemon=True,
+            )
+            self._stderr_thread.start()
+        else:
+            self._stderr_thread = None
+
+        self._ffmpeg_process = process
+        self._pcm_backlog.clear()
+        self._last_restart = time.time()
+
+    def _stop_ffmpeg_process(self) -> None:
+        """Terminate any running FFmpeg process and clean up resources."""
+        process = self._ffmpeg_process
+        self._ffmpeg_process = None
+
+        if process is None:
+            return
+
+        try:
+            if process.poll() is None:
+                process.terminate()
                 try:
-                    self._ffmpeg_process.kill()
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+        finally:
+            if process.stdout is not None:
+                try:
+                    process.stdout.close()
                 except Exception:
                     pass
-            self._ffmpeg_process = None
+            if process.stderr is not None:
+                try:
+                    process.stderr.close()
+                except Exception:
+                    pass
 
-        if self._ffmpeg_thread and self._ffmpeg_thread.is_alive():
-            self._ffmpeg_thread.join(timeout=2)
-        self._ffmpeg_thread = None
+        if self._stderr_thread and self._stderr_thread.is_alive():
+            self._stderr_thread.join(timeout=1)
+        self._stderr_thread = None
 
-        if self._stream_response:
-            try:
-                self._stream_response.close()
-            except Exception:
-                pass
-            self._stream_response = None
+    def _restart_ffmpeg_process(self, reason: str) -> None:
+        """Restart FFmpeg with a small backoff to avoid tight crash loops."""
+        now = time.time()
+        if now - self._last_restart < self._restart_delay_seconds:
+            return
 
-        if self._session:
-            try:
-                self._session.close()
-            except Exception:
-                pass
-            self._session = None
+        logger.warning(f"{self.config.name}: restarting FFmpeg decoder ({reason})")
+        try:
+            self._launch_ffmpeg_process()
+        except Exception as exc:
+            self.status = AudioSourceStatus.ERROR
+            self.error_message = str(exc)
+            logger.error(f"{self.config.name}: failed to restart FFmpeg: {exc}")
 
-        self._buffer.clear()
-        self._pcm_buffer.clear()
-        self._decoder = None
+    def _stderr_pump(self, process: subprocess.Popen) -> None:
+        """Continuously drain FFmpeg stderr so it never blocks."""
+        stderr = process.stderr
+        if stderr is None:
+            return
+
+        try:
+            for raw_line in iter(stderr.readline, b''):
+                if not raw_line:
+                    break
+                text = raw_line.decode('utf-8', errors='replace').strip()
+                if text:
+                    logger.warning(f"{self.config.name}: FFmpeg stderr: {text}")
+        except Exception as exc:
+            logger.debug(f"{self.config.name}: stderr pump stopped: {exc}")
+
+    def _start_capture(self) -> None:
+        """Resolve the stream URL and start FFmpeg decoding."""
+        resolved = self._resolve_stream_url(self._stream_url)
+        self._resolved_stream_url = resolved
+
+        self._stream_metadata = {
+            'stream_url': self._stream_url,
+            'resolved_url': resolved,
+            'connection_timestamp': time.time(),
+            'decoder': 'ffmpeg',
+        }
+        self.metrics.metadata = self._stream_metadata.copy()
+
+        logger.info(f"{self.config.name}: resolved stream to {resolved}")
+        self._launch_ffmpeg_process()
+        self.status = AudioSourceStatus.RUNNING
+
+    def _stop_capture(self) -> None:
+        """Stop FFmpeg decoding for the stream source."""
+        self._stop_ffmpeg_process()
+        self._pcm_backlog.clear()
 
     def _read_audio_chunk(self) -> Optional[np.ndarray]:
-        """Read audio chunk from HTTP stream with improved error handling."""
-        # Reset activity flag at start of each read
+        """Read decoded PCM samples from FFmpeg stdout."""
         self._had_data_activity = False
 
-        # If stream is disconnected, attempt reconnection
-        if not self._stream_response:
-            if self._reconnect_attempts < self._max_reconnect_attempts:
-                self._reconnect_attempts += 1
-                logger.info(f"Stream disconnected, attempting to reconnect (attempt {self._reconnect_attempts}/{self._max_reconnect_attempts})")
-                time.sleep(0.5)  # Reduced from 2s to 0.5s for faster recovery
-                try:
-                    self._start_capture()
-                    # Return None this iteration, will read data on next call
-                    return None
-                except Exception as e:
-                    logger.error(f"Reconnection failed: {e}")
-                    self.status = AudioSourceStatus.DISCONNECTED
-                    return None
-            else:
-                # Max reconnection attempts reached
-                self.status = AudioSourceStatus.ERROR
-                self.error_message = f"Max reconnection attempts ({self._max_reconnect_attempts}) reached"
-                return None
-
-        try:
-            # Determine how much space is available before hitting the HTTP buffer cap
-            available_space = self._max_http_buffer_size - len(self._buffer)
-            if available_space <= 0:
-                # Buffer is full - first try to drain already-decoded PCM before sleeping
-                decoded_chunk = self._decode_stream_chunk()
-                if decoded_chunk is not None:
-                    return decoded_chunk
-
-                # Nothing ready for playback yet; pause reads so the feeder can catch up
-                now = time.time()
-                if now - self._last_http_backpressure_log > 5.0:
-                    logger.warning(
-                        f"{self.config.name}: HTTP buffer full ({len(self._buffer)} bytes), "
-                        "pausing stream reads to apply backpressure"
-                    )
-                    self._last_http_backpressure_log = now
-                time.sleep(0.01)
-                return None
-
-            # Read data from stream (smaller chunks for more continuous flow)
-            chunk_size = min(self.config.buffer_size * 4, available_space)
-
-            try:
-                data = self._stream_response.raw.read(chunk_size)
-            except Exception as e:
-                logger.error(f"Error reading from stream: {e}")
-                # Attempt reconnection with shorter delay
-                if self._reconnect_attempts < self._max_reconnect_attempts:
-                    self._reconnect_attempts += 1
-                    logger.info(f"Attempting to reconnect to stream (attempt {self._reconnect_attempts}/{self._max_reconnect_attempts})")
-                    time.sleep(0.5)  # Reduced from 2s to 0.5s
-                    try:
-                        self._stop_capture()
-                        self._start_capture()
-                        return None
-                    except Exception as reconnect_err:
-                        logger.error(f"Reconnection attempt failed: {reconnect_err}")
-                        self.status = AudioSourceStatus.DISCONNECTED
-                        return None
-                else:
-                    self.status = AudioSourceStatus.ERROR
-                    self.error_message = f"Read error after {self._max_reconnect_attempts} reconnect attempts: {str(e)}"
-                    return None
-
-            if not data:
-                logger.warning("Stream ended or no data received")
-                self.status = AudioSourceStatus.DISCONNECTED
-                return None
-
-            # Append to buffer
-            self._buffer.extend(data)
-            # Mark that we successfully read data from the stream
-            self._had_data_activity = True
-
-            return self._decode_stream_chunk()
-
-        except Exception as e:
-            logger.error(f"Error reading stream audio: {e}")
+        process = self._ffmpeg_process
+        if process is None or process.poll() is not None:
+            self._restart_ffmpeg_process("decoder not running")
             return None
 
-    def _decode_stream_chunk(self) -> Optional[np.ndarray]:
-        """Dispatch decoding based on the configured stream format."""
-        if self._stream_format == 'mp3':
-            return self._decode_mp3_chunk()
-        if self._stream_format == 'aac':
-            return self._decode_aac_chunk()
-        if self._stream_format == 'ogg':
-            return self._decode_ogg_chunk()
-        if self._stream_format == 'raw':
-            return self._decode_raw_chunk()
+        stdout = process.stdout
+        if stdout is None:
+            self._restart_ffmpeg_process("stdout pipe missing")
+            return None
 
-        logger.error(f"Unsupported stream format: {self._stream_format}")
-        return None
-
-    def _find_mp3_frame_sync(self, data: bytearray, start_pos: int = 0) -> int:
-        """
-        Find the next MP3 frame sync position in the buffer.
-        MP3 frame sync: 11 bits set to 1 (0xFF 0xE0 or higher for second byte).
-        Returns position of sync, or -1 if not found.
-        """
-        for i in range(start_pos, len(data) - 1):
-            # Check for frame sync pattern: 0xFF followed by 0xE0-0xFF
-            if data[i] == 0xFF and (data[i + 1] & 0xE0) == 0xE0:
-                return i
-        return -1
-
-    def _start_ffmpeg_decoder(self) -> None:
-        """Start FFmpeg subprocess for decoding stream audio."""
-        import subprocess
-        import os
-
-        if self._ffmpeg_process:
-            return  # Already running
+        bytes_per_sample = 2 * self.config.channels
+        target_bytes = self.config.buffer_size * bytes_per_sample
 
         try:
-            # Start FFmpeg to decode stream to raw PCM
-            self._ffmpeg_process = subprocess.Popen([
-                'ffmpeg',
-                '-f', self._stream_format,  # Input format (mp3, aac, etc.)
-                '-i', 'pipe:0',              # Read from stdin
-                '-f', 's16le',               # Output 16-bit PCM little-endian
-                '-ar', str(self.config.sample_rate),  # Sample rate
-                '-ac', '1',                  # Mono output
-                '-loglevel', 'error',        # Only show errors
-                'pipe:1'                     # Output to stdout
-            ],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            bufsize=4096
-            )
-
-            # Set all pipes to non-blocking mode to prevent deadlocks
-            if self._ffmpeg_process.stdout:
-                os.set_blocking(self._ffmpeg_process.stdout.fileno(), False)
-                logger.debug(f"Set FFmpeg stdout to non-blocking mode for {self.config.name}")
-
-            if self._ffmpeg_process.stdin:
-                os.set_blocking(self._ffmpeg_process.stdin.fileno(), False)
-                logger.debug(f"Set FFmpeg stdin to non-blocking mode for {self.config.name}")
-
-            # CRITICAL: Set stderr to non-blocking to prevent FFmpeg from blocking on error writes
-            if self._ffmpeg_process.stderr:
-                os.set_blocking(self._ffmpeg_process.stderr.fileno(), False)
-                logger.debug(f"Set FFmpeg stderr to non-blocking mode for {self.config.name}")
-
-            # Start thread to feed data to FFmpeg
-            self._ffmpeg_thread = threading.Thread(
-                target=self._feed_ffmpeg,
-                name=f"ffmpeg-feeder-{self.config.name}",
-                daemon=True
-            )
-            self._ffmpeg_thread.start()
-
-            logger.info(f"Started FFmpeg decoder for {self.config.name}")
-
-        except Exception as e:
-            logger.error(f"Failed to start FFmpeg decoder: {e}")
-            self.status = AudioSourceStatus.ERROR
-            self.error_message = f"FFmpeg decoder error: {e}"
-
-    def _feed_ffmpeg(self) -> None:
-        """Thread function to feed encoded data from buffer to FFmpeg stdin with backpressure."""
-        logger.info(f"{self.config.name}: Feeder thread started")
-        total_bytes_fed = 0
-        last_log_time = time.time()
-
-        # Maximum HTTP buffer size before we stop feeding (backpressure)
-        max_buffer_size = 65536  # 64KB - keep buffer small
-
-        # Feed in 4KB chunks
-        chunk_size = 4096
-
-        logger.info(f"{self.config.name}: Feeder using backpressure control (max buffer: {max_buffer_size} bytes)")
-
-        try:
-            while self._ffmpeg_process and self._ffmpeg_process.poll() is None:
+            while len(self._pcm_backlog) < target_bytes:
                 try:
-                    buffer_size = len(self._buffer)
-
-                    # Backpressure: only feed if buffer is below threshold
-                    # This automatically rate-limits based on FFmpeg's actual consumption rate
-                    if buffer_size > 0 and buffer_size < max_buffer_size:
-                        # Send data to FFmpeg stdin (non-blocking)
-                        chunk = bytes(self._buffer[:chunk_size])
-
-                        if self._ffmpeg_process and self._ffmpeg_process.stdin:
-                            try:
-                                bytes_written = self._ffmpeg_process.stdin.write(chunk)
-                                if bytes_written:
-                                    # CRITICAL: Use del instead of reassignment to avoid race condition
-                                    # The capture loop extends the buffer while we're removing from it
-                                    # Must modify in-place, not create new bytearray
-                                    del self._buffer[:bytes_written]
-                                    total_bytes_fed += bytes_written
-
-                                    # Log feeding rate periodically
-                                    now = time.time()
-                                    if now - last_log_time > 2.0:
-                                        self._ffmpeg_process.stdin.flush()  # Flush periodically
-                                        rate_kbps = (total_bytes_fed * 8 / 1000) / (now - last_log_time)
-                                        logger.info(f"{self.config.name}: Fed {total_bytes_fed} bytes to FFmpeg ({rate_kbps:.1f} kbps), buffer size: {len(self._buffer)} bytes")
-                                        total_bytes_fed = 0
-                                        last_log_time = now
-
-                                    # Small delay to prevent busy loop
-                                    time.sleep(0.001)
-                                else:
-                                    # Write returned 0 - pipe is full
-                                    if not hasattr(self, '_last_blocked_log'):
-                                        self._last_blocked_log = 0
-                                    now = time.time()
-                                    if now - self._last_blocked_log > 5.0:
-                                        logger.warning(f"{self.config.name}: FFmpeg stdin write blocked (returned 0), buffer size: {buffer_size} bytes, PCM buffer: {len(self._pcm_buffer)} bytes")
-                                        self._last_blocked_log = now
-                                    time.sleep(0.01)  # Sleep when blocked
-                            except BlockingIOError:
-                                # Write would block
-                                if not hasattr(self, '_last_blocked_log'):
-                                    self._last_blocked_log = 0
-                                now = time.time()
-                                if now - self._last_blocked_log > 5.0:
-                                    logger.warning(f"{self.config.name}: FFmpeg stdin BlockingIOError, buffer size: {buffer_size} bytes, PCM buffer: {len(self._pcm_buffer)} bytes")
-                                    self._last_blocked_log = now
-                                time.sleep(0.01)  # Sleep when blocked
-                            except BrokenPipeError:
-                                logger.warning(f"{self.config.name}: FFmpeg stdin pipe broken, decoder may have exited")
-                                break
-                    elif buffer_size >= max_buffer_size:
-                        # Buffer too large - apply backpressure by not feeding
-                        # Log periodically
-                        if not hasattr(self, '_last_backpressure_log'):
-                            self._last_backpressure_log = 0
-                        now = time.time()
-                        if now - self._last_backpressure_log > 5.0:
-                            logger.warning(f"{self.config.name}: Applying backpressure - buffer size: {buffer_size} bytes (max: {max_buffer_size}), PCM buffer: {len(self._pcm_buffer)} bytes")
-                            self._last_backpressure_log = now
-                        time.sleep(0.1)  # Sleep longer when applying backpressure
-                    else:
-                        # No data to send
-                        time.sleep(0.01)  # 10ms when no data
-
-                except Exception as e:
-                    logger.error(f"{self.config.name}: Error feeding FFmpeg: {e}")
-                    break
-        except Exception as e:
-            logger.error(f"{self.config.name}: Fatal error in feeder thread: {e}", exc_info=True)
-        finally:
-            logger.info(f"{self.config.name}: Feeder thread exiting")
-
-    def _decode_mp3_chunk(self) -> Optional[np.ndarray]:
-        """Decode MP3 audio from buffer using FFmpeg subprocess."""
-        try:
-            # Start FFmpeg decoder if not already running
-            if not self._ffmpeg_process or self._ffmpeg_process.poll() is not None:
-                # Check if FFmpeg died unexpectedly
-                if self._ffmpeg_process and self._ffmpeg_process.poll() is not None:
-                    returncode = self._ffmpeg_process.returncode
-                    stderr_output = ""
-                    if self._ffmpeg_process.stderr:
-                        try:
-                            stderr_output = self._ffmpeg_process.stderr.read().decode('utf-8', errors='replace')
-                        except:
-                            pass
-                    logger.warning(f"{self.config.name}: FFmpeg decoder died (return code: {returncode}), restarting. Stderr: {stderr_output[:500]}")
-                self._start_ffmpeg_decoder()
-
-            if not self._ffmpeg_process:
-                return None
-
-            # CRITICAL: Drain both stdout (PCM data) and stderr (errors) to prevent FFmpeg deadlock
-            # If either pipe fills to 64KB, FFmpeg will block on writes and stop consuming stdin
-
-            # Drain stderr first to catch any errors
-            if self._ffmpeg_process.stderr:
-                try:
-                    stderr_data = self._ffmpeg_process.stderr.read()
-                    if stderr_data:
-                        stderr_text = stderr_data.decode('utf-8', errors='replace').strip()
-                        if stderr_text:
-                            logger.warning(f"{self.config.name}: FFmpeg stderr: {stderr_text[:500]}")
+                    chunk = stdout.read(target_bytes - len(self._pcm_backlog))
                 except BlockingIOError:
-                    pass  # No stderr data available
-                except Exception as e:
-                    logger.debug(f"Error reading FFmpeg stderr: {e}")
+                    break
 
-            # Drain stdout (PCM data)
-            if self._ffmpeg_process.stdout:
-                # Keep reading until no more data available (non-blocking)
-                total_read = 0
-                drain_iterations = 0
-                max_pcm_buffer_size = 500000  # 500KB max PCM buffer (~5 seconds at 44.1kHz mono)
+                if not chunk:
+                    if process.poll() is not None:
+                        self._restart_ffmpeg_process("decoder exited")
+                    break
 
-                while True:
-                    drain_iterations += 1
-                    # Stop draining if PCM buffer is too large (backpressure)
-                    if len(self._pcm_buffer) >= max_pcm_buffer_size:
-                        if not hasattr(self, '_last_pcm_backpressure_log'):
-                            self._last_pcm_backpressure_log = 0
-                        now = time.time()
-                        if now - self._last_pcm_backpressure_log > 5.0:
-                            logger.warning(f"{self.config.name}: PCM buffer full ({len(self._pcm_buffer)} bytes), stopping stdout drain (downstream bottleneck)")
-                            self._last_pcm_backpressure_log = now
-                        break
-
-                    try:
-                        # Read up to 64KB of PCM data per iteration
-                        chunk = self._ffmpeg_process.stdout.read(65536)
-                        if chunk:
-                            self._pcm_buffer.extend(chunk)
-                            total_read += len(chunk)
-                        else:
-                            # No more data available
-                            break
-                    except BlockingIOError:
-                        # No data available - this is expected with non-blocking reads
-                        break
-                    except Exception as e:
-                        logger.debug(f"Error reading from FFmpeg stdout: {e}")
-                        break
-
-                # Log stdout draining activity (even when no data to diagnose issues)
-                if total_read > 0:
-                    logger.info(f"{self.config.name}: Drained {total_read} bytes from FFmpeg stdout in {drain_iterations} iteration(s), PCM buffer: {len(self._pcm_buffer)} bytes, HTTP buffer: {len(self._buffer)} bytes")
-                elif drain_iterations == 1:
-                    # First iteration found no data - FFmpeg hasn't produced output yet
-                    if not hasattr(self, '_last_empty_drain_log'):
-                        self._last_empty_drain_log = 0
-                    if time.time() - self._last_empty_drain_log > 5.0:
-                        logger.debug(f"{self.config.name}: Stdout drain found no data immediately (FFmpeg may still be buffering)")
-                        self._last_empty_drain_log = time.time()
-
-            # Convert PCM buffer to numpy array when we have enough data
-            bytes_per_sample = 2  # 16-bit = 2 bytes
-            samples_available = len(self._pcm_buffer) // bytes_per_sample
-
-            # Aim for ~0.05 seconds of audio per chunk
-            target_samples = int(self.config.sample_rate * 0.05)
-
-            if samples_available >= target_samples:
-                # Extract samples
-                bytes_to_extract = target_samples * bytes_per_sample
-                pcm_data = bytes(self._pcm_buffer[:bytes_to_extract])
-                # CRITICAL: Use del instead of reassignment for in-place modification
-                del self._pcm_buffer[:bytes_to_extract]
-
-                # Convert to numpy array
-                samples = np.frombuffer(pcm_data, dtype=np.int16)
-
-                # Convert to float32 normalized to [-1, 1]
-                samples = samples.astype(np.float32) / 32768.0
-
-                return samples
-            else:
-                # DEBUG: Periodically log when waiting for more data
-                if not hasattr(self, '_last_wait_log'):
-                    self._last_wait_log = 0
-                if time.time() - self._last_wait_log > 2.0:  # Log every 2 seconds
-                    logger.warning(f"{self.config.name}: Waiting for PCM data - have {samples_available}/{target_samples} samples ({len(self._pcm_buffer)} bytes), HTTP buffer: {len(self._buffer)} bytes")
-                    self._last_wait_log = time.time()
-
+                self._pcm_backlog.extend(chunk)
+                self._had_data_activity = True
+        except Exception as exc:
+            logger.error(f"{self.config.name}: error reading from FFmpeg stdout: {exc}")
+            self._restart_ffmpeg_process("stdout read error")
             return None
 
-        except Exception as e:
-            logger.error(f"Error in FFmpeg decoding: {e}")
+        if len(self._pcm_backlog) < target_bytes:
             return None
 
-    def _decode_aac_chunk(self) -> Optional[np.ndarray]:
-        """Decode AAC audio from buffer using FFmpeg."""
-        # FFmpeg handles AAC natively, use the same decoder
-        return self._decode_mp3_chunk()
+        raw = bytes(self._pcm_backlog[:target_bytes])
+        del self._pcm_backlog[:target_bytes]
 
-    def _decode_ogg_chunk(self) -> Optional[np.ndarray]:
-        """Decode OGG/Vorbis audio from buffer using FFmpeg."""
-        # FFmpeg handles OGG natively, use the same decoder
-        return self._decode_mp3_chunk()
-
-    def _decode_raw_chunk(self) -> Optional[np.ndarray]:
-        """Decode raw PCM audio from buffer."""
-        try:
-            # Assume 16-bit PCM
-            bytes_needed = self.config.buffer_size * 2
-
-            if len(self._buffer) < bytes_needed:
-                return None
-
-            # Extract samples
-            chunk_data = bytes(self._buffer[:bytes_needed])
-            self._buffer = self._buffer[bytes_needed:]
-
-            # Convert to numpy array
-            audio_array = np.frombuffer(chunk_data, dtype=np.int16)
-            # Convert to float32 normalized to [-1, 1]
-            audio_array = audio_array.astype(np.float32) / 32768.0
-
-            return audio_array
-
-        except Exception as e:
-            logger.error(f"Error decoding raw audio: {e}")
-            return None
-
-    def _analyze_stream_frames(self) -> None:
-        """
-        Analyze stream buffer to detect codec and bitrate from frame headers.
-        Updates stream metadata with detected values.
-        """
-        try:
-            from app_core.audio.stream_analysis import analyze_stream
-
-            # Analyze the current buffer
-            stream_info = analyze_stream(self._buffer, hint_codec=self._stream_format)
-
-            if stream_info:
-                # Update metadata with detected values
-                if stream_info.codec:
-                    self._stream_metadata['codec'] = stream_info.codec
-                    logger.info(f"  Detected codec from frames: {stream_info.codec}")
-
-                if stream_info.bitrate_kbps:
-                    self._stream_metadata['bitrate_kbps'] = stream_info.bitrate_kbps
-                    vbr_note = " (VBR avg)" if stream_info.is_vbr else ""
-                    logger.info(f"  Detected bitrate from frames: {stream_info.bitrate_kbps} kbps{vbr_note}")
-
-                if stream_info.sample_rate:
-                    self._stream_metadata['detected_sample_rate'] = stream_info.sample_rate
-                    logger.info(f"  Detected sample rate: {stream_info.sample_rate} Hz")
-
-                if stream_info.channels:
-                    self._stream_metadata['detected_channels'] = stream_info.channels
-
-                if stream_info.codec_version:
-                    self._stream_metadata['codec_version'] = stream_info.codec_version
-                    logger.info(f"  Codec version: {stream_info.codec_version}")
-
-                if stream_info.is_vbr:
-                    self._stream_metadata['is_vbr'] = True
-
-                # Update metrics with the enhanced metadata
-                self.metrics.metadata = self._stream_metadata.copy()
-
-        except ImportError:
-            logger.debug("Stream analysis module not available")
-        except Exception as e:
-            logger.debug(f"Error analyzing stream frames: {e}")
-
+        samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+        return samples
 
 # Factory function for creating sources
 def create_audio_source(config: AudioSourceConfig) -> AudioSourceAdapter:
