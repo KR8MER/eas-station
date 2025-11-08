@@ -243,8 +243,6 @@ class IcecastStreamer:
                 '-ice_description', stream_description,
                 '-ice_genre', stream_genre,
                 '-ice_public', '0',  # Disable directory listing
-                '-tcp_nodelay', '1',  # Disable Nagle's algorithm for lower latency
-                '-send_expect_100', '0',  # Don't wait for 100-continue
                 icecast_url
             ])
 

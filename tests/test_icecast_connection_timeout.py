@@ -1,4 +1,9 @@
-"""Tests for Icecast connection timeout prevention."""
+"""Tests for Icecast connection timeout prevention.
+
+The 10-minute timeout issue is fixed server-side in Icecast configuration
+by setting source-timeout to 0 (infinite). This test verifies that FFmpeg
+commands are generated correctly without invalid protocol options.
+"""
 
 import subprocess
 import sys
@@ -19,8 +24,8 @@ class _DummyAudioSource:
     metrics = mock.MagicMock(metadata={})
 
 
-def test_ffmpeg_command_includes_infinite_timeout():
-    """Ensure FFmpeg command includes -timeout -1 to prevent 10-minute disconnect."""
+def test_ffmpeg_command_valid_for_icecast_protocol():
+    """Ensure FFmpeg command is valid and doesn't include HTTP-only options."""
 
     config = IcecastConfig(
         server='localhost',
@@ -47,60 +52,21 @@ def test_ffmpeg_command_includes_infinite_timeout():
     with mock.patch('subprocess.Popen', side_effect=mock_popen):
         streamer._start_ffmpeg()
 
-    # Verify timeout option is present
-    assert '-timeout' in captured_cmd, "FFmpeg command missing -timeout option"
+    # Verify no invalid HTTP-only options for icecast:// protocol
+    invalid_options = ['-timeout', '-tcp_nodelay', '-send_expect_100', '-rw_timeout']
+    for opt in invalid_options:
+        assert opt not in captured_cmd, (
+            f"FFmpeg command includes {opt} which is not valid for icecast:// protocol. "
+            f"This causes immediate connection failures."
+        )
 
-    # Find the timeout value
-    timeout_index = captured_cmd.index('-timeout')
-    timeout_value = captured_cmd[timeout_index + 1]
-
-    assert timeout_value == '-1', (
-        f"Expected timeout value of -1 (infinite), got {timeout_value}. "
-        "This is critical to prevent the 10-minute disconnect bug."
-    )
-
-
-def test_ffmpeg_command_includes_tcp_nodelay():
-    """Ensure FFmpeg command includes TCP_NODELAY for lower latency."""
-
-    config = IcecastConfig(
-        server='localhost',
-        port=8000,
-        password='test_password',
-        mount='test_mount',
-        name='Test Stream',
-        description='Test stream',
-    )
-    streamer = IcecastStreamer(config, _DummyAudioSource())
-
-    captured_cmd = []
-
-    def mock_popen(cmd, **kwargs):
-        captured_cmd.extend(cmd)
-        mock_process = mock.MagicMock()
-        mock_process.poll.return_value = None
-        mock_process.stdin = mock.MagicMock()
-        mock_process.stdout = mock.MagicMock()
-        mock_process.stderr = mock.MagicMock()
-        return mock_process
-
-    with mock.patch('subprocess.Popen', side_effect=mock_popen):
-        streamer._start_ffmpeg()
-
-    # Verify tcp_nodelay option is present
-    assert '-tcp_nodelay' in captured_cmd, "FFmpeg command missing -tcp_nodelay option"
-
-    # Find the value
-    nodelay_index = captured_cmd.index('-tcp_nodelay')
-    nodelay_value = captured_cmd[nodelay_index + 1]
-
-    assert nodelay_value == '1', (
-        f"Expected tcp_nodelay value of 1, got {nodelay_value}"
-    )
+    # Verify the command includes valid icecast options
+    assert '-ice_public' in captured_cmd, "Missing valid Icecast option -ice_public"
+    assert 'icecast://' in ' '.join(captured_cmd), "Missing icecast:// URL"
 
 
-def test_ffmpeg_command_disables_expect_100():
-    """Ensure FFmpeg command disables Expect: 100-continue for better compatibility."""
+def test_icecast_config_includes_ice_public():
+    """Ensure ice_public option is set to disable directory listing."""
 
     config = IcecastConfig(
         server='localhost',
@@ -126,27 +92,25 @@ def test_ffmpeg_command_disables_expect_100():
     with mock.patch('subprocess.Popen', side_effect=mock_popen):
         streamer._start_ffmpeg()
 
-    # Verify send_expect_100 option is present
-    assert '-send_expect_100' in captured_cmd, "FFmpeg command missing -send_expect_100 option"
+    # Verify ice_public option is present
+    assert '-ice_public' in captured_cmd, "FFmpeg command missing -ice_public option"
 
     # Find the value
-    expect_index = captured_cmd.index('-send_expect_100')
-    expect_value = captured_cmd[expect_index + 1]
+    public_index = captured_cmd.index('-ice_public')
+    public_value = captured_cmd[public_index + 1]
 
-    assert expect_value == '0', (
-        f"Expected send_expect_100 value of 0, got {expect_value}"
+    assert public_value == '0', (
+        f"Expected ice_public value of 0, got {public_value}"
     )
 
 
 if __name__ == '__main__':
     # Run tests
-    test_ffmpeg_command_includes_infinite_timeout()
-    print("✓ FFmpeg includes -timeout -1 (infinite)")
+    test_ffmpeg_command_valid_for_icecast_protocol()
+    print("✓ FFmpeg command is valid for icecast:// protocol")
 
-    test_ffmpeg_command_includes_tcp_nodelay()
-    print("✓ FFmpeg includes -tcp_nodelay 1")
+    test_icecast_config_includes_ice_public()
+    print("✓ FFmpeg includes -ice_public 0")
 
-    test_ffmpeg_command_disables_expect_100()
-    print("✓ FFmpeg includes -send_expect_100 0")
-
-    print("\n✅ All connection timeout prevention tests passed!")
+    print("\n✅ All Icecast connection tests passed!")
+    print("Note: 10-minute timeout fix is in Icecast server config (source-timeout=0)")
