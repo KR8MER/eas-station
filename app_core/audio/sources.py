@@ -979,8 +979,13 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
             # Try to extract text="" or song="" attribute (iHeartRadio format)
             text_match = re.search(r'text="([^"]+)"', stream_title)
+            song_attr_match = re.search(r'song="([^"]+)"', stream_title)
             if text_match:
                 title = text_match.group(1).strip()
+                updates['song_title'] = title
+                updates['title'] = title
+            elif song_attr_match:
+                title = song_attr_match.group(1).strip()
                 updates['song_title'] = title
                 updates['title'] = title
 
@@ -989,6 +994,18 @@ class StreamSourceAdapter(AudioSourceAdapter):
             if artist_match:
                 artist = artist_match.group(1).strip()
                 updates['artist'] = artist
+                updates['song_artist'] = artist
+            elif text_match or song_attr_match:
+                # Pattern like "Artist - text=\"Title\" ..." or "Artist - song=\"Title\" ..."
+                attr_key = 'text' if text_match else 'song'
+                prefix_pattern = rf'(?P<artist>.+?)-\s*{attr_key}="'
+                prefix_match = re.match(prefix_pattern, stream_title)
+                if prefix_match:
+                    artist_candidate = prefix_match.group('artist').strip()
+                    if artist_candidate:
+                        artist = artist_candidate
+                        updates['artist'] = artist
+                        updates['song_artist'] = artist
 
             # Try to extract album art URL
             artwork_match = re.search(r'(?:amgArtworkURL|artworkURL|artwork_url)="([^"]+)"', stream_title)
@@ -1019,6 +1036,7 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
                     if not artist_match and artist:
                         updates['artist'] = artist
+                        updates.setdefault('song_artist', artist)
                     if not text_match:
                         updates['song_title'] = title
                         updates['title'] = title
