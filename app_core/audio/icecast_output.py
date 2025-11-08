@@ -455,15 +455,6 @@ class IcecastStreamer:
         if not mount_path.startswith('/'):
             mount_path = f"/{mount_path}"
 
-        # Log what we're about to encode for debugging
-        logger.debug(
-            "Encoding metadata for %s: song_value=%r (type=%s, len=%d)",
-            self.config.mount,
-            song_value[:100] if len(song_value) > 100 else song_value,
-            type(song_value).__name__,
-            len(song_value),
-        )
-
         # Manually build URL with UTF-8 encoded parameters to avoid latin-1 encoding issues
         # Ensure values are proper Unicode strings before percent-encoding
         mount_str = str(mount_path) if mount_path else ''
@@ -478,11 +469,25 @@ class IcecastStreamer:
         base_url = f"http://{self.config.server}:{self.config.port}/admin/metadata"
         url = f"{base_url}?mode=updinfo&mount={encoded_mount}&song={encoded_song}"
 
+        # HTTP Basic Auth requires ASCII/latin-1 encoding
+        # Sanitize credentials to prevent encoding errors
+        try:
+            auth_user = str(self.config.admin_user or '').encode('latin-1').decode('latin-1')
+            auth_pass = str(self.config.admin_password or '').encode('latin-1').decode('latin-1')
+        except UnicodeEncodeError:
+            # If credentials contain non-latin-1 characters, use ASCII subset
+            auth_user = str(self.config.admin_user or '').encode('ascii', 'replace').decode('ascii')
+            auth_pass = str(self.config.admin_password or '').encode('ascii', 'replace').decode('ascii')
+            logger.warning(
+                "Icecast admin credentials contain non-ASCII characters for %s, using fallback encoding",
+                self.config.mount,
+            )
+
         try:
             # Make the HTTP GET request with the pre-encoded URL
             response = requests.get(
                 url,
-                auth=(self.config.admin_user, self.config.admin_password),
+                auth=(auth_user, auth_pass),
                 timeout=5.0,
             )
         except requests_exceptions.RequestException as exc:
