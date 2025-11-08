@@ -847,24 +847,26 @@ class StreamSourceAdapter(AudioSourceAdapter):
                         try:
                             bytes_written = self._ffmpeg_process.stdin.write(chunk)
                             if bytes_written:
-                                # Only remove the bytes that were actually written
-                                self._buffer = self._buffer[bytes_written:]
+                                # CRITICAL: Use del instead of reassignment to avoid race condition
+                                # The capture loop extends the buffer while we're removing from it
+                                # Must modify in-place, not create new bytearray
+                                del self._buffer[:bytes_written]
                                 self._ffmpeg_process.stdin.flush()
                             else:
                                 # Write would block, sleep briefly
-                                time.sleep(0.01)
+                                time.sleep(0.001)  # Reduced from 10ms to 1ms
                         except BlockingIOError:
                             # Write would block, buffer is full, sleep briefly
-                            time.sleep(0.01)
+                            time.sleep(0.001)  # Reduced from 10ms to 1ms
                         except BrokenPipeError:
-                            logger.warning("FFmpeg stdin pipe broken, decoder may have exited")
+                            logger.warning(f"{self.config.name}: FFmpeg stdin pipe broken, decoder may have exited")
                             break
                 else:
                     # No data to send, sleep briefly
-                    time.sleep(0.01)
+                    time.sleep(0.001)  # Reduced from 10ms to 1ms
 
             except Exception as e:
-                logger.error(f"Error feeding FFmpeg: {e}")
+                logger.error(f"{self.config.name}: Error feeding FFmpeg: {e}")
                 break
 
     def _decode_mp3_chunk(self) -> Optional[np.ndarray]:
