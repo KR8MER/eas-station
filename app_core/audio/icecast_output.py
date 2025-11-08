@@ -218,9 +218,13 @@ class IcecastStreamer:
     def _start_ffmpeg(self) -> bool:
         """Start FFmpeg encoder and Icecast streamer."""
         try:
-            # Build Icecast URL
+            # Build Icecast URL with properly encoded credentials
+            # URL-encode the password to handle special characters like @, :, /, etc.
+            from urllib.parse import quote
+            encoded_password = quote(self.config.password, safe='')
+
             icecast_url = (
-                f"icecast://source:{self.config.password}@"
+                f"icecast://source:{encoded_password}@"
                 f"{self.config.server}:{self.config.port}/{self.config.mount}"
             )
 
