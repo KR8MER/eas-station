@@ -874,10 +874,22 @@ class StreamSourceAdapter(AudioSourceAdapter):
                                         total_bytes_fed = 0
                                         last_log_time = now
                                 else:
-                                    # Write would block, sleep briefly
+                                    # Write returned 0 - pipe is full
+                                    if not hasattr(self, '_last_blocked_log'):
+                                        self._last_blocked_log = 0
+                                    now = time.time()
+                                    if now - self._last_blocked_log > 5.0:
+                                        logger.warning(f"{self.config.name}: FFmpeg stdin write blocked (returned 0), buffer size: {len(self._buffer)} bytes")
+                                        self._last_blocked_log = now
                                     time.sleep(0.001)  # Reduced from 10ms to 1ms
                             except BlockingIOError:
                                 # Write would block, buffer is full, sleep briefly
+                                if not hasattr(self, '_last_blocked_log'):
+                                    self._last_blocked_log = 0
+                                now = time.time()
+                                if now - self._last_blocked_log > 5.0:
+                                    logger.warning(f"{self.config.name}: FFmpeg stdin BlockingIOError, buffer size: {len(self._buffer)} bytes")
+                                    self._last_blocked_log = now
                                 time.sleep(0.001)  # Reduced from 10ms to 1ms
                             except BrokenPipeError:
                                 logger.warning(f"{self.config.name}: FFmpeg stdin pipe broken, decoder may have exited")
