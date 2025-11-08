@@ -6,6 +6,7 @@ Concrete implementations of AudioSourceAdapter for different input types.
 
 from __future__ import annotations
 
+import copy
 import logging
 import os
 import subprocess
@@ -536,6 +537,10 @@ class StreamSourceAdapter(AudioSourceAdapter):
         self._stream_metadata: Dict[str, Any] = {}
         self._last_restart = 0.0
         self._restart_delay_seconds = 3.0
+        self._metadata_thread: Optional[threading.Thread] = None
+        self._metadata_stop_event = threading.Event()
+        self._metadata_lock = threading.Lock()
+        self._last_icy_metadata: Optional[str] = None
 
     def _resolve_stream_url(self, url: str) -> str:
         """Validate the configured URL and resolve playlists when needed."""
@@ -713,15 +718,22 @@ class StreamSourceAdapter(AudioSourceAdapter):
             'resolved_url': resolved,
             'connection_timestamp': time.time(),
             'decoder': 'ffmpeg',
+            'icy': {
+                'supported': False,
+            },
         }
-        self.metrics.metadata = self._stream_metadata.copy()
+        with self._metadata_lock:
+            self.metrics.metadata = copy.deepcopy(self._stream_metadata)
+        self._last_icy_metadata = None
 
         logger.info(f"{self.config.name}: resolved stream to {resolved}")
         self._launch_ffmpeg_process()
         self.status = AudioSourceStatus.RUNNING
+        self._start_metadata_listener()
 
     def _stop_capture(self) -> None:
         """Stop FFmpeg decoding for the stream source."""
+        self._stop_metadata_listener()
         self._stop_ffmpeg_process()
         self._pcm_backlog.clear()
 
@@ -769,6 +781,220 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
         samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
         return samples
+
+    def _start_metadata_listener(self) -> None:
+        """Start a background thread that harvests ICY metadata from the stream."""
+        if not REQUESTS_AVAILABLE:
+            return
+
+        if self._metadata_thread and self._metadata_thread.is_alive():
+            return
+
+        self._metadata_stop_event.clear()
+        self._metadata_thread = threading.Thread(
+            target=self._metadata_loop,
+            name=f"metadata-{self.config.name}",
+            daemon=True,
+        )
+        self._metadata_thread.start()
+
+    def _stop_metadata_listener(self) -> None:
+        """Stop the ICY metadata harvesting thread."""
+        self._metadata_stop_event.set()
+        if self._metadata_thread and self._metadata_thread.is_alive():
+            self._metadata_thread.join(timeout=2.0)
+        self._metadata_thread = None
+
+    def _metadata_loop(self) -> None:
+        """Continuously poll the stream for ICY metadata updates."""
+        if not REQUESTS_AVAILABLE:
+            return
+
+        session = requests.Session()
+        session.headers.update({
+            'User-Agent': 'EAS-Station/1.0',
+            'Icy-MetaData': '1',
+        })
+
+        try:
+            while not self._metadata_stop_event.is_set():
+                stream_url = self._resolved_stream_url or self._stream_url
+                if not stream_url:
+                    break
+
+                try:
+                    response = session.get(
+                        stream_url,
+                        stream=True,
+                        timeout=(5.0, 15.0),
+                    )
+                    response.raise_for_status()
+                except Exception as exc:
+                    logger.debug(
+                        "%s: metadata request failed: %s",
+                        self.config.name,
+                        exc,
+                    )
+                    if self._metadata_stop_event.wait(5.0):
+                        break
+                    continue
+
+                metaint_header = response.headers.get('icy-metaint')
+                try:
+                    metaint = int(metaint_header)
+                except (TypeError, ValueError):
+                    metaint = 0
+
+                if metaint <= 0:
+                    logger.debug(
+                        "%s: stream does not advertise ICY metadata (icy-metaint=%s)",
+                        self.config.name,
+                        metaint_header,
+                    )
+                    self._apply_metadata_update({
+                        'icy': {
+                            'supported': False,
+                            'last_error': 'ICY metadata not available',
+                            'last_check': time.time(),
+                        }
+                    })
+                    response.close()
+                    if self._metadata_stop_event.wait(30.0):
+                        break
+                    continue
+
+                self._apply_metadata_update({
+                    'icy': {
+                        'supported': True,
+                        'metaint': metaint,
+                        'last_error': None,
+                        'last_check': time.time(),
+                    }
+                })
+
+                raw = response.raw
+                raw.decode_content = False
+
+                try:
+                    while not self._metadata_stop_event.is_set():
+                        if not raw.read(metaint):
+                            break
+
+                        length_byte = raw.read(1)
+                        if not length_byte:
+                            break
+
+                        block_length = length_byte[0] * 16
+                        if block_length == 0:
+                            continue
+
+                        metadata_block = raw.read(block_length) or b''
+                        metadata_text = metadata_block.rstrip(b'\x00').decode(
+                            'utf-8', errors='replace'
+                        ).strip()
+
+                        if metadata_text:
+                            self._handle_icy_metadata(metadata_text)
+
+                except Exception as exc:
+                    logger.debug(
+                        "%s: error while reading ICY metadata: %s",
+                        self.config.name,
+                        exc,
+                    )
+                    self._apply_metadata_update({
+                        'icy': {
+                            'last_error': str(exc),
+                            'last_check': time.time(),
+                        }
+                    })
+                finally:
+                    response.close()
+
+                if self._metadata_stop_event.wait(3.0):
+                    break
+        finally:
+            session.close()
+
+    def _handle_icy_metadata(self, metadata_text: str) -> None:
+        """Parse raw ICY metadata and update the source metadata cache."""
+        if metadata_text == self._last_icy_metadata:
+            return
+
+        self._last_icy_metadata = metadata_text
+
+        fields: Dict[str, Any] = {}
+        for part in metadata_text.split(';'):
+            part = part.strip()
+            if not part or '=' not in part:
+                continue
+
+            key, value = part.split('=', 1)
+            key = key.strip()
+            value = value.strip().strip("'\"")
+            if key:
+                fields[key] = value
+
+        updates: Dict[str, Any] = {
+            'icy': {
+                'supported': True,
+                'fields': fields,
+                'raw': metadata_text,
+                'last_update': time.time(),
+            }
+        }
+
+        stream_title = fields.get('StreamTitle')
+        if stream_title:
+            updates['song'] = stream_title
+
+            title = stream_title.strip()
+            artist = None
+            if ' - ' in stream_title:
+                artist_candidate, title_candidate = stream_title.split(' - ', 1)
+                artist = artist_candidate.strip() or None
+                title = title_candidate.strip() or title
+
+            now_playing: Dict[str, Any] = {'raw': stream_title}
+            if title:
+                now_playing['title'] = title
+                updates['song_title'] = title
+                updates['title'] = title
+            if artist:
+                now_playing['artist'] = artist
+                updates['artist'] = artist
+
+            updates['now_playing'] = now_playing
+
+        stream_url = fields.get('StreamUrl')
+        if stream_url:
+            updates['resolved_url'] = stream_url
+
+        self._apply_metadata_update(updates)
+
+    def _apply_metadata_update(self, updates: Dict[str, Any]) -> None:
+        """Merge metadata updates into the shared cache and sync metrics."""
+
+        def _merge_dict(base: Dict[str, Any], new_data: Dict[str, Any]) -> bool:
+            changed = False
+            for key, value in new_data.items():
+                if isinstance(value, dict):
+                    existing = base.get(key)
+                    if isinstance(existing, dict):
+                        if _merge_dict(existing, value):
+                            changed = True
+                    else:
+                        base[key] = copy.deepcopy(value)
+                        changed = True
+                else:
+                    if base.get(key) != value:
+                        base[key] = value
+                        changed = True
+            return changed
+
+        with self._metadata_lock:
+            if _merge_dict(self._stream_metadata, updates):
+                self.metrics.metadata = copy.deepcopy(self._stream_metadata)
 
 # Factory function for creating sources
 def create_audio_source(config: AudioSourceConfig) -> AudioSourceAdapter:

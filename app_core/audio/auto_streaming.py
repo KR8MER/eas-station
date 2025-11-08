@@ -37,6 +37,8 @@ class AutoStreamingService:
         icecast_server: str = "localhost",
         icecast_port: int = 8000,
         icecast_password: str = "",
+        icecast_admin_user: Optional[str] = None,
+        icecast_admin_password: Optional[str] = None,
         default_bitrate: int = 128,
         default_format: StreamFormat = StreamFormat.MP3,
         enabled: bool = False
@@ -55,6 +57,8 @@ class AutoStreamingService:
         self.icecast_server = icecast_server
         self.icecast_port = icecast_port
         self.icecast_password = icecast_password
+        self.icecast_admin_user = icecast_admin_user
+        self.icecast_admin_password = icecast_admin_password
         self.default_bitrate = default_bitrate
         self.default_format = default_format
         self.enabled = enabled
@@ -165,7 +169,9 @@ class AutoStreamingService:
                     bitrate=bitrate or self.default_bitrate,
                     format=self.default_format,
                     public=False,
-                    sample_rate=sample_rate
+                    sample_rate=sample_rate,
+                    admin_user=self.icecast_admin_user,
+                    admin_password=self.icecast_admin_password,
                 )
 
                 # Create and start streamer
