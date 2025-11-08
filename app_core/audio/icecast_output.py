@@ -438,6 +438,12 @@ class IcecastStreamer:
     def _send_metadata_update(self, title: str, artist: Optional[str]) -> Optional[str]:
         """Submit metadata to Icecast and return the formatted payload on success."""
         if not (self.config.admin_user and self.config.admin_password):
+            logger.debug(
+                "Metadata update skipped for %s: credentials not configured (user=%s, pass=%s)",
+                self.config.mount,
+                "SET" if self.config.admin_user else "NOT SET",
+                "SET" if self.config.admin_password else "NOT SET",
+            )
             return None
 
         safe_stream_name = self._stream_name or "EAS Station"
@@ -476,14 +482,13 @@ class IcecastStreamer:
         auth_user = str(self.config.admin_user or '')
         auth_pass = str(self.config.admin_password or '')
 
-        # Log credentials info for debugging (mask password)
-        logger.debug(
-            "Auth for %s: user=%r (len=%d), pass=***%s (len=%d)",
+        # Log credentials info for debugging (mask password) - use INFO to ensure it shows
+        logger.info(
+            "Icecast auth for %s: user=%r pass=***%s (total_len=%d)",
             self.config.mount,
             auth_user,
-            len(auth_user),
-            auth_pass[-3:] if len(auth_pass) >= 3 else "***",
-            len(auth_pass),
+            auth_pass[-2:] if len(auth_pass) >= 2 else "**",
+            len(f"{auth_user}:{auth_pass}"),
         )
 
         # Encode credentials as "username:password" in UTF-8, then base64
