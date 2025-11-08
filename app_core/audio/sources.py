@@ -538,6 +538,7 @@ class StreamSourceAdapter(AudioSourceAdapter):
         self._ffmpeg_process = None  # FFmpeg subprocess for decoding
         self._pcm_buffer = bytearray()  # Buffer for decoded PCM audio
         self._ffmpeg_thread = None  # Thread for feeding data to FFmpeg
+        self._had_data_activity = False  # Track if HTTP data was read (even if decode returned None)
 
     def _parse_m3u(self, url: str) -> str:
         """Parse M3U playlist and return the first stream URL."""
@@ -695,6 +696,9 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
     def _read_audio_chunk(self) -> Optional[np.ndarray]:
         """Read audio chunk from HTTP stream with improved error handling."""
+        # Reset activity flag at start of each read
+        self._had_data_activity = False
+
         # If stream is disconnected, attempt reconnection
         if not self._stream_response:
             if self._reconnect_attempts < self._max_reconnect_attempts:
@@ -748,6 +752,8 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
             # Append to buffer
             self._buffer.extend(data)
+            # Mark that we successfully read data from the stream
+            self._had_data_activity = True
 
             # Decode audio based on format
             if self._stream_format == 'mp3':
