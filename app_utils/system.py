@@ -21,6 +21,12 @@ from sqlalchemy import text
 from .time import UTC_TZ, local_now, utc_now
 
 
+DEVICE_TREE_CANDIDATES = [
+    Path("/proc/device-tree"),
+    Path("/sys/firmware/devicetree/base"),
+]
+
+
 SystemHealth = Dict[str, Any]
 
 
@@ -611,6 +617,11 @@ def _collect_cpu_details(logger) -> Dict[str, Any]:
         "stepping": None,
         "family": None,
         "model": None,
+        "hardware": None,
+        "revision": None,
+        "serial": None,
+        "cpu_implementer": None,
+        "cpu_part": None,
         "flags": [],
         "supports_virtualization": None,
         "physical_cores": psutil.cpu_count(logical=False),
@@ -624,9 +635,11 @@ def _collect_cpu_details(logger) -> Dict[str, Any]:
         if cpuinfo_path.exists():
             content = cpuinfo_path.read_text(encoding="utf-8", errors="ignore")
             sections = [segment for segment in content.split("\n\n") if segment.strip()]
-            if sections:
-                first = sections[0]
-                for line in first.splitlines():
+            merged_fields: Dict[str, str] = {}
+            features: List[str] = []
+
+            for section in sections:
+                for line in section.splitlines():
                     if ":" not in line:
                         continue
                     key, value = line.split(":", 1)
@@ -634,61 +647,85 @@ def _collect_cpu_details(logger) -> Dict[str, Any]:
                     value = value.strip()
                     if not value:
                         continue
-                    if key == "model name":
-                        details["model_name"] = value
-                    elif key == "vendor_id":
-                        details["vendor_id"] = value
-                    elif key == "microcode":
-                        details["microcode"] = value
-                    elif key == "stepping":
-                        details["stepping"] = value
-                    elif key == "cpu family":
-                        details["family"] = value
-                    elif key == "model":
-                        details["model"] = value
-                    elif key == "cache size":
-                        details["cache_size"] = value
-                    elif key == "flags":
-                        flags = [flag.strip() for flag in value.split() if flag.strip()]
-                        details["flags"] = sorted(set(flags))
+
+                    merged_fields.setdefault(key, value)
+
+                    if key in {"flags", "features"}:
+                        features.extend(flag.strip() for flag in value.split() if flag.strip())
+
+            def _set_from_fields(target: str, *candidates: str) -> None:
+                for candidate in candidates:
+                    value = merged_fields.get(candidate)
+                    if value:
+                        details[target] = value
+                        return
+
+            _set_from_fields("model_name", "model name", "model")
+            _set_from_fields("vendor_id", "vendor_id", "cpu implementer")
+            _set_from_fields("microcode", "microcode")
+            _set_from_fields("stepping", "stepping", "cpu revision")
+            _set_from_fields("family", "cpu family", "cpu architecture")
+            _set_from_fields("model", "model")
+            _set_from_fields("cache_size", "cache size")
+            _set_from_fields("hardware", "hardware")
+            _set_from_fields("revision", "revision")
+            _set_from_fields("serial", "serial")
+            _set_from_fields("cpu_implementer", "cpu implementer")
+            _set_from_fields("cpu_part", "cpu part")
+
+            if features:
+                details["flags"] = sorted(set(features))
+
+            virtualization_field = merged_fields.get("virtualization")
+            if virtualization_field:
+                lowered = virtualization_field.strip().lower()
+                if lowered in {"vt-x", "svm", "hardware", "full"}:
+                    details["supports_virtualization"] = True
+                elif lowered in {"none", "n/a", "no"}:
+                    details["supports_virtualization"] = False
     except Exception as exc:  # pragma: no cover - depends on host filesystem
         if logger:
             logger.debug("Failed to parse /proc/cpuinfo: %s", exc)
 
     flags_set = set(details.get("flags") or [])
     if flags_set:
-        details["supports_virtualization"] = any(flag in {"vmx", "svm"} for flag in flags_set)
+        if details["supports_virtualization"] is None:
+            details["supports_virtualization"] = any(flag in {"vmx", "svm"} for flag in flags_set)
 
     return details
 
 
 def _collect_platform_details() -> Dict[str, Any]:
-    """Return chassis / firmware metadata if exposed via DMI."""
-
-    base_path = Path("/sys/devices/virtual/dmi/id")
-    if not base_path.exists():
-        return {}
-
-    fields = {
-        "sys_vendor": "sys_vendor",
-        "product_name": "product_name",
-        "product_version": "product_version",
-        "product_serial": "product_serial",
-        "board_name": "board_name",
-        "board_vendor": "board_vendor",
-        "board_version": "board_version",
-        "chassis_asset_tag": "chassis_asset_tag",
-        "bios_vendor": "bios_vendor",
-        "bios_version": "bios_version",
-        "bios_date": "bios_date",
-    }
+    """Return chassis / firmware metadata using DMI and device-tree sources."""
 
     details: Dict[str, Any] = {}
 
-    for key, filename in fields.items():
-        value = _safe_read_text(base_path / filename)
-        if value is not None:
-            details[key] = value
+    base_path = Path("/sys/devices/virtual/dmi/id")
+    if base_path.exists():
+        fields = {
+            "sys_vendor": "sys_vendor",
+            "product_name": "product_name",
+            "product_version": "product_version",
+            "product_serial": "product_serial",
+            "board_name": "board_name",
+            "board_vendor": "board_vendor",
+            "board_version": "board_version",
+            "chassis_asset_tag": "chassis_asset_tag",
+            "bios_vendor": "bios_vendor",
+            "bios_version": "bios_version",
+            "bios_date": "bios_date",
+        }
+
+        for key, filename in fields.items():
+            value = _safe_read_text(base_path / filename)
+            if value is not None:
+                details[key] = value
+
+    # Augment with device-tree metadata when available (common on ARM boards).
+    dt_details = _collect_device_tree_details()
+    if dt_details:
+        for key, value in dt_details.items():
+            details.setdefault(key, value)
 
     return details
 
@@ -769,6 +806,43 @@ def _collect_block_devices(logger) -> Dict[str, Any]:
     result["available"] = bool(simplified_devices)
 
     return result
+
+
+def _collect_device_tree_details() -> Dict[str, Any]:
+    """Gather platform metadata from device-tree files on ARM systems."""
+
+    base: Optional[Path] = None
+    for candidate in DEVICE_TREE_CANDIDATES:
+        if candidate.exists():
+            base = candidate
+            break
+
+    if base is None:
+        return {}
+
+    details: Dict[str, Any] = {}
+
+    model = _safe_read_device_tree_text(base / "model")
+    if model:
+        details.setdefault("product_name", model)
+        details.setdefault("board_name", model)
+        if "raspberry" in model.lower():
+            details.setdefault("sys_vendor", "Raspberry Pi Foundation")
+
+    serial = _safe_read_device_tree_text(base / "serial-number")
+    if serial:
+        details.setdefault("product_serial", serial)
+
+    revision = _safe_read_device_tree_revision(base / "system/linux,revision")
+    if revision:
+        details.setdefault("product_version", revision)
+        details.setdefault("board_version", revision)
+
+    compatible = _safe_read_device_tree_compatible(base / "compatible")
+    if compatible:
+        details.setdefault("compatible", compatible)
+
+    return details
 
 
 def _simplify_block_devices(entries: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
@@ -859,13 +933,16 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
             "reallocated_sector_count": None,
             "media_errors": None,
             "critical_warnings": None,
+            "data_units_written": None,
             "data_units_written_bytes": None,
+            "data_units_read": None,
             "data_units_read_bytes": None,
-            "host_read_commands": None,
-            "host_write_commands": None,
-            "controller_busy_time_minutes": None,
-            "unsafe_shutdowns": None,
+            "host_writes_32mib": None,
+            "host_writes_bytes": None,
+            "host_reads_32mib": None,
+            "host_reads_bytes": None,
             "percentage_used": None,
+            "unsafe_shutdowns": None,
             "exit_status": None,
             "error": None,
         }
@@ -927,6 +1004,8 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
         nvme_stats = _extract_nvme_statistics(report)
         for key, value in nvme_stats.items():
             device_result[key] = value
+
+        _populate_nvme_metrics(device_result, report)
 
         if completed.stderr:
             stderr = completed.stderr.strip()
@@ -1118,54 +1197,62 @@ def _extract_nvme_field(report: Dict[str, Any], key: str) -> Optional[int]:
     return None
 
 
-def _extract_nvme_statistics(report: Dict[str, Any]) -> Dict[str, Optional[int]]:
-    """Normalise NVMe-specific counters from smartctl output."""
-
-    stats: Dict[str, Optional[int]] = {
-        "data_units_written_bytes": None,
-        "data_units_read_bytes": None,
-        "host_read_commands": None,
-        "host_write_commands": None,
-        "controller_busy_time_minutes": None,
-        "unsafe_shutdowns": None,
-        "percentage_used": None,
-    }
-
+def _populate_nvme_metrics(device_result: Dict[str, Any], report: Dict[str, Any]) -> None:
     nvme_info = report.get("nvme_smart_health_information_log")
     if not isinstance(nvme_info, dict):
-        return stats
+        return
 
-    def pull(*keys: str) -> Optional[int]:
-        for candidate in keys:
-            if candidate in nvme_info:
-                value = _coerce_int(nvme_info.get(candidate))
-                if value is not None:
-                    return value
-        return None
+    def _update_if_absent(field: str, *keys: str) -> None:
+        if device_result.get(field) is not None:
+            return
+        for key in keys:
+            value = nvme_info.get(key)
+            if isinstance(value, (int, float)):
+                device_result[field] = int(value)
+                return
 
-    bytes_written = pull("data_units_written_bytes")
-    if bytes_written is not None:
-        stats["data_units_written_bytes"] = bytes_written
-    else:
-        units_written = pull("data_units_written", "data_units_written_raw")
-        if units_written is not None:
-            stats["data_units_written_bytes"] = units_written * NVME_DATA_UNIT_BYTES
+    _update_if_absent("power_on_hours", "power_on_hours", "power_on_time_hours")
+    _update_if_absent("power_cycle_count", "power_cycles")
+    _update_if_absent("unsafe_shutdowns", "unsafe_shutdowns")
+    _update_if_absent("percentage_used", "percentage_used")
 
-    bytes_read = pull("data_units_read_bytes")
-    if bytes_read is not None:
-        stats["data_units_read_bytes"] = bytes_read
-    else:
-        units_read = pull("data_units_read", "data_units_read_raw")
-        if units_read is not None:
-            stats["data_units_read_bytes"] = units_read * NVME_DATA_UNIT_BYTES
+    for source_key, target_field in (
+        ("data_units_written", "data_units_written"),
+        ("data_units_read", "data_units_read"),
+        ("host_writes_32mib", "host_writes_32mib"),
+        ("host_reads_32mib", "host_reads_32mib"),
+    ):
+        value = nvme_info.get(source_key)
+        if isinstance(value, (int, float)):
+            device_result[target_field] = int(value)
 
-    stats["host_read_commands"] = pull("host_read_commands", "host_reads")
-    stats["host_write_commands"] = pull("host_write_commands", "host_writes")
-    stats["controller_busy_time_minutes"] = pull("controller_busy_time_minutes", "controller_busy_time")
-    stats["unsafe_shutdowns"] = pull("unsafe_shutdowns")
-    stats["percentage_used"] = pull("percentage_used")
+    if device_result.get("data_units_written") is not None:
+        device_result["data_units_written_bytes"] = _convert_nvme_data_units(
+            device_result["data_units_written"]
+        )
+    if device_result.get("data_units_read") is not None:
+        device_result["data_units_read_bytes"] = _convert_nvme_data_units(
+            device_result["data_units_read"]
+        )
 
-    return stats
+    if device_result.get("host_writes_32mib") is not None:
+        device_result["host_writes_bytes"] = _convert_nvme_host_io(
+            device_result["host_writes_32mib"]
+        )
+    if device_result.get("host_reads_32mib") is not None:
+        device_result["host_reads_bytes"] = _convert_nvme_host_io(
+            device_result["host_reads_32mib"]
+        )
+
+
+def _convert_nvme_data_units(units: int) -> int:
+    # Per the NVMe specification, each data unit represents 512,000 bytes.
+    return int(units) * 512_000
+
+
+def _convert_nvme_host_io(units_32mib: int) -> int:
+    # smartctl reports host reads/writes in units of 32 MiB.
+    return int(units_32mib) * 32 * 1024 * 1024
 
 
 def _safe_read_text(path: Path) -> Optional[str]:
@@ -1175,6 +1262,48 @@ def _safe_read_text(path: Path) -> Optional[str]:
             lower = value.lower()
             if lower not in {"none", "unknown", "not specified"}:
                 return value
+    return None
+
+
+def _safe_read_device_tree_text(path: Path) -> Optional[str]:
+    with contextlib.suppress(OSError, FileNotFoundError, PermissionError):
+        data = path.read_bytes()
+        if not data:
+            return None
+        text = data.split(b"\x00", 1)[0].decode("utf-8", errors="ignore").strip()
+        if text and text.lower() not in {"", "none", "unknown", "not specified"}:
+            return text
+    return None
+
+
+def _safe_read_device_tree_revision(path: Path) -> Optional[str]:
+    with contextlib.suppress(OSError, FileNotFoundError, PermissionError):
+        data = path.read_bytes()
+        if not data:
+            return None
+        if len(data) in {4, 8}:
+            value = int.from_bytes(data[:4], byteorder="big", signed=False)
+            if value:
+                return f"0x{value:08x}"
+        text = data.split(b"\x00", 1)[0].decode("utf-8", errors="ignore").strip()
+        if text:
+            return text
+    return None
+
+
+def _safe_read_device_tree_compatible(path: Path) -> Optional[List[str]]:
+    with contextlib.suppress(OSError, FileNotFoundError, PermissionError):
+        data = path.read_bytes()
+        if not data:
+            return None
+        parts = [
+            part.decode("utf-8", errors="ignore").strip()
+            for part in data.split(b"\x00")
+            if part.strip()
+        ]
+        cleaned = [part for part in parts if part and part.lower() not in {"none", "unknown"}]
+        if cleaned:
+            return cleaned
     return None
 
 
