@@ -65,6 +65,8 @@ services:
       - "host.docker.internal:host-gateway"
     devices:
       - /dev/bus/usb:/dev/bus/usb
+      - /dev/nvme0:/dev/nvme0      # NVMe controller for SMART monitoring
+      - /dev/nvme0n1:/dev/nvme0n1  # NVMe namespace (Samsung 990 PRO)
     cap_add:
       - SYS_RAWIO
     security_opt:
@@ -100,6 +102,8 @@ services:
       - "host.docker.internal:host-gateway"
     devices:
       - /dev/bus/usb:/dev/bus/usb
+      - /dev/nvme0:/dev/nvme0      # NVMe controller for SMART monitoring
+      - /dev/nvme0n1:/dev/nvme0n1  # NVMe namespace (Samsung 990 PRO)
     cap_add:
       - SYS_RAWIO
     security_opt:
@@ -146,6 +150,8 @@ services:
       - "host.docker.internal:host-gateway"
     devices:
       - /dev/bus/usb:/dev/bus/usb
+      - /dev/nvme0:/dev/nvme0      # NVMe controller for SMART monitoring
+      - /dev/nvme0n1:/dev/nvme0n1  # NVMe namespace (Samsung 990 PRO)
     cap_add:
       - SYS_RAWIO
     security_opt:
