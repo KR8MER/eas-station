@@ -10,7 +10,17 @@ Provides:
 from enum import Enum
 from functools import wraps
 from typing import List, Set, Optional
-from flask import session, abort, current_app
+from urllib.parse import urlencode
+
+from flask import (
+    current_app,
+    flash,
+    jsonify,
+    redirect,
+    request,
+    session,
+    url_for,
+)
 from sqlalchemy import Column, Integer, String, ForeignKey, Table, DateTime, Text
 from sqlalchemy.orm import relationship
 
@@ -272,6 +282,68 @@ def has_permission(permission_name: str, user=None) -> bool:
     return user.role.has_permission(permission_name)
 
 
+def _wants_json_response() -> bool:
+    """Determine if the current request expects a JSON response."""
+
+    if request.is_json:
+        return True
+
+    accept_header = request.headers.get("Accept", "")
+    return "application/json" in accept_header.lower()
+
+
+def _build_login_redirect():
+    """Redirect the user to the login page with an informative flash message."""
+
+    if _wants_json_response():
+        return (
+            jsonify(
+                {
+                    "error": "authentication_required",
+                    "message": "Please sign in to continue.",
+                }
+            ),
+            401,
+        )
+
+    flash("Please sign in to continue.")
+
+    login_url = url_for("login")
+    next_target = None
+
+    if request.method in {"GET", "HEAD"}:
+        next_target = request.full_path or request.path
+    elif request.referrer:
+        next_target = request.referrer
+
+    if next_target:
+        # Flask's full_path appends a trailing '?' when there is no query string.
+        if next_target.endswith("?"):
+            next_target = next_target[:-1]
+        login_url = f"{login_url}?{urlencode({'next': next_target})}"
+
+    return redirect(login_url)
+
+
+def _permission_denied_response(permission_name: str):
+    """Return a friendly permission denied response without exposing a 403 page."""
+
+    if _wants_json_response():
+        return (
+            jsonify(
+                {
+                    "error": "permission_denied",
+                    "permission": permission_name,
+                    "message": "You do not have permission to perform this action.",
+                }
+            ),
+            403,
+        )
+
+    flash("You do not have permission to access that page.")
+    return redirect(url_for("admin"))
+
+
 def require_permission(permission_name: str):
     """
     Decorator to require a specific permission for a route.
@@ -289,10 +361,14 @@ def require_permission(permission_name: str):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             if not has_permission(permission_name):
+                user = get_current_user()
+                if not user:
+                    return _build_login_redirect()
+
                 current_app.logger.warning(
                     f"Permission denied: {permission_name} for user {session.get('user_id')}"
                 )
-                abort(403)  # Forbidden
+                return _permission_denied_response(permission_name)
             return f(*args, **kwargs)
         return decorated_function
     return decorator
@@ -313,7 +389,7 @@ def require_any_permission(*permission_names: str):
         def decorated_function(*args, **kwargs):
             user = get_current_user()
             if not user or not user.is_active:
-                abort(403)
+                return _build_login_redirect()
 
             if user.role and any(user.role.has_permission(p) for p in permission_names):
                 return f(*args, **kwargs)
@@ -321,7 +397,7 @@ def require_any_permission(*permission_names: str):
             current_app.logger.warning(
                 f"Permission denied: needs any of {permission_names} for user {session.get('user_id')}"
             )
-            abort(403)
+            return _permission_denied_response(" or ".join(permission_names))
         return decorated_function
     return decorator
 
@@ -341,7 +417,7 @@ def require_all_permissions(*permission_names: str):
         def decorated_function(*args, **kwargs):
             user = get_current_user()
             if not user or not user.is_active:
-                abort(403)
+                return _build_login_redirect()
 
             if user.role and all(user.role.has_permission(p) for p in permission_names):
                 return f(*args, **kwargs)
@@ -349,7 +425,7 @@ def require_all_permissions(*permission_names: str):
             current_app.logger.warning(
                 f"Permission denied: needs all of {permission_names} for user {session.get('user_id')}"
             )
-            abort(403)
+            return _permission_denied_response(" and ".join(permission_names))
         return decorated_function
     return decorator
 
