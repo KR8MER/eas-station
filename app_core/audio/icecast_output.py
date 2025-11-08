@@ -14,6 +14,7 @@ Key Features:
 
 from __future__ import annotations
 
+import base64
 import logging
 import subprocess
 import threading
@@ -469,25 +470,25 @@ class IcecastStreamer:
         base_url = f"http://{self.config.server}:{self.config.port}/admin/metadata"
         url = f"{base_url}?mode=updinfo&mount={encoded_mount}&song={encoded_song}"
 
-        # HTTP Basic Auth requires ASCII/latin-1 encoding
-        # Sanitize credentials to prevent encoding errors
-        try:
-            auth_user = str(self.config.admin_user or '').encode('latin-1').decode('latin-1')
-            auth_pass = str(self.config.admin_password or '').encode('latin-1').decode('latin-1')
-        except UnicodeEncodeError:
-            # If credentials contain non-latin-1 characters, use ASCII subset
-            auth_user = str(self.config.admin_user or '').encode('ascii', 'replace').decode('ascii')
-            auth_pass = str(self.config.admin_password or '').encode('ascii', 'replace').decode('ascii')
-            logger.warning(
-                "Icecast admin credentials contain non-ASCII characters for %s, using fallback encoding",
-                self.config.mount,
-            )
+        # Create HTTP Basic Auth header manually with UTF-8 encoding
+        # This allows Unicode passwords (requests' default auth uses latin-1)
+        # RFC 7617 specifies that UTF-8 can be used for Basic Auth
+        auth_user = str(self.config.admin_user or '')
+        auth_pass = str(self.config.admin_password or '')
+
+        # Encode credentials as "username:password" in UTF-8, then base64
+        credentials = f"{auth_user}:{auth_pass}".encode('utf-8')
+        encoded_credentials = base64.b64encode(credentials).decode('ascii')
+
+        headers = {
+            'Authorization': f'Basic {encoded_credentials}'
+        }
 
         try:
-            # Make the HTTP GET request with the pre-encoded URL
+            # Make the HTTP GET request with the pre-encoded URL and UTF-8 auth
             response = requests.get(
                 url,
-                auth=(auth_user, auth_pass),
+                headers=headers,
                 timeout=5.0,
             )
         except requests_exceptions.RequestException as exc:
