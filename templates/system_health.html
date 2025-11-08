@@ -677,6 +677,21 @@
                                             {% if device.media_errors is not none %} • Media Errors: {{ device.media_errors }}{% endif %}
                                             {% if device.critical_warnings is not none %} • Warnings: {{ device.critical_warnings }}{% endif %}
                                         </div>
+                                        {% set host_writes = device.host_writes_bytes or device.data_units_written_bytes %}
+                                        {% set host_reads = device.host_reads_bytes or device.data_units_read_bytes %}
+                                        {% if host_writes is not none or host_reads is not none or device.percentage_used is not none %}
+                                        <div class="hardware-meta">
+                                            {% if host_writes is not none %}Host Writes: {{ format_bytes(host_writes) }}{% endif %}
+                                            {% if host_reads is not none %}{% if host_writes is not none %} • {% endif %}Host Reads: {{ format_bytes(host_reads) }}{% endif %}
+                                            {% if device.percentage_used is not none %}{% if host_writes is not none or host_reads is not none %} • {% endif %}Wear: {{ device.percentage_used }}%{% endif %}
+                                        </div>
+                                        {% endif %}
+                                        {% if device.power_cycle_count is not none or device.unsafe_shutdowns is not none %}
+                                        <div class="hardware-meta">
+                                            {% if device.power_cycle_count is not none %}Power Cycles: {{ device.power_cycle_count }}{% endif %}
+                                            {% if device.unsafe_shutdowns is not none %}{% if device.power_cycle_count is not none %} • {% endif %}Unsafe Shutdowns: {{ device.unsafe_shutdowns }}{% endif %}
+                                        </div>
+                                        {% endif %}
                                         {% if device.error %}<div class="hardware-meta text-muted">Note: {{ device.error }}</div>{% endif %}
                                     </div>
                                 {% endfor %}
@@ -1526,6 +1541,28 @@
                 const reallocated = data.reallocated_sector_count != null ? escapeHtml(String(data.reallocated_sector_count)) : 'N/A';
                 const mediaErrors = data.media_errors != null ? ` • Media Errors: ${escapeHtml(String(data.media_errors))}` : '';
                 const warnings = data.critical_warnings != null ? ` • Warnings: ${escapeHtml(String(data.critical_warnings))}` : '';
+                const hostWritesBytes = data.host_writes_bytes != null ? Number(data.host_writes_bytes) : (data.data_units_written_bytes != null ? Number(data.data_units_written_bytes) : null);
+                const hostReadsBytes = data.host_reads_bytes != null ? Number(data.host_reads_bytes) : (data.data_units_read_bytes != null ? Number(data.data_units_read_bytes) : null);
+                const hostSegments = [];
+                if (hostWritesBytes !== null && Number.isFinite(hostWritesBytes)) {
+                    hostSegments.push(`Host Writes: ${formatBytes(hostWritesBytes)}`);
+                }
+                if (hostReadsBytes !== null && Number.isFinite(hostReadsBytes)) {
+                    hostSegments.push(`Host Reads: ${formatBytes(hostReadsBytes)}`);
+                }
+                if (data.percentage_used != null) {
+                    hostSegments.push(`Wear: ${escapeHtml(String(data.percentage_used))}%`);
+                }
+                const hostDetails = hostSegments.length ? `<div class="hardware-meta">${hostSegments.join(' • ')}</div>` : '';
+
+                const powerSegments = [];
+                if (data.power_cycle_count != null) {
+                    powerSegments.push(`Power Cycles: ${escapeHtml(String(data.power_cycle_count))}`);
+                }
+                if (data.unsafe_shutdowns != null) {
+                    powerSegments.push(`Unsafe Shutdowns: ${escapeHtml(String(data.unsafe_shutdowns))}`);
+                }
+                const powerDetails = powerSegments.length ? `<div class="hardware-meta">${powerSegments.join(' • ')}</div>` : '';
                 const note = data.error ? `<div class="hardware-meta text-muted">Note: ${escapeHtml(String(data.error))}</div>` : '';
 
                 return `
@@ -1544,6 +1581,8 @@
                         <div class="hardware-meta">
                             Realloc: ${reallocated}${mediaErrors}${warnings}
                         </div>
+                        ${hostDetails}
+                        ${powerDetails}
                         ${note}
                     </div>
                 `;
