@@ -970,21 +970,64 @@ class StreamSourceAdapter(AudioSourceAdapter):
         if stream_title:
             updates['song'] = stream_title
 
+            # Parse rich metadata from StreamTitle (e.g., iHeartRadio format)
+            # Example: text="Golden" song_spot="M" MediaBaseId="3136003" ... amgArtworkURL="..." length="00:03:11"
+            import re
+
             title = stream_title.strip()
             artist = None
-            if ' - ' in stream_title:
-                artist_candidate, title_candidate = stream_title.split(' - ', 1)
-                artist = artist_candidate.strip() or None
-                title = title_candidate.strip() or title
+
+            # Try to extract text="" or song="" attribute (iHeartRadio format)
+            text_match = re.search(r'text="([^"]+)"', stream_title)
+            if text_match:
+                title = text_match.group(1).strip()
+                updates['song_title'] = title
+                updates['title'] = title
+
+            # Try to extract artist="" attribute
+            artist_match = re.search(r'artist="([^"]+)"', stream_title)
+            if artist_match:
+                artist = artist_match.group(1).strip()
+                updates['artist'] = artist
+
+            # Try to extract album art URL
+            artwork_match = re.search(r'(?:amgArtworkURL|artworkURL|artwork_url)="([^"]+)"', stream_title)
+            if artwork_match:
+                updates['artwork_url'] = artwork_match.group(1).strip()
+
+            # Try to extract song length/duration
+            length_match = re.search(r'(?:length|duration)="([^"]+)"', stream_title)
+            if length_match:
+                updates['length'] = length_match.group(1).strip()
+
+            # Try to extract album name
+            album_match = re.search(r'album="([^"]+)"', stream_title)
+            if album_match:
+                updates['album'] = album_match.group(1).strip()
+
+            # If we didn't find text="" attribute, try traditional "Artist - Title" format
+            if not text_match and ' - ' in stream_title:
+                # Remove any XML-like attributes before splitting
+                clean_title = re.sub(r'\s+\w+="[^"]*"', '', stream_title)
+                clean_title = re.sub(r'\s+\w+=\S+', '', clean_title)
+                clean_title = ' '.join(clean_title.split()).strip()
+
+                if ' - ' in clean_title:
+                    artist_candidate, title_candidate = clean_title.split(' - ', 1)
+                    artist = artist_candidate.strip() or artist
+                    title = title_candidate.strip() or title
+
+                    if not artist_match and artist:
+                        updates['artist'] = artist
+                    if not text_match:
+                        updates['song_title'] = title
+                        updates['title'] = title
 
             now_playing: Dict[str, Any] = {'raw': stream_title}
             if title:
                 now_playing['title'] = title
-                updates['song_title'] = title
-                updates['title'] = title
             if artist:
                 now_playing['artist'] = artist
-                updates['artist'] = artist
 
             updates['now_playing'] = now_playing
 
