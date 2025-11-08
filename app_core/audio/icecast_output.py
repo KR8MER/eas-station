@@ -106,6 +106,11 @@ class IcecastStreamer:
         self._last_metadata_check = 0.0
         self._metadata_poll_interval = max(self.config.metadata_poll_interval, 0.5)
 
+        # Extended metadata (album art, song length, etc.)
+        self._last_artwork_url: Optional[str] = None
+        self._last_song_length: Optional[str] = None
+        self._last_album: Optional[str] = None
+
         logger.info(
             f"Initialized IcecastStreamer: {config.server}:{config.port}/{config.mount}"
         )
@@ -327,7 +332,18 @@ class IcecastStreamer:
         if payload is None:
             return
 
-        title, artist = payload
+        # Extract title and artist for Icecast update
+        title = payload.get('title')
+        artist = payload.get('artist')
+
+        # Store extended metadata (gracefully)
+        try:
+            self._last_artwork_url = payload.get('artwork_url')
+            self._last_song_length = payload.get('length')
+            self._last_album = payload.get('album')
+        except Exception as e:
+            logger.debug(f"Error storing extended metadata: {e}")
+
         cache_key = (title or "", artist)
         if self._last_metadata_payload == cache_key:
             return
@@ -347,12 +363,26 @@ class IcecastStreamer:
         if sent_value:
             self._last_metadata_payload = cache_key
             self._last_metadata_song = sent_value
+            # Log extended metadata when available
+            if self._last_artwork_url or self._last_song_length or self._last_album:
+                logger.debug(
+                    "Extended metadata for %s: artwork=%s, length=%s, album=%s",
+                    self.config.mount,
+                    self._last_artwork_url or 'N/A',
+                    self._last_song_length or 'N/A',
+                    self._last_album or 'N/A',
+                )
 
     def _extract_metadata_fields(
         self,
         metadata: Dict[str, Any]
-    ) -> Optional[Tuple[Optional[str], Optional[str]]]:
-        """Derive title/artist information from source metadata."""
+    ) -> Optional[Dict[str, Optional[str]]]:
+        """
+        Derive title/artist and extended metadata from source metadata.
+
+        Returns a dict with keys: title, artist, artwork_url, length, album
+        Returns None if no useful metadata found.
+        """
 
         def _normalize(value: Any) -> Optional[str]:
             if value is None:
@@ -372,6 +402,34 @@ class IcecastStreamer:
             text = str(value).strip()
             if not text:
                 return None
+
+            # Clean up metadata that contains XML/JSON attributes
+            # Example: text="Everybody Talks" song_spot="M" MediaBaseId="1842682" ...
+            # Extract just the text="" value
+            import re
+            text_match = re.search(r'text="([^"]+)"', text)
+            if text_match:
+                text = text_match.group(1)
+
+            # Also try title="" attribute
+            elif 'title="' in text:
+                title_match = re.search(r'title="([^"]+)"', text)
+                if title_match:
+                    text = title_match.group(1)
+
+            # Also try song="" attribute
+            elif 'song="' in text:
+                song_match = re.search(r'song="([^"]+)"', text)
+                if song_match:
+                    text = song_match.group(1)
+
+            # Remove any remaining XML-like attributes
+            # Remove key="value" patterns
+            text = re.sub(r'\s+\w+="[^"]*"', '', text)
+            # Remove key='value' patterns
+            text = re.sub(r"\s+\w+='[^']*'", '', text)
+            # Remove standalone key=value patterns (no quotes)
+            text = re.sub(r'\s+\w+=\S+', '', text)
 
             # Collapse extraneous whitespace (including newlines)
             text = ' '.join(text.split())
@@ -411,7 +469,69 @@ class IcecastStreamer:
         if not title and not artist:
             return None
 
-        return title, artist
+        # Extract additional metadata fields with graceful error handling
+        result = {
+            'title': title,
+            'artist': artist,
+            'artwork_url': None,
+            'length': None,
+            'album': None,
+        }
+
+        # Try to extract album art URL (various field names)
+        try:
+            artwork_candidates = [
+                _normalize(metadata.get('amgArtworkURL')),
+                _normalize(metadata.get('artwork_url')),
+                _normalize(metadata.get('artworkURL')),
+                _normalize(metadata.get('album_art')),
+                _normalize(metadata.get('cover_art')),
+            ]
+            if isinstance(now_playing, dict):
+                artwork_candidates.extend([
+                    _normalize(now_playing.get('artwork_url')),
+                    _normalize(now_playing.get('album_art')),
+                ])
+
+            # Find first valid URL (should contain http/https)
+            for candidate in artwork_candidates:
+                if candidate and ('http://' in candidate or 'https://' in candidate):
+                    result['artwork_url'] = candidate
+                    break
+        except Exception as e:
+            logger.debug(f"Error extracting artwork URL from metadata: {e}")
+
+        # Try to extract song length/duration
+        try:
+            length_candidates = [
+                _normalize(metadata.get('length')),
+                _normalize(metadata.get('duration')),
+                _normalize(metadata.get('song_length')),
+            ]
+            if isinstance(now_playing, dict):
+                length_candidates.extend([
+                    _normalize(now_playing.get('length')),
+                    _normalize(now_playing.get('duration')),
+                ])
+
+            result['length'] = next((candidate for candidate in length_candidates if candidate), None)
+        except Exception as e:
+            logger.debug(f"Error extracting length from metadata: {e}")
+
+        # Try to extract album name
+        try:
+            album_candidates = [
+                _normalize(metadata.get('album')),
+                _normalize(metadata.get('album_name')),
+            ]
+            if isinstance(now_playing, dict):
+                album_candidates.append(_normalize(now_playing.get('album')))
+
+            result['album'] = next((candidate for candidate in album_candidates if candidate), None)
+        except Exception as e:
+            logger.debug(f"Error extracting album from metadata: {e}")
+
+        return result
 
     @staticmethod
     def _sanitize_metadata_value(value: Optional[str], fallback: str = "") -> str:
@@ -577,6 +697,10 @@ class IcecastStreamer:
             'public': self.config.public,
             'last_metadata': self._last_metadata_song,
             'metadata_enabled': bool(self.config.admin_user and self.config.admin_password),
+            # Extended metadata
+            'artwork_url': self._last_artwork_url,
+            'song_length': self._last_song_length,
+            'album': self._last_album,
         }
 
 

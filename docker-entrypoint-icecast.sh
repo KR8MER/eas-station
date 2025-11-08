@@ -2,6 +2,7 @@
 set -e
 
 CONFIG_FILE="/etc/icecast2/icecast.xml"
+ENV_FILE="/app-config/.env"
 
 # Check if perl is installed (CRITICAL for config updates)
 if ! command -v perl &> /dev/null; then
@@ -12,6 +13,26 @@ if ! command -v perl &> /dev/null; then
 fi
 
 echo "DEBUG: perl is available at: $(which perl)"
+
+# Load configuration from persistent .env file if it exists
+# This ensures Icecast uses the same passwords as the app container
+if [ -f "$ENV_FILE" ]; then
+    echo "=========================================="
+    echo "INFO: Loading Icecast configuration from persistent .env file: $ENV_FILE"
+    echo "INFO: This is the single source of truth for all passwords"
+    echo "=========================================="
+    # Source the .env file to load variables
+    # Use export to make them available to this script
+    set -a  # automatically export all variables
+    source "$ENV_FILE"
+    set +a
+    echo "INFO: ✓ Configuration loaded from persistent storage"
+else
+    echo "=========================================="
+    echo "INFO: No persistent .env file found at $ENV_FILE"
+    echo "INFO: Using environment variables from docker-compose (initial setup)"
+    echo "=========================================="
+fi
 
 # Function to update XML config values (handles multiline and whitespace)
 update_config() {
@@ -31,6 +52,7 @@ update_config() {
 
 echo "Configuring Icecast from environment variables..."
 echo "DEBUG: ICECAST_SOURCE_PASSWORD environment variable is: ${ICECAST_SOURCE_PASSWORD:-<not set, will use 'hackme'>}"
+echo "DEBUG: ICECAST_ADMIN_PASSWORD environment variable is: ${ICECAST_ADMIN_PASSWORD:-<not set, will use 'hackme'>}"
 
 # Show authentication section BEFORE updates
 echo "DEBUG: Authentication section BEFORE updates:"
