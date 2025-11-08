@@ -980,7 +980,6 @@ class StreamSourceAdapter(AudioSourceAdapter):
                 return samples
             else:
                 # DEBUG: Periodically log when waiting for more data
-                import time
                 if not hasattr(self, '_last_wait_log'):
                     self._last_wait_log = 0
                 if time.time() - self._last_wait_log > 2.0:  # Log every 2 seconds
