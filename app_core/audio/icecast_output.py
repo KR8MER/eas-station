@@ -73,6 +73,20 @@ class IcecastStreamer:
         self.config = config
         self.audio_source = audio_source
 
+        # Pre-sanitize stream metadata fields to avoid runtime encoding errors.
+        self._stream_name = self._sanitize_metadata_value(
+            getattr(self.config, 'name', None),
+            "EAS Station",
+        )
+        self._stream_description = self._sanitize_metadata_value(
+            getattr(self.config, 'description', None),
+            self._stream_name,
+        )
+        self._stream_genre = self._sanitize_metadata_value(
+            getattr(self.config, 'genre', None),
+            "Emergency",
+        )
+
         # FFmpeg process
         self._ffmpeg_process: Optional[subprocess.Popen] = None
         self._feeder_thread: Optional[threading.Thread] = None
@@ -177,20 +191,24 @@ class IcecastStreamer:
                     '-f', 'ogg',
                 ])
 
+            stream_name = self._stream_name or "EAS Station"
+            stream_description = self._stream_description or stream_name
+            stream_genre = self._stream_genre or "Emergency"
+
             # Add metadata
             cmd.extend([
-                '-metadata', f'title={self.config.name}',
+                '-metadata', f'title={stream_name}',
                 '-metadata', f'artist=EAS Station',
-                '-metadata', f'album={self.config.description}',
-                '-metadata', f'genre={self.config.genre}',
+                '-metadata', f'album={stream_description}',
+                '-metadata', f'genre={stream_genre}',
             ])
 
             # Output to Icecast
             cmd.extend([
                 '-content_type', 'audio/mpeg' if self.config.format == StreamFormat.MP3 else 'audio/ogg',
-                '-ice_name', self.config.name,
-                '-ice_description', self.config.description,
-                '-ice_genre', self.config.genre,
+                '-ice_name', stream_name,
+                '-ice_description', stream_description,
+                '-ice_genre', stream_genre,
                 icecast_url
             ])
 
@@ -311,7 +329,17 @@ class IcecastStreamer:
         if self._last_metadata_payload == cache_key:
             return
 
-        sent_value = self._send_metadata_update(title or self.config.name, artist)
+        try:
+            sent_value = self._send_metadata_update(title or self.config.name, artist)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning(
+                "Unable to update Icecast metadata for %s: %s",
+                self.config.mount,
+                exc,
+            )
+            self._last_error = str(exc)
+            return
+
         if sent_value:
             self._last_metadata_payload = cache_key
             self._last_metadata_song = sent_value
@@ -381,18 +409,52 @@ class IcecastStreamer:
 
         return title, artist
 
+    @staticmethod
+    def _sanitize_metadata_value(value: Optional[str], fallback: str = "") -> str:
+        """Return a latin-1 safe metadata string, stripping unsupported characters."""
+
+        def _prepare(text: Optional[str]) -> str:
+            if not text:
+                return ""
+            cleaned = str(text).strip()
+            if not cleaned:
+                return ""
+            try:
+                cleaned.encode("latin-1")
+                return cleaned
+            except UnicodeEncodeError:
+                sanitized_text = cleaned.encode("latin-1", "ignore").decode("latin-1").strip()
+                if sanitized_text and sanitized_text != cleaned:
+                    logger.debug(
+                        "Sanitized metadata value by removing unsupported characters: %s",
+                        sanitized_text,
+                    )
+                return sanitized_text
+
+        sanitized_fallback = _prepare(fallback)
+        sanitized_value = _prepare(value)
+
+        if sanitized_value:
+            return sanitized_value
+
+        return sanitized_fallback or ""
+
     def _send_metadata_update(self, title: str, artist: Optional[str]) -> Optional[str]:
         """Submit metadata to Icecast and return the formatted payload on success."""
         if not (self.config.admin_user and self.config.admin_password):
             return None
 
-        title_text = (title or "").strip() or self.config.name
-        artist_text = (artist or "").strip()
+        safe_stream_name = self._stream_name or "EAS Station"
 
-        if artist_text and artist_text.lower() not in title_text.lower():
+        title_text = self._sanitize_metadata_value(title, safe_stream_name)
+        artist_text = self._sanitize_metadata_value(artist, "")
+
+        if artist_text and title_text and artist_text.lower() not in title_text.lower():
             song_value = f"{artist_text} - {title_text}"
         else:
             song_value = title_text
+
+        song_value = self._sanitize_metadata_value(song_value, safe_stream_name)
 
         mount_path = self.config.mount
         if not mount_path.startswith('/'):
