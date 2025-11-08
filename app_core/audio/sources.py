@@ -729,7 +729,12 @@ class StreamSourceAdapter(AudioSourceAdapter):
             # Determine how much space is available before hitting the HTTP buffer cap
             available_space = self._max_http_buffer_size - len(self._buffer)
             if available_space <= 0:
-                # Buffer is full - skip reading more data this cycle to let feeder catch up
+                # Buffer is full - first try to drain already-decoded PCM before sleeping
+                decoded_chunk = self._decode_stream_chunk()
+                if decoded_chunk is not None:
+                    return decoded_chunk
+
+                # Nothing ready for playback yet; pause reads so the feeder can catch up
                 now = time.time()
                 if now - self._last_http_backpressure_log > 5.0:
                     logger.warning(
@@ -775,22 +780,25 @@ class StreamSourceAdapter(AudioSourceAdapter):
             # Mark that we successfully read data from the stream
             self._had_data_activity = True
 
-            # Decode audio based on format
-            if self._stream_format == 'mp3':
-                return self._decode_mp3_chunk()
-            elif self._stream_format == 'aac':
-                return self._decode_aac_chunk()
-            elif self._stream_format == 'ogg':
-                return self._decode_ogg_chunk()
-            elif self._stream_format == 'raw':
-                return self._decode_raw_chunk()
-            else:
-                logger.error(f"Unsupported stream format: {self._stream_format}")
-                return None
+            return self._decode_stream_chunk()
 
         except Exception as e:
             logger.error(f"Error reading stream audio: {e}")
             return None
+
+    def _decode_stream_chunk(self) -> Optional[np.ndarray]:
+        """Dispatch decoding based on the configured stream format."""
+        if self._stream_format == 'mp3':
+            return self._decode_mp3_chunk()
+        if self._stream_format == 'aac':
+            return self._decode_aac_chunk()
+        if self._stream_format == 'ogg':
+            return self._decode_ogg_chunk()
+        if self._stream_format == 'raw':
+            return self._decode_raw_chunk()
+
+        logger.error(f"Unsupported stream format: {self._stream_format}")
+        return None
 
     def _find_mp3_frame_sync(self, data: bytearray, start_pos: int = 0) -> int:
         """
