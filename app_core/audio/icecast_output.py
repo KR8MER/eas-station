@@ -373,6 +373,34 @@ class IcecastStreamer:
             if not text:
                 return None
 
+            # Clean up metadata that contains XML/JSON attributes
+            # Example: text="Everybody Talks" song_spot="M" MediaBaseId="1842682" ...
+            # Extract just the text="" value
+            import re
+            text_match = re.search(r'text="([^"]+)"', text)
+            if text_match:
+                text = text_match.group(1)
+
+            # Also try title="" attribute
+            elif 'title="' in text:
+                title_match = re.search(r'title="([^"]+)"', text)
+                if title_match:
+                    text = title_match.group(1)
+
+            # Also try song="" attribute
+            elif 'song="' in text:
+                song_match = re.search(r'song="([^"]+)"', text)
+                if song_match:
+                    text = song_match.group(1)
+
+            # Remove any remaining XML-like attributes
+            # Remove key="value" patterns
+            text = re.sub(r'\s+\w+="[^"]*"', '', text)
+            # Remove key='value' patterns
+            text = re.sub(r"\s+\w+='[^']*'", '', text)
+            # Remove standalone key=value patterns (no quotes)
+            text = re.sub(r'\s+\w+=\S+', '', text)
+
             # Collapse extraneous whitespace (including newlines)
             text = ' '.join(text.split())
             return text or None
