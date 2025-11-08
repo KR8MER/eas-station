@@ -209,9 +209,15 @@ class IcecastStreamer:
 
                 decoded_line = line.decode('utf-8', errors='replace').strip()
                 if decoded_line:
-                    # Log ALL messages to see what's happening with Icecast connections
-                    # Use WARNING level for visibility in production logs
-                    logger.warning(f"FFmpeg [{self.config.mount}]: {decoded_line}")
+                    # Only log important messages (errors/warnings) to avoid log spam
+                    # FFmpeg is very verbose with version info and config
+                    lower_line = decoded_line.lower()
+                    if any(keyword in lower_line for keyword in
+                           ['error', 'failed', 'invalid', 'unable', 'not found',
+                            'warning', 'deprecated', 'refused', 'timeout']):
+                        logger.warning(f"FFmpeg [{self.config.mount}]: {decoded_line}")
+                    else:
+                        logger.debug(f"FFmpeg [{self.config.mount}]: {decoded_line}")
         except Exception as e:
             logger.debug(f"FFmpeg stderr reader stopped: {e}")
 
@@ -231,8 +237,6 @@ class IcecastStreamer:
             # FFmpeg command to encode and stream
             cmd = [
                 'ffmpeg',
-                # Global options to prevent connection timeouts
-                '-timeout', '-1',  # Infinite I/O timeout (prevents 10-minute disconnect)
                 '-f', 's16le',  # Input: 16-bit PCM
                 '-ar', str(self.config.sample_rate),  # Sample rate
                 '-ac', '1',      # Mono
