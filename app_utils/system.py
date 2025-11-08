@@ -24,6 +24,9 @@ from .time import UTC_TZ, local_now, utc_now
 SystemHealth = Dict[str, Any]
 
 
+NVME_DATA_UNIT_BYTES = 512_000
+
+
 def build_system_health_snapshot(db, logger) -> SystemHealth:
     """Collect detailed system health metrics."""
 
@@ -218,9 +221,6 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
             logger, hardware_info.get("block_devices", {}).get("devices") or []
         )
         temperature_info = _collect_temperature_readings(logger, smart_info)
-
-        hardware_info = _collect_hardware_inventory(logger)
-        smart_info = _collect_smart_health(logger, hardware_info.get("block_devices", {}).get("devices") or [])
 
         return {
             "timestamp": utc_now().isoformat(),
@@ -859,6 +859,13 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
             "reallocated_sector_count": None,
             "media_errors": None,
             "critical_warnings": None,
+            "data_units_written_bytes": None,
+            "data_units_read_bytes": None,
+            "host_read_commands": None,
+            "host_write_commands": None,
+            "controller_busy_time_minutes": None,
+            "unsafe_shutdowns": None,
+            "percentage_used": None,
             "exit_status": None,
             "error": None,
         }
@@ -917,6 +924,9 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
         )
         device_result["media_errors"] = _extract_nvme_field(report, "media_errors")
         device_result["critical_warnings"] = _extract_nvme_field(report, "critical_warning")
+        nvme_stats = _extract_nvme_statistics(report)
+        for key, value in nvme_stats.items():
+            device_result[key] = value
 
         if completed.stderr:
             stderr = completed.stderr.strip()
@@ -1102,9 +1112,60 @@ def _extract_nvme_field(report: Dict[str, Any], key: str) -> Optional[int]:
     nvme_info = report.get("nvme_smart_health_information_log")
     if isinstance(nvme_info, dict):
         value = nvme_info.get(key)
-        if isinstance(value, (int, float)):
-            return int(value)
+        coerced = _coerce_int(value)
+        if coerced is not None:
+            return coerced
     return None
+
+
+def _extract_nvme_statistics(report: Dict[str, Any]) -> Dict[str, Optional[int]]:
+    """Normalise NVMe-specific counters from smartctl output."""
+
+    stats: Dict[str, Optional[int]] = {
+        "data_units_written_bytes": None,
+        "data_units_read_bytes": None,
+        "host_read_commands": None,
+        "host_write_commands": None,
+        "controller_busy_time_minutes": None,
+        "unsafe_shutdowns": None,
+        "percentage_used": None,
+    }
+
+    nvme_info = report.get("nvme_smart_health_information_log")
+    if not isinstance(nvme_info, dict):
+        return stats
+
+    def pull(*keys: str) -> Optional[int]:
+        for candidate in keys:
+            if candidate in nvme_info:
+                value = _coerce_int(nvme_info.get(candidate))
+                if value is not None:
+                    return value
+        return None
+
+    bytes_written = pull("data_units_written_bytes")
+    if bytes_written is not None:
+        stats["data_units_written_bytes"] = bytes_written
+    else:
+        units_written = pull("data_units_written", "data_units_written_raw")
+        if units_written is not None:
+            stats["data_units_written_bytes"] = units_written * NVME_DATA_UNIT_BYTES
+
+    bytes_read = pull("data_units_read_bytes")
+    if bytes_read is not None:
+        stats["data_units_read_bytes"] = bytes_read
+    else:
+        units_read = pull("data_units_read", "data_units_read_raw")
+        if units_read is not None:
+            stats["data_units_read_bytes"] = units_read * NVME_DATA_UNIT_BYTES
+
+    stats["host_read_commands"] = pull("host_read_commands", "host_reads")
+    stats["host_write_commands"] = pull("host_write_commands", "host_writes")
+    stats["controller_busy_time_minutes"] = pull("controller_busy_time_minutes", "controller_busy_time")
+    stats["unsafe_shutdowns"] = pull("unsafe_shutdowns")
+    stats["percentage_used"] = pull("percentage_used")
+
+    return stats
 
 
 def _safe_read_text(path: Path) -> Optional[str]:
@@ -1126,6 +1187,36 @@ def _safe_int(value: Any) -> Optional[int]:
         return int(str(value).strip())
     except (TypeError, ValueError):
         return None
+
+
+def _coerce_int(value: Any) -> Optional[int]:
+    """Best-effort conversion of nested numeric representations to int."""
+
+    if value is None:
+        return None
+
+    if isinstance(value, (int, float)):
+        return int(value)
+
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        try:
+            if cleaned.lower().startswith("0x"):
+                return int(cleaned, 16)
+            return int(float(cleaned))
+        except ValueError:
+            return None
+
+    if isinstance(value, dict):
+        for key in ("value", "raw", "raw_value", "raw_value_64", "count", "hex"):
+            if key in value:
+                coerced = _coerce_int(value.get(key))
+                if coerced is not None:
+                    return coerced
+
+    return None
 
 
 def _to_bool(value: Any) -> Optional[bool]:
