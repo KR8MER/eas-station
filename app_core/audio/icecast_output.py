@@ -14,13 +14,16 @@ Key Features:
 
 from __future__ import annotations
 
+import base64
 import logging
 import subprocess
 import threading
 import time
+import traceback
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Optional, Tuple
+from urllib.parse import quote
 
 import numpy as np
 import requests
@@ -72,6 +75,20 @@ class IcecastStreamer:
         """
         self.config = config
         self.audio_source = audio_source
+
+        # Pre-sanitize stream metadata fields to avoid runtime encoding errors.
+        self._stream_name = self._sanitize_metadata_value(
+            getattr(self.config, 'name', None),
+            "EAS Station",
+        )
+        self._stream_description = self._sanitize_metadata_value(
+            getattr(self.config, 'description', None),
+            self._stream_name,
+        )
+        self._stream_genre = self._sanitize_metadata_value(
+            getattr(self.config, 'genre', None),
+            "Emergency",
+        )
 
         # FFmpeg process
         self._ffmpeg_process: Optional[subprocess.Popen] = None
@@ -177,20 +194,24 @@ class IcecastStreamer:
                     '-f', 'ogg',
                 ])
 
+            stream_name = self._stream_name or "EAS Station"
+            stream_description = self._stream_description or stream_name
+            stream_genre = self._stream_genre or "Emergency"
+
             # Add metadata
             cmd.extend([
-                '-metadata', f'title={self.config.name}',
+                '-metadata', f'title={stream_name}',
                 '-metadata', f'artist=EAS Station',
-                '-metadata', f'album={self.config.description}',
-                '-metadata', f'genre={self.config.genre}',
+                '-metadata', f'album={stream_description}',
+                '-metadata', f'genre={stream_genre}',
             ])
 
             # Output to Icecast
             cmd.extend([
                 '-content_type', 'audio/mpeg' if self.config.format == StreamFormat.MP3 else 'audio/ogg',
-                '-ice_name', self.config.name,
-                '-ice_description', self.config.description,
-                '-ice_genre', self.config.genre,
+                '-ice_name', stream_name,
+                '-ice_description', stream_description,
+                '-ice_genre', stream_genre,
                 icecast_url
             ])
 
@@ -315,9 +336,10 @@ class IcecastStreamer:
             sent_value = self._send_metadata_update(title or self.config.name, artist)
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning(
-                "Unable to update Icecast metadata for %s: %s",
+                "Unable to update Icecast metadata for %s: %s\nTraceback:\n%s",
                 self.config.mount,
                 exc,
+                ''.join(traceback.format_tb(exc.__traceback__)),
             )
             self._last_error = str(exc)
             return
@@ -393,60 +415,104 @@ class IcecastStreamer:
 
     @staticmethod
     def _sanitize_metadata_value(value: Optional[str], fallback: str = "") -> str:
-        """Return a latin-1 safe metadata string, stripping unsupported characters."""
-        if not value:
-            return fallback
+        """Return a clean metadata string, supporting UTF-8/Unicode characters."""
 
-        text = value.strip()
-        if not text:
-            return fallback
+        def _prepare(text: Optional[str]) -> str:
+            if not text:
+                return ""
+            cleaned = str(text).strip()
+            if not cleaned:
+                return ""
+            # Collapse extraneous whitespace (including newlines) and return
+            cleaned = ' '.join(cleaned.split())
+            return cleaned
 
-        try:
-            text.encode("latin-1")
-            return text
-        except UnicodeEncodeError:
-            sanitized = text.encode("latin-1", "ignore").decode("latin-1").strip()
-            if sanitized:
-                logger.debug(
-                    "Sanitized metadata value by removing unsupported characters: %s",
-                    sanitized,
-                )
-                return sanitized
-            return fallback
+        sanitized_fallback = _prepare(fallback)
+        sanitized_value = _prepare(value)
+
+        if sanitized_value:
+            return sanitized_value
+
+        return sanitized_fallback or ""
 
     def _send_metadata_update(self, title: str, artist: Optional[str]) -> Optional[str]:
         """Submit metadata to Icecast and return the formatted payload on success."""
         if not (self.config.admin_user and self.config.admin_password):
+            logger.debug(
+                "Metadata update skipped for %s: credentials not configured (user=%s, pass=%s)",
+                self.config.mount,
+                "SET" if self.config.admin_user else "NOT SET",
+                "SET" if self.config.admin_password else "NOT SET",
+            )
             return None
 
-        title_text = self._sanitize_metadata_value(title, self.config.name)
-        artist_text = self._sanitize_metadata_value(artist)
+        safe_stream_name = self._stream_name or "EAS Station"
 
-        if artist_text and artist_text.lower() not in title_text.lower():
+        title_text = self._sanitize_metadata_value(title, safe_stream_name)
+        artist_text = self._sanitize_metadata_value(artist, "")
+
+        if artist_text and title_text and artist_text.lower() not in title_text.lower():
             song_value = f"{artist_text} - {title_text}"
         else:
             song_value = title_text
 
-        song_value = self._sanitize_metadata_value(song_value, self.config.name)
+        song_value = self._sanitize_metadata_value(song_value, safe_stream_name)
 
         mount_path = self.config.mount
         if not mount_path.startswith('/'):
             mount_path = f"/{mount_path}"
 
-        url = f"http://{self.config.server}:{self.config.port}/admin/metadata"
-        params = {
-            'mode': 'updinfo',
-            'mount': mount_path,
-            'song': song_value,
-        }
+        # Manually build URL with UTF-8 encoded parameters to avoid latin-1 encoding issues
+        # Ensure values are proper Unicode strings before percent-encoding
+        mount_str = str(mount_path) if mount_path else ''
+        song_str = str(song_value) if song_value else ''
+
+        # quote() with safe='' ensures proper UTF-8 percent-encoding for all special characters
+        # Explicitly specify encoding='utf-8' to be absolutely clear
+        encoded_mount = quote(mount_str, safe='/', encoding='utf-8', errors='replace')
+        encoded_song = quote(song_str, safe='', encoding='utf-8', errors='replace')
+
+        # Build the URL manually to avoid requests' internal parameter encoding
+        base_url = f"http://{self.config.server}:{self.config.port}/admin/metadata"
+        url = f"{base_url}?mode=updinfo&mount={encoded_mount}&song={encoded_song}"
+
+        # Try auth with standard requests first (latin-1), fall back to UTF-8 if needed
+        auth_user = str(self.config.admin_user or '')
+        auth_pass = str(self.config.admin_password or '')
+
+        # Log credentials info for debugging (mask password) - use INFO to ensure it shows
+        logger.info(
+            "Icecast auth for %s: user=%r pass=***%s (total_len=%d)",
+            self.config.mount,
+            auth_user,
+            auth_pass[-2:] if len(auth_pass) >= 2 else "**",
+            len(f"{auth_user}:{auth_pass}"),
+        )
+
+        # Try to use requests' built-in auth first (latin-1 encoding)
+        # This is the standard that most servers expect
+        try:
+            # Test if credentials can be latin-1 encoded
+            auth_user.encode('latin-1')
+            auth_pass.encode('latin-1')
+            # If successful, use requests' built-in auth
+            auth_tuple = (auth_user, auth_pass)
+            headers = {}
+            logger.debug("Using latin-1 auth encoding (standard)")
+        except UnicodeEncodeError:
+            # Falls back to UTF-8 for Unicode passwords (RFC 7617)
+            credentials = f"{auth_user}:{auth_pass}".encode('utf-8')
+            encoded_credentials = base64.b64encode(credentials).decode('ascii')
+            auth_tuple = None
+            headers = {'Authorization': f'Basic {encoded_credentials}'}
+            logger.info("Using UTF-8 auth encoding (RFC 7617) for Unicode password")
 
         try:
-            response = requests.get(
-                url,
-                params=params,
-                auth=(self.config.admin_user, self.config.admin_password),
-                timeout=5.0,
-            )
+            # Make the HTTP GET request
+            if auth_tuple:
+                response = requests.get(url, auth=auth_tuple, timeout=5.0)
+            else:
+                response = requests.get(url, headers=headers, timeout=5.0)
         except requests_exceptions.RequestException as exc:
             logger.warning(
                 "Failed to update Icecast metadata for %s: %s",
