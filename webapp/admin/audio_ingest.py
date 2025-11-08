@@ -1276,7 +1276,7 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
                     'uptime_seconds': time.time() - adapter._start_time if hasattr(adapter, '_start_time') and adapter._start_time > 0 else 0,
                     'peak_level_db': _sanitize_float(metrics.peak_level_db),
                     'rms_level_db': _sanitize_float(metrics.rms_level_db),
-                    'is_silent': metrics.silence_detected,
+                    'is_silent': _sanitize_bool(metrics.silence_detected),
                     'buffer_fill_percentage': _sanitize_float(metrics.buffer_utilization * 100),
                     'restart_count': getattr(adapter, '_restart_count', 0),
                     'error_message': getattr(adapter, '_last_error', None),
@@ -1326,7 +1326,7 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
                     'rms_level_db': _sanitize_float(metrics.rms_level_db),
                     'sample_rate': metrics.sample_rate,
                     'frames_captured': metrics.frames_captured,
-                    'silence_detected': metrics.silence_detected,
+                    'silence_detected': _sanitize_bool(metrics.silence_detected),
                     'buffer_utilization': _sanitize_float(metrics.buffer_utilization * 100),
                 })
 
