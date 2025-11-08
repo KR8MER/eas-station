@@ -27,6 +27,9 @@ _auto_streaming_service = None
 # Global lock file to prevent duplicate streaming services across workers
 _streaming_lock_file = None
 
+# Global lock file to prevent duplicate audio source initialization across workers
+_audio_initialization_lock_file = None
+
 # Initialization state
 _initialization_started = False
 _initialization_lock = None
@@ -104,7 +107,7 @@ def _load_audio_source_configs(controller: AudioIngestController) -> None:
 
 def _start_audio_sources_background(app: Flask) -> None:
     """Start audio sources and streaming in background (slow, async)."""
-    global _audio_controller, _streaming_lock_file
+    global _audio_controller, _streaming_lock_file, _audio_initialization_lock_file
 
     # CRITICAL: Use Flask app context for database access
     with app.app_context():
@@ -119,10 +122,12 @@ def _start_audio_sources_background(app: Flask) -> None:
 
             try:
                 # Try to acquire exclusive lock (non-blocking)
-                lock_file = open(lock_file_path, 'w')
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                # IMPORTANT: Store handle in global variable to keep lock for process lifetime
+                _audio_initialization_lock_file = open(lock_file_path, 'w')
+                fcntl.flock(_audio_initialization_lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
                 # If we got here, we have the lock - this worker is responsible for initialization
+                # Keep the file open to maintain the lock
                 logger.info(f"Acquired audio initialization lock (PID {os.getpid()})")
 
             except (IOError, OSError) as e:
