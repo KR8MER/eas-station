@@ -810,15 +810,19 @@ class StreamSourceAdapter(AudioSourceAdapter):
             bufsize=4096
             )
 
-            # Set stdout to non-blocking mode to prevent hangs
+            # Set all pipes to non-blocking mode to prevent deadlocks
             if self._ffmpeg_process.stdout:
                 os.set_blocking(self._ffmpeg_process.stdout.fileno(), False)
                 logger.debug(f"Set FFmpeg stdout to non-blocking mode for {self.config.name}")
 
-            # Set stdin to non-blocking mode as well
             if self._ffmpeg_process.stdin:
                 os.set_blocking(self._ffmpeg_process.stdin.fileno(), False)
                 logger.debug(f"Set FFmpeg stdin to non-blocking mode for {self.config.name}")
+
+            # CRITICAL: Set stderr to non-blocking to prevent FFmpeg from blocking on error writes
+            if self._ffmpeg_process.stderr:
+                os.set_blocking(self._ffmpeg_process.stderr.fileno(), False)
+                logger.debug(f"Set FFmpeg stderr to non-blocking mode for {self.config.name}")
 
             # Start thread to feed data to FFmpeg
             self._ffmpeg_thread = threading.Thread(
@@ -844,7 +848,8 @@ class StreamSourceAdapter(AudioSourceAdapter):
             try:
                 if len(self._buffer) > 0:
                     # Send data to FFmpeg stdin (non-blocking)
-                    chunk = bytes(self._buffer[:4096])
+                    # Use larger chunks to reduce overhead and improve throughput
+                    chunk = bytes(self._buffer[:65536])
 
                     if self._ffmpeg_process and self._ffmpeg_process.stdin:
                         try:
@@ -888,18 +893,44 @@ class StreamSourceAdapter(AudioSourceAdapter):
         try:
             # Start FFmpeg decoder if not already running
             if not self._ffmpeg_process or self._ffmpeg_process.poll() is not None:
+                # Check if FFmpeg died unexpectedly
+                if self._ffmpeg_process and self._ffmpeg_process.poll() is not None:
+                    returncode = self._ffmpeg_process.returncode
+                    stderr_output = ""
+                    if self._ffmpeg_process.stderr:
+                        try:
+                            stderr_output = self._ffmpeg_process.stderr.read().decode('utf-8', errors='replace')
+                        except:
+                            pass
+                    logger.warning(f"{self.config.name}: FFmpeg decoder died (return code: {returncode}), restarting. Stderr: {stderr_output[:500]}")
                 self._start_ffmpeg_decoder()
 
             if not self._ffmpeg_process:
                 return None
 
-            # CRITICAL: Read ALL available PCM from FFmpeg stdout (non-blocking)
-            # Must drain stdout completely to prevent FFmpeg from blocking on write,
-            # which would prevent it from reading stdin, causing the input buffer to grow
+            # CRITICAL: Drain both stdout (PCM data) and stderr (errors) to prevent FFmpeg deadlock
+            # If either pipe fills to 64KB, FFmpeg will block on writes and stop consuming stdin
+
+            # Drain stderr first to catch any errors
+            if self._ffmpeg_process.stderr:
+                try:
+                    stderr_data = self._ffmpeg_process.stderr.read()
+                    if stderr_data:
+                        stderr_text = stderr_data.decode('utf-8', errors='replace').strip()
+                        if stderr_text:
+                            logger.warning(f"{self.config.name}: FFmpeg stderr: {stderr_text[:500]}")
+                except BlockingIOError:
+                    pass  # No stderr data available
+                except Exception as e:
+                    logger.debug(f"Error reading FFmpeg stderr: {e}")
+
+            # Drain stdout (PCM data)
             if self._ffmpeg_process.stdout:
                 # Keep reading until no more data available (non-blocking)
                 total_read = 0
+                drain_iterations = 0
                 while True:
+                    drain_iterations += 1
                     try:
                         # Read up to 64KB of PCM data per iteration
                         chunk = self._ffmpeg_process.stdout.read(65536)
@@ -916,9 +947,16 @@ class StreamSourceAdapter(AudioSourceAdapter):
                         logger.debug(f"Error reading from FFmpeg stdout: {e}")
                         break
 
-                # Log when we successfully drain stdout
+                # Log stdout draining activity (even when no data to diagnose issues)
                 if total_read > 0:
-                    logger.debug(f"{self.config.name}: Read {total_read} bytes from FFmpeg stdout, PCM buffer now: {len(self._pcm_buffer)} bytes")
+                    logger.info(f"{self.config.name}: Drained {total_read} bytes from FFmpeg stdout in {drain_iterations} iteration(s), PCM buffer: {len(self._pcm_buffer)} bytes, HTTP buffer: {len(self._buffer)} bytes")
+                elif drain_iterations == 1:
+                    # First iteration found no data - FFmpeg hasn't produced output yet
+                    if not hasattr(self, '_last_empty_drain_log'):
+                        self._last_empty_drain_log = 0
+                    if time.time() - self._last_empty_drain_log > 5.0:
+                        logger.debug(f"{self.config.name}: Stdout drain found no data immediately (FFmpeg may still be buffering)")
+                        self._last_empty_drain_log = time.time()
 
             # Convert PCM buffer to numpy array when we have enough data
             bytes_per_sample = 2  # 16-bit = 2 bytes
