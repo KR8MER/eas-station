@@ -108,6 +108,8 @@ class AudioSourceAdapter(ABC):
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5
         self._last_error_time = 0.0
+        # Activity tracking for capture loop optimization
+        self._had_data_activity = False  # Some sources set this when they read data but can't decode yet
 
     @abstractmethod
     def _start_capture(self) -> None:
@@ -210,9 +212,11 @@ class AudioSourceAdapter(ABC):
                         except queue.Empty:
                             pass
                 else:
-                    # No data available - sleep briefly to avoid busy loop
-                    # This is critical for non-blocking sources (streams, etc.)
-                    time.sleep(0.001)  # 1ms sleep to prevent CPU spinning
+                    # No decoded audio chunk available
+                    # Only sleep if source had no data activity (prevents busy loops on truly idle sources)
+                    # Stream sources may read HTTP data but not have enough to decode yet - don't sleep in that case
+                    if not self._had_data_activity:
+                        time.sleep(0.001)  # 1ms sleep to prevent CPU spinning on idle sources
 
             except Exception as e:
                 logger.error(f"Error in capture loop for {self.config.name}: {e}")
