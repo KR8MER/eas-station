@@ -311,7 +311,17 @@ class IcecastStreamer:
         if self._last_metadata_payload == cache_key:
             return
 
-        sent_value = self._send_metadata_update(title or self.config.name, artist)
+        try:
+            sent_value = self._send_metadata_update(title or self.config.name, artist)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning(
+                "Unable to update Icecast metadata for %s: %s",
+                self.config.mount,
+                exc,
+            )
+            self._last_error = str(exc)
+            return
+
         if sent_value:
             self._last_metadata_payload = cache_key
             self._last_metadata_song = sent_value
@@ -381,18 +391,43 @@ class IcecastStreamer:
 
         return title, artist
 
+    @staticmethod
+    def _sanitize_metadata_value(value: Optional[str], fallback: str = "") -> str:
+        """Return a latin-1 safe metadata string, stripping unsupported characters."""
+        if not value:
+            return fallback
+
+        text = value.strip()
+        if not text:
+            return fallback
+
+        try:
+            text.encode("latin-1")
+            return text
+        except UnicodeEncodeError:
+            sanitized = text.encode("latin-1", "ignore").decode("latin-1").strip()
+            if sanitized:
+                logger.debug(
+                    "Sanitized metadata value by removing unsupported characters: %s",
+                    sanitized,
+                )
+                return sanitized
+            return fallback
+
     def _send_metadata_update(self, title: str, artist: Optional[str]) -> Optional[str]:
         """Submit metadata to Icecast and return the formatted payload on success."""
         if not (self.config.admin_user and self.config.admin_password):
             return None
 
-        title_text = (title or "").strip() or self.config.name
-        artist_text = (artist or "").strip()
+        title_text = self._sanitize_metadata_value(title, self.config.name)
+        artist_text = self._sanitize_metadata_value(artist)
 
         if artist_text and artist_text.lower() not in title_text.lower():
             song_value = f"{artist_text} - {title_text}"
         else:
             song_value = title_text
+
+        song_value = self._sanitize_metadata_value(song_value, self.config.name)
 
         mount_path = self.config.mount
         if not mount_path.startswith('/'):
