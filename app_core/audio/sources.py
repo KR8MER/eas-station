@@ -885,6 +885,9 @@ class StreamSourceAdapter(AudioSourceAdapter):
                     chunk = self._ffmpeg_process.stdout.read(16384)
                     if chunk:
                         self._pcm_buffer.extend(chunk)
+                        # DEBUG: Log when we successfully read from FFmpeg
+                        if len(self._pcm_buffer) % 50000 < 16384:  # Log every ~50KB
+                            logger.debug(f"{self.config.name}: FFmpeg PCM buffer size: {len(self._pcm_buffer)} bytes, HTTP buffer: {len(self._buffer)} bytes")
                 except BlockingIOError:
                     # No data available yet - this is expected with non-blocking reads
                     pass
@@ -911,6 +914,14 @@ class StreamSourceAdapter(AudioSourceAdapter):
                 samples = samples.astype(np.float32) / 32768.0
 
                 return samples
+            else:
+                # DEBUG: Periodically log when waiting for more data
+                import time
+                if not hasattr(self, '_last_wait_log'):
+                    self._last_wait_log = 0
+                if time.time() - self._last_wait_log > 2.0:  # Log every 2 seconds
+                    logger.warning(f"{self.config.name}: Waiting for PCM data - have {samples_available}/{target_samples} samples ({len(self._pcm_buffer)} bytes), HTTP buffer: {len(self._buffer)} bytes")
+                    self._last_wait_log = time.time()
 
             return None
 
