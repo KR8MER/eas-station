@@ -92,4 +92,28 @@ The following Python packages are used to build the documentation website locall
 
 ---
 
+## Geographic Data Sources & Attribution
+
+EAS Station uses publicly available geographic data to provide spatial filtering and location-based alert processing.
+
+### County & Municipal Boundary Data
+
+| Data Source | Provider | License/Terms | Purpose |
+| --- | --- | --- | --- |
+| **Putnam County, Ohio GIS Data** | Putnam County GIS Office<br/>Greg Luersman, GIS Coordinator<br/>https://www.putnamcountygis.com/Downloads.html | Public Domain / Open Data | County boundaries, municipal boundaries, and reference geographic data for spatial filtering and alert targeting |
+
+**Attribution**: Geographic boundary data for Putnam County, Ohio, is provided by the Putnam County GIS Office under the direction of Greg Luersman, GIS Coordinator. This data is made freely available to the public through the Putnam County GIS Downloads portal.
+
+### Federal Geographic Data
+
+| Data Source | Provider | License/Terms | Purpose |
+| --- | --- | --- | --- |
+| **FIPS County Codes** | U.S. Census Bureau | Public Domain | County identification for EAS SAME headers and CAP message parsing |
+| **NWS Zone Boundaries** | NOAA National Weather Service | Public Domain | Weather zone boundary definitions for alert filtering |
+| **State Boundaries** | U.S. Census Bureau TIGER/Line | Public Domain | State-level geographic filtering |
+
+---
+
 All dependencies are sourced from public repositories published under OSI-approved licenses. Ensure that attribution for BSD and MIT packages accompanies any redistribution of EAS Station binaries or container images.
+
+Geographic data is provided by government sources and local GIS offices under public domain or open data licenses. Users are encouraged to acknowledge data providers when sharing derivative works or documentation.

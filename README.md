@@ -360,6 +360,8 @@ See [LICENSE](LICENSE) file for full text.
 - **NOAA/NWS** - Weather alert data and CAP specifications
 - **FEMA/IPAWS** - National alert system integration
 - **PostGIS Team** - Spatial database technology
+- **Putnam County GIS Office** - Geographic boundary data (Greg Luersman, GIS Coordinator)
+- **U.S. Census Bureau** - FIPS codes and TIGER/Line boundary data
 - **Flask Community** - Web framework
 - **RTL-SDR Project** - Software-defined radio tools
 - **Amateur Radio Community** - Testing and feedback

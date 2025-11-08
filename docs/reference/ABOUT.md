@@ -59,6 +59,25 @@ The application combines open-source tooling and optional cloud integrations. Ve
 - Azure Cognitive Services Speech SDK 1.38.0 (optional AI narration)
 - Docker Engine 24+ and Docker Compose V2 for container orchestration
 
+## Data Sources & Attribution
+
+EAS Station relies on publicly available geographic data to enable spatial filtering, boundary-aware alert processing, and location-based targeting.
+
+### Geographic Data Providers
+
+- **Putnam County GIS Office** - County and municipal boundary shapefiles, reference geographic data
+  - Greg Luersman, GIS Coordinator
+  - https://www.putnamcountygis.com/Downloads.html
+  - Licensed under Public Domain / Open Data terms
+
+- **U.S. Census Bureau** - FIPS county codes and TIGER/Line state/county boundaries
+  - Public Domain federal data
+
+- **NOAA National Weather Service** - Weather forecast zone boundaries and definitions
+  - Public Domain federal data
+
+For complete attribution details, see [`dependency_attribution.md`](dependency_attribution.md).
+
 ## Governance and Support
 - **Issue Tracking:** Use GitHub issues for bug reports and feature requests.
 - **Documentation Updates:** User-facing changes must update the README, HELP, and CHANGELOG entries.
