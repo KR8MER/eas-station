@@ -802,6 +802,7 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             return jsonify({
                 'health_records': health_list,
                 'overall_health_score': avg_health,
+                'health_score': avg_health,  # Add for UI compatibility
                 'overall_status': overall_status,
                 'active_sources': active_sources,
                 'total_sources': len(controller._sources),
@@ -1233,6 +1234,23 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
             for source_name, adapter in controller._sources.items():
                 metrics = adapter.metrics
                 status = adapter.status
+
+                # Skip sources with no metrics
+                if metrics is None:
+                    health_status = 'failed'
+                    failed_count += 1
+                    categorized_sources['failed'].append(source_name)
+                    source_health[source_name] = {
+                        'status': health_status,
+                        'uptime_seconds': 0,
+                        'peak_level_db': -120.0,
+                        'rms_level_db': -120.0,
+                        'is_silent': True,
+                        'buffer_fill_percentage': 0.0,
+                        'restart_count': 0,
+                        'error_message': 'No metrics available',
+                    }
+                    continue
 
                 # Determine health status
                 if status.value == 'running':
