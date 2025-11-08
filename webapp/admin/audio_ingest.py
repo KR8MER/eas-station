@@ -104,11 +104,32 @@ def _load_audio_source_configs(controller: AudioIngestController) -> None:
 
 def _start_audio_sources_background(app: Flask) -> None:
     """Start audio sources and streaming in background (slow, async)."""
-    global _audio_controller
+    global _audio_controller, _streaming_lock_file
 
     # CRITICAL: Use Flask app context for database access
     with app.app_context():
         try:
+            # CRITICAL: Acquire file lock BEFORE starting audio sources
+            # In multi-worker environments, we need to ensure only ONE worker
+            # starts the audio source decoders to prevent duplicate FFmpeg processes
+            import fcntl
+            import os
+
+            lock_file_path = '/tmp/eas-audio-initialization.lock'
+
+            try:
+                # Try to acquire exclusive lock (non-blocking)
+                lock_file = open(lock_file_path, 'w')
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+                # If we got here, we have the lock - this worker is responsible for initialization
+                logger.info(f"Acquired audio initialization lock (PID {os.getpid()})")
+
+            except (IOError, OSError) as e:
+                # Lock is already held by another worker - skip initialization
+                logger.info(f"Audio sources already being initialized by another worker (PID {os.getpid()}) - skipping")
+                return
+
             logger.info("Background: Starting audio sources")
 
             if _audio_controller is None:
