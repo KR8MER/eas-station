@@ -293,16 +293,27 @@ class IcecastStreamer:
         """Get streaming statistics."""
         uptime = time.time() - self._start_time if self._start_time > 0 else 0
 
+        # Guard against division by zero when calculating bitrate
+        if uptime <= 0:
+            bitrate = 0.0
+        else:
+            bitrate = (self._bytes_sent * 8 / 1000) / uptime
+
         return {
             'running': not self._stop_event.is_set(),
             'uptime_seconds': uptime,
             'bytes_sent': self._bytes_sent,
-            'bitrate_kbps': (self._bytes_sent * 8 / 1000 / max(uptime, 1)),
+            'bitrate_kbps': bitrate,
             'reconnect_count': self._reconnect_count,
             'last_error': self._last_error,
             'server': self.config.server,
             'port': self.config.port,
             'mount': self.config.mount,
+            'name': self.config.name,
+            'description': self.config.description,
+            'genre': self.config.genre,
+            'format': self.config.format.value,
+            'public': self.config.public,
         }
 
 

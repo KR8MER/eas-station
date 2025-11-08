@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from flask import Flask, jsonify, render_template, request, current_app
@@ -33,6 +34,44 @@ _audio_initialization_lock_file = None
 # Initialization state
 _initialization_started = False
 _initialization_lock = None
+
+
+def _try_acquire_lock(lock_file_path: str, mode: str = 'a'):
+    """Attempt to acquire an exclusive file lock.
+
+    On platforms without ``fcntl`` (e.g., Windows) we log a warning and
+    proceed without locking so that audio ingestion still functions.
+
+    Returns a tuple of ``(file_handle, acquired)``. ``file_handle`` will be
+    ``None`` when locking isn't supported or when the lock could not be
+    obtained. ``acquired`` indicates whether initialization should proceed.
+    """
+    try:
+        import fcntl  # type: ignore
+    except ImportError:
+        logger.warning(
+            "POSIX file locking (fcntl) not available on this platform; "
+            "continuing without an exclusive lock for %s",
+            lock_file_path
+        )
+        return None, True
+
+    try:
+        lock_file = open(lock_file_path, mode)
+    except OSError as exc:
+        logger.warning(
+            "Failed to open lock file %s (%s); continuing without exclusive lock",
+            lock_file_path,
+            exc
+        )
+        return None, True
+
+    try:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return lock_file, True
+    except (IOError, OSError):
+        lock_file.close()
+        return None, False
 
 
 def _get_audio_controller() -> AudioIngestController:
@@ -115,26 +154,26 @@ def _start_audio_sources_background(app: Flask) -> None:
             # CRITICAL: Acquire file lock BEFORE starting audio sources
             # In multi-worker environments, we need to ensure only ONE worker
             # starts the audio source decoders to prevent duplicate FFmpeg processes
-            import fcntl
             import os
 
             lock_file_path = '/tmp/eas-audio-initialization.lock'
 
-            try:
-                # Try to acquire exclusive lock (non-blocking)
-                # IMPORTANT: Store handle in global variable to keep lock for process lifetime
-                # Use 'a' mode to avoid truncating (which could interfere with locks)
-                _audio_initialization_lock_file = open(lock_file_path, 'a')
-                fcntl.flock(_audio_initialization_lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-                # If we got here, we have the lock - this worker is responsible for initialization
-                # Keep the file open to maintain the lock
-                logger.info(f"Acquired audio initialization lock (PID {os.getpid()})")
-
-            except (IOError, OSError) as e:
+            lock_file, acquired = _try_acquire_lock(lock_file_path, mode='a')
+            if not acquired:
                 # Lock is already held by another worker - skip initialization
-                logger.info(f"Audio sources already being initialized by another worker (PID {os.getpid()}) - skipping")
+                logger.info(
+                    f"Audio sources already being initialized by another worker (PID {os.getpid()}) - skipping"
+                )
                 return
+
+            if lock_file:
+                # Keep the file open to maintain the lock for the life of the process
+                _audio_initialization_lock_file = lock_file
+                logger.info(f"Acquired audio initialization lock (PID {os.getpid()})")
+            else:
+                logger.info(
+                    f"Proceeding without exclusive audio initialization lock (PID {os.getpid()})"
+                )
 
             logger.info("Background: Starting audio sources")
 
@@ -174,25 +213,29 @@ def _initialize_auto_streaming() -> None:
     # With multiple gunicorn workers, each worker would initialize its own streaming
     # service, causing multiple FFmpeg processes to fight for the same Icecast mount.
     # Use a file lock to ensure only ONE worker starts the streaming service.
-    import fcntl
     import os
 
     lock_file_path = '/tmp/eas-auto-streaming.lock'
 
-    try:
-        # Try to acquire exclusive lock (non-blocking)
-        _streaming_lock_file = open(lock_file_path, 'w')
-        fcntl.flock(_streaming_lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-        # If we got here, we have the lock - this worker is responsible for streaming
-        # Keep lock file open for the lifetime of the process to maintain the lock
-        logger.info(f"Acquired streaming lock (PID {os.getpid()}) - initializing auto-streaming service")
-
-    except (IOError, OSError) as e:
+    lock_file, acquired = _try_acquire_lock(lock_file_path, mode='w')
+    if not acquired:
         # Lock is already held by another worker - skip initialization
-        logger.info(f"Auto-streaming already initialized by another worker (PID {os.getpid()}) - skipping")
+        logger.info(
+            f"Auto-streaming already initialized by another worker (PID {os.getpid()}) - skipping"
+        )
         _auto_streaming_service = None
         return
+
+    if lock_file:
+        # Keep lock file open for the lifetime of the process to maintain the lock
+        _streaming_lock_file = lock_file
+        logger.info(
+            f"Acquired streaming lock (PID {os.getpid()}) - initializing auto-streaming service"
+        )
+    else:
+        logger.info(
+            f"Proceeding without exclusive auto-streaming lock (PID {os.getpid()})"
+        )
 
     try:
         from app_core.audio.icecast_auto_config import get_icecast_auto_config
@@ -258,7 +301,119 @@ def _sanitize_bool(value) -> bool:
     return bool(value)
 
 
-def _serialize_audio_source(source_name: str, adapter: Any) -> Dict[str, Any]:
+def _get_icecast_stream_url(source_name: str) -> Optional[str]:
+    """Resolve the external Icecast URL for a source when configured."""
+    try:
+        from app_core.audio.icecast_auto_config import get_icecast_auto_config
+
+        auto_config = get_icecast_auto_config()
+        if auto_config.is_enabled():
+            return auto_config.get_stream_url(source_name, external=True)
+    except Exception:
+        # Icecast may not be configured or auto-config import could fail; ignore gracefully
+        return None
+
+    return None
+
+
+def _sanitize_metadata_value(value: Any) -> Any:
+    """Sanitize a metadata value to ensure JSON serialization safety."""
+    if value is None:
+        return None
+
+    if isinstance(value, (str, int)):
+        return value
+
+    if isinstance(value, float):
+        return _sanitize_float(value)
+
+    if isinstance(value, bool):
+        return _sanitize_bool(value)
+
+    if isinstance(value, (list, tuple)):
+        return [
+            _sanitize_metadata_value(item)
+            for item in value
+        ]
+
+    if isinstance(value, dict):
+        return {
+            str(key): _sanitize_metadata_value(item)
+            for key, item in value.items()
+        }
+
+    if isinstance(value, datetime):
+        return value.isoformat()
+
+    try:
+        import numpy as np  # type: ignore
+
+        if isinstance(value, (np.floating, np.integer)):
+            return _sanitize_float(float(value))
+
+        if isinstance(value, np.bool_):
+            return _sanitize_bool(bool(value))
+    except Exception:
+        # numpy may not be installed in some environments
+        pass
+
+    return str(value)
+
+
+def _merge_metadata(*metadata_sources: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Merge multiple metadata dictionaries into a sanitized structure."""
+    merged: Dict[str, Any] = {}
+
+    for metadata in metadata_sources:
+        if not metadata:
+            continue
+
+        for key, value in metadata.items():
+            sanitized_value = _sanitize_metadata_value(value)
+            if sanitized_value is None:
+                continue
+
+            key_str = str(key)
+            if key_str in merged and merged[key_str] is not None:
+                continue
+
+            merged[key_str] = sanitized_value
+
+    return merged or None
+
+
+def _sanitize_streaming_stats(stats: Optional[Dict[str, Any]], icecast_url: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Prepare streaming statistics for API output."""
+    if not stats:
+        return None
+
+    sanitized: Dict[str, Any] = {}
+
+    for key, value in stats.items():
+        if key in {'bitrate_kbps', 'uptime_seconds'}:
+            if value is None:
+                sanitized[key] = None
+            else:
+                sanitized[key] = round(float(value), 2)
+        elif key in {'bytes_sent', 'reconnect_count', 'port'}:
+            sanitized[key] = int(value) if value is not None else None
+        elif key == 'running' or key == 'public':
+            sanitized[key] = _sanitize_bool(value)
+        else:
+            sanitized[key] = value
+
+    if icecast_url:
+        sanitized.setdefault('url', icecast_url)
+
+    return sanitized
+
+
+def _serialize_audio_source(
+    source_name: str,
+    adapter: Any,
+    latest_metric: Optional[AudioSourceMetrics] = None,
+    icecast_stats: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """Serialize an audio source adapter to JSON-compatible dict."""
     config = adapter.config
 
@@ -266,17 +421,62 @@ def _serialize_audio_source(source_name: str, adapter: Any) -> Dict[str, Any]:
     db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
 
     # Check if Icecast streaming is available for this source
-    icecast_url = None
-    try:
-        # Use auto-config to detect Icecast from environment
-        from app_core.audio.icecast_auto_config import get_icecast_auto_config
-        auto_config = get_icecast_auto_config()
-        if auto_config.is_enabled():
-            # Get external URL for browser access
-            icecast_url = auto_config.get_stream_url(source_name, external=True)
-    except Exception:
-        # Silently fail - Icecast just won't be available
-        pass
+    icecast_url = _get_icecast_stream_url(source_name)
+
+    metadata = _merge_metadata(
+        adapter.metrics.metadata if adapter.metrics else None,
+        latest_metric.source_metadata if latest_metric else None,
+        {
+            'stream_url': icecast_url,
+            'icecast_stream_url': icecast_url,
+            'icecast_mount': icecast_stats.get('mount') if icecast_stats else None,
+            'icecast_server': icecast_stats.get('server') if icecast_stats else None,
+            'icecast_port': icecast_stats.get('port') if icecast_stats else None,
+            'bitrate_kbps': icecast_stats.get('bitrate_kbps') if icecast_stats else None,
+            'codec': (icecast_stats.get('format') or '').lower() if icecast_stats else None,
+            'codec_version': (
+                'Icecast MP3' if icecast_stats and (icecast_stats.get('format') or '').lower() == 'mp3'
+                else 'Icecast OGG' if icecast_stats and (icecast_stats.get('format') or '').lower() == 'ogg'
+                else None
+            ),
+            'icy_name': icecast_stats.get('name') if icecast_stats else None,
+            'icy_genre': icecast_stats.get('genre') if icecast_stats else None,
+        }
+    )
+
+    streaming = {
+        'icecast': _sanitize_streaming_stats(icecast_stats, icecast_url)
+    } if icecast_stats else None
+
+    metrics_payload = None
+    if adapter.metrics:
+        metrics_payload = {
+            'timestamp': adapter.metrics.timestamp,
+            'peak_level_db': _sanitize_float(adapter.metrics.peak_level_db),
+            'rms_level_db': _sanitize_float(adapter.metrics.rms_level_db),
+            'sample_rate': adapter.metrics.sample_rate,
+            'channels': adapter.metrics.channels,
+            'frames_captured': adapter.metrics.frames_captured,
+            'silence_detected': _sanitize_bool(adapter.metrics.silence_detected),
+            'buffer_utilization': _sanitize_float(adapter.metrics.buffer_utilization),
+            'metadata': metadata,
+        }
+    elif latest_metric:
+        metrics_payload = {
+            'timestamp': latest_metric.timestamp.isoformat() if latest_metric.timestamp else None,
+            'peak_level_db': _sanitize_float(latest_metric.peak_level_db) if latest_metric.peak_level_db is not None else None,
+            'rms_level_db': _sanitize_float(latest_metric.rms_level_db) if latest_metric.rms_level_db is not None else None,
+            'sample_rate': latest_metric.sample_rate,
+            'channels': latest_metric.channels,
+            'frames_captured': latest_metric.frames_captured,
+            'silence_detected': _sanitize_bool(latest_metric.silence_detected) if latest_metric.silence_detected is not None else False,
+            'buffer_utilization': _sanitize_float(latest_metric.buffer_utilization) if latest_metric.buffer_utilization is not None else 0.0,
+            'metadata': metadata,
+        }
+
+    if metadata and metrics_payload is None:
+        # Ensure metadata is not lost when no metrics are available
+        metrics_payload = {'metadata': metadata}
 
     return {
         'id': source_name,
@@ -297,17 +497,8 @@ def _serialize_audio_source(source_name: str, adapter: Any) -> Dict[str, Any]:
             'silence_duration_seconds': config.silence_duration_seconds,
             'device_params': config.device_params,
         },
-        'metrics': {
-            'timestamp': adapter.metrics.timestamp,
-            'peak_level_db': _sanitize_float(adapter.metrics.peak_level_db),
-            'rms_level_db': _sanitize_float(adapter.metrics.rms_level_db),
-            'sample_rate': adapter.metrics.sample_rate,
-            'channels': adapter.metrics.channels,
-            'frames_captured': adapter.metrics.frames_captured,
-            'silence_detected': _sanitize_bool(adapter.metrics.silence_detected),
-            'buffer_utilization': _sanitize_float(adapter.metrics.buffer_utilization),
-            'metadata': adapter.metrics.metadata if adapter.metrics.metadata else None,
-        } if adapter.metrics else None,
+        'metrics': metrics_payload,
+        'streaming': streaming,
     }
 
 
@@ -322,32 +513,108 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
         """List all configured audio sources."""
         try:
             controller = _get_audio_controller()
-            sources = []
+            sources: List[Dict[str, Any]] = []
 
             # Query DATABASE for all sources (source of truth)
             db_configs = AudioSourceConfigDB.query.all()
 
+            source_names = [config.name for config in db_configs]
+
+            latest_metrics_map: Dict[str, AudioSourceMetrics] = {}
+            if source_names:
+                recent_metrics = (
+                    AudioSourceMetrics.query
+                    .filter(AudioSourceMetrics.source_name.in_(source_names))
+                    .order_by(AudioSourceMetrics.source_name, desc(AudioSourceMetrics.timestamp))
+                    .all()
+                )
+
+                for metric in recent_metrics:
+                    if metric.source_name not in latest_metrics_map:
+                        latest_metrics_map[metric.source_name] = metric
+
+            icecast_status_map: Dict[str, Dict[str, Any]] = {}
+            auto_streaming = _get_auto_streaming_service()
+            if auto_streaming:
+                try:
+                    streaming_status = auto_streaming.get_status()
+                    active_streams = streaming_status.get('active_streams', {}) if streaming_status else {}
+                    icecast_status_map = {
+                        name: dict(stats)
+                        for name, stats in active_streams.items()
+                    }
+                except Exception as status_exc:
+                    logger.warning('Failed to get Icecast streaming status: %s', status_exc)
+
             for db_config in db_configs:
-                # Check if source is loaded in memory
                 adapter = controller._sources.get(db_config.name)
+                latest_metric = latest_metrics_map.get(db_config.name)
+                icecast_stats = icecast_status_map.get(db_config.name)
+                icecast_url = _get_icecast_stream_url(db_config.name)
 
                 if adapter:
-                    # Source is in memory, serialize it normally
-                    sources.append(_serialize_audio_source(db_config.name, adapter))
-                else:
-                    # Source exists in DB but not in memory - show as stopped
-                    sources.append({
-                        'name': db_config.name,
-                        'type': db_config.source_type,
-                        'status': 'stopped',
-                        'enabled': db_config.enabled,
-                        'priority': db_config.priority,
-                        'auto_start': db_config.auto_start,
-                        'description': db_config.description or '',
-                        'metrics': None,
-                        'error_message': 'Not loaded in memory (restart required)',
-                        'in_memory': False  # Flag to indicate sync issue
-                    })
+                    sources.append(
+                        _serialize_audio_source(
+                            db_config.name,
+                            adapter,
+                            latest_metric,
+                            icecast_stats,
+                        )
+                    )
+                    continue
+
+                metadata = _merge_metadata(
+                    latest_metric.source_metadata if latest_metric else None,
+                    {
+                        'stream_url': icecast_url,
+                        'icecast_stream_url': icecast_url,
+                        'icecast_mount': icecast_stats.get('mount') if icecast_stats else None,
+                        'icecast_server': icecast_stats.get('server') if icecast_stats else None,
+                        'icecast_port': icecast_stats.get('port') if icecast_stats else None,
+                        'bitrate_kbps': icecast_stats.get('bitrate_kbps') if icecast_stats else None,
+                        'codec': (icecast_stats.get('format') or '').lower() if icecast_stats else None,
+                        'codec_version': (
+                            'Icecast MP3' if icecast_stats and (icecast_stats.get('format') or '').lower() == 'mp3'
+                            else 'Icecast OGG' if icecast_stats and (icecast_stats.get('format') or '').lower() == 'ogg'
+                            else None
+                        ),
+                        'icy_name': icecast_stats.get('name') if icecast_stats else None,
+                        'icy_genre': icecast_stats.get('genre') if icecast_stats else None,
+                    }
+                )
+
+                metrics_payload: Optional[Dict[str, Any]] = None
+                if latest_metric:
+                    metrics_payload = {
+                        'timestamp': latest_metric.timestamp.isoformat() if latest_metric.timestamp else None,
+                        'peak_level_db': _sanitize_float(latest_metric.peak_level_db) if latest_metric.peak_level_db is not None else None,
+                        'rms_level_db': _sanitize_float(latest_metric.rms_level_db) if latest_metric.rms_level_db is not None else None,
+                        'sample_rate': latest_metric.sample_rate,
+                        'channels': latest_metric.channels,
+                        'frames_captured': latest_metric.frames_captured,
+                        'silence_detected': _sanitize_bool(latest_metric.silence_detected) if latest_metric.silence_detected is not None else False,
+                        'buffer_utilization': _sanitize_float(latest_metric.buffer_utilization) if latest_metric.buffer_utilization is not None else 0.0,
+                        'metadata': metadata,
+                    }
+                elif metadata:
+                    metrics_payload = {'metadata': metadata}
+
+                sources.append({
+                    'name': db_config.name,
+                    'type': db_config.source_type,
+                    'status': 'stopped',
+                    'enabled': db_config.enabled,
+                    'priority': db_config.priority,
+                    'auto_start': db_config.auto_start,
+                    'description': db_config.description or '',
+                    'metrics': metrics_payload,
+                    'error_message': 'Not loaded in memory (restart required)',
+                    'in_memory': False,
+                    'icecast_url': icecast_url,
+                    'streaming': {
+                        'icecast': _sanitize_streaming_stats(icecast_stats, icecast_url)
+                    } if icecast_stats else None,
+                })
 
             return jsonify({
                 'sources': sources,
