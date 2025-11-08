@@ -208,6 +208,26 @@ class IcecastStreamer:
 
         chunk_samples = int(self.config.sample_rate * 0.1)  # 100ms chunks
 
+        # CRITICAL: Pre-buffer audio to prevent stuttering/clipping
+        # Build up a buffer before starting to feed FFmpeg
+        from collections import deque
+        buffer = deque(maxlen=50)  # Up to 5 seconds of audio (50 * 100ms)
+        prebuffer_target = 20  # Pre-fill with 2 seconds before starting
+
+        logger.info(f"Pre-buffering {prebuffer_target} chunks for smooth Icecast streaming")
+        prebuffer_timeout = time.time() + 10.0  # 10 seconds max to prebuffer
+
+        while len(buffer) < prebuffer_target and time.time() < prebuffer_timeout:
+            samples = self.audio_source.get_audio_chunk(timeout=0.5)
+            if samples is not None:
+                pcm_data = (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16)
+                buffer.append(pcm_data.tobytes())
+
+        if len(buffer) < prebuffer_target:
+            logger.warning(f"Pre-buffer timeout: only filled {len(buffer)}/{prebuffer_target} chunks")
+        else:
+            logger.info(f"Pre-buffer complete: {len(buffer)} chunks ready")
+
         while not self._stop_event.is_set():
             if not self._ffmpeg_process or self._ffmpeg_process.poll() is not None:
                 # FFmpeg died, try to get error output
@@ -233,20 +253,23 @@ class IcecastStreamer:
                     continue
 
             try:
-                # Read audio from source
+                # Read audio from source and add to buffer
                 samples = self.audio_source.get_audio_chunk(timeout=0.1)
 
                 if samples is not None:
                     # Convert float32 [-1, 1] to int16 PCM
                     pcm_data = (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16)
+                    buffer.append(pcm_data.tobytes())
 
-                    # Write to FFmpeg stdin
-                    if self._ffmpeg_process and self._ffmpeg_process.stdin:
-                        self._ffmpeg_process.stdin.write(pcm_data.tobytes())
-                        self._ffmpeg_process.stdin.flush()
-                        self._bytes_sent += len(pcm_data.tobytes())
-                else:
-                    # No audio available, sleep briefly
+                # Feed FFmpeg from buffer (always try to send, even if we just got None)
+                # This keeps FFmpeg fed even when source is temporarily slow
+                if buffer and self._ffmpeg_process and self._ffmpeg_process.stdin:
+                    chunk = buffer.popleft()
+                    self._ffmpeg_process.stdin.write(chunk)
+                    self._ffmpeg_process.stdin.flush()
+                    self._bytes_sent += len(chunk)
+                elif not buffer:
+                    # Buffer empty - slow down to avoid busy loop
                     time.sleep(0.01)
 
             except Exception as e:
