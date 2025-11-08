@@ -39,6 +39,8 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
             else psutil.cpu_percent(interval=None) or 0
         )
 
+        os_details = _collect_operating_system_details()
+
         cpu_info = {
             "physical_cores": psutil.cpu_count(logical=False),
             "total_cores": psutil.cpu_count(logical=True),
@@ -132,6 +134,8 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
         except Exception:
             pass
 
+        network_info["traffic"] = _collect_network_traffic()
+
         process_info = {
             "total_processes": len(psutil.pids()),
             "running_processes": len(
@@ -209,23 +213,11 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
             for index, container in enumerate(containers_info.get("containers", []), start=1)
         }
 
-        temperature_info: Dict[str, Any] = {}
-        try:
-            temps = psutil.sensors_temperatures()
-            if temps:
-                for name, entries in temps.items():
-                    temperature_info[name] = []
-                    for entry in entries:
-                        temperature_info[name].append(
-                            {
-                                "label": entry.label or "Unknown",
-                                "current": entry.current,
-                                "high": entry.high,
-                                "critical": entry.critical,
-                            }
-                        )
-        except Exception:
-            pass
+        hardware_info = _collect_hardware_inventory(logger)
+        smart_info = _collect_smart_health(
+            logger, hardware_info.get("block_devices", {}).get("devices") or []
+        )
+        temperature_info = _collect_temperature_readings(logger, smart_info)
 
         hardware_info = _collect_hardware_inventory(logger)
         smart_info = _collect_smart_health(logger, hardware_info.get("block_devices", {}).get("devices") or [])
@@ -242,6 +234,7 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
                 "processor": uname.processor,
                 "boot_time": datetime.fromtimestamp(boot_time, UTC_TZ).isoformat(),
                 "uptime_seconds": time.time() - boot_time,
+                **os_details,
             },
             "cpu": cpu_info,
             "memory": memory_info,
@@ -333,18 +326,274 @@ def _collect_container_statuses(logger) -> Dict[str, Any]:
     return result
 
 
+def _collect_operating_system_details() -> Dict[str, Any]:
+    """Return distribution and kernel metadata for the host."""
+
+    details: Dict[str, Any] = {
+        "distribution": None,
+        "distribution_version": None,
+        "distribution_codename": None,
+        "distribution_id": None,
+        "distribution_like": None,
+        "os_pretty_name": None,
+        "kernel": platform.system(),
+        "kernel_release": platform.release(),
+        "kernel_version": platform.version(),
+        "virtualization": None,
+    }
+
+    os_release_path = Path("/etc/os-release")
+    release_data: Dict[str, str] = {}
+    with contextlib.suppress(OSError, FileNotFoundError, PermissionError):
+        content = os_release_path.read_text(encoding="utf-8", errors="ignore")
+        for line in content.splitlines():
+            if not line or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip().upper()
+            if not key:
+                continue
+            value = value.strip().strip('"')
+            release_data[key] = value
+
+    if release_data:
+        details["os_pretty_name"] = release_data.get("PRETTY_NAME") or None
+        details["distribution"] = release_data.get("NAME") or None
+        details["distribution_id"] = release_data.get("ID") or None
+        details["distribution_version"] = (
+            release_data.get("VERSION_ID") or release_data.get("VERSION") or None
+        )
+        details["distribution_codename"] = release_data.get("VERSION_CODENAME") or None
+        details["distribution_like"] = release_data.get("ID_LIKE") or None
+
+    virtualization = _detect_virtualization_environment()
+    if virtualization:
+        details["virtualization"] = virtualization
+
+    return details
+
+
+def _detect_virtualization_environment() -> Optional[str]:
+    """Attempt to detect virtualization technology in use."""
+
+    detect_path = shutil.which("systemd-detect-virt")
+    if detect_path:
+        try:
+            completed = subprocess.run(
+                [detect_path],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+            )
+        except Exception:  # pragma: no cover - host specific behaviour
+            completed = None
+        else:
+            if completed:
+                output = (completed.stdout or "").strip()
+                if output and output.lower() != "none":
+                    return output
+
+    product_name = _safe_read_text(Path("/sys/class/dmi/id/product_name"))
+    system_vendor = _safe_read_text(Path("/sys/class/dmi/id/sys_vendor"))
+
+    virtualization_markers = (
+        (product_name or "", "product"),
+        (system_vendor or "", "vendor"),
+    )
+    known_labels = (
+        ("virtualbox", "VirtualBox"),
+        ("vmware", "VMware"),
+        ("kvm", "KVM"),
+        ("qemu", "QEMU"),
+        ("hyper-v", "Hyper-V"),
+        ("xen", "Xen"),
+        ("parallels", "Parallels"),
+        ("bhyve", "bhyve"),
+    )
+
+    for raw_value, _source in virtualization_markers:
+        lowered = raw_value.lower() if raw_value else ""
+        for marker, label in known_labels:
+            if marker in lowered:
+                return label
+
+    cpuinfo_path = Path("/proc/cpuinfo")
+    with contextlib.suppress(OSError, FileNotFoundError, PermissionError):
+        content = cpuinfo_path.read_text(encoding="utf-8", errors="ignore")
+        if "hypervisor" in content.lower():
+            return "Hypervisor detected"
+
+    return None
+
+
+def _collect_network_traffic() -> Dict[str, Any]:
+    """Return cumulative network I/O statistics."""
+
+    result: Dict[str, Any] = {
+        "available": False,
+        "interfaces": [],
+        "totals": {},
+        "error": None,
+    }
+
+    try:
+        totals = psutil.net_io_counters()
+        result["totals"] = {
+            "bytes_sent": totals.bytes_sent,
+            "bytes_recv": totals.bytes_recv,
+            "packets_sent": totals.packets_sent,
+            "packets_recv": totals.packets_recv,
+            "errin": totals.errin,
+            "errout": totals.errout,
+            "dropin": totals.dropin,
+            "dropout": totals.dropout,
+        }
+        result["available"] = True
+    except Exception as exc:  # pragma: no cover - depends on psutil support
+        result["error"] = str(exc)
+
+    try:
+        pernic = psutil.net_io_counters(pernic=True)
+    except Exception:
+        pernic = {}
+
+    stats = {}
+    with contextlib.suppress(Exception):
+        stats = psutil.net_if_stats()
+
+    for name in sorted(pernic.keys()):
+        counters = pernic[name]
+        stat = stats.get(name)
+        result["interfaces"].append(
+            {
+                "name": name,
+                "bytes_sent": counters.bytes_sent,
+                "bytes_recv": counters.bytes_recv,
+                "packets_sent": counters.packets_sent,
+                "packets_recv": counters.packets_recv,
+                "errin": counters.errin,
+                "errout": counters.errout,
+                "dropin": counters.dropin,
+                "dropout": counters.dropout,
+                "speed_mbps": getattr(stat, "speed", None),
+                "mtu": getattr(stat, "mtu", None),
+                "is_up": getattr(stat, "isup", None),
+                "duplex": getattr(stat, "duplex", None),
+            }
+        )
+
+    if result["interfaces"]:
+        result["available"] = True
+
+    return result
+
+
 def _collect_hardware_inventory(logger) -> Dict[str, Any]:
     """Gather hardware inventory details for the host."""
 
     cpu_details = _collect_cpu_details(logger)
     platform_details = _collect_platform_details()
     block_devices = _collect_block_devices(logger)
+    usb_devices = _collect_usb_devices(logger)
 
     return {
         "cpu": cpu_details,
         "platform": platform_details,
         "block_devices": block_devices,
+        "usb": usb_devices,
     }
+
+
+def _collect_usb_devices(logger) -> Dict[str, Any]:
+    """Inspect USB devices via sysfs for detailed inventory."""
+
+    result: Dict[str, Any] = {
+        "available": False,
+        "devices": [],
+        "summary": {"devices": 0, "hubs": 0},
+        "error": None,
+    }
+
+    devices_root = Path("/sys/bus/usb/devices")
+    if not devices_root.exists():
+        result["error"] = "USB sysfs tree not available"
+        return result
+
+    try:
+        entries = sorted(devices_root.iterdir(), key=lambda path: path.name)
+    except Exception as exc:  # pragma: no cover - depends on host permissions
+        result["error"] = str(exc)
+        return result
+
+    for entry in entries:
+        if not entry.is_dir():
+            continue
+
+        id_vendor = _safe_read_text(entry / "idVendor")
+        id_product = _safe_read_text(entry / "idProduct")
+        if not id_vendor or not id_product:
+            continue
+
+        product = _safe_read_text(entry / "product")
+        manufacturer = _safe_read_text(entry / "manufacturer")
+        serial = _safe_read_text(entry / "serial")
+        busnum = _safe_read_text(entry / "busnum")
+        devnum = _safe_read_text(entry / "devnum")
+        device_class = _safe_read_text(entry / "bDeviceClass")
+        device_subclass = _safe_read_text(entry / "bDeviceSubClass")
+        device_protocol = _safe_read_text(entry / "bDeviceProtocol")
+
+        speed_value: Optional[float] = None
+        speed_raw = _safe_read_text(entry / "speed")
+        if speed_raw:
+            with contextlib.suppress(ValueError):
+                speed_value = float(speed_raw)
+
+        driver = None
+        driver_path = entry / "driver"
+        if driver_path.exists():
+            with contextlib.suppress(OSError):
+                target = os.readlink(driver_path)
+                driver = os.path.basename(target)
+
+        interface_classes: List[str] = []
+        for interface_dir in entry.iterdir():
+            if not interface_dir.is_dir():
+                continue
+            class_value = _safe_read_text(interface_dir / "bInterfaceClass")
+            if class_value:
+                interface_classes.append(class_value)
+
+        device_entry = {
+            "path": entry.name,
+            "vendor_id": id_vendor,
+            "product_id": id_product,
+            "manufacturer": manufacturer,
+            "product": product,
+            "serial": serial,
+            "bus_number": busnum,
+            "device_number": devnum,
+            "device_class": device_class,
+            "device_subclass": device_subclass,
+            "device_protocol": device_protocol,
+            "speed_mbps": speed_value,
+            "driver": driver,
+            "interfaces": interface_classes,
+            "is_hub": (device_class or "").lower() in {"09", "9"},
+        }
+
+        result["devices"].append(device_entry)
+
+    result["summary"]["devices"] = len(result["devices"])
+    result["summary"]["hubs"] = sum(1 for device in result["devices"] if device.get("is_hub"))
+
+    if result["devices"]:
+        result["available"] = True
+    else:
+        result["error"] = result.get("error") or "No USB devices detected"
+
+    return result
 
 
 def _collect_cpu_details(logger) -> Dict[str, Any]:
@@ -368,11 +617,6 @@ def _collect_cpu_details(logger) -> Dict[str, Any]:
         "logical_cores": psutil.cpu_count(logical=True),
         "max_frequency": cpu_freq.max if cpu_freq else None,
         "min_frequency": cpu_freq.min if cpu_freq else None,
-        "hardware": None,
-        "revision": None,
-        "serial": None,
-        "cpu_implementer": None,
-        "cpu_part": None,
     }
 
     try:
@@ -380,11 +624,9 @@ def _collect_cpu_details(logger) -> Dict[str, Any]:
         if cpuinfo_path.exists():
             content = cpuinfo_path.read_text(encoding="utf-8", errors="ignore")
             sections = [segment for segment in content.split("\n\n") if segment.strip()]
-            merged_fields: Dict[str, str] = {}
-            features: List[str] = []
-
-            for section in sections:
-                for line in section.splitlines():
+            if sections:
+                first = sections[0]
+                for line in first.splitlines():
                     if ":" not in line:
                         continue
                     key, value = line.split(":", 1)
@@ -392,29 +634,23 @@ def _collect_cpu_details(logger) -> Dict[str, Any]:
                     value = value.strip()
                     if not value:
                         continue
-
-                    # Preserve the first occurrence so we reflect physical CPU metadata.
-                    merged_fields.setdefault(key, value)
-
-                    if key == "flags" or key == "features":
-                        features.extend(flag.strip() for flag in value.split() if flag.strip())
-
-            if merged_fields:
-                details["model_name"] = merged_fields.get("model name") or merged_fields.get("model") or details["model_name"]
-                details["vendor_id"] = merged_fields.get("vendor_id") or merged_fields.get("cpu implementer") or details["vendor_id"]
-                details["microcode"] = merged_fields.get("microcode") or details["microcode"]
-                details["stepping"] = merged_fields.get("stepping") or merged_fields.get("cpu revision") or details["stepping"]
-                details["family"] = merged_fields.get("cpu family") or merged_fields.get("cpu architecture") or details["family"]
-                details["model"] = merged_fields.get("model") or details["model"]
-                details["cache_size"] = merged_fields.get("cache size") or details["cache_size"]
-                details["hardware"] = merged_fields.get("hardware") or details["hardware"]
-                details["revision"] = merged_fields.get("revision") or details["revision"]
-                details["serial"] = merged_fields.get("serial") or details["serial"]
-                details["cpu_implementer"] = merged_fields.get("cpu implementer") or details["cpu_implementer"]
-                details["cpu_part"] = merged_fields.get("cpu part") or details["cpu_part"]
-
-            if features:
-                details["flags"] = sorted(set(features))
+                    if key == "model name":
+                        details["model_name"] = value
+                    elif key == "vendor_id":
+                        details["vendor_id"] = value
+                    elif key == "microcode":
+                        details["microcode"] = value
+                    elif key == "stepping":
+                        details["stepping"] = value
+                    elif key == "cpu family":
+                        details["family"] = value
+                    elif key == "model":
+                        details["model"] = value
+                    elif key == "cache size":
+                        details["cache_size"] = value
+                    elif key == "flags":
+                        flags = [flag.strip() for flag in value.split() if flag.strip()]
+                        details["flags"] = sorted(set(flags))
     except Exception as exc:  # pragma: no cover - depends on host filesystem
         if logger:
             logger.debug("Failed to parse /proc/cpuinfo: %s", exc)
@@ -427,36 +663,32 @@ def _collect_cpu_details(logger) -> Dict[str, Any]:
 
 
 def _collect_platform_details() -> Dict[str, Any]:
-    """Return chassis / firmware metadata using DMI or device-tree sources."""
+    """Return chassis / firmware metadata if exposed via DMI."""
+
+    base_path = Path("/sys/devices/virtual/dmi/id")
+    if not base_path.exists():
+        return {}
+
+    fields = {
+        "sys_vendor": "sys_vendor",
+        "product_name": "product_name",
+        "product_version": "product_version",
+        "product_serial": "product_serial",
+        "board_name": "board_name",
+        "board_vendor": "board_vendor",
+        "board_version": "board_version",
+        "chassis_asset_tag": "chassis_asset_tag",
+        "bios_vendor": "bios_vendor",
+        "bios_version": "bios_version",
+        "bios_date": "bios_date",
+    }
 
     details: Dict[str, Any] = {}
 
-    base_path = Path("/sys/devices/virtual/dmi/id")
-    if base_path.exists():
-        fields = {
-            "sys_vendor": "sys_vendor",
-            "product_name": "product_name",
-            "product_version": "product_version",
-            "product_serial": "product_serial",
-            "board_name": "board_name",
-            "board_vendor": "board_vendor",
-            "board_version": "board_version",
-            "chassis_asset_tag": "chassis_asset_tag",
-            "bios_vendor": "bios_vendor",
-            "bios_version": "bios_version",
-            "bios_date": "bios_date",
-        }
-
-        for key, filename in fields.items():
-            value = _safe_read_text(base_path / filename)
-            if value is not None:
-                details[key] = value
-
-    # Augment with device-tree metadata when available (common on ARM boards).
-    dt_details = _collect_device_tree_details()
-    if dt_details:
-        for key, value in dt_details.items():
-            details.setdefault(key, value)
+    for key, filename in fields.items():
+        value = _safe_read_text(base_path / filename)
+        if value is not None:
+            details[key] = value
 
     return details
 
@@ -537,48 +769,6 @@ def _collect_block_devices(logger) -> Dict[str, Any]:
     result["available"] = bool(simplified_devices)
 
     return result
-
-
-def _collect_device_tree_details() -> Dict[str, Any]:
-    """Gather platform metadata from device-tree files on ARM systems."""
-
-    candidates = [
-        Path("/proc/device-tree"),
-        Path("/sys/firmware/devicetree/base"),
-    ]
-
-    base: Optional[Path] = None
-    for candidate in candidates:
-        if candidate.exists():
-            base = candidate
-            break
-
-    if base is None:
-        return {}
-
-    details: Dict[str, Any] = {}
-
-    model = _safe_read_device_tree_text(base / "model")
-    if model:
-        details.setdefault("product_name", model)
-        details.setdefault("board_name", model)
-        if "raspberry" in model.lower():
-            details.setdefault("sys_vendor", "Raspberry Pi Foundation")
-
-    serial = _safe_read_device_tree_text(base / "serial-number")
-    if serial:
-        details.setdefault("product_serial", serial)
-
-    revision = _safe_read_device_tree_revision(base / "system/linux,revision")
-    if revision:
-        details.setdefault("product_version", revision)
-        details.setdefault("board_version", revision)
-
-    compatible_values = _safe_read_device_tree_compatible(base / "compatible")
-    if compatible_values:
-        details.setdefault("compatible", compatible_values)
-
-    return details
 
 
 def _simplify_block_devices(entries: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
@@ -669,16 +859,6 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
             "reallocated_sector_count": None,
             "media_errors": None,
             "critical_warnings": None,
-            "data_units_written": None,
-            "data_units_written_bytes": None,
-            "data_units_read": None,
-            "data_units_read_bytes": None,
-            "host_writes_32mib": None,
-            "host_writes_bytes": None,
-            "host_reads_32mib": None,
-            "host_reads_bytes": None,
-            "percentage_used": None,
-            "unsafe_shutdowns": None,
             "exit_status": None,
             "error": None,
         }
@@ -738,8 +918,6 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
         device_result["media_errors"] = _extract_nvme_field(report, "media_errors")
         device_result["critical_warnings"] = _extract_nvme_field(report, "critical_warning")
 
-        _populate_nvme_metrics(device_result, report)
-
         if completed.stderr:
             stderr = completed.stderr.strip()
             if stderr:
@@ -751,6 +929,121 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
         result["error"] = result.get("error") or "No eligible block devices detected"
 
     return result
+
+
+def _collect_temperature_readings(logger, smart_info: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Aggregate temperature readings from psutil, sysfs, and SMART."""
+
+    readings: Dict[str, List[Dict[str, Any]]] = {}
+
+    try:
+        temps = psutil.sensors_temperatures()
+    except Exception as exc:  # pragma: no cover - depends on psutil support
+        if logger:
+            logger.debug("psutil temperature query failed: %s", exc)
+        temps = {}
+
+    for name, entries in (temps or {}).items():
+        if not isinstance(entries, Iterable):
+            continue
+        for entry in entries:
+            current = getattr(entry, "current", None)
+            if current is None:
+                continue
+            _add_temperature_entry(
+                readings,
+                name,
+                getattr(entry, "label", None) or "Sensor",
+                float(current),
+                getattr(entry, "high", None),
+                getattr(entry, "critical", None),
+            )
+
+    thermal_root = Path("/sys/class/thermal")
+    if thermal_root.exists():
+        for zone in sorted(thermal_root.glob("thermal_zone*")):
+            zone_type = _safe_read_text(zone / "type") or zone.name
+            current_value = _parse_temperature_value(_safe_read_text(zone / "temp"))
+            if current_value is None:
+                continue
+
+            trip_points: Dict[str, float] = {}
+            for trip_type_path in zone.glob("trip_point_*_type"):
+                trip_type = _safe_read_text(trip_type_path)
+                if not trip_type:
+                    continue
+                temp_path = zone / trip_type_path.name.replace("_type", "_temp")
+                trip_temp = _parse_temperature_value(_safe_read_text(temp_path))
+                if trip_temp is not None:
+                    trip_points[trip_type.strip().lower()] = trip_temp
+
+            _add_temperature_entry(
+                readings,
+                zone_type,
+                zone_type,
+                current_value,
+                trip_points.get("high") or trip_points.get("passive"),
+                trip_points.get("critical"),
+            )
+
+    if isinstance(smart_info, dict):
+        for device in smart_info.get("devices") or []:
+            temperature = device.get("temperature_celsius")
+            if temperature is None:
+                continue
+            label = (
+                device.get("product")
+                or device.get("model")
+                or device.get("path")
+                or device.get("name")
+                or "Storage device"
+            )
+            _add_temperature_entry(
+                readings,
+                "Storage",
+                label,
+                float(temperature),
+                None,
+                None,
+            )
+
+    for group_entries in readings.values():
+        group_entries.sort(key=lambda entry: str(entry.get("label") or ""))
+
+    return readings
+
+
+def _add_temperature_entry(
+    container: Dict[str, List[Dict[str, Any]]],
+    group: str,
+    label: str,
+    current: Optional[float],
+    high: Optional[float],
+    critical: Optional[float],
+) -> None:
+    if current is None:
+        return
+
+    entry = {
+        "label": label,
+        "current": current,
+        "high": high,
+        "critical": critical,
+    }
+
+    container.setdefault(group, []).append(entry)
+
+
+def _parse_temperature_value(raw: Optional[str]) -> Optional[float]:
+    if raw is None:
+        return None
+    try:
+        value = float(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+    if value > 1000:
+        value = value / 1000.0
+    return value
 
 
 def _iter_disk_devices(devices: List[Dict[str, Any]]):
@@ -814,56 +1107,6 @@ def _extract_nvme_field(report: Dict[str, Any], key: str) -> Optional[int]:
     return None
 
 
-def _populate_nvme_metrics(device_result: Dict[str, Any], report: Dict[str, Any]) -> None:
-    nvme_info = report.get("nvme_smart_health_information_log")
-    if not isinstance(nvme_info, dict):
-        return
-
-    def _update_if_absent(field: str, *keys: str) -> None:
-        if device_result.get(field) is not None:
-            return
-        for key in keys:
-            value = nvme_info.get(key)
-            if isinstance(value, (int, float)):
-                device_result[field] = int(value)
-                return
-
-    _update_if_absent("power_on_hours", "power_on_hours", "power_on_time_hours")
-    _update_if_absent("power_cycle_count", "power_cycles")
-    _update_if_absent("unsafe_shutdowns", "unsafe_shutdowns")
-    _update_if_absent("percentage_used", "percentage_used")
-
-    for key, field in (
-        ("data_units_written", "data_units_written"),
-        ("data_units_read", "data_units_read"),
-        ("host_writes_32mib", "host_writes_32mib"),
-        ("host_reads_32mib", "host_reads_32mib"),
-    ):
-        value = nvme_info.get(key)
-        if isinstance(value, (int, float)):
-            device_result[field] = int(value)
-
-    if device_result.get("data_units_written") is not None:
-        device_result["data_units_written_bytes"] = _convert_nvme_data_units(device_result["data_units_written"])
-    if device_result.get("data_units_read") is not None:
-        device_result["data_units_read_bytes"] = _convert_nvme_data_units(device_result["data_units_read"])
-
-    if device_result.get("host_writes_32mib") is not None:
-        device_result["host_writes_bytes"] = _convert_nvme_host_io(device_result["host_writes_32mib"])
-    if device_result.get("host_reads_32mib") is not None:
-        device_result["host_reads_bytes"] = _convert_nvme_host_io(device_result["host_reads_32mib"])
-
-
-def _convert_nvme_data_units(units: int) -> int:
-    # Per the NVMe specification, each data unit represents 512,000 bytes.
-    return int(units) * 512_000
-
-
-def _convert_nvme_host_io(units_32mib: int) -> int:
-    # smartctl reports host reads/writes in units of 32 MiB.
-    return int(units_32mib) * 32 * 1024 * 1024
-
-
 def _safe_read_text(path: Path) -> Optional[str]:
     with contextlib.suppress(OSError, FileNotFoundError, PermissionError):
         value = path.read_text(encoding="utf-8", errors="ignore").strip()
@@ -871,51 +1114,6 @@ def _safe_read_text(path: Path) -> Optional[str]:
             lower = value.lower()
             if lower not in {"none", "unknown", "not specified"}:
                 return value
-    return None
-
-
-def _safe_read_device_tree_text(path: Path) -> Optional[str]:
-    with contextlib.suppress(OSError, FileNotFoundError, PermissionError):
-        data = path.read_bytes()
-        if not data:
-            return None
-        text = data.split(b"\x00", 1)[0].decode("utf-8", errors="ignore").strip()
-        if text:
-            lower = text.lower()
-            if lower not in {"", "none", "unknown", "not specified"}:
-                return text
-    return None
-
-
-def _safe_read_device_tree_revision(path: Path) -> Optional[str]:
-    with contextlib.suppress(OSError, FileNotFoundError, PermissionError):
-        data = path.read_bytes()
-        if not data:
-            return None
-        # Revision is typically stored as a 32-bit big-endian integer.
-        if len(data) in {4, 8}:
-            value = int.from_bytes(data[:4], byteorder="big", signed=False)
-            if value:
-                return f"0x{value:08x}"
-        text = data.split(b"\x00", 1)[0].decode("utf-8", errors="ignore").strip()
-        if text:
-            return text
-    return None
-
-
-def _safe_read_device_tree_compatible(path: Path) -> Optional[List[str]]:
-    with contextlib.suppress(OSError, FileNotFoundError, PermissionError):
-        data = path.read_bytes()
-        if not data:
-            return None
-        parts = [
-            part.decode("utf-8", errors="ignore").strip()
-            for part in data.split(b"\x00")
-            if part.strip()
-        ]
-        cleaned = [part for part in parts if part and part.lower() not in {"none", "unknown"}]
-        if cleaned:
-            return cleaned
     return None
 
 
