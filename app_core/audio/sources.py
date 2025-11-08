@@ -691,6 +691,28 @@ class StreamSourceAdapter(AudioSourceAdapter):
             self.status = AudioSourceStatus.ERROR
             self.error_message = str(exc)
             logger.error(f"{self.config.name}: failed to restart FFmpeg: {exc}")
+        else:
+            # Successful restart - clear error state and refresh metadata
+            self.status = AudioSourceStatus.RUNNING
+            self.error_message = None
+
+            metadata_updates: Dict[str, Any] = {
+                'connection_timestamp': time.time(),
+                'last_error': None,
+                'restart_reason': reason,
+            }
+
+            icy_state = self._stream_metadata.get('icy')
+            if isinstance(icy_state, dict):
+                metadata_updates['icy'] = {
+                    'last_error': None,
+                    'last_check': time.time(),
+                    'supported': icy_state.get('supported', False),
+                    'metaint': icy_state.get('metaint'),
+                }
+
+            self._apply_metadata_update(metadata_updates)
+            logger.info(f"{self.config.name}: FFmpeg decoder restarted successfully")
 
     def _stderr_pump(self, process: subprocess.Popen) -> None:
         """Continuously drain FFmpeg stderr so it never blocks."""
