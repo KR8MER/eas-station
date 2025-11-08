@@ -41,6 +41,8 @@ services:
       ICECAST_PORT: ${ICECAST_INTERNAL_PORT:-8000}
       ICECAST_EXTERNAL_PORT: ${ICECAST_PORT:-8001}
       ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-eas_station_source_password}
+      ICECAST_ADMIN_USER: ${ICECAST_ADMIN_USER:-admin}
+      ICECAST_ADMIN_PASSWORD: ${ICECAST_ADMIN_PASSWORD:-changeme_admin}
       ICECAST_ENABLED: ${ICECAST_ENABLED:-true}
       ICECAST_PUBLIC_HOSTNAME: ${ICECAST_PUBLIC_HOSTNAME:-}
     extra_hosts:
@@ -168,18 +170,19 @@ services:
       - ICECAST_MAX_CLIENTS=${ICECAST_MAX_CLIENTS:-100}
       - ICECAST_MAX_SOURCES=${ICECAST_MAX_SOURCES:-50}
 
-      # Authentication
+      # Authentication (defaults only - actual values loaded from /app-config/.env)
       - ICECAST_SOURCE_PASSWORD=${ICECAST_SOURCE_PASSWORD:-eas_station_source_password}
       - ICECAST_RELAY_PASSWORD=${ICECAST_RELAY_PASSWORD:-changeme_relay}
       - ICECAST_ADMIN_PASSWORD=${ICECAST_ADMIN_PASSWORD:-changeme_admin}
     volumes:
       - icecast-logs:/var/log/icecast2
+      - app-config:/app-config:ro  # Mount persistent config as read-only for password sync
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000 || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
+      test: ["CMD-SHELL", "curl -f -s http://localhost:8000/status.xsl >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     # Note: Configure EAS Station to use Icecast:
     #   1. Go to /settings/audio in the web interface
     #   2. Scroll to "Icecast Streaming Output"

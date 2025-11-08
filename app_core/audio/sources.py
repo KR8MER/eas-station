@@ -945,6 +945,13 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
         self._last_icy_metadata = metadata_text
 
+        def _strip_wrapping_quotes(value: str) -> str:
+            """Remove a single layer of matching quotes from the ends of a string."""
+
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+                return value[1:-1]
+            return value
+
         fields: Dict[str, Any] = {}
         for part in metadata_text.split(';'):
             part = part.strip()
@@ -953,7 +960,7 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
             key, value = part.split('=', 1)
             key = key.strip()
-            value = value.strip().strip("'\"")
+            value = _strip_wrapping_quotes(value.strip())
             if key:
                 fields[key] = value
 
@@ -968,25 +975,113 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
         stream_title = fields.get('StreamTitle')
         if stream_title:
-            updates['song'] = stream_title
+            updates['song_raw'] = stream_title
+
+            # Parse rich metadata from StreamTitle (e.g., iHeartRadio format)
+            # Example: text="Golden" song_spot="M" MediaBaseId="3136003" ... amgArtworkURL="..." length="00:03:11"
+            import re
 
             title = stream_title.strip()
             artist = None
-            if ' - ' in stream_title:
-                artist_candidate, title_candidate = stream_title.split(' - ', 1)
-                artist = artist_candidate.strip() or None
-                title = title_candidate.strip() or title
+            display_song = None
+
+            # Try to extract text="" or song="" attribute (iHeartRadio format)
+            text_match = re.search(r'text="([^"]+)"', stream_title)
+            song_attr_match = re.search(r'song="([^"]+)"', stream_title)
+            if text_match:
+                title = text_match.group(1).strip()
+                updates['song_title'] = title
+                updates['title'] = title
+            elif song_attr_match:
+                title = song_attr_match.group(1).strip()
+                updates['song_title'] = title
+                updates['title'] = title
+
+            # Try to extract artist="" attribute
+            artist_match = re.search(r'artist="([^"]+)"', stream_title)
+            if artist_match:
+                artist = artist_match.group(1).strip()
+                updates['artist'] = artist
+                updates['song_artist'] = artist
+            elif text_match or song_attr_match:
+                # Pattern like "Artist - text=\"Title\" ..." or "Artist - song=\"Title\" ..."
+                attr_key = 'text' if text_match else 'song'
+                prefix_pattern = rf'(?P<artist>.+?)-\s*{attr_key}="'
+                prefix_match = re.match(prefix_pattern, stream_title)
+                if prefix_match:
+                    artist_candidate = prefix_match.group('artist').strip()
+                    if artist_candidate:
+                        artist = artist_candidate
+                        updates['artist'] = artist
+                        updates['song_artist'] = artist
+
+            if artist and title:
+                display_song = f"{artist} - {title}"
+            elif title:
+                display_song = title
+            elif artist:
+                display_song = artist
+
+            # Try to extract album art URL
+            artwork_match = re.search(r'(?:amgArtworkURL|artworkURL|artwork_url)="([^"]+)"', stream_title)
+            if artwork_match:
+                updates['artwork_url'] = artwork_match.group(1).strip()
+
+            # Try to extract song length/duration
+            length_match = re.search(r'(?:length|duration)="([^"]+)"', stream_title)
+            if length_match:
+                updates['length'] = length_match.group(1).strip()
+
+            # Try to extract album name
+            album_match = re.search(r'album="([^"]+)"', stream_title)
+            if album_match:
+                updates['album'] = album_match.group(1).strip()
+
+            # If we didn't find text="" attribute, try traditional "Artist - Title" format
+            if not text_match and ' - ' in stream_title:
+                # Remove any XML-like attributes before splitting
+                clean_title = re.sub(r'\s+\w+="[^"]*"', '', stream_title)
+                clean_title = re.sub(r'\s+\w+=\S+', '', clean_title)
+                clean_title = ' '.join(clean_title.split()).strip()
+
+                if ' - ' in clean_title:
+                    artist_candidate, title_candidate = clean_title.split(' - ', 1)
+                    artist = artist_candidate.strip() or artist
+                    title = title_candidate.strip() or title
+
+                    if not artist_match and artist:
+                        updates['artist'] = artist
+                        updates.setdefault('song_artist', artist)
+                    if not text_match:
+                        updates['song_title'] = title
+                        updates['title'] = title
+
+            if display_song:
+                updates['song'] = display_song
+            else:
+                updates['song'] = stream_title
 
             now_playing: Dict[str, Any] = {'raw': stream_title}
             if title:
                 now_playing['title'] = title
-                updates['song_title'] = title
-                updates['title'] = title
             if artist:
                 now_playing['artist'] = artist
-                updates['artist'] = artist
 
             updates['now_playing'] = now_playing
+
+            # Expose the parsed fields for UI fallbacks without clobbering the raw data
+            if title:
+                fields.setdefault('text', title)
+                fields.setdefault('title', title)
+                fields.setdefault('song', display_song or title)
+            if artist:
+                fields.setdefault('artist', artist)
+            if updates.get('artwork_url'):
+                fields.setdefault('artwork_url', updates['artwork_url'])
+            if updates.get('length'):
+                fields.setdefault('length', updates['length'])
+            if updates.get('album'):
+                fields.setdefault('album', updates['album'])
 
         stream_url = fields.get('StreamUrl')
         if stream_url:

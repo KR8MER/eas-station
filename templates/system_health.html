@@ -990,6 +990,255 @@
             </div>
         </div>
 
+        {% set block_info = hardware_data.block_devices or {} %}
+        {% set smart_info = smart or {} %}
+
+        <!-- Storage Inventory & Health -->
+        <div class="row mb-4">
+            <div class="col-lg-8 mb-3" id="hardware-devices-card">
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-database section-icon"></i> Storage Inventory</h5>
+
+                        {% if block_info.available and (block_info.devices or []) %}
+                        {% set disk_items = block_info.devices | selectattr('type', 'equalto', 'disk') | list %}
+                        {% if block_info.summary %}
+                        <div class="hardware-meta mb-2">
+                            {{ block_info.summary.disks or 0 }} disks • {{ block_info.summary.partitions or 0 }} partitions{% if block_info.summary.virtual %} • {{ block_info.summary.virtual }} virtual{% endif %}
+                        </div>
+                        {% endif %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover device-inventory-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Device</th>
+                                        <th scope="col">Details</th>
+                                        <th scope="col">Mounts</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for disk in disk_items %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ disk.path or ('/dev/' ~ (disk.name or 'unknown')) }}</strong>
+                                            {% if disk.model %}<div class="hardware-meta">{{ disk.model }}</div>{% endif %}
+                                            {% if disk.serial %}<div class="hardware-meta">Serial: {{ disk.serial }}</div>{% endif %}
+                                            {% if disk.vendor %}<div class="hardware-meta">Vendor: {{ disk.vendor }}</div>{% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="hardware-meta">Size: {% if disk.size_bytes %}{{ format_bytes(disk.size_bytes) }}{% else %}Unknown{% endif %}</div>
+                                            {% if disk.transport or disk.is_rotational is not none %}
+                                            <div class="hardware-meta">
+                                                {% if disk.transport %}{{ disk.transport|upper }}{% endif %}
+                                                {% if disk.transport and disk.is_rotational is not none %} • {% endif %}
+                                                {% if disk.is_rotational is sameas(true) %}HDD{% elif disk.is_rotational is sameas(false) %}SSD{% else %}Storage{% endif %}
+                                            </div>
+                                            {% endif %}
+                                            {% if disk.is_read_only is sameas(true) %}<div class="hardware-meta text-danger">Read Only</div>{% endif %}
+                                            {% if disk.is_removable is sameas(true) %}<div class="hardware-meta">Removable media</div>{% endif %}
+                                        </td>
+                                        <td>
+                                            {% if disk.children %}
+                                                {% for child in disk.children %}
+                                                <div class="hardware-meta">
+                                                    {{ child.path or ('/dev/' ~ (child.name or 'unknown')) }}
+                                                    {% if child.filesystem %}<span class="text-muted"> ({{ child.filesystem }})</span>{% endif %}
+                                                    {% if child.mountpoints %}<span class="text-muted"> → {{ child.mountpoints|join(', ') }}</span>{% endif %}
+                                                </div>
+                                                {% endfor %}
+                                            {% else %}
+                                                <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% if disk_items|length == 0 %}
+                        <p class="text-muted mb-0">No physical disks reported.</p>
+                        {% endif %}
+                        {% else %}
+                        <div class="alert alert-warning mb-0 py-2">
+                            Storage inventory unavailable{% if block_info.error %}: {{ block_info.error }}{% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4 mb-3" id="smart-card">
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h5>
+
+                        {% if smart_info.available %}
+                            {% set smart_devices = smart_info.devices or [] %}
+                            {% if smart_devices %}
+                                {% for device in smart_devices[:5] %}
+                                    {% set status_raw = (device.overall_status or 'unknown')|lower %}
+                                    {% if status_raw in ['passed', 'ok', 'healthy', 'success'] %}
+                                        {% set badge_class = 'success' %}
+                                        {% set status_label = 'Passed' %}
+                                    {% elif status_raw in ['failed', 'fail', 'critical'] %}
+                                        {% set badge_class = 'danger' %}
+                                        {% set status_label = 'Failed' %}
+                                    {% else %}
+                                        {% set badge_class = 'warning' %}
+                                        {% set status_label = device.overall_status or 'Unknown' %}
+                                    {% endif %}
+                                    <div class="mb-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <span class="metric-label">{{ device.path or device.name or 'Unknown device' }}</span>
+                                                {% if device.model %}<div class="hardware-meta">{{ device.model }}</div>{% endif %}
+                                                {% if device.serial %}<div class="hardware-meta">Serial: {{ device.serial }}</div>{% endif %}
+                                            </div>
+                                            <span class="badge bg-{{ badge_class }} smart-status-badge">{{ status_label }}</span>
+                                        </div>
+                                        <div class="hardware-meta">
+                                            Temp: {% if device.temperature_celsius is not none %}{{ "%.0f"|format(device.temperature_celsius) }}°C{% else %}N/A{% endif %}
+                                            {% if device.power_on_hours is not none %} • Power On: {{ device.power_on_hours }}h{% endif %}
+                                        </div>
+                                        <div class="hardware-meta">
+                                            {% if device.reallocated_sector_count is not none %}Realloc: {{ device.reallocated_sector_count }}{% else %}Realloc: N/A{% endif %}
+                                            {% if device.media_errors is not none %} • Media Errors: {{ device.media_errors }}{% endif %}
+                                            {% if device.critical_warnings is not none %} • Warnings: {{ device.critical_warnings }}{% endif %}
+                                        </div>
+                                        {% set host_writes = device.host_writes_bytes or device.data_units_written_bytes %}
+                                        {% set host_reads = device.host_reads_bytes or device.data_units_read_bytes %}
+                                        {% if host_writes is not none or host_reads is not none or device.percentage_used is not none %}
+                                        <div class="hardware-meta">
+                                            {% if host_writes is not none %}Host Writes: {{ format_bytes(host_writes) }}{% endif %}
+                                            {% if host_reads is not none %}{% if host_writes is not none %} • {% endif %}Host Reads: {{ format_bytes(host_reads) }}{% endif %}
+                                            {% if device.percentage_used is not none %}{% if host_writes is not none or host_reads is not none %} • {% endif %}Wear: {{ device.percentage_used }}%{% endif %}
+                                        </div>
+                                        {% endif %}
+                                        {% if device.power_cycle_count is not none or device.unsafe_shutdowns is not none %}
+                                        <div class="hardware-meta">
+                                            {% if device.power_cycle_count is not none %}Power Cycles: {{ device.power_cycle_count }}{% endif %}
+                                            {% if device.unsafe_shutdowns is not none %}{% if device.power_cycle_count is not none %} • {% endif %}Unsafe Shutdowns: {{ device.unsafe_shutdowns }}{% endif %}
+                                        </div>
+                                        {% endif %}
+                                        {% if device.error %}<div class="hardware-meta text-muted">Note: {{ device.error }}</div>{% endif %}
+                                    </div>
+                                {% endfor %}
+                                {% if smart_devices|length > 5 %}
+                                <small class="text-muted">… and {{ smart_devices|length - 5 }} more devices</small>
+                                {% endif %}
+                            {% else %}
+                                <p class="text-muted mb-0">No S.M.A.R.T. capable devices detected.</p>
+                            {% endif %}
+                        {% else %}
+                            <div class="alert alert-warning mb-0 py-2">
+                                S.M.A.R.T. data unavailable{% if smart_info.error %}: {{ smart_info.error }}{% endif %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Container Details -->
+        <div class="row mb-4">
+            <div class="col-12" id="containers-details">
+                <div class="card health-card">
+                    <div class="card-body">
+                        <h5><i class="fas fa-boxes section-icon"></i> Container Details</h5>
+
+                        {% set containers_data = containers or {} %}
+                        {% set container_items = containers_data.containers or [] %}
+
+                        {% if containers_data.available and container_items %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover container-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Container</th>
+                                        <th scope="col">Status</th>
+                                        <th scope="col">Health</th>
+                                        <th scope="col">Uptime</th>
+                                        <th scope="col">Image</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for container in container_items %}
+                                    {% set status_label = container.status or (container.state|upper if container.state else 'Unknown') %}
+                                    {% set state = (container.state or '')|lower %}
+                                    {% set health = (container.health or '')|lower %}
+                                    {% if health == 'healthy' %}
+                                        {% set status_class = 'success' %}
+                                    {% elif health == 'unhealthy' %}
+                                        {% set status_class = 'danger' %}
+                                    {% elif state == 'running' %}
+                                        {% set status_class = 'success' %}
+                                    {% elif state in ['restarting', 'created', 'paused'] %}
+                                        {% set status_class = 'warning' %}
+                                    {% elif state in ['exited', 'dead'] %}
+                                        {% set status_class = 'secondary' %}
+                                    {% else %}
+                                        {% set status_class = 'secondary' %}
+                                    {% endif %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ container.display_name or container.name }}</strong>
+                                            {% if container.service %}
+                                            <div class="container-meta">Service: {{ container.service }}</div>
+                                            {% endif %}
+                                            {% if container.project %}
+                                            <div class="container-meta">Project: {{ container.project }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{{ status_class }} status-badge">{{ status_label }}</span>
+                                        </td>
+                                        <td>
+                                            {% if container.health %}
+                                                {% if container.health == 'healthy' %}
+                                                <span class="badge bg-success status-badge">Healthy</span>
+                                                {% elif container.health == 'unhealthy' %}
+                                                <span class="badge bg-danger status-badge">Unhealthy</span>
+                                                {% elif container.health == 'starting' %}
+                                                <span class="badge bg-warning status-badge">Starting</span>
+                                                {% else %}
+                                                <span class="badge bg-secondary status-badge">{{ container.health }}</span>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                        <td><span class="metric-value">{{ container.running_for or '—' }}</span></td>
+                                        <td>
+                                            {% if container.image %}
+                                            <div class="container-image">{{ container.image }}</div>
+                                            {% else %}
+                                            <span class="text-muted">—</span>
+                                            {% endif %}
+                                            {% if container.ports %}
+                                            <div class="container-meta">Ports: {{ container.ports }}</div>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="text-muted mb-0">
+                            {% if containers_data.available %}
+                                No container information detected for the current engine.
+                            {% elif containers_data.error %}
+                                Container details unavailable: {{ containers_data.error }}
+                            {% else %}
+                                Container details unavailable.
+                            {% endif %}
+                        </p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Process Information -->
         <div class="row">
             <div class="col-12" id="processes-card">

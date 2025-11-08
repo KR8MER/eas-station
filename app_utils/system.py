@@ -219,6 +219,9 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
         )
         temperature_info = _collect_temperature_readings(logger, smart_info)
 
+        hardware_info = _collect_hardware_inventory(logger)
+        smart_info = _collect_smart_health(logger, hardware_info.get("block_devices", {}).get("devices") or [])
+
         return {
             "timestamp": utc_now().isoformat(),
             "local_timestamp": local_now().isoformat(),

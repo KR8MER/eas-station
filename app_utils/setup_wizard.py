@@ -310,6 +310,34 @@ def _validate_gpio_pin(value: str) -> str:
     return str(pin)
 
 
+def _validate_icecast_password(value: str) -> str:
+    """Validate Icecast password (ASCII-only, no Unicode characters)."""
+    if not value:
+        return value
+
+    # Check for minimum length
+    if len(value) < 8:
+        raise ValueError("Password should be at least 8 characters long.")
+
+    # Check for ASCII-only (Icecast requirement)
+    try:
+        value.encode('ascii')
+    except UnicodeEncodeError:
+        raise ValueError(
+            "Icecast passwords must use ASCII characters only. "
+            "No emoji, Unicode bullets, or non-Latin characters allowed. "
+            "Use only: a-z, A-Z, 0-9, and symbols like !@#$%^&*()-_=+"
+        )
+
+    # Warn about default passwords
+    if value in {'changeme', 'changeme_admin', 'changeme_source', 'hackme', 'password'}:
+        raise ValueError(
+            "Please use a secure password. Default/common passwords are not allowed."
+        )
+
+    return value
+
+
 # Core section - Required settings
 CORE_FIELDS = [
     WizardField(
@@ -458,6 +486,26 @@ AUDIO_INGEST_FIELDS = [
     ),
 ]
 
+# Icecast streaming section
+ICECAST_FIELDS = [
+    WizardField(
+        key="ICECAST_ADMIN_PASSWORD",
+        label="Icecast Admin Password",
+        description="Password for Icecast admin interface (metadata updates). Must be ASCII-only, no Unicode/emoji. Leave blank to disable metadata updates.",
+        input_type="password",
+        validator=_validate_icecast_password,
+        required=False,
+    ),
+    WizardField(
+        key="ICECAST_SOURCE_PASSWORD",
+        label="Icecast Source Password",
+        description="Password for publishing audio streams to Icecast. Must be ASCII-only, no Unicode/emoji.",
+        input_type="password",
+        validator=_validate_icecast_password,
+        required=False,
+    ),
+]
+
 # TTS section
 TTS_FIELDS = [
     WizardField(
@@ -538,6 +586,12 @@ WIZARD_SECTIONS = [
         title="Audio Ingest",
         description="Audio capture from SDR and line-level sources",
         fields=AUDIO_INGEST_FIELDS,
+    ),
+    WizardSection(
+        name="icecast",
+        title="Icecast Streaming",
+        description="Audio streaming server passwords (must be ASCII-only, no Unicode/emoji)",
+        fields=ICECAST_FIELDS,
     ),
     WizardSection(
         name="tts",
