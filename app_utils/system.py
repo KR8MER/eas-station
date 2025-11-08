@@ -1187,6 +1187,56 @@ def _extract_attribute_value(report: Dict[str, Any], name: str) -> Optional[int]
     return None
 
 
+def _extract_nvme_statistics(report: Dict[str, Any]) -> Dict[str, Optional[int]]:
+    """Normalise NVMe-specific counters from smartctl output."""
+
+    stats: Dict[str, Optional[int]] = {
+        "data_units_written_bytes": None,
+        "data_units_read_bytes": None,
+        "host_read_commands": None,
+        "host_write_commands": None,
+        "controller_busy_time_minutes": None,
+        "unsafe_shutdowns": None,
+        "percentage_used": None,
+    }
+
+    nvme_info = report.get("nvme_smart_health_information_log")
+    if not isinstance(nvme_info, dict):
+        return stats
+
+    def pull(*keys: str) -> Optional[int]:
+        for candidate in keys:
+            if candidate in nvme_info:
+                value = _coerce_int(nvme_info.get(candidate))
+                if value is not None:
+                    return value
+        return None
+
+    bytes_written = pull("data_units_written_bytes")
+    if bytes_written is not None:
+        stats["data_units_written_bytes"] = bytes_written
+    else:
+        units_written = pull("data_units_written", "data_units_written_raw")
+        if units_written is not None:
+            stats["data_units_written_bytes"] = units_written * NVME_DATA_UNIT_BYTES
+
+    bytes_read = pull("data_units_read_bytes")
+    if bytes_read is not None:
+        stats["data_units_read_bytes"] = bytes_read
+    else:
+        units_read = pull("data_units_read", "data_units_read_raw")
+        if units_read is not None:
+            stats["data_units_read_bytes"] = units_read * NVME_DATA_UNIT_BYTES
+
+    stats["host_read_commands"] = pull("host_read_commands", "host_reads")
+    stats["host_write_commands"] = pull("host_write_commands", "host_writes")
+    stats["controller_busy_time_minutes"] = pull("controller_busy_time_minutes", "controller_busy_time")
+    stats["unsafe_shutdowns"] = pull("unsafe_shutdowns")
+    stats["percentage_used"] = pull("percentage_used")
+
+    return stats
+
+
 def _extract_nvme_field(report: Dict[str, Any], key: str) -> Optional[int]:
     nvme_info = report.get("nvme_smart_health_information_log")
     if isinstance(nvme_info, dict):
