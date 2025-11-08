@@ -123,7 +123,8 @@ def _start_audio_sources_background(app: Flask) -> None:
             try:
                 # Try to acquire exclusive lock (non-blocking)
                 # IMPORTANT: Store handle in global variable to keep lock for process lifetime
-                _audio_initialization_lock_file = open(lock_file_path, 'w')
+                # Use 'a' mode to avoid truncating (which could interfere with locks)
+                _audio_initialization_lock_file = open(lock_file_path, 'a')
                 fcntl.flock(_audio_initialization_lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
                 # If we got here, we have the lock - this worker is responsible for initialization
