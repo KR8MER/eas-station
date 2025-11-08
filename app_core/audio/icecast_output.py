@@ -202,6 +202,8 @@ class IcecastStreamer:
             # FFmpeg command to encode and stream
             cmd = [
                 'ffmpeg',
+                # Global options to prevent connection timeouts
+                '-timeout', '-1',  # Infinite I/O timeout (prevents 10-minute disconnect)
                 '-f', 's16le',  # Input: 16-bit PCM
                 '-ar', str(self.config.sample_rate),  # Sample rate
                 '-ac', '1',      # Mono
@@ -234,12 +236,15 @@ class IcecastStreamer:
                 '-metadata', f'genre={stream_genre}',
             ])
 
-            # Output to Icecast
+            # Output to Icecast with keep-alive options
             cmd.extend([
                 '-content_type', 'audio/mpeg' if self.config.format == StreamFormat.MP3 else 'audio/ogg',
                 '-ice_name', stream_name,
                 '-ice_description', stream_description,
                 '-ice_genre', stream_genre,
+                '-ice_public', '0',  # Disable directory listing
+                '-tcp_nodelay', '1',  # Disable Nagle's algorithm for lower latency
+                '-send_expect_100', '0',  # Don't wait for 100-continue
                 icecast_url
             ])
 
