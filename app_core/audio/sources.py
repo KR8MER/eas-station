@@ -539,6 +539,9 @@ class StreamSourceAdapter(AudioSourceAdapter):
         self._pcm_buffer = bytearray()  # Buffer for decoded PCM audio
         self._ffmpeg_thread = None  # Thread for feeding data to FFmpeg
         self._had_data_activity = False  # Track if HTTP data was read (even if decode returned None)
+        # Backpressure thresholds for encoded HTTP buffer management (aligned with FFmpeg stdin pipe size)
+        self._max_http_buffer_size = 65536  # 64KB limit to prevent unbounded growth
+        self._last_http_backpressure_log = 0.0
 
     def _parse_m3u(self, url: str) -> str:
         """Parse M3U playlist and return the first stream URL."""
@@ -723,8 +726,22 @@ class StreamSourceAdapter(AudioSourceAdapter):
                 return None
 
         try:
+            # Determine how much space is available before hitting the HTTP buffer cap
+            available_space = self._max_http_buffer_size - len(self._buffer)
+            if available_space <= 0:
+                # Buffer is full - skip reading more data this cycle to let feeder catch up
+                now = time.time()
+                if now - self._last_http_backpressure_log > 5.0:
+                    logger.warning(
+                        f"{self.config.name}: HTTP buffer full ({len(self._buffer)} bytes), "
+                        "pausing stream reads to apply backpressure"
+                    )
+                    self._last_http_backpressure_log = now
+                time.sleep(0.01)
+                return None
+
             # Read data from stream (smaller chunks for more continuous flow)
-            chunk_size = self.config.buffer_size * 4  # Balanced size for low latency and efficiency
+            chunk_size = min(self.config.buffer_size * 4, available_space)
 
             try:
                 data = self._stream_response.raw.read(chunk_size)
