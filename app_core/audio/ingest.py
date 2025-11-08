@@ -191,14 +191,14 @@ class AudioSourceAdapter(ABC):
     def _capture_loop(self) -> None:
         """Main capture loop running in separate thread."""
         logger.debug(f"Capture loop started for {self.config.name}")
-        
+
         while not self._stop_event.is_set():
             try:
                 audio_chunk = self._read_audio_chunk()
                 if audio_chunk is not None:
                     # Update metrics
                     self._update_metrics(audio_chunk)
-                    
+
                     # Add to queue, drop if full
                     try:
                         self._audio_queue.put_nowait(audio_chunk)
@@ -209,7 +209,11 @@ class AudioSourceAdapter(ABC):
                             self._audio_queue.put_nowait(audio_chunk)
                         except queue.Empty:
                             pass
-                            
+                else:
+                    # No data available - sleep briefly to avoid busy loop
+                    # This is critical for non-blocking sources (streams, etc.)
+                    time.sleep(0.001)  # 1ms sleep to prevent CPU spinning
+
             except Exception as e:
                 logger.error(f"Error in capture loop for {self.config.name}: {e}")
                 self.status = AudioSourceStatus.ERROR
