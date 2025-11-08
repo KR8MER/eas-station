@@ -25,6 +25,11 @@
         .container-table td, .container-table th { vertical-align: middle; }
         .container-image { font-family: 'Courier New', monospace; font-size: 0.75rem; }
         .container-meta { font-size: 0.75rem; color: #6c757d; }
+        .hardware-badge { display: inline-block; padding: 0.25rem 0.5rem; margin: 0 0.25rem 0.25rem 0; background-color: #f8f9fa; border-radius: 999px; border: 1px solid #dee2e6; font-size: 0.75rem; color: #495057; }
+        .hardware-meta { font-size: 0.8rem; color: #6c757d; }
+        .device-inventory-table { font-size: 0.85rem; }
+        .device-inventory-table td, .device-inventory-table th { vertical-align: top; }
+        .smart-status-badge { font-size: 0.8rem; }
     </style>
 {% endblock %}
 
@@ -83,6 +88,166 @@
                                     <i class="fas fa-sync-alt"></i> Refresh Now
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% set hardware_data = hardware or {} %}
+        {% set hardware_cpu = hardware_data.cpu or {} %}
+        {% set platform_data = hardware_data.platform or {} %}
+
+        <!-- Hardware Summary -->
+        <div class="row mb-4">
+            <div class="col-lg-6 mb-3" id="cpu-hardware-card">
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-microchip section-icon"></i> CPU Details</h5>
+
+                        <div class="metric-row">
+                            <span class="metric-label">Model:</span>
+                            <span class="metric-value">{{ hardware_cpu.model_name or hardware_cpu.processor or 'Unknown' }}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Vendor:</span>
+                            <span class="metric-value">{{ hardware_cpu.vendor_id or 'Unknown' }}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Architecture:</span>
+                            <span class="metric-value">{{ hardware_cpu.architecture or 'Unknown' }}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Virtualization:</span>
+                            {% set virtualization = hardware_cpu.supports_virtualization %}
+                            <span class="metric-value">
+                                {% if virtualization is sameas(true) %}
+                                    Supported
+                                {% elif virtualization is sameas(false) %}
+                                    Not detected
+                                {% else %}
+                                    Unknown
+                                {% endif %}
+                            </span>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-sm-6">
+                                <div class="metric-row">
+                                    <span class="metric-label">Physical Cores:</span>
+                                    <span class="metric-value">{{ hardware_cpu.physical_cores or 'N/A' }}</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Logical Cores:</span>
+                                    <span class="metric-value">{{ hardware_cpu.logical_cores or 'N/A' }}</span>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="metric-row">
+                                    <span class="metric-label">Max Frequency:</span>
+                                    <span class="metric-value">{% if hardware_cpu.max_frequency %}{{ "%.0f"|format(hardware_cpu.max_frequency) }} MHz{% else %}Unknown{% endif %}</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Min Frequency:</span>
+                                    <span class="metric-value">{% if hardware_cpu.min_frequency %}{{ "%.0f"|format(hardware_cpu.min_frequency) }} MHz{% else %}Unknown{% endif %}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {% if hardware_cpu.cache_size or hardware_cpu.microcode %}
+                        <hr>
+                        <div class="row">
+                            {% if hardware_cpu.cache_size %}
+                            <div class="col-sm-6">
+                                <div class="metric-row">
+                                    <span class="metric-label">Cache Size:</span>
+                                    <span class="metric-value">{{ hardware_cpu.cache_size }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if hardware_cpu.microcode %}
+                            <div class="col-sm-6">
+                                <div class="metric-row">
+                                    <span class="metric-label">Microcode:</span>
+                                    <span class="metric-value">{{ hardware_cpu.microcode }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        {% if hardware_cpu.flags %}
+                        <hr>
+                        <h6 class="text-muted">Feature Flags</h6>
+                        <div>
+                            {% for flag in hardware_cpu.flags[:16] %}
+                            <span class="hardware-badge">{{ flag }}</span>
+                            {% endfor %}
+                            {% if hardware_cpu.flags|length > 16 %}
+                            <small class="text-muted d-block mt-1">+ {{ hardware_cpu.flags|length - 16 }} additional flags</small>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6 mb-3" id="platform-card">
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-desktop section-icon"></i> Platform &amp; Firmware</h5>
+
+                        <div class="metric-row">
+                            <span class="metric-label">Manufacturer:</span>
+                            <span class="metric-value">{{ platform_data.sys_vendor or platform_data.board_vendor or 'Unknown' }}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Product:</span>
+                            <span class="metric-value">{{ platform_data.product_name or 'Unknown' }}</span>
+                        </div>
+                        {% if platform_data.product_version %}
+                        <div class="metric-row">
+                            <span class="metric-label">Version:</span>
+                            <span class="metric-value">{{ platform_data.product_version }}</span>
+                        </div>
+                        {% endif %}
+                        {% if platform_data.product_serial %}
+                        <div class="metric-row">
+                            <span class="metric-label">Serial:</span>
+                            <span class="metric-value">{{ platform_data.product_serial }}</span>
+                        </div>
+                        {% endif %}
+
+                        <hr>
+                        <div class="metric-row">
+                            <span class="metric-label">Mainboard:</span>
+                            <span class="metric-value">{{ platform_data.board_name or 'Unknown' }}</span>
+                        </div>
+                        {% if platform_data.board_version %}
+                        <div class="metric-row">
+                            <span class="metric-label">Board Version:</span>
+                            <span class="metric-value">{{ platform_data.board_version }}</span>
+                        </div>
+                        {% endif %}
+                        {% if platform_data.chassis_asset_tag %}
+                        <div class="metric-row">
+                            <span class="metric-label">Asset Tag:</span>
+                            <span class="metric-value">{{ platform_data.chassis_asset_tag }}</span>
+                        </div>
+                        {% endif %}
+
+                        <hr>
+                        <div class="metric-row">
+                            <span class="metric-label">BIOS Vendor:</span>
+                            <span class="metric-value">{{ platform_data.bios_vendor or 'Unknown' }}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">BIOS Version:</span>
+                            <span class="metric-value">{{ platform_data.bios_version or 'Unknown' }}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">BIOS Date:</span>
+                            <span class="metric-value">{{ platform_data.bios_date or 'Unknown' }}</span>
                         </div>
                     </div>
                 </div>
@@ -391,6 +556,140 @@
 
                         {% if network.interfaces|length > 3 %}
                         <small class="text-muted">... and {{ network.interfaces|length - 3 }} more interfaces</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% set block_info = hardware_data.block_devices or {} %}
+        {% set smart_info = smart or {} %}
+
+        <!-- Storage Inventory & Health -->
+        <div class="row mb-4">
+            <div class="col-lg-8 mb-3" id="hardware-devices-card">
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-database section-icon"></i> Storage Inventory</h5>
+
+                        {% if block_info.available and (block_info.devices or []) %}
+                        {% set disk_items = block_info.devices | selectattr('type', 'equalto', 'disk') | list %}
+                        {% if block_info.summary %}
+                        <div class="hardware-meta mb-2">
+                            {{ block_info.summary.disks or 0 }} disks • {{ block_info.summary.partitions or 0 }} partitions{% if block_info.summary.virtual %} • {{ block_info.summary.virtual }} virtual{% endif %}
+                        </div>
+                        {% endif %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover device-inventory-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Device</th>
+                                        <th scope="col">Details</th>
+                                        <th scope="col">Mounts</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for disk in disk_items %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ disk.path or ('/dev/' ~ (disk.name or 'unknown')) }}</strong>
+                                            {% if disk.model %}<div class="hardware-meta">{{ disk.model }}</div>{% endif %}
+                                            {% if disk.serial %}<div class="hardware-meta">Serial: {{ disk.serial }}</div>{% endif %}
+                                            {% if disk.vendor %}<div class="hardware-meta">Vendor: {{ disk.vendor }}</div>{% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="hardware-meta">Size: {% if disk.size_bytes %}{{ format_bytes(disk.size_bytes) }}{% else %}Unknown{% endif %}</div>
+                                            {% if disk.transport or disk.is_rotational is not none %}
+                                            <div class="hardware-meta">
+                                                {% if disk.transport %}{{ disk.transport|upper }}{% endif %}
+                                                {% if disk.transport and disk.is_rotational is not none %} • {% endif %}
+                                                {% if disk.is_rotational is sameas(true) %}HDD{% elif disk.is_rotational is sameas(false) %}SSD{% else %}Storage{% endif %}
+                                            </div>
+                                            {% endif %}
+                                            {% if disk.is_read_only is sameas(true) %}<div class="hardware-meta text-danger">Read Only</div>{% endif %}
+                                            {% if disk.is_removable is sameas(true) %}<div class="hardware-meta">Removable media</div>{% endif %}
+                                        </td>
+                                        <td>
+                                            {% if disk.children %}
+                                                {% for child in disk.children %}
+                                                <div class="hardware-meta">
+                                                    {{ child.path or ('/dev/' ~ (child.name or 'unknown')) }}
+                                                    {% if child.filesystem %}<span class="text-muted"> ({{ child.filesystem }})</span>{% endif %}
+                                                    {% if child.mountpoints %}<span class="text-muted"> → {{ child.mountpoints|join(', ') }}</span>{% endif %}
+                                                </div>
+                                                {% endfor %}
+                                            {% else %}
+                                                <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% if disk_items|length == 0 %}
+                        <p class="text-muted mb-0">No physical disks reported.</p>
+                        {% endif %}
+                        {% else %}
+                        <div class="alert alert-warning mb-0 py-2">
+                            Storage inventory unavailable{% if block_info.error %}: {{ block_info.error }}{% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4 mb-3" id="smart-card">
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h5>
+
+                        {% if smart_info.available %}
+                            {% set smart_devices = smart_info.devices or [] %}
+                            {% if smart_devices %}
+                                {% for device in smart_devices[:5] %}
+                                    {% set status_raw = (device.overall_status or 'unknown')|lower %}
+                                    {% if status_raw in ['passed', 'ok', 'healthy', 'success'] %}
+                                        {% set badge_class = 'success' %}
+                                        {% set status_label = 'Passed' %}
+                                    {% elif status_raw in ['failed', 'fail', 'critical'] %}
+                                        {% set badge_class = 'danger' %}
+                                        {% set status_label = 'Failed' %}
+                                    {% else %}
+                                        {% set badge_class = 'warning' %}
+                                        {% set status_label = device.overall_status or 'Unknown' %}
+                                    {% endif %}
+                                    <div class="mb-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <span class="metric-label">{{ device.path or device.name or 'Unknown device' }}</span>
+                                                {% if device.model %}<div class="hardware-meta">{{ device.model }}</div>{% endif %}
+                                                {% if device.serial %}<div class="hardware-meta">Serial: {{ device.serial }}</div>{% endif %}
+                                            </div>
+                                            <span class="badge bg-{{ badge_class }} smart-status-badge">{{ status_label }}</span>
+                                        </div>
+                                        <div class="hardware-meta">
+                                            Temp: {% if device.temperature_celsius is not none %}{{ "%.0f"|format(device.temperature_celsius) }}°C{% else %}N/A{% endif %}
+                                            {% if device.power_on_hours is not none %} • Power On: {{ device.power_on_hours }}h{% endif %}
+                                        </div>
+                                        <div class="hardware-meta">
+                                            {% if device.reallocated_sector_count is not none %}Realloc: {{ device.reallocated_sector_count }}{% else %}Realloc: N/A{% endif %}
+                                            {% if device.media_errors is not none %} • Media Errors: {{ device.media_errors }}{% endif %}
+                                            {% if device.critical_warnings is not none %} • Warnings: {{ device.critical_warnings }}{% endif %}
+                                        </div>
+                                        {% if device.error %}<div class="hardware-meta text-muted">Note: {{ device.error }}</div>{% endif %}
+                                    </div>
+                                {% endfor %}
+                                {% if smart_devices|length > 5 %}
+                                <small class="text-muted">… and {{ smart_devices|length - 5 }} more devices</small>
+                                {% endif %}
+                            {% else %}
+                                <p class="text-muted mb-0">No S.M.A.R.T. capable devices detected.</p>
+                            {% endif %}
+                        {% else %}
+                            <div class="alert alert-warning mb-0 py-2">
+                                S.M.A.R.T. data unavailable{% if smart_info.error %}: {{ smart_info.error }}{% endif %}
+                            </div>
                         {% endif %}
                     </div>
                 </div>
@@ -873,6 +1172,398 @@
             `;
         }
 
+        function renderCpuHardwareCard(hardwareCpu) {
+            const cpu = hardwareCpu && typeof hardwareCpu === 'object' ? hardwareCpu : {};
+            const model = escapeHtml(cpu.model_name || cpu.processor || 'Unknown');
+            const vendor = escapeHtml(cpu.vendor_id || 'Unknown');
+            const architecture = escapeHtml(cpu.architecture || 'Unknown');
+            const virtualization = cpu.supports_virtualization;
+            const virtualizationLabel = virtualization === true
+                ? 'Supported'
+                : virtualization === false
+                    ? 'Not detected'
+                    : 'Unknown';
+
+            const maxFreq = toNumber(cpu.max_frequency, 0);
+            const minFreq = toNumber(cpu.min_frequency, 0);
+            const maxFreqLabel = maxFreq > 0 ? `${maxFreq.toFixed(0)} MHz` : 'Unknown';
+            const minFreqLabel = minFreq > 0 ? `${minFreq.toFixed(0)} MHz` : 'Unknown';
+
+            const cacheSize = cpu.cache_size ? escapeHtml(String(cpu.cache_size)) : '';
+            const microcode = cpu.microcode ? escapeHtml(String(cpu.microcode)) : '';
+
+            const flagList = Array.isArray(cpu.flags) ? cpu.flags : [];
+            const flagBadges = flagList
+                .slice(0, 16)
+                .map((flag) => `<span class="hardware-badge">${escapeHtml(flag)}</span>`) 
+                .join('');
+            const extraFlags = flagList.length > 16
+                ? `<small class="text-muted d-block mt-1">+ ${flagList.length - 16} additional flags</small>`
+                : '';
+            const flagSection = flagList.length
+                ? `
+                        <hr>
+                        <h6 class="text-muted">Feature Flags</h6>
+                        <div>
+                            ${flagBadges}
+                            ${extraFlags}
+                        </div>
+                    `
+                : '';
+
+            const cacheSection = cacheSize || microcode
+                ? `
+                        <hr>
+                        <div class="row">
+                            ${cacheSize
+                                ? `
+                                    <div class="col-sm-6">
+                                        <div class="metric-row">
+                                            <span class="metric-label">Cache Size:</span>
+                                            <span class="metric-value">${cacheSize}</span>
+                                        </div>
+                                    </div>
+                                `
+                                : ''}
+                            ${microcode
+                                ? `
+                                    <div class="col-sm-6">
+                                        <div class="metric-row">
+                                            <span class="metric-label">Microcode:</span>
+                                            <span class="metric-value">${microcode}</span>
+                                        </div>
+                                    </div>
+                                `
+                                : ''}
+                        </div>
+                    `
+                : '';
+
+            return `
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-microchip section-icon"></i> CPU Details</h5>
+
+                        <div class="metric-row">
+                            <span class="metric-label">Model:</span>
+                            <span class="metric-value">${model}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Vendor:</span>
+                            <span class="metric-value">${vendor}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Architecture:</span>
+                            <span class="metric-value">${architecture}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Virtualization:</span>
+                            <span class="metric-value">${virtualizationLabel}</span>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-sm-6">
+                                <div class="metric-row">
+                                    <span class="metric-label">Physical Cores:</span>
+                                    <span class="metric-value">${cpu.physical_cores ?? 'N/A'}</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Logical Cores:</span>
+                                    <span class="metric-value">${cpu.logical_cores ?? 'N/A'}</span>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="metric-row">
+                                    <span class="metric-label">Max Frequency:</span>
+                                    <span class="metric-value">${maxFreqLabel}</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Min Frequency:</span>
+                                    <span class="metric-value">${minFreqLabel}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        ${cacheSection}
+                        ${flagSection}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderPlatformCard(platform) {
+            const data = platform && typeof platform === 'object' ? platform : {};
+            const manufacturer = escapeHtml(data.sys_vendor || data.board_vendor || 'Unknown');
+            const product = escapeHtml(data.product_name || 'Unknown');
+            const productVersion = data.product_version ? `<div class="metric-row"><span class="metric-label">Version:</span><span class="metric-value">${escapeHtml(String(data.product_version))}</span></div>` : '';
+            const productSerial = data.product_serial ? `<div class="metric-row"><span class="metric-label">Serial:</span><span class="metric-value">${escapeHtml(String(data.product_serial))}</span></div>` : '';
+            const boardName = escapeHtml(data.board_name || 'Unknown');
+            const boardVersion = data.board_version ? `<div class="metric-row"><span class="metric-label">Board Version:</span><span class="metric-value">${escapeHtml(String(data.board_version))}</span></div>` : '';
+            const assetTag = data.chassis_asset_tag ? `<div class="metric-row"><span class="metric-label">Asset Tag:</span><span class="metric-value">${escapeHtml(String(data.chassis_asset_tag))}</span></div>` : '';
+            const biosVendor = escapeHtml(data.bios_vendor || 'Unknown');
+            const biosVersion = escapeHtml(data.bios_version || 'Unknown');
+            const biosDate = escapeHtml(data.bios_date || 'Unknown');
+
+            return `
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-desktop section-icon"></i> Platform &amp; Firmware</h5>
+
+                        <div class="metric-row">
+                            <span class="metric-label">Manufacturer:</span>
+                            <span class="metric-value">${manufacturer}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Product:</span>
+                            <span class="metric-value">${product}</span>
+                        </div>
+                        ${productVersion}
+                        ${productSerial}
+
+                        <hr>
+                        <div class="metric-row">
+                            <span class="metric-label">Mainboard:</span>
+                            <span class="metric-value">${boardName}</span>
+                        </div>
+                        ${boardVersion}
+                        ${assetTag}
+
+                        <hr>
+                        <div class="metric-row">
+                            <span class="metric-label">BIOS Vendor:</span>
+                            <span class="metric-value">${biosVendor}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">BIOS Version:</span>
+                            <span class="metric-value">${biosVersion}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">BIOS Date:</span>
+                            <span class="metric-value">${biosDate}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderHardwareInventoryCard(blockInfo) {
+            const info = blockInfo && typeof blockInfo === 'object' ? blockInfo : {};
+            const available = Boolean(info.available);
+            const devices = Array.isArray(info.devices) ? info.devices : [];
+
+            if (!available || devices.length === 0) {
+                const error = info.error ? `: ${escapeHtml(info.error)}` : '';
+                return `
+                    <div class="card health-card h-100">
+                        <div class="card-body">
+                            <h5><i class="fas fa-database section-icon"></i> Storage Inventory</h5>
+                            <div class="alert alert-warning mb-0 py-2">Storage inventory unavailable${error}</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            const disks = devices.filter((device) => String(device.type || '').toLowerCase() === 'disk');
+            const summary = info.summary && typeof info.summary === 'object' ? info.summary : {};
+            const summaryParts = [];
+            if (summary.disks !== undefined) {
+                summaryParts.push(`${toNumber(summary.disks, 0)} disks`);
+            }
+            if (summary.partitions !== undefined) {
+                summaryParts.push(`${toNumber(summary.partitions, 0)} partitions`);
+            }
+            if (summary.virtual) {
+                summaryParts.push(`${toNumber(summary.virtual, 0)} virtual`);
+            }
+            const summaryHtml = summaryParts.length
+                ? `<div class="hardware-meta mb-2">${summaryParts.map((part) => escapeHtml(part)).join(' • ')}</div>`
+                : '';
+
+            const rows = disks
+                .map((disk) => {
+                    const name = disk && typeof disk === 'object' ? disk : {};
+                    const devicePath = escapeHtml(name.path || (name.name ? `/dev/${name.name}` : 'unknown'));
+                    const model = name.model ? `<div class="hardware-meta">${escapeHtml(name.model)}</div>` : '';
+                    const serial = name.serial ? `<div class="hardware-meta">Serial: ${escapeHtml(name.serial)}</div>` : '';
+                    const vendor = name.vendor ? `<div class="hardware-meta">Vendor: ${escapeHtml(name.vendor)}</div>` : '';
+                    const sizeBytes = name.size_bytes != null ? toNumber(name.size_bytes, 0) : null;
+                    const sizeLabel = sizeBytes && sizeBytes > 0 ? formatBytes(sizeBytes) : 'Unknown';
+                    const transport = name.transport ? escapeHtml(String(name.transport).toUpperCase()) : '';
+                    const hasRotational = name.is_rotational === true || name.is_rotational === false;
+                    let rotational = '';
+                    if (name.is_rotational === true) {
+                        rotational = 'HDD';
+                    } else if (name.is_rotational === false) {
+                        rotational = 'SSD';
+                    }
+                    let transportDetail = '';
+                    if (transport) {
+                        transportDetail = transport;
+                        if (hasRotational) {
+                            transportDetail += ` • ${rotational}`;
+                        }
+                    } else if (hasRotational) {
+                        transportDetail = rotational;
+                    }
+                    const transportLine = transportDetail
+                        ? `<div class="hardware-meta">${transportDetail}</div>`
+                        : '';
+                    const readOnly = name.is_read_only === true ? '<div class="hardware-meta text-danger">Read Only</div>' : '';
+                    const removable = name.is_removable === true ? '<div class="hardware-meta">Removable media</div>' : '';
+
+                    const children = Array.isArray(name.children) ? name.children : [];
+                    const childRows = children.length
+                        ? children
+                            .map((child) => {
+                                const childDevice = child && typeof child === 'object' ? child : {};
+                                const childPath = escapeHtml(childDevice.path || (childDevice.name ? `/dev/${childDevice.name}` : 'unknown'));
+                                const fs = childDevice.filesystem ? ` <span class="text-muted">(${escapeHtml(childDevice.filesystem)})</span>` : '';
+                                const mountpoints = Array.isArray(childDevice.mountpoints) && childDevice.mountpoints.length
+                                    ? ` <span class="text-muted">→ ${childDevice.mountpoints.map((mp) => escapeHtml(mp)).join(', ')}</span>`
+                                    : '';
+                                return `<div class="hardware-meta">${childPath}${fs}${mountpoints}</div>`;
+                            })
+                            .join('')
+                        : '<span class="text-muted">—</span>';
+
+                    return `
+                        <tr>
+                            <td>
+                                <strong>${devicePath}</strong>
+                                ${model}
+                                ${serial}
+                                ${vendor}
+                            </td>
+                            <td>
+                                <div class="hardware-meta">Size: ${sizeLabel}</div>
+                                ${transportLine}
+                                ${readOnly}
+                                ${removable}
+                            </td>
+                            <td>${childRows}</td>
+                        </tr>
+                    `;
+                })
+                .join('');
+
+            const tableContent = disks.length
+                ? `
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover device-inventory-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Device</th>
+                                        <th scope="col">Details</th>
+                                        <th scope="col">Mounts</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${rows}
+                                </tbody>
+                            </table>
+                        </div>
+                    `
+                : '<p class="text-muted mb-0">No physical disks reported.</p>';
+
+            return `
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-database section-icon"></i> Storage Inventory</h5>
+                        ${summaryHtml}
+                        ${tableContent}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderSmartHealthCard(smartInfo) {
+            const info = smartInfo && typeof smartInfo === 'object' ? smartInfo : {};
+            if (!info.available) {
+                const error = info.error ? `: ${escapeHtml(info.error)}` : '';
+                return `
+                    <div class="card health-card h-100">
+                        <div class="card-body">
+                            <h5><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h5>
+                            <div class="alert alert-warning mb-0 py-2">S.M.A.R.T. data unavailable${error}</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            const devices = Array.isArray(info.devices) ? info.devices : [];
+            if (!devices.length) {
+                return `
+                    <div class="card health-card h-100">
+                        <div class="card-body">
+                            <h5><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h5>
+                            <p class="text-muted mb-0">No S.M.A.R.T. capable devices detected.</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            const sections = devices.slice(0, 5).map((device) => {
+                const data = device && typeof device === 'object' ? device : {};
+                const path = escapeHtml(data.path || data.name || 'Unknown device');
+                const model = data.model ? `<div class="hardware-meta">${escapeHtml(data.model)}</div>` : '';
+                const serial = data.serial ? `<div class="hardware-meta">Serial: ${escapeHtml(data.serial)}</div>` : '';
+
+                const statusRaw = String(data.overall_status || 'unknown').toLowerCase();
+                let badgeClass = 'warning';
+                let statusLabel = data.overall_status ? escapeHtml(String(data.overall_status)) : 'Unknown';
+                if (['passed', 'ok', 'healthy', 'success'].includes(statusRaw)) {
+                    badgeClass = 'success';
+                    statusLabel = 'Passed';
+                } else if (['failed', 'fail', 'critical'].includes(statusRaw)) {
+                    badgeClass = 'danger';
+                    statusLabel = 'Failed';
+                }
+
+                const temperature = data.temperature_celsius != null
+                    ? `${toNumber(data.temperature_celsius, 0).toFixed(0)}°C`
+                    : 'N/A';
+                const powerOnHours = data.power_on_hours != null ? `${escapeHtml(String(data.power_on_hours))}h` : '';
+                const reallocated = data.reallocated_sector_count != null ? escapeHtml(String(data.reallocated_sector_count)) : 'N/A';
+                const mediaErrors = data.media_errors != null ? ` • Media Errors: ${escapeHtml(String(data.media_errors))}` : '';
+                const warnings = data.critical_warnings != null ? ` • Warnings: ${escapeHtml(String(data.critical_warnings))}` : '';
+                const note = data.error ? `<div class="hardware-meta text-muted">Note: ${escapeHtml(String(data.error))}</div>` : '';
+
+                return `
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="metric-label">${path}</span>
+                                ${model}
+                                ${serial}
+                            </div>
+                            <span class="badge bg-${badgeClass} smart-status-badge">${statusLabel}</span>
+                        </div>
+                        <div class="hardware-meta">
+                            Temp: ${temperature}${powerOnHours ? ` • Power On: ${powerOnHours}` : ''}
+                        </div>
+                        <div class="hardware-meta">
+                            Realloc: ${reallocated}${mediaErrors}${warnings}
+                        </div>
+                        ${note}
+                    </div>
+                `;
+            }).join('');
+
+            const overflow = devices.length > 5
+                ? `<small class="text-muted">… and ${devices.length - 5} more devices</small>`
+                : '';
+
+            return `
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h5>
+                        ${sections}
+                        ${overflow}
+                    </div>
+                </div>
+            `;
+        }
+
         function determineContainerBadge(container) {
             if (!container || typeof container !== 'object') {
                 return { badge: 'secondary', label: 'Unknown' };
@@ -1319,6 +2010,18 @@
 
             updateOverview(data);
 
+            const hardware = data.hardware || {};
+
+            const cpuHardwareContainer = document.getElementById('cpu-hardware-card');
+            if (cpuHardwareContainer) {
+                cpuHardwareContainer.innerHTML = renderCpuHardwareCard(hardware.cpu || {});
+            }
+
+            const platformContainer = document.getElementById('platform-card');
+            if (platformContainer) {
+                platformContainer.innerHTML = renderPlatformCard(hardware.platform || {});
+            }
+
             const cpuContainer = document.getElementById('cpu-card');
             if (cpuContainer) {
                 cpuContainer.innerHTML = renderCpuCard(data.cpu || {});
@@ -1327,6 +2030,16 @@
             const memoryContainer = document.getElementById('memory-card');
             if (memoryContainer) {
                 memoryContainer.innerHTML = renderMemoryCard(data.memory || {});
+            }
+
+            const hardwareDevicesContainer = document.getElementById('hardware-devices-card');
+            if (hardwareDevicesContainer) {
+                hardwareDevicesContainer.innerHTML = renderHardwareInventoryCard(hardware.block_devices || {});
+            }
+
+            const smartContainer = document.getElementById('smart-card');
+            if (smartContainer) {
+                smartContainer.innerHTML = renderSmartHealthCard(data.smart || {});
             }
 
             const stackContainer = document.getElementById('containers-card');

@@ -1,6 +1,7 @@
 """System monitoring helpers."""
 
 from datetime import datetime
+import contextlib
 import http.client
 import json
 import os
@@ -9,6 +10,7 @@ import shutil
 import socket
 import subprocess
 import time
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from urllib.parse import urlparse
@@ -225,6 +227,9 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
         except Exception:
             pass
 
+        hardware_info = _collect_hardware_inventory(logger)
+        smart_info = _collect_smart_health(logger, hardware_info.get("block_devices", {}).get("devices") or [])
+
         return {
             "timestamp": utc_now().isoformat(),
             "local_timestamp": local_now().isoformat(),
@@ -248,6 +253,8 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
             "services": services_status,
             "containers": containers_info,
             "temperature": temperature_info,
+            "hardware": hardware_info,
+            "smart": smart_info,
         }
 
     except Exception as exc:  # pragma: no cover - defensive logging only
@@ -324,6 +331,454 @@ def _collect_container_statuses(logger) -> Dict[str, Any]:
 
     result["compose_project"] = compose_project
     return result
+
+
+def _collect_hardware_inventory(logger) -> Dict[str, Any]:
+    """Gather hardware inventory details for the host."""
+
+    cpu_details = _collect_cpu_details(logger)
+    platform_details = _collect_platform_details()
+    block_devices = _collect_block_devices(logger)
+
+    return {
+        "cpu": cpu_details,
+        "platform": platform_details,
+        "block_devices": block_devices,
+    }
+
+
+def _collect_cpu_details(logger) -> Dict[str, Any]:
+    """Return static CPU capabilities and metadata."""
+
+    cpu_freq = psutil.cpu_freq()
+
+    details: Dict[str, Any] = {
+        "model_name": None,
+        "vendor_id": None,
+        "architecture": platform.machine() or None,
+        "processor": platform.processor() or None,
+        "cache_size": None,
+        "microcode": None,
+        "stepping": None,
+        "family": None,
+        "model": None,
+        "flags": [],
+        "supports_virtualization": None,
+        "physical_cores": psutil.cpu_count(logical=False),
+        "logical_cores": psutil.cpu_count(logical=True),
+        "max_frequency": cpu_freq.max if cpu_freq else None,
+        "min_frequency": cpu_freq.min if cpu_freq else None,
+    }
+
+    try:
+        cpuinfo_path = Path("/proc/cpuinfo")
+        if cpuinfo_path.exists():
+            content = cpuinfo_path.read_text(encoding="utf-8", errors="ignore")
+            sections = [segment for segment in content.split("\n\n") if segment.strip()]
+            if sections:
+                first = sections[0]
+                for line in first.splitlines():
+                    if ":" not in line:
+                        continue
+                    key, value = line.split(":", 1)
+                    key = key.strip().lower()
+                    value = value.strip()
+                    if not value:
+                        continue
+                    if key == "model name":
+                        details["model_name"] = value
+                    elif key == "vendor_id":
+                        details["vendor_id"] = value
+                    elif key == "microcode":
+                        details["microcode"] = value
+                    elif key == "stepping":
+                        details["stepping"] = value
+                    elif key == "cpu family":
+                        details["family"] = value
+                    elif key == "model":
+                        details["model"] = value
+                    elif key == "cache size":
+                        details["cache_size"] = value
+                    elif key == "flags":
+                        flags = [flag.strip() for flag in value.split() if flag.strip()]
+                        details["flags"] = sorted(set(flags))
+    except Exception as exc:  # pragma: no cover - depends on host filesystem
+        if logger:
+            logger.debug("Failed to parse /proc/cpuinfo: %s", exc)
+
+    flags_set = set(details.get("flags") or [])
+    if flags_set:
+        details["supports_virtualization"] = any(flag in {"vmx", "svm"} for flag in flags_set)
+
+    return details
+
+
+def _collect_platform_details() -> Dict[str, Any]:
+    """Return chassis / firmware metadata if exposed via DMI."""
+
+    base_path = Path("/sys/devices/virtual/dmi/id")
+    if not base_path.exists():
+        return {}
+
+    fields = {
+        "sys_vendor": "sys_vendor",
+        "product_name": "product_name",
+        "product_version": "product_version",
+        "product_serial": "product_serial",
+        "board_name": "board_name",
+        "board_vendor": "board_vendor",
+        "board_version": "board_version",
+        "chassis_asset_tag": "chassis_asset_tag",
+        "bios_vendor": "bios_vendor",
+        "bios_version": "bios_version",
+        "bios_date": "bios_date",
+    }
+
+    details: Dict[str, Any] = {}
+
+    for key, filename in fields.items():
+        value = _safe_read_text(base_path / filename)
+        if value is not None:
+            details[key] = value
+
+    return details
+
+
+def _collect_block_devices(logger) -> Dict[str, Any]:
+    """Use lsblk to inspect attached block devices."""
+
+    result: Dict[str, Any] = {
+        "available": False,
+        "devices": [],
+        "error": None,
+        "summary": {"disks": 0, "partitions": 0, "virtual": 0},
+    }
+
+    lsblk_path = shutil.which("lsblk")
+    if not lsblk_path:
+        result["error"] = "lsblk utility not available"
+        return result
+
+    columns = [
+        "NAME",
+        "PATH",
+        "TYPE",
+        "SIZE",
+        "MODEL",
+        "SERIAL",
+        "ROTA",
+        "TRAN",
+        "VENDOR",
+        "RO",
+        "RM",
+        "MOUNTPOINT",
+        "MOUNTPOINTS",
+        "FSTYPE",
+    ]
+
+    try:
+        completed = subprocess.run(
+            [
+                lsblk_path,
+                "--bytes",
+                "--json",
+                "--output",
+                ",".join(columns),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+    except Exception as exc:  # pragma: no cover - depends on host configuration
+        result["error"] = str(exc)
+        if logger:
+            logger.warning("Failed to execute lsblk: %s", exc)
+        return result
+
+    stdout = (completed.stdout or "").strip()
+    if completed.returncode != 0:
+        stderr = (completed.stderr or "").strip()
+        result["error"] = stderr or "lsblk returned a non-zero exit status"
+        if logger:
+            logger.warning("lsblk exited with status %s: %s", completed.returncode, result["error"])
+
+    if not stdout:
+        return result
+
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError as exc:  # pragma: no cover - host specific output
+        result["error"] = f"Unable to parse lsblk output: {exc}"
+        if logger:
+            logger.warning("Unable to parse lsblk output: %s", exc)
+        return result
+
+    simplified_devices, summary = _simplify_block_devices(payload.get("blockdevices") or [])
+    result["devices"] = simplified_devices
+    result["summary"] = summary
+    result["available"] = bool(simplified_devices)
+
+    return result
+
+
+def _simplify_block_devices(entries: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+    """Normalize lsblk output into a compact, UI-friendly structure."""
+
+    simplified: List[Dict[str, Any]] = []
+    summary = {"disks": 0, "partitions": 0, "virtual": 0}
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+
+        children_entries = entry.get("children") or []
+        children, child_summary = _simplify_block_devices(children_entries)
+
+        for key, value in child_summary.items():
+            summary[key] = summary.get(key, 0) + value
+
+        entry_type = (entry.get("type") or "").lower()
+        if entry_type == "disk":
+            summary["disks"] = summary.get("disks", 0) + 1
+        elif entry_type == "part":
+            summary["partitions"] = summary.get("partitions", 0) + 1
+        elif entry_type in {"loop", "rom"}:
+            summary["virtual"] = summary.get("virtual", 0) + 1
+
+        mountpoints = entry.get("mountpoints")
+        if mountpoints is None:
+            mountpoint = entry.get("mountpoint")
+            if mountpoint:
+                mountpoints = [mountpoint]
+            else:
+                mountpoints = []
+
+        if isinstance(mountpoints, str):
+            mountpoints = [mountpoints]
+
+        device = {
+            "name": entry.get("name"),
+            "path": entry.get("path"),
+            "type": entry_type or None,
+            "size_bytes": _safe_int(entry.get("size")),
+            "model": entry.get("model"),
+            "serial": entry.get("serial"),
+            "vendor": entry.get("vendor"),
+            "transport": entry.get("tran"),
+            "is_rotational": _to_bool(entry.get("rota")),
+            "is_read_only": _to_bool(entry.get("ro")),
+            "is_removable": _to_bool(entry.get("rm")),
+            "filesystem": entry.get("fstype"),
+            "mountpoints": mountpoints if isinstance(mountpoints, list) else [],
+            "children": children,
+        }
+
+        simplified.append(device)
+
+    return simplified, summary
+
+
+def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Collect S.M.A.R.T. health summaries for detected block devices."""
+
+    result: Dict[str, Any] = {"available": False, "devices": [], "error": None}
+
+    smartctl_path = shutil.which("smartctl")
+    if not smartctl_path:
+        result["error"] = "smartctl utility not installed"
+        return result
+
+    result["available"] = True
+
+    for device in _iter_disk_devices(devices):
+        path = device.get("path") or (f"/dev/{device.get('name')}" if device.get("name") else None)
+        if not path:
+            continue
+
+        device_result: Dict[str, Any] = {
+            "name": device.get("name"),
+            "path": path,
+            "model": device.get("model"),
+            "serial": device.get("serial"),
+            "transport": device.get("transport"),
+            "is_rotational": device.get("is_rotational"),
+            "overall_status": "unknown",
+            "temperature_celsius": None,
+            "power_on_hours": None,
+            "power_cycle_count": None,
+            "reallocated_sector_count": None,
+            "media_errors": None,
+            "critical_warnings": None,
+            "exit_status": None,
+            "error": None,
+        }
+
+        command = [smartctl_path, "--json=o", "-H", "-A", "-n", "standby,now", path]
+
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=15,
+            )
+        except Exception as exc:  # pragma: no cover - depends on host configuration
+            device_result["error"] = str(exc)
+            if logger:
+                logger.warning("smartctl failed for %s: %s", path, exc)
+            result["devices"].append(device_result)
+            continue
+
+        device_result["exit_status"] = completed.returncode
+
+        raw_output = (completed.stdout or "").strip()
+        if not raw_output:
+            if completed.stderr:
+                device_result["error"] = completed.stderr.strip()
+            result["devices"].append(device_result)
+            continue
+
+        try:
+            report = json.loads(raw_output)
+        except json.JSONDecodeError as exc:  # pragma: no cover - host specific output
+            device_result["error"] = f"Unable to parse smartctl output: {exc}"
+            if logger:
+                logger.warning("Unable to parse smartctl output for %s: %s", path, exc)
+            result["devices"].append(device_result)
+            continue
+
+        smart_status = report.get("smart_status") or {}
+        passed = smart_status.get("passed")
+        if passed is True:
+            device_result["overall_status"] = "passed"
+        elif passed is False:
+            device_result["overall_status"] = "failed"
+        else:
+            status_text = smart_status.get("status") or smart_status.get("string")
+            if status_text:
+                device_result["overall_status"] = str(status_text)
+
+        device_result["temperature_celsius"] = _extract_temperature(report)
+        device_result["power_on_hours"] = _extract_attribute_value(report, "Power_On_Hours")
+        device_result["power_cycle_count"] = _extract_attribute_value(report, "Power_Cycle_Count")
+        device_result["reallocated_sector_count"] = _extract_attribute_value(
+            report, "Reallocated_Sector_Ct"
+        )
+        device_result["media_errors"] = _extract_nvme_field(report, "media_errors")
+        device_result["critical_warnings"] = _extract_nvme_field(report, "critical_warning")
+
+        if completed.stderr:
+            stderr = completed.stderr.strip()
+            if stderr:
+                device_result["error"] = stderr
+
+        result["devices"].append(device_result)
+
+    if not result["devices"]:
+        result["error"] = result.get("error") or "No eligible block devices detected"
+
+    return result
+
+
+def _iter_disk_devices(devices: List[Dict[str, Any]]):
+    for device in devices:
+        if not isinstance(device, dict):
+            continue
+        device_type = (device.get("type") or "").lower()
+        name = device.get("name") or ""
+        if device_type == "disk" and not name.startswith(("ram", "loop")):
+            yield device
+        for child in device.get("children") or []:
+            yield from _iter_disk_devices([child])
+
+
+def _extract_temperature(report: Dict[str, Any]) -> Optional[float]:
+    temperature = report.get("temperature")
+    if isinstance(temperature, dict):
+        current = temperature.get("current")
+        if isinstance(current, (int, float)):
+            return float(current)
+
+    nvme_info = report.get("nvme_smart_health_information_log")
+    if isinstance(nvme_info, dict):
+        current = nvme_info.get("temperature")
+        if isinstance(current, (int, float)):
+            # NVMe devices commonly report temperature in Kelvin; convert when it appears elevated.
+            if current > 200:
+                return float(current - 273.15)
+            return float(current)
+
+    return None
+
+
+def _extract_attribute_value(report: Dict[str, Any], name: str) -> Optional[int]:
+    attributes = report.get("ata_smart_attributes")
+    if isinstance(attributes, dict):
+        table = attributes.get("table")
+        if isinstance(table, list):
+            for entry in table:
+                if not isinstance(entry, dict):
+                    continue
+                if str(entry.get("name")) == name:
+                    raw = entry.get("raw")
+                    if isinstance(raw, dict):
+                        value = raw.get("value")
+                        if isinstance(value, (int, float)):
+                            return int(value)
+    # Fallback for NVMe data stored directly on the report
+    direct_value = report.get(name)
+    if isinstance(direct_value, (int, float)):
+        return int(direct_value)
+    return None
+
+
+def _extract_nvme_field(report: Dict[str, Any], key: str) -> Optional[int]:
+    nvme_info = report.get("nvme_smart_health_information_log")
+    if isinstance(nvme_info, dict):
+        value = nvme_info.get(key)
+        if isinstance(value, (int, float)):
+            return int(value)
+    return None
+
+
+def _safe_read_text(path: Path) -> Optional[str]:
+    with contextlib.suppress(OSError, FileNotFoundError, PermissionError):
+        value = path.read_text(encoding="utf-8", errors="ignore").strip()
+        if value:
+            lower = value.lower()
+            if lower not in {"none", "unknown", "not specified"}:
+                return value
+    return None
+
+
+def _safe_int(value: Any) -> Optional[int]:
+    try:
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return int(value)
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_bool(value: Any) -> Optional[bool]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    try:
+        numeric = int(str(value).strip())
+        return bool(numeric)
+    except (TypeError, ValueError):
+        lowered = str(value).strip().lower()
+        if lowered in {"y", "yes", "true"}:
+            return True
+        if lowered in {"n", "no", "false"}:
+            return False
+    return None
 
 
 class _UnixHTTPConnection(http.client.HTTPConnection):
