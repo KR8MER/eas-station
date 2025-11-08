@@ -342,7 +342,7 @@ def register_api_routes(app, logger):
                 alerts_query = get_active_alerts_query()
                 logger.info("Including only active alerts in API response")
 
-            alerts = db.session.query(
+            alerts = alerts_query.with_entities(
                 CAPAlert.id,
                 CAPAlert.identifier,
                 CAPAlert.event,
@@ -353,8 +353,6 @@ def register_api_routes(app, logger):
                 CAPAlert.expires,
                 CAPAlert.area_desc,
                 func.ST_AsGeoJSON(CAPAlert.geom).label('geometry'),
-            ).filter(
-                CAPAlert.id.in_(alerts_query.with_entities(CAPAlert.id).subquery())
             ).all()
 
             county_boundary = None
