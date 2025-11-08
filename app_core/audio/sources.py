@@ -641,6 +641,9 @@ class StreamSourceAdapter(AudioSourceAdapter):
             # Update metrics with stream metadata
             self.metrics.metadata = self._stream_metadata.copy()
 
+            # Store bitrate for rate limiting
+            self._stream_bitrate = bitrate if bitrate else 128  # Default to 128 kbps if not detected
+
             # Log comprehensive stream metadata
             logger.info(f"Stream connected: {stream_url}")
             logger.info(f"  Codec: {detected_codec} | Content-Type: {content_type}")
@@ -840,23 +843,44 @@ class StreamSourceAdapter(AudioSourceAdapter):
             self.error_message = f"FFmpeg decoder error: {e}"
 
     def _feed_ffmpeg(self) -> None:
-        """Thread function to feed encoded data from buffer to FFmpeg stdin."""
+        """Thread function to feed encoded data from buffer to FFmpeg stdin at controlled rate."""
         logger.info(f"{self.config.name}: Feeder thread started")
         total_bytes_fed = 0
         last_log_time = time.time()
+        last_feed_time = time.time()
+
+        # Calculate target bytes per second based on stream bitrate (with 10% overhead for safety)
+        # bitrate is in kbps, convert to bytes per second
+        target_bytes_per_sec = (self._stream_bitrate * 1000 / 8) * 1.1 if hasattr(self, '_stream_bitrate') and self._stream_bitrate else 20000
+
+        # Feed in small chunks to maintain steady rate
+        chunk_size = 4096  # 4KB chunks
+        bytes_per_chunk = chunk_size
+        target_delay_per_chunk = bytes_per_chunk / target_bytes_per_sec
+
+        logger.info(f"{self.config.name}: Feeder rate limit: {target_bytes_per_sec/1000:.1f} KB/s ({target_delay_per_chunk*1000:.1f}ms per {chunk_size} byte chunk)")
 
         try:
             while self._ffmpeg_process and self._ffmpeg_process.poll() is None:
                 try:
                     if len(self._buffer) > 0:
+                        # Rate limiting: wait if we're feeding too fast
+                        now = time.time()
+                        time_since_last_feed = now - last_feed_time
+                        if time_since_last_feed < target_delay_per_chunk:
+                            # Need to slow down - sleep for remaining time
+                            sleep_time = target_delay_per_chunk - time_since_last_feed
+                            time.sleep(sleep_time)
+                            now = time.time()
+
                         # Send data to FFmpeg stdin (non-blocking)
-                        # Use larger chunks to reduce overhead and improve throughput
-                        chunk = bytes(self._buffer[:65536])
+                        chunk = bytes(self._buffer[:chunk_size])
 
                         if self._ffmpeg_process and self._ffmpeg_process.stdin:
                             try:
                                 bytes_written = self._ffmpeg_process.stdin.write(chunk)
                                 if bytes_written:
+                                    last_feed_time = now  # Update last feed time
                                     # CRITICAL: Use del instead of reassignment to avoid race condition
                                     # The capture loop extends the buffer while we're removing from it
                                     # Must modify in-place, not create new bytearray
@@ -866,7 +890,6 @@ class StreamSourceAdapter(AudioSourceAdapter):
                                     total_bytes_fed += bytes_written
 
                                     # Log feeding rate and flush periodically
-                                    now = time.time()
                                     if now - last_log_time > 2.0:
                                         self._ffmpeg_process.stdin.flush()  # Flush periodically, not every write
                                         rate_kbps = (total_bytes_fed * 8 / 1000) / (now - last_log_time)
@@ -874,29 +897,28 @@ class StreamSourceAdapter(AudioSourceAdapter):
                                         total_bytes_fed = 0
                                         last_log_time = now
                                 else:
-                                    # Write returned 0 - pipe is full
+                                    # Write returned 0 - pipe is full, sleep longer
                                     if not hasattr(self, '_last_blocked_log'):
                                         self._last_blocked_log = 0
-                                    now = time.time()
                                     if now - self._last_blocked_log > 5.0:
                                         logger.warning(f"{self.config.name}: FFmpeg stdin write blocked (returned 0), buffer size: {len(self._buffer)} bytes")
                                         self._last_blocked_log = now
-                                    time.sleep(0.001)  # Reduced from 10ms to 1ms
+                                    time.sleep(0.1)  # Sleep longer when blocked
                             except BlockingIOError:
-                                # Write would block, buffer is full, sleep briefly
+                                # Write would block, buffer is full, sleep longer
                                 if not hasattr(self, '_last_blocked_log'):
                                     self._last_blocked_log = 0
                                 now = time.time()
                                 if now - self._last_blocked_log > 5.0:
                                     logger.warning(f"{self.config.name}: FFmpeg stdin BlockingIOError, buffer size: {len(self._buffer)} bytes")
                                     self._last_blocked_log = now
-                                time.sleep(0.001)  # Reduced from 10ms to 1ms
+                                time.sleep(0.1)  # Sleep longer when blocked
                             except BrokenPipeError:
                                 logger.warning(f"{self.config.name}: FFmpeg stdin pipe broken, decoder may have exited")
                                 break
                     else:
                         # No data to send, sleep briefly
-                        time.sleep(0.001)  # Reduced from 10ms to 1ms
+                        time.sleep(0.01)  # 10ms when no data
 
                 except Exception as e:
                     logger.error(f"{self.config.name}: Error feeding FFmpeg: {e}")
