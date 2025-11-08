@@ -438,6 +438,12 @@ class IcecastStreamer:
     def _send_metadata_update(self, title: str, artist: Optional[str]) -> Optional[str]:
         """Submit metadata to Icecast and return the formatted payload on success."""
         if not (self.config.admin_user and self.config.admin_password):
+            logger.debug(
+                "Metadata update skipped for %s: credentials not configured (user=%s, pass=%s)",
+                self.config.mount,
+                "SET" if self.config.admin_user else "NOT SET",
+                "SET" if self.config.admin_password else "NOT SET",
+            )
             return None
 
         safe_stream_name = self._stream_name or "EAS Station"
@@ -470,37 +476,43 @@ class IcecastStreamer:
         base_url = f"http://{self.config.server}:{self.config.port}/admin/metadata"
         url = f"{base_url}?mode=updinfo&mount={encoded_mount}&song={encoded_song}"
 
-        # Create HTTP Basic Auth header manually with UTF-8 encoding
-        # This allows Unicode passwords (requests' default auth uses latin-1)
-        # RFC 7617 specifies that UTF-8 can be used for Basic Auth
+        # Try auth with standard requests first (latin-1), fall back to UTF-8 if needed
         auth_user = str(self.config.admin_user or '')
         auth_pass = str(self.config.admin_password or '')
 
-        # Log credentials info for debugging (mask password)
-        logger.debug(
-            "Auth for %s: user=%r (len=%d), pass=***%s (len=%d)",
+        # Log credentials info for debugging (mask password) - use INFO to ensure it shows
+        logger.info(
+            "Icecast auth for %s: user=%r pass=***%s (total_len=%d)",
             self.config.mount,
             auth_user,
-            len(auth_user),
-            auth_pass[-3:] if len(auth_pass) >= 3 else "***",
-            len(auth_pass),
+            auth_pass[-2:] if len(auth_pass) >= 2 else "**",
+            len(f"{auth_user}:{auth_pass}"),
         )
 
-        # Encode credentials as "username:password" in UTF-8, then base64
-        credentials = f"{auth_user}:{auth_pass}".encode('utf-8')
-        encoded_credentials = base64.b64encode(credentials).decode('ascii')
-
-        headers = {
-            'Authorization': f'Basic {encoded_credentials}'
-        }
+        # Try to use requests' built-in auth first (latin-1 encoding)
+        # This is the standard that most servers expect
+        try:
+            # Test if credentials can be latin-1 encoded
+            auth_user.encode('latin-1')
+            auth_pass.encode('latin-1')
+            # If successful, use requests' built-in auth
+            auth_tuple = (auth_user, auth_pass)
+            headers = {}
+            logger.debug("Using latin-1 auth encoding (standard)")
+        except UnicodeEncodeError:
+            # Falls back to UTF-8 for Unicode passwords (RFC 7617)
+            credentials = f"{auth_user}:{auth_pass}".encode('utf-8')
+            encoded_credentials = base64.b64encode(credentials).decode('ascii')
+            auth_tuple = None
+            headers = {'Authorization': f'Basic {encoded_credentials}'}
+            logger.info("Using UTF-8 auth encoding (RFC 7617) for Unicode password")
 
         try:
-            # Make the HTTP GET request with the pre-encoded URL and UTF-8 auth
-            response = requests.get(
-                url,
-                headers=headers,
-                timeout=5.0,
-            )
+            # Make the HTTP GET request
+            if auth_tuple:
+                response = requests.get(url, auth=auth_tuple, timeout=5.0)
+            else:
+                response = requests.get(url, headers=headers, timeout=5.0)
         except requests_exceptions.RequestException as exc:
             logger.warning(
                 "Failed to update Icecast metadata for %s: %s",
