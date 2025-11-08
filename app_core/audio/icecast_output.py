@@ -229,11 +229,11 @@ class IcecastStreamer:
             from urllib.parse import quote
             encoded_password = quote(self.config.password, safe='')
 
-            # Add timeout as a protocol option to prevent 10-minute disconnections
-            # Set to -1 (infinite) to keep connection alive indefinitely
+            # Note: The 10-minute timeout fix is SERVER-SIDE in Icecast config (source-timeout=0)
+            # The icecast:// protocol (libshout) doesn't support HTTP timeout options
             icecast_url = (
                 f"icecast://source:{encoded_password}@"
-                f"{self.config.server}:{self.config.port}/{self.config.mount}?timeout=-1"
+                f"{self.config.server}:{self.config.port}/{self.config.mount}"
             )
 
             # FFmpeg command to encode and stream
