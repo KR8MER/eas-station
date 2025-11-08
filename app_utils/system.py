@@ -1,13 +1,14 @@
 """System monitoring helpers."""
 
 from datetime import datetime
+import json
 import os
 import platform
 import shutil
 import socket
 import subprocess
 import time
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 import psutil
 from sqlalchemy import text
@@ -195,26 +196,13 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
         except Exception as exc:
             db_status = f"error: {exc}"
 
-        services_status: Dict[str, Any] = {}
-        services_to_check = ["apache2", "postgresql"]
-        systemctl_path = shutil.which("systemctl")
-
-        if systemctl_path:
-            for service in services_to_check:
-                try:
-                    result = subprocess.run(
-                        [systemctl_path, "is-active", service],
-                        capture_output=True,
-                        text=True,
-                        timeout=5,
-                    )
-                    service_status = result.stdout.strip() if result.stdout else "unknown"
-                    services_status[service] = service_status or "unknown"
-                except Exception:
-                    services_status[service] = "unknown"
-        else:
-            for service in services_to_check:
-                services_status[service] = "unavailable"
+        containers_info = _collect_container_statuses(logger)
+        services_status: Dict[str, Any] = {
+            container.get("display_name")
+            or container.get("name")
+            or f"container-{index}": container.get("status")
+            for index, container in enumerate(containers_info.get("containers", []), start=1)
+        }
 
         temperature_info: Dict[str, Any] = {}
         try:
@@ -255,6 +243,7 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
             "load_averages": load_averages,
             "database": {"status": db_status, "info": db_info},
             "services": services_status,
+            "containers": containers_info,
             "temperature": temperature_info,
         }
 
@@ -265,3 +254,148 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
             "timestamp": utc_now().isoformat(),
             "local_timestamp": local_now().isoformat(),
         }
+
+
+def _collect_container_statuses(logger) -> Dict[str, Any]:
+    """Collect information about running containers using Docker or Podman."""
+
+    result: Dict[str, Any] = {
+        "available": False,
+        "status": "unavailable",
+        "engine": None,
+        "containers": [],
+        "summary": {"total": 0, "running": 0, "healthy": 0, "unhealthy": 0, "stopped": 0},
+        "issues": [],
+        "error": None,
+    }
+
+    compose_project = os.getenv("COMPOSE_PROJECT_NAME") or os.getenv("STACK_PROJECT_NAME") or os.getenv(
+        "STACK_NAME"
+    )
+    engines: List[str] = ["docker", "podman"]
+    last_error: Optional[str] = None
+
+    for engine in engines:
+        engine_path = shutil.which(engine)
+        if not engine_path:
+            continue
+
+        command = [engine_path, "ps", "--all"]
+        if compose_project:
+            if engine == "docker":
+                command.extend(["--filter", f"label=com.docker.compose.project={compose_project}"])
+            else:
+                command.extend(["--filter", f"label=io.podman.compose.project={compose_project}"])
+        command.extend(["--format", "{{json .}}"])  # Return machine-readable output
+
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10,
+            )
+
+            if completed.returncode != 0:
+                stderr = completed.stderr.strip() or "unknown error"
+                raise RuntimeError(f"{engine} ps failed: {stderr}")
+
+            lines = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
+            containers: List[Dict[str, Any]] = []
+
+            for raw_line in lines:
+                try:
+                    info = json.loads(raw_line)
+                except json.JSONDecodeError:
+                    last_error = f"Unable to parse {engine} output: {raw_line}"
+                    continue
+
+                labels_text = info.get("Labels") or ""
+                labels: Dict[str, str] = {}
+                if labels_text:
+                    for item in labels_text.split(","):
+                        if "=" in item:
+                            key, value = item.split("=", 1)
+                            labels[key.strip()] = value.strip()
+
+                name = info.get("Names") or "unknown"
+                status_text = info.get("Status") or "unknown"
+                state = (info.get("State") or "").lower()
+                status_lower = status_text.lower()
+                health_state = None
+                if "unhealthy" in status_lower:
+                    health_state = "unhealthy"
+                elif "healthy" in status_lower:
+                    health_state = "healthy"
+                elif "starting" in status_lower:
+                    health_state = "starting"
+
+                is_running = state == "running" or status_lower.startswith("up")
+
+                service = labels.get("com.docker.compose.service") or labels.get("io.podman.compose.service")
+                display_name = None
+                if service:
+                    display_name = service.replace("_", " ").replace("-", " ").title()
+
+                containers.append(
+                    {
+                        "name": name,
+                        "display_name": display_name,
+                        "service": service,
+                        "project": labels.get("com.docker.compose.project")
+                        or labels.get("io.podman.compose.project")
+                        or compose_project,
+                        "status": status_text,
+                        "state": state or None,
+                        "health": health_state,
+                        "is_running": is_running,
+                        "image": info.get("Image"),
+                        "ports": info.get("Ports"),
+                        "running_for": info.get("RunningFor"),
+                        "created_at": info.get("CreatedAt"),
+                        "labels": labels,
+                    }
+                )
+
+            total = len(containers)
+            running = len([item for item in containers if item.get("is_running")])
+            unhealthy = len([item for item in containers if item.get("health") == "unhealthy"])
+            stopped = max(total - running, 0)
+
+            issues = [
+                item
+                for item in containers
+                if not item.get("is_running") or item.get("health") == "unhealthy"
+            ]
+
+            result.update(
+                {
+                    "available": True,
+                    "status": "healthy" if not issues else "degraded",
+                    "engine": engine,
+                    "containers": containers,
+                    "summary": {
+                        "total": total,
+                        "running": running,
+                        "healthy": len([item for item in containers if item.get("health") == "healthy"]),
+                        "unhealthy": unhealthy,
+                        "stopped": stopped,
+                    },
+                    "issues": issues,
+                    "error": None,
+                    "compose_project": compose_project,
+                }
+            )
+
+            return result
+
+        except Exception as exc:  # pragma: no cover - depends on host environment
+            last_error = str(exc)
+            if logger:
+                logger.warning("Failed to collect container status via %s: %s", engine, exc)
+
+    if not result["available"]:
+        result["error"] = last_error or "Container engine not available"
+
+    return result
