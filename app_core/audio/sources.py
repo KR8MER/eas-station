@@ -841,52 +841,58 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
     def _feed_ffmpeg(self) -> None:
         """Thread function to feed encoded data from buffer to FFmpeg stdin."""
+        logger.info(f"{self.config.name}: Feeder thread started")
         total_bytes_fed = 0
         last_log_time = time.time()
 
-        while self._ffmpeg_process and self._ffmpeg_process.poll() is None:
-            try:
-                if len(self._buffer) > 0:
-                    # Send data to FFmpeg stdin (non-blocking)
-                    # Use larger chunks to reduce overhead and improve throughput
-                    chunk = bytes(self._buffer[:65536])
+        try:
+            while self._ffmpeg_process and self._ffmpeg_process.poll() is None:
+                try:
+                    if len(self._buffer) > 0:
+                        # Send data to FFmpeg stdin (non-blocking)
+                        # Use larger chunks to reduce overhead and improve throughput
+                        chunk = bytes(self._buffer[:65536])
 
-                    if self._ffmpeg_process and self._ffmpeg_process.stdin:
-                        try:
-                            bytes_written = self._ffmpeg_process.stdin.write(chunk)
-                            if bytes_written:
-                                # CRITICAL: Use del instead of reassignment to avoid race condition
-                                # The capture loop extends the buffer while we're removing from it
-                                # Must modify in-place, not create new bytearray
-                                del self._buffer[:bytes_written]
-                                # DON'T flush after every write - let FFmpeg buffer internally
-                                # Flush only periodically to avoid breaking decoder buffering
-                                total_bytes_fed += bytes_written
+                        if self._ffmpeg_process and self._ffmpeg_process.stdin:
+                            try:
+                                bytes_written = self._ffmpeg_process.stdin.write(chunk)
+                                if bytes_written:
+                                    # CRITICAL: Use del instead of reassignment to avoid race condition
+                                    # The capture loop extends the buffer while we're removing from it
+                                    # Must modify in-place, not create new bytearray
+                                    del self._buffer[:bytes_written]
+                                    # DON'T flush after every write - let FFmpeg buffer internally
+                                    # Flush only periodically to avoid breaking decoder buffering
+                                    total_bytes_fed += bytes_written
 
-                                # Log feeding rate and flush periodically
-                                now = time.time()
-                                if now - last_log_time > 2.0:
-                                    self._ffmpeg_process.stdin.flush()  # Flush periodically, not every write
-                                    rate_kbps = (total_bytes_fed * 8 / 1000) / (now - last_log_time)
-                                    logger.info(f"{self.config.name}: Fed {total_bytes_fed} bytes to FFmpeg ({rate_kbps:.1f} kbps), buffer size: {len(self._buffer)} bytes")
-                                    total_bytes_fed = 0
-                                    last_log_time = now
-                            else:
-                                # Write would block, sleep briefly
+                                    # Log feeding rate and flush periodically
+                                    now = time.time()
+                                    if now - last_log_time > 2.0:
+                                        self._ffmpeg_process.stdin.flush()  # Flush periodically, not every write
+                                        rate_kbps = (total_bytes_fed * 8 / 1000) / (now - last_log_time)
+                                        logger.info(f"{self.config.name}: Fed {total_bytes_fed} bytes to FFmpeg ({rate_kbps:.1f} kbps), buffer size: {len(self._buffer)} bytes")
+                                        total_bytes_fed = 0
+                                        last_log_time = now
+                                else:
+                                    # Write would block, sleep briefly
+                                    time.sleep(0.001)  # Reduced from 10ms to 1ms
+                            except BlockingIOError:
+                                # Write would block, buffer is full, sleep briefly
                                 time.sleep(0.001)  # Reduced from 10ms to 1ms
-                        except BlockingIOError:
-                            # Write would block, buffer is full, sleep briefly
-                            time.sleep(0.001)  # Reduced from 10ms to 1ms
-                        except BrokenPipeError:
-                            logger.warning(f"{self.config.name}: FFmpeg stdin pipe broken, decoder may have exited")
-                            break
-                else:
-                    # No data to send, sleep briefly
-                    time.sleep(0.001)  # Reduced from 10ms to 1ms
+                            except BrokenPipeError:
+                                logger.warning(f"{self.config.name}: FFmpeg stdin pipe broken, decoder may have exited")
+                                break
+                    else:
+                        # No data to send, sleep briefly
+                        time.sleep(0.001)  # Reduced from 10ms to 1ms
 
-            except Exception as e:
-                logger.error(f"{self.config.name}: Error feeding FFmpeg: {e}")
-                break
+                except Exception as e:
+                    logger.error(f"{self.config.name}: Error feeding FFmpeg: {e}")
+                    break
+        except Exception as e:
+            logger.error(f"{self.config.name}: Fatal error in feeder thread: {e}", exc_info=True)
+        finally:
+            logger.info(f"{self.config.name}: Feeder thread exiting")
 
     def _decode_mp3_chunk(self) -> Optional[np.ndarray]:
         """Decode MP3 audio from buffer using FFmpeg subprocess."""
@@ -980,7 +986,6 @@ class StreamSourceAdapter(AudioSourceAdapter):
                 return samples
             else:
                 # DEBUG: Periodically log when waiting for more data
-                import time
                 if not hasattr(self, '_last_wait_log'):
                     self._last_wait_log = 0
                 if time.time() - self._last_wait_log > 2.0:  # Log every 2 seconds
