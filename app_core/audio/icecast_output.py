@@ -20,9 +20,11 @@ import threading
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
+import requests
+from requests import exceptions as requests_exceptions
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,9 @@ class IcecastConfig:
     format: StreamFormat = StreamFormat.MP3
     public: bool = False
     sample_rate: int = 44100  # Audio sample rate in Hz
+    admin_user: Optional[str] = None
+    admin_password: Optional[str] = None
+    metadata_poll_interval: float = 1.0
 
 
 class IcecastStreamer:
@@ -79,6 +84,10 @@ class IcecastStreamer:
         self._bytes_sent = 0
         self._reconnect_count = 0
         self._last_error: Optional[str] = None
+        self._last_metadata_payload: Optional[Tuple[str, Optional[str]]] = None
+        self._last_metadata_song: Optional[str] = None
+        self._last_metadata_check = 0.0
+        self._metadata_poll_interval = max(self.config.metadata_poll_interval, 0.5)
 
         logger.info(
             f"Initialized IcecastStreamer: {config.server}:{config.port}/{config.mount}"
@@ -272,22 +281,173 @@ class IcecastStreamer:
                     # Buffer empty - slow down to avoid busy loop
                     time.sleep(0.01)
 
+                now = time.time()
+                if now - self._last_metadata_check >= self._metadata_poll_interval:
+                    self._last_metadata_check = now
+                    self._maybe_update_metadata()
+
             except Exception as e:
                 logger.error(f"Error feeding Icecast stream: {e}")
                 time.sleep(1.0)
 
         logger.debug("Icecast feed loop stopped")
 
-    def update_metadata(self, title: str, artist: str = "EAS Station") -> None:
-        """
-        Update stream metadata (requires Icecast admin API).
+    def _maybe_update_metadata(self) -> None:
+        """Push updated now-playing metadata to Icecast when it changes."""
+        if not (self.config.admin_user and self.config.admin_password):
+            return
 
-        Args:
-            title: Stream title
-            artist: Artist name
-        """
-        # TODO: Implement Icecast metadata update via admin API
-        logger.info(f"Metadata update requested: {title} - {artist}")
+        metrics = getattr(self.audio_source, 'metrics', None)
+        metadata = getattr(metrics, 'metadata', None)
+        if not isinstance(metadata, dict):
+            return
+
+        payload = self._extract_metadata_fields(metadata)
+        if payload is None:
+            return
+
+        title, artist = payload
+        cache_key = (title or "", artist)
+        if self._last_metadata_payload == cache_key:
+            return
+
+        sent_value = self._send_metadata_update(title or self.config.name, artist)
+        if sent_value:
+            self._last_metadata_payload = cache_key
+            self._last_metadata_song = sent_value
+
+    def _extract_metadata_fields(
+        self,
+        metadata: Dict[str, Any]
+    ) -> Optional[Tuple[Optional[str], Optional[str]]]:
+        """Derive title/artist information from source metadata."""
+
+        def _normalize(value: Any) -> Optional[str]:
+            if value is None:
+                return None
+            if isinstance(value, dict):
+                for key in ('title', 'song', 'text', 'value', 'name'):
+                    if key in value:
+                        return _normalize(value.get(key))
+                return None
+            if isinstance(value, (list, tuple)):
+                for item in value:
+                    normalized = _normalize(item)
+                    if normalized:
+                        return normalized
+                return None
+
+            text = str(value).strip()
+            if not text:
+                return None
+
+            # Collapse extraneous whitespace (including newlines)
+            text = ' '.join(text.split())
+            return text or None
+
+        now_playing = metadata.get('now_playing')
+        nested_title = None
+        nested_artist = None
+        if isinstance(now_playing, dict):
+            nested_title = _normalize(now_playing.get('title') or now_playing.get('song'))
+            nested_artist = _normalize(now_playing.get('artist'))
+        elif now_playing is not None:
+            nested_title = _normalize(now_playing)
+
+        title_candidates = [
+            nested_title,
+            _normalize(metadata.get('song_title')),
+            _normalize(metadata.get('song')),
+            _normalize(metadata.get('title')),
+            _normalize(metadata.get('program_title')),
+            _normalize(metadata.get('rbds_radio_text')),
+        ]
+
+        artist_candidates = [
+            nested_artist,
+            _normalize(metadata.get('artist')),
+            _normalize(metadata.get('song_artist')),
+            _normalize(metadata.get('performer')),
+            _normalize(metadata.get('rbds_ps_name')),
+            _normalize(metadata.get('station_name')),
+            _normalize(metadata.get('station_callsign')),
+        ]
+
+        title = next((candidate for candidate in title_candidates if candidate), None)
+        artist = next((candidate for candidate in artist_candidates if candidate), None)
+
+        if not title and not artist:
+            return None
+
+        return title, artist
+
+    def _send_metadata_update(self, title: str, artist: Optional[str]) -> Optional[str]:
+        """Submit metadata to Icecast and return the formatted payload on success."""
+        if not (self.config.admin_user and self.config.admin_password):
+            return None
+
+        title_text = (title or "").strip() or self.config.name
+        artist_text = (artist or "").strip()
+
+        if artist_text and artist_text.lower() not in title_text.lower():
+            song_value = f"{artist_text} - {title_text}"
+        else:
+            song_value = title_text
+
+        mount_path = self.config.mount
+        if not mount_path.startswith('/'):
+            mount_path = f"/{mount_path}"
+
+        url = f"http://{self.config.server}:{self.config.port}/admin/metadata"
+        params = {
+            'mode': 'updinfo',
+            'mount': mount_path,
+            'song': song_value,
+        }
+
+        try:
+            response = requests.get(
+                url,
+                params=params,
+                auth=(self.config.admin_user, self.config.admin_password),
+                timeout=5.0,
+            )
+        except requests_exceptions.RequestException as exc:
+            logger.warning(
+                "Failed to update Icecast metadata for %s: %s",
+                self.config.mount,
+                exc,
+            )
+            self._last_error = str(exc)
+            return None
+
+        if response.status_code == 200:
+            logger.info(
+                "Updated Icecast metadata for %s: %s",
+                self.config.mount,
+                song_value,
+            )
+            return song_value
+
+        logger.warning(
+            "Icecast metadata update returned %s for %s: %s",
+            response.status_code,
+            self.config.mount,
+            response.text.strip()[:200],
+        )
+        self._last_error = f"metadata update failed ({response.status_code})"
+        return None
+
+    def update_metadata(self, title: str, artist: str = "EAS Station") -> bool:
+        """Manually update stream metadata via the Icecast admin API."""
+        sent_value = self._send_metadata_update(title, artist)
+        if sent_value:
+            cache_key = (title.strip() if title else "", artist.strip() if artist else None)
+            self._last_metadata_payload = cache_key
+            self._last_metadata_song = sent_value
+            return True
+
+        return False
 
     def get_stats(self) -> dict:
         """Get streaming statistics."""
@@ -314,6 +474,8 @@ class IcecastStreamer:
             'genre': self.config.genre,
             'format': self.config.format.value,
             'public': self.config.public,
+            'last_metadata': self._last_metadata_song,
+            'metadata_enabled': bool(self.config.admin_user and self.config.admin_password),
         }
 
 
