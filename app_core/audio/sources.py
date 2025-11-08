@@ -893,22 +893,32 @@ class StreamSourceAdapter(AudioSourceAdapter):
             if not self._ffmpeg_process:
                 return None
 
-            # Read decoded PCM from FFmpeg stdout (non-blocking)
+            # CRITICAL: Read ALL available PCM from FFmpeg stdout (non-blocking)
+            # Must drain stdout completely to prevent FFmpeg from blocking on write,
+            # which would prevent it from reading stdin, causing the input buffer to grow
             if self._ffmpeg_process.stdout:
-                # Try to read decoded PCM data (non-blocking)
-                try:
-                    # Read up to 16KB of PCM data
-                    chunk = self._ffmpeg_process.stdout.read(16384)
-                    if chunk:
-                        self._pcm_buffer.extend(chunk)
-                        # DEBUG: Log when we successfully read from FFmpeg
-                        if len(self._pcm_buffer) % 50000 < 16384:  # Log every ~50KB
-                            logger.debug(f"{self.config.name}: FFmpeg PCM buffer size: {len(self._pcm_buffer)} bytes, HTTP buffer: {len(self._buffer)} bytes")
-                except BlockingIOError:
-                    # No data available yet - this is expected with non-blocking reads
-                    pass
-                except Exception as e:
-                    logger.debug(f"Error reading from FFmpeg stdout: {e}")
+                # Keep reading until no more data available (non-blocking)
+                total_read = 0
+                while True:
+                    try:
+                        # Read up to 64KB of PCM data per iteration
+                        chunk = self._ffmpeg_process.stdout.read(65536)
+                        if chunk:
+                            self._pcm_buffer.extend(chunk)
+                            total_read += len(chunk)
+                        else:
+                            # No more data available
+                            break
+                    except BlockingIOError:
+                        # No data available - this is expected with non-blocking reads
+                        break
+                    except Exception as e:
+                        logger.debug(f"Error reading from FFmpeg stdout: {e}")
+                        break
+
+                # Log when we successfully drain stdout
+                if total_read > 0:
+                    logger.debug(f"{self.config.name}: Read {total_read} bytes from FFmpeg stdout, PCM buffer now: {len(self._pcm_buffer)} bytes")
 
             # Convert PCM buffer to numpy array when we have enough data
             bytes_per_sample = 2  # 16-bit = 2 bytes
