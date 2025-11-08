@@ -40,36 +40,92 @@ def _get_audio_controller() -> AudioIngestController:
         # Create the controller immediately (lightweight)
         _audio_controller = AudioIngestController()
 
-        # Start initialization in background thread to avoid blocking worker
+        # Load audio source configs from database (fast - just DB query)
+        # This makes sources visible in UI immediately
+        _load_audio_source_configs(_audio_controller)
+
+        # Start sources and streaming in background to avoid blocking worker
         if not _initialization_started:
             _initialization_started = True
             import threading
             init_thread = threading.Thread(
-                target=_initialize_audio_system_background,
+                target=_start_audio_sources_background,
                 daemon=True,
-                name="AudioSystemInit"
+                name="AudioSourceStarter"
             )
             init_thread.start()
-            logger.info("Started audio system initialization in background thread")
+            logger.info("Started audio source initialization in background thread")
 
     return _audio_controller
 
 
-def _initialize_audio_system_background() -> None:
-    """Initialize audio sources and streaming in background to avoid blocking worker."""
+def _load_audio_source_configs(controller: AudioIngestController) -> None:
+    """Load audio source configurations from database (fast, synchronous)."""
+    try:
+        saved_configs = AudioSourceConfigDB.query.all()
+        logger.info(f"Loading {len(saved_configs)} audio source configurations from database")
+
+        for db_config in saved_configs:
+            try:
+                # Parse source type
+                source_type = AudioSourceType(db_config.source_type)
+
+                # Create runtime configuration from database config
+                config_params = db_config.config_params or {}
+                runtime_config = AudioSourceConfig(
+                    source_type=source_type,
+                    name=db_config.name,
+                    enabled=db_config.enabled,
+                    priority=db_config.priority,
+                    sample_rate=config_params.get('sample_rate', 44100),
+                    channels=config_params.get('channels', 1),
+                    buffer_size=config_params.get('buffer_size', 4096),
+                    silence_threshold_db=config_params.get('silence_threshold_db', -60.0),
+                    silence_duration_seconds=config_params.get('silence_duration_seconds', 5.0),
+                    device_params=config_params.get('device_params', {}),
+                )
+
+                # Create and add adapter (fast - doesn't connect yet)
+                adapter = create_audio_source(runtime_config)
+                controller.add_source(adapter)
+                logger.debug(f"Loaded audio source config: {db_config.name}")
+
+            except Exception as e:
+                logger.error(f'Failed to load audio source {db_config.name}: {e}')
+
+        logger.info(f"Loaded {len(controller._sources)} audio source configurations")
+
+    except Exception as e:
+        logger.error(f'Failed to load audio sources from database: {e}')
+
+
+def _start_audio_sources_background() -> None:
+    """Start audio sources and streaming in background (slow, async)."""
     global _audio_controller
     try:
-        logger.info("Background audio initialization started")
+        logger.info("Background: Starting audio sources")
 
         if _audio_controller is None:
-            logger.error("Audio controller not initialized - cannot start background init")
+            logger.error("Audio controller not initialized - cannot start sources")
             return
 
-        _initialize_audio_sources(_audio_controller)
+        # Start sources that have auto_start enabled (SLOW - network connections)
+        saved_configs = AudioSourceConfigDB.query.all()
+        for db_config in saved_configs:
+            if db_config.enabled and db_config.auto_start:
+                try:
+                    _audio_controller.start_source(db_config.name)
+                    logger.info(f'Background: Auto-started audio source: {db_config.name}')
+                except Exception as e:
+                    logger.error(f'Background: Failed to start audio source {db_config.name}: {e}')
+
+        # Initialize streaming service (SLOW - starts FFmpeg processes)
         _initialize_auto_streaming()
-        logger.info("Background audio initialization completed successfully")
+
+        logger.info("Background: Audio source initialization completed successfully")
+
     except Exception as e:
-        logger.error(f"Background audio initialization failed: {e}", exc_info=True)
+        logger.error(f"Background: Audio source initialization failed: {e}", exc_info=True)
 
 
 def _get_auto_streaming_service():
@@ -140,55 +196,6 @@ def _initialize_auto_streaming() -> None:
         logger.warning(f"Failed to initialize auto-streaming service: {e}")
         _auto_streaming_service = None
 
-
-def _initialize_audio_sources(controller: AudioIngestController) -> None:
-    """Initialize audio sources from database configuration."""
-    try:
-        # Load ALL saved configurations from database (not just enabled ones)
-        # This allows disabled sources to be manageable through the UI
-        saved_configs = AudioSourceConfigDB.query.all()
-
-        for db_config in saved_configs:
-            try:
-                # Parse source type
-                source_type = AudioSourceType(db_config.source_type)
-
-                # Create runtime configuration from database config
-                config_params = db_config.config_params or {}
-                runtime_config = AudioSourceConfig(
-                    source_type=source_type,
-                    name=db_config.name,
-                    enabled=db_config.enabled,
-                    priority=db_config.priority,
-                    sample_rate=config_params.get('sample_rate', 44100),
-                    channels=config_params.get('channels', 1),
-                    buffer_size=config_params.get('buffer_size', 4096),
-                    silence_threshold_db=config_params.get('silence_threshold_db', -60.0),
-                    silence_duration_seconds=config_params.get('silence_duration_seconds', 5.0),
-                    device_params=config_params.get('device_params', {}),
-                )
-
-                # Create and add adapter
-                adapter = create_audio_source(runtime_config)
-                controller.add_source(adapter)
-
-                # Auto-start only if both enabled AND auto_start are True
-                if db_config.enabled and db_config.auto_start:
-                    controller.start_source(db_config.name)
-                    logger.info('Auto-started audio source: %s', db_config.name)
-
-                    # Auto-start Icecast streaming if available (will be initialized later)
-                    # Note: We'll try to add streams after auto-streaming service is initialized
-                else:
-                    logger.info('Loaded audio source: %s (not auto-started)', db_config.name)
-
-            except Exception as exc:
-                logger.error('Error loading audio source %s: %s', db_config.name, exc)
-
-        logger.info('Initialized %d audio sources from database', len(saved_configs))
-
-    except Exception as exc:
-        logger.error('Error initializing audio sources from database: %s', exc)
 
 
 def _sanitize_float(value: float) -> float:
