@@ -24,7 +24,8 @@ RUN --mount=type=cache,target=/var/lib/apt \
         libusb-1.0-0 \
         libusb-1.0-0-dev \
         python3-soapysdr \
-        soapysdr-tools; \
+        soapysdr-tools \
+        smartmontools; \
     if [ -n "$SOAPYSDR_DRIVERS" ]; then \
         IFS=','; \
         for driver in $SOAPYSDR_DRIVERS; do \
