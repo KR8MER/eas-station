@@ -49,10 +49,11 @@ services:
       - "host.docker.internal:host-gateway"
     devices:
       - /dev/bus/usb:/dev/bus/usb
-      - /dev/nvme0:/dev/nvme0      # NVMe controller for SMART monitoring
-      - /dev/nvme0n1:/dev/nvme0n1  # NVMe namespace (Samsung 990 PRO)
+      # Uncomment the following lines if you have NVMe drives and want SMART monitoring:
+      # - /dev/nvme0:/dev/nvme0      # NVMe controller for SMART monitoring
+      # - /dev/nvme0n1:/dev/nvme0n1  # NVMe namespace (adjust nvme0n1 to your device)
     cap_add:
-      - SYS_RAWIO
+      - SYS_RAWIO  # Required for SMART monitoring
     security_opt:
       - no-new-privileges:true
     depends_on:
@@ -86,10 +87,11 @@ services:
       - "host.docker.internal:host-gateway"
     devices:
       - /dev/bus/usb:/dev/bus/usb
-      - /dev/nvme0:/dev/nvme0      # NVMe controller for SMART monitoring
-      - /dev/nvme0n1:/dev/nvme0n1  # NVMe namespace (Samsung 990 PRO)
+      # Uncomment the following lines if you have NVMe drives and want SMART monitoring:
+      # - /dev/nvme0:/dev/nvme0      # NVMe controller for SMART monitoring
+      # - /dev/nvme0n1:/dev/nvme0n1  # NVMe namespace (adjust nvme0n1 to your device)
     cap_add:
-      - SYS_RAWIO
+      - SYS_RAWIO  # Required for SMART monitoring
     security_opt:
       - no-new-privileges:true
 
@@ -131,10 +133,11 @@ services:
       - "host.docker.internal:host-gateway"
     devices:
       - /dev/bus/usb:/dev/bus/usb
-      - /dev/nvme0:/dev/nvme0      # NVMe controller for SMART monitoring
-      - /dev/nvme0n1:/dev/nvme0n1  # NVMe namespace (Samsung 990 PRO)
+      # Uncomment the following lines if you have NVMe drives and want SMART monitoring:
+      # - /dev/nvme0:/dev/nvme0      # NVMe controller for SMART monitoring
+      # - /dev/nvme0n1:/dev/nvme0n1  # NVMe namespace (adjust nvme0n1 to your device)
     cap_add:
-      - SYS_RAWIO
+      - SYS_RAWIO  # Required for SMART monitoring
     security_opt:
       - no-new-privileges:true
 
