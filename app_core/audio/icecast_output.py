@@ -411,7 +411,7 @@ class IcecastStreamer:
 
     @staticmethod
     def _sanitize_metadata_value(value: Optional[str], fallback: str = "") -> str:
-        """Return a latin-1 safe metadata string, stripping unsupported characters."""
+        """Return a clean metadata string, supporting UTF-8/Unicode characters."""
 
         def _prepare(text: Optional[str]) -> str:
             if not text:
@@ -419,17 +419,9 @@ class IcecastStreamer:
             cleaned = str(text).strip()
             if not cleaned:
                 return ""
-            try:
-                cleaned.encode("latin-1")
-                return cleaned
-            except UnicodeEncodeError:
-                sanitized_text = cleaned.encode("latin-1", "ignore").decode("latin-1").strip()
-                if sanitized_text and sanitized_text != cleaned:
-                    logger.debug(
-                        "Sanitized metadata value by removing unsupported characters: %s",
-                        sanitized_text,
-                    )
-                return sanitized_text
+            # Collapse extraneous whitespace (including newlines) and return
+            cleaned = ' '.join(cleaned.split())
+            return cleaned
 
         sanitized_fallback = _prepare(fallback)
         sanitized_value = _prepare(value)
