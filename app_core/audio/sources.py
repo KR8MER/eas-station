@@ -854,12 +854,14 @@ class StreamSourceAdapter(AudioSourceAdapter):
                                 # The capture loop extends the buffer while we're removing from it
                                 # Must modify in-place, not create new bytearray
                                 del self._buffer[:bytes_written]
-                                self._ffmpeg_process.stdin.flush()
+                                # DON'T flush after every write - let FFmpeg buffer internally
+                                # Flush only periodically to avoid breaking decoder buffering
                                 total_bytes_fed += bytes_written
 
-                                # Log feeding rate every 2 seconds
+                                # Log feeding rate and flush periodically
                                 now = time.time()
                                 if now - last_log_time > 2.0:
+                                    self._ffmpeg_process.stdin.flush()  # Flush periodically, not every write
                                     rate_kbps = (total_bytes_fed * 8 / 1000) / (now - last_log_time)
                                     logger.info(f"{self.config.name}: Fed {total_bytes_fed} bytes to FFmpeg ({rate_kbps:.1f} kbps), buffer size: {len(self._buffer)} bytes")
                                     total_bytes_fed = 0
