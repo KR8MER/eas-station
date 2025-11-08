@@ -15,6 +15,7 @@ Key Features:
 from __future__ import annotations
 
 import base64
+import errno
 import logging
 import subprocess
 import threading
@@ -55,6 +56,7 @@ class IcecastConfig:
     admin_user: Optional[str] = None
     admin_password: Optional[str] = None
     metadata_poll_interval: float = 1.0
+    source_timeout: float = 30.0  # Seconds without writes before forcing a restart
 
 
 class IcecastStreamer:
@@ -105,11 +107,20 @@ class IcecastStreamer:
         self._last_metadata_song: Optional[str] = None
         self._last_metadata_check = 0.0
         self._metadata_poll_interval = max(self.config.metadata_poll_interval, 0.5)
+        self._source_timeout = max(getattr(self.config, 'source_timeout', 30.0) or 0.0, 0.0)
+        self._last_write_time = 0.0
 
         # Extended metadata (album art, song length, etc.)
         self._last_artwork_url: Optional[str] = None
         self._last_song_length: Optional[str] = None
         self._last_album: Optional[str] = None
+
+        # Metadata update coordination
+        self._metadata_update_lock = threading.Lock()
+        self._metadata_update_thread: Optional[threading.Thread] = None
+        self._pending_metadata: Optional[
+            Tuple[Tuple[str, Optional[str]], str, Optional[str]]
+        ] = None
 
         logger.info(
             f"Initialized IcecastStreamer: {config.server}:{config.port}/{config.mount}"
@@ -128,10 +139,13 @@ class IcecastStreamer:
 
         self._stop_event.clear()
         self._start_time = time.time()
+        self._last_write_time = self._start_time
 
         # Start FFmpeg encoder
         if not self._start_ffmpeg():
             return False
+
+        self._last_write_time = time.time()
 
         # Start feeder thread
         self._feeder_thread = threading.Thread(
@@ -164,6 +178,15 @@ class IcecastStreamer:
         # Wait for feeder thread
         if self._feeder_thread:
             self._feeder_thread.join(timeout=5.0)
+
+        # Wait for any in-flight metadata updates
+        with self._metadata_update_lock:
+            pending_thread = self._metadata_update_thread
+            self._metadata_update_thread = None
+            self._pending_metadata = None
+
+        if pending_thread and pending_thread.is_alive():
+            pending_thread.join(timeout=2.0)
 
         logger.info("Stopped Icecast streamer")
 
@@ -265,29 +288,13 @@ class IcecastStreamer:
 
         while not self._stop_event.is_set():
             if not self._ffmpeg_process or self._ffmpeg_process.poll() is not None:
-                # FFmpeg died, try to get error output
-                stderr_output = None
-                if self._ffmpeg_process and self._ffmpeg_process.stderr:
-                    try:
-                        stderr_output = self._ffmpeg_process.stderr.read().decode('utf-8', errors='replace')
-                    except Exception as e:
-                        logger.debug(f"Could not read FFmpeg stderr: {e}")
-
-                if stderr_output:
-                    logger.error(f"FFmpeg process died with error:\n{stderr_output}")
-                else:
-                    logger.warning("FFmpeg process died (no error output available)")
-
-                self._reconnect_count += 1
-
-                if self._start_ffmpeg():
-                    logger.info("FFmpeg restarted successfully")
-                else:
-                    logger.error("Failed to restart FFmpeg")
+                reason = "encoder not running" if not self._ffmpeg_process else "encoder exited"
+                if not self._restart_ffmpeg(reason):
                     time.sleep(5.0)
-                    continue
+                continue
 
             try:
+                wrote_chunk = False
                 # Read audio from source and add to buffer
                 samples = self.audio_source.get_audio_chunk(timeout=0.1)
 
@@ -303,20 +310,87 @@ class IcecastStreamer:
                     self._ffmpeg_process.stdin.write(chunk)
                     self._ffmpeg_process.stdin.flush()
                     self._bytes_sent += len(chunk)
+                    wrote_chunk = True
                 elif not buffer:
                     # Buffer empty - slow down to avoid busy loop
                     time.sleep(0.01)
+
+                if wrote_chunk:
+                    self._last_write_time = time.time()
 
                 now = time.time()
                 if now - self._last_metadata_check >= self._metadata_poll_interval:
                     self._last_metadata_check = now
                     self._maybe_update_metadata()
 
+                if (
+                    self._source_timeout
+                    and buffer
+                    and self._last_write_time > 0.0
+                    and now - self._last_write_time > self._source_timeout
+                ):
+                    idle_duration = now - self._last_write_time
+                    logger.warning(
+                        "No audio written to Icecast for %.1f seconds; forcing encoder restart",
+                        idle_duration,
+                    )
+                    if not self._restart_ffmpeg(f"idle writer timeout ({idle_duration:.1f}s)"):
+                        time.sleep(5.0)
+                    continue
+
+            except BrokenPipeError as exc:
+                logger.error("Icecast FFmpeg pipe closed: %s", exc)
+                if not self._restart_ffmpeg("ffmpeg pipe closed"):
+                    time.sleep(5.0)
+            except OSError as exc:
+                if exc.errno == errno.EPIPE:
+                    logger.error("Icecast FFmpeg write EPIPE: %s", exc)
+                    if not self._restart_ffmpeg("ffmpeg EPIPE"):
+                        time.sleep(5.0)
+                else:
+                    logger.error(f"Error feeding Icecast stream: {exc}")
+                    time.sleep(1.0)
             except Exception as e:
                 logger.error(f"Error feeding Icecast stream: {e}")
                 time.sleep(1.0)
 
         logger.debug("Icecast feed loop stopped")
+
+    def _restart_ffmpeg(self, reason: str) -> bool:
+        """Tear down and re-launch the FFmpeg encoder pipeline."""
+
+        if self._stop_event.is_set():
+            return False
+
+        process = self._ffmpeg_process
+        if process:
+            try:
+                process.terminate()
+                try:
+                    process.wait(timeout=2.0)
+                except subprocess.TimeoutExpired:
+                    logger.debug("FFmpeg did not terminate gracefully; killing process")
+                    process.kill()
+                except Exception as exc:  # pylint: disable=broad-except
+                    logger.debug("Error waiting for FFmpeg termination: %s", exc)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.debug("Error terminating FFmpeg: %s", exc)
+
+        self._ffmpeg_process = None
+        self._reconnect_count += 1
+        self._last_error = reason
+        logger.warning("Restarting Icecast FFmpeg pipeline (%s)", reason)
+
+        if self._stop_event.is_set():
+            return False
+
+        if self._start_ffmpeg():
+            self._last_write_time = time.time()
+            logger.info("FFmpeg restarted successfully")
+            return True
+
+        logger.error("Failed to restart FFmpeg (%s)", reason)
+        return False
 
     def _maybe_update_metadata(self) -> None:
         """Push updated now-playing metadata to Icecast when it changes."""
@@ -333,8 +407,22 @@ class IcecastStreamer:
             return
 
         # Extract title and artist for Icecast update
-        title = payload.get('title')
-        artist = payload.get('artist')
+        raw_title = payload.get('title')
+        raw_artist = payload.get('artist')
+
+        # Sanitize metadata before queuing for async update
+        safe_title = self._sanitize_metadata_value(
+            raw_title,
+            self.config.name or self.config.mount or "EAS Station",
+        )
+        if not safe_title:
+            safe_title = self.config.name or self.config.mount or "EAS Station"
+        safe_title = safe_title.strip()
+        safe_artist = self._sanitize_metadata_value(raw_artist, "")
+        if safe_artist:
+            safe_artist = safe_artist.strip()
+        if not safe_artist:
+            safe_artist = None
 
         # Store extended metadata (gracefully)
         try:
@@ -344,34 +432,14 @@ class IcecastStreamer:
         except Exception as e:
             logger.debug(f"Error storing extended metadata: {e}")
 
-        cache_key = (title or "", artist)
+        cache_key = (
+            safe_title.strip() if safe_title else "",
+            safe_artist.strip() if safe_artist else None,
+        )
         if self._last_metadata_payload == cache_key:
             return
 
-        try:
-            sent_value = self._send_metadata_update(title or self.config.name, artist)
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.warning(
-                "Unable to update Icecast metadata for %s: %s\nTraceback:\n%s",
-                self.config.mount,
-                exc,
-                ''.join(traceback.format_tb(exc.__traceback__)),
-            )
-            self._last_error = str(exc)
-            return
-
-        if sent_value:
-            self._last_metadata_payload = cache_key
-            self._last_metadata_song = sent_value
-            # Log extended metadata when available
-            if self._last_artwork_url or self._last_song_length or self._last_album:
-                logger.debug(
-                    "Extended metadata for %s: artwork=%s, length=%s, album=%s",
-                    self.config.mount,
-                    self._last_artwork_url or 'N/A',
-                    self._last_song_length or 'N/A',
-                    self._last_album or 'N/A',
-                )
+        self._queue_metadata_update(cache_key, safe_title, safe_artist)
 
     def _extract_metadata_fields(
         self,
@@ -555,6 +623,91 @@ class IcecastStreamer:
 
         return sanitized_fallback or ""
 
+    def _queue_metadata_update(
+        self,
+        cache_key: Tuple[str, Optional[str]],
+        title: str,
+        artist: Optional[str]
+    ) -> None:
+        """Schedule metadata update on a background thread."""
+
+        if self._stop_event.is_set():
+            return
+
+        with self._metadata_update_lock:
+            # If an update is already running, store the latest metadata and exit.
+            if self._metadata_update_thread and self._metadata_update_thread.is_alive():
+                self._pending_metadata = (cache_key, title, artist)
+                return
+
+            # No update running; start a new thread.
+            self._pending_metadata = None
+            self._metadata_update_thread = threading.Thread(
+                target=self._run_metadata_update,
+                name=f"icecast-metadata-{self.config.mount}",
+                args=(cache_key, title, artist),
+                daemon=True,
+            )
+            self._metadata_update_thread.start()
+
+    def _run_metadata_update(
+        self,
+        cache_key: Tuple[str, Optional[str]],
+        title: str,
+        artist: Optional[str]
+    ) -> None:
+        """Perform metadata updates sequentially without blocking audio."""
+
+        pending: Optional[Tuple[Tuple[str, Optional[str]], str, Optional[str]]] = (
+            cache_key,
+            title,
+            artist,
+        )
+
+        while pending and not self._stop_event.is_set():
+            cache_key, current_title, current_artist = pending
+
+            try:
+                sent_value = self._send_metadata_update(current_title, current_artist)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning(
+                    "Unable to update Icecast metadata for %s: %s\nTraceback:\n%s",
+                    self.config.mount,
+                    exc,
+                    ''.join(traceback.format_tb(exc.__traceback__)),
+                )
+                self._last_error = str(exc)
+                sent_value = None
+
+            if sent_value:
+                self._last_metadata_payload = cache_key
+                self._last_metadata_song = sent_value
+                if self._last_artwork_url or self._last_song_length or self._last_album:
+                    logger.debug(
+                        "Extended metadata for %s: artwork=%s, length=%s, album=%s",
+                        self.config.mount,
+                        self._last_artwork_url or 'N/A',
+                        self._last_song_length or 'N/A',
+                        self._last_album or 'N/A',
+                    )
+
+            with self._metadata_update_lock:
+                if self._stop_event.is_set():
+                    self._pending_metadata = None
+                    self._metadata_update_thread = None
+                    return
+
+                next_pending = self._pending_metadata
+                self._pending_metadata = None
+
+                if next_pending:
+                    next_cache_key, next_title, next_artist = next_pending
+                    pending = (next_cache_key, next_title, next_artist)
+                else:
+                    pending = None
+                    self._metadata_update_thread = None
+
+
     def _send_metadata_update(self, title: str, artist: Optional[str]) -> Optional[str]:
         """Submit metadata to Icecast and return the formatted payload on success."""
         if not (self.config.admin_user and self.config.admin_password):
@@ -697,6 +850,7 @@ class IcecastStreamer:
             'public': self.config.public,
             'last_metadata': self._last_metadata_song,
             'metadata_enabled': bool(self.config.admin_user and self.config.admin_password),
+            'source_timeout': self._source_timeout,
             # Extended metadata
             'artwork_url': self._last_artwork_url,
             'song_length': self._last_song_length,
