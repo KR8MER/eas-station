@@ -18,6 +18,7 @@ import logging
 import subprocess
 import threading
 import time
+import traceback
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Optional, Tuple
@@ -334,9 +335,10 @@ class IcecastStreamer:
             sent_value = self._send_metadata_update(title or self.config.name, artist)
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning(
-                "Unable to update Icecast metadata for %s: %s",
+                "Unable to update Icecast metadata for %s: %s\nTraceback:\n%s",
                 self.config.mount,
                 exc,
+                ''.join(traceback.format_tb(exc.__traceback__)),
             )
             self._last_error = str(exc)
             return
@@ -452,6 +454,15 @@ class IcecastStreamer:
         mount_path = self.config.mount
         if not mount_path.startswith('/'):
             mount_path = f"/{mount_path}"
+
+        # Log what we're about to encode for debugging
+        logger.debug(
+            "Encoding metadata for %s: song_value=%r (type=%s, len=%d)",
+            self.config.mount,
+            song_value[:100] if len(song_value) > 100 else song_value,
+            type(song_value).__name__,
+            len(song_value),
+        )
 
         # Manually build URL with UTF-8 encoded parameters to avoid latin-1 encoding issues
         # quote() with safe='' ensures proper UTF-8 percent-encoding for all special characters
