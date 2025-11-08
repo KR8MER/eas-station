@@ -95,6 +95,7 @@ class IcecastStreamer:
         # FFmpeg process
         self._ffmpeg_process: Optional[subprocess.Popen] = None
         self._feeder_thread: Optional[threading.Thread] = None
+        self._stderr_reader_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._stop_event.set()  # Start in stopped state
 
@@ -175,6 +176,11 @@ class IcecastStreamer:
                     pass
             self._ffmpeg_process = None
 
+        # Wait for stderr reader thread
+        if self._stderr_reader_thread:
+            self._stderr_reader_thread.join(timeout=2.0)
+            self._stderr_reader_thread = None
+
         # Wait for feeder thread
         if self._feeder_thread:
             self._feeder_thread.join(timeout=5.0)
@@ -189,6 +195,28 @@ class IcecastStreamer:
             pending_thread.join(timeout=2.0)
 
         logger.info("Stopped Icecast streamer")
+
+    def _read_ffmpeg_stderr(self) -> None:
+        """Read and log FFmpeg stderr output to prevent buffer blocking."""
+        if not self._ffmpeg_process or not self._ffmpeg_process.stderr:
+            return
+
+        try:
+            # Read stderr line by line and log it
+            for line in iter(self._ffmpeg_process.stderr.readline, b''):
+                if self._stop_event.is_set():
+                    break
+
+                decoded_line = line.decode('utf-8', errors='replace').strip()
+                if decoded_line:
+                    # Only log important messages to avoid log spam
+                    # FFmpeg is very verbose, so we filter to warnings and errors
+                    if any(keyword in decoded_line.lower() for keyword in ['error', 'failed', 'invalid', 'unable']):
+                        logger.warning(f"FFmpeg [{self.config.mount}]: {decoded_line}")
+                    else:
+                        logger.debug(f"FFmpeg [{self.config.mount}]: {decoded_line}")
+        except Exception as e:
+            logger.debug(f"FFmpeg stderr reader stopped: {e}")
 
     def _start_ffmpeg(self) -> bool:
         """Start FFmpeg encoder and Icecast streamer."""
@@ -255,6 +283,14 @@ class IcecastStreamer:
                 stderr=subprocess.PIPE,
                 bufsize=8192
             )
+
+            # Start stderr reader thread to prevent buffer blocking
+            self._stderr_reader_thread = threading.Thread(
+                target=self._read_ffmpeg_stderr,
+                name=f"ffmpeg-stderr-{self.config.mount}",
+                daemon=True
+            )
+            self._stderr_reader_thread.start()
 
             return True
 
@@ -366,6 +402,8 @@ class IcecastStreamer:
             return False
 
         process = self._ffmpeg_process
+        stderr_thread = self._stderr_reader_thread
+
         if process:
             try:
                 process.terminate()
@@ -379,7 +417,12 @@ class IcecastStreamer:
             except Exception as exc:  # pylint: disable=broad-except
                 logger.debug("Error terminating FFmpeg: %s", exc)
 
+        # Wait for stderr reader thread to finish
+        if stderr_thread and stderr_thread.is_alive():
+            stderr_thread.join(timeout=1.0)
+
         self._ffmpeg_process = None
+        self._stderr_reader_thread = None
         self._reconnect_count += 1
         self._last_error = reason
         logger.warning("Restarting Icecast FFmpeg pipeline (%s)", reason)
