@@ -341,6 +341,16 @@ def register(app: Flask, logger) -> None:
     def system_health_page():
         try:
             health_data = get_system_health(logger=route_logger)
+
+            # Check if the backend returned an error instead of health data
+            if "error" in health_data and "system" not in health_data:
+                error_msg = health_data.get("error", "Unknown error")
+                route_logger.error("System health backend error: %s", error_msg)
+                return (
+                    "<h1>Error loading system health</h1>"
+                    f"<p>{error_msg}</p><p><a href='/'>← Back to Main</a></p>"
+                )
+
             template_context = dict(health_data)
             template_context["format_bytes"] = format_bytes
             template_context["format_uptime"] = format_uptime
