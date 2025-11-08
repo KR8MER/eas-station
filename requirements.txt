@@ -28,6 +28,9 @@ psutil==6.1.1
 # Environment variables
 python-dotenv==1.0.1
 
+# YAML parsing for compose file validation
+PyYAML==6.0.2
+
 # JSON handling (usually included with Python)
 # But some systems may need explicit installation
 # json5==0.9.14  # Uncomment if needed

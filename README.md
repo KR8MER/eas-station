@@ -172,11 +172,32 @@ graph TB
 | **SDR** | RTL-SDR v3 or Airspy |
 | **Storage** | External SSD (50GB+) |
 
-### Minimum Software
+### Software Requirements
 
-- Docker 24+
+**For Docker deployment (recommended)**:
+- Docker Engine 24+ with Compose V2
+- PostgreSQL 14+ with PostGIS 3+ (provided in docker-compose.yml)
+
+**For source installation**:
+- Python 3.11+
 - PostgreSQL 14+ with PostGIS 3+
-- Python 3.11+ (for development)
+- System packages (see below)
+
+### System Package Dependencies
+
+**Required for audio streaming**:
+- `ffmpeg` - Audio codec library for MP3/AAC/OGG stream decoding
+- `libpq-dev` - PostgreSQL client library headers
+
+**Optional (for specific features)**:
+- `icecast2` - Audio streaming server (recommended for production)
+- `python3-soapysdr` + `soapysdr-module-rtlsdr` - SDR receiver support
+- `espeak` / `libespeak-ng1` - Text-to-speech synthesis
+- `libusb-1.0-0` - USB SDR hardware support
+
+> 📘 **Docker users**: All system packages are pre-installed in the container.
+>
+> 📘 **Source installation**: See [SYSTEM_DEPENDENCIES.md](docs/reference/SYSTEM_DEPENDENCIES.md) for complete installation guide.
 
 ## 🛠️ Configuration
 
