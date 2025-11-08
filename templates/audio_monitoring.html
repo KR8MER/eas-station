@@ -305,6 +305,70 @@ function renderAudioSources() {
                             </small>
                         </div>
 
+                        <!-- Now Playing (if available) -->
+                        ${source.metrics.metadata && (source.metrics.metadata.now_playing || source.metrics.metadata.song_title || (source.metrics.metadata.icy && source.metrics.metadata.icy.fields && source.metrics.metadata.icy.fields.text)) ? `
+                            <div class="mt-3">
+                                <h6 class="text-muted mb-2"><i class="fas fa-music"></i> Now Playing</h6>
+                                <div class="card bg-light border-0">
+                                    <div class="card-body p-3">
+                                        <div class="row align-items-center">
+                                            ${(() => {
+                                                // Get album art URL from various possible sources
+                                                const artworkUrl = source.metrics.metadata.artwork_url
+                                                    || (source.metrics.metadata.icy && source.metrics.metadata.icy.fields && source.metrics.metadata.icy.fields.amgArtworkURL)
+                                                    || (source.metrics.metadata.now_playing && source.metrics.metadata.now_playing.artwork_url)
+                                                    || (source.metrics.metadata.icy && source.metrics.metadata.icy.fields && source.metrics.metadata.icy.fields.artworkURL);
+
+                                                // Get song title from various sources
+                                                const songTitle = (source.metrics.metadata.icy && source.metrics.metadata.icy.fields && source.metrics.metadata.icy.fields.text)
+                                                    || (source.metrics.metadata.now_playing && source.metrics.metadata.now_playing.title)
+                                                    || source.metrics.metadata.song_title
+                                                    || source.metrics.metadata.title
+                                                    || (source.metrics.metadata.icy && source.metrics.metadata.icy.fields && source.metrics.metadata.icy.fields.song);
+
+                                                // Get artist from various sources
+                                                const artist = (source.metrics.metadata.now_playing && source.metrics.metadata.now_playing.artist)
+                                                    || source.metrics.metadata.artist
+                                                    || (source.metrics.metadata.icy && source.metrics.metadata.icy.fields && source.metrics.metadata.icy.fields.artist);
+
+                                                // Get album
+                                                const album = source.metrics.metadata.album
+                                                    || (source.metrics.metadata.icy && source.metrics.metadata.icy.fields && source.metrics.metadata.icy.fields.album);
+
+                                                // Get length/duration
+                                                const length = source.metrics.metadata.length
+                                                    || (source.metrics.metadata.icy && source.metrics.metadata.icy.fields && source.metrics.metadata.icy.fields.length)
+                                                    || (source.metrics.metadata.icy && source.metrics.metadata.icy.fields && source.metrics.metadata.icy.fields.duration);
+
+                                                return artworkUrl ? `
+                                                    <div class="col-auto">
+                                                        <img src="${escapeHtml(artworkUrl)}"
+                                                             alt="Album Art"
+                                                             class="img-thumbnail"
+                                                             style="width: 100px; height: 100px; object-fit: cover;"
+                                                             onerror="this.style.display='none'">
+                                                    </div>
+                                                    <div class="col">
+                                                        ${songTitle ? `<div class="fw-bold fs-5">${escapeHtml(songTitle)}</div>` : ''}
+                                                        ${artist ? `<div class="text-muted">${escapeHtml(artist)}</div>` : ''}
+                                                        ${album ? `<div class="small text-muted"><i class="fas fa-compact-disc"></i> ${escapeHtml(album)}</div>` : ''}
+                                                        ${length ? `<div class="small text-muted"><i class="fas fa-clock"></i> ${escapeHtml(length)}</div>` : ''}
+                                                    </div>
+                                                ` : `
+                                                    <div class="col">
+                                                        ${songTitle ? `<div class="fw-bold fs-5">${escapeHtml(songTitle)}</div>` : ''}
+                                                        ${artist ? `<div class="text-muted">${escapeHtml(artist)}</div>` : ''}
+                                                        ${album ? `<div class="small text-muted"><i class="fas fa-compact-disc"></i> ${escapeHtml(album)}</div>` : ''}
+                                                        ${length ? `<div class="small text-muted"><i class="fas fa-clock"></i> ${escapeHtml(length)}</div>` : ''}
+                                                    </div>
+                                                `;
+                                            })()}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ` : ''}
+
                         <!-- Stream Metadata (if available) -->
                         ${source.metrics.metadata ? `
                             <div class="mt-3">

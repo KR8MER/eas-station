@@ -1126,6 +1126,448 @@
         const numberFormatter = new Intl.NumberFormat();
         let lastUpdatedTime = null;
 
+                        {% if containers_data.available and container_items %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover container-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Container</th>
+                                        <th scope="col">Status</th>
+                                        <th scope="col">Health</th>
+                                        <th scope="col">Uptime</th>
+                                        <th scope="col">Image</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for container in container_items %}
+                                    {% set status_label = container.status or (container.state|upper if container.state else 'Unknown') %}
+                                    {% set state = (container.state or '')|lower %}
+                                    {% set health = (container.health or '')|lower %}
+                                    {% if health == 'healthy' %}
+                                        {% set status_class = 'success' %}
+                                    {% elif health == 'unhealthy' %}
+                                        {% set status_class = 'danger' %}
+                                    {% elif state == 'running' %}
+                                        {% set status_class = 'success' %}
+                                    {% elif state in ['restarting', 'created', 'paused'] %}
+                                        {% set status_class = 'warning' %}
+                                    {% elif state in ['exited', 'dead'] %}
+                                        {% set status_class = 'secondary' %}
+                                    {% else %}
+                                        {% set status_class = 'secondary' %}
+                                    {% endif %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ container.display_name or container.name }}</strong>
+                                            {% if container.service %}
+                                            <div class="container-meta">Service: {{ container.service }}</div>
+                                            {% endif %}
+                                            {% if container.project %}
+                                            <div class="container-meta">Project: {{ container.project }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{{ status_class }} status-badge">{{ status_label }}</span>
+                                        </td>
+                                        <td>
+                                            {% if container.health %}
+                                                {% if container.health == 'healthy' %}
+                                                <span class="badge bg-success status-badge">Healthy</span>
+                                                {% elif container.health == 'unhealthy' %}
+                                                <span class="badge bg-danger status-badge">Unhealthy</span>
+                                                {% elif container.health == 'starting' %}
+                                                <span class="badge bg-warning status-badge">Starting</span>
+                                                {% else %}
+                                                <span class="badge bg-secondary status-badge">{{ container.health }}</span>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                        <td><span class="metric-value">{{ container.running_for or '—' }}</span></td>
+                                        <td>
+                                            {% if container.image %}
+                                            <div class="container-image">{{ container.image }}</div>
+                                            {% else %}
+                                            <span class="text-muted">—</span>
+                                            {% endif %}
+                                            {% if container.ports %}
+                                            <div class="container-meta">Ports: {{ container.ports }}</div>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="text-muted mb-0">
+                            {% if containers_data.available %}
+                                No container information detected for the current engine.
+                            {% elif containers_data.error %}
+                                Container details unavailable: {{ containers_data.error }}
+                            {% else %}
+                                Container details unavailable.
+                            {% endif %}
+                        </p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% set block_info = hardware_data.block_devices or {} %}
+        {% set smart_info = smart or {} %}
+
+        <!-- Storage Inventory & Health -->
+        <div class="row mb-4">
+            <div class="col-lg-8 mb-3" id="hardware-devices-card">
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-database section-icon"></i> Storage Inventory</h5>
+
+                        {% if block_info.available and (block_info.devices or []) %}
+                        {% set disk_items = block_info.devices | selectattr('type', 'equalto', 'disk') | list %}
+                        {% if block_info.summary %}
+                        <div class="hardware-meta mb-2">
+                            {{ block_info.summary.disks or 0 }} disks • {{ block_info.summary.partitions or 0 }} partitions{% if block_info.summary.virtual %} • {{ block_info.summary.virtual }} virtual{% endif %}
+                        </div>
+                        {% endif %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover device-inventory-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Device</th>
+                                        <th scope="col">Details</th>
+                                        <th scope="col">Mounts</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for disk in disk_items %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ disk.path or ('/dev/' ~ (disk.name or 'unknown')) }}</strong>
+                                            {% if disk.model %}<div class="hardware-meta">{{ disk.model }}</div>{% endif %}
+                                            {% if disk.serial %}<div class="hardware-meta">Serial: {{ disk.serial }}</div>{% endif %}
+                                            {% if disk.vendor %}<div class="hardware-meta">Vendor: {{ disk.vendor }}</div>{% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="hardware-meta">Size: {% if disk.size_bytes %}{{ format_bytes(disk.size_bytes) }}{% else %}Unknown{% endif %}</div>
+                                            {% if disk.transport or disk.is_rotational is not none %}
+                                            <div class="hardware-meta">
+                                                {% if disk.transport %}{{ disk.transport|upper }}{% endif %}
+                                                {% if disk.transport and disk.is_rotational is not none %} • {% endif %}
+                                                {% if disk.is_rotational is sameas(true) %}HDD{% elif disk.is_rotational is sameas(false) %}SSD{% else %}Storage{% endif %}
+                                            </div>
+                                            {% endif %}
+                                            {% if disk.is_read_only is sameas(true) %}<div class="hardware-meta text-danger">Read Only</div>{% endif %}
+                                            {% if disk.is_removable is sameas(true) %}<div class="hardware-meta">Removable media</div>{% endif %}
+                                        </td>
+                                        <td>
+                                            {% if disk.children %}
+                                                {% for child in disk.children %}
+                                                <div class="hardware-meta">
+                                                    {{ child.path or ('/dev/' ~ (child.name or 'unknown')) }}
+                                                    {% if child.filesystem %}<span class="text-muted"> ({{ child.filesystem }})</span>{% endif %}
+                                                    {% if child.mountpoints %}<span class="text-muted"> → {{ child.mountpoints|join(', ') }}</span>{% endif %}
+                                                </div>
+                                                {% endfor %}
+                                            {% else %}
+                                                <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% if disk_items|length == 0 %}
+                        <p class="text-muted mb-0">No physical disks reported.</p>
+                        {% endif %}
+                        {% else %}
+                        <div class="alert alert-warning mb-0 py-2">
+                            Storage inventory unavailable{% if block_info.error %}: {{ block_info.error }}{% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4 mb-3" id="smart-card">
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h5>
+
+                        {% if smart_info.available %}
+                            {% set smart_devices = smart_info.devices or [] %}
+                            {% if smart_devices %}
+                                {% for device in smart_devices[:5] %}
+                                    {% set status_raw = (device.overall_status or 'unknown')|lower %}
+                                    {% if status_raw in ['passed', 'ok', 'healthy', 'success'] %}
+                                        {% set badge_class = 'success' %}
+                                        {% set status_label = 'Passed' %}
+                                    {% elif status_raw in ['failed', 'fail', 'critical'] %}
+                                        {% set badge_class = 'danger' %}
+                                        {% set status_label = 'Failed' %}
+                                    {% else %}
+                                        {% set badge_class = 'warning' %}
+                                        {% set status_label = device.overall_status or 'Unknown' %}
+                                    {% endif %}
+                                    <div class="mb-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <span class="metric-label">{{ device.path or device.name or 'Unknown device' }}</span>
+                                                {% if device.model %}<div class="hardware-meta">{{ device.model }}</div>{% endif %}
+                                                {% if device.serial %}<div class="hardware-meta">Serial: {{ device.serial }}</div>{% endif %}
+                                            </div>
+                                            <span class="badge bg-{{ badge_class }} smart-status-badge">{{ status_label }}</span>
+                                        </div>
+                                        <div class="hardware-meta">
+                                            Temp: {% if device.temperature_celsius is not none %}{{ "%.0f"|format(device.temperature_celsius) }}°C{% else %}N/A{% endif %}
+                                            {% if device.power_on_hours is not none %} • Power On: {{ device.power_on_hours }}h{% endif %}
+                                        </div>
+                                        <div class="hardware-meta">
+                                            {% if device.reallocated_sector_count is not none %}Realloc: {{ device.reallocated_sector_count }}{% else %}Realloc: N/A{% endif %}
+                                            {% if device.media_errors is not none %} • Media Errors: {{ device.media_errors }}{% endif %}
+                                            {% if device.critical_warnings is not none %} • Warnings: {{ device.critical_warnings }}{% endif %}
+                                        </div>
+                                        {% set host_writes = device.host_writes_bytes or device.data_units_written_bytes %}
+                                        {% set host_reads = device.host_reads_bytes or device.data_units_read_bytes %}
+                                        {% if host_writes is not none or host_reads is not none or device.percentage_used is not none %}
+                                        <div class="hardware-meta">
+                                            {% if host_writes is not none %}Host Writes: {{ format_bytes(host_writes) }}{% endif %}
+                                            {% if host_reads is not none %}{% if host_writes is not none %} • {% endif %}Host Reads: {{ format_bytes(host_reads) }}{% endif %}
+                                            {% if device.percentage_used is not none %}{% if host_writes is not none or host_reads is not none %} • {% endif %}Wear: {{ device.percentage_used }}%{% endif %}
+                                        </div>
+                                        {% endif %}
+                                        {% if device.power_cycle_count is not none or device.unsafe_shutdowns is not none %}
+                                        <div class="hardware-meta">
+                                            {% if device.power_cycle_count is not none %}Power Cycles: {{ device.power_cycle_count }}{% endif %}
+                                            {% if device.unsafe_shutdowns is not none %}{% if device.power_cycle_count is not none %} • {% endif %}Unsafe Shutdowns: {{ device.unsafe_shutdowns }}{% endif %}
+                                        </div>
+                                        {% endif %}
+                                        {% if device.error %}<div class="hardware-meta text-muted">Note: {{ device.error }}</div>{% endif %}
+                                    </div>
+                                {% endfor %}
+                                {% if smart_devices|length > 5 %}
+                                <small class="text-muted">… and {{ smart_devices|length - 5 }} more devices</small>
+                                {% endif %}
+                            {% else %}
+                                <p class="text-muted mb-0">No S.M.A.R.T. capable devices detected.</p>
+                            {% endif %}
+                        {% else %}
+                            <div class="alert alert-warning mb-0 py-2">
+                                S.M.A.R.T. data unavailable{% if smart_info.error %}: {{ smart_info.error }}{% endif %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Container Details -->
+        <div class="row mb-4">
+            <div class="col-12" id="containers-details">
+                <div class="card health-card">
+                    <div class="card-body">
+                        <h5><i class="fas fa-boxes section-icon"></i> Container Details</h5>
+
+                        {% set containers_data = containers or {} %}
+                        {% set container_items = containers_data.containers or [] %}
+
+                        {% if containers_data.available and container_items %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover container-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Container</th>
+                                        <th scope="col">Status</th>
+                                        <th scope="col">Health</th>
+                                        <th scope="col">Uptime</th>
+                                        <th scope="col">Image</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for container in container_items %}
+                                    {% set status_label = container.status or (container.state|upper if container.state else 'Unknown') %}
+                                    {% set state = (container.state or '')|lower %}
+                                    {% set health = (container.health or '')|lower %}
+                                    {% if health == 'healthy' %}
+                                        {% set status_class = 'success' %}
+                                    {% elif health == 'unhealthy' %}
+                                        {% set status_class = 'danger' %}
+                                    {% elif state == 'running' %}
+                                        {% set status_class = 'success' %}
+                                    {% elif state in ['restarting', 'created', 'paused'] %}
+                                        {% set status_class = 'warning' %}
+                                    {% elif state in ['exited', 'dead'] %}
+                                        {% set status_class = 'secondary' %}
+                                    {% else %}
+                                        {% set status_class = 'secondary' %}
+                                    {% endif %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ container.display_name or container.name }}</strong>
+                                            {% if container.service %}
+                                            <div class="container-meta">Service: {{ container.service }}</div>
+                                            {% endif %}
+                                            {% if container.project %}
+                                            <div class="container-meta">Project: {{ container.project }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{{ status_class }} status-badge">{{ status_label }}</span>
+                                        </td>
+                                        <td>
+                                            {% if container.health %}
+                                                {% if container.health == 'healthy' %}
+                                                <span class="badge bg-success status-badge">Healthy</span>
+                                                {% elif container.health == 'unhealthy' %}
+                                                <span class="badge bg-danger status-badge">Unhealthy</span>
+                                                {% elif container.health == 'starting' %}
+                                                <span class="badge bg-warning status-badge">Starting</span>
+                                                {% else %}
+                                                <span class="badge bg-secondary status-badge">{{ container.health }}</span>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                        <td><span class="metric-value">{{ container.running_for or '—' }}</span></td>
+                                        <td>
+                                            {% if container.image %}
+                                            <div class="container-image">{{ container.image }}</div>
+                                            {% else %}
+                                            <span class="text-muted">—</span>
+                                            {% endif %}
+                                            {% if container.ports %}
+                                            <div class="container-meta">Ports: {{ container.ports }}</div>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="text-muted mb-0">
+                            {% if containers_data.available %}
+                                No container information detected for the current engine.
+                            {% elif containers_data.error %}
+                                Container details unavailable: {{ containers_data.error }}
+                            {% else %}
+                                Container details unavailable.
+                            {% endif %}
+                        </p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Process Information -->
+        <div class="row">
+            <div class="col-12" id="processes-card">
+                <div class="card health-card">
+                    <div class="card-body">
+                        <h5><i class="fas fa-tasks section-icon"></i> Top Processes (CPU Usage)</h5>
+                        
+                        {% if processes.top_processes %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>PID</th>
+                                        <th>Process Name</th>
+                                        <th>CPU %</th>
+                                        <th>Memory %</th>
+                                        <th>User</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for proc in processes.top_processes[:10] %}
+                                    <tr>
+                                        <td><code>{{ proc.pid or 'N/A' }}</code></td>
+                                        <td>
+                                            <span title="{{ proc.name or 'Unknown' }}">
+                                                {% if proc.name and proc.name|length > 20 %}
+                                                    {{ proc.name[:20] }}...
+                                                {% else %}
+                                                    {{ proc.name or 'Unknown' }}
+                                                {% endif %}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="metric-value">{{ "%.1f"|format(proc.cpu_percent or 0) }}%</span>
+                                        </td>
+                                        <td>
+                                            <span class="metric-value">{{ "%.1f"|format(proc.memory_percent or 0) }}%</span>
+                                        </td>
+                                        <td><small class="text-muted">{{ proc.username or 'N/A' }}</small></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="text-muted text-center py-3">No process information available</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Temperature Sensors (if available) -->
+        <div class="row mt-4 {% if not temperature %}d-none{% endif %}" id="temperature-section">
+            {% if temperature %}
+            <div class="col-12">
+                <div class="card health-card">
+                    <div class="card-body">
+                        <h5><i class="fas fa-thermometer-half section-icon"></i> Temperature Sensors</h5>
+                        <div class="row">
+                            {% for sensor_name, entries in temperature.items() %}
+                            <div class="col-md-4 mb-3">
+                                <h6 class="text-muted">{{ sensor_name }}</h6>
+                                {% for entry in entries %}
+                                <div class="metric-row">
+                                    <span class="metric-label">{{ entry.label or 'Sensor' }}:</span>
+                                    <span class="metric-value">
+                                        {{ "%.1f"|format(entry.current) }}°C
+                                        {% if entry.critical and entry.current > entry.critical * 0.8 %}
+                                            <span class="badge bg-warning ms-1">Hot</span>
+                                        {% endif %}
+                                    </span>
+                                </div>
+                                {% if entry.high or entry.critical %}
+                                <small class="text-muted">
+                                    {% if entry.high %}High: {{ "%.1f"|format(entry.high) }}°C{% endif %}
+                                    {% if entry.critical %}{% if entry.high %} • {% endif %}Critical: {{ "%.1f"|format(entry.critical) }}°C{% endif %}
+                                </small>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Auto-refresh button -->
+    <button class="btn btn-primary refresh-btn refresh-trigger" type="button" title="Refresh system data">
+        <i class="fas fa-sync-alt"></i>
+    </button>
+</div>
+{% endblock %}
+
+{% block scripts %}
+    <script>
+        const initialHealthData = {{ health_data_json | safe }} || {};
+        const REFRESH_INTERVAL_MS = 30000;
+        let lastUpdatedTime = null;
+
         function escapeHtml(value) {
             if (value === null || value === undefined) {
                 return '';
@@ -1841,6 +2283,408 @@
                             Realloc: ${reallocated}${mediaErrors}${warnings}
                         </div>
                         ${nvmeMeta}
+                        ${note}
+                    </div>
+                `;
+            }).join('');
+
+            const overflow = devices.length > 5
+                ? `<small class="text-muted">… and ${devices.length - 5} more devices</small>`
+                : '';
+
+            return `
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h5>
+                        ${sections}
+                        ${overflow}
+                    </div>
+                </div>
+            `;
+        }
+
+        function determineContainerBadge(container) {
+            if (!container || typeof container !== 'object') {
+                return { badge: 'secondary', label: 'Unknown' };
+            }
+
+            const state = String(container.state || '').toLowerCase();
+            const rawStatus = container.status || (state ? state.toUpperCase() : 'Unknown');
+            const health = String(container.health || '').toLowerCase();
+
+            if (health === 'healthy') {
+                return { badge: 'success', label: 'Healthy' };
+            }
+            if (health === 'unhealthy') {
+                return { badge: 'danger', label: 'Unhealthy' };
+            }
+            if (health === 'starting') {
+                return { badge: 'warning', label: 'Starting' };
+            }
+            if (state === 'running') {
+                return { badge: 'success', label: rawStatus };
+            }
+            if (['restarting', 'created', 'paused'].includes(state)) {
+                return { badge: 'warning', label: rawStatus };
+            }
+            if (['exited', 'dead'].includes(state)) {
+                return { badge: 'secondary', label: rawStatus };
+            }
+            return { badge: 'secondary', label: rawStatus };
+        }
+
+        function renderStackCard(database, containers) {
+            const containerData = containers && typeof containers === 'object' ? containers : {};
+            const summary = containerData.summary || {};
+            const total = toNumber(summary.total, 0);
+            const running = toNumber(summary.running, 0);
+            const stopped = Math.max(toNumber(summary.stopped, total - running), 0);
+            const unhealthy = toNumber(summary.unhealthy, 0);
+
+            const dbStatusRaw = database && database.status ? String(database.status) : 'Unknown';
+            const statusLower = dbStatusRaw.toLowerCase();
+            let dbClass = 'warning';
+            if (statusLower === 'connected') {
+                dbClass = 'success';
+            } else if (statusLower.includes('error')) {
+                dbClass = 'danger';
+            } else if (statusLower === 'unknown' || statusLower === 'unavailable') {
+                dbClass = 'secondary';
+            }
+
+            const cacheSection = cacheSize || microcode
+                ? `
+                        <hr>
+                        <div class="row">
+                            ${cacheSize
+                                ? `
+                                    <div class="col-sm-6">
+                                        <div class="metric-row">
+                                            <span class="metric-label">Cache Size:</span>
+                                            <span class="metric-value">${cacheSize}</span>
+                                        </div>
+                                    </div>
+                                `
+                                : ''}
+                            ${microcode
+                                ? `
+                                    <div class="col-sm-6">
+                                        <div class="metric-row">
+                                            <span class="metric-label">Microcode:</span>
+                                            <span class="metric-value">${microcode}</span>
+                                        </div>
+                                    </div>
+                                `
+                                : ''}
+                        </div>
+                    `
+                : '';
+
+            return `
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-microchip section-icon"></i> CPU Details</h5>
+
+                        <div class="metric-row">
+                            <span class="metric-label">Model:</span>
+                            <span class="metric-value">${model}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Vendor:</span>
+                            <span class="metric-value">${vendor}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Architecture:</span>
+                            <span class="metric-value">${architecture}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Virtualization:</span>
+                            <span class="metric-value">${virtualizationLabel}</span>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-sm-6">
+                                <div class="metric-row">
+                                    <span class="metric-label">Physical Cores:</span>
+                                    <span class="metric-value">${cpu.physical_cores ?? 'N/A'}</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Logical Cores:</span>
+                                    <span class="metric-value">${cpu.logical_cores ?? 'N/A'}</span>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="metric-row">
+                                    <span class="metric-label">Max Frequency:</span>
+                                    <span class="metric-value">${maxFreqLabel}</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Min Frequency:</span>
+                                    <span class="metric-value">${minFreqLabel}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        ${cacheSection}
+                        ${flagSection}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderPlatformCard(platform) {
+            const data = platform && typeof platform === 'object' ? platform : {};
+            const manufacturer = escapeHtml(data.sys_vendor || data.board_vendor || 'Unknown');
+            const product = escapeHtml(data.product_name || 'Unknown');
+            const productVersion = data.product_version ? `<div class="metric-row"><span class="metric-label">Version:</span><span class="metric-value">${escapeHtml(String(data.product_version))}</span></div>` : '';
+            const productSerial = data.product_serial ? `<div class="metric-row"><span class="metric-label">Serial:</span><span class="metric-value">${escapeHtml(String(data.product_serial))}</span></div>` : '';
+            const boardName = escapeHtml(data.board_name || 'Unknown');
+            const boardVersion = data.board_version ? `<div class="metric-row"><span class="metric-label">Board Version:</span><span class="metric-value">${escapeHtml(String(data.board_version))}</span></div>` : '';
+            const assetTag = data.chassis_asset_tag ? `<div class="metric-row"><span class="metric-label">Asset Tag:</span><span class="metric-value">${escapeHtml(String(data.chassis_asset_tag))}</span></div>` : '';
+            const biosVendor = escapeHtml(data.bios_vendor || 'Unknown');
+            const biosVersion = escapeHtml(data.bios_version || 'Unknown');
+            const biosDate = escapeHtml(data.bios_date || 'Unknown');
+
+            return `
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-desktop section-icon"></i> Platform &amp; Firmware</h5>
+
+                        <div class="metric-row">
+                            <span class="metric-label">Manufacturer:</span>
+                            <span class="metric-value">${manufacturer}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Product:</span>
+                            <span class="metric-value">${product}</span>
+                        </div>
+                        ${productVersion}
+                        ${productSerial}
+
+                        <hr>
+                        <div class="metric-row">
+                            <span class="metric-label">Mainboard:</span>
+                            <span class="metric-value">${boardName}</span>
+                        </div>
+                        ${boardVersion}
+                        ${assetTag}
+
+                        <hr>
+                        <div class="metric-row">
+                            <span class="metric-label">BIOS Vendor:</span>
+                            <span class="metric-value">${biosVendor}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">BIOS Version:</span>
+                            <span class="metric-value">${biosVersion}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">BIOS Date:</span>
+                            <span class="metric-value">${biosDate}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderHardwareInventoryCard(blockInfo) {
+            const info = blockInfo && typeof blockInfo === 'object' ? blockInfo : {};
+            const available = Boolean(info.available);
+            const devices = Array.isArray(info.devices) ? info.devices : [];
+
+            if (!available || devices.length === 0) {
+                const error = info.error ? `: ${escapeHtml(info.error)}` : '';
+                return `
+                    <div class="card health-card h-100">
+                        <div class="card-body">
+                            <h5><i class="fas fa-database section-icon"></i> Storage Inventory</h5>
+                            <div class="alert alert-warning mb-0 py-2">Storage inventory unavailable${error}</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            const disks = devices.filter((device) => String(device.type || '').toLowerCase() === 'disk');
+            const summary = info.summary && typeof info.summary === 'object' ? info.summary : {};
+            const summaryParts = [];
+            if (summary.disks !== undefined) {
+                summaryParts.push(`${toNumber(summary.disks, 0)} disks`);
+            }
+            if (summary.partitions !== undefined) {
+                summaryParts.push(`${toNumber(summary.partitions, 0)} partitions`);
+            }
+            if (summary.virtual) {
+                summaryParts.push(`${toNumber(summary.virtual, 0)} virtual`);
+            }
+            const summaryHtml = summaryParts.length
+                ? `<div class="hardware-meta mb-2">${summaryParts.map((part) => escapeHtml(part)).join(' • ')}</div>`
+                : '';
+
+            const rows = disks
+                .map((disk) => {
+                    const name = disk && typeof disk === 'object' ? disk : {};
+                    const devicePath = escapeHtml(name.path || (name.name ? `/dev/${name.name}` : 'unknown'));
+                    const model = name.model ? `<div class="hardware-meta">${escapeHtml(name.model)}</div>` : '';
+                    const serial = name.serial ? `<div class="hardware-meta">Serial: ${escapeHtml(name.serial)}</div>` : '';
+                    const vendor = name.vendor ? `<div class="hardware-meta">Vendor: ${escapeHtml(name.vendor)}</div>` : '';
+                    const sizeBytes = name.size_bytes != null ? toNumber(name.size_bytes, 0) : null;
+                    const sizeLabel = sizeBytes && sizeBytes > 0 ? formatBytes(sizeBytes) : 'Unknown';
+                    const transport = name.transport ? escapeHtml(String(name.transport).toUpperCase()) : '';
+                    const hasRotational = name.is_rotational === true || name.is_rotational === false;
+                    let rotational = '';
+                    if (name.is_rotational === true) {
+                        rotational = 'HDD';
+                    } else if (name.is_rotational === false) {
+                        rotational = 'SSD';
+                    }
+                    let transportDetail = '';
+                    if (transport) {
+                        transportDetail = transport;
+                        if (hasRotational) {
+                            transportDetail += ` • ${rotational}`;
+                        }
+                    } else if (hasRotational) {
+                        transportDetail = rotational;
+                    }
+                    const transportLine = transportDetail
+                        ? `<div class="hardware-meta">${transportDetail}</div>`
+                        : '';
+                    const readOnly = name.is_read_only === true ? '<div class="hardware-meta text-danger">Read Only</div>' : '';
+                    const removable = name.is_removable === true ? '<div class="hardware-meta">Removable media</div>' : '';
+
+                    const children = Array.isArray(name.children) ? name.children : [];
+                    const childRows = children.length
+                        ? children
+                            .map((child) => {
+                                const childDevice = child && typeof child === 'object' ? child : {};
+                                const childPath = escapeHtml(childDevice.path || (childDevice.name ? `/dev/${childDevice.name}` : 'unknown'));
+                                const fs = childDevice.filesystem ? ` <span class="text-muted">(${escapeHtml(childDevice.filesystem)})</span>` : '';
+                                const mountpoints = Array.isArray(childDevice.mountpoints) && childDevice.mountpoints.length
+                                    ? ` <span class="text-muted">→ ${childDevice.mountpoints.map((mp) => escapeHtml(mp)).join(', ')}</span>`
+                                    : '';
+                                return `<div class="hardware-meta">${childPath}${fs}${mountpoints}</div>`;
+                            })
+                            .join('')
+                        : '<span class="text-muted">—</span>';
+
+                    return `
+                        <tr>
+                            <td>
+                                <strong>${devicePath}</strong>
+                                ${model}
+                                ${serial}
+                                ${vendor}
+                            </td>
+                            <td>
+                                <div class="hardware-meta">Size: ${sizeLabel}</div>
+                                ${transportLine}
+                                ${readOnly}
+                                ${removable}
+                            </td>
+                            <td>${childRows}</td>
+                        </tr>
+                    `;
+                })
+                .join('');
+
+            const tableContent = disks.length
+                ? `
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover device-inventory-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Device</th>
+                                        <th scope="col">Details</th>
+                                        <th scope="col">Mounts</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${rows}
+                                </tbody>
+                            </table>
+                        </div>
+                    `
+                : '<p class="text-muted mb-0">No physical disks reported.</p>';
+
+            return `
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-database section-icon"></i> Storage Inventory</h5>
+                        ${summaryHtml}
+                        ${tableContent}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderSmartHealthCard(smartInfo) {
+            const info = smartInfo && typeof smartInfo === 'object' ? smartInfo : {};
+            if (!info.available) {
+                const error = info.error ? `: ${escapeHtml(info.error)}` : '';
+                return `
+                    <div class="card health-card h-100">
+                        <div class="card-body">
+                            <h5><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h5>
+                            <div class="alert alert-warning mb-0 py-2">S.M.A.R.T. data unavailable${error}</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            const devices = Array.isArray(info.devices) ? info.devices : [];
+            if (!devices.length) {
+                return `
+                    <div class="card health-card h-100">
+                        <div class="card-body">
+                            <h5><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h5>
+                            <p class="text-muted mb-0">No S.M.A.R.T. capable devices detected.</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            const sections = devices.slice(0, 5).map((device) => {
+                const data = device && typeof device === 'object' ? device : {};
+                const path = escapeHtml(data.path || data.name || 'Unknown device');
+                const model = data.model ? `<div class="hardware-meta">${escapeHtml(data.model)}</div>` : '';
+                const serial = data.serial ? `<div class="hardware-meta">Serial: ${escapeHtml(data.serial)}</div>` : '';
+
+                const statusRaw = String(data.overall_status || 'unknown').toLowerCase();
+                let badgeClass = 'warning';
+                let statusLabel = data.overall_status ? escapeHtml(String(data.overall_status)) : 'Unknown';
+                if (['passed', 'ok', 'healthy', 'success'].includes(statusRaw)) {
+                    badgeClass = 'success';
+                    statusLabel = 'Passed';
+                } else if (['failed', 'fail', 'critical'].includes(statusRaw)) {
+                    badgeClass = 'danger';
+                    statusLabel = 'Failed';
+                }
+
+                const temperature = data.temperature_celsius != null
+                    ? `${toNumber(data.temperature_celsius, 0).toFixed(0)}°C`
+                    : 'N/A';
+                const powerOnHours = data.power_on_hours != null ? `${escapeHtml(String(data.power_on_hours))}h` : '';
+                const reallocated = data.reallocated_sector_count != null ? escapeHtml(String(data.reallocated_sector_count)) : 'N/A';
+                const mediaErrors = data.media_errors != null ? ` • Media Errors: ${escapeHtml(String(data.media_errors))}` : '';
+                const warnings = data.critical_warnings != null ? ` • Warnings: ${escapeHtml(String(data.critical_warnings))}` : '';
+                const note = data.error ? `<div class="hardware-meta text-muted">Note: ${escapeHtml(String(data.error))}</div>` : '';
+
+                return `
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="metric-label">${path}</span>
+                                ${model}
+                                ${serial}
+                            </div>
+                            <span class="badge bg-${badgeClass} smart-status-badge">${statusLabel}</span>
+                        </div>
+                        <div class="hardware-meta">
+                            Temp: ${temperature}${powerOnHours ? ` • Power On: ${powerOnHours}` : ''}
+                        </div>
+                        <div class="hardware-meta">
+                            Realloc: ${reallocated}${mediaErrors}${warnings}
+                        </div>
                         ${note}
                     </div>
                 `;
