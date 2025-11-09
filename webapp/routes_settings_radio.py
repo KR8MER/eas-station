@@ -168,6 +168,46 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
     return data, None
 
 
+def _sync_radio_manager_state(route_logger) -> Dict[str, Any]:
+    """Reload radio manager configuration after CRUD operations."""
+
+    from app_core.extensions import get_radio_manager
+
+    summary: Dict[str, Any] = {
+        "configured": 0,
+        "auto_started": [],
+        "errors": [],
+    }
+
+    try:
+        radio_manager = get_radio_manager()
+    except Exception as exc:  # pragma: no cover - defensive
+        route_logger.error("Failed to acquire RadioManager: %s", exc, exc_info=True)
+        summary["errors"].append(str(exc))
+        return summary
+
+    enabled_receivers = RadioReceiver.query.filter_by(enabled=True).all()
+    summary["configured"] = len(enabled_receivers)
+
+    radio_manager.configure_from_records(enabled_receivers)
+
+    for receiver in enabled_receivers:
+        instance = radio_manager.get_receiver(receiver.identifier)
+        if instance is None:
+            continue
+
+        if receiver.auto_start:
+            try:
+                instance.start()
+                summary["auto_started"].append(receiver.identifier)
+            except Exception as exc:  # pragma: no cover - hardware specific
+                message = f"Failed to auto-start {receiver.identifier}: {exc}"
+                route_logger.error(message, exc_info=True)
+                summary["errors"].append(message)
+
+    return summary
+
+
 def register(app: Flask, logger) -> None:
     route_logger = logger.getChild("routes_settings_radio")
 
@@ -214,7 +254,12 @@ def register(app: Flask, logger) -> None:
             db.session.rollback()
             return jsonify({"error": "Failed to save receiver."}), 500
 
-        return jsonify({"receiver": _receiver_to_dict(receiver)}), 201
+        manager_state = _sync_radio_manager_state(route_logger)
+
+        return jsonify({
+            "receiver": _receiver_to_dict(receiver),
+            "radio_manager": manager_state,
+        }), 201
 
     @app.route("/api/radio/receivers/<int:receiver_id>", methods=["PUT", "PATCH"])
     def api_update_receiver(receiver_id: int) -> Any:
@@ -240,7 +285,12 @@ def register(app: Flask, logger) -> None:
             db.session.rollback()
             return jsonify({"error": "Failed to update receiver."}), 500
 
-        return jsonify({"receiver": _receiver_to_dict(receiver)})
+        manager_state = _sync_radio_manager_state(route_logger)
+
+        return jsonify({
+            "receiver": _receiver_to_dict(receiver),
+            "radio_manager": manager_state,
+        })
 
     @app.route("/api/radio/receivers/<int:receiver_id>", methods=["DELETE"])
     def api_delete_receiver(receiver_id: int) -> Any:
@@ -255,7 +305,9 @@ def register(app: Flask, logger) -> None:
             db.session.rollback()
             return jsonify({"error": "Failed to delete receiver."}), 500
 
-        return jsonify({"success": True})
+        manager_state = _sync_radio_manager_state(route_logger)
+
+        return jsonify({"success": True, "radio_manager": manager_state})
 
     @app.route("/api/radio/receivers/<int:receiver_id>/restart", methods=["POST"])
     def api_restart_receiver(receiver_id: int) -> Any:

@@ -331,7 +331,8 @@ except Exception as e:
                 gain=self.gain,
                 channel=self.channel,
                 serial=self.serial,
-                enabled=bool(self.enabled and self.auto_start),
+                enabled=bool(self.enabled),
+                auto_start=bool(self.auto_start),
             )
 
     class RadioReceiverStatus(Base):
