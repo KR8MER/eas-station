@@ -6,15 +6,19 @@
 set -e
 
 purge_certificate_material() {
+    TARGET_DOMAIN="${1:-$DOMAIN_NAME}"
+
     if command -v certbot >/dev/null 2>&1; then
-        certbot delete --cert-name "$DOMAIN_NAME" --non-interactive --quiet >/dev/null 2>&1 || true
+        certbot delete --cert-name "$TARGET_DOMAIN" --non-interactive --quiet >/dev/null 2>&1 || true
     fi
 
-    rm -rf "/etc/letsencrypt/live/$DOMAIN_NAME"
-    rm -rf "/etc/letsencrypt/archive/$DOMAIN_NAME"
-    rm -f "/etc/letsencrypt/renewal/$DOMAIN_NAME.conf"
+    rm -rf "/etc/letsencrypt/live/$TARGET_DOMAIN"
+    rm -rf "/etc/letsencrypt/archive/$TARGET_DOMAIN"
+    rm -f "/etc/letsencrypt/renewal/$TARGET_DOMAIN.conf"
 
-    mkdir -p "/etc/letsencrypt/live/$DOMAIN_NAME"
+    if [ "$TARGET_DOMAIN" = "$DOMAIN_NAME" ]; then
+        mkdir -p "/etc/letsencrypt/live/$TARGET_DOMAIN"
+    fi
 }
 
 generate_self_signed_certificate() {
@@ -32,7 +36,7 @@ generate_self_signed_certificate() {
 }
 
 is_self_signed_certificate() {
-    CERT_PATH="/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem"
+    CERT_PATH="${1:-/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem}"
 
     if [ ! -s "$CERT_PATH" ]; then
         return 1
@@ -50,6 +54,36 @@ is_self_signed_certificate() {
     fi
 
     return 1
+}
+
+purge_stale_self_signed_material() {
+    BASE_PATH="/etc/letsencrypt/live"
+
+    if [ ! -d "$BASE_PATH" ]; then
+        return
+    fi
+
+    for CERT_DIR in "$BASE_PATH"/*; do
+        [ -d "$CERT_DIR" ] || continue
+
+        CERT_DOMAIN=$(basename "$CERT_DIR")
+        MARKER_FILE="$CERT_DIR/.self-signed"
+        CERT_PATH="$CERT_DIR/fullchain.pem"
+
+        case "$CERT_DOMAIN" in
+            "$DOMAIN_NAME"|"$DOMAIN_NAME"-[0-9]*)
+                DOMAIN_MATCH=1
+                ;;
+            *)
+                DOMAIN_MATCH=0
+                ;;
+        esac
+
+        if [ -f "$MARKER_FILE" ] || { [ "$DOMAIN_MATCH" -eq 1 ] && is_self_signed_certificate "$CERT_PATH"; }; then
+            echo "Removing stale self-signed certificate artifacts for $CERT_DOMAIN"
+            purge_certificate_material "$CERT_DOMAIN"
+        fi
+    done
 }
 
 # Source persistent configuration from setup wizard if it exists
@@ -84,8 +118,10 @@ echo "========================================="
 
 # Create necessary directories
 mkdir -p /var/www/certbot
-mkdir -p /etc/letsencrypt/live/$DOMAIN_NAME
 mkdir -p /var/log/nginx
+
+# Ensure any stale self-signed material tied to this domain is removed before proceeding
+purge_stale_self_signed_material
 
 # Substitute environment variables in nginx config
 envsubst '${DOMAIN_NAME}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf

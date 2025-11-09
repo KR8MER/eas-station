@@ -433,6 +433,13 @@ tracks releases under the 2.x series.
 - Bumped the default `APP_BUILD_VERSION` to 2.3.0 across the application and sample
   environment template so deployments surface the new release number.
 
+## [2.4.6] - 2025-11-09
+### Fixed
+- Remove any lingering self-signed certificate directories (including suffixed variants) on
+  container startup so stale fallbacks are purged before new issuance attempts.
+- Extend the certificate purge routine to clean historical self-signed material before certbot
+  runs, preventing nginx from reusing temporary chains across restarts.
+
 ## [2.4.5] - 2025-11-09
 ### Fixed
 - Purge the domain's existing `/etc/letsencrypt` material whenever a self-signed
