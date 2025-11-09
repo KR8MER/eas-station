@@ -1487,14 +1487,16 @@
     };
 
     // ========================================================================
-    // Waveform Monitor
+    // Waterfall Monitor (Spectrum Display)
     // ========================================================================
 
     const waveformContainer = document.getElementById('waveformContainer');
     const waveformAutoRefresh = document.getElementById('waveformAutoRefresh');
     let waveformRefreshHandle = null;
     const waveformCanvases = new Map();
-    const WAVEFORM_REFRESH_INTERVAL_MS = 1000; // 1 Hz refresh rate (reduced from 100ms to prevent backend flooding)
+    const waterfallHistory = new Map(); // Store spectrum history for waterfall
+    const WAVEFORM_REFRESH_INTERVAL_MS = 200; // 5 Hz refresh rate for waterfall
+    const WATERFALL_HISTORY_SIZE = 100; // Number of spectrum lines to keep
 
     function createWaveformCanvas(receiver) {
         const canvasId = `waveform-${receiver.id}`;
@@ -1510,7 +1512,7 @@
                     <span class="badge bg-secondary">${escapeHtml(receiver.identifier)}</span>
                 </div>
                 <div class="card-body p-2">
-                    <canvas id="${canvasId}" width="600" height="200" style="width: 100%; height: auto;"></canvas>
+                    <canvas id="${canvasId}" width="800" height="300" style="width: 100%; height: auto;"></canvas>
                     <div class="small text-muted text-center mt-2">
                         <span id="waveform-info-${receiver.id}">Initializing...</span>
                     </div>
@@ -1518,69 +1520,84 @@
             </div>
         `;
 
+        // Initialize waterfall history
+        waterfallHistory.set(receiver.id, []);
+
         return col;
     }
 
-    function drawWaveform(canvas, waveformData) {
+    function drawWaterfall(canvas, history, spectrumData) {
         const ctx = canvas.getContext('2d');
         const width = canvas.width;
         const height = canvas.height;
 
-        // Clear canvas
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(0, 0, width, height);
-
-        // Draw grid
-        ctx.strokeStyle = '#333';
-        ctx.lineWidth = 1;
-
-        // Horizontal grid lines
-        for (let i = 0; i <= 4; i++) {
-            const y = (height / 4) * i;
-            ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(width, y);
-            ctx.stroke();
-        }
-
-        // Center line
-        ctx.strokeStyle = '#555';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(0, height / 2);
-        ctx.lineTo(width, height / 2);
-        ctx.stroke();
-
-        if (!waveformData || waveformData.length === 0) {
+        if (!spectrumData || spectrumData.length === 0) {
+            // Clear canvas if no data
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(0, 0, width, height);
             return;
         }
 
-        // Draw waveform
-        const step = width / waveformData.length;
-        const middle = height / 2;
-        const scale = height / 2;
-
-        ctx.strokeStyle = '#00ff00';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-
-        for (let i = 0; i < waveformData.length; i++) {
-            const x = i * step;
-            const y = middle - (waveformData[i] * scale);
-
-            if (i === 0) {
-                ctx.moveTo(x, y);
-            } else {
-                ctx.lineTo(x, y);
-            }
+        // Add new spectrum to history
+        history.push(spectrumData);
+        if (history.length > WATERFALL_HISTORY_SIZE) {
+            history.shift(); // Remove oldest
         }
 
-        ctx.stroke();
+        // Clear canvas
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, width, height);
+
+        // Draw waterfall (newest at bottom)
+        const lineHeight = height / WATERFALL_HISTORY_SIZE;
+        const binWidth = width / spectrumData.length;
+
+        for (let row = 0; row < history.length; row++) {
+            const spectrum = history[row];
+            const y = height - (history.length - row) * lineHeight;
+
+            for (let bin = 0; bin < spectrum.length; bin++) {
+                const intensity = spectrum[bin]; // 0 to 1
+                const x = bin * binWidth;
+
+                // Color mapping: blue (weak) -> cyan -> green -> yellow -> red (strong)
+                let r, g, b;
+                if (intensity < 0.2) {
+                    // Dark blue to blue
+                    r = 0;
+                    g = 0;
+                    b = Math.floor(intensity * 5 * 255);
+                } else if (intensity < 0.4) {
+                    // Blue to cyan
+                    r = 0;
+                    g = Math.floor((intensity - 0.2) * 5 * 255);
+                    b = 255;
+                } else if (intensity < 0.6) {
+                    // Cyan to green
+                    r = 0;
+                    g = 255;
+                    b = 255 - Math.floor((intensity - 0.4) * 5 * 255);
+                } else if (intensity < 0.8) {
+                    // Green to yellow
+                    r = Math.floor((intensity - 0.6) * 5 * 255);
+                    g = 255;
+                    b = 0;
+                } else {
+                    // Yellow to red
+                    r = 255;
+                    g = 255 - Math.floor((intensity - 0.8) * 5 * 255);
+                    b = 0;
+                }
+
+                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                ctx.fillRect(x, y, Math.ceil(binWidth), Math.ceil(lineHeight) + 1);
+            }
+        }
     }
 
     async function updateWaveform(receiver) {
         try {
-            const response = await fetch(`/api/radio/waveform/${receiver.id}?samples=512`);
+            const response = await fetch(`/api/radio/spectrum/${receiver.id}`);
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
             }
@@ -1589,6 +1606,7 @@
 
             // Get or create canvas
             let canvas = waveformCanvases.get(receiver.id);
+            let history = waterfallHistory.get(receiver.id);
             if (!canvas) {
                 const col = createWaveformCanvas(receiver);
 
@@ -1600,20 +1618,23 @@
                 waveformContainer.appendChild(col);
                 canvas = document.getElementById(`waveform-${receiver.id}`);
                 waveformCanvases.set(receiver.id, canvas);
+                history = waterfallHistory.get(receiver.id);
             }
 
-            // Draw waveform
-            drawWaveform(canvas, data.waveform);
+            // Draw waterfall
+            drawWaterfall(canvas, history, data.spectrum);
 
             // Update info
             const infoElement = document.getElementById(`waveform-info-${receiver.id}`);
             if (infoElement) {
-                const sampleRate = data.sample_rate ? (data.sample_rate / 1000000).toFixed(2) : '?';
-                infoElement.textContent = `Sample rate: ${sampleRate} MHz | Samples: ${data.num_samples}`;
+                const centerFreq = data.center_frequency ? (data.center_frequency / 1000000).toFixed(3) : '?';
+                const freqMin = data.freq_min ? (data.freq_min / 1000000).toFixed(3) : '?';
+                const freqMax = data.freq_max ? (data.freq_max / 1000000).toFixed(3) : '?';
+                infoElement.textContent = `Center: ${centerFreq} MHz | Range: ${freqMin} - ${freqMax} MHz`;
             }
 
         } catch (error) {
-            console.error(`Failed to update waveform for receiver ${receiver.id}:`, error);
+            console.error(`Failed to update waterfall for receiver ${receiver.id}:`, error);
         }
     }
 
