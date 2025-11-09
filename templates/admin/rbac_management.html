@@ -148,9 +148,14 @@
 
         <!-- User Assignments Tab -->
         <div class="tab-pane fade" id="assignments" role="tabpanel">
-            <div class="mb-4">
-                <h3>User Role Assignments</h3>
-                <p class="text-muted">Manage which users have which roles</p>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h3>User Role Assignments</h3>
+                    <p class="text-muted">Manage which users have which roles</p>
+                </div>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createUserModal">
+                    <i class="fas fa-user-plus"></i> Create User
+                </button>
             </div>
 
             <div class="table-responsive">
@@ -274,6 +279,59 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" onclick="changeUserRole()">
                     <i class="fas fa-save"></i> Change Role
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create User Modal -->
+<div class="modal fade" id="createUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-user-plus"></i> Create New User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createUserForm">
+                    <div class="mb-3">
+                        <label for="newUsername" class="form-label">Username <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="newUsername" required
+                               pattern="[a-zA-Z0-9._-]{3,64}"
+                               placeholder="Enter username (3-64 characters)">
+                        <small class="text-muted">Letters, numbers, dots, underscores, and hyphens only</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="newUserPassword" class="form-label">Password <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control" id="newUserPassword" required minlength="8"
+                               placeholder="Minimum 8 characters">
+                        <small class="text-muted">Must be at least 8 characters long</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="newUserPasswordConfirm" class="form-label">Confirm Password <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control" id="newUserPasswordConfirm" required minlength="8"
+                               placeholder="Re-enter password">
+                    </div>
+                    <div class="mb-3">
+                        <label for="newUserRole" class="form-label">Role <span class="text-danger">*</span></label>
+                        <select class="form-select" id="newUserRole" required>
+                            <option value="">Select a role...</option>
+                        </select>
+                        <small class="text-muted">
+                            <a href="/docs/RBAC_PERMISSION_TREE" target="_blank" class="text-decoration-none">
+                                <i class="fas fa-sitemap"></i> View permission tree
+                            </a>
+                        </small>
+                    </div>
+                    <div id="createUserError" class="alert alert-danger d-none" role="alert"></div>
+                    <div id="createUserSuccess" class="alert alert-success d-none" role="alert"></div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="createUser()">
+                    <i class="fas fa-user-plus"></i> Create User
                 </button>
             </div>
         </div>
@@ -529,6 +587,15 @@ function populateRoleSelect() {
     select.innerHTML = rolesData.map(role =>
         `<option value="${role.id}">${escapeHtml(role.name)}</option>`
     ).join('');
+
+    // Also populate the create user role dropdown
+    const createUserRoleSelect = document.getElementById('newUserRole');
+    if (createUserRoleSelect) {
+        createUserRoleSelect.innerHTML = '<option value="">Select a role...</option>' +
+            rolesData.map(role =>
+                `<option value="${role.id}">${escapeHtml(role.name)} - ${escapeHtml(role.description || '')}</option>`
+            ).join('');
+    }
 }
 
 function showChangeRoleModal(userId, username, currentRoleId) {
@@ -565,6 +632,98 @@ async function changeUserRole() {
     } catch (error) {
         console.error('Failed to change user role:', error);
         alert('Failed to change user role');
+    }
+}
+
+async function createUser() {
+    // Clear previous messages
+    document.getElementById('createUserError').classList.add('d-none');
+    document.getElementById('createUserSuccess').classList.add('d-none');
+
+    // Get form values
+    const username = document.getElementById('newUsername').value.trim();
+    const password = document.getElementById('newUserPassword').value;
+    const passwordConfirm = document.getElementById('newUserPasswordConfirm').value;
+    const roleId = document.getElementById('newUserRole').value;
+
+    // Validate
+    if (!username || !password || !passwordConfirm || !roleId) {
+        document.getElementById('createUserError').textContent = 'All fields are required';
+        document.getElementById('createUserError').classList.remove('d-none');
+        return;
+    }
+
+    if (password !== passwordConfirm) {
+        document.getElementById('createUserError').textContent = 'Passwords do not match';
+        document.getElementById('createUserError').classList.remove('d-none');
+        return;
+    }
+
+    if (password.length < 8) {
+        document.getElementById('createUserError').textContent = 'Password must be at least 8 characters long';
+        document.getElementById('createUserError').classList.remove('d-none');
+        return;
+    }
+
+    if (!/^[a-zA-Z0-9._-]{3,64}$/.test(username)) {
+        document.getElementById('createUserError').textContent = 'Invalid username format';
+        document.getElementById('createUserError').classList.remove('d-none');
+        return;
+    }
+
+    try {
+        // First create the user (always creates as admin role initially)
+        const createResponse = await fetch('/admin/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        const createData = await createResponse.json();
+
+        if (!createResponse.ok) {
+            document.getElementById('createUserError').textContent = createData.error || 'Failed to create user';
+            document.getElementById('createUserError').classList.remove('d-none');
+            return;
+        }
+
+        // Then assign the selected role (if not admin)
+        const selectedRoleId = parseInt(roleId);
+        const adminRole = rolesData.find(r => r.name === 'admin');
+
+        if (selectedRoleId !== adminRole?.id) {
+            const roleResponse = await fetch(`/security/users/${createData.user.id}/role`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ role_id: selectedRoleId })
+            });
+
+            if (!roleResponse.ok) {
+                document.getElementById('createUserError').textContent = 'User created but failed to assign role. Please assign role manually.';
+                document.getElementById('createUserError').classList.remove('d-none');
+            }
+        }
+
+        // Success!
+        document.getElementById('createUserSuccess').textContent = `User "${username}" created successfully!`;
+        document.getElementById('createUserSuccess').classList.remove('d-none');
+
+        // Reset form
+        document.getElementById('createUserForm').reset();
+
+        // Reload users table
+        await loadUsers();
+
+        // Close modal after 2 seconds
+        setTimeout(() => {
+            bootstrap.Modal.getInstance(document.getElementById('createUserModal')).hide();
+            document.getElementById('createUserSuccess').classList.add('d-none');
+        }, 2000);
+
+    } catch (error) {
+        console.error('Failed to create user:', error);
+        document.getElementById('createUserError').textContent = 'Failed to create user: ' + error.message;
+        document.getElementById('createUserError').classList.remove('d-none');
     }
 }
 
