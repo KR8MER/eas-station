@@ -261,6 +261,13 @@ tracks releases under the 2.x series.
 - Prevented the LED fallback initializer from raising a `NameError` when the optional
   controller module is missing so deployments without sign hardware continue to boot.
 
+## [2.4.1] - 2025-11-09
+### Fixed
+- **Resolved production nginx image regressions** - Ensured HTTPS container bundles required tooling and static assets
+  - Added `certbot` to nginx Docker image so Let's Encrypt provisioning no longer fails with `certbot: not found`
+  - Copied repository `static/` directory into the image to stop 404 errors for CSS, JS, and image assets
+  - Updated nginx configuration to use the modern `http2 on;` directive and silence deprecation warnings during startup
+
 ## [2.3.12] - 2025-11-15
 ### Fixed
 - Hardened admin location validation so statewide SAME/FIPS codes are always accepted and labelled consistently when saving.
@@ -426,3 +433,52 @@ tracks releases under the 2.x series.
 - Bumped the default `APP_BUILD_VERSION` to 2.3.0 across the application and sample
   environment template so deployments surface the new release number.
 
+## [2.4.8] - 2025-11-09
+### Fixed
+- Verify existing certificates against the system trust store and expiration before skipping issuance, so stale self-signed chains are purged and a new ACME request runs on startup.
+- Log detailed reasons when certificate validation fails and remove the associated material, making it obvious when fallback artifacts block public issuance.
+
+## [2.4.7] - 2025-11-09
+### Fixed
+- Detect existing certificates issued by anything other than Let's Encrypt (including legacy self-signed chains)
+  and automatically purge them so startup always retries public issuance instead of reusing stale fallbacks.
+- Extend the certificate cleanup routine to treat unknown issuers as invalid, guaranteeing that deployments replace
+  outdated self-signed material with a fresh ACME request on every boot.
+
+## [2.4.6] - 2025-11-09
+### Fixed
+- Remove any lingering self-signed certificate directories (including suffixed variants) on
+  container startup so stale fallbacks are purged before new issuance attempts.
+- Extend the certificate purge routine to clean historical self-signed material before certbot
+  runs, preventing nginx from reusing temporary chains across restarts.
+
+## [2.4.5] - 2025-11-09
+### Fixed
+- Purge the domain's existing `/etc/letsencrypt` material whenever a self-signed
+  fallback is detected so administrators no longer need to manually delete
+  leftover files before retrying ACME issuance.
+- Force certbot to request a fresh certificate for self-signed domains by
+  assigning a stable certificate name and forcing renewal so nginx replaces
+  fallback chains during the next startup sequence.
+
+## [2.4.4] - 2025-11-09
+### Fixed
+- Detect legacy self-signed fallback certificates by inspecting the existing fullchain.pem and
+  purge them before retrying Let's Encrypt so deployments stop serving stale fallback chains
+  from earlier releases.
+- Remove invalid certificate files prior to issuing new ones so nginx never launches with the
+  leftover self-signed materials while ACME runs.
+
+## [2.4.3] - 2025-11-09
+### Fixed
+- Detect previously generated self-signed certificates and automatically retry Let's Encrypt
+  issuance so production domains replace fallback certs on the next start.
+- Tag self-signed fallbacks with a marker file and clear it after successful issuance to avoid
+  skipping renewal attempts on subsequent container restarts.
+
+## [2.4.2] - 2025-11-09
+### Fixed
+- Provision certbot in the nginx container via Python's package manager so Let's Encrypt
+  requests no longer fail with `certbot: not found`.
+- Replaced bash-specific `[[ ... ]]` usage in the nginx initialization script with
+  POSIX-compatible logic to maintain reliable self-signed fallback handling.
