@@ -103,8 +103,17 @@ def get_device_capabilities(driver: str, device_args: Optional[Dict[str, str]] =
         return None
 
     try:
-        args = device_args or {}
-        args["driver"] = driver
+        # Build device args - prioritize serial over device_id to avoid conflicts
+        args = {"driver": driver}
+
+        if device_args:
+            # If serial is provided, use ONLY serial (don't mix with device_id)
+            if "serial" in device_args and device_args["serial"]:
+                args["serial"] = device_args["serial"]
+            # Use device_id only if no serial is provided
+            elif "device_id" in device_args and device_args["device_id"]:
+                args["device_id"] = device_args["device_id"]
+                args["serial"] = device_args["device_id"]
 
         device = SoapySDR.Device(args)
 

@@ -67,6 +67,9 @@ Then open http://localhost:5000 in your browser.
 - **[📘 User Guide](docs/guides/HELP.md)**
   Daily operations, alert management, hardware
 
+- **[📡 SDR Setup Guide](docs/SDR_SETUP.md)**
+  USB device passthrough, troubleshooting, udev rules
+
 - **[🔧 Admin Guide](docs/guides/PORTAINER_DEPLOYMENT.md)**
   Deployment, database, maintenance
 

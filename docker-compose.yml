@@ -48,12 +48,18 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     devices:
+      # SDR Device Passthrough
+      # This passes ALL USB devices to the container for SDR access
+      # For dedicated SDR hardware, this is the recommended configuration
+      # For specific device passthrough, see docs/SDR_SETUP.md
       - /dev/bus/usb:/dev/bus/usb
+
+      # NVMe Device Passthrough (optional)
       # Uncomment the following lines if you have NVMe drives and want SMART monitoring:
       # - /dev/nvme0:/dev/nvme0      # NVMe controller for SMART monitoring
       # - /dev/nvme0n1:/dev/nvme0n1  # NVMe namespace (adjust nvme0n1 to your device)
     cap_add:
-      - SYS_RAWIO  # Required for SMART monitoring
+      - SYS_RAWIO  # Required for SDR hardware access and SMART monitoring
     security_opt:
       - no-new-privileges:true
     depends_on:
@@ -86,12 +92,18 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     devices:
+      # SDR Device Passthrough
+      # This passes ALL USB devices to the container for SDR access
+      # For dedicated SDR hardware, this is the recommended configuration
+      # For specific device passthrough, see docs/SDR_SETUP.md
       - /dev/bus/usb:/dev/bus/usb
+
+      # NVMe Device Passthrough (optional)
       # Uncomment the following lines if you have NVMe drives and want SMART monitoring:
       # - /dev/nvme0:/dev/nvme0      # NVMe controller for SMART monitoring
       # - /dev/nvme0n1:/dev/nvme0n1  # NVMe namespace (adjust nvme0n1 to your device)
     cap_add:
-      - SYS_RAWIO  # Required for SMART monitoring
+      - SYS_RAWIO  # Required for SDR hardware access and SMART monitoring
     security_opt:
       - no-new-privileges:true
 
@@ -132,12 +144,18 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     devices:
+      # SDR Device Passthrough
+      # This passes ALL USB devices to the container for SDR access
+      # For dedicated SDR hardware, this is the recommended configuration
+      # For specific device passthrough, see docs/SDR_SETUP.md
       - /dev/bus/usb:/dev/bus/usb
+
+      # NVMe Device Passthrough (optional)
       # Uncomment the following lines if you have NVMe drives and want SMART monitoring:
       # - /dev/nvme0:/dev/nvme0      # NVMe controller for SMART monitoring
       # - /dev/nvme0n1:/dev/nvme0n1  # NVMe namespace (adjust nvme0n1 to your device)
     cap_add:
-      - SYS_RAWIO  # Required for SMART monitoring
+      - SYS_RAWIO  # Required for SDR hardware access and SMART monitoring
     security_opt:
       - no-new-privileges:true
 
