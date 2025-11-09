@@ -121,6 +121,7 @@ nav:
   - Home: README.md
   - Documentation Index: INDEX.md
   - User Guides:
+      - Setup Instructions: guides/SETUP_INSTRUCTIONS.md
       - Help & Operations: guides/HELP.md
       - Portainer Deployment: guides/PORTAINER_DEPLOYMENT.md
       - Database Fixes: guides/DATABASE_CONSISTENCY_FIXES.md
@@ -129,10 +130,17 @@ nav:
       - Radio USB Passthrough: guides/radio_usb_passthrough.md
       - SDR Setup Guide: guides/sdr_setup_guide.md
       - One Button Upgrade: guides/one_button_upgrade.md
+      - Audio Monitoring Dashboard: audio/AUDIO_MONITORING.md
   - Development:
       - Developer Guidelines: development/AGENTS.md
       - Git Workflow: development/git_workflow.md
       - Contributing: process/CONTRIBUTING.md
+  - Deployment:
+      - Audio Hardware: deployment/audio_hardware.md
+      - Post Install Checklist: deployment/post_install.md
+      - Portainer Quick Start: deployment/portainer/PORTAINER_QUICK_START.md
+      - Portainer Database Setup: deployment/portainer/PORTAINER_DATABASE_SETUP.md
+      - Portainer Network Setup: deployment/portainer/PORTAINER_NETWORK_SETUP.md
   - Architecture:
       - System Architecture: architecture/SYSTEM_ARCHITECTURE.md
       - Data Flow Sequences: architecture/DATA_FLOW_SEQUENCES.md
@@ -147,6 +155,7 @@ nav:
   - Reference:
       - About: reference/ABOUT.md
       - Changelog: reference/CHANGELOG.md
+      - Feature Matrix: reference/FEATURE_MATRIX.md
       - Dependency Attribution: reference/dependency_attribution.md
   - Roadmap:
       - DASDEC3 Comparison: roadmap/DASDEC3_COMPARISON.md

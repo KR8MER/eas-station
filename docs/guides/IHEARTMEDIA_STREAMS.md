@@ -327,7 +327,7 @@ When monitoring iHeartMedia or any broadcast stations:
 
 ## Related Documentation
 
-- [AUDIO_MONITORING.md](../../AUDIO_MONITORING.md) - Main audio monitoring guide
+- [AUDIO_MONITORING.md](../audio/AUDIO_MONITORING.md) - Main audio monitoring guide
 - [PROFESSIONAL_AUDIO_SUBSYSTEM.md](../PROFESSIONAL_AUDIO_SUBSYSTEM.md) - Architecture details
 - [AUDIO_SYSTEM_ACCESS_GUIDE.md](../AUDIO_SYSTEM_ACCESS_GUIDE.md) - API reference
 

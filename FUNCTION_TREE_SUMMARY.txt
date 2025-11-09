@@ -223,7 +223,7 @@ RELATED DOCUMENTATION
 
 See Also:
   → README.md - Project overview & setup
-  → SECURITY_FIXES.md - Recent security updates
+  → docs/archive/2025/SECURITY_FIXES.md - Historical security updates
   → KNOWN_BUGS.md - Known issues & workarounds
   → CHANGELOG - Version history
   → docs/ - Complete documentation directory
