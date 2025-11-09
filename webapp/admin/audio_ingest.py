@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Flask, jsonify, render_template, request, current_app
 from sqlalchemy import desc
 
 from app_core.extensions import db
-from app_core.models import AudioAlert, AudioHealthStatus, AudioSourceMetrics, AudioSourceConfigDB
+from app_core.models import (
+    AudioAlert,
+    AudioHealthStatus,
+    AudioSourceMetrics,
+    AudioSourceConfigDB,
+    RadioReceiver,
+)
 from app_core.audio import AudioIngestController
 from app_core.audio.ingest import AudioSourceConfig, AudioSourceType, AudioSourceStatus
 from app_core.audio.sources import create_audio_source
@@ -316,6 +323,261 @@ def _get_icecast_stream_url(source_name: str) -> Optional[str]:
         return None
 
     return None
+
+
+def _derive_sdr_source_name(identifier: str) -> str:
+    """Generate a deterministic audio source name for a receiver identifier."""
+
+    slug = re.sub(r"[^a-z0-9]+", "-", identifier.strip().lower()).strip("-")
+    if not slug:
+        slug = "receiver"
+    return f"sdr-{slug}"
+
+
+def _recommend_audio_stream(receiver: RadioReceiver) -> Tuple[int, int]:
+    """Return (sample_rate, channels) best suited for the receiver's modulation."""
+
+    modulation = (receiver.modulation_type or "IQ").upper()
+
+    if modulation in {"FM", "WFM"}:
+        return (48000 if receiver.stereo_enabled else 32000, 2 if receiver.stereo_enabled else 1)
+    if modulation in {"AM", "NFM"}:
+        return 24000, 1
+
+    # Default to full-bandwidth monitoring
+    return 44100, 1
+
+
+def _format_receiver_frequency(frequency_hz: float) -> str:
+    """Format an arbitrary receiver frequency for human-readable display."""
+
+    if frequency_hz >= 1_000_000:
+        return f"{frequency_hz / 1_000_000:.3f} MHz"
+    if frequency_hz >= 1_000:
+        return f"{frequency_hz / 1_000:.0f} kHz"
+    return f"{frequency_hz:.0f} Hz"
+
+
+def _base_radio_metadata(receiver: RadioReceiver, source_name: str) -> Dict[str, Any]:
+    """Build baseline metadata payload for SDR-backed audio sources."""
+
+    frequency_hz = float(receiver.frequency_hz or 0.0)
+    frequency_mhz = frequency_hz / 1_000_000 if frequency_hz else 0.0
+    return {
+        'receiver_identifier': receiver.identifier,
+        'receiver_display_name': receiver.display_name,
+        'receiver_driver': receiver.driver,
+        'receiver_frequency_hz': frequency_hz,
+        'receiver_frequency_mhz': round(frequency_mhz, 6),
+        'receiver_frequency_display': _format_receiver_frequency(frequency_hz) if frequency_hz else None,
+        'receiver_modulation': (receiver.modulation_type or "IQ").upper(),
+        'receiver_audio_output': bool(receiver.audio_output),
+        'receiver_auto_start': bool(receiver.auto_start),
+        'source_category': 'sdr',
+        'icecast_mount': f"/{source_name}",
+    }
+
+
+def list_radio_managed_audio_sources() -> List[AudioSourceConfigDB]:
+    """Return AudioSourceConfig rows that are managed automatically for SDR receivers."""
+
+    configs = AudioSourceConfigDB.query.filter_by(source_type=AudioSourceType.SDR.value).all()
+    managed: List[AudioSourceConfigDB] = []
+    for config in configs:
+        params = config.config_params or {}
+        if params.get('managed_by') == 'radio':
+            managed.append(config)
+    return managed
+
+
+def remove_radio_managed_audio_source(
+    source_name: str,
+    *,
+    commit: bool = True,
+    stop_stream: bool = True,
+) -> bool:
+    """Remove a radio-managed SDR audio source from memory, streaming, and database."""
+
+    db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+    if not db_config:
+        return False
+
+    params = db_config.config_params or {}
+    if params.get('managed_by') != 'radio':
+        return False
+
+    controller = _audio_controller
+    if controller and source_name in controller._sources:
+        controller.remove_source(source_name)
+
+    if stop_stream:
+        auto_streaming = _get_auto_streaming_service()
+        if auto_streaming:
+            try:
+                auto_streaming.remove_source(source_name)
+            except Exception as exc:
+                logger.warning('Failed to stop Icecast stream for %s: %s', source_name, exc)
+
+    db.session.delete(db_config)
+    if commit:
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
+
+    logger.info('Removed SDR audio monitor %s', source_name)
+    return True
+
+
+def ensure_sdr_audio_monitor_source(
+    receiver: RadioReceiver,
+    *,
+    start_immediately: Optional[bool] = None,
+    commit: bool = True,
+) -> Dict[str, Any]:
+    """Ensure an SDR receiver has a corresponding audio monitor source configured."""
+
+    source_name = _derive_sdr_source_name(receiver.identifier)
+    should_enable = bool(receiver.audio_output and receiver.enabled)
+
+    if not should_enable:
+        removed = remove_radio_managed_audio_source(source_name, commit=commit)
+        return {
+            'source_name': source_name,
+            'created': False,
+            'updated': False,
+            'started': False,
+            'icecast_started': False,
+            'removed': removed,
+        }
+
+    controller = _get_audio_controller()
+    sample_rate, channels = _recommend_audio_stream(receiver)
+    buffer_size = 4096 if channels == 1 else 8192
+    silence_threshold = -60.0
+    silence_duration = 5.0
+
+    device_params = {
+        'receiver_id': receiver.identifier,
+        'receiver_display_name': receiver.display_name,
+        'receiver_driver': receiver.driver,
+        'receiver_frequency_hz': float(receiver.frequency_hz or 0.0),
+        'receiver_modulation': (receiver.modulation_type or 'IQ').upper(),
+    }
+
+    config_params = {
+        'sample_rate': sample_rate,
+        'channels': channels,
+        'buffer_size': buffer_size,
+        'silence_threshold_db': silence_threshold,
+        'silence_duration_seconds': silence_duration,
+        'device_params': device_params,
+        'managed_by': 'radio',
+    }
+
+    start_flag = bool(start_immediately if start_immediately is not None else receiver.auto_start)
+
+    freq_display = _format_receiver_frequency(float(receiver.frequency_hz or 0.0)) if receiver.frequency_hz else "Unknown"
+    description = f"SDR monitor for {receiver.display_name} · {freq_display}"
+
+    created = False
+    updated = False
+
+    db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+    priority = 10
+
+    if db_config is None:
+        db_config = AudioSourceConfigDB(
+            name=source_name,
+            source_type=AudioSourceType.SDR.value,
+            config_params=config_params,
+            priority=priority,
+            enabled=True,
+            auto_start=start_flag,
+            description=description,
+        )
+        db.session.add(db_config)
+        created = True
+    else:
+        if (db_config.config_params or {}) != config_params:
+            db_config.config_params = config_params
+            updated = True
+        if not db_config.enabled:
+            db_config.enabled = True
+            updated = True
+        if db_config.auto_start != start_flag:
+            db_config.auto_start = start_flag
+            updated = True
+        if (db_config.description or '') != description:
+            db_config.description = description
+            updated = True
+        if db_config.priority != priority:
+            db_config.priority = priority
+            updated = True
+        if db_config.source_type != AudioSourceType.SDR.value:
+            db_config.source_type = AudioSourceType.SDR.value
+            updated = True
+
+    if commit and (created or updated):
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
+
+    auto_streaming = _get_auto_streaming_service()
+
+    if controller._sources.get(source_name):
+        if auto_streaming:
+            try:
+                auto_streaming.remove_source(source_name)
+            except Exception as exc:
+                logger.debug('Auto-stream removal for %s during reconfigure failed: %s', source_name, exc)
+        controller.remove_source(source_name)
+
+    runtime_config = AudioSourceConfig(
+        source_type=AudioSourceType.SDR,
+        name=source_name,
+        enabled=True,
+        priority=priority,
+        sample_rate=sample_rate,
+        channels=channels,
+        buffer_size=buffer_size,
+        silence_threshold_db=silence_threshold,
+        silence_duration_seconds=silence_duration,
+        device_params=device_params,
+    )
+
+    adapter = create_audio_source(runtime_config)
+    metadata = adapter.metrics.metadata or {}
+    metadata.update({k: v for k, v in _base_radio_metadata(receiver, source_name).items() if v is not None})
+    adapter.metrics.metadata = metadata
+    controller.add_source(adapter)
+
+    started = False
+    icecast_started = False
+
+    if start_flag:
+        try:
+            started = controller.start_source(source_name)
+        except Exception as exc:
+            logger.warning('Failed to auto-start SDR audio source %s: %s', source_name, exc)
+        else:
+            if started and auto_streaming and auto_streaming.is_available():
+                try:
+                    icecast_started = bool(auto_streaming.add_source(source_name, adapter))
+                except Exception as exc:
+                    logger.warning('Failed to start Icecast stream for %s: %s', source_name, exc)
+
+    return {
+        'source_name': source_name,
+        'created': created,
+        'updated': updated,
+        'started': started,
+        'icecast_started': icecast_started,
+        'removed': False,
+    }
 
 
 def _sanitize_metadata_value(value: Any) -> Any:

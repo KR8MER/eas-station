@@ -86,6 +86,29 @@ class SDRSourceAdapter(AudioSourceAdapter):
         if db_receiver:
             self._receiver_config = db_receiver.to_receiver_config()
 
+            metadata = self.metrics.metadata or {}
+            metadata.setdefault('receiver_identifier', receiver_id)
+            metadata.setdefault('receiver_display_name', db_receiver.display_name)
+            metadata.setdefault('receiver_driver', db_receiver.driver)
+            metadata.setdefault('source_category', 'sdr')
+            metadata.setdefault('icecast_mount', f"/{self.config.name}")
+            metadata.setdefault('receiver_audio_output', bool(db_receiver.audio_output))
+            metadata.setdefault('receiver_auto_start', bool(db_receiver.auto_start))
+
+            freq_hz = float(db_receiver.frequency_hz or 0.0)
+            if freq_hz and 'receiver_frequency_hz' not in metadata:
+                metadata['receiver_frequency_hz'] = freq_hz
+                metadata['receiver_frequency_mhz'] = round(freq_hz / 1_000_000, 6)
+                if freq_hz >= 1_000_000:
+                    metadata['receiver_frequency_display'] = f"{freq_hz / 1_000_000:.3f} MHz"
+                elif freq_hz >= 1_000:
+                    metadata['receiver_frequency_display'] = f"{freq_hz / 1_000:.0f} kHz"
+                else:
+                    metadata['receiver_frequency_display'] = f"{freq_hz:.0f} Hz"
+
+            metadata.setdefault('receiver_modulation', (self._receiver_config.modulation_type or 'IQ').upper())
+            self.metrics.metadata = metadata
+
             # Create demodulator if audio output is enabled and modulation is not IQ
             if self._receiver_config.audio_output and self._receiver_config.modulation_type != 'IQ':
                 demod_config = DemodulatorConfig(

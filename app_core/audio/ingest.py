@@ -90,7 +90,7 @@ class AudioSourceAdapter(ABC):
             frames_captured=0,
             silence_detected=False,
             buffer_utilization=0.0,
-            metadata=None
+            metadata={'source_category': config.source_type.value}
         )
         self._stop_event = threading.Event()
         self._capture_thread: Optional[threading.Thread] = None
