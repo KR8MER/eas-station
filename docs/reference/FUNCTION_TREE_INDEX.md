@@ -1,7 +1,7 @@
 # EAS Station - Function Tree Index & Quick Start
 
 **Generated:** 2025-11-06  
-**Main Document:** [`FUNCTION_TREE.md`](/FUNCTION_TREE.md) (1,211 lines)  
+**Main Document:** [`FUNCTION_TREE.md`](FUNCTION_TREE.md) (1,211 lines)  
 **Summary:** [`FUNCTION_TREE_SUMMARY.txt`](/FUNCTION_TREE_SUMMARY.txt) (147 lines)
 
 ---
@@ -12,7 +12,7 @@
 
 **👨‍💻 Developers Adding Features**
 1. Read the **Module Dependency Graph** (section near end)
-2. Locate your module in **FUNCTION_TREE.md**
+2. Locate your module in **[FUNCTION_TREE.md](FUNCTION_TREE.md)**
 3. Find related classes/functions by searching the document
 4. Check **API Routes** section for endpoint patterns
 
@@ -238,7 +238,7 @@ scripts/
 
 ## Search Tips
 
-**To find something quickly in FUNCTION_TREE.md:**
+**To find something quickly in [FUNCTION_TREE.md](FUNCTION_TREE.md):**
 
 1. **Function by name:** `Ctrl+F` + function name
 2. **Class methods:** Search for `| function_name |`
@@ -287,7 +287,7 @@ scripts/
 
 ## When to Use This Document
 
-**Use FUNCTION_TREE.md when:**
+**Use [FUNCTION_TREE.md](FUNCTION_TREE.md) when:**
 - Learning the codebase structure
 - Finding a specific function/class
 - Understanding a module's capabilities
@@ -302,7 +302,7 @@ scripts/
 - Understanding document structure
 - Checking statistics
 
-**Use FUNCTION_TREE_INDEX.md (this file) when:**
+**Use [FUNCTION_TREE_INDEX.md](FUNCTION_TREE_INDEX.md) (this file) when:**
 - Starting a task (quick task lookup)
 - Navigating large functions/classes
 - Finding related components
@@ -328,7 +328,7 @@ scripts/
 | FUNCTION_TREE_SUMMARY.txt | Overview & statistics |
 | README.md | Project setup & overview |
 | docs/archive/2025/SECURITY_FIXES.md | Historical security updates |
-| KNOWN_BUGS.md | Known issues |
+| [KNOWN_BUGS.md](KNOWN_BUGS.md) | Known issues |
 | docs/ | Complete documentation |
 | CHANGELOG | Version history |
 
@@ -340,17 +340,17 @@ scripts/
 1. Read README.md (general overview)
 2. Skim this index (quick navigation)
 3. Review FUNCTION_TREE_SUMMARY.txt (statistics)
-4. Open FUNCTION_TREE.md in editor (bookmark it!)
+4. Open [FUNCTION_TREE.md](FUNCTION_TREE.md) in editor (bookmark it!)
 5. Find your module of interest using table of contents
 
 ### For Quick Questions:
-1. Use Ctrl+F to search FUNCTION_TREE.md
+1. Use Ctrl+F to search [FUNCTION_TREE.md](FUNCTION_TREE.md)
 2. Check FUNCTION_TREE_SUMMARY.txt for statistics
 3. Review related section in full document
 
 ### For Code Navigation:
 1. Find your file in module structure (above)
-2. Search for class/function in FUNCTION_TREE.md
+2. Search for class/function in [FUNCTION_TREE.md](FUNCTION_TREE.md)
 3. Note line number
 4. Jump to file & line number in editor
 

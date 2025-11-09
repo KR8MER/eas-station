@@ -348,6 +348,163 @@ curl http://localhost:5000/health
 - **Document new variables** - Add to both `.env.example` and README
 - **Provide sensible defaults** - Make local development easy
 
+### Adding New Environment Variables
+
+When adding a new environment variable to the system, you MUST update these files:
+
+1. **`.env.example`** - Add the variable with documentation and a default value
+2. **`stack.env`** - Add the variable with the default value for Docker deployments
+3. **`docker-entrypoint.sh`** - Add the variable to the initialization section if it needs to be available during container startup
+4. **`webapp/admin/environment.py`** - Add the variable to the appropriate category in `ENV_CATEGORIES` to make it accessible in the web UI settings page
+5. **`app_utils/setup_wizard.py`** - If the variable is part of initial setup, add it to the appropriate wizard section with matching validation
+
+### Environment Variable Validation
+
+**CRITICAL:** Validation rules MUST match between `webapp/admin/environment.py` and `app_utils/setup_wizard.py`. Users should not be able to enter invalid values in either interface.
+
+When adding validation:
+- **SECRET_KEY**: Use `_validate_secret_key` in setup wizard (min 32 chars), `minlength: 32, pattern: ^[A-Za-z0-9]{32,}$` in environment.py
+- **Port numbers**: Use `_validate_port` in setup wizard, `min: 1, max: 65535` in environment.py
+- **IP addresses**: Use `_validate_ipv4` in setup wizard, `pattern: IPv4 regex` in environment.py
+- **GPIO pins**: Use `_validate_gpio_pin` in setup wizard, `min: 2, max: 27` in environment.py
+- **Station IDs**: Use `_validate_station_id` in setup wizard, `pattern: ^[A-Z0-9/]{1,8}$` in environment.py
+- **Originator codes**: Use dropdown in both (4 options: WXR, EAS, PEP, CIV)
+
+### Variable Types in environment.py
+
+- `text` - Text input field
+- `number` - Numeric input with optional min/max/step
+- `password` - Password field with masking (set `sensitive: True`)
+- `select` - Dropdown with predefined options
+- `textarea` - Multi-line text input
+
+**IMPORTANT:** Never use `boolean` type. Always use `select` with `options: ['false', 'true']` for yes/no or true/false values. This prevents end users from inputting invalid responses and breaking functionality.
+
+```python
+# ❌ WRONG - Don't use boolean type
+{
+    'key': 'SOME_FLAG',
+    'type': 'boolean',
+    'default': 'false',
+}
+
+# ✅ CORRECT - Use select with explicit options
+{
+    'key': 'SOME_FLAG',
+    'type': 'select',
+    'options': ['false', 'true'],
+    'default': 'false',
+}
+```
+
+### Input Validation Best Practices
+
+**ALWAYS add validation attributes to prevent invalid input.**
+
+**Important Principle:** If a field has only a fixed set of valid values (e.g., 4 originator codes, specific status codes), use a `select` dropdown instead of a `text` field with regex validation. This provides the best user experience and prevents any possibility of invalid input.
+
+**Port Numbers:**
+```python
+{
+    'key': 'SOME_PORT',
+    'label': 'Port',
+    'type': 'number',
+    'default': '8080',
+    'min': 1,          # Ports start at 1
+    'max': 65535,      # Maximum valid port
+}
+```
+
+**IP Addresses:**
+```python
+{
+    'key': 'SOME_IP',
+    'label': 'IP Address',
+    'type': 'text',
+    'pattern': '^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$',
+    'title': 'Must be a valid IPv4 address (e.g., 192.168.1.100)',
+    'placeholder': '192.168.1.100',
+}
+```
+
+**GPIO Pins (Raspberry Pi BCM):**
+```python
+{
+    'key': 'GPIO_PIN',
+    'label': 'GPIO Pin',
+    'type': 'number',
+    'min': 2,    # Valid GPIO range
+    'max': 27,   # Standard BCM numbering
+    'placeholder': 'e.g., 17',
+}
+```
+
+### Conditional Field Visibility
+
+Use the `category` attribute to group fields that should be disabled when their parent feature is disabled.
+
+**Pattern:** When a feature can be enabled/disabled, use this structure:
+1. **Enable/Disable Field** - A select dropdown or text field that controls enablement
+2. **Dependent Fields** - Fields with `category` attribute linking them to the parent
+
+**Example - Feature with Enable/Disable Toggle:**
+```python
+# Parent enable/disable field
+{
+    'key': 'EAS_BROADCAST_ENABLED',
+    'label': 'Enable EAS Broadcasting',
+    'type': 'select',
+    'options': ['false', 'true'],
+    'default': 'false',
+    'description': 'Enable SAME/EAS audio generation',
+},
+
+# Dependent fields (will be grayed out when EAS_BROADCAST_ENABLED is false)
+{
+    'key': 'EAS_STATION_ID',
+    'label': 'Station ID',
+    'type': 'text',
+    'category': 'eas_enabled',  # Links to parent feature
+},
+```
+
+**Category Naming Convention:**
+- `eas_enabled` - EAS broadcast feature
+- `gpio_enabled` - GPIO control feature
+- `led_enabled` - LED display feature
+- `vfd_enabled` - VFD display feature
+- `email` - Email notification sub-fields
+- `azure_openai` - Azure OpenAI TTS sub-fields
+
+### Variable Categories
+
+Variables are organized into categories in `webapp/admin/environment.py`:
+
+- **core** - Essential application configuration (SECRET_KEY, LOG_LEVEL, etc.)
+- **database** - PostgreSQL connection settings
+- **polling** - CAP feed polling configuration
+- **location** - Default location and coverage area
+- **eas** - EAS broadcast settings
+- **gpio** - GPIO relay control
+- **tts** - Text-to-speech providers
+- **led** - LED display configuration
+- **vfd** - VFD display configuration
+- **notifications** - Email and SMS alerts
+- **performance** - Caching and worker settings
+- **docker** - Container and infrastructure settings
+- **icecast** - Icecast streaming server configuration
+
+Choose the most appropriate category for your variable, or create a new one if needed.
+
+### Docker Compose Files - CRITICAL
+
+**IMPORTANT:** When editing Docker Compose files, you MUST update BOTH files:
+
+1. **`docker-compose.yml`** - Main compose file
+2. **`docker-compose.embedded-db.yml`** - Embedded database variant
+
+These files have parallel structure but different configurations (external vs embedded database). Any changes to service definitions, environment variables, ports, volumes, etc. must be applied to **BOTH** files to maintain consistency.
+
 ---
 
 ## 📚 Documentation Standards
@@ -380,6 +537,51 @@ def calculate_coverage_percentages(alert_id, intersections):
 - **AGENTS.md** - New patterns, standards, or guidelines
 - **Inline comments** - Complex logic that isn't obvious
 - **Docstrings** - All public functions and classes
+
+### Documentation Location Policy
+
+**CRITICAL**: All documentation files MUST be located in the `/docs` folder, NOT in the repository root.
+
+**Directory Structure:**
+- `/docs/development/` - Development guidelines, coding standards, agent instructions
+- `/docs/guides/` - User guides, setup instructions, how-to documents
+- `/docs/reference/` - Technical reference materials, function trees, known bugs
+- `/docs/security/` - Security analysis, implementation checklists, audit reports
+- `/docs/architecture/` - System architecture, theory of operation
+- `/docs/process/` - Contributing guidelines, PR templates, issue templates
+- `/docs/frontend/` - UI/UX documentation, component libraries
+- `/docs/hardware/` - Hardware integration, GPIO, SDR setup
+- `/docs/audio/` - Audio system documentation
+- `/docs/compliance/` - FCC compliance, regulatory documentation
+- `/docs/deployment/` - Deployment guides, Docker, infrastructure
+- `/docs/roadmap/` - Project roadmap, feature planning
+- `/docs/runbooks/` - Operational procedures, troubleshooting
+
+**Files That Stay in Root:**
+- `README.md` - Project overview and quick start (GitHub standard)
+- `.env.example` - Environment variable template
+- `docker-compose.yml` - Docker composition files
+- `LICENSE` - License file
+
+**When Creating New Documentation:**
+1. **Choose the appropriate subdirectory** based on the content type
+2. **Use descriptive filenames** in UPPERCASE_WITH_UNDERSCORES.md format
+3. **Update relevant index files** (like `docs/INDEX.md`)
+4. **Link from related documents** to ensure discoverability
+5. **NEVER create .md files in the root** unless they are README.md
+
+**When Moving/Reorganizing Documentation:**
+1. **Use `git mv`** to preserve file history
+2. **Update all references** in other markdown files
+3. **Update navigation links** in index files
+4. **Test all links** to ensure they're not broken
+
+**Examples:**
+- ✅ `docs/guides/SETUP_WIZARD.md` - Setup guide
+- ✅ `docs/reference/KNOWN_BUGS.md` - Bug list
+- ✅ `docs/security/SECURITY_ANALYSIS_INDEX.md` - Security docs
+- ❌ `SETUP_GUIDE.md` (in root) - Should be in docs/guides/
+- ❌ `BUG_LIST.md` (in root) - Should be in docs/reference/
 
 ---
 
@@ -625,14 +827,14 @@ Simplifies codebase by ~60 lines.
 
 For quick navigation and understanding of the codebase structure, refer to the comprehensive function tree documentation:
 
-- **`/FUNCTION_TREE.md`** (Primary Reference)
+- **`docs/reference/FUNCTION_TREE.md`** (Primary Reference)
   - Complete catalog of all major modules, classes, and functions
   - 24 database models, 150+ functions, 98+ classes documented
   - Every entry includes file path, line number, and signature
   - Module dependency graph and database schema overview
   - **Use this to:** Find where specific functions are defined, understand module organization
 
-- **`/FUNCTION_TREE_INDEX.md`** (Quick Reference)
+- **`docs/reference/FUNCTION_TREE_INDEX.md`** (Quick Reference)
   - Quick navigation guide for different user types (developers, agents, operators)
   - Task-based lookup table (e.g., "Add API endpoint" → relevant files)
   - Complete module file structure tree
@@ -648,25 +850,25 @@ For quick navigation and understanding of the codebase structure, refer to the c
 ### How to Use Function Tree for Development
 
 **When adding a new feature:**
-1. Search FUNCTION_TREE_INDEX.md for similar features
+1. Search [docs/reference/FUNCTION_TREE_INDEX.md](../reference/FUNCTION_TREE_INDEX.md) for similar features
 2. Identify the module pattern (e.g., routes in `webapp/`, models in `app_core/`)
 3. Follow the established patterns from similar functions
-4. Update FUNCTION_TREE.md if you add new significant functions or modules
+4. Update [docs/reference/FUNCTION_TREE.md](../reference/FUNCTION_TREE.md) if you add new significant functions or modules
 
 **When fixing a bug:**
-1. Search FUNCTION_TREE.md for the function/class mentioned in the bug report
+1. Search [docs/reference/FUNCTION_TREE.md](../reference/FUNCTION_TREE.md) for the function/class mentioned in the bug report
 2. Note the file path and line number
 3. Check related functions in the same module
 4. Look for similar patterns in other modules for consistency
 
 **When exploring unfamiliar code:**
 1. Start with FUNCTION_TREE_SUMMARY.txt to understand subsystem coverage
-2. Use FUNCTION_TREE_INDEX.md to find the subsystem you're interested in
-3. Dive into FUNCTION_TREE.md for detailed function signatures and locations
+2. Use [docs/reference/FUNCTION_TREE_INDEX.md](../reference/FUNCTION_TREE_INDEX.md) to find the subsystem you're interested in
+3. Dive into [docs/reference/FUNCTION_TREE.md](../reference/FUNCTION_TREE.md) for detailed function signatures and locations
 
 ### Known Bugs Documentation
 
-**`/KNOWN_BUGS.md`** contains a comprehensive list of identified issues:
+**`docs/reference/KNOWN_BUGS.md`** contains a comprehensive list of identified issues:
 - RBAC (Role-Based Access Control) issues
 - Text-to-Speech (TTS) configuration issues
 - Display Screens page issues
@@ -675,9 +877,9 @@ For quick navigation and understanding of the codebase structure, refer to the c
 - Docker/Portainer deployment issues
 
 **Before starting any work:**
-1. Check KNOWN_BUGS.md to see if your issue is already documented
-2. If fixing a bug, remove it from KNOWN_BUGS.md in your commit
-3. If discovering a new bug, add it to KNOWN_BUGS.md with detailed analysis
+1. Check [docs/reference/KNOWN_BUGS.md](../reference/KNOWN_BUGS.md) to see if your issue is already documented
+2. If fixing a bug, remove it from [docs/reference/KNOWN_BUGS.md](../reference/KNOWN_BUGS.md) in your commit
+3. If discovering a new bug, add it to [docs/reference/KNOWN_BUGS.md](../reference/KNOWN_BUGS.md) with detailed analysis
 
 ---
 
