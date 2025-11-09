@@ -1149,7 +1149,13 @@
     });
 
     // Run Diagnostics
-    runDiagnosticsBtn?.addEventListener('click', async () => {
+    runDiagnosticsBtn?.addEventListener('click', () => {
+        // Navigate to the full diagnostics page
+        window.location.href = '/settings/radio/diagnostics';
+    });
+
+    // Legacy diagnostics modal handler (kept for backwards compatibility)
+    const showLegacyDiagnostics = async () => {
         const modalElement = document.getElementById('diagnosticsModal');
         const diagnosticsModal = bootstrap.Modal.getOrCreateInstance(modalElement);
         const modalBody = document.getElementById('diagnosticsModalBody');
