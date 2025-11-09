@@ -11,15 +11,16 @@
 
 services:
   nginx:
-    image: nginx:alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    image: eas-nginx:latest
     restart: unless-stopped
     ports:
       - "80:80"    # HTTP (redirects to HTTPS)
       - "443:443"  # HTTPS
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf.template:ro
-      - ./nginx-init.sh:/docker-entrypoint.d/00-init.sh:ro
-      - certbot-conf:/etc/letsencrypt:ro
+      - certbot-conf:/etc/letsencrypt
       - certbot-www:/var/www/certbot
       - nginx-logs:/var/log/nginx
       - app-config:/app-config:ro  # Read persistent config from setup wizard
@@ -27,7 +28,6 @@ services:
       - DOMAIN_NAME=${DOMAIN_NAME:-localhost}
       - SSL_EMAIL=${SSL_EMAIL:-admin@example.com}
       - CERTBOT_STAGING=${CERTBOT_STAGING:-0}
-    entrypoint: ["/bin/sh", "/docker-entrypoint.d/00-init.sh"]
     depends_on:
       - app
     security_opt:
