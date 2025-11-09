@@ -162,12 +162,18 @@ class GPIOController:
             if config.pin in self._pins:
                 raise ValueError(f"Pin {config.pin} is already configured")
 
-            if not self._initialized:
+            self._pins[config.pin] = config
+
+            if not self._initialized or RPiGPIO is None:
+                # Record the configuration even when GPIO hardware isn't available so the
+                # application can still display configured pins in the UI.
+                self._states[config.pin] = GPIOState.ERROR
                 if self.logger:
-                    self.logger.warning(f"Cannot configure pin {config.pin}: GPIO not available")
+                    self.logger.warning(
+                        f"Configured pin {config.pin} but GPIO hardware is not available"
+                    )
                 return
 
-            self._pins[config.pin] = config
             self._states[config.pin] = GPIOState.INACTIVE
 
             # Setup the pin
