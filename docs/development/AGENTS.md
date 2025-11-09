@@ -355,8 +355,10 @@ When adding a new environment variable to the system, you MUST update these file
 1. **`.env.example`** - Add the variable with documentation and a default value
 2. **`stack.env`** - Add the variable with the default value for Docker deployments
 3. **`docker-entrypoint.sh`** - Add the variable to the initialization section if it needs to be available during container startup
-4. **`webapp/admin/environment.py`** - Add the variable to the appropriate category in `ENV_CATEGORIES` to make it accessible in the web UI settings page
+4. **`webapp/admin/environment.py`** - **REQUIRED**: Add the variable to the appropriate category in `ENV_CATEGORIES` to make it accessible in the web UI settings page. This is how users configure the system!
 5. **`app_utils/setup_wizard.py`** - If the variable is part of initial setup, add it to the appropriate wizard section with matching validation
+
+**CRITICAL**: EAS Station uses persistent configuration stored in `/app-config/.env` and managed through the web UI. **ALL** user-configurable environment variables MUST be added to `webapp/admin/environment.py`, otherwise users cannot change them without editing Docker Compose files.
 
 ### Environment Variable Validation
 
@@ -742,10 +744,15 @@ Before committing changes:
 
 ### Adding New Dependencies
 
+**CRITICAL**: When adding ANY new dependency to the project (Python libraries, system packages, Docker images, or infrastructure programs), you MUST update the documentation.
+
+#### For Python Dependencies:
+
 1. **Add to `requirements.txt`** - Include version pin
 2. **Test in Docker** - Rebuild and verify
-3. **Document if needed** - Update README if it affects users
-4. **Keep minimal** - Only add if truly necessary
+3. **Update attribution** - Add to `docs/reference/dependency_attribution.md`
+4. **Document if needed** - Update README if it affects users
+5. **Keep minimal** - Only add if truly necessary
 
 **Example:**
 ```txt
@@ -754,6 +761,37 @@ flask==2.3.3
 requests==2.31.0
 new-library==1.2.3  # Add with version
 ```
+
+#### For System Packages and Infrastructure Components:
+
+When adding system packages (apt/yum), Docker images, or infrastructure programs (nginx, certbot, redis, etc.):
+
+1. **Update Dockerfile or docker-compose.yml** - Add the package/service
+2. **Update `docs/reference/dependency_attribution.md`** - Add to "System Package Dependencies" section
+   - Package name and version
+   - Purpose and what it's used for
+   - License information
+   - Whether it's required or optional
+3. **Update `docs/reference/SYSTEM_DEPENDENCIES.md`** if it exists
+4. **Create deployment documentation** - Explain how it works and why it's needed
+5. **Attribution is mandatory** - All software used in deployment must be properly credited
+
+**Example entries for dependency_attribution.md:**
+
+```markdown
+### Infrastructure Components
+
+| Component | Version | Purpose | License |
+| --- | --- | --- | --- |
+| **nginx** | 1.25+ (Alpine) | Reverse proxy for HTTPS termination and Let's Encrypt ACME support | BSD-2-Clause |
+| **certbot** | 2.0+ | Automated Let's Encrypt SSL certificate management and renewal | Apache-2.0 |
+```
+
+**Why this matters:**
+- Open source attribution is a legal requirement for many licenses
+- Users need to understand what software is running in their deployment
+- Proper documentation helps with security audits and compliance
+- Future maintainers need to know what dependencies exist and why
 
 ---
 
