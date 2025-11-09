@@ -809,6 +809,38 @@ def after_request(response):
 # handler dynamically depending on which hook is available.  If neither hook is
 # present we fall back to running the initialization immediately within an
 # application context.
+
+def _initialize_radio_receivers():
+    """Initialize and start radio receivers from database configuration."""
+    try:
+        from app_core.extensions import get_radio_manager
+
+        # Get all configured receivers from database
+        receivers = RadioReceiver.query.filter_by(enabled=True).all()
+        if not receivers:
+            logger.info("No radio receivers configured in database")
+            return
+
+        # Get or create the radio manager
+        radio_manager = get_radio_manager()
+
+        # Configure receivers from database records
+        radio_manager.configure_from_records(receivers)
+        logger.info(f"Configured {len(receivers)} radio receiver(s) from database")
+
+        # Start all receivers that have auto_start enabled
+        auto_start_receivers = [r for r in receivers if r.auto_start]
+        if auto_start_receivers:
+            radio_manager.start_all()
+            logger.info(f"Started {len(auto_start_receivers)} radio receiver(s) with auto_start enabled")
+        else:
+            logger.info("No radio receivers have auto_start enabled")
+
+    except Exception as exc:
+        logger.error(f"Failed to initialize radio receivers: %s", exc, exc_info=True)
+        raise
+
+
 def initialize_database():
     """Create all database tables, logging any initialization failure."""
     global _db_initialized, _db_initialization_error
@@ -884,6 +916,12 @@ def initialize_database():
                 logger.info("RBAC roles and permissions initialized")
             except Exception as rbac_error:
                 logger.warning("Failed to initialize RBAC roles: %s", rbac_error)
+
+            # Initialize RadioManager with configured receivers
+            try:
+                _initialize_radio_receivers()
+            except Exception as radio_error:
+                logger.warning("Failed to initialize radio receivers: %s", radio_error)
         except OperationalError as db_error:
             _db_initialization_error = db_error
             logger.error("Database initialization failed: %s", db_error)

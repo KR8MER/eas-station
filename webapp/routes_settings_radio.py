@@ -473,13 +473,32 @@ def register(app: Flask, logger) -> None:
             receiver_instance = radio_manager.get_receiver(receiver.identifier)
 
             if not receiver_instance:
-                return jsonify({"error": "Receiver not running"}), 404
+                route_logger.warning(
+                    "Receiver instance not found in RadioManager for identifier=%s (id=%s). "
+                    "Available receivers: %s",
+                    receiver.identifier,
+                    receiver_id,
+                    list(radio_manager._receivers.keys())
+                )
+                return jsonify({
+                    "error": "Receiver not running",
+                    "hint": "Receiver may need to be started or reloaded"
+                }), 404
 
             # Get recent IQ samples
             iq_samples = receiver_instance.get_samples(num_samples=2048)
 
             if iq_samples is None or len(iq_samples) == 0:
-                return jsonify({"error": "No samples available"}), 503
+                route_logger.warning(
+                    "No samples available from receiver %s (id=%s). Status: %s",
+                    receiver.identifier,
+                    receiver_id,
+                    receiver_instance.get_status()
+                )
+                return jsonify({
+                    "error": "No samples available",
+                    "hint": "Receiver may be starting up or not locked to signal"
+                }), 503
 
             # Compute FFT
             fft_size = min(len(iq_samples), 2048)

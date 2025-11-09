@@ -126,6 +126,12 @@ class _SoapySDRReceiver(ReceiverInterface):
             raise
 
         self._handle = handle
+
+        # Initialize sample buffer BEFORE starting thread to avoid race condition
+        with self._sample_buffer_lock:
+            self._sample_buffer = handle.numpy.zeros(self._sample_buffer_size, dtype=handle.numpy.complex64)
+            self._sample_buffer_pos = 0
+
         self._running.set()
 
         thread_name = f"{self.__class__.__name__}-{self.config.identifier}"
@@ -279,10 +285,7 @@ class _SoapySDRReceiver(ReceiverInterface):
         handle = self._handle
         buffer = handle.numpy.zeros(4096, dtype=handle.numpy.complex64)
 
-        # Initialize sample buffer for real-time streaming
-        with self._sample_buffer_lock:
-            self._sample_buffer = handle.numpy.zeros(self._sample_buffer_size, dtype=handle.numpy.complex64)
-            self._sample_buffer_pos = 0
+        # Sample buffer is now initialized in start() before thread starts
 
         while self._running.is_set():
             try:
