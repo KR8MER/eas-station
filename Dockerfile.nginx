@@ -2,9 +2,13 @@ FROM nginx:alpine
 
 # Install required tools for certificate handling and envsubst
 RUN apk add --no-cache \
-    openssl \
+    bash \
     gettext \
-    bash
+    openssl \
+    python3 \
+    py3-pip \
+    ca-certificates \
+    certbot
 
 # Create necessary directories
 RUN mkdir -p /var/www/certbot /etc/nginx/conf.d
@@ -15,6 +19,9 @@ RUN chmod +x /docker-entrypoint.d/00-init.sh
 
 # Copy nginx configuration template
 COPY nginx.conf /etc/nginx/nginx.conf.template
+
+# Copy static assets that nginx serves directly
+COPY static /app/static
 
 EXPOSE 80 443
 
