@@ -50,7 +50,15 @@ else
     echo "No existing certificates found"
 
     # Check if domain is localhost or an IP address
-    if [ "$DOMAIN_NAME" = "localhost" ] || [[ "$DOMAIN_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    if [ "$DOMAIN_NAME" = "localhost" ]; then
+        LOCAL_CERT_ONLY=1
+    elif echo "$DOMAIN_NAME" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+        LOCAL_CERT_ONLY=1
+    else
+        LOCAL_CERT_ONLY=0
+    fi
+
+    if [ "$LOCAL_CERT_ONLY" -eq 1 ]; then
         echo "========================================="
         echo "WARNING: Cannot obtain Let's Encrypt certificates for localhost or IP addresses"
         echo "Generating self-signed certificate for development/testing"
