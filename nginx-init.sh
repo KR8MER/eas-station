@@ -17,6 +17,27 @@ generate_self_signed_certificate() {
     touch "$SELF_SIGNED_MARKER"
 }
 
+is_self_signed_certificate() {
+    CERT_PATH="/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem"
+
+    if [ ! -s "$CERT_PATH" ]; then
+        return 1
+    fi
+
+    SUBJECT=$(openssl x509 -in "$CERT_PATH" -noout -subject 2>/dev/null || true)
+    ISSUER=$(openssl x509 -in "$CERT_PATH" -noout -issuer 2>/dev/null || true)
+
+    if [ -z "$SUBJECT" ] || [ -z "$ISSUER" ]; then
+        return 1
+    fi
+
+    if [ "$SUBJECT" = "$ISSUER" ]; then
+        return 0
+    fi
+
+    return 1
+}
+
 # Source persistent configuration from setup wizard if it exists
 # This allows HTTPS settings to be configured through the web UI
 if [ -f "/app-config/.env" ]; then
@@ -56,19 +77,34 @@ mkdir -p /var/log/nginx
 envsubst '${DOMAIN_NAME}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
 # Check if we already have certificates
-if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ] && [ ! -f "$SELF_SIGNED_MARKER" ]; then
-    echo "SSL certificates already exist for $DOMAIN_NAME"
-    echo "Skipping certificate generation"
-else
+CURRENT_CERT_SELF_SIGNED=1
+if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
     if [ -f "$SELF_SIGNED_MARKER" ]; then
         echo "Detected previously generated self-signed certificate"
         echo "Will retry Let's Encrypt issuance for $DOMAIN_NAME"
+        CURRENT_CERT_SELF_SIGNED=1
+    elif is_self_signed_certificate; then
+        echo "Existing certificate appears to be self-signed without marker"
+        echo "Cleaning up legacy fallback before reissuing"
+        touch "$SELF_SIGNED_MARKER"
+        CURRENT_CERT_SELF_SIGNED=1
+    else
+        echo "SSL certificates already exist for $DOMAIN_NAME"
+        echo "Skipping certificate generation"
+        CURRENT_CERT_SELF_SIGNED=0
+    fi
+else
+    CURRENT_CERT_SELF_SIGNED=1
+fi
+
+if [ "$CURRENT_CERT_SELF_SIGNED" -ne 0 ]; then
+    if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
         rm -f /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem \
               /etc/letsencrypt/live/$DOMAIN_NAME/chain.pem \
               /etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem
     fi
 
-    echo "No existing certificates found"
+    echo "No valid certificates found for $DOMAIN_NAME"
 
     # Check if domain is localhost or an IP address
     if [ "$DOMAIN_NAME" = "localhost" ]; then

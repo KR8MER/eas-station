@@ -433,6 +433,14 @@ tracks releases under the 2.x series.
 - Bumped the default `APP_BUILD_VERSION` to 2.3.0 across the application and sample
   environment template so deployments surface the new release number.
 
+## [2.4.4] - 2025-11-09
+### Fixed
+- Detect legacy self-signed fallback certificates by inspecting the existing fullchain.pem and
+  purge them before retrying Let's Encrypt so deployments stop serving stale fallback chains
+  from earlier releases.
+- Remove invalid certificate files prior to issuing new ones so nginx never launches with the
+  leftover self-signed materials while ACME runs.
+
 ## [2.4.3] - 2025-11-09
 ### Fixed
 - Detect previously generated self-signed certificates and automatically retry Let's Encrypt
