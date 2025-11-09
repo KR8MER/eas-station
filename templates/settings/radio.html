@@ -250,7 +250,6 @@
                         <input type="hidden" id="receiverSerial" name="serial">
                         <input type="hidden" id="receiverIdentifier" name="identifier">
                         <input type="hidden" id="receiverFrequency" name="frequency_hz">
-                        <input type="hidden" id="receiverSampleRate" name="sample_rate">
                         <input type="hidden" id="receiverChannel" name="channel">
 
                         <div class="col-12"><hr class="my-3"></div>
@@ -296,12 +295,17 @@
                         <div class="col-12">
                             <h6 class="text-primary"><i class="fas fa-sliders-h"></i> Advanced Options (Optional)</h6>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
+                            <label for="receiverSampleRate" class="form-label">Sample Rate (Hz)</label>
+                            <input type="number" class="form-control" id="receiverSampleRate" name="sample_rate" step="1" placeholder="Auto" min="96000">
+                            <small class="form-text text-muted">Higher rates = more bandwidth. 96-250 kHz typical.</small>
+                        </div>
+                        <div class="col-md-4">
                             <label for="receiverGain" class="form-label">Gain (dB)</label>
                             <input type="number" class="form-control" id="receiverGain" name="gain" step="0.1" placeholder="Auto">
                             <small class="form-text text-muted">Leave blank for automatic gain</small>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label for="receiverNotes" class="form-label">Notes</label>
                             <textarea class="form-control" id="receiverNotes" name="notes" rows="2" placeholder="Optional notes about this receiver"></textarea>
                         </div>
@@ -321,7 +325,7 @@
                             </select>
                             <small class="form-text text-muted">Select signal modulation type</small>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-4" id="deemphasisContainer">
                             <label for="receiverDeemphasis" class="form-label">De-emphasis (μs)</label>
                             <select class="form-select" id="receiverDeemphasis" name="deemphasis_us">
                                 <option value="0">None (Disabled)</option>
@@ -339,7 +343,7 @@
                                 <small class="form-text text-muted d-block">Output demodulated audio</small>
                             </div>
                         </div>
-                        <div class="col-md-6 d-flex align-items-center">
+                        <div class="col-md-6 d-flex align-items-center" id="fmOptionsContainer">
                             <div class="form-check me-3">
                                 <input class="form-check-input" type="checkbox" id="receiverStereo" name="stereo_enabled" checked>
                                 <label class="form-check-label" for="receiverStereo">FM Stereo Decoding</label>
@@ -734,6 +738,23 @@
         radio.addEventListener('change', async (e) => {
             currentServiceType = e.target.value;
 
+            // Show/hide FM-specific options based on service type
+            const fmOptionsContainer = document.getElementById('fmOptionsContainer');
+            const deemphasisContainer = document.getElementById('deemphasisContainer');
+
+            if (currentServiceType === 'FM') {
+                // Show FM-specific options
+                if (fmOptionsContainer) fmOptionsContainer.style.display = '';
+                if (deemphasisContainer) deemphasisContainer.style.display = '';
+            } else {
+                // Hide FM-specific options for NOAA and AM
+                if (fmOptionsContainer) fmOptionsContainer.style.display = 'none';
+                if (currentServiceType === 'AM' && deemphasisContainer) {
+                    // Also hide de-emphasis for AM
+                    deemphasisContainer.style.display = 'none';
+                }
+            }
+
             // Fetch service configuration
             try {
                 const response = await fetch(`/api/radio/service-config/${currentServiceType}`);
@@ -845,6 +866,11 @@
         if (document.getElementById('configSummary')) {
             document.getElementById('configSummary').style.display = 'none';
         }
+
+        // Hide FM-specific options by default (until service type selected)
+        const fmOptionsContainer = document.getElementById('fmOptionsContainer');
+        const deemphasisContainer = document.getElementById('deemphasisContainer');
+        if (fmOptionsContainer) fmOptionsContainer.style.display = 'none';
 
         // Load devices
         loadSDRDevices();
