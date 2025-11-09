@@ -435,9 +435,16 @@ sudo systemctl restart eas-station</code></pre>
                             </div>
                         </div>
                         <div class="mt-2">
-                            <a href="/api/radio/spectrum/by-identifier/${identifier}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                <i class="fas fa-vial"></i> Test Spectrum Endpoint
-                            </a>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <a href="/api/radio/spectrum/by-identifier/${identifier}" target="_blank" class="btn btn-outline-primary">
+                                    <i class="fas fa-vial"></i> Test Spectrum Endpoint
+                                </a>
+                                ${receiver.receiver_id ? `
+                                    <button type="button" class="btn btn-outline-warning" data-action="restart" data-receiver-id="${receiver.receiver_id}">
+                                        <i class="fas fa-sync-alt"></i> Restart Receiver
+                                    </button>
+                                ` : ''}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -502,6 +509,50 @@ sudo systemctl restart eas-station</code></pre>
             startAutoRefresh();
         } else {
             stopAutoRefresh();
+        }
+    });
+
+    // Delegated event listener for restart buttons
+    document.addEventListener('click', async (event) => {
+        const restartBtn = event.target.closest('button[data-action="restart"]');
+        if (!restartBtn) return;
+
+        const receiverId = restartBtn.getAttribute('data-receiver-id');
+        if (!receiverId) return;
+
+        const confirmed = window.confirm('Restart this receiver? This will stop and restart the SDR to recover from errors.');
+        if (!confirmed) return;
+
+        try {
+            // Disable button and show loading state
+            restartBtn.disabled = true;
+            const originalHtml = restartBtn.innerHTML;
+            restartBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Restarting...';
+
+            const response = await fetch(`/api/radio/receivers/${receiverId}/restart`, {
+                method: 'POST'
+            });
+            const result = await response.json();
+
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Failed to restart receiver.');
+            }
+
+            // Show success message
+            alert(result.message || 'Receiver restarted successfully.');
+
+            // Reload diagnostics to show updated status
+            await loadDiagnostics();
+        } catch (error) {
+            console.error('Failed to restart receiver', error);
+            alert(error.message || 'Failed to restart receiver.');
+        } finally {
+            // Re-enable button (it will be replaced by loadDiagnostics anyway)
+            const btn = document.querySelector(`button[data-receiver-id="${receiverId}"]`);
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-sync-alt"></i> Restart Receiver';
+            }
         }
     });
 

@@ -229,7 +229,7 @@
                 </div>
                 <div class="modal-body">
                     <input type="hidden" id="receiverId" name="id">
-                    <div class="row g-3">
+                    <div class="row g-2">
                         <div class="col-12">
                             <h6 class="text-primary"><i class="fas fa-microchip"></i> 1. Select Your SDR Device</h6>
                         </div>
@@ -252,9 +252,9 @@
                         <input type="hidden" id="receiverFrequency" name="frequency_hz">
                         <input type="hidden" id="receiverChannel" name="channel">
 
-                        <div class="col-12"><hr class="my-3"></div>
+                        <div class="col-12"><hr class="my-2"></div>
                         <div class="col-12">
-                            <h6 class="text-primary"><i class="fas fa-radio"></i> 2. What Service Are You Monitoring?</h6>
+                            <h6 class="text-primary mb-2"><i class="fas fa-radio"></i> 2. What Service Are You Monitoring?</h6>
                         </div>
                         <div class="col-md-12">
                             <div class="btn-group w-100" role="group" id="serviceTypeGroup">
@@ -275,9 +275,9 @@
                             </div>
                         </div>
 
-                        <div class="col-12"><hr class="my-3"></div>
+                        <div class="col-12"><hr class="my-2"></div>
                         <div class="col-12">
-                            <h6 class="text-primary"><i class="fas fa-signal"></i> 3. Enter Frequency</h6>
+                            <h6 class="text-primary mb-2"><i class="fas fa-signal"></i> 3. Enter Frequency</h6>
                         </div>
                         <div class="col-md-6">
                             <label for="receiverFrequencyInput" class="form-label" id="frequencyLabel">Frequency <span class="text-danger">*</span></label>
@@ -291,9 +291,9 @@
                             </div>
                         </div>
 
-                        <div class="col-12"><hr class="my-3"></div>
+                        <div class="col-12"><hr class="my-2"></div>
                         <div class="col-12">
-                            <h6 class="text-primary"><i class="fas fa-sliders-h"></i> Advanced Options (Optional)</h6>
+                            <h6 class="text-primary mb-2"><i class="fas fa-sliders-h"></i> Advanced Options (Optional)</h6>
                         </div>
                         <div class="col-md-4">
                             <label for="receiverSampleRate" class="form-label">Sample Rate</label>
@@ -311,10 +311,10 @@
                             <label for="receiverNotes" class="form-label">Notes</label>
                             <textarea class="form-control" id="receiverNotes" name="notes" rows="2" placeholder="Optional notes about this receiver"></textarea>
                         </div>
-                        <div class="col-12"><hr class="my-3"></div>
+                        <div class="col-12"><hr class="my-2"></div>
                         <div class="col-12">
-                            <h6 class="text-primary"><i class="fas fa-broadcast-tower"></i> Audio Demodulation Settings</h6>
-                            <p class="text-muted small mb-3">Configure real-time audio output from the SDR receiver</p>
+                            <h6 class="text-primary mb-1"><i class="fas fa-broadcast-tower"></i> Audio Demodulation Settings</h6>
+                            <p class="text-muted small mb-2">Configure real-time audio output from the SDR receiver</p>
                         </div>
                         <div class="col-md-4">
                             <label for="receiverModulation" class="form-label">Modulation Type</label>
@@ -337,7 +337,7 @@
                             <small class="form-text text-muted">FM de-emphasis filter</small>
                         </div>
                         <div class="col-md-4 d-flex align-items-end">
-                            <div class="form-check mb-3">
+                            <div class="form-check mb-2">
                                 <input class="form-check-input" type="checkbox" id="receiverAudioOutput" name="audio_output">
                                 <label class="form-check-label" for="receiverAudioOutput">
                                     <strong>Enable Audio Output</strong>
@@ -355,7 +355,7 @@
                                 <label class="form-check-label" for="receiverRBDS">Extract RBDS/RDS</label>
                             </div>
                         </div>
-                        <div class="col-12"><hr class="my-3"></div>
+                        <div class="col-12"><hr class="my-2"></div>
                         <div class="col-md-6 d-flex align-items-center">
                             <div class="form-check me-3">
                                 <input class="form-check-input" type="checkbox" id="receiverEnabled" name="enabled" checked>
@@ -659,10 +659,13 @@
                 <td>${renderStatusBadge(receiver.latest_status)}</td>
                 <td class="text-end">
                     <div class="btn-group btn-group-sm" role="group">
-                        <button type="button" class="btn btn-outline-secondary" data-action="edit" data-id="${receiver.id}">
+                        <button type="button" class="btn btn-outline-secondary" data-action="edit" data-id="${receiver.id}" title="Edit receiver">
                             <i class="fas fa-edit"></i>
                         </button>
-                        <button type="button" class="btn btn-outline-danger" data-action="delete" data-id="${receiver.id}">
+                        <button type="button" class="btn btn-outline-warning" data-action="restart" data-id="${receiver.id}" title="Restart receiver">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-danger" data-action="delete" data-id="${receiver.id}" title="Delete receiver">
                             <i class="fas fa-trash-alt"></i>
                         </button>
                     </div>
@@ -1119,6 +1122,35 @@
         }
     }
 
+    async function restartReceiver(receiverId) {
+        if (!receiverId) {
+            return;
+        }
+
+        const receiver = deriveReceiverFromId(receiverId);
+        const receiverName = receiver ? receiver.display_name : 'this receiver';
+
+        const confirmed = window.confirm(`Restart ${receiverName}? This will stop and restart the SDR to recover from errors.`);
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            setStatus('Restarting receiver...', 'info');
+            const response = await fetch(`${CRUD_ENDPOINT}/${receiverId}/restart`, { method: 'POST' });
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Failed to restart receiver.');
+            }
+            setStatus(result.message || 'Receiver restarted successfully.', 'success');
+            await refreshReceivers({ endpoint: MONITORING_ENDPOINT, silent: true });
+            scheduleAutoRefresh();
+        } catch (error) {
+            console.error('Failed to restart receiver', error);
+            setStatus(error.message || 'Failed to restart receiver.', 'danger');
+        }
+    }
+
     async function deleteReceiver(receiverId) {
         if (!receiverId) {
             return;
@@ -1155,6 +1187,8 @@
 
         if (action === 'edit' && receiver) {
             openModal(receiver);
+        } else if (action === 'restart') {
+            restartReceiver(id);
         } else if (action === 'delete') {
             deleteReceiver(id);
         }
