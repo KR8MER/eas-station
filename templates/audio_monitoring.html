@@ -149,6 +149,7 @@
 <script>
 let audioSources = [];
 let waveformIntervals = {};
+const htmlEntityDecoder = document.createElement('textarea');
 
 // Fetch audio sources from API
 async function loadAudioSources() {
@@ -495,6 +496,8 @@ function normalizeNowPlayingMetadata(metadata) {
         || (icyFields && icyFields.amgArtworkURL)
         || (icyFields && icyFields.artworkURL);
 
+    const stationIdentifiers = collectStationIdentifiers(metadata, icyFields);
+
     let title = cleanMetadataValue(
         (metadata.now_playing && metadata.now_playing.title)
         || metadata.song_title
@@ -512,6 +515,18 @@ function normalizeNowPlayingMetadata(metadata) {
 
     let album = cleanMetadataValue(metadata.album || icyFields.album);
     let length = cleanMetadataValue(metadata.length || icyFields.length || icyFields.duration);
+
+    if (!isMeaningfulMetadataValue(title, stationIdentifiers)) {
+        title = '';
+    }
+
+    if (!isMeaningfulMetadataValue(artist, stationIdentifiers)) {
+        artist = '';
+    }
+
+    if (!isMeaningfulMetadataValue(album, stationIdentifiers)) {
+        album = '';
+    }
 
     if (title && artist) {
         const titleLower = title.toLowerCase();
@@ -588,6 +603,11 @@ function cleanMetadataValue(value) {
         return '';
     }
 
+    const attributeOnlyMatch = text.match(/^\s*\w+=\s*(?:"([^"]*)"|'([^']*)'|(\S+))\s*$/);
+    if (attributeOnlyMatch) {
+        text = attributeOnlyMatch[1] || attributeOnlyMatch[2] || attributeOnlyMatch[3] || '';
+    }
+
     const streamTitleMatch = text.match(/StreamTitle='([^']*)'/i);
     if (streamTitleMatch) {
         text = streamTitleMatch[1];
@@ -599,6 +619,34 @@ function cleanMetadataValue(value) {
     text = text.replace(/^['"]/, '').replace(/['"]$/, '');
     text = text.replace(/\+/g, ' ');
 
+    const attributeValuePatterns = [
+        /text="([^"]+)"/i,
+        /title="([^"]+)"/i,
+        /song="([^"]+)"/i,
+        /artist="([^"]+)"/i,
+        /album="([^"]+)"/i,
+        /name="([^"]+)"/i,
+        /description="([^"]+)"/i,
+        /value="([^"]+)"/i
+    ];
+
+    for (const pattern of attributeValuePatterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+            text = match[1];
+            break;
+        }
+    }
+
+    if (/[&][a-z0-9#]+;/i.test(text)) {
+        htmlEntityDecoder.innerHTML = text;
+        text = htmlEntityDecoder.value;
+    }
+
+    text = text.replace(/<[^>]*>/g, ' ');
+    text = text.replace(/https?:\/\/\S+/gi, ' ');
+    text = text.replace(/www\.[^\s]+/gi, ' ');
+
     if (/%[0-9A-Fa-f]{2}/.test(text)) {
         try {
             text = decodeURIComponent(text);
@@ -607,14 +655,148 @@ function cleanMetadataValue(value) {
         }
     }
 
+    text = text.replace(/\s+\w+="[^"]*"/g, '');
+    text = text.replace(/\s+\w+='[^']*'/g, '');
+    text = text.replace(/\s+\w+=\S+/g, '');
+
     const streamMarkerIndex = text.search(/;\s*Stream/i);
     if (streamMarkerIndex !== -1) {
         text = text.substring(0, streamMarkerIndex);
     }
 
+    text = text.replace(/[\s\-–—:]+$/, '');
+    text = text.replace(/^[\s\-–—:]+/, '');
     text = text.replace(/\s+/g, ' ');
 
     return text.trim();
+}
+
+function collectStationIdentifiers(metadata, icyFields = {}) {
+    const identifiers = new Set();
+    const simplifiedIdentifiers = new Set();
+    const tokenIdentifiers = new Set();
+    const candidateValues = [
+        metadata.icy_name,
+        metadata.station_name,
+        metadata.station_callsign,
+        metadata.station_id,
+        metadata.station,
+        metadata.stream_name,
+        metadata.stream_description,
+        metadata.short_name,
+        metadata.display_name,
+        metadata.call_sign,
+        metadata.callsign,
+        metadata.source_name,
+        metadata.device_name,
+        metadata.icecast_server,
+        metadata.icecast_mount,
+        metadata.icecast_description,
+        metadata.icecast_server_name,
+        metadata.icecast_server_description,
+        icyFields.name,
+        icyFields.station,
+        icyFields.server_name,
+        icyFields.stream_description
+    ];
+
+    candidateValues.forEach(value => {
+        const cleaned = cleanMetadataValue(value);
+        if (cleaned) {
+            const lower = cleaned.toLowerCase();
+            identifiers.add(lower);
+            const simplified = lower.replace(/[^a-z0-9]/g, '');
+            if (simplified) {
+                simplifiedIdentifiers.add(simplified);
+            }
+            lower.split(/[^a-z0-9]+/).filter(Boolean).forEach(token => {
+                if (token.length >= 3) {
+                    tokenIdentifiers.add(token);
+                }
+            });
+        }
+    });
+
+    return {
+        primary: identifiers,
+        simplified: simplifiedIdentifiers,
+        tokens: tokenIdentifiers
+    };
+}
+
+function isMeaningfulMetadataValue(value, stationIdentifiers = { primary: new Set(), simplified: new Set(), tokens: new Set() }) {
+    if (!value) {
+        return false;
+    }
+
+    const text = value.trim();
+    if (!text) {
+        return false;
+    }
+
+    const lower = text.toLowerCase();
+
+    const simplified = lower.replace(/[^a-z0-9]/g, '');
+
+    if (stationIdentifiers.primary.has(lower) || (simplified && stationIdentifiers.simplified.has(simplified))) {
+        return false;
+    }
+
+    for (const ident of stationIdentifiers.primary) {
+        if (!ident || ident.length < 6) {
+            continue;
+        }
+        if (lower.includes(ident) || ident.includes(lower)) {
+            return false;
+        }
+        const identSimplified = ident.replace(/[^a-z0-9]/g, '');
+        if (simplified && identSimplified && (identSimplified.includes(simplified) || simplified.includes(identSimplified))) {
+            return false;
+        }
+    }
+
+    if (stationIdentifiers.tokens.size) {
+        const words = lower.split(/[^a-z0-9]+/).filter(Boolean);
+        if (words.length) {
+            const matches = words.filter(word => stationIdentifiers.tokens.has(word));
+            if (matches.length >= 2 || (words.length === 1 && matches.length === 1)) {
+                return false;
+            }
+            const coverage = matches.length / words.length;
+            if (coverage >= 0.6) {
+                return false;
+            }
+        }
+    }
+
+    const junkPatterns = [
+        /^(listen\s+live|click\s+to\s+listen|tune\s+in)$/i,
+        /streamtitle/i,
+        /streamurl/i,
+        /%[0-9a-f]{2}/i,
+        /https?:/i,
+        /onlineradiobox/i,
+        /radio\.net/i,
+        /iheart/i,
+        /broadcaster/i,
+        /digital\s+stream/i,
+        /now\s+playing[:\-]?$/i,
+        /listen\s*now/i
+    ];
+
+    if (junkPatterns.some(pattern => pattern.test(text))) {
+        return false;
+    }
+
+    if (/^(n\/a|na|none|null|unknown)$/i.test(text)) {
+        return false;
+    }
+
+    if (!/[a-z]/i.test(text) && !/[0-9]/.test(text)) {
+        return false;
+    }
+
+    return true;
 }
 
 function escapeHtml(text) {
