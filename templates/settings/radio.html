@@ -296,9 +296,11 @@
                             <h6 class="text-primary"><i class="fas fa-sliders-h"></i> Advanced Options (Optional)</h6>
                         </div>
                         <div class="col-md-4">
-                            <label for="receiverSampleRate" class="form-label">Sample Rate (Hz)</label>
-                            <input type="number" class="form-control" id="receiverSampleRate" name="sample_rate" step="1" placeholder="Auto" min="96000">
-                            <small class="form-text text-muted">Higher rates = more bandwidth. 96-250 kHz typical.</small>
+                            <label for="receiverSampleRate" class="form-label">Sample Rate</label>
+                            <select class="form-select" id="receiverSampleRate" name="sample_rate" disabled>
+                                <option value="">Select service type first</option>
+                            </select>
+                            <small class="form-text text-muted" id="sampleRateHelp">Choose appropriate bandwidth for signal</small>
                         </div>
                         <div class="col-md-4">
                             <label for="receiverGain" class="form-label">Gain (dB)</label>
@@ -734,6 +736,61 @@
     let currentServiceType = null;
     let currentServiceConfig = null;
 
+    // Sample rate options for different service types
+    const sampleRateOptions = {
+        'NOAA': [
+            { value: 96000, label: '96 kHz (Recommended - Low CPU)', recommended: true },
+            { value: 192000, label: '192 kHz (Good balance)', recommended: false },
+            { value: 250000, label: '250 kHz (Wide capture - High CPU)', recommended: false }
+        ],
+        'FM': [
+            { value: 192000, label: '192 kHz (Standard FM)', recommended: false },
+            { value: 240000, label: '240 kHz (Wide FM)', recommended: false },
+            { value: 250000, label: '250 kHz (Wideband FM)', recommended: true },
+            { value: 1024000, label: '1.024 MHz (Full broadcast band)', recommended: false },
+            { value: 2400000, label: '2.4 MHz (Wide spectrum)', recommended: false }
+        ],
+        'AM': [
+            { value: 48000, label: '48 kHz (Recommended - Low CPU)', recommended: true },
+            { value: 96000, label: '96 kHz (Wide capture)', recommended: false },
+            { value: 192000, label: '192 kHz (Very wide)', recommended: false }
+        ]
+    };
+
+    function populateSampleRates(serviceType) {
+        const sampleRateSelect = document.getElementById('receiverSampleRate');
+        const sampleRateHelp = document.getElementById('sampleRateHelp');
+
+        if (!serviceType || !sampleRateOptions[serviceType]) {
+            sampleRateSelect.disabled = true;
+            sampleRateSelect.innerHTML = '<option value="">Select service type first</option>';
+            sampleRateHelp.textContent = 'Choose appropriate bandwidth for signal';
+            return;
+        }
+
+        const options = sampleRateOptions[serviceType];
+        sampleRateSelect.disabled = false;
+        sampleRateSelect.innerHTML = '';
+
+        options.forEach(option => {
+            const opt = document.createElement('option');
+            opt.value = option.value;
+            opt.textContent = option.label;
+            if (option.recommended) {
+                opt.selected = true;
+            }
+            sampleRateSelect.appendChild(opt);
+        });
+
+        // Update help text based on service type
+        const helpTexts = {
+            'NOAA': 'Lower rates save CPU - NOAA signals are only ~25kHz wide',
+            'FM': 'Higher rates capture wider spectrum - FM signals are ~200kHz wide',
+            'AM': 'Lower rates are sufficient - AM signals are only ~10kHz wide'
+        };
+        sampleRateHelp.textContent = helpTexts[serviceType] || 'Choose appropriate bandwidth for signal';
+    }
+
     document.querySelectorAll('input[name="serviceType"]').forEach(radio => {
         radio.addEventListener('change', async (e) => {
             currentServiceType = e.target.value;
@@ -754,6 +811,9 @@
                     deemphasisContainer.style.display = 'none';
                 }
             }
+
+            // Populate sample rate options based on service type
+            populateSampleRates(currentServiceType);
 
             // Fetch service configuration
             try {
@@ -883,7 +943,6 @@
             document.getElementById('receiverDriver').value = receiver.driver;
             document.getElementById('receiverSerial').value = receiver.serial || '';
             document.getElementById('receiverFrequency').value = receiver.frequency_hz;
-            document.getElementById('receiverSampleRate').value = receiver.sample_rate;
             document.getElementById('receiverGain').value = receiver.gain ?? '';
             document.getElementById('receiverChannel').value = receiver.channel ?? '';
             document.getElementById('receiverNotes').value = receiver.notes ?? '';
@@ -894,6 +953,55 @@
             document.getElementById('receiverRBDS').value = receiver.enable_rbds ? '1' : '0';
             document.getElementById('receiverEnabled').checked = receiver.enabled !== false;
             document.getElementById('receiverAutoStart').checked = receiver.auto_start !== false;
+
+            // Determine service type based on frequency
+            let detectedServiceType = 'NOAA'; // Default
+            const freqHz = receiver.frequency_hz;
+            if (freqHz >= 162000000 && freqHz <= 163000000) {
+                detectedServiceType = 'NOAA';
+            } else if (freqHz >= 88000000 && freqHz <= 108000000) {
+                detectedServiceType = 'FM';
+            } else if (freqHz >= 540000 && freqHz <= 1700000) {
+                detectedServiceType = 'AM';
+            }
+
+            // Populate sample rate dropdown for editing mode
+            const sampleRateSelect = document.getElementById('receiverSampleRate');
+            if (sampleRateOptions[detectedServiceType]) {
+                sampleRateSelect.disabled = false;
+                sampleRateSelect.innerHTML = '';
+
+                const options = sampleRateOptions[detectedServiceType];
+                let foundExisting = false;
+
+                options.forEach(option => {
+                    const opt = document.createElement('option');
+                    opt.value = option.value;
+                    opt.textContent = option.label;
+                    if (receiver.sample_rate && option.value === receiver.sample_rate) {
+                        opt.selected = true;
+                        foundExisting = true;
+                    }
+                    sampleRateSelect.appendChild(opt);
+                });
+
+                // If current sample rate isn't in the predefined list, add it as custom
+                if (!foundExisting && receiver.sample_rate) {
+                    const customOpt = document.createElement('option');
+                    customOpt.value = receiver.sample_rate;
+                    customOpt.textContent = `${(receiver.sample_rate / 1000).toFixed(0)} kHz (Current custom value)`;
+                    customOpt.selected = true;
+                    sampleRateSelect.appendChild(customOpt);
+                }
+
+                // Update help text
+                const helpTexts = {
+                    'NOAA': 'Lower rates save CPU - NOAA signals are only ~25kHz wide',
+                    'FM': 'Higher rates capture wider spectrum - FM signals are ~200kHz wide',
+                    'AM': 'Lower rates are sufficient - AM signals are only ~10kHz wide'
+                };
+                document.getElementById('sampleRateHelp').textContent = helpTexts[detectedServiceType] || 'Choose appropriate bandwidth for signal';
+            }
 
             // For editing, show a simplified view with current values
             const freqMHz = (receiver.frequency_hz / 1e6).toFixed(3);
