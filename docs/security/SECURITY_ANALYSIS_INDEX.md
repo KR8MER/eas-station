@@ -10,23 +10,23 @@
 
 ### For Busy Executives
 Start here:
-1. **SECURITY_ANALYSIS_EXECUTIVE_SUMMARY.md** - 2-minute read, critical findings only
+1. **[SECURITY_ANALYSIS_EXECUTIVE_SUMMARY.md](SECURITY_ANALYSIS_EXECUTIVE_SUMMARY.md)** - 2-minute read, critical findings only
 
 ### For Developers Implementing Fixes
 Start here:
-1. **IMPLEMENTATION_CHECKLIST.md** - Exact line numbers, copy-paste ready
-2. **PROTECTED_ROUTES_SUMMARY.md** - Quick reference tables
+1. **[IMPLEMENTATION_CHECKLIST.md](../guides/IMPLEMENTATION_CHECKLIST.md)** - Exact line numbers, copy-paste ready
+2. **[PROTECTED_ROUTES_SUMMARY.md](../reference/PROTECTED_ROUTES_SUMMARY.md)** - Quick reference tables
 
 ### For Security Auditors
 Start here:
 1. **ROUTE_SECURITY_ANALYSIS.txt** - Complete detailed analysis
-2. **DEMO_ROLE_IMPLEMENTATION_GUIDE.md** - Safe demo configuration
+2. **[DEMO_ROLE_IMPLEMENTATION_GUIDE.md](../guides/DEMO_ROLE_IMPLEMENTATION_GUIDE.md)** - Safe demo configuration
 
 ---
 
 ## Document Descriptions
 
-### 1. SECURITY_ANALYSIS_EXECUTIVE_SUMMARY.md
+### 1. [SECURITY_ANALYSIS_EXECUTIVE_SUMMARY.md](SECURITY_ANALYSIS_EXECUTIVE_SUMMARY.md)
 **Purpose**: High-level overview of security findings
 **Audience**: Managers, Team Leads, Non-technical stakeholders
 **Read Time**: 5-10 minutes
@@ -65,7 +65,7 @@ Start here:
 
 ---
 
-### 3. IMPLEMENTATION_CHECKLIST.md
+### 3. [IMPLEMENTATION_CHECKLIST.md](../guides/IMPLEMENTATION_CHECKLIST.md)
 **Purpose**: Step-by-step implementation guide
 **Audience**: Developers, DevOps engineers
 **Read Time**: 20-30 minutes
@@ -85,7 +85,7 @@ Start here:
 
 ---
 
-### 4. PROTECTED_ROUTES_SUMMARY.md
+### 4. [PROTECTED_ROUTES_SUMMARY.md](../reference/PROTECTED_ROUTES_SUMMARY.md)
 **Purpose**: Quick reference for route permissions
 **Audience**: Developers, QA engineers
 **Read Time**: 10-15 minutes
@@ -103,7 +103,7 @@ Start here:
 
 ---
 
-### 5. DEMO_ROLE_IMPLEMENTATION_GUIDE.md
+### 5. [DEMO_ROLE_IMPLEMENTATION_GUIDE.md](../guides/DEMO_ROLE_IMPLEMENTATION_GUIDE.md)
 **Purpose**: Safe configuration for demo users
 **Audience**: Security team, System administrators
 **Read Time**: 15-20 minutes
@@ -243,27 +243,27 @@ Add permission decorators to enforce restrictions:
 ## How to Use These Documents
 
 ### Scenario 1: "I need to understand what's broken"
-1. Read: SECURITY_ANALYSIS_EXECUTIVE_SUMMARY.md
-2. Read: PROTECTED_ROUTES_SUMMARY.md (Critical section)
+1. Read: [SECURITY_ANALYSIS_EXECUTIVE_SUMMARY.md](SECURITY_ANALYSIS_EXECUTIVE_SUMMARY.md)
+2. Read: [PROTECTED_ROUTES_SUMMARY.md](../reference/PROTECTED_ROUTES_SUMMARY.md) (Critical section)
 
 ### Scenario 2: "I need to fix it"
-1. Read: IMPLEMENTATION_CHECKLIST.md
-2. Use: PROTECTED_ROUTES_SUMMARY.md (as reference)
-3. Follow: Code templates in IMPLEMENTATION_CHECKLIST.md
-4. Test: Test cases in IMPLEMENTATION_CHECKLIST.md
+1. Read: [IMPLEMENTATION_CHECKLIST.md](../guides/IMPLEMENTATION_CHECKLIST.md)
+2. Use: [PROTECTED_ROUTES_SUMMARY.md](../reference/PROTECTED_ROUTES_SUMMARY.md) (as reference)
+3. Follow: Code templates in [IMPLEMENTATION_CHECKLIST.md](../guides/IMPLEMENTATION_CHECKLIST.md)
+4. Test: Test cases in [IMPLEMENTATION_CHECKLIST.md](../guides/IMPLEMENTATION_CHECKLIST.md)
 
 ### Scenario 3: "I need to audit this"
 1. Read: ROUTE_SECURITY_ANALYSIS.txt (complete)
-2. Review: IMPLEMENTATION_CHECKLIST.md (verification)
-3. Test: All test cases in IMPLEMENTATION_CHECKLIST.md
+2. Review: [IMPLEMENTATION_CHECKLIST.md](../guides/IMPLEMENTATION_CHECKLIST.md) (verification)
+3. Test: All test cases in [IMPLEMENTATION_CHECKLIST.md](../guides/IMPLEMENTATION_CHECKLIST.md)
 
 ### Scenario 4: "I need to configure demo user"
-1. Read: DEMO_ROLE_IMPLEMENTATION_GUIDE.md
-2. Reference: PROTECTED_ROUTES_SUMMARY.md (Demo Role section)
+1. Read: [DEMO_ROLE_IMPLEMENTATION_GUIDE.md](../guides/DEMO_ROLE_IMPLEMENTATION_GUIDE.md)
+2. Reference: [PROTECTED_ROUTES_SUMMARY.md](../reference/PROTECTED_ROUTES_SUMMARY.md) (Demo Role section)
 3. Verify: Permission configuration in app_core/auth/roles.py
 
 ### Scenario 5: "I need to brief executives"
-1. Use: SECURITY_ANALYSIS_EXECUTIVE_SUMMARY.md
+1. Use: [SECURITY_ANALYSIS_EXECUTIVE_SUMMARY.md](SECURITY_ANALYSIS_EXECUTIVE_SUMMARY.md)
 2. Share: Key statistics from this index
 3. Reference: Risk levels and impact assessment
 
@@ -321,9 +321,9 @@ SECURITY_ANALYSIS_INDEX.md (this file)
 ---
 
 **For questions or clarifications, refer to:**
-- Specific implementation details: IMPLEMENTATION_CHECKLIST.md
-- Route reference: PROTECTED_ROUTES_SUMMARY.md
-- Demo configuration: DEMO_ROLE_IMPLEMENTATION_GUIDE.md
+- Specific implementation details: [IMPLEMENTATION_CHECKLIST.md](../guides/IMPLEMENTATION_CHECKLIST.md)
+- Route reference: [PROTECTED_ROUTES_SUMMARY.md](../reference/PROTECTED_ROUTES_SUMMARY.md)
+- Demo configuration: [DEMO_ROLE_IMPLEMENTATION_GUIDE.md](../guides/DEMO_ROLE_IMPLEMENTATION_GUIDE.md)
 - Complete analysis: ROUTE_SECURITY_ANALYSIS.txt
 
 **Status**: Analysis Complete ✓
