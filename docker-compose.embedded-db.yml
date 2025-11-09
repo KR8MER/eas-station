@@ -73,7 +73,7 @@ services:
     security_opt:
       - no-new-privileges:true
 
-  poller:
+  noaa-poller:
     image: eas-station:latest
     depends_on:
       app:
@@ -123,7 +123,7 @@ services:
       - poller/cap_poller.py
       - --continuous
       - --interval
-      - "120"
+      - "180"
       - --log-level
       - "${LOG_LEVEL:-INFO}"
     restart: unless-stopped
