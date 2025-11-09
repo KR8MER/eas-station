@@ -1,0 +1,495 @@
+{% extends "base.html" %}
+
+{% block title %}Radio Receiver Diagnostics{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between mb-4">
+        <div>
+            <h1 class="h3 mb-1">SDR Audio Pipeline Diagnostics</h1>
+            <p class="text-muted mb-0">Real-time status of receivers, RadioManager, and audio pipeline.</p>
+        </div>
+        <div class="btn-group mt-3 mt-md-0">
+            <a href="/settings/radio" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Settings
+            </a>
+            <button class="btn btn-primary" id="refreshBtn">
+                <i class="fas fa-sync"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Overall Health Status -->
+    <div class="card mb-4 shadow-sm border-0" id="healthCard">
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-auto">
+                    <div class="spinner-border text-primary" role="status" id="healthSpinner">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <i class="fas fa-heart fa-3x d-none" id="healthIcon"></i>
+                </div>
+                <div class="col">
+                    <h5 class="mb-1" id="healthTitle">Checking system status...</h5>
+                    <p class="mb-0 text-muted" id="healthMessage">Please wait while we check the audio pipeline.</p>
+                </div>
+                <div class="col-auto">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
+                        <label class="form-check-label" for="autoRefresh">Auto-refresh (5s)</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="row g-3 mb-4" id="statsRow">
+        <div class="col-md-3">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center">
+                    <div class="text-muted small mb-1">Database Receivers</div>
+                    <div class="h3 mb-0" id="statDbReceivers">—</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center">
+                    <div class="text-muted small mb-1">Loaded Instances</div>
+                    <div class="h3 mb-0" id="statLoadedInstances">—</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center">
+                    <div class="text-muted small mb-1">Running & Locked</div>
+                    <div class="h3 mb-0" id="statLockedInstances">—</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center">
+                    <div class="text-muted small mb-1">With Sample Data</div>
+                    <div class="h3 mb-0" id="statWithSamples">—</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RadioManager Status -->
+    <div class="card mb-4 shadow-sm border-0">
+        <div class="card-header bg-dark text-white">
+            <i class="fas fa-server me-2"></i>
+            <strong>RadioManager Status</strong>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <table class="table table-sm">
+                        <tbody>
+                            <tr>
+                                <td class="text-muted">Available Drivers</td>
+                                <td id="availableDrivers">—</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Loaded Receivers</td>
+                                <td id="loadedReceivers">—</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Running Receivers</td>
+                                <td id="runningReceivers">—</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <table class="table table-sm">
+                        <tbody>
+                            <tr>
+                                <td class="text-muted">Locked Receivers</td>
+                                <td id="lockedReceivers">—</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Receivers with Samples</td>
+                                <td id="receiversWithSamples">—</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Last Update</td>
+                                <td id="lastUpdate">—</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Receiver Details -->
+    <div class="card mb-4 shadow-sm border-0">
+        <div class="card-header bg-dark text-white">
+            <i class="fas fa-satellite-dish me-2"></i>
+            <strong>Receiver Details</strong>
+        </div>
+        <div class="card-body" id="receiversContainer">
+            <div class="text-center text-muted py-4">
+                <i class="fas fa-spinner fa-spin fa-2x mb-2"></i>
+                <p class="mb-0">Loading receiver details...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Troubleshooting Tips -->
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-info text-white">
+            <i class="fas fa-lightbulb me-2"></i>
+            <strong>Troubleshooting Tips</strong>
+        </div>
+        <div class="card-body">
+            <div class="accordion" id="troubleshootingAccordion">
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#tip1">
+                            <i class="fas fa-exclamation-triangle text-danger me-2"></i>
+                            "RadioManager not initialized - restart required"
+                        </button>
+                    </h2>
+                    <div id="tip1" class="accordion-collapse collapse" data-bs-parent="#troubleshootingAccordion">
+                        <div class="accordion-body">
+                            <p><strong>Cause:</strong> Receivers are configured in the database but not loaded into RadioManager.</p>
+                            <p><strong>Solution:</strong> Restart the web application:</p>
+                            <pre class="bg-light p-2"><code>docker-compose restart webapp
+# or
+sudo systemctl restart eas-station</code></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#tip2">
+                            <i class="fas fa-exclamation-circle text-warning me-2"></i>
+                            "Receivers running but not locked to signal"
+                        </button>
+                    </h2>
+                    <div id="tip2" class="accordion-collapse collapse" data-bs-parent="#troubleshootingAccordion">
+                        <div class="accordion-body">
+                            <p><strong>Possible causes:</strong></p>
+                            <ul>
+                                <li>Antenna not connected or disconnected</li>
+                                <li>Wrong frequency for your location</li>
+                                <li>Signal too weak</li>
+                                <li>SDR device issue</li>
+                            </ul>
+                            <p><strong>Solution:</strong> Check antenna connection, verify frequency settings, and test with a known-good frequency (e.g., local FM station).</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#tip3">
+                            <i class="fas fa-signal text-success me-2"></i>
+                            "Locked but no samples available"
+                        </button>
+                    </h2>
+                    <div id="tip3" class="accordion-collapse collapse" data-bs-parent="#troubleshootingAccordion">
+                        <div class="accordion-body">
+                            <p><strong>Possible causes:</strong></p>
+                            <ul>
+                                <li>Receiver just started (wait a few seconds)</li>
+                                <li>Sample buffer not initialized</li>
+                                <li>SDR device communication issue</li>
+                            </ul>
+                            <p><strong>Solution:</strong> Wait 5-10 seconds and refresh. If problem persists, restart the receiver from the main settings page.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#tip4">
+                            <i class="fas fa-chart-line text-primary me-2"></i>
+                            Waterfall display not showing
+                        </button>
+                    </h2>
+                    <div id="tip4" class="accordion-collapse collapse" data-bs-parent="#troubleshootingAccordion">
+                        <div class="accordion-body">
+                            <p><strong>Checklist:</strong></p>
+                            <ul>
+                                <li>Check that "Loaded Instances" matches "Database Receivers" above</li>
+                                <li>Verify "With Sample Data" is greater than 0</li>
+                                <li>Open browser console (F12) and check for JavaScript errors</li>
+                                <li>Verify auto-refresh checkbox is enabled on /settings/radio page</li>
+                                <li>Test the spectrum endpoint directly: <code>/api/radio/spectrum/1</code></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(() => {
+    let autoRefreshHandle = null;
+    const autoRefreshCheckbox = document.getElementById('autoRefresh');
+    const refreshBtn = document.getElementById('refreshBtn');
+
+    function formatTimestamp(timestamp) {
+        if (!timestamp) return '—';
+        const date = new Date(timestamp * 1000);
+        return date.toLocaleTimeString();
+    }
+
+    function formatFrequency(hz) {
+        if (!hz) return '—';
+        return (hz / 1e6).toFixed(3) + ' MHz';
+    }
+
+    function updateHealthStatus(data) {
+        const healthCard = document.getElementById('healthCard');
+        const healthSpinner = document.getElementById('healthSpinner');
+        const healthIcon = document.getElementById('healthIcon');
+        const healthTitle = document.getElementById('healthTitle');
+        const healthMessage = document.getElementById('healthMessage');
+
+        // Hide spinner, show icon
+        healthSpinner.classList.add('d-none');
+        healthIcon.classList.remove('d-none');
+
+        // Update based on health status
+        const status = data.health_status || 'unknown';
+        healthCard.className = 'card mb-4 shadow-sm border-0';
+
+        switch (status) {
+            case 'healthy':
+                healthCard.classList.add('border-success');
+                healthIcon.className = 'fas fa-check-circle fa-3x text-success';
+                healthTitle.textContent = '✓ System Healthy';
+                break;
+            case 'warning':
+                healthCard.classList.add('border-warning');
+                healthIcon.className = 'fas fa-exclamation-triangle fa-3x text-warning';
+                healthTitle.textContent = '⚠ Warning';
+                break;
+            case 'error':
+                healthCard.classList.add('border-danger');
+                healthIcon.className = 'fas fa-times-circle fa-3x text-danger';
+                healthTitle.textContent = '✗ Error';
+                break;
+            case 'info':
+                healthCard.classList.add('border-info');
+                healthIcon.className = 'fas fa-info-circle fa-3x text-info';
+                healthTitle.textContent = 'ℹ Information';
+                break;
+            default:
+                healthIcon.className = 'fas fa-question-circle fa-3x text-muted';
+                healthTitle.textContent = 'Unknown Status';
+        }
+
+        healthMessage.textContent = data.health_message || 'No status message available';
+    }
+
+    function updateStats(data) {
+        const summary = data.summary || {};
+
+        document.getElementById('statDbReceivers').textContent = summary.database_receivers || 0;
+        document.getElementById('statLoadedInstances').textContent = summary.loaded_instances || 0;
+        document.getElementById('statLockedInstances').textContent = summary.locked_instances || 0;
+        document.getElementById('statWithSamples').textContent = summary.instances_with_samples || 0;
+
+        // Color coding
+        const dbCount = summary.database_receivers || 0;
+        const loadedCount = summary.loaded_instances || 0;
+        const statLoaded = document.getElementById('statLoadedInstances');
+
+        if (dbCount > 0 && loadedCount === 0) {
+            statLoaded.className = 'h3 mb-0 text-danger';
+        } else if (loadedCount < dbCount) {
+            statLoaded.className = 'h3 mb-0 text-warning';
+        } else {
+            statLoaded.className = 'h3 mb-0 text-success';
+        }
+    }
+
+    function updateRadioManager(data) {
+        const rm = data.radio_manager || {};
+
+        document.getElementById('availableDrivers').textContent =
+            (rm.available_drivers || []).join(', ') || 'None';
+        document.getElementById('loadedReceivers').textContent = rm.loaded_receiver_count || 0;
+        document.getElementById('runningReceivers').textContent = rm.running_receiver_count || 0;
+        document.getElementById('lockedReceivers').textContent = rm.locked_receiver_count || 0;
+        document.getElementById('receiversWithSamples').textContent = rm.receivers_with_samples || 0;
+        document.getElementById('lastUpdate').textContent = formatTimestamp(data.timestamp);
+    }
+
+    function updateReceiverDetails(data) {
+        const container = document.getElementById('receiversContainer');
+        const receivers = data.radio_manager?.receivers || {};
+        const dbReceivers = data.database?.receivers || [];
+
+        if (Object.keys(receivers).length === 0) {
+            container.innerHTML = `
+                <div class="alert alert-warning" role="alert">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>No receivers loaded in RadioManager.</strong>
+                    ${dbReceivers.length > 0 ? ' Restart the web application to load configured receivers.' : ' Add a receiver at /settings/radio to get started.'}
+                </div>
+            `;
+            return;
+        }
+
+        let html = '';
+        for (const [identifier, receiver] of Object.entries(receivers)) {
+            const config = receiver.config || {};
+            const statusBadge = receiver.locked ?
+                '<span class="badge bg-success">Locked</span>' :
+                receiver.running ?
+                '<span class="badge bg-warning">Running (Not Locked)</span>' :
+                '<span class="badge bg-secondary">Stopped</span>';
+
+            const samplesBadge = receiver.samples_available ?
+                `<span class="badge bg-success">${receiver.sample_count} samples</span>` :
+                '<span class="badge bg-danger">No samples</span>';
+
+            html += `
+                <div class="card mb-3 border-start border-4 ${receiver.locked ? 'border-success' : 'border-warning'}">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h5 class="card-title mb-3">
+                                    ${identifier}
+                                    ${statusBadge}
+                                    ${samplesBadge}
+                                </h5>
+                                <table class="table table-sm">
+                                    <tbody>
+                                        <tr>
+                                            <td class="text-muted">Frequency</td>
+                                            <td>${formatFrequency(config.frequency_hz)}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted">Sample Rate</td>
+                                            <td>${(config.sample_rate || 0).toLocaleString()} Hz</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted">Driver</td>
+                                            <td>${config.driver || '—'}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted">Modulation</td>
+                                            <td>${config.modulation_type || '—'}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-muted mb-2">Status Details</h6>
+                                <table class="table table-sm">
+                                    <tbody>
+                                        <tr>
+                                            <td class="text-muted">Running</td>
+                                            <td>${receiver.running ? '<i class="fas fa-check text-success"></i> Yes' : '<i class="fas fa-times text-danger"></i> No'}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted">Locked</td>
+                                            <td>${receiver.locked ? '<i class="fas fa-check text-success"></i> Yes' : '<i class="fas fa-times text-danger"></i> No'}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted">Signal Strength</td>
+                                            <td>${receiver.signal_strength !== null ? receiver.signal_strength.toFixed(4) : '—'}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted">Sample Buffer</td>
+                                            <td>${receiver.samples_available ? '<i class="fas fa-check text-success"></i> Working' : '<i class="fas fa-times text-danger"></i> Not available'}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                ${receiver.last_error ? `
+                                    <div class="alert alert-danger alert-sm mb-0">
+                                        <small><strong>Error:</strong> ${receiver.last_error}</small>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <a href="/api/radio/spectrum/${identifier}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-vial"></i> Test Spectrum Endpoint
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+    }
+
+    async function loadDiagnostics() {
+        try {
+            const response = await fetch('/api/radio/diagnostics/status');
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            updateHealthStatus(data);
+            updateStats(data);
+            updateRadioManager(data);
+            updateReceiverDetails(data);
+        } catch (error) {
+            console.error('Failed to load diagnostics:', error);
+
+            document.getElementById('healthSpinner').classList.add('d-none');
+            document.getElementById('healthIcon').classList.remove('d-none');
+            document.getElementById('healthIcon').className = 'fas fa-exclamation-triangle fa-3x text-danger';
+            document.getElementById('healthTitle').textContent = 'Failed to Load Diagnostics';
+            document.getElementById('healthMessage').textContent = error.message;
+
+            document.getElementById('receiversContainer').innerHTML = `
+                <div class="alert alert-danger" role="alert">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Error loading diagnostics:</strong> ${error.message}
+                </div>
+            `;
+        }
+    }
+
+    function startAutoRefresh() {
+        if (autoRefreshHandle) {
+            clearInterval(autoRefreshHandle);
+        }
+
+        if (autoRefreshCheckbox.checked) {
+            loadDiagnostics();
+            autoRefreshHandle = setInterval(loadDiagnostics, 5000);
+        }
+    }
+
+    function stopAutoRefresh() {
+        if (autoRefreshHandle) {
+            clearInterval(autoRefreshHandle);
+            autoRefreshHandle = null;
+        }
+    }
+
+    // Event listeners
+    refreshBtn.addEventListener('click', loadDiagnostics);
+    autoRefreshCheckbox.addEventListener('change', () => {
+        if (autoRefreshCheckbox.checked) {
+            startAutoRefresh();
+        } else {
+            stopAutoRefresh();
+        }
+    });
+
+    // Initial load
+    startAutoRefresh();
+})();
+</script>
+{% endblock %}

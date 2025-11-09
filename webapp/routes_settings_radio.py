@@ -551,5 +551,124 @@ def register(app: Flask, logger) -> None:
         receivers = RadioReceiver.query.order_by(RadioReceiver.display_name.asc(), RadioReceiver.identifier.asc()).all()
         return jsonify({"receivers": [_receiver_to_dict(receiver) for receiver in receivers]})
 
+    @app.route("/api/radio/diagnostics/status", methods=["GET"])
+    def api_radio_diagnostics_status() -> Any:
+        """Get comprehensive diagnostic information about RadioManager and receivers."""
+        try:
+            from app_core.extensions import get_radio_manager
+
+            # Get database receivers
+            receivers_db = RadioReceiver.query.all()
+            enabled_receivers = [r for r in receivers_db if r.enabled]
+            auto_start_receivers = [r for r in enabled_receivers if r.auto_start]
+
+            # Get RadioManager status
+            radio_manager = get_radio_manager()
+            available_drivers = list(radio_manager.available_drivers().keys())
+
+            # Get loaded receiver instances
+            loaded_receivers = {}
+            if hasattr(radio_manager, '_receivers'):
+                for identifier, receiver_instance in radio_manager._receivers.items():
+                    status = receiver_instance.get_status()
+
+                    # Test sample buffer
+                    samples_available = False
+                    sample_count = 0
+                    if hasattr(receiver_instance, 'get_samples'):
+                        try:
+                            samples = receiver_instance.get_samples(num_samples=100)
+                            if samples is not None:
+                                samples_available = True
+                                sample_count = len(samples)
+                        except Exception as e:
+                            route_logger.debug(f"Error getting samples from {identifier}: {e}")
+
+                    loaded_receivers[identifier] = {
+                        "identifier": identifier,
+                        "running": receiver_instance._running.is_set() if hasattr(receiver_instance, '_running') else False,
+                        "locked": status.locked,
+                        "signal_strength": status.signal_strength,
+                        "last_error": status.last_error,
+                        "reported_at": status.reported_at.isoformat() if status.reported_at else None,
+                        "samples_available": samples_available,
+                        "sample_count": sample_count,
+                        "config": {
+                            "frequency_hz": receiver_instance.config.frequency_hz,
+                            "sample_rate": receiver_instance.config.sample_rate,
+                            "driver": receiver_instance.config.driver,
+                            "modulation_type": receiver_instance.config.modulation_type,
+                        } if hasattr(receiver_instance, 'config') else {}
+                    }
+
+            # Calculate summary statistics
+            running_count = sum(1 for r in loaded_receivers.values() if r['running'])
+            locked_count = sum(1 for r in loaded_receivers.values() if r['locked'])
+            with_samples_count = sum(1 for r in loaded_receivers.values() if r['samples_available'])
+
+            # Determine overall health status
+            if len(loaded_receivers) == 0 and len(enabled_receivers) > 0:
+                health_status = "error"
+                health_message = "RadioManager not initialized - restart required"
+            elif locked_count > 0 and with_samples_count > 0:
+                health_status = "healthy"
+                health_message = "Audio pipeline operational"
+            elif running_count > 0 and locked_count == 0:
+                health_status = "warning"
+                health_message = "Receivers running but not locked to signal"
+            elif len(enabled_receivers) == 0:
+                health_status = "info"
+                health_message = "No receivers configured"
+            else:
+                health_status = "warning"
+                health_message = "Some receivers may have issues"
+
+            return jsonify({
+                "timestamp": time.time(),
+                "health_status": health_status,
+                "health_message": health_message,
+                "database": {
+                    "total_receivers": len(receivers_db),
+                    "enabled_receivers": len(enabled_receivers),
+                    "auto_start_receivers": len(auto_start_receivers),
+                    "receivers": [_receiver_to_dict(r) for r in receivers_db]
+                },
+                "radio_manager": {
+                    "available_drivers": available_drivers,
+                    "loaded_receiver_count": len(loaded_receivers),
+                    "running_receiver_count": running_count,
+                    "locked_receiver_count": locked_count,
+                    "receivers_with_samples": with_samples_count,
+                    "receivers": loaded_receivers
+                },
+                "summary": {
+                    "database_receivers": len(receivers_db),
+                    "enabled_receivers": len(enabled_receivers),
+                    "auto_start_receivers": len(auto_start_receivers),
+                    "loaded_instances": len(loaded_receivers),
+                    "running_instances": running_count,
+                    "locked_instances": locked_count,
+                    "instances_with_samples": with_samples_count
+                }
+            })
+
+        except Exception as exc:
+            route_logger.error("Failed to get diagnostic status: %s", exc, exc_info=True)
+            return jsonify({
+                "error": str(exc),
+                "health_status": "error",
+                "health_message": f"Diagnostic check failed: {exc}"
+            }), 500
+
+    @app.route("/settings/radio/diagnostics")
+    def radio_diagnostics_page() -> Any:
+        """Display radio receiver diagnostics page."""
+        try:
+            ensure_radio_tables(route_logger)
+        except Exception as exc:
+            route_logger.debug("Radio table validation failed: %s", exc)
+
+        return render_template("settings/radio_diagnostics.html")
+
 
 __all__ = ["register"]
