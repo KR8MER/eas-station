@@ -4,6 +4,15 @@
 
 set -e
 
+# Source persistent configuration from setup wizard if it exists
+# This allows HTTPS settings to be configured through the web UI
+if [ -f "/app-config/.env" ]; then
+    echo "Loading persistent configuration from /app-config/.env"
+    # Export variables from .env file (only HTTPS-related ones)
+    export $(grep -E '^(DOMAIN_NAME|SSL_EMAIL|CERTBOT_STAGING)=' /app-config/.env | xargs)
+fi
+
+# Set defaults from environment variables (or use hardcoded defaults as fallback)
 DOMAIN_NAME="${DOMAIN_NAME:-localhost}"
 EMAIL="${SSL_EMAIL:-admin@example.com}"
 STAGING="${CERTBOT_STAGING:-0}"

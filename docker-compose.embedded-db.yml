@@ -22,8 +22,11 @@ services:
       - certbot-conf:/etc/letsencrypt:ro
       - certbot-www:/var/www/certbot
       - nginx-logs:/var/log/nginx
+      - app-config:/app-config:ro  # Read persistent config from setup wizard
     environment:
       - DOMAIN_NAME=${DOMAIN_NAME:-localhost}
+      - SSL_EMAIL=${SSL_EMAIL:-admin@example.com}
+      - CERTBOT_STAGING=${CERTBOT_STAGING:-0}
     command: /bin/sh -c "chmod +x /docker-entrypoint.d/00-init.sh && /docker-entrypoint.d/00-init.sh"
     depends_on:
       - app
@@ -36,6 +39,7 @@ services:
     volumes:
       - certbot-conf:/etc/letsencrypt
       - certbot-www:/var/www/certbot
+      - app-config:/app-config:ro  # Read persistent config from setup wizard
     environment:
       - DOMAIN_NAME=${DOMAIN_NAME:-localhost}
       - SSL_EMAIL=${SSL_EMAIL:-admin@example.com}
