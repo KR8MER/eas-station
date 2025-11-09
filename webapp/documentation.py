@@ -98,9 +98,53 @@ def _markdown_to_html(content: str) -> str:
     # Convert blockquotes
     html = re.sub(r'^> (.+)$', r'<blockquote>\1</blockquote>', str(html), flags=re.MULTILINE)
 
-    # Convert horizontal rules
+    # Convert horizontal rules (but not table separators)
     html = re.sub(r'^---$', r'<hr>', str(html), flags=re.MULTILINE)
     html = re.sub(r'^\*\*\*$', r'<hr>', str(html), flags=re.MULTILINE)
+
+    # Convert tables
+    lines = str(html).split('\n')
+    result = []
+    in_table = False
+    for i, line in enumerate(lines):
+        # Check if this is a table row (has pipes)
+        if '|' in line and line.strip().startswith('|'):
+            # Check if next line is separator (---|---|)
+            is_header = False
+            if i + 1 < len(lines) and re.match(r'^\|[\s\-:|]+\|$', lines[i + 1]):
+                is_header = True
+                if not in_table:
+                    result.append('<table class="table table-striped table-bordered">')
+                    in_table = True
+                # Process header row
+                cells = [cell.strip() for cell in line.split('|')[1:-1]]
+                result.append('<thead><tr>')
+                for cell in cells:
+                    result.append(f'<th>{cell}</th>')
+                result.append('</tr></thead><tbody>')
+                continue
+            elif in_table and re.match(r'^\|[\s\-:|]+\|$', line):
+                # Skip separator row
+                continue
+            elif in_table:
+                # Process data row
+                cells = [cell.strip() for cell in line.split('|')[1:-1]]
+                result.append('<tr>')
+                for cell in cells:
+                    result.append(f'<td>{cell}</td>')
+                result.append('</tr>')
+                continue
+        else:
+            # Not a table line
+            if in_table:
+                result.append('</tbody></table>')
+                in_table = False
+            result.append(line)
+
+    if in_table:
+        result.append('</tbody></table>')
+
+    html = '\n'.join(result)
 
     # Convert line breaks to paragraphs
     paragraphs = html.split('\n\n')

@@ -1,0 +1,490 @@
+================================================================================
+EAS STATION - COMPREHENSIVE ROUTE AND PERMISSION SECURITY ANALYSIS
+================================================================================
+
+EXECUTIVE SUMMARY
+=================
+
+Total Routes: 224
+Protected Routes (with @require_permission): 22 (9.8%)
+Unprotected Routes (NO permission checks): 202 (90.2%)
+
+CRITICAL FINDING: The vast majority of routes in the application lack
+permission-based access control. Only 22 of 224 routes have any permission
+decorator. This is a MAJOR SECURITY ISSUE.
+
+================================================================================
+PERMISSION FRAMEWORK OVERVIEW
+================================================================================
+
+Permission System Location: /app_core/auth/roles.py
+Decorator Types:
+  - @require_permission('permission.name')
+  - @require_any_permission('perm1', 'perm2')
+  - @require_all_permissions('perm1', 'perm2')
+
+Default Roles and Permissions:
+  ADMIN:    Full access to all permissions
+  OPERATOR: Alerts, EAS, logs, receivers, GPIO (no system config)
+  VIEWER:   Read-only access (alerts, logs, statistics)
+  DEMO:     Limited view (alerts, EAS view, config view, receivers, GPIO)
+
+================================================================================
+PERMISSION DEFINITIONS
+================================================================================
+
+alerts.view        - View CAP alerts, alert history, and alert details
+alerts.create      - Create new manual CAP alerts
+alerts.delete      - Delete CAP alerts
+alerts.export      - Export alert data (CSV, JSON, etc.)
+
+eas.view           - View EAS broadcast operations and history
+eas.broadcast      - Initiate EAS broadcasts
+eas.manual_activate - Manually activate EAS equipment
+eas.cancel         - Cancel active or scheduled broadcasts
+
+system.configure   - Modify system settings and environment variables
+system.view_config - View system configuration (read-only)
+system.manage_users - Create, modify, delete user accounts
+system.view_users  - View user list and roles
+
+logs.view          - View system and audit logs
+logs.export        - Export log data
+logs.delete        - Delete log entries
+
+receivers.view     - View configured SDR receivers
+receivers.configure - Add/modify SDR receivers
+receivers.delete   - Remove receivers
+
+gpio.view          - View GPIO pin status
+gpio.control       - Control GPIO pins and relays
+
+api.read           - Read via REST API
+api.write          - Modify via REST API
+
+================================================================================
+PROTECTED ROUTES (22 total)
+================================================================================
+
+PERMISSION: system.view_config (5 routes - READ-ONLY)
+  Line 801   GET     /api/environment/categories
+  Line 816   GET     /api/environment/variables
+  Line 945   GET     /api/environment/validate
+  Line 1018  GET     /settings/environment
+  Line 1040  GET     /admin/environment/download-env
+  File: webapp/admin/environment.py
+  Description: View system configuration settings (read-only)
+  Sensitivity: HIGH - Exposes database config, API keys, secret key (masked), etc.
+
+PERMISSION: system.configure (2 routes - WRITE OPERATIONS)
+  Line 870   PUT     /api/environment/variables
+  Line 1064  POST    /api/environment/generate-secret
+  File: webapp/admin/environment.py
+  Description: Modify system configuration
+  Sensitivity: CRITICAL - Can change all system settings, SECRET_KEY, database connection
+
+PERMISSION: system.view_users (3 routes - READ-ONLY)
+  Line 211   GET     /roles
+  Line 221   GET     /roles/<int:role_id>
+  Line 313   GET     /permissions
+  File: webapp/routes_security.py
+  Description: View roles and permissions
+  Sensitivity: MEDIUM
+
+PERMISSION: system.manage_users (4 routes - WRITE OPERATIONS)
+  Line 229   POST    /roles
+  Line 273   PUT     /roles/<int:role_id>
+  Line 323   PUT     /users/<int:user_id>/role
+  Line 469   POST    /init-roles
+  File: webapp/routes_security.py
+  Description: Create, modify roles and assign user roles
+  Sensitivity: CRITICAL - Can grant any permissions to any user
+
+PERMISSION: logs.view (1 route - READ-ONLY)
+  Line 370   GET     /audit-logs
+  File: webapp/routes_security.py
+  Description: View audit logs
+  Sensitivity: MEDIUM
+
+PERMISSION: logs.export (1 route - DATA EXPORT)
+  Line 412   GET     /audit-logs/export
+  File: webapp/routes_security.py
+  Description: Export audit logs as CSV
+  Sensitivity: MEDIUM
+
+PERMISSION: analytics_manage (6 routes - WRITE OPERATIONS)
+  Line 123   POST    /api/analytics/metrics/aggregate
+  Line 196   POST    /api/analytics/trends/analyze
+  Line 308   POST    /api/analytics/anomalies/detect
+  Line 361   POST    /api/analytics/anomalies/<int:anomaly_id>/acknowledge
+  Line 390   POST    /api/analytics/anomalies/<int:anomaly_id>/resolve
+  Line 423   POST    /api/analytics/anomalies/<int:anomaly_id>/false-positive
+  File: webapp/routes_analytics.py
+  Description: Manage analytics data and anomaly detection
+  Sensitivity: LOW-MEDIUM
+
+================================================================================
+UNPROTECTED ROUTES - CRITICAL FINDINGS (202 TOTAL)
+================================================================================
+
+CATEGORY 1: AUTHENTICATION & USER MANAGEMENT
+  Line 33    GET/POST /login                      (webapp/admin/auth.py)
+  Line 111   GET      /logout                     (webapp/admin/auth.py)
+  Line 134   GET/POST /mfa/verify                 (webapp/admin/auth.py)
+  Line 36    GET      /mfa/status                 (webapp/routes_security.py)
+  Line 53    POST     /mfa/enroll/start           (webapp/routes_security.py)
+  Line 92    GET      /mfa/enroll/qr              (webapp/routes_security.py)
+  Line 122   POST     /mfa/enroll/verify          (webapp/routes_security.py)
+  Line 162   POST     /mfa/disable                (webapp/routes_security.py)
+  Line 164   GET/POST /admin/users                (webapp/admin/dashboard.py)
+  Line 213   PATCH/DEL /admin/users/<int:user_id> (webapp/admin/dashboard.py)
+  Sensitivity: CRITICAL - User creation/deletion is unprotected
+  Note: /login and MFA endpoints can be user-facing, but /admin/users should be protected
+
+CATEGORY 2: EAS WORKFLOW & BROADCASTS (CRITICAL)
+  *** NO PERMISSION DECORATORS ON ANY EAS ROUTES ***
+  
+  Line 105   POST     /manual/generate            (webapp/eas/workflow.py)
+  Line 520   GET      /manual/events              (webapp/eas/workflow.py)
+  Line 594   GET      /manual/events/<id>/print   (webapp/eas/workflow.py)
+  Line 649   GET      /manual/events/<id>/export  (webapp/eas/workflow.py)
+  Line 674   DELETE   /manual/events/<int:event_id> (webapp/eas/workflow.py)
+  Line 708   POST     /manual/events/purge        (webapp/eas/workflow.py)
+  
+  Line 621   POST     /admin/eas/manual_generate  (webapp/admin/audio.py)
+  Line 992   GET      /admin/eas/manual_events    (webapp/admin/audio.py)
+  Line 1105  GET      /admin/eas/manual_events/<id>/print (webapp/admin/audio.py)
+  Line 1154  GET      /admin/eas/manual_events/<id>/export (webapp/admin/audio.py)
+  
+  Sensitivity: CRITICAL - Can initiate EAS broadcasts
+  Risk: Any authenticated user can generate EAS messages and potentially broadcast
+
+CATEGORY 3: AUDIO MONITORING & INGEST
+  Line 513   GET      /api/audio/sources         (webapp/admin/audio_ingest.py)
+  Line 631   POST     /api/audio/sources         (webapp/admin/audio_ingest.py)
+  Line 727   GET      /api/audio/sources/<name>  (webapp/admin/audio_ingest.py)
+  Line 754   PATCH    /api/audio/sources/<name>  (webapp/admin/audio_ingest.py)
+  Line 834   DELETE   /api/audio/sources/<name>  (webapp/admin/audio_ingest.py)
+  Line 874   POST     /api/audio/sources/<name>/start (webapp/admin/audio_ingest.py)
+  Line 920   POST     /api/audio/sources/<name>/stop  (webapp/admin/audio_ingest.py)
+  
+  Line 966   GET      /api/audio/metrics         (webapp/admin/audio_ingest.py)
+  Line 1025  GET      /api/audio/health          (webapp/admin/audio_ingest.py)
+  Line 1084  GET      /api/audio/alerts          (webapp/admin/audio_ingest.py)
+  Line 1139  POST     /api/audio/alerts/<id>/acknowledge (webapp/admin/audio_ingest.py)
+  Line 1166  POST     /api/audio/alerts/<id>/resolve (webapp/admin/audio_ingest.py)
+  Line 1195  GET      /api/audio/devices         (webapp/admin/audio_ingest.py)
+  Line 1249  GET      /api/audio/waveform/<name> (webapp/admin/audio_ingest.py)
+  Line 1288  GET      /api/audio/spectrogram/<name> (webapp/admin/audio_ingest.py)
+  Line 1331  GET      /api/audio/stream/<name>   (webapp/admin/audio_ingest.py)
+  Line 1497  GET      /api/audio/health/dashboard (webapp/admin/audio_ingest.py)
+  Line 1593  GET      /api/audio/health/metrics  (webapp/admin/audio_ingest.py)
+  Line 1623  GET      /api/audio/icecast/config  (webapp/admin/audio_ingest.py)
+  Line 1643  POST     /api/audio/icecast/config  (webapp/admin/audio_ingest.py)
+  
+  Sensitivity: HIGH - Can configure audio sources and streaming
+  Risk: Ability to modify audio receivers and start/stop streams
+
+CATEGORY 4: GPIO / RELAY CONTROL (CRITICAL)
+  Line 150   GET      /api/gpio/status           (webapp/routes/system_controls.py)
+  Line 171   POST     /api/gpio/activate/<int:pin> (webapp/routes/system_controls.py)
+  Line 231   POST     /api/gpio/deactivate/<int:pin> (webapp/routes/system_controls.py)
+  Line 273   GET      /api/gpio/history          (webapp/routes/system_controls.py)
+  Line 326   GET      /api/gpio/statistics       (webapp/routes/system_controls.py)
+  Line 399   GET      /admin/gpio                (webapp/routes/system_controls.py)
+  
+  Sensitivity: CRITICAL - Can control GPIO pins (relay activation/deactivation)
+  Risk: Could trigger equipment, control broadcasts, activate sirens, etc.
+
+CATEGORY 5: RECEIVER/RADIO CONFIGURATION
+  Line 190   GET      /api/radio/receivers       (webapp/routes_settings_radio.py)
+  Line 196   POST     /api/radio/receivers       (webapp/routes_settings_radio.py)
+  Line 219   PUT/PATCH /api/radio/receivers/<int:id> (webapp/routes_settings_radio.py)
+  Line 245   DELETE   /api/radio/receivers/<int:id> (webapp/routes_settings_radio.py)
+  Line 260   GET      /api/radio/discover        (webapp/routes_settings_radio.py)
+  Line 270   GET      /api/radio/devices/simple  (webapp/routes_settings_radio.py)
+  Line 311   POST     /api/radio/validate-frequency (webapp/routes_settings_radio.py)
+  Line 338   GET      /api/radio/service-config/<type> (webapp/routes_settings_radio.py)
+  Line 362   GET      /api/radio/diagnostics     (webapp/routes_settings_radio.py)
+  Line 372   GET      /api/radio/capabilities/<driver> (webapp/routes_settings_radio.py)
+  Line 392   GET      /api/radio/presets         (webapp/routes_settings_radio.py)
+  Line 397   GET      /api/radio/presets/<key>   (webapp/routes_settings_radio.py)
+  Line 405   GET      /api/radio/waveform/<int:id> (webapp/routes_settings_radio.py)
+  Line 457   GET      /api/radio/spectrum/<int:id> (webapp/routes_settings_radio.py)
+  Line 528   GET      /api/monitoring/radio      (webapp/routes_settings_radio.py)
+  
+  Sensitivity: HIGH - Can add/modify/delete SDR receivers
+  Risk: Could reconfigure receivers to listen to wrong frequencies
+
+CATEGORY 6: DISPLAY & SCREEN CONTROL
+  Line 50    GET      /api/screens               (webapp/routes_screens.py)
+  Line 75    GET      /api/screens/<int:id>      (webapp/routes_screens.py)
+  Line 90    POST     /api/screens               (webapp/routes_screens.py)
+  Line 140   PUT      /api/screens/<int:id>      (webapp/routes_screens.py)
+  Line 195   DELETE   /api/screens/<int:id>      (webapp/routes_screens.py)
+  Line 217   GET      /api/screens/<int:id>/preview (webapp/routes_screens.py)
+  Line 242   POST     /api/screens/<int:id>/display (webapp/routes_screens.py)
+  Line 338   GET      /api/rotations             (webapp/routes_screens.py)
+  Line 363   GET      /api/rotations/<int:id>    (webapp/routes_screens.py)
+  Line 378   POST     /api/rotations             (webapp/routes_screens.py)
+  Line 425   PUT      /api/rotations/<int:id>    (webapp/routes_screens.py)
+  Line 474   DELETE   /api/rotations/<int:id>    (webapp/routes_screens.py)
+  Line 500   GET      /screens                   (webapp/routes_screens.py)
+  
+  Sensitivity: MEDIUM - Can control display screens and rotations
+
+CATEGORY 7: VFD / LED CONTROL
+  Line 32    GET      /vfd                       (webapp/routes_vfd.py)
+  Line 36    GET      /vfd_control               (webapp/routes_vfd.py)
+  Line 79    GET      /api/vfd/status            (webapp/routes_vfd.py)
+  Line 101   POST     /api/vfd/clear             (webapp/routes_vfd.py)
+  Line 125   POST     /api/vfd/brightness        (webapp/routes_vfd.py)
+  Line 170   POST     /api/vfd/text              (webapp/routes_vfd.py)
+  Line 216   POST     /api/vfd/image             (webapp/routes_vfd.py)
+  Line 343   POST     /api/vfd/graphics/pixel    (webapp/routes_vfd.py)
+  Line 366   POST     /api/vfd/graphics/line     (webapp/routes_vfd.py)
+  Line 396   POST     /api/vfd/graphics/rectangle (webapp/routes_vfd.py)
+  Line 429   POST     /api/vfd/graphics/progress (webapp/routes_vfd.py)
+  Line 454   GET      /api/vfd/displays          (webapp/routes_vfd.py)
+  
+  Line 36    GET      /led                       (webapp/routes_led.py)
+  Line 40    GET      /led_control               (webapp/routes_led.py)
+  Line 101   POST     /api/led/send_message      (webapp/routes_led.py)
+  Line 295   POST     /api/led/send_canned       (webapp/routes_led.py)
+  Line 336   POST     /api/led/clear             (webapp/routes_led.py)
+  Line 362   POST     /api/led/brightness        (webapp/routes_led.py)
+  Line 390   POST     /api/led/test              (webapp/routes_led.py)
+  Line 413   POST     /api/led/emergency         (webapp/routes_led.py)
+  Line 444   GET      /api/led/status            (webapp/routes_led.py)
+  Line 460   GET      /api/led/messages          (webapp/routes_led.py)
+  Line 487   GET      /api/led/canned_messages   (webapp/routes_led.py)
+  Line 504   GET/POST /api/led/serial_config     (webapp/routes_led.py)
+  
+  Sensitivity: MEDIUM - Can control LED and VFD displays
+
+CATEGORY 8: ALERT MANAGEMENT (UNPROTECTED)
+  Line 988   GET      /admin/alerts              (webapp/admin/maintenance.py)
+  Line 1035  GET/PATCH/DEL /admin/alerts/<int:id> (webapp/admin/maintenance.py)
+  Line 1212  POST     /admin/mark_expired        (webapp/admin/maintenance.py)
+  
+  Line 332   GET      /api/alerts                (webapp/admin/api.py)
+  Line 444   GET      /api/alerts/historical     (webapp/admin/api.py)
+  Line 52    GET      /api/alerts/<id>/geometry  (webapp/admin/api.py)
+  Line 167   GET      /alerts/<int:id>           (webapp/admin/api.py)
+  Line 366   GET      /alerts                    (webapp/routes_public.py)
+  
+  Sensitivity: HIGH - Can modify and delete alerts
+  Risk: Could delete alert history, modify alert data
+
+CATEGORY 9: BOUNDARY MANAGEMENT
+  Line 247   POST     /admin/preview_geojson     (webapp/admin/boundaries.py)
+  Line 350   POST     /admin/upload_boundaries   (webapp/admin/boundaries.py)
+  Line 442   DELETE   /admin/clear_boundaries/<type> (webapp/admin/boundaries.py)
+  Line 489   DELETE   /admin/clear_all_boundaries (webapp/admin/boundaries.py)
+  Line 551   GET      /api/boundaries            (webapp/admin/api.py)
+  
+  Sensitivity: MEDIUM - Can upload/modify boundary data
+
+CATEGORY 10: SYSTEM OPERATIONS & MAINTENANCE
+  Line 445   GET      /admin/operations/status   (webapp/admin/maintenance.py)
+  Line 449   POST     /admin/operations/backup   (webapp/admin/maintenance.py)
+  Line 480   POST     /admin/operations/upgrade  (webapp/admin/maintenance.py)
+  Line 520   GET      /admin/check_db_health    (webapp/admin/maintenance.py)
+  Line 573   POST     /admin/optimize_db        (webapp/admin/maintenance.py)
+  Line 636   GET/POST /admin/env_config         (webapp/admin/maintenance.py)
+  Line 722   POST     /admin/trigger_poll       (webapp/admin/maintenance.py)
+  Line 742   GET/PUT  /admin/location_settings  (webapp/admin/maintenance.py)
+  Line 769   GET      /admin/location_reference (webapp/admin/maintenance.py)
+  Line 785   POST     /admin/import_alert       (webapp/admin/maintenance.py)
+  
+  Sensitivity: CRITICAL - Can backup, upgrade, optimize database, trigger operations
+
+CATEGORY 11: ALERT VERIFICATION & COMPLIANCE
+  Line 247   GET/POST /admin/alert-verification (webapp/routes/alert_verification.py)
+  Line 327   GET      /admin/alert-verification/export.csv (webapp/routes/alert_verification.py)
+  Line 362   GET      /admin/alert-verification/decodes/<id>/audio/<seg> (webapp/routes/alert_verification.py)
+  
+  Line 33    GET      /admin/compliance          (webapp/routes/eas_compliance.py)
+  Line 99    GET      /admin/compliance/export.csv (webapp/routes/eas_compliance.py)
+  Line 120   GET      /admin/compliance/export.pdf (webapp/routes/eas_compliance.py)
+  
+  Sensitivity: MEDIUM-HIGH - Can export compliance and verification data
+
+CATEGORY 12: INTERSECTION MANAGEMENT
+  Line 21    POST     /admin/fix_county_intersections (webapp/admin/intersections.py)
+  Line 79    POST     /admin/recalculate_intersections (webapp/admin/intersections.py)
+  Line 127   POST     /admin/calculate_intersections/<id> (webapp/admin/intersections.py)
+  Line 203   POST     /admin/calculate_all_intersections (webapp/admin/intersections.py)
+  Line 281   POST     /admin/calculate_single_alert/<id> (webapp/admin/intersections.py)
+  
+  Sensitivity: LOW-MEDIUM - Recalculates alert intersections
+
+CATEGORY 13: DASHBOARD & PUBLIC PAGES
+  Line 34    GET      /admin                    (webapp/admin/dashboard.py)
+  Line 257   GET      /admin/rbac               (webapp/admin/dashboard.py)
+  Line 262   GET      /admin/audit-logs         (webapp/admin/dashboard.py)
+  Line 267   GET      /admin/gpio/statistics    (webapp/admin/dashboard.py)
+  Line 272   GET      /admin/operations         (webapp/admin/dashboard.py)
+  Line 277   GET      /admin/intersections      (webapp/admin/dashboard.py)
+  
+  Line 38    GET      /                         (webapp/routes_public.py)
+  Line 51    GET      /stats                    (webapp/routes_public.py)
+  Line 300   GET      /about                    (webapp/routes_public.py)
+  Line 310   GET      /help                     (webapp/routes_public.py)
+  Line 320   GET      /terms                    (webapp/routes_public.py)
+  Line 330   GET      /privacy                  (webapp/routes_public.py)
+  
+  Note: Some of these should be public (/, /about, /help, /stats)
+  But /admin, /admin/rbac should be protected
+
+CATEGORY 14: MONITORING & HEALTH
+  Line 30    GET      /health                   (webapp/routes_monitoring.py)
+  Line 69    GET      /api/health               (webapp/routes_monitoring.py)
+  Line 75    GET      /ping                     (webapp/routes_monitoring.py)
+  Line 87    GET      /version                  (webapp/routes_monitoring.py)
+  Line 108   GET      /api/release-manifest     (webapp/routes_monitoring.py)
+  Line 236   GET      /favicon.ico              (webapp/routes_monitoring.py)
+  Line 242   GET      /robots.txt               (webapp/routes_monitoring.py)
+  Line 257   GET      /api/monitoring/radio     (webapp/routes_monitoring.py)
+  
+  Line 606   GET      /api/system_status        (webapp/admin/api.py)
+  Line 768   GET      /api/system_health        (webapp/admin/api.py)
+  
+  Note: These health check endpoints might need to be public for monitoring
+
+CATEGORY 15: EXPORTS & DATA ACCESS
+  Line 27    GET      /export/alerts            (webapp/routes_exports.py)
+  Line 87    GET      /export/boundaries        (webapp/routes_exports.py)
+  Line 136   GET      /export/statistics        (webapp/routes_exports.py)
+  Line 200   GET      /export/intersections     (webapp/routes_exports.py)
+  
+  Line 52    GET      /audio                    (webapp/admin/audio.py)
+  Line 382   GET      /audio/<int:id>           (webapp/admin/audio.py)
+  Line 442   GET      /eas_messages/<id>/audio  (webapp/admin/audio.py)
+  Line 479   GET      /eas_messages/<id>/summary (webapp/admin/audio.py)
+  
+  Sensitivity: MEDIUM - Can export alert and boundary data
+
+================================================================================
+MISSING PERMISSION DECORATORS ON SENSITIVE ROUTES
+================================================================================
+
+Routes that MUST be protected (by frequency and risk):
+
+1. EAS/BROADCAST OPERATIONS (Most Critical)
+   - /manual/generate - Initiates EAS broadcasts
+   - /admin/eas/manual_generate
+   - Suggested: @require_permission('eas.broadcast')
+   Risk Level: CRITICAL - Can trigger false alarms
+
+2. GPIO/RELAY CONTROL (Critical)
+   - /api/gpio/activate/<pin>
+   - /api/gpio/deactivate/<pin>
+   Suggested: @require_permission('gpio.control')
+   Risk Level: CRITICAL - Can control physical equipment
+
+3. SYSTEM CONFIGURATION (Critical)
+   - /admin/operations/upgrade
+   - /admin/optimize_db
+   - /admin/env_config
+   Suggested: @require_permission('system.configure')
+   Risk Level: CRITICAL - Can modify system operation
+
+4. RECEIVER/RADIO CONFIGURATION (High)
+   - /api/radio/receivers (POST/PUT/DELETE)
+   Suggested: @require_permission('receivers.configure')
+   Risk Level: HIGH - Can reconfigure SDR receivers
+
+5. ALERT MANAGEMENT (High)
+   - /admin/alerts (GET/PATCH/DELETE)
+   - /admin/mark_expired
+   - /admin/import_alert
+   Suggested: @require_permission('alerts.view', 'alerts.delete')
+   Risk Level: HIGH - Can delete alert history
+
+6. AUDIO/AUDIO INGEST (High)
+   - /api/audio/sources (POST/PATCH/DELETE)
+   - /api/audio/sources/<name>/start
+   - /api/audio/sources/<name>/stop
+   Suggested: @require_permission('receivers.configure')
+   Risk Level: HIGH - Can stop audio monitoring
+
+================================================================================
+RECOMMENDED DEMO ROLE PERMISSIONS
+================================================================================
+
+For a safe "DEMO" role that can showcase features without dangerous operations:
+
+Current DEMO Role Has:
+  ✓ alerts.view
+  ✓ eas.view
+  ✓ system.view_config
+  ✓ receivers.view
+  ✓ gpio.view
+
+RECOMMENDED ADDITIONS FOR DEMO (Read-only):
+  ✓ logs.view       - Can view history (good for demo)
+  
+PREVENT FOR DEMO (Write operations):
+  ✗ alerts.create, alerts.delete, alerts.export
+  ✗ eas.broadcast, eas.cancel, eas.manual_activate
+  ✗ system.configure
+  ✗ receivers.configure, receivers.delete
+  ✗ gpio.control
+  ✗ logs.export, logs.delete
+  ✗ system.manage_users, system.view_users
+  ✗ analytics_manage (write operations on analytics)
+
+CRITICAL: Must also add decorators to unprotected routes!
+
+================================================================================
+ROUTES NEEDING AUTHENTICATION CHECK
+================================================================================
+
+Routes that should have login_required decorator (no permission, just auth):
+  - /admin/* - All admin pages should require authentication
+  - /api/* - Most API endpoints should require authentication
+  - /settings/* - All settings pages
+  - /mfa/* - MFA management (partially OK if user-facing)
+
+Current Status: Many /admin routes lack even basic authentication checks
+
+================================================================================
+ACTION ITEMS
+================================================================================
+
+IMMEDIATE (Critical):
+1. Add @require_permission decorators to all sensitive routes:
+   - All /manual/generate routes (eas.broadcast)
+   - All GPIO control routes (gpio.control)
+   - System operations routes (system.configure)
+   - Receiver/radio management (receivers.configure)
+
+2. Add authentication checks to /admin routes without permissions
+
+3. Review /api/audio routes for access control
+
+SHORT-TERM (Within Sprint):
+1. Add missing permission checks for:
+   - Alert management operations
+   - Boundary uploads/modifications
+   - Screen/display configuration
+
+2. Create permission-based access control for all write operations
+
+MEDIUM-TERM:
+1. Add fine-grained permissions for:
+   - Read vs. write operations
+   - Different alert types
+   - Regional/zone-based access (if multi-zone support)
+
+2. Test DEMO role with all protected routes
+
+================================================================================
+ANALYSIS COMPLETE
+================================================================================
+
+Generated: 2024-11-09
+Analyzed: webapp/routes*.py, webapp/admin/*.py, webapp/eas/*.py
+Framework: Flask with role-based access control (RBAC)
+

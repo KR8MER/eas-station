@@ -313,6 +313,13 @@
                                 </a>
                             </li>
                             {% endif %}
+                            {% if is_authenticated %}
+                            <li>
+                                <a class="dropdown-item" href="/docs/RBAC_PERMISSION_TREE">
+                                    <i class="fas fa-sitemap"></i> Permission Tree
+                                </a>
+                            </li>
+                            {% endif %}
                             {% if show_admin_audit %}
                             <li>
                                 <a class="dropdown-item" href="/admin/audit-logs">
