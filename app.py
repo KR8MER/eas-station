@@ -757,7 +757,7 @@ def before_request():
             return
 
     if not setup_mode_active:
-        protected_prefixes = ('/admin', '/logs', '/api', '/eas')
+        protected_prefixes = ('/admin', '/logs', '/api', '/eas', '/settings')
         if any(request.path.startswith(prefix) for prefix in protected_prefixes):
             if g.current_user is None:
                 if request.path.startswith('/api/'):

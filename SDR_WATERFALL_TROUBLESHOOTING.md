@@ -3,6 +3,21 @@
 ## Issue
 Receiver shows as "locked" but no waterfall/spectrum display appears on `/settings/radio` or `/audio-monitor`.
 
+## Quick Start: Use the Web Diagnostics Tool
+
+**The easiest way to diagnose SDR issues is through the web interface:**
+
+1. Navigate to **Broadcast → SDR Diagnostics** in the main menu
+2. Or go directly to: `http://your-server:5000/settings/radio/diagnostics`
+3. The diagnostics page will show you:
+   - Overall system health status
+   - Number of configured vs. loaded receivers
+   - Real-time sample buffer status
+   - Detailed error messages
+   - Built-in troubleshooting tips
+
+**If the diagnostics page shows "RadioManager not initialized", you need to restart the web application (see below).**
+
 ## Root Cause (FIXED)
 The RadioManager was not being initialized in the web application, so even though receivers were configured in the database, they weren't accessible to the web UI endpoints.
 
