@@ -56,6 +56,30 @@ is_self_signed_certificate() {
     return 1
 }
 
+certificate_has_trusted_issuer() {
+    CERT_PATH="${1:-/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem}"
+
+    if [ ! -s "$CERT_PATH" ]; then
+        return 1
+    fi
+
+    ISSUER=$(openssl x509 -in "$CERT_PATH" -noout -issuer 2>/dev/null || true)
+
+    if [ -z "$ISSUER" ]; then
+        return 1
+    fi
+
+    if echo "$ISSUER" | grep -qi "Let's Encrypt"; then
+        return 0
+    fi
+
+    if [ "$STAGING" = "1" ] && echo "$ISSUER" | grep -qi "Fake LE"; then
+        return 0
+    fi
+
+    return 1
+}
+
 purge_stale_self_signed_material() {
     BASE_PATH="/etc/letsencrypt/live"
 
@@ -79,7 +103,7 @@ purge_stale_self_signed_material() {
                 ;;
         esac
 
-        if [ -f "$MARKER_FILE" ] || { [ "$DOMAIN_MATCH" -eq 1 ] && is_self_signed_certificate "$CERT_PATH"; }; then
+        if [ -f "$MARKER_FILE" ] || { [ "$DOMAIN_MATCH" -eq 1 ] && ! certificate_has_trusted_issuer "$CERT_PATH"; } || { [ "$DOMAIN_MATCH" -eq 1 ] && is_self_signed_certificate "$CERT_PATH"; }; then
             echo "Removing stale self-signed certificate artifacts for $CERT_DOMAIN"
             purge_certificate_material "$CERT_DOMAIN"
         fi
@@ -138,10 +162,16 @@ if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
         echo "Cleaning up legacy fallback before reissuing"
         touch "$SELF_SIGNED_MARKER"
         CURRENT_CERT_SELF_SIGNED=1
-    else
+    elif certificate_has_trusted_issuer; then
         echo "SSL certificates already exist for $DOMAIN_NAME"
         echo "Skipping certificate generation"
         CURRENT_CERT_SELF_SIGNED=0
+    else
+        CERT_ISSUER=$(openssl x509 -in "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" -noout -issuer 2>/dev/null || echo "unknown")
+        echo "Existing certificate for $DOMAIN_NAME is not signed by Let's Encrypt (issuer: $CERT_ISSUER)"
+        echo "Will request a new trusted certificate"
+        touch "$SELF_SIGNED_MARKER"
+        CURRENT_CERT_SELF_SIGNED=1
     fi
 else
     CURRENT_CERT_SELF_SIGNED=1

@@ -433,6 +433,13 @@ tracks releases under the 2.x series.
 - Bumped the default `APP_BUILD_VERSION` to 2.3.0 across the application and sample
   environment template so deployments surface the new release number.
 
+## [2.4.7] - 2025-11-09
+### Fixed
+- Detect existing certificates issued by anything other than Let's Encrypt (including legacy self-signed chains)
+  and automatically purge them so startup always retries public issuance instead of reusing stale fallbacks.
+- Extend the certificate cleanup routine to treat unknown issuers as invalid, guaranteeing that deployments replace
+  outdated self-signed material with a fresh ACME request on every boot.
+
 ## [2.4.6] - 2025-11-09
 ### Fixed
 - Remove any lingering self-signed certificate directories (including suffixed variants) on
