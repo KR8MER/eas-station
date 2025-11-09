@@ -2109,7 +2109,7 @@ def main():
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'], help='Logging level')
     parser.add_argument('--continuous', action='store_true', help='Run continuously')
     parser.add_argument('--interval', type=int, default=int(os.getenv('POLL_INTERVAL_SEC', '300')),
-                        help='Polling interval seconds (default: 300)')
+                        help='Polling interval seconds (default: 300, minimum: 30)')
     parser.add_argument('--cap-endpoint', dest='cap_endpoints', action='append', default=[],
                         help='Custom CAP feed endpoint (repeatable)')
     parser.add_argument('--cap-endpoints', dest='cap_endpoints_csv',
@@ -2149,17 +2149,25 @@ def main():
             stats = poller.fix_existing_geometry()
             print(json.dumps(stats, indent=2))
         elif args.continuous:
-            logger.info(f"Running continuously with {args.interval} second intervals")
+            # Enforce minimum interval to prevent excessive CPU usage
+            interval = max(30, args.interval)
+            if interval != args.interval:
+                logger.warning(
+                    f"Interval {args.interval}s is below minimum; using {interval}s to prevent excessive CPU usage"
+                )
+            logger.info(f"Running continuously with {interval} second intervals")
             while True:
                 try:
                     stats = poller.poll_and_process()
                     print(json.dumps(stats, indent=2))
-                    time.sleep(args.interval)
+                    logger.info(f"Polling cycle complete. Sleeping for {interval} seconds...")
+                    time.sleep(interval)
                 except KeyboardInterrupt:
                     logger.info("Received interrupt signal, shutting down")
                     break
                 except Exception as e:
                     logger.error(f"Error in continuous polling: {e}")
+                    logger.info("Sleeping for 60 seconds before retry...")
                     time.sleep(60)
         else:
             stats = poller.poll_and_process()
