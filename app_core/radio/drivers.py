@@ -111,6 +111,8 @@ class _SoapySDRReceiver(ReceiverInterface):
         self._sample_buffer_size = 32768  # Store ~0.67 seconds at 48kHz
         self._sample_buffer_pos = 0
         self._sample_buffer_lock = threading.Lock()
+        self._retry_backoff = 0.25
+        self._max_retry_backoff = 5.0
 
     # ------------------------------------------------------------------
     # Lifecycle helpers
@@ -126,11 +128,7 @@ class _SoapySDRReceiver(ReceiverInterface):
             raise
 
         self._handle = handle
-
-        # Initialize sample buffer BEFORE starting thread to avoid race condition
-        with self._sample_buffer_lock:
-            self._sample_buffer = handle.numpy.zeros(self._sample_buffer_size, dtype=handle.numpy.complex64)
-            self._sample_buffer_pos = 0
+        self._initialize_sample_buffer(handle.numpy)
 
         self._running.set()
 
@@ -147,7 +145,7 @@ class _SoapySDRReceiver(ReceiverInterface):
             self._thread.join(timeout=2.0)
 
         self._teardown_handle()
-        self._cancel_capture_requests(RuntimeError("Receiver stopped"))
+        self._cancel_capture_requests(RuntimeError("Receiver stopped"), teardown=False)
         self._update_status(locked=False)
 
     # ------------------------------------------------------------------
@@ -193,6 +191,12 @@ class _SoapySDRReceiver(ReceiverInterface):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+    def _initialize_sample_buffer(self, numpy_module) -> None:
+        """Reset the rolling IQ sample buffer using the provided numpy module."""
+        with self._sample_buffer_lock:
+            self._sample_buffer = numpy_module.zeros(self._sample_buffer_size, dtype=numpy_module.complex64)
+            self._sample_buffer_pos = 0
+
     def _open_handle(self) -> _SoapySDRHandle:
         try:
             import SoapySDR  # type: ignore
@@ -252,8 +256,9 @@ class _SoapySDRReceiver(ReceiverInterface):
 
         return _SoapySDRHandle(device=device, stream=stream, sdr_module=SoapySDR, numpy_module=numpy)
 
-    def _teardown_handle(self) -> None:
-        handle = self._handle
+    def _teardown_handle(self, handle: Optional[_SoapySDRHandle] = None) -> None:
+        if handle is None:
+            handle = self._handle
         if not handle:
             return
 
@@ -278,16 +283,36 @@ class _SoapySDRReceiver(ReceiverInterface):
         except Exception:  # pragma: no cover - best-effort cleanup
             pass
 
-        self._handle = None
+        if handle is self._handle:
+            self._handle = None
 
     def _capture_loop(self) -> None:
-        assert self._handle is not None
         handle = self._handle
-        buffer = handle.numpy.zeros(4096, dtype=handle.numpy.complex64)
+        buffer = None
+        if handle is not None:
+            buffer = handle.numpy.zeros(4096, dtype=handle.numpy.complex64)
 
-        # Sample buffer is now initialized in start() before thread starts
+        retry_delay = self._retry_backoff
 
         while self._running.is_set():
+            if handle is None:
+                if not self._running.is_set():
+                    break
+
+                try:
+                    new_handle = self._open_handle()
+                except Exception as exc:
+                    self._update_status(locked=False, last_error=str(exc))
+                    time.sleep(min(retry_delay, self._max_retry_backoff))
+                    retry_delay = min(retry_delay * 2.0, self._max_retry_backoff)
+                    continue
+
+                handle = self._handle = new_handle
+                self._initialize_sample_buffer(new_handle.numpy)
+                buffer = new_handle.numpy.zeros(4096, dtype=new_handle.numpy.complex64)
+                retry_delay = self._retry_backoff
+                continue
+
             try:
                 result = handle.device.readStream(handle.stream, [buffer], len(buffer))
                 if result.ret < 0:
@@ -301,16 +326,20 @@ class _SoapySDRReceiver(ReceiverInterface):
                 self._update_status(locked=True, signal_strength=magnitude)
                 if result.ret > 0:
                     samples = buffer[: result.ret]
-                    # Update real-time sample buffer
                     self._update_sample_buffer(samples)
-                    # Process capture requests
                     self._process_capture(samples)
             except Exception as exc:
                 self._update_status(locked=False, last_error=str(exc))
-                self._running.clear()
-                break
+                self._teardown_handle(handle)
+                handle = None
+                buffer = None
+                self._cancel_capture_requests(RuntimeError(f"Capture error: {exc}"), teardown=False)
+                if not self._running.is_set():
+                    break
+                time.sleep(min(retry_delay, self._max_retry_backoff))
+                retry_delay = min(retry_delay * 2.0, self._max_retry_backoff)
 
-        self._cancel_capture_requests(RuntimeError("Capture loop exited"))
+        self._cancel_capture_requests(RuntimeError("Capture loop exited"), teardown=False)
 
     def capture_to_file(
         self,
@@ -381,7 +410,7 @@ class _SoapySDRReceiver(ReceiverInterface):
         with self._capture_lock:
             self._capture_requests = [ticket for ticket in self._capture_requests if not ticket.completed]
 
-    def _cancel_capture_requests(self, exc: Exception) -> None:
+    def _cancel_capture_requests(self, exc: Exception, *, teardown: bool = True) -> None:
         with self._capture_lock:
             pending = self._capture_requests
             self._capture_requests = []
@@ -391,7 +420,8 @@ class _SoapySDRReceiver(ReceiverInterface):
             # Yield to the scheduler to avoid busy-spinning when readStream returns quickly.
             time.sleep(0.01)
 
-        self._teardown_handle()
+        if teardown:
+            self._teardown_handle()
         self._update_status(locked=False)
 
     def _update_sample_buffer(self, samples) -> None:

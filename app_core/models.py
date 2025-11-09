@@ -601,12 +601,13 @@ class RadioReceiver(db.Model):
             gain=self.gain,
             channel=self.channel,
             serial=self.serial,
-            enabled=bool(self.enabled and self.auto_start),
+            enabled=bool(self.enabled),
             modulation_type=self.modulation_type or 'IQ',
             audio_output=bool(self.audio_output),
             stereo_enabled=bool(self.stereo_enabled),
             deemphasis_us=float(self.deemphasis_us) if self.deemphasis_us else 75.0,
             enable_rbds=bool(self.enable_rbds),
+            auto_start=bool(self.auto_start),
         )
 
     def latest_status(self) -> Optional["RadioReceiverStatus"]:

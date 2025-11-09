@@ -31,6 +31,7 @@ class ReceiverConfig:
     stereo_enabled: bool = True  # FM stereo decoding
     deemphasis_us: float = 75.0  # De-emphasis time constant
     enable_rbds: bool = False  # Extract RBDS data
+    auto_start: bool = True  # Start automatically when manager boots
 
 
 @dataclass
@@ -150,6 +151,9 @@ class RadioManager:
 
         with self._lock:
             for receiver in self._receivers.values():
+                config = getattr(receiver, 'config', None)
+                if config is not None and not getattr(config, 'auto_start', True):
+                    continue
                 receiver.start()
 
     def stop_all(self) -> None:
