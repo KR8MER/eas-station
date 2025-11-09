@@ -248,10 +248,11 @@ DEFAULT_ROLE_PERMISSIONS = {
         PermissionDefinition.API_READ,
     ],
     RoleDefinition.DEMO.value: [
-        # Limited demo access - view-only without export or sensitive data
+        # Limited demo access - view-only without export, sensitive data, or configuration
+        # Safe for public demonstrations - cannot trigger broadcasts, control equipment,
+        # access logs, export data, or view sensitive configuration/environment variables
         PermissionDefinition.ALERTS_VIEW,
         PermissionDefinition.EAS_VIEW,
-        PermissionDefinition.SYSTEM_VIEW_CONFIG,
         PermissionDefinition.RECEIVERS_VIEW,
         PermissionDefinition.GPIO_VIEW,
     ],
