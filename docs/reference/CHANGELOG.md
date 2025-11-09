@@ -433,6 +433,13 @@ tracks releases under the 2.x series.
 - Bumped the default `APP_BUILD_VERSION` to 2.3.0 across the application and sample
   environment template so deployments surface the new release number.
 
+## [2.4.9] - 2025-11-09
+### Fixed
+- Switch certbot issuance to standalone HTTP-01 mode so the container itself binds to port 80 during startup,
+  eliminating the connection reset failures that occurred before nginx began serving traffic.
+- Log the standalone challenge server activation so operators can confirm ACME connectivity when debugging
+  certificate renewals.
+
 ## [2.4.8] - 2025-11-09
 ### Fixed
 - Verify existing certificates against the system trust store and expiration before skipping issuance, so stale self-signed chains are purged and a new ACME request runs on startup.

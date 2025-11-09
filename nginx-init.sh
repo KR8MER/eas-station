@@ -234,9 +234,11 @@ if [ "$CURRENT_CERT_SELF_SIGNED" -ne 0 ]; then
             generate_self_signed_certificate
         else
             echo "Obtaining Let's Encrypt certificate for $DOMAIN_NAME"
+            echo "Using certbot standalone mode to respond to HTTP-01 challenges on port 80"
 
             # Build certbot command
-            CERTBOT_CMD="certbot certonly --webroot --webroot-path=/var/www/certbot"
+            CERTBOT_CMD="certbot certonly --standalone --preferred-challenges http"
+            CERTBOT_CMD="$CERTBOT_CMD --http-01-port 80"
             CERTBOT_CMD="$CERTBOT_CMD --email $EMAIL"
             CERTBOT_CMD="$CERTBOT_CMD --agree-tos"
             CERTBOT_CMD="$CERTBOT_CMD --no-eff-email"
