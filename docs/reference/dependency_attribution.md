@@ -79,6 +79,17 @@ The following system packages are used in the optional Icecast2 streaming contai
 | **wget** / **curl** | HTTP client utilities for healthchecks and downloads | GPL-3.0 / MIT |
 | **perl** | Scripting language for entrypoint script processing | Artistic-2.0 / GPL-1.0+ |
 
+### Infrastructure Components (Docker Services)
+
+The following infrastructure components are deployed as Docker services for HTTPS support and reverse proxy functionality:
+
+| Component | Version/Image | Purpose | License |
+| --- | --- | --- | --- |
+| **nginx** | nginx:alpine (latest) | Reverse proxy server providing HTTPS termination, SSL/TLS encryption, rate limiting, and secure headers. Routes external HTTPS traffic to internal Flask application. | BSD-2-Clause |
+| **certbot** | certbot/certbot:latest (official) | Automated SSL/TLS certificate management using the ACME protocol. Obtains and renews Let's Encrypt certificates every 90 days. Handles domain validation via HTTP-01 challenge. | Apache-2.0 |
+
+**Attribution**: nginx is developed by Igor Sysoev and maintained by Nginx, Inc. and the open-source community. Certbot is developed and maintained by the Electronic Frontier Foundation (EFF) and contributors as part of the Let's Encrypt initiative.
+
 ## Documentation Build Dependencies
 
 The following Python packages are used to build the documentation website locally (see `requirements-docs.txt`). They are not required for running the application.

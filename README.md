@@ -24,6 +24,7 @@ EAS Station is a software-defined drop-in replacement for commercial EAS encoder
 | 📻 **FCC-Compliant SAME** | Specific Area Message Encoding per FCC Part 11 |
 | 🗺️ **Geographic Intelligence** | PostGIS spatial filtering with county/state/polygon support |
 | 📡 **SDR Verification** | Automated broadcast verification with RTL-SDR/Airspy |
+| 🔒 **Built-in HTTPS** | Automatic SSL/TLS with Let's Encrypt, nginx reverse proxy |
 | 🎨 **Modern Web UI** | Responsive Bootstrap 5 interface with real-time updates |
 | ⚡ **Hardware Integration** | GPIO relay control, LED signs, multiple audio outputs |
 
@@ -38,9 +39,12 @@ cp .env.example .env && \
 sudo docker compose up -d --build
 ```
 
-Then open http://localhost:5000 in your browser.
+Then open **https://localhost** in your browser (HTTPS enabled by default).
 
-> 💡 **Next Steps**: Edit `.env` with your configuration, then restart: `sudo docker compose restart`
+> 💡 **Next Steps**:
+> - For production with Let's Encrypt: Set `DOMAIN_NAME` in `.env` and restart
+> - For localhost: Accept the self-signed certificate warning (safe for testing)
+> - Edit `.env` with your configuration, then restart: `sudo docker compose restart`
 
 ### Prerequisites
 
@@ -72,6 +76,9 @@ Then open http://localhost:5000 in your browser.
 
 - **[🔧 Admin Guide](docs/guides/PORTAINER_DEPLOYMENT.md)**
   Deployment, database, maintenance
+
+- **[🔒 HTTPS Setup](docs/guides/HTTPS_SETUP.md)**
+  SSL/TLS configuration, Let's Encrypt certificates, nginx reverse proxy
 
 - **[🎧 Audio Monitoring](docs/audio/AUDIO_MONITORING.md)**
   Live stream viewer, level metering, troubleshooting steps

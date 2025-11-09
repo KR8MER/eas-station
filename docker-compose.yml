@@ -1,4 +1,38 @@
 services:
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"    # HTTP (redirects to HTTPS)
+      - "443:443"  # HTTPS
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf.template:ro
+      - ./nginx-init.sh:/docker-entrypoint.d/00-init.sh:ro
+      - certbot-conf:/etc/letsencrypt:ro
+      - certbot-www:/var/www/certbot
+      - nginx-logs:/var/log/nginx
+    environment:
+      - DOMAIN_NAME=${DOMAIN_NAME:-localhost}
+    command: /bin/sh -c "chmod +x /docker-entrypoint.d/00-init.sh && /docker-entrypoint.d/00-init.sh"
+    depends_on:
+      - app
+    security_opt:
+      - no-new-privileges:true
+
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - certbot-conf:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    environment:
+      - DOMAIN_NAME=${DOMAIN_NAME:-localhost}
+      - SSL_EMAIL=${SSL_EMAIL:-admin@example.com}
+      - CERTBOT_STAGING=${CERTBOT_STAGING:-0}
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot --webroot-path=/var/www/certbot; sleep 12h & wait $${!}; done;'"
+    security_opt:
+      - no-new-privileges:true
+
   app:
     build:
       context: .
@@ -6,8 +40,8 @@ services:
       args:
         SOAPYSDR_DRIVERS: ${SOAPYSDR_DRIVERS:-rtlsdr,airspy}
     image: eas-station:latest
-    ports:
-      - "80:5000"
+    expose:
+      - "5000"  # Internal only, accessed via nginx reverse proxy
     env_file:
       - stack.env  # For Portainer Git deployments - provides defaults
       # NOTE: .env removed - loads empty file from Git. App loads from CONFIG_PATH at runtime.
@@ -223,3 +257,6 @@ volumes:
   alerts-db-data:
   app-config:  # Persistent storage for wizard-generated .env file
   icecast-logs:  # Icecast server logs
+  certbot-conf:  # Let's Encrypt SSL certificates
+  certbot-www:  # Certbot ACME challenge files
+  nginx-logs:  # nginx access and error logs
