@@ -455,8 +455,14 @@ def register(app: Flask, logger) -> None:
             return jsonify({"error": "Failed to generate waveform data"}), 500
 
     @app.route("/api/radio/spectrum/<int:receiver_id>", methods=["GET"])
-    def api_radio_spectrum(receiver_id: int) -> Any:
-        """Get real-time spectrum data for waterfall display."""
+    @app.route("/api/radio/spectrum/by-identifier/<string:identifier>", methods=["GET"])
+    def api_radio_spectrum(receiver_id: int = None, identifier: str = None) -> Any:
+        """Get real-time spectrum data for waterfall display.
+
+        Can be accessed by numeric ID or string identifier:
+        - /api/radio/spectrum/1
+        - /api/radio/spectrum/by-identifier/wxj93
+        """
         try:
             # Try to import NumPy, but handle gracefully if not available
             try:
@@ -465,7 +471,16 @@ def register(app: Flask, logger) -> None:
                 route_logger.error("NumPy not available for spectrum generation")
                 return jsonify({"error": "Spectrum feature requires NumPy"}), 503
 
-            receiver = RadioReceiver.query.get_or_404(receiver_id)
+            # Look up receiver by ID or identifier
+            if identifier:
+                receiver = RadioReceiver.query.filter_by(identifier=identifier).first()
+                if not receiver:
+                    return jsonify({
+                        "error": f"Receiver '{identifier}' not found",
+                        "hint": "Check receiver identifier"
+                    }), 404
+            else:
+                receiver = RadioReceiver.query.get_or_404(receiver_id)
 
             # Get the radio manager and receiver
             from app_core.extensions import get_radio_manager
@@ -551,6 +566,108 @@ def register(app: Flask, logger) -> None:
         receivers = RadioReceiver.query.order_by(RadioReceiver.display_name.asc(), RadioReceiver.identifier.asc()).all()
         return jsonify({"receivers": [_receiver_to_dict(receiver) for receiver in receivers]})
 
+    def _decode_soapysdr_error(error_msg: str) -> dict:
+        """Decode SoapySDR error codes and provide helpful explanations."""
+        if not error_msg:
+            return {"code": None, "name": None, "explanation": None, "solutions": []}
+
+        # Extract error code from message like "SoapySDR readStream error: -4"
+        import re
+        match = re.search(r'error:\s*(-?\d+)', str(error_msg))
+        if not match:
+            return {"code": None, "name": None, "explanation": error_msg, "solutions": []}
+
+        error_code = int(match.group(1))
+
+        # SoapySDR error code mappings
+        error_info = {
+            -1: {
+                "name": "SOAPY_SDR_TIMEOUT",
+                "explanation": "Stream operation timed out",
+                "solutions": [
+                    "Check that SDR device is properly connected via USB",
+                    "Try a different USB port (preferably USB 3.0)",
+                    "Check USB cable quality and length",
+                    "Reduce sample rate if using high rates",
+                    "Check for USB power issues"
+                ]
+            },
+            -2: {
+                "name": "SOAPY_SDR_STREAM_ERROR",
+                "explanation": "Streaming error occurred",
+                "solutions": [
+                    "Device may have been disconnected during operation",
+                    "USB bandwidth may be insufficient",
+                    "Try restarting the receiver",
+                    "Check system logs (dmesg) for USB errors"
+                ]
+            },
+            -3: {
+                "name": "SOAPY_SDR_CORRUPTION",
+                "explanation": "Data corruption detected",
+                "solutions": [
+                    "USB connection unstable - check cable",
+                    "Electromagnetic interference may be present",
+                    "Try a shielded USB cable",
+                    "Move device away from interference sources"
+                ]
+            },
+            -4: {
+                "name": "SOAPY_SDR_OVERFLOW",
+                "explanation": "Buffer overflow - system cannot keep up with data rate",
+                "solutions": [
+                    "Reduce sample rate to lower value",
+                    "Close other applications using CPU/USB bandwidth",
+                    "Enable hardware flow control if available",
+                    "Increase system buffer sizes",
+                    "Check for USB controller sharing with other devices"
+                ]
+            },
+            -5: {
+                "name": "SOAPY_SDR_NOT_SUPPORTED",
+                "explanation": "Operation not supported by this device",
+                "solutions": [
+                    "Check device capabilities",
+                    "Verify driver supports requested operation",
+                    "Update SoapySDR and device drivers"
+                ]
+            },
+            -6: {
+                "name": "SOAPY_SDR_TIME_ERROR",
+                "explanation": "Timing error in stream",
+                "solutions": [
+                    "Check system time synchronization",
+                    "Reduce timing precision requirements"
+                ]
+            },
+            -7: {
+                "name": "SOAPY_SDR_UNDERFLOW",
+                "explanation": "Buffer underflow - not enough data provided",
+                "solutions": [
+                    "Increase buffer size",
+                    "Check application performance",
+                    "Reduce sample rate"
+                ]
+            }
+        }
+
+        info = error_info.get(error_code, {
+            "name": f"UNKNOWN_ERROR_{error_code}",
+            "explanation": f"Unknown SoapySDR error code: {error_code}",
+            "solutions": [
+                "Check SoapySDR documentation",
+                "Try restarting the receiver",
+                "Check device connection"
+            ]
+        })
+
+        return {
+            "code": error_code,
+            "name": info["name"],
+            "explanation": info["explanation"],
+            "solutions": info["solutions"]
+        }
+
     @app.route("/api/radio/diagnostics/status", methods=["GET"])
     def api_radio_diagnostics_status() -> Any:
         """Get comprehensive diagnostic information about RadioManager and receivers."""
@@ -572,6 +689,9 @@ def register(app: Flask, logger) -> None:
                 for identifier, receiver_instance in radio_manager._receivers.items():
                     status = receiver_instance.get_status()
 
+                    # Decode error message if present
+                    error_info = _decode_soapysdr_error(status.last_error) if status.last_error else None
+
                     # Test sample buffer
                     samples_available = False
                     sample_count = 0
@@ -590,6 +710,7 @@ def register(app: Flask, logger) -> None:
                         "locked": status.locked,
                         "signal_strength": status.signal_strength,
                         "last_error": status.last_error,
+                        "error_decoded": error_info,
                         "reported_at": status.reported_at.isoformat() if status.reported_at else None,
                         "samples_available": samples_available,
                         "sample_count": sample_count,

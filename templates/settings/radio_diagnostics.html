@@ -410,15 +410,32 @@ sudo systemctl restart eas-station</code></pre>
                                         </tr>
                                     </tbody>
                                 </table>
-                                ${receiver.last_error ? `
+                                ${receiver.last_error ? (receiver.error_decoded && receiver.error_decoded.code !== null ? `
+                                    <div class="alert alert-danger mb-0">
+                                        <div class="d-flex align-items-start">
+                                            <i class="fas fa-exclamation-circle me-2 mt-1"></i>
+                                            <div class="flex-grow-1">
+                                                <strong class="d-block">${receiver.error_decoded.name}</strong>
+                                                <small class="d-block mb-2">${receiver.error_decoded.explanation}</small>
+                                                <details>
+                                                    <summary class="text-decoration-underline" style="cursor: pointer;">Solutions</summary>
+                                                    <ul class="mt-2 mb-0 small">
+                                                        ${receiver.error_decoded.solutions.map(s => `<li>${s}</li>`).join('')}
+                                                    </ul>
+                                                </details>
+                                                <small class="text-muted d-block mt-2">Raw error: ${receiver.last_error}</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ` : `
                                     <div class="alert alert-danger alert-sm mb-0">
                                         <small><strong>Error:</strong> ${receiver.last_error}</small>
                                     </div>
-                                ` : ''}
+                                `) : ''}
                             </div>
                         </div>
                         <div class="mt-2">
-                            <a href="/api/radio/spectrum/${identifier}" target="_blank" class="btn btn-sm btn-outline-primary">
+                            <a href="/api/radio/spectrum/by-identifier/${identifier}" target="_blank" class="btn btn-sm btn-outline-primary">
                                 <i class="fas fa-vial"></i> Test Spectrum Endpoint
                             </a>
                         </div>
