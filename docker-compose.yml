@@ -16,7 +16,7 @@ services:
       - DOMAIN_NAME=${DOMAIN_NAME:-localhost}
       - SSL_EMAIL=${SSL_EMAIL:-admin@example.com}
       - CERTBOT_STAGING=${CERTBOT_STAGING:-0}
-    command: /bin/sh -c "chmod +x /docker-entrypoint.d/00-init.sh && /docker-entrypoint.d/00-init.sh"
+    entrypoint: ["/bin/sh", "/docker-entrypoint.d/00-init.sh"]
     depends_on:
       - app
     security_opt:
