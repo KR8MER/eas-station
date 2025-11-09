@@ -70,7 +70,7 @@ services:
     image: eas-station:latest
     depends_on:
       - app
-    command: ["python", "poller/cap_poller.py", "--continuous"]
+    command: ["python", "poller/cap_poller.py", "--continuous", "--interval", "180"]
     restart: unless-stopped
     env_file:
       - stack.env  # For Portainer Git deployments - provides defaults
