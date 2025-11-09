@@ -433,6 +433,15 @@ tracks releases under the 2.x series.
 - Bumped the default `APP_BUILD_VERSION` to 2.3.0 across the application and sample
   environment template so deployments surface the new release number.
 
+## [2.4.5] - 2025-11-09
+### Fixed
+- Purge the domain's existing `/etc/letsencrypt` material whenever a self-signed
+  fallback is detected so administrators no longer need to manually delete
+  leftover files before retrying ACME issuance.
+- Force certbot to request a fresh certificate for self-signed domains by
+  assigning a stable certificate name and forcing renewal so nginx replaces
+  fallback chains during the next startup sequence.
+
 ## [2.4.4] - 2025-11-09
 ### Fixed
 - Detect legacy self-signed fallback certificates by inspecting the existing fullchain.pem and

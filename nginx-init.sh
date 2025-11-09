@@ -5,7 +5,21 @@
 
 set -e
 
+purge_certificate_material() {
+    if command -v certbot >/dev/null 2>&1; then
+        certbot delete --cert-name "$DOMAIN_NAME" --non-interactive --quiet >/dev/null 2>&1 || true
+    fi
+
+    rm -rf "/etc/letsencrypt/live/$DOMAIN_NAME"
+    rm -rf "/etc/letsencrypt/archive/$DOMAIN_NAME"
+    rm -f "/etc/letsencrypt/renewal/$DOMAIN_NAME.conf"
+
+    mkdir -p "/etc/letsencrypt/live/$DOMAIN_NAME"
+}
+
 generate_self_signed_certificate() {
+    mkdir -p "/etc/letsencrypt/live/$DOMAIN_NAME"
+
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
         -keyout /etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem \
         -out /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem \
@@ -98,11 +112,8 @@ else
 fi
 
 if [ "$CURRENT_CERT_SELF_SIGNED" -ne 0 ]; then
-    if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
-        rm -f /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem \
-              /etc/letsencrypt/live/$DOMAIN_NAME/chain.pem \
-              /etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem
-    fi
+    echo "Purging existing certificate material for $DOMAIN_NAME"
+    purge_certificate_material
 
     echo "No valid certificates found for $DOMAIN_NAME"
 
@@ -144,6 +155,9 @@ if [ "$CURRENT_CERT_SELF_SIGNED" -ne 0 ]; then
             CERTBOT_CMD="$CERTBOT_CMD --agree-tos"
             CERTBOT_CMD="$CERTBOT_CMD --no-eff-email"
             CERTBOT_CMD="$CERTBOT_CMD -d $DOMAIN_NAME"
+            CERTBOT_CMD="$CERTBOT_CMD --cert-name $DOMAIN_NAME"
+            CERTBOT_CMD="$CERTBOT_CMD --non-interactive"
+            CERTBOT_CMD="$CERTBOT_CMD --force-renewal"
 
             # Add staging flag if requested
             if [ "$STAGING" = "1" ]; then
