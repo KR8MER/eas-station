@@ -111,6 +111,22 @@
     color: #212529;
 }
 
+.now-playing-title {
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.now-playing-artist {
+    font-size: 0.95rem;
+    color: #495057;
+}
+
+.now-playing-meta {
+    font-size: 0.85rem;
+    color: #6c757d;
+}
+
 .level-meter {
     height: 20px;
     background: linear-gradient(to right, #28a745, #ffc107, #dc3545);
@@ -306,41 +322,21 @@ function renderAudioSources() {
                         </div>
 
                         <!-- Now Playing (if available) -->
-                        ${source.metrics.metadata && (source.metrics.metadata.now_playing || source.metrics.metadata.song_title || (source.metrics.metadata.icy && source.metrics.metadata.icy.fields && source.metrics.metadata.icy.fields.text)) ? `
-                            <div class="mt-3">
-                                <h6 class="text-muted mb-2"><i class="fas fa-music"></i> Now Playing</h6>
-                                <div class="card bg-light border-0">
-                                    <div class="card-body p-3">
-                                        <div class="row align-items-center">
-                                            ${(() => {
-                                                // Get album art URL from various possible sources
-                                                const artworkUrl = source.metrics.metadata.artwork_url
-                                                    || (source.metrics.metadata.icy && source.metrics.metadata.icy.fields && source.metrics.metadata.icy.fields.amgArtworkURL)
-                                                    || (source.metrics.metadata.now_playing && source.metrics.metadata.now_playing.artwork_url)
-                                                    || (source.metrics.metadata.icy && source.metrics.metadata.icy.fields && source.metrics.metadata.icy.fields.artworkURL);
+                        ${(() => {
+                            const nowPlaying = normalizeNowPlayingMetadata(source.metrics.metadata);
+                            if (!nowPlaying) {
+                                return '';
+                            }
 
-                                                // Get song title from various sources
-                                                const songTitle = (source.metrics.metadata.icy && source.metrics.metadata.icy.fields && source.metrics.metadata.icy.fields.text)
-                                                    || (source.metrics.metadata.now_playing && source.metrics.metadata.now_playing.title)
-                                                    || source.metrics.metadata.song_title
-                                                    || source.metrics.metadata.title
-                                                    || (source.metrics.metadata.icy && source.metrics.metadata.icy.fields && source.metrics.metadata.icy.fields.song);
+                            const { artworkUrl, title, artist, album, length } = nowPlaying;
 
-                                                // Get artist from various sources
-                                                const artist = (source.metrics.metadata.now_playing && source.metrics.metadata.now_playing.artist)
-                                                    || source.metrics.metadata.artist
-                                                    || (source.metrics.metadata.icy && source.metrics.metadata.icy.fields && source.metrics.metadata.icy.fields.artist);
-
-                                                // Get album
-                                                const album = source.metrics.metadata.album
-                                                    || (source.metrics.metadata.icy && source.metrics.metadata.icy.fields && source.metrics.metadata.icy.fields.album);
-
-                                                // Get length/duration
-                                                const length = source.metrics.metadata.length
-                                                    || (source.metrics.metadata.icy && source.metrics.metadata.icy.fields && source.metrics.metadata.icy.fields.length)
-                                                    || (source.metrics.metadata.icy && source.metrics.metadata.icy.fields && source.metrics.metadata.icy.fields.duration);
-
-                                                return artworkUrl ? `
+                            return `
+                                <div class="mt-3">
+                                    <h6 class="text-muted mb-2"><i class="fas fa-music"></i> Now Playing</h6>
+                                    <div class="card bg-light border-0">
+                                        <div class="card-body p-3">
+                                            <div class="row align-items-center">
+                                                ${artworkUrl ? `
                                                     <div class="col-auto">
                                                         <img src="${escapeHtml(artworkUrl)}"
                                                              alt="Album Art"
@@ -348,26 +344,19 @@ function renderAudioSources() {
                                                              style="width: 100px; height: 100px; object-fit: cover;"
                                                              onerror="this.style.display='none'">
                                                     </div>
-                                                    <div class="col">
-                                                        ${songTitle ? `<div class="fw-bold fs-5">${escapeHtml(songTitle)}</div>` : ''}
-                                                        ${artist ? `<div class="text-muted">${escapeHtml(artist)}</div>` : ''}
-                                                        ${album ? `<div class="small text-muted"><i class="fas fa-compact-disc"></i> ${escapeHtml(album)}</div>` : ''}
-                                                        ${length ? `<div class="small text-muted"><i class="fas fa-clock"></i> ${escapeHtml(length)}</div>` : ''}
-                                                    </div>
-                                                ` : `
-                                                    <div class="col">
-                                                        ${songTitle ? `<div class="fw-bold fs-5">${escapeHtml(songTitle)}</div>` : ''}
-                                                        ${artist ? `<div class="text-muted">${escapeHtml(artist)}</div>` : ''}
-                                                        ${album ? `<div class="small text-muted"><i class="fas fa-compact-disc"></i> ${escapeHtml(album)}</div>` : ''}
-                                                        ${length ? `<div class="small text-muted"><i class="fas fa-clock"></i> ${escapeHtml(length)}</div>` : ''}
-                                                    </div>
-                                                `;
-                                            })()}
+                                                ` : ''}
+                                                <div class="col">
+                                                    ${title ? `<div class="now-playing-title text-break">${escapeHtml(title)}</div>` : ''}
+                                                    ${artist ? `<div class="now-playing-artist text-break">${escapeHtml(artist)}</div>` : ''}
+                                                    ${album ? `<div class="now-playing-meta text-break"><i class="fas fa-compact-disc"></i> ${escapeHtml(album)}</div>` : ''}
+                                                    ${length ? `<div class="now-playing-meta text-break"><i class="fas fa-clock"></i> ${escapeHtml(length)}</div>` : ''}
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        ` : ''}
+                            `;
+                        })()}
 
                         <!-- Stream Metadata (if available) -->
                         ${source.metrics.metadata ? `
@@ -491,6 +480,141 @@ function getStatusColor(status) {
         'disconnected': 'warning'
     };
     return colors[status] || 'secondary';
+}
+
+function normalizeNowPlayingMetadata(metadata) {
+    if (!metadata) {
+        return null;
+    }
+
+    const icyFields = metadata.icy && metadata.icy.fields ? metadata.icy.fields : {};
+    const streamTitleInfo = parseStreamTitle(icyFields.text);
+
+    const artworkUrl = metadata.artwork_url
+        || (metadata.now_playing && metadata.now_playing.artwork_url)
+        || (icyFields && icyFields.amgArtworkURL)
+        || (icyFields && icyFields.artworkURL);
+
+    let title = cleanMetadataValue(
+        (metadata.now_playing && metadata.now_playing.title)
+        || metadata.song_title
+        || metadata.title
+        || streamTitleInfo.title
+        || streamTitleInfo.text
+    );
+
+    let artist = cleanMetadataValue(
+        (metadata.now_playing && metadata.now_playing.artist)
+        || metadata.artist
+        || icyFields.artist
+        || streamTitleInfo.artist
+    );
+
+    let album = cleanMetadataValue(metadata.album || icyFields.album);
+    let length = cleanMetadataValue(metadata.length || icyFields.length || icyFields.duration);
+
+    if (title && artist) {
+        const titleLower = title.toLowerCase();
+        const artistLower = artist.toLowerCase();
+
+        if (titleLower === artistLower) {
+            artist = '';
+        } else if (titleLower.startsWith(`${artistLower} - `)) {
+            title = title.substring(artist.length + 3).trim();
+        }
+    }
+
+    if (album && title && album.toLowerCase() === title.toLowerCase()) {
+        album = '';
+    }
+
+    if (length && /^(0|0:00)$/.test(length.trim())) {
+        length = '';
+    }
+
+    if (!artworkUrl && !title && !artist && !album && !length) {
+        return null;
+    }
+
+    return { artworkUrl, title, artist, album, length };
+}
+
+function parseStreamTitle(rawText) {
+    if (!rawText) {
+        return {};
+    }
+
+    let text = String(rawText).trim();
+
+    const streamTitleMatch = text.match(/StreamTitle='([^']*)'/i);
+    if (streamTitleMatch) {
+        text = streamTitleMatch[1];
+    } else if (text.toLowerCase().startsWith('streamtitle=')) {
+        text = text.slice('StreamTitle='.length);
+        text = text.replace(/^['"]?/, '').replace(/['"]?$/, '');
+    }
+
+    const streamUrlIndex = text.indexOf(';StreamUrl');
+    if (streamUrlIndex !== -1) {
+        text = text.substring(0, streamUrlIndex);
+    }
+
+    text = cleanMetadataValue(text);
+
+    if (!text) {
+        return {};
+    }
+
+    const parts = text.split(/\s+-\s+/);
+    if (parts.length >= 2) {
+        return {
+            text,
+            artist: parts[0].trim(),
+            title: parts.slice(1).join(' - ').trim()
+        };
+    }
+
+    return { text, title: text };
+}
+
+function cleanMetadataValue(value) {
+    if (value === null || value === undefined) {
+        return '';
+    }
+
+    let text = String(value).trim();
+
+    if (!text) {
+        return '';
+    }
+
+    const streamTitleMatch = text.match(/StreamTitle='([^']*)'/i);
+    if (streamTitleMatch) {
+        text = streamTitleMatch[1];
+    }
+
+    text = text.replace(/^StreamTitle=/i, '');
+    text = text.replace(/;StreamUrl='[^']*';?/ig, '');
+    text = text.replace(/;StreamUrl=[^;]*/ig, '');
+    text = text.replace(/^['"]/, '').replace(/['"]$/, '');
+    text = text.replace(/\+/g, ' ');
+
+    if (/%[0-9A-Fa-f]{2}/.test(text)) {
+        try {
+            text = decodeURIComponent(text);
+        } catch (err) {
+            // Ignore decoding errors and use the original value
+        }
+    }
+
+    const streamMarkerIndex = text.search(/;\s*Stream/i);
+    if (streamMarkerIndex !== -1) {
+        text = text.substring(0, streamMarkerIndex);
+    }
+
+    text = text.replace(/\s+/g, ' ');
+
+    return text.trim();
 }
 
 function escapeHtml(text) {
