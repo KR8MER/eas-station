@@ -1,6 +1,7 @@
-#!/bin/bash
+#!/bin/sh
 # nginx initialization script for EAS Station
 # Handles SSL certificate generation and nginx configuration
+# Compatible with Alpine Linux /bin/sh
 
 set -e
 
@@ -9,7 +10,15 @@ set -e
 if [ -f "/app-config/.env" ]; then
     echo "Loading persistent configuration from /app-config/.env"
     # Export variables from .env file (only HTTPS-related ones)
-    export $(grep -E '^(DOMAIN_NAME|SSL_EMAIL|CERTBOT_STAGING)=' /app-config/.env | xargs)
+    # Use a safer approach that works with busybox sh
+    while IFS='=' read -r key value; do
+        case "$key" in
+            DOMAIN_NAME|SSL_EMAIL|CERTBOT_STAGING)
+                export "$key=$value"
+                echo "Loaded $key from persistent config"
+                ;;
+        esac
+    done < /app-config/.env
 fi
 
 # Set defaults from environment variables (or use hardcoded defaults as fallback)
