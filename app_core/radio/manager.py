@@ -240,3 +240,77 @@ class RadioManager:
             reports.append(row.to_receiver_status())
 
         return reports
+
+    def get_receiver(self, identifier: str) -> Optional[ReceiverInterface]:
+        """Get a receiver instance by identifier."""
+        with self._lock:
+            return self._receivers.get(identifier)
+
+    def start_audio_capture(
+        self,
+        receiver_id: str,
+        sample_rate: int,
+        channels: int,
+        format: str = 'iq'
+    ) -> Dict[str, object]:
+        """Start real-time audio capture from a receiver.
+
+        Args:
+            receiver_id: Identifier of the receiver to capture from
+            sample_rate: Desired audio sample rate (for demodulated audio)
+            channels: Number of audio channels (1 or 2)
+            format: 'iq' for raw IQ samples or 'pcm' for demodulated audio
+
+        Returns:
+            Handle dict containing receiver_id and capture config
+        """
+        receiver = self.get_receiver(receiver_id)
+        if not receiver:
+            raise KeyError(f"No receiver found with identifier '{receiver_id}'")
+
+        # Verify receiver is running
+        status = receiver.get_status()
+        if not status.locked:
+            raise RuntimeError(f"Receiver '{receiver_id}' is not running")
+
+        # Return a handle that the audio source can use
+        handle = {
+            'receiver_id': receiver_id,
+            'sample_rate': sample_rate,
+            'channels': channels,
+            'format': format,
+            'receiver': receiver
+        }
+
+        return handle
+
+    def stop_audio_capture(self, handle: Dict[str, object]) -> None:
+        """Stop real-time audio capture.
+
+        Args:
+            handle: Capture handle returned by start_audio_capture
+        """
+        # Currently no cleanup needed, but could be extended in the future
+        pass
+
+    def get_audio_data(self, handle: Dict[str, object], chunk_size: int = 4096):
+        """Get audio data from a capture handle.
+
+        Args:
+            handle: Capture handle returned by start_audio_capture
+            chunk_size: Number of samples to retrieve
+
+        Returns:
+            numpy array of samples (complex64 for IQ, float32 for PCM)
+        """
+        receiver = handle.get('receiver')
+        if not receiver:
+            return None
+
+        # Get samples from the receiver
+        # Check if receiver has get_samples method (added to SoapySDR receivers)
+        if hasattr(receiver, 'get_samples'):
+            samples = receiver.get_samples(chunk_size)
+            return samples
+
+        return None

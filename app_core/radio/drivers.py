@@ -106,6 +106,11 @@ class _SoapySDRReceiver(ReceiverInterface):
         self._status_lock = threading.Lock()
         self._capture_requests: List[_CaptureTicket] = []
         self._capture_lock = threading.Lock()
+        # Real-time sample buffer for audio streaming
+        self._sample_buffer = None  # Will be a numpy array ring buffer
+        self._sample_buffer_size = 32768  # Store ~0.67 seconds at 48kHz
+        self._sample_buffer_pos = 0
+        self._sample_buffer_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Lifecycle helpers
@@ -200,15 +205,14 @@ class _SoapySDRReceiver(ReceiverInterface):
         args: Dict[str, str] = {"driver": self.driver_hint}
 
         # Use the device serial number if available for precise device identification
+        # If serial is provided, use ONLY serial (don't mix with device_id)
         if self.config.serial:
             args["serial"] = self.config.serial
-
-        # Use channel/device_id as fallback identification
-        if self.config.channel is not None:
+        # Use channel/device_id as fallback identification only if no serial
+        elif self.config.channel is not None:
+            # For consistency, set both device_id and serial from channel
             args["device_id"] = str(self.config.channel)
-            # Only set serial from channel if no explicit serial was provided
-            if not self.config.serial:
-                args["serial"] = str(self.config.channel)
+            args["serial"] = str(self.config.channel)
 
         # Label is for human reference only, not device identification
         if self.config.identifier:
@@ -275,6 +279,11 @@ class _SoapySDRReceiver(ReceiverInterface):
         handle = self._handle
         buffer = handle.numpy.zeros(4096, dtype=handle.numpy.complex64)
 
+        # Initialize sample buffer for real-time streaming
+        with self._sample_buffer_lock:
+            self._sample_buffer = handle.numpy.zeros(self._sample_buffer_size, dtype=handle.numpy.complex64)
+            self._sample_buffer_pos = 0
+
         while self._running.is_set():
             try:
                 result = handle.device.readStream(handle.stream, [buffer], len(buffer))
@@ -288,7 +297,11 @@ class _SoapySDRReceiver(ReceiverInterface):
 
                 self._update_status(locked=True, signal_strength=magnitude)
                 if result.ret > 0:
-                    self._process_capture(buffer[: result.ret])
+                    samples = buffer[: result.ret]
+                    # Update real-time sample buffer
+                    self._update_sample_buffer(samples)
+                    # Process capture requests
+                    self._process_capture(samples)
             except Exception as exc:
                 self._update_status(locked=False, last_error=str(exc))
                 self._running.clear()
@@ -377,6 +390,79 @@ class _SoapySDRReceiver(ReceiverInterface):
 
         self._teardown_handle()
         self._update_status(locked=False)
+
+    def _update_sample_buffer(self, samples) -> None:
+        """Update the real-time sample ring buffer with new samples."""
+        if self._sample_buffer is None:
+            return
+
+        with self._sample_buffer_lock:
+            num_samples = len(samples)
+            if num_samples >= self._sample_buffer_size:
+                # If we got more samples than buffer size, just take the latest
+                self._sample_buffer[:] = samples[-self._sample_buffer_size:]
+                self._sample_buffer_pos = 0
+            else:
+                # Write samples to ring buffer
+                end_pos = self._sample_buffer_pos + num_samples
+                if end_pos <= self._sample_buffer_size:
+                    # Samples fit without wrapping
+                    self._sample_buffer[self._sample_buffer_pos:end_pos] = samples
+                else:
+                    # Samples wrap around
+                    first_chunk = self._sample_buffer_size - self._sample_buffer_pos
+                    self._sample_buffer[self._sample_buffer_pos:] = samples[:first_chunk]
+                    self._sample_buffer[:num_samples - first_chunk] = samples[first_chunk:]
+
+                self._sample_buffer_pos = end_pos % self._sample_buffer_size
+
+    def get_samples(self, num_samples: Optional[int] = None):
+        """Get recent IQ samples from the receiver for real-time processing.
+
+        Args:
+            num_samples: Number of samples to retrieve. If None, returns all available samples.
+
+        Returns:
+            numpy array of complex64 samples, or None if receiver is not running
+        """
+        if not self._running.is_set() or self._sample_buffer is None:
+            return None
+
+        with self._sample_buffer_lock:
+            if num_samples is None or num_samples >= self._sample_buffer_size:
+                # Return entire buffer in correct order
+                if self._sample_buffer_pos == 0:
+                    return self._sample_buffer.copy()
+                else:
+                    # Reorder ring buffer to put oldest samples first
+                    handle = self._handle
+                    if not handle:
+                        return None
+                    result = handle.numpy.concatenate([
+                        self._sample_buffer[self._sample_buffer_pos:],
+                        self._sample_buffer[:self._sample_buffer_pos]
+                    ])
+                    return result
+            else:
+                # Return most recent num_samples
+                if num_samples > self._sample_buffer_size:
+                    num_samples = self._sample_buffer_size
+
+                handle = self._handle
+                if not handle:
+                    return None
+
+                # Calculate start position for most recent samples
+                start_pos = (self._sample_buffer_pos - num_samples) % self._sample_buffer_size
+                if start_pos < self._sample_buffer_pos:
+                    # No wrap
+                    return self._sample_buffer[start_pos:self._sample_buffer_pos].copy()
+                else:
+                    # Wrapped
+                    return handle.numpy.concatenate([
+                        self._sample_buffer[start_pos:],
+                        self._sample_buffer[:self._sample_buffer_pos]
+                    ])
 
 
 class RTLSDRReceiver(_SoapySDRReceiver):

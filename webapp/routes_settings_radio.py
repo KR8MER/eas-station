@@ -454,6 +454,77 @@ def register(app: Flask, logger) -> None:
             # Don't leak sensitive exception details to client
             return jsonify({"error": "Failed to generate waveform data"}), 500
 
+    @app.route("/api/radio/spectrum/<int:receiver_id>", methods=["GET"])
+    def api_radio_spectrum(receiver_id: int) -> Any:
+        """Get real-time spectrum data for waterfall display."""
+        try:
+            # Try to import NumPy, but handle gracefully if not available
+            try:
+                import numpy as np
+            except ImportError:
+                route_logger.error("NumPy not available for spectrum generation")
+                return jsonify({"error": "Spectrum feature requires NumPy"}), 503
+
+            receiver = RadioReceiver.query.get_or_404(receiver_id)
+
+            # Get the radio manager and receiver
+            from app_core.extensions import get_radio_manager
+            radio_manager = get_radio_manager()
+            receiver_instance = radio_manager.get_receiver(receiver.identifier)
+
+            if not receiver_instance:
+                return jsonify({"error": "Receiver not running"}), 404
+
+            # Get recent IQ samples
+            iq_samples = receiver_instance.get_samples(num_samples=2048)
+
+            if iq_samples is None or len(iq_samples) == 0:
+                return jsonify({"error": "No samples available"}), 503
+
+            # Compute FFT
+            fft_size = min(len(iq_samples), 2048)
+            window = np.hanning(fft_size)
+            windowed = iq_samples[:fft_size] * window
+            fft_result = np.fft.fftshift(np.fft.fft(windowed))
+
+            # Convert to magnitude (dB)
+            magnitude = np.abs(fft_result)
+            magnitude = np.where(magnitude > 0, magnitude, 1e-10)  # Avoid log(0)
+            magnitude_db = 20 * np.log10(magnitude)
+
+            # Normalize to 0-1 range for display
+            min_db = magnitude_db.min()
+            max_db = magnitude_db.max()
+            if max_db > min_db:
+                normalized = (magnitude_db - min_db) / (max_db - min_db)
+            else:
+                normalized = np.zeros_like(magnitude_db)
+
+            # Convert to list for JSON
+            spectrum_data = normalized.tolist()
+
+            # Calculate frequency bins
+            sample_rate = receiver.sample_rate if receiver.sample_rate else 2400000
+            freq_min = receiver.frequency_hz - (sample_rate / 2)
+            freq_max = receiver.frequency_hz + (sample_rate / 2)
+
+            return jsonify({
+                "receiver_id": receiver_id,
+                "identifier": receiver.identifier,
+                "display_name": receiver.display_name,
+                "sample_rate": sample_rate,
+                "center_frequency": receiver.frequency_hz,
+                "freq_min": freq_min,
+                "freq_max": freq_max,
+                "fft_size": fft_size,
+                "spectrum": spectrum_data,
+                "timestamp": time.time()
+            })
+
+        except Exception as exc:
+            route_logger.error("Failed to get spectrum data for receiver %s: %s", receiver_id, exc)
+            return jsonify({"error": "Failed to generate spectrum data"}), 500
+
     @app.route("/api/monitoring/radio", methods=["GET"])
     def api_monitoring_radio() -> Any:
         """Get monitoring status for all radio receivers (includes latest status updates)."""

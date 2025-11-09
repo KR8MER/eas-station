@@ -73,7 +73,9 @@ class SDRSourceAdapter(AudioSourceAdapter):
         if not receiver_id:
             raise ValueError("receiver_id required in device_params")
 
-        self._radio_manager = RadioManager()
+        # Get the global radio manager instance
+        from app_core.extensions import get_radio_manager
+        self._radio_manager = get_radio_manager()
         self._receiver_id = receiver_id
 
         # Get receiver configuration to check demodulation settings
@@ -98,8 +100,6 @@ class SDRSourceAdapter(AudioSourceAdapter):
                 logger.info(f"Created {self._receiver_config.modulation_type} demodulator for receiver: {receiver_id}")
 
         # Start IQ capture from the specified receiver
-        # Note: This requires the radio manager to support IQ streaming,
-        # which would need to be implemented in the receiver drivers
         self._capture_handle = self._radio_manager.start_audio_capture(
             receiver_id=self._receiver_id,
             sample_rate=self.config.sample_rate,
