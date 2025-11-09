@@ -433,6 +433,11 @@ tracks releases under the 2.x series.
 - Bumped the default `APP_BUILD_VERSION` to 2.3.0 across the application and sample
   environment template so deployments surface the new release number.
 
+## [2.4.8] - 2025-11-09
+### Fixed
+- Verify existing certificates against the system trust store and expiration before skipping issuance, so stale self-signed chains are purged and a new ACME request runs on startup.
+- Log detailed reasons when certificate validation fails and remove the associated material, making it obvious when fallback artifacts block public issuance.
+
 ## [2.4.7] - 2025-11-09
 ### Fixed
 - Detect existing certificates issued by anything other than Let's Encrypt (including legacy self-signed chains)

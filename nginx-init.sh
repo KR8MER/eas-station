@@ -56,28 +56,45 @@ is_self_signed_certificate() {
     return 1
 }
 
-certificate_has_trusted_issuer() {
+certificate_is_trusted_and_valid() {
     CERT_PATH="${1:-/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem}"
 
     if [ ! -s "$CERT_PATH" ]; then
         return 1
     fi
 
-    ISSUER=$(openssl x509 -in "$CERT_PATH" -noout -issuer 2>/dev/null || true)
-
-    if [ -z "$ISSUER" ]; then
+    if ! openssl x509 -in "$CERT_PATH" -checkend 0 -noout >/dev/null 2>&1; then
         return 1
     fi
 
-    if echo "$ISSUER" | grep -qi "Let's Encrypt"; then
-        return 0
-    fi
-
-    if [ "$STAGING" = "1" ] && echo "$ISSUER" | grep -qi "Fake LE"; then
+    if openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt "$CERT_PATH" >/dev/null 2>&1; then
         return 0
     fi
 
     return 1
+}
+
+describe_certificate_issue() {
+    CERT_PATH="${1:-/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem}"
+    CERT_DOMAIN="${2:-$DOMAIN_NAME}"
+
+    if [ ! -s "$CERT_PATH" ]; then
+        echo "Certificate for $CERT_DOMAIN is missing or empty"
+        return
+    fi
+
+    if ! openssl x509 -in "$CERT_PATH" -checkend 0 -noout >/dev/null 2>&1; then
+        echo "Certificate for $CERT_DOMAIN is expired or not yet valid"
+    fi
+
+    if is_self_signed_certificate "$CERT_PATH"; then
+        echo "Certificate for $CERT_DOMAIN is self-signed"
+    fi
+
+    if ! openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt "$CERT_PATH" >/dev/null 2>&1; then
+        ISSUER=$(openssl x509 -in "$CERT_PATH" -noout -issuer 2>/dev/null || echo "unknown")
+        echo "Certificate for $CERT_DOMAIN failed trust verification (issuer: $ISSUER)"
+    fi
 }
 
 purge_stale_self_signed_material() {
@@ -103,8 +120,9 @@ purge_stale_self_signed_material() {
                 ;;
         esac
 
-        if [ -f "$MARKER_FILE" ] || { [ "$DOMAIN_MATCH" -eq 1 ] && ! certificate_has_trusted_issuer "$CERT_PATH"; } || { [ "$DOMAIN_MATCH" -eq 1 ] && is_self_signed_certificate "$CERT_PATH"; }; then
-            echo "Removing stale self-signed certificate artifacts for $CERT_DOMAIN"
+        if [ -f "$MARKER_FILE" ] || { [ "$DOMAIN_MATCH" -eq 1 ] && ! certificate_is_trusted_and_valid "$CERT_PATH"; } || { [ "$DOMAIN_MATCH" -eq 1 ] && is_self_signed_certificate "$CERT_PATH"; }; then
+            describe_certificate_issue "$CERT_PATH" "$CERT_DOMAIN"
+            echo "Removing stale certificate artifacts for $CERT_DOMAIN"
             purge_certificate_material "$CERT_DOMAIN"
         fi
     done
@@ -156,19 +174,21 @@ if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
     if [ -f "$SELF_SIGNED_MARKER" ]; then
         echo "Detected previously generated self-signed certificate"
         echo "Will retry Let's Encrypt issuance for $DOMAIN_NAME"
+        describe_certificate_issue "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" "$DOMAIN_NAME"
         CURRENT_CERT_SELF_SIGNED=1
     elif is_self_signed_certificate; then
         echo "Existing certificate appears to be self-signed without marker"
         echo "Cleaning up legacy fallback before reissuing"
         touch "$SELF_SIGNED_MARKER"
+        describe_certificate_issue "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" "$DOMAIN_NAME"
         CURRENT_CERT_SELF_SIGNED=1
-    elif certificate_has_trusted_issuer; then
+    elif certificate_is_trusted_and_valid; then
         echo "SSL certificates already exist for $DOMAIN_NAME"
         echo "Skipping certificate generation"
         CURRENT_CERT_SELF_SIGNED=0
     else
-        CERT_ISSUER=$(openssl x509 -in "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" -noout -issuer 2>/dev/null || echo "unknown")
-        echo "Existing certificate for $DOMAIN_NAME is not signed by Let's Encrypt (issuer: $CERT_ISSUER)"
+        describe_certificate_issue "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" "$DOMAIN_NAME"
+        echo "Existing certificate for $DOMAIN_NAME failed validation"
         echo "Will request a new trusted certificate"
         touch "$SELF_SIGNED_MARKER"
         CURRENT_CERT_SELF_SIGNED=1
