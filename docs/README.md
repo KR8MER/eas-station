@@ -11,17 +11,19 @@ Welcome to the comprehensive documentation for **EAS Station** - an experimental
 |----------|-------------|
 | [**Help & Operations Guide**](guides/HELP.md) | Daily operations, dashboard access, alert monitoring |
 | [**Quick Start**](../README.md#quick-start) | Get up and running in 5 minutes |
+| [**Setup Instructions**](guides/SETUP_INSTRUCTIONS.md) | First-run wizard, environment validation |
 | [**Portainer Deployment**](guides/PORTAINER_DEPLOYMENT.md) | Complete guide for deploying and maintaining with Portainer |
 | [**Database Fixes**](guides/DATABASE_CONSISTENCY_FIXES.md) | Troubleshooting database connection issues |
 | [**Environment Migration**](guides/ENV_MIGRATION_GUIDE.md) | Migrating .env configuration between versions |
 | [**One-Button Upgrade**](guides/one_button_upgrade.md) | Automated upgrade workflow |
+| [**Audio Monitoring**](audio/AUDIO_MONITORING.md) | Live stream viewer, waveform analysis, troubleshooting |
 
 ### For Integrators
 | Document | Description |
 |----------|-------------|
 | [**IPAWS Feed Integration**](guides/ipaws_feed_integration.md) | Configure IPAWS/Pub-Sub polling |
 | [**Radio USB Passthrough**](guides/radio_usb_passthrough.md) | SDR receiver configuration for Docker |
-| [**API Reference**](../README.md#api-endpoints) | REST API documentation |
+| [**API Reference**](../README.md#-api-endpoints) | REST API documentation |
 
 ### For Developers
 | Document | Description |
@@ -36,6 +38,7 @@ Welcome to the comprehensive documentation for **EAS Station** - an experimental
 |----------|-------------|
 | [**About**](reference/ABOUT.md) | Project mission, architecture, technology stack |
 | [**Changelog**](reference/CHANGELOG.md) | Complete version history and release notes |
+| [**Feature Matrix**](reference/FEATURE_MATRIX.md) | Documentation coverage by feature |
 | [**Roadmap**](roadmap/) | Feature planning and requirements |
 | [**DASDEC3 Comparison**](roadmap/DASDEC3_COMPARISON.md) | Gap analysis vs. commercial encoder/decoder |
 | [**DASDEC3 Manuals (Reference)**](Version%205.1%20Software_Users%20Guide_R1.0%205-31-23.pdf) | Vendor manual, quick start, Grob Systems dossier |
@@ -60,6 +63,7 @@ docs/
 │
 ├── guides/                            ← Operational guides and how-tos
 │   ├── HELP.md                       ← Primary operations guide
+│   ├── SETUP_INSTRUCTIONS.md         ← First-run walkthrough
 │   ├── PORTAINER_DEPLOYMENT.md       ← Portainer deployment guide
 │   ├── DATABASE_CONSISTENCY_FIXES.md
 │   ├── ENV_MIGRATION_GUIDE.md
@@ -68,19 +72,37 @@ docs/
 │   ├── radio_usb_passthrough.md
 │   └── sdr_setup_guide.md
 │
+├── audio/                             ← Audio monitoring and verification
+│   └── AUDIO_MONITORING.md           ← Live monitoring dashboard guide
+│
 ├── development/                       ← Developer documentation
 │   ├── AGENTS.md                     ← Primary developer guide (code standards)
 │   └── git_workflow.md               ← Version control workflow
 │
+├── deployment/                        ← Deployment runbooks
+│   ├── audio_hardware.md             ← Hardware wiring reference
+│   ├── post_install.md               ← Post-installation checklist
+│   └── portainer/
+│       ├── README.md                 ← Portainer doc overview
+│       ├── PORTAINER_QUICK_START.md  ← Five-minute stack deployment
+│       ├── PORTAINER_DATABASE_SETUP.md
+│       └── PORTAINER_NETWORK_SETUP.md
+│
 ├── reference/                         ← Technical reference
 │   ├── ABOUT.md                      ← Project overview
 │   ├── CHANGELOG.md                  ← Version history
+│   ├── FEATURE_MATRIX.md             ← Coverage by feature
 │   ├── dependency_attribution.md     ← License compliance
 │   └── CFR-2010-title47-vol1-sec11-31.xml  ← FCC regulations
 │
 ├── architecture/                      ← System theory of operation and diagrams
 │   ├── SYSTEM_ARCHITECTURE.md        ← Comprehensive architecture diagrams
 │   └── THEORY_OF_OPERATION.md        ← Detailed pipeline and SAME overview
+│
+├── archive/                           ← Historical reference material
+│   ├── README.md                     ← Archive usage guidelines
+│   └── 2025/
+│       └── …                         ← Bug reports, security analyses, changelogs
 │
 ├── policies/                          ← Legal and governance
 │   ├── TERMS_OF_USE.md
@@ -108,12 +130,14 @@ docs/
 - **Troubleshooting issues?** → [Database Fixes](guides/DATABASE_CONSISTENCY_FIXES.md) + [Help Guide](guides/HELP.md)
 - **Integrating with IPAWS?** → [IPAWS Integration Guide](guides/ipaws_feed_integration.md)
 - **Configuring SDR hardware?** → [Radio USB Passthrough](guides/radio_usb_passthrough.md)
+- **Monitoring audio feeds?** → [Audio Monitoring](audio/AUDIO_MONITORING.md)
 - **Understanding the architecture?** → [System Architecture](architecture/SYSTEM_ARCHITECTURE.md) + [Theory of Operation](architecture/THEORY_OF_OPERATION.md) + [About](reference/ABOUT.md)
 - **Checking version history?** → [Changelog](reference/CHANGELOG.md)
 
 ### By Audience
 - **👨‍💼 Emergency Managers**: Start with [About](reference/ABOUT.md) and [Terms of Use](policies/TERMS_OF_USE.md)
 - **📻 Radio Operators**: [Help Guide](guides/HELP.md) → [IPAWS Integration](guides/ipaws_feed_integration.md)
+- **🎧 Audio Engineers**: [Audio Monitoring](audio/AUDIO_MONITORING.md) → [Professional Audio Subsystem](../PROFESSIONAL_AUDIO_SUBSYSTEM.md)
 - **💻 Developers**: [AGENTS.md](development/AGENTS.md) → [Contributing](process/CONTRIBUTING.md)
 - **🔧 System Administrators**: [Portainer Deployment](guides/PORTAINER_DEPLOYMENT.md) → [Environment Migration](guides/ENV_MIGRATION_GUIDE.md) → [Database Fixes](guides/DATABASE_CONSISTENCY_FIXES.md)
 

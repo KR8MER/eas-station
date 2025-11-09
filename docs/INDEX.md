@@ -43,6 +43,7 @@ If you're new to EAS Station, start here:
 | [🌐 IPAWS Integration](guides/ipaws_feed_integration.md) | Federal alert source setup |
 | [🔄 Environment Migration](guides/ENV_MIGRATION_GUIDE.md) | Moving between versions |
 | [🗄️ Database Setup](guides/DATABASE_CONSISTENCY_FIXES.md) | PostgreSQL/PostGIS configuration |
+| [🛠️ Setup Instructions](guides/SETUP_INSTRUCTIONS.md) | Initial wizard and environment checklist |
 
 ### Hardware Integration
 | Document | Description |
@@ -51,6 +52,7 @@ If you're new to EAS Station, start here:
 | [🔊 Audio Configuration](guides/HELP.md#audio-generation-errors) | Sound card and audio routing |
 | [🎧 Professional Audio Subsystem](PROFESSIONAL_AUDIO_SUBSYSTEM.md) | **NEW:** 24/7 audio monitoring architecture |
 | [🔗 Audio System Access Guide](AUDIO_SYSTEM_ACCESS_GUIDE.md) | **NEW:** Quick reference for audio features |
+| [🎧 Audio Monitoring Dashboard](audio/AUDIO_MONITORING.md) | Live stream viewer and troubleshooting |
 | [💡 LED Sign Integration](guides/HELP.md#led-sign-not-responding) | Alpha Protocol signage |
 | [📻 Radio Management](guides/radio_usb_passthrough.md) | USB radio devices |
 
@@ -70,7 +72,7 @@ If you're new to EAS Station, start here:
 | [🏗️ Architecture Overview](architecture/THEORY_OF_OPERATION.md) | System design and components |
 | [💻 Development Setup](development/AGENTS.md) | Local development environment |
 | [🎨 Frontend Documentation](frontend/FRONTEND_INDEX.md) | Complete UI and frontend guide |
-| [🔧 API Reference](../README.md#api-endpoints) | REST API documentation |
+| [🔧 API Reference](../README.md#-api-endpoints) | REST API documentation |
 | [🗺️ Project Structure](development/AGENTS.md#project-structure) | Code organization guide |
 
 ### Contributing
@@ -97,8 +99,10 @@ If you're new to EAS Station, start here:
 |----------|-------------|
 | [📖 About EAS Station](reference/ABOUT.md) | Project background and goals |
 | [📄 Changelog](reference/CHANGELOG.md) | Version history and changes |
+| [🧭 Feature Matrix](reference/FEATURE_MATRIX.md) | Documentation coverage by feature |
 | [🎵 Audio System Changelog (2025-11-07)](CHANGELOG_2025-11-07.md) | **NEW:** Professional audio subsystem build log |
 | [📊 Documentation Audit](documentation_audit.md) | Documentation status and maintenance tracking |
+| [🗃️ Documentation Archive](archive/README.md) | Historical bug reports & security analyses |
 | [🔐 Security Policy](development/AGENTS.md#security) | Security considerations |
 | [📜 License](../LICENSE) | MIT License terms |
 
@@ -108,7 +112,11 @@ If you're new to EAS Station, start here:
 | Document | Description |
 |----------|-------------|
 | [🐳 Docker Deployment](../README.md#-quick-start) | Container setup and management |
+| [🚀 Portainer Quick Start](deployment/portainer/PORTAINER_QUICK_START.md) | Five-minute stack deployment |
+| [🗄️ Portainer Database Setup](deployment/portainer/PORTAINER_DATABASE_SETUP.md) | External database configuration |
+| [🌐 Portainer Network Setup](deployment/portainer/PORTAINER_NETWORK_SETUP.md) | Reverse proxy and DNS guidance |
 | [🔄 One-Button Upgrade](guides/one_button_upgrade.md) | Automated update process |
+| [🧰 Post Install Checklist](deployment/post_install.md) | Finalize services and accounts |
 | [📊 Performance Tuning](guides/HELP.md#optimization) | Optimization guidelines |
 | [🔍 Monitoring & Logging](guides/HELP.md#monitoring) | System observability |
 

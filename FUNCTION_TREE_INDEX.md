@@ -327,7 +327,7 @@ scripts/
 | FUNCTION_TREE.md | Complete function reference (this one) |
 | FUNCTION_TREE_SUMMARY.txt | Overview & statistics |
 | README.md | Project setup & overview |
-| SECURITY_FIXES.md | Recent security updates |
+| docs/archive/2025/SECURITY_FIXES.md | Historical security updates |
 | KNOWN_BUGS.md | Known issues |
 | docs/ | Complete documentation |
 | CHANGELOG | Version history |

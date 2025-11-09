@@ -61,11 +61,17 @@ Then open http://localhost:5000 in your browser.
 - **[📖 Getting Started](docs/INDEX.md)**
   Installation, configuration, first alert
 
+- **[🛠️ Setup Instructions](docs/guides/SETUP_INSTRUCTIONS.md)**
+  First-run wizard walkthrough and environment validation tips
+
 - **[📘 User Guide](docs/guides/HELP.md)**
   Daily operations, alert management, hardware
 
 - **[🔧 Admin Guide](docs/guides/PORTAINER_DEPLOYMENT.md)**
   Deployment, database, maintenance
+
+- **[🎧 Audio Monitoring](docs/audio/AUDIO_MONITORING.md)**
+  Live stream viewer, level metering, troubleshooting steps
 
 </td>
 <td width="50%">
@@ -95,6 +101,16 @@ pip install -r requirements-docs.txt
 mkdocs serve
 # Open http://localhost:8000
 ```
+
+## 📡 API Endpoints
+
+EAS Station exposes a comprehensive REST API for automation and integrations:
+
+- [Endpoint reference](docs/frontend/JAVASCRIPT_API.md) – Complete request/response catalog and authentication model
+- [Architecture overview](docs/architecture/SYSTEM_ARCHITECTURE.md) – How the API interacts with pollers, database, and broadcast services
+- [SDK examples](docs/frontend/FRONTEND_INDEX.md#javascript-api-usage) – Using the JavaScript client to control GPIO and audio devices
+
+> Tip: All API routes are namespaced under `/api/`. Use the `X-API-Key` header generated from the Configuration → API Keys page.
 
 ## 🏗️ Architecture
 

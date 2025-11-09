@@ -1,6 +1,6 @@
 # Documentation Audit Report
 
-**Last Updated**: November 8, 2025
+**Last Updated**: November 9, 2025
 **Status**: ✅ Major cleanup completed, ongoing maintenance required
 
 ## Overview
@@ -39,6 +39,12 @@ This document tracks the state of EAS Station documentation and identifies areas
 - ✅ Consistent Markdown formatting across files
 - ✅ Comprehensive index at `docs/INDEX.md`
 
+### Phase 4: Root Directory Refresh ✅ COMPLETE
+- ✅ Archived legacy bug/security reports to `docs/archive/`
+- ✅ Moved Portainer quick-start docs to `docs/deployment/portainer/`
+- ✅ Relocated setup/audio guides into their functional folders
+- ✅ Root directory now focused on essential project and deployment files
+
 ## 📊 Current Documentation Structure
 
 ### Root Directory Files (Essential Only)
@@ -46,10 +52,22 @@ This document tracks the state of EAS Station documentation and identifies areas
 |------|-------|---------|--------|
 | `README.md` | 382 | Main project documentation | ✅ Clean |
 | `AGENTS.md` | ~250 | AI agent documentation | ✅ Current |
-| `AUDIO_MONITORING.md` | ~225 | Audio system guide | ✅ Current |
-| `SETUP_INSTRUCTIONS.md` | ~110 | Installation guide | ✅ Current |
 | `KNOWN_BUGS.md` | ~600 | Bug tracking | ⚠️ Active |
-| Others | Various | Specialized guides (Portainer, security, etc.) | ✅ Current |
+| `FUNCTION_TREE*.md` | Various | Developer index references | ✅ Canonical |
+| Compose & Docker assets | Various | Deployment manifests | ✅ Required |
+
+### Newly Archived or Relocated
+| File | New Location | Notes |
+|------|--------------|-------|
+| `BUG_REPORT_ENV_SETTINGS.md` | `docs/archive/2025/` | Preserved for historical context |
+| `CHANGES_2025-11-07.md` | `docs/archive/2025/` | Release history retained |
+| `SECURITY_FIXES.md` | `docs/archive/2025/` | Security remediation write-up |
+| `SECURITY_FIXES_2025-11-06.md` | `docs/archive/2025/` | Additional security analysis |
+| `PORTAINER_QUICK_START.md` | `docs/deployment/portainer/` | Consolidated with Portainer docs |
+| `PORTAINER_DATABASE_SETUP.md` | `docs/deployment/portainer/` | Consolidated with Portainer docs |
+| `PORTAINER_NETWORK_SETUP.md` | `docs/deployment/portainer/` | Consolidated with Portainer docs |
+| `SETUP_INSTRUCTIONS.md` | `docs/guides/SETUP_INSTRUCTIONS.md` | Linked from README and docs index |
+| `AUDIO_MONITORING.md` | `docs/audio/AUDIO_MONITORING.md` | Linked from audio integration guides |
 
 ### Documentation Categories
 
