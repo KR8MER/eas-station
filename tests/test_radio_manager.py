@@ -9,8 +9,8 @@ from app_core.radio.manager import RadioManager, ReceiverConfig, ReceiverInterfa
 
 
 class _DummyReceiver(ReceiverInterface):
-    def __init__(self, config: ReceiverConfig) -> None:
-        super().__init__(config)
+    def __init__(self, config: ReceiverConfig, *, event_logger=None) -> None:
+        super().__init__(config, event_logger=event_logger)
         self.started = 0
         self.stopped = 0
         self._status = ReceiverStatus(identifier=config.identifier, locked=False)

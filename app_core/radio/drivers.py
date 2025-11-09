@@ -97,8 +97,13 @@ class _SoapySDRReceiver(ReceiverInterface):
 
     driver_hint: str = ""
 
-    def __init__(self, config: ReceiverConfig) -> None:
-        super().__init__(config)
+    def __init__(
+        self,
+        config: ReceiverConfig,
+        *,
+        event_logger=None,
+    ) -> None:
+        super().__init__(config, event_logger=event_logger)
         self._handle: Optional[_SoapySDRHandle] = None
         self._thread: Optional[threading.Thread] = None
         self._running = threading.Event()
@@ -113,6 +118,7 @@ class _SoapySDRReceiver(ReceiverInterface):
         self._sample_buffer_lock = threading.Lock()
         self._retry_backoff = 0.25
         self._max_retry_backoff = 5.0
+        self._last_logged_error: Optional[str] = None
 
     # ------------------------------------------------------------------
     # Lifecycle helpers
@@ -124,7 +130,7 @@ class _SoapySDRReceiver(ReceiverInterface):
         try:
             handle = self._open_handle()
         except Exception as exc:
-            self._update_status(locked=False, last_error=str(exc))
+            self._update_status(locked=False, last_error=str(exc), context="startup")
             raise
 
         self._handle = handle
@@ -171,14 +177,20 @@ class _SoapySDRReceiver(ReceiverInterface):
         last_error: Optional[str] = None,
         capture_mode: Optional[str] = None,
         capture_path: Optional[str] = None,
+        context: Optional[str] = None,
     ) -> None:
         with self._status_lock:
             if locked is not None:
                 self._status.locked = locked
             if signal_strength is not None:
                 self._status.signal_strength = signal_strength
-            if last_error is not None:
-                self._status.last_error = last_error
+            sanitized_error = last_error
+            if isinstance(sanitized_error, str):
+                sanitized_error = sanitized_error.strip()
+            if sanitized_error == "":
+                sanitized_error = None
+            if sanitized_error is not None:
+                self._status.last_error = sanitized_error
             elif locked:
                 # Clear stale error state when the receiver reports healthy.
                 self._status.last_error = None
@@ -187,6 +199,58 @@ class _SoapySDRReceiver(ReceiverInterface):
             if capture_path is not None:
                 self._status.capture_path = capture_path
             self._status.reported_at = datetime.datetime.now(datetime.timezone.utc)
+
+            current_error = self._status.last_error
+
+        if sanitized_error is not None and current_error:
+            details = self._build_event_details(context=context)
+            details["error"] = current_error
+            self._emit_event(
+                "ERROR",
+                f"{self.config.identifier}: {current_error}",
+                details=details,
+            )
+            self._last_logged_error = current_error
+        elif sanitized_error is None and locked and self._last_logged_error:
+            details = self._build_event_details(context=context)
+            details["previous_error"] = self._last_logged_error
+            self._emit_event(
+                "INFO",
+                f"{self.config.identifier} recovered and resumed streaming",
+                details=details,
+            )
+            self._last_logged_error = None
+
+    def _build_event_details(self, *, context: Optional[str] = None) -> Dict[str, object]:
+        with self._status_lock:
+            locked = bool(self._status.locked)
+            signal_strength = self._status.signal_strength
+            capture_mode = self._status.capture_mode
+            capture_path = self._status.capture_path
+            reported_at = self._status.reported_at
+
+        details: Dict[str, object] = {
+            "identifier": self.config.identifier,
+            "driver": self.config.driver,
+            "driver_hint": self.driver_hint,
+            "frequency_hz": self.config.frequency_hz,
+            "sample_rate": self.config.sample_rate,
+            "gain": self.config.gain,
+            "serial": self.config.serial,
+            "locked": locked,
+            "signal_strength": signal_strength,
+        }
+
+        if capture_mode is not None:
+            details["capture_mode"] = capture_mode
+        if capture_path is not None:
+            details["capture_path"] = capture_path
+        if reported_at is not None:
+            details["reported_at"] = reported_at.isoformat()
+        if context:
+            details["context"] = context
+
+        return details
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -302,7 +366,11 @@ class _SoapySDRReceiver(ReceiverInterface):
                 try:
                     new_handle = self._open_handle()
                 except Exception as exc:
-                    self._update_status(locked=False, last_error=str(exc))
+                    self._update_status(
+                        locked=False,
+                        last_error=str(exc),
+                        context="open_stream",
+                    )
                     time.sleep(min(retry_delay, self._max_retry_backoff))
                     retry_delay = min(retry_delay * 2.0, self._max_retry_backoff)
                     continue
@@ -329,7 +397,11 @@ class _SoapySDRReceiver(ReceiverInterface):
                     self._update_sample_buffer(samples)
                     self._process_capture(samples)
             except Exception as exc:
-                self._update_status(locked=False, last_error=str(exc))
+                self._update_status(
+                    locked=False,
+                    last_error=str(exc),
+                    context="read_stream",
+                )
                 self._teardown_handle(handle)
                 handle = None
                 buffer = None

@@ -360,15 +360,44 @@ function renderAudioSources() {
                         })()}
 
                         <!-- Stream Metadata (if available) -->
-                        ${source.metrics.metadata ? `
-                            <div class="mt-3">
-                                <h6 class="text-muted mb-2"><i class="fas fa-info-circle"></i> Stream Information</h6>
-                                <div class="small">
-                                    ${source.metrics.metadata.codec ? `
-                                        <div class="d-flex justify-content-between mb-1">
-                                            <span class="text-muted">Codec:</span>
-                                            <span class="fw-bold text-uppercase">
-                                                ${escapeHtml(source.metrics.metadata.codec)}
+                                    ${source.metrics.metadata ? `
+                                        <div class="mt-3">
+                                            <h6 class="text-muted mb-2"><i class="fas fa-info-circle"></i> Stream Information</h6>
+                                            <div class="small">
+                                                ${source.metrics.metadata.receiver_display_name ? `
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Receiver:</span>
+                                                        <span class="fw-bold">
+                                                            ${escapeHtml(source.metrics.metadata.receiver_display_name)}
+                                                            ${source.metrics.metadata.receiver_identifier ? `
+                                                                <span class="text-muted small ms-2">${escapeHtml(source.metrics.metadata.receiver_identifier)}</span>
+                                                            ` : ''}
+                                                        </span>
+                                                    </div>
+                                                ` : ''}
+                                                ${source.metrics.metadata.receiver_frequency_display ? `
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Frequency:</span>
+                                                        <span>${escapeHtml(source.metrics.metadata.receiver_frequency_display)}</span>
+                                                    </div>
+                                                ` : ''}
+                                                ${source.metrics.metadata.receiver_modulation ? `
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Mode:</span>
+                                                        <span class="text-uppercase">${escapeHtml(source.metrics.metadata.receiver_modulation)}</span>
+                                                    </div>
+                                                ` : ''}
+                                                ${source.metrics.metadata.receiver_driver ? `
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Driver:</span>
+                                                        <span class="font-monospace small">${escapeHtml(source.metrics.metadata.receiver_driver)}</span>
+                                                    </div>
+                                                ` : ''}
+                                                ${source.metrics.metadata.codec ? `
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Codec:</span>
+                                                        <span class="fw-bold text-uppercase">
+                                                            ${escapeHtml(source.metrics.metadata.codec)}
                                                 ${source.metrics.metadata.codec_version ? `
                                                     <span class="badge bg-secondary text-white small ms-1">${escapeHtml(source.metrics.metadata.codec_version)}</span>
                                                 ` : ''}

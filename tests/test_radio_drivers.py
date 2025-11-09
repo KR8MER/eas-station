@@ -152,3 +152,49 @@ def test_receiver_recovers_from_stream_error(monkeypatch):
         receiver.stop()
         monkeypatch.delitem(sys.modules, "SoapySDR", raising=False)
         _DeviceFactory.open_count = 0
+
+
+def test_receiver_logs_error_and_recovery(monkeypatch):
+    _DeviceFactory.open_count = 0
+    _install_soapysdr_stub(monkeypatch)
+
+    events = []
+
+    def recorder(level, message, *, module, details=None):
+        events.append((level, message, module, details))
+
+    config = ReceiverConfig(
+        identifier="test",
+        driver="rtlsdr",
+        frequency_hz=162_550_000,
+        sample_rate=2_400_000,
+        gain=10.0,
+        auto_start=True,
+    )
+
+    receiver = RTLSDRReceiver(config, event_logger=recorder)
+    receiver.start()
+
+    try:
+        deadline = time.time() + 2.0
+        recovered = False
+        while time.time() < deadline:
+            if any(event[0] == "INFO" and "recovered" in event[1] for event in events):
+                recovered = True
+                break
+            time.sleep(0.05)
+
+        assert any(
+            event[0] == "ERROR" and "SoapySDR readStream error" in event[1]
+            for event in events
+        ), "expected readStream error to be logged"
+        assert recovered, "receiver did not emit recovery log entry"
+
+        assert any(
+            (details or {}).get("identifier") == "test" and details.get("driver") == "rtlsdr"
+            for _, _, _, details in events
+        ), "event details should include receiver metadata"
+    finally:
+        receiver.stop()
+        monkeypatch.delitem(sys.modules, "SoapySDR", raising=False)
+        _DeviceFactory.open_count = 0

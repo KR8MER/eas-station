@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import logging
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Flask, jsonify, render_template, request
 from sqlalchemy.exc import SQLAlchemyError
 
-from app_core.extensions import db
+from app_core.extensions import db, get_radio_manager
 from app_core.location import get_location_settings
 from app_core.models import RadioReceiver
 from app_core.radio import (
@@ -25,6 +26,43 @@ from app_core.radio.service_config import (
     get_frequency_help_text,
     NOAA_FREQUENCIES,
 )
+from webapp.admin.audio_ingest import (
+    ensure_sdr_audio_monitor_source,
+    list_radio_managed_audio_sources,
+    remove_radio_managed_audio_source,
+)
+
+
+_module_logger = logging.getLogger(__name__)
+
+
+def _log_radio_event(
+    level: str,
+    message: str,
+    *,
+    module_suffix: Optional[str] = None,
+    details: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Persist radio UI events to the shared SystemLog table."""
+
+    try:
+        manager = get_radio_manager()
+    except Exception as exc:  # pragma: no cover - defensive logging
+        _module_logger.debug(
+            "Unable to acquire RadioManager for log emission: %s", exc, exc_info=True
+        )
+        return
+
+    module = "radio.ui"
+    if module_suffix:
+        module = f"{module}.{module_suffix}"
+
+    try:
+        manager.log_event(level, message, module=module, details=details)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        _module_logger.debug(
+            "RadioManager.log_event failed for message '%s': %s", message, exc, exc_info=True
+        )
 
 
 def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
@@ -171,8 +209,6 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
 def _sync_radio_manager_state(route_logger) -> Dict[str, Any]:
     """Reload radio manager configuration after CRUD operations."""
 
-    from app_core.extensions import get_radio_manager
-
     summary: Dict[str, Any] = {
         "configured": 0,
         "auto_started": [],
@@ -184,6 +220,12 @@ def _sync_radio_manager_state(route_logger) -> Dict[str, Any]:
     except Exception as exc:  # pragma: no cover - defensive
         route_logger.error("Failed to acquire RadioManager: %s", exc, exc_info=True)
         summary["errors"].append(str(exc))
+        _log_radio_event(
+            "ERROR",
+            f"Failed to acquire RadioManager: {exc}",
+            module_suffix="sync",
+            details={"error": str(exc)},
+        )
         return summary
 
     enabled_receivers = RadioReceiver.query.filter_by(enabled=True).all()
@@ -204,8 +246,74 @@ def _sync_radio_manager_state(route_logger) -> Dict[str, Any]:
                 message = f"Failed to auto-start {receiver.identifier}: {exc}"
                 route_logger.error(message, exc_info=True)
                 summary["errors"].append(message)
+                _log_radio_event(
+                    "ERROR",
+                    message,
+                    module_suffix="sync",
+                    details={
+                        "identifier": receiver.identifier,
+                        "error": str(exc),
+                    },
+                )
+
+    _sync_audio_monitors(route_logger, enabled_receivers)
 
     return summary
+
+
+def _sync_audio_monitors(route_logger, receivers: List[RadioReceiver]) -> None:
+    """Ensure each receiver with audio output has an Icecast-backed monitor."""
+
+    active_sources: set[str] = set()
+
+    for receiver in receivers:
+        try:
+            result = ensure_sdr_audio_monitor_source(
+                receiver,
+                start_immediately=receiver.auto_start,
+                commit=True,
+            )
+        except Exception as exc:
+            route_logger.error(
+                "Failed to ensure audio monitor for %s: %s",
+                receiver.identifier,
+                exc,
+                exc_info=True,
+            )
+            _log_radio_event(
+                "ERROR",
+                f"Failed to ensure audio monitor for {receiver.identifier}: {exc}",
+                module_suffix="audio",
+                details={
+                    "identifier": receiver.identifier,
+                    "error": str(exc),
+                },
+            )
+            continue
+
+        source_name = result.get("source_name")
+        if source_name and not result.get("removed"):
+            active_sources.add(source_name)
+
+    for config in list_radio_managed_audio_sources():
+        if config.name in active_sources:
+            continue
+        try:
+            if remove_radio_managed_audio_source(config.name):
+                route_logger.info("Removed inactive SDR audio monitor %s", config.name)
+        except Exception as exc:
+            route_logger.error(
+                "Failed to remove SDR audio monitor %s: %s", config.name, exc, exc_info=True
+            )
+            _log_radio_event(
+                "ERROR",
+                f"Failed to remove SDR audio monitor {config.name}: {exc}",
+                module_suffix="audio",
+                details={
+                    "source_name": config.name,
+                    "error": str(exc),
+                },
+            )
 
 
 def register(app: Flask, logger) -> None:
@@ -252,6 +360,15 @@ def register(app: Flask, logger) -> None:
         except SQLAlchemyError as exc:
             route_logger.error("Failed to create receiver: %s", exc)
             db.session.rollback()
+            _log_radio_event(
+                "ERROR",
+                f"Failed to create receiver {data.get('identifier')}: {exc}",
+                module_suffix="crud",
+                details={
+                    "identifier": data.get("identifier"),
+                    "error": str(exc),
+                },
+            )
             return jsonify({"error": "Failed to save receiver."}), 500
 
         manager_state = _sync_radio_manager_state(route_logger)
@@ -283,6 +400,15 @@ def register(app: Flask, logger) -> None:
         except SQLAlchemyError as exc:
             route_logger.error("Failed to update receiver %s: %s", receiver.identifier, exc)
             db.session.rollback()
+            _log_radio_event(
+                "ERROR",
+                f"Failed to update receiver {receiver.identifier}: {exc}",
+                module_suffix="crud",
+                details={
+                    "identifier": receiver.identifier,
+                    "error": str(exc),
+                },
+            )
             return jsonify({"error": "Failed to update receiver."}), 500
 
         manager_state = _sync_radio_manager_state(route_logger)
@@ -303,6 +429,15 @@ def register(app: Flask, logger) -> None:
         except SQLAlchemyError as exc:
             route_logger.error("Failed to delete receiver %s: %s", receiver.identifier, exc)
             db.session.rollback()
+            _log_radio_event(
+                "ERROR",
+                f"Failed to delete receiver {receiver.identifier}: {exc}",
+                module_suffix="crud",
+                details={
+                    "identifier": receiver.identifier,
+                    "error": str(exc),
+                },
+            )
             return jsonify({"error": "Failed to delete receiver."}), 500
 
         manager_state = _sync_radio_manager_state(route_logger)
@@ -315,7 +450,6 @@ def register(app: Flask, logger) -> None:
         ensure_radio_tables(route_logger)
         receiver_record = RadioReceiver.query.get_or_404(receiver_id)
 
-        from app_core.extensions import get_radio_manager
         radio_manager = get_radio_manager()
 
         # Get the receiver instance from RadioManager
@@ -339,6 +473,18 @@ def register(app: Flask, logger) -> None:
             # Get updated status
             status = receiver_instance.get_status()
 
+            _log_radio_event(
+                "INFO",
+                f"Restarted receiver {receiver_record.identifier}",
+                module_suffix="actions",
+                details={
+                    "identifier": receiver_record.identifier,
+                    "locked": status.locked,
+                    "signal_strength": status.signal_strength,
+                    "last_error": status.last_error,
+                },
+            )
+
             return jsonify({
                 "success": True,
                 "message": f"Receiver '{receiver_record.display_name}' restarted successfully",
@@ -350,6 +496,15 @@ def register(app: Flask, logger) -> None:
             })
         except Exception as exc:
             route_logger.error("Failed to restart receiver %s: %s", receiver_record.identifier, exc, exc_info=True)
+            _log_radio_event(
+                "ERROR",
+                f"Failed to restart receiver {receiver_record.identifier}: {exc}",
+                module_suffix="actions",
+                details={
+                    "identifier": receiver_record.identifier,
+                    "error": str(exc),
+                },
+            )
             return jsonify({
                 "error": f"Failed to restart receiver: {str(exc)}"
             }), 500
@@ -362,6 +517,12 @@ def register(app: Flask, logger) -> None:
             return jsonify({"devices": devices, "count": len(devices)})
         except Exception as exc:
             route_logger.error("Device enumeration failed: %s", exc)
+            _log_radio_event(
+                "ERROR",
+                f"Device enumeration failed: {exc}",
+                module_suffix="discovery",
+                details={"error": str(exc)},
+            )
             return jsonify({"error": str(exc), "devices": []}), 500
 
     @app.route("/api/radio/devices/simple", methods=["GET"])
@@ -403,11 +564,20 @@ def register(app: Flask, logger) -> None:
             return jsonify({"devices": simple_devices, "count": len(simple_devices)})
         except Exception as exc:
             route_logger.error("Device enumeration failed: %s", exc)
+            _log_radio_event(
+                "ERROR",
+                f"Device enumeration failed: {exc}",
+                module_suffix="discovery",
+                details={"error": str(exc)},
+            )
             return jsonify({"error": str(exc), "devices": []}), 500
 
     @app.route("/api/radio/validate-frequency", methods=["POST"])
     def api_validate_frequency() -> Any:
         """Validate frequency input based on service type."""
+        payload: Dict[str, Any] = {}
+        service_type = None
+        frequency_input = None
         try:
             payload = request.get_json() or {}
             service_type = payload.get('service_type', '').upper()
@@ -430,6 +600,16 @@ def register(app: Flask, logger) -> None:
 
         except Exception as exc:
             route_logger.error("Frequency validation failed: %s", exc)
+            _log_radio_event(
+                "ERROR",
+                f"Frequency validation failed: {exc}",
+                module_suffix="validation",
+                details={
+                    "error": str(exc),
+                    "service_type": service_type,
+                    "frequency_input": frequency_input,
+                },
+            )
             return jsonify({"error": str(exc)}), 500
 
     @app.route("/api/radio/service-config/<service_type>", methods=["GET"])
@@ -454,6 +634,15 @@ def register(app: Flask, logger) -> None:
             return jsonify(config)
         except Exception as exc:
             route_logger.error("Failed to get service config: %s", exc)
+            _log_radio_event(
+                "ERROR",
+                f"Failed to get service config for {service_type}: {exc}",
+                module_suffix="validation",
+                details={
+                    "error": str(exc),
+                    "service_type": service_type,
+                },
+            )
             return jsonify({"error": str(exc)}), 500
 
     @app.route("/api/radio/diagnostics", methods=["GET"])
@@ -464,6 +653,12 @@ def register(app: Flask, logger) -> None:
             return jsonify(diagnostics)
         except Exception as exc:
             route_logger.error("Diagnostics check failed: %s", exc)
+            _log_radio_event(
+                "ERROR",
+                f"Diagnostics check failed: {exc}",
+                module_suffix="diagnostics",
+                details={"error": str(exc)},
+            )
             return jsonify({"error": str(exc), "ready": False}), 500
 
     @app.route("/api/radio/capabilities/<driver>", methods=["GET"])
@@ -484,6 +679,16 @@ def register(app: Flask, logger) -> None:
             return jsonify(capabilities)
         except Exception as exc:
             route_logger.error("Failed to query capabilities for driver '%s': %s", driver, exc)
+            _log_radio_event(
+                "ERROR",
+                f"Failed to query capabilities for driver '{driver}': {exc}",
+                module_suffix="diagnostics",
+                details={
+                    "error": str(exc),
+                    "driver": driver,
+                    "device_args": device_args,
+                },
+            )
             return jsonify({"error": str(exc)}), 500
 
     @app.route("/api/radio/presets", methods=["GET"])
@@ -508,6 +713,12 @@ def register(app: Flask, logger) -> None:
                 import numpy as np
             except ImportError:
                 route_logger.error("NumPy not available for waveform generation")
+                _log_radio_event(
+                    "ERROR",
+                    "NumPy not available for waveform generation",
+                    module_suffix="waveform",
+                    details={"receiver_id": receiver_id},
+                )
                 return jsonify({"error": "Waveform feature requires NumPy"}), 503
 
             receiver = RadioReceiver.query.get_or_404(receiver_id)
@@ -548,6 +759,15 @@ def register(app: Flask, logger) -> None:
 
         except Exception as exc:
             route_logger.error("Failed to get waveform data for receiver %s: %s", receiver_id, exc)
+            _log_radio_event(
+                "ERROR",
+                f"Failed to get waveform data for receiver {receiver_id}: {exc}",
+                module_suffix="waveform",
+                details={
+                    "receiver_id": receiver_id,
+                    "error": str(exc),
+                },
+            )
             # Don't leak sensitive exception details to client
             return jsonify({"error": "Failed to generate waveform data"}), 500
 
@@ -566,6 +786,12 @@ def register(app: Flask, logger) -> None:
                 import numpy as np
             except ImportError:
                 route_logger.error("NumPy not available for spectrum generation")
+                _log_radio_event(
+                    "ERROR",
+                    "NumPy not available for spectrum generation",
+                    module_suffix="spectrum",
+                    details={"receiver_id": receiver_id, "identifier": identifier},
+                )
                 return jsonify({"error": "Spectrum feature requires NumPy"}), 503
 
             # Look up receiver by ID or identifier
@@ -580,7 +806,6 @@ def register(app: Flask, logger) -> None:
                 receiver = RadioReceiver.query.get_or_404(receiver_id)
 
             # Get the radio manager and receiver
-            from app_core.extensions import get_radio_manager
             radio_manager = get_radio_manager()
             receiver_instance = radio_manager.get_receiver(receiver.identifier)
 
@@ -654,6 +879,16 @@ def register(app: Flask, logger) -> None:
 
         except Exception as exc:
             route_logger.error("Failed to get spectrum data for receiver %s: %s", receiver_id, exc)
+            _log_radio_event(
+                "ERROR",
+                f"Failed to get spectrum data for receiver {receiver_id}: {exc}",
+                module_suffix="spectrum",
+                details={
+                    "receiver_id": receiver_id,
+                    "identifier": identifier,
+                    "error": str(exc),
+                },
+            )
             return jsonify({"error": "Failed to generate spectrum data"}), 500
 
     @app.route("/api/monitoring/radio", methods=["GET"])
@@ -769,8 +1004,6 @@ def register(app: Flask, logger) -> None:
     def api_radio_diagnostics_status() -> Any:
         """Get comprehensive diagnostic information about RadioManager and receivers."""
         try:
-            from app_core.extensions import get_radio_manager
-
             # Get database receivers
             receivers_db = RadioReceiver.query.all()
             enabled_receivers = [r for r in receivers_db if r.enabled]
@@ -877,6 +1110,12 @@ def register(app: Flask, logger) -> None:
 
         except Exception as exc:
             route_logger.error("Failed to get diagnostic status: %s", exc, exc_info=True)
+            _log_radio_event(
+                "ERROR",
+                f"Failed to get radio diagnostic status: {exc}",
+                module_suffix="diagnostics",
+                details={"error": str(exc)},
+            )
             return jsonify({
                 "error": str(exc),
                 "health_status": "error",

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Iterable, List, Mapping, Optional
+from typing import TYPE_CHECKING, Callable, Dict, Iterable, List, Mapping, Optional
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
     from app_core.models import RadioReceiver, RadioReceiverStatus
@@ -53,8 +54,17 @@ class ReceiverStatus:
 class ReceiverInterface(ABC):
     """Base interface implemented by all receiver driver backends."""
 
-    def __init__(self, config: ReceiverConfig) -> None:
+    def __init__(
+        self,
+        config: ReceiverConfig,
+        *,
+        event_logger: Optional[Callable[..., None]] = None,
+    ) -> None:
         self.config = config
+        self._event_logger: Optional[Callable[..., None]] = event_logger
+        self._interface_logger = logging.getLogger(
+            f"{__name__}.{self.__class__.__name__}"
+        )
 
     @abstractmethod
     def start(self) -> None:
@@ -79,6 +89,44 @@ class ReceiverInterface(ABC):
     ) -> Path:
         """Capture a block of samples and persist them to disk."""
 
+    # ------------------------------------------------------------------
+    # Event logging helpers
+    # ------------------------------------------------------------------
+    def set_event_logger(self, callback: Optional[Callable[..., None]]) -> None:
+        """Set or update the callable used for structured event logging."""
+
+        self._event_logger = callback
+
+    def _emit_event(
+        self,
+        level: str,
+        message: str,
+        *,
+        module_suffix: Optional[str] = None,
+        details: Optional[Dict[str, object]] = None,
+    ) -> None:
+        if not self._event_logger:
+            return
+
+        module = "radio"
+        identifier = getattr(self.config, "identifier", None)
+        if identifier:
+            module = f"{module}.{identifier}"
+        if module_suffix:
+            module = f"{module}.{module_suffix}"
+
+        try:
+            self._event_logger(
+                level,
+                message,
+                module=module,
+                details=details or {},
+            )
+        except Exception:  # pragma: no cover - defensive logging
+            self._interface_logger.warning(
+                "Failed to emit radio event '%s'", message, exc_info=True
+            )
+
 
 class RadioManager:
     """Coordinate SDR receivers and expose a unified management surface."""
@@ -87,6 +135,9 @@ class RadioManager:
         self._drivers: Dict[str, type[ReceiverInterface]] = {}
         self._receivers: Dict[str, ReceiverInterface] = {}
         self._lock = threading.RLock()
+        self._event_logger: Optional[Callable[..., None]] = None
+        self._flask_app = None
+        self._logger = logging.getLogger(__name__)
 
     def register_driver(self, name: str, driver: type[ReceiverInterface]) -> None:
         """Register a receiver implementation that can be instantiated by name."""
@@ -127,7 +178,7 @@ class RadioManager:
                 if existing is not None:
                     existing.stop()
 
-                receiver = driver_cls(config)
+                receiver = driver_cls(config, event_logger=self._event_logger)
                 desired[config.identifier] = receiver
 
             for identifier, receiver in self._receivers.items():
@@ -244,6 +295,50 @@ class RadioManager:
             reports.append(row.to_receiver_status())
 
         return reports
+
+    def attach_app(self, app) -> None:
+        """Attach the Flask application so receivers can log structured events."""
+
+        if app is None:
+            return
+
+        if self._flask_app is app and self._event_logger is not None:
+            return
+
+        from app_core.radio.logging import build_radio_event_logger
+
+        self._flask_app = app
+        self.set_event_logger(build_radio_event_logger(app))
+
+    def set_event_logger(self, callback: Optional[Callable[..., None]]) -> None:
+        """Assign the callable used to persist radio system log entries."""
+
+        with self._lock:
+            self._event_logger = callback
+            for receiver in self._receivers.values():
+                receiver.set_event_logger(callback)
+
+    def log_event(
+        self,
+        level: str,
+        message: str,
+        *,
+        module: Optional[str] = None,
+        details: Optional[Dict[str, object]] = None,
+    ) -> None:
+        """Emit a structured event to the configured logging sink, if any."""
+
+        callback = self._event_logger
+        if not callback:
+            return
+
+        module_name = module or "radio"
+        try:
+            callback(level, message, module=module_name, details=details or {})
+        except Exception:  # pragma: no cover - defensive logging
+            self._logger.warning(
+                "Failed to emit radio manager event '%s'", message, exc_info=True
+            )
 
     def get_receiver(self, identifier: str) -> Optional[ReceiverInterface]:
         """Get a receiver instance by identifier."""

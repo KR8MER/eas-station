@@ -142,6 +142,7 @@ class SilenceDetector:
         self._is_silent = False
         self._silence_start_time: Optional[float] = None
         self._last_signal_time = time.time()
+        self._ever_had_signal = False
         
         # Alerting
         self._alerts: List[AudioAlert] = []
@@ -164,12 +165,13 @@ class SilenceDetector:
         """Process audio level and detect silence."""
         with self._lock:
             current_time = time.time()
-            
+
             # Check if audio is above silence threshold
             if level_db > self.silence_threshold_db:
                 # We have signal
                 self._last_signal_time = current_time
-                
+                self._ever_had_signal = True
+
                 # If we were in silence, alert that signal restored
                 if self._is_silent:
                     self._is_silent = False
@@ -183,17 +185,30 @@ class SilenceDetector:
                     
                 # Clear silence start time
                 self._silence_start_time = None
-                
+
             else:
                 # Audio is below threshold
+                if not self._ever_had_signal and not self._is_silent:
+                    self._silence_start_time = self._last_signal_time
+                    self._is_silent = True
+                    self._create_alert(
+                        AlertLevel.WARNING,
+                        source_name,
+                        f"Silence detected (no prior signal) ({level_db:.1f} dBFS)",
+                        level_db,
+                        self.silence_threshold_db
+                    )
+                    return
+
                 if not self._is_silent and self._silence_start_time is None:
-                    # Start timing silence
-                    self._silence_start_time = current_time
-                    
+                    # Start timing silence from the last time we had a signal
+                    self._silence_start_time = self._last_signal_time
+
                 elif self._silence_start_time is not None:
                     # Check if silence duration exceeded
-                    silence_duration = current_time - self._silence_start_time
-                    
+                    silence_start = self._silence_start_time or self._last_signal_time
+                    silence_duration = current_time - silence_start
+
                     if silence_duration >= self.silence_duration_seconds and not self._is_silent:
                         # Silence detected
                         self._is_silent = True

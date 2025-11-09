@@ -590,7 +590,7 @@
         const capture = status.capture_path
             ? `<div class="small text-muted">Captured: ${escapeHtml(status.capture_path)}</div>`
             : '';
-        const error = status.last_error
+        const error = (!locked && status.last_error)
             ? `<div class="small text-danger mt-1">${escapeHtml(status.last_error)}</div>`
             : '';
         const timestamp = status.reported_at
