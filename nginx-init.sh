@@ -5,6 +5,18 @@
 
 set -e
 
+generate_self_signed_certificate() {
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout /etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem \
+        -out /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem \
+        -subj "/C=US/ST=State/L=City/O=EAS Station/CN=$DOMAIN_NAME"
+
+    cp /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem \
+       /etc/letsencrypt/live/$DOMAIN_NAME/chain.pem
+
+    touch "$SELF_SIGNED_MARKER"
+}
+
 # Source persistent configuration from setup wizard if it exists
 # This allows HTTPS settings to be configured through the web UI
 if [ -f "/app-config/.env" ]; then
@@ -25,6 +37,7 @@ fi
 DOMAIN_NAME="${DOMAIN_NAME:-localhost}"
 EMAIL="${SSL_EMAIL:-admin@example.com}"
 STAGING="${CERTBOT_STAGING:-0}"
+SELF_SIGNED_MARKER="/etc/letsencrypt/live/$DOMAIN_NAME/.self-signed"
 
 echo "========================================="
 echo "EAS Station nginx Initialization"
@@ -43,10 +56,18 @@ mkdir -p /var/log/nginx
 envsubst '${DOMAIN_NAME}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
 # Check if we already have certificates
-if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
+if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ] && [ ! -f "$SELF_SIGNED_MARKER" ]; then
     echo "SSL certificates already exist for $DOMAIN_NAME"
     echo "Skipping certificate generation"
 else
+    if [ -f "$SELF_SIGNED_MARKER" ]; then
+        echo "Detected previously generated self-signed certificate"
+        echo "Will retry Let's Encrypt issuance for $DOMAIN_NAME"
+        rm -f /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem \
+              /etc/letsencrypt/live/$DOMAIN_NAME/chain.pem \
+              /etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem
+    fi
+
     echo "No existing certificates found"
 
     # Check if domain is localhost or an IP address
@@ -64,15 +85,7 @@ else
         echo "Generating self-signed certificate for development/testing"
         echo "========================================="
 
-        # Generate self-signed certificate
-        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-            -keyout /etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem \
-            -out /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem \
-            -subj "/C=US/ST=State/L=City/O=EAS Station/CN=$DOMAIN_NAME"
-
-        # Create chain.pem (copy of fullchain for self-signed)
-        cp /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem \
-           /etc/letsencrypt/live/$DOMAIN_NAME/chain.pem
+        generate_self_signed_certificate
 
         echo "Self-signed certificate generated"
         echo "IMPORTANT: Browsers will show a security warning"
@@ -85,13 +98,7 @@ else
             echo "Falling back to self-signed certificate"
             echo "========================================="
 
-            openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-                -keyout /etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem \
-                -out /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem \
-                -subj "/C=US/ST=State/L=City/O=EAS Station/CN=$DOMAIN_NAME"
-
-            cp /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem \
-               /etc/letsencrypt/live/$DOMAIN_NAME/chain.pem
+            generate_self_signed_certificate
         else
             echo "Obtaining Let's Encrypt certificate for $DOMAIN_NAME"
 
@@ -111,6 +118,7 @@ else
             # Request certificate
             if $CERTBOT_CMD; then
                 echo "Successfully obtained SSL certificate"
+                rm -f "$SELF_SIGNED_MARKER"
             else
                 echo "========================================="
                 echo "ERROR: Failed to obtain SSL certificate"
@@ -124,13 +132,7 @@ else
                 echo "========================================="
 
                 # Generate self-signed certificate as fallback
-                openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-                    -keyout /etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem \
-                    -out /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem \
-                    -subj "/C=US/ST=State/L=City/O=EAS Station/CN=$DOMAIN_NAME"
-
-                cp /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem \
-                   /etc/letsencrypt/live/$DOMAIN_NAME/chain.pem
+                generate_self_signed_certificate
             fi
         fi
     fi

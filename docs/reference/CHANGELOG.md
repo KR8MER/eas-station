@@ -433,6 +433,13 @@ tracks releases under the 2.x series.
 - Bumped the default `APP_BUILD_VERSION` to 2.3.0 across the application and sample
   environment template so deployments surface the new release number.
 
+## [2.4.3] - 2025-11-09
+### Fixed
+- Detect previously generated self-signed certificates and automatically retry Let's Encrypt
+  issuance so production domains replace fallback certs on the next start.
+- Tag self-signed fallbacks with a marker file and clear it after successful issuance to avoid
+  skipping renewal attempts on subsequent container restarts.
+
 ## [2.4.2] - 2025-11-09
 ### Fixed
 - Provision certbot in the nginx container via Python's package manager so Let's Encrypt
