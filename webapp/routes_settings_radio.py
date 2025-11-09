@@ -257,6 +257,51 @@ def register(app: Flask, logger) -> None:
 
         return jsonify({"success": True})
 
+    @app.route("/api/radio/receivers/<int:receiver_id>/restart", methods=["POST"])
+    def api_restart_receiver(receiver_id: int) -> Any:
+        """Restart a receiver to recover from errors."""
+        ensure_radio_tables(route_logger)
+        receiver_record = RadioReceiver.query.get_or_404(receiver_id)
+
+        from app_core.extensions import get_radio_manager
+        radio_manager = get_radio_manager()
+
+        # Get the receiver instance from RadioManager
+        receiver_instance = radio_manager.get_receiver(receiver_record.identifier)
+
+        if not receiver_instance:
+            return jsonify({
+                "error": f"Receiver '{receiver_record.identifier}' not loaded in RadioManager",
+                "hint": "Try restarting the web application to reload receivers"
+            }), 404
+
+        try:
+            # Stop the receiver
+            route_logger.info("Stopping receiver %s for restart", receiver_record.identifier)
+            receiver_instance.stop()
+
+            # Start it again
+            route_logger.info("Starting receiver %s", receiver_record.identifier)
+            receiver_instance.start()
+
+            # Get updated status
+            status = receiver_instance.get_status()
+
+            return jsonify({
+                "success": True,
+                "message": f"Receiver '{receiver_record.display_name}' restarted successfully",
+                "status": {
+                    "locked": status.locked,
+                    "signal_strength": status.signal_strength,
+                    "last_error": status.last_error
+                }
+            })
+        except Exception as exc:
+            route_logger.error("Failed to restart receiver %s: %s", receiver_record.identifier, exc, exc_info=True)
+            return jsonify({
+                "error": f"Failed to restart receiver: {str(exc)}"
+            }), 500
+
     @app.route("/api/radio/discover", methods=["GET"])
     def api_discover_devices() -> Any:
         """Enumerate all SoapySDR-compatible devices connected to the system."""
@@ -704,8 +749,13 @@ def register(app: Flask, logger) -> None:
                         except Exception as e:
                             route_logger.debug(f"Error getting samples from {identifier}: {e}")
 
+                    # Look up receiver ID from database
+                    receiver_db = RadioReceiver.query.filter_by(identifier=identifier).first()
+                    receiver_id = receiver_db.id if receiver_db else None
+
                     loaded_receivers[identifier] = {
                         "identifier": identifier,
+                        "receiver_id": receiver_id,
                         "running": receiver_instance._running.is_set() if hasattr(receiver_instance, '_running') else False,
                         "locked": status.locked,
                         "signal_strength": status.signal_strength,
