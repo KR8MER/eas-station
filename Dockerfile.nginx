@@ -7,12 +7,8 @@ RUN apk add --no-cache \
     openssl \
     python3 \
     py3-pip \
-    ca-certificates
-
-# Install certbot via pip to ensure availability on minimal Alpine base images
-RUN python3 -m pip install --no-cache-dir --upgrade pip \
-    && python3 -m pip install --no-cache-dir certbot \
-    && rm -rf /root/.cache/pip
+    ca-certificates \
+    certbot
 
 # Create necessary directories
 RUN mkdir -p /var/www/certbot /etc/nginx/conf.d

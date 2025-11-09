@@ -78,37 +78,13 @@ else
         echo "IMPORTANT: Browsers will show a security warning"
         echo "For production, use a valid domain name"
     else
-        echo "Obtaining Let's Encrypt certificate for $DOMAIN_NAME"
-
-        # Build certbot command
-        CERTBOT_CMD="certbot certonly --webroot --webroot-path=/var/www/certbot"
-        CERTBOT_CMD="$CERTBOT_CMD --email $EMAIL"
-        CERTBOT_CMD="$CERTBOT_CMD --agree-tos"
-        CERTBOT_CMD="$CERTBOT_CMD --no-eff-email"
-        CERTBOT_CMD="$CERTBOT_CMD -d $DOMAIN_NAME"
-
-        # Add staging flag if requested
-        if [ "$STAGING" = "1" ]; then
-            echo "Using Let's Encrypt staging server (for testing)"
-            CERTBOT_CMD="$CERTBOT_CMD --staging"
-        fi
-
-        # Request certificate
-        if $CERTBOT_CMD; then
-            echo "Successfully obtained SSL certificate"
-        else
+        if ! command -v certbot >/dev/null 2>&1; then
             echo "========================================="
-            echo "ERROR: Failed to obtain SSL certificate"
+            echo "ERROR: certbot command is not available"
             echo "========================================="
-            echo "Possible reasons:"
-            echo "1. Domain $DOMAIN_NAME is not pointing to this server"
-            echo "2. Port 80 is not accessible from the internet"
-            echo "3. Firewall is blocking Let's Encrypt validation"
-            echo ""
             echo "Falling back to self-signed certificate"
             echo "========================================="
 
-            # Generate self-signed certificate as fallback
             openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
                 -keyout /etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem \
                 -out /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem \
@@ -116,6 +92,46 @@ else
 
             cp /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem \
                /etc/letsencrypt/live/$DOMAIN_NAME/chain.pem
+        else
+            echo "Obtaining Let's Encrypt certificate for $DOMAIN_NAME"
+
+            # Build certbot command
+            CERTBOT_CMD="certbot certonly --webroot --webroot-path=/var/www/certbot"
+            CERTBOT_CMD="$CERTBOT_CMD --email $EMAIL"
+            CERTBOT_CMD="$CERTBOT_CMD --agree-tos"
+            CERTBOT_CMD="$CERTBOT_CMD --no-eff-email"
+            CERTBOT_CMD="$CERTBOT_CMD -d $DOMAIN_NAME"
+
+            # Add staging flag if requested
+            if [ "$STAGING" = "1" ]; then
+                echo "Using Let's Encrypt staging server (for testing)"
+                CERTBOT_CMD="$CERTBOT_CMD --staging"
+            fi
+
+            # Request certificate
+            if $CERTBOT_CMD; then
+                echo "Successfully obtained SSL certificate"
+            else
+                echo "========================================="
+                echo "ERROR: Failed to obtain SSL certificate"
+                echo "========================================="
+                echo "Possible reasons:"
+                echo "1. Domain $DOMAIN_NAME is not pointing to this server"
+                echo "2. Port 80 is not accessible from the internet"
+                echo "3. Firewall is blocking Let's Encrypt validation"
+                echo ""
+                echo "Falling back to self-signed certificate"
+                echo "========================================="
+
+                # Generate self-signed certificate as fallback
+                openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+                    -keyout /etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem \
+                    -out /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem \
+                    -subj "/C=US/ST=State/L=City/O=EAS Station/CN=$DOMAIN_NAME"
+
+                cp /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem \
+                   /etc/letsencrypt/live/$DOMAIN_NAME/chain.pem
+            fi
         fi
     fi
 fi
