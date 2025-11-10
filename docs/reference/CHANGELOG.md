@@ -263,6 +263,11 @@ tracks releases under the 2.x series.
 - Prevented the LED fallback initializer from raising a `NameError` when the optional
   controller module is missing so deployments without sign hardware continue to boot.
 
+## [2.4.11] - 2025-11-09
+### Fixed
+- Corrected the documentation viewer's Mermaid block detection to support Windows-style line endings so diagrams render instead of showing raw code.
+- Refreshed system version metadata on each request so the footer and monitoring endpoints display the latest release after version bumps.
+
 ## [2.4.1] - 2025-11-09
 ### Fixed
 - **Resolved production nginx image regressions** - Ensured HTTPS container bundles required tooling and static assets
