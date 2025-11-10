@@ -63,19 +63,15 @@ certificate_is_trusted_and_valid() {
         return 1
     fi
 
-    # Check if certificate is expired or not yet valid
     if ! openssl x509 -in "$CERT_PATH" -checkend 0 -noout >/dev/null 2>&1; then
         return 1
     fi
 
-    # Check if certificate is self-signed (self-signed certs should be replaced)
-    if is_self_signed_certificate "$CERT_PATH"; then
-        return 1
+    if openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt "$CERT_PATH" >/dev/null 2>&1; then
+        return 0
     fi
 
-    # If certificate exists, is not expired, and is not self-signed, consider it valid
-    # Don't fail on openssl verify issues as they may be false positives
-    return 0
+    return 1
 }
 
 describe_certificate_issue() {
@@ -124,12 +120,7 @@ purge_stale_self_signed_material() {
                 ;;
         esac
 
-        # Only purge certificates that are:
-        # 1. Marked as self-signed (via marker file)
-        # 2. Actually self-signed (detected by certificate check)
-        # 3. Expired or not yet valid
-        # Don't purge certificates just because they fail trust verification
-        if [ -f "$MARKER_FILE" ] || { [ "$DOMAIN_MATCH" -eq 1 ] && is_self_signed_certificate "$CERT_PATH"; } || { [ "$DOMAIN_MATCH" -eq 1 ] && [ -s "$CERT_PATH" ] && ! openssl x509 -in "$CERT_PATH" -checkend 0 -noout >/dev/null 2>&1; }; then
+        if [ -f "$MARKER_FILE" ] || { [ "$DOMAIN_MATCH" -eq 1 ] && ! certificate_is_trusted_and_valid "$CERT_PATH"; } || { [ "$DOMAIN_MATCH" -eq 1 ] && is_self_signed_certificate "$CERT_PATH"; }; then
             describe_certificate_issue "$CERT_PATH" "$CERT_DOMAIN"
             echo "Removing stale certificate artifacts for $CERT_DOMAIN"
             purge_certificate_material "$CERT_DOMAIN"
@@ -197,8 +188,9 @@ if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
         CURRENT_CERT_SELF_SIGNED=0
     else
         describe_certificate_issue "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" "$DOMAIN_NAME"
-        echo "Existing certificate for $DOMAIN_NAME is expired or invalid"
+        echo "Existing certificate for $DOMAIN_NAME failed validation"
         echo "Will request a new trusted certificate"
+        touch "$SELF_SIGNED_MARKER"
         CURRENT_CERT_SELF_SIGNED=1
     fi
 else
@@ -253,6 +245,7 @@ if [ "$CURRENT_CERT_SELF_SIGNED" -ne 0 ]; then
             CERTBOT_CMD="$CERTBOT_CMD -d $DOMAIN_NAME"
             CERTBOT_CMD="$CERTBOT_CMD --cert-name $DOMAIN_NAME"
             CERTBOT_CMD="$CERTBOT_CMD --non-interactive"
+            CERTBOT_CMD="$CERTBOT_CMD --force-renewal"
 
             # Add staging flag if requested
             if [ "$STAGING" = "1" ]; then
