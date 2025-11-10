@@ -25,6 +25,17 @@ def _markdown_to_html(content: str) -> str:
     This is a simple markdown converter. For production, consider using
     markdown2 or mistune for more complete markdown support.
     """
+    # Extract mermaid blocks before escaping to preserve syntax
+    mermaid_blocks = {}
+    mermaid_pattern = r'```mermaid\n(.*?)```'
+
+    def save_mermaid(match):
+        placeholder = f'___MERMAID_BLOCK_{len(mermaid_blocks)}___'
+        mermaid_blocks[placeholder] = match.group(1)
+        return placeholder
+
+    content = re.sub(mermaid_pattern, save_mermaid, content, flags=re.DOTALL)
+
     # Escape HTML first
     html = escape(content)
 
@@ -149,6 +160,14 @@ def _markdown_to_html(content: str) -> str:
     # Convert line breaks to paragraphs
     paragraphs = html.split('\n\n')
     html = ''.join(f'<p>{p}</p>' if not p.strip().startswith('<') else p for p in paragraphs)
+
+    # Restore mermaid blocks as div elements (don't escape mermaid syntax)
+    for placeholder, mermaid_code in mermaid_blocks.items():
+        # The placeholder was already escaped during the escape(content) step
+        escaped_placeholder = escape(placeholder)
+        # Keep mermaid code unescaped so Mermaid.js can parse it
+        mermaid_div = f'<div class="mermaid">{mermaid_code}</div>'
+        html = str(html).replace(str(escaped_placeholder), mermaid_div)
 
     return Markup(html)
 
