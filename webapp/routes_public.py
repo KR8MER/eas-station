@@ -546,16 +546,55 @@ def register(app: Flask, logger) -> None:
 
     @app.route("/alerts/export.pdf")
     def alerts_export_pdf():
-        """Export alerts list as PDF - server-side from database."""
+        """
+        Export alerts list as PDF - server-side from database.
+
+        This endpoint generates a PDF document containing filtered alerts from the
+        alerts history page. It respects all current filters applied by the user and
+        provides a tamper-proof, archival-quality export for compliance and reporting.
+
+        Query Parameters:
+            search (str): Text search across headline, description, event, area_desc
+            status (str): Filter by alert status (Actual, Test, Exercise, etc.)
+            severity (str): Filter by severity (Extreme, Severe, Moderate, Minor)
+            event (str): Filter by event type (e.g., "Tornado Warning")
+            source (str): Filter by alert source (e.g., "NWS")
+            show_expired (bool): Include expired alerts (accepts: true, 1, t, yes, on)
+            per_page (str): Pagination setting (informational, not used in PDF export)
+
+        Returns:
+            Response: PDF document with application/pdf mimetype
+                     Includes Content-Disposition header for inline display
+                     Filename format: alerts_export_YYYYMMDD.pdf
+
+        Limits:
+            - Maximum 500 alerts per PDF for performance
+            - Descriptions truncated to 500 characters
+            - Text-only export (no audio or multimedia)
+
+        See Also:
+            - /alerts route for main alerts page
+            - /alerts/<id>/export.pdf for individual alert PDF export
+            - docs/alerts-pdf-export.md for comprehensive documentation
+        """
         try:
             from datetime import datetime
 
-            # Get filter parameters (same as alerts() function)
+            # ============================================================
+            # STEP 1: Parse and validate query parameters
+            # ============================================================
+            # Extract filter parameters from request - these mirror the
+            # filters available on the main /alerts page to ensure
+            # consistency between the UI and exported PDF
+
             search = request.args.get("search", "").strip()
             status_filter = request.args.get("status", "").strip()
             severity_filter = request.args.get("severity", "").strip()
             event_filter = request.args.get("event", "").strip()
             source_filter = request.args.get("source", "").strip()
+
+            # Handle show_expired as boolean - accepts multiple formats
+            # for maximum compatibility with different URL builders
             show_expired_raw = request.args.get("show_expired", "")
             show_expired = str(show_expired_raw).lower() in {
                 "true",
@@ -564,11 +603,20 @@ def register(app: Flask, logger) -> None:
                 "yes",
                 "on",
             }
+
+            # per_page captured but not used - PDF export ignores pagination
             per_page = request.args.get("per_page", "25", type=str)
 
-            # Build query with same filters as alerts() route
+            # ============================================================
+            # STEP 2: Build database query with filters
+            # ============================================================
+            # Uses same query logic as /alerts route to ensure exported
+            # data matches what user sees in the UI
+
             query = CAPAlert.query
 
+            # Text search: case-insensitive partial match across multiple fields
+            # Uses OR logic so matching any field will include the alert
             if search:
                 search_term = f"%{search}%"
                 query = query.filter(
@@ -580,6 +628,8 @@ def register(app: Flask, logger) -> None:
                     )
                 )
 
+            # Exact match filters: Apply each filter independently
+            # Empty strings are treated as "no filter" (show all)
             if status_filter:
                 query = query.filter(CAPAlert.status == status_filter)
             if severity_filter:
@@ -589,25 +639,39 @@ def register(app: Flask, logger) -> None:
             if source_filter:
                 query = query.filter(CAPAlert.source == source_filter)
 
+            # Expired alerts filter: By default, exclude expired alerts
+            # This matches the default behavior of the /alerts page
             if not show_expired:
                 query = query.filter(
                     or_(CAPAlert.expires.is_(None), CAPAlert.expires > utc_now())
                 ).filter(CAPAlert.status != "Expired")
 
+            # Order by sent timestamp descending (newest first)
             query = query.order_by(CAPAlert.sent.desc())
 
-            # Limit to 500 alerts for PDF generation
+            # ============================================================
+            # STEP 3: Execute query with performance limit
+            # ============================================================
+            # Hard limit of 500 alerts prevents excessive memory usage
+            # and ensures reasonable PDF file size (typically 50-500KB)
             alerts_list = query.limit(500).all()
 
-            # Build PDF sections
+            # ============================================================
+            # STEP 4: Format alert data for PDF output
+            # ============================================================
+            # Build structured text sections with all relevant alert details
+            # Each alert is formatted as a text block with consistent field order
+
             sections = []
             alert_lines = []
 
             for alert in alerts_list:
-                # Format alert information
+                # Format timestamps with local time + UTC for compliance
+                # Fallback to 'Unknown' if sent time is missing (shouldn't happen)
                 sent_str = format_local_datetime(alert.sent, include_utc=True) if alert.sent else 'Unknown'
                 expires_str = format_local_datetime(alert.expires, include_utc=True) if alert.expires else 'No expiration'
 
+                # Core fields: Always included for every alert
                 alert_block = [
                     f"Event: {alert.event}",
                     f"Severity: {alert.severity or 'N/A'}",
@@ -617,6 +681,7 @@ def register(app: Flask, logger) -> None:
                     f"Expires: {expires_str}",
                 ]
 
+                # Optional fields: Only included if present
                 if alert.headline:
                     alert_block.append(f"Headline: {alert.headline}")
 
@@ -624,15 +689,21 @@ def register(app: Flask, logger) -> None:
                     alert_block.append(f"Area: {alert.area_desc}")
 
                 if alert.description:
-                    # Truncate long descriptions
+                    # Truncate long descriptions to prevent excessively long PDFs
+                    # Full description available in alert detail page
                     desc = alert.description[:500] + '...' if len(alert.description) > 500 else alert.description
                     alert_block.append(f"Description: {desc}")
 
-                # Add spacing between alerts
+                # Add alert block to output and separate with blank line
                 alert_lines.extend(alert_block)
-                alert_lines.append("")  # Empty line separator
+                alert_lines.append("")  # Empty line between alerts for readability
 
-            # Build filter summary
+            # ============================================================
+            # STEP 5: Build filter summary for PDF subtitle
+            # ============================================================
+            # Create human-readable summary of applied filters
+            # This appears in the PDF subtitle for context and documentation
+
             filter_parts = []
             if search:
                 filter_parts.append(f"Search: {search}")
@@ -647,14 +718,20 @@ def register(app: Flask, logger) -> None:
             if not show_expired:
                 filter_parts.append("Active alerts only")
 
+            # Join all filter parts with pipe separator, or show "All alerts" if no filters
             filter_summary = " | ".join(filter_parts) if filter_parts else "All alerts"
 
+            # Add content section with heading showing alert count
             sections.append({
                 'heading': f'Alerts Export ({len(alerts_list)} alerts)',
                 'content': alert_lines if alert_lines else ['No alerts found'],
             })
 
-            # Generate PDF
+            # ============================================================
+            # STEP 6: Generate PDF using common utility
+            # ============================================================
+            # Uses shared pdf_generator module for consistency across all
+            # PDF exports in the application (logs, audit logs, alerts, etc.)
             pdf_bytes = generate_pdf_document(
                 title="Alerts Export",
                 sections=sections,
@@ -662,7 +739,11 @@ def register(app: Flask, logger) -> None:
                 footer_text="Generated by EAS Station - Emergency Alert System Platform"
             )
 
-            # Return as downloadable PDF
+            # ============================================================
+            # STEP 7: Return PDF response with proper headers
+            # ============================================================
+            # Content-Disposition: inline = display in browser (vs attachment = download)
+            # Filename includes date for easy organization of saved PDFs
             response = Response(pdf_bytes, mimetype="application/pdf")
             response.headers["Content-Disposition"] = (
                 f"inline; filename=alerts_export_{datetime.now().strftime('%Y%m%d')}.pdf"
@@ -670,6 +751,9 @@ def register(app: Flask, logger) -> None:
             return response
 
         except Exception as exc:
+            # ============================================================
+            # Error handling: Log and return user-friendly error page
+            # ============================================================
             route_logger.error("Error generating alerts PDF: %s", exc)
             return (
                 "<h1>Error generating PDF</h1>"
