@@ -15,6 +15,9 @@
                     <button onclick="exportCurrentAlerts()" class="btn btn-success" title="Export current filtered alerts to Excel">
                         <i class="fas fa-file-excel"></i> Export
                     </button>
+                    <button onclick="exportAlertsPDF()" class="btn btn-outline-secondary" title="Export current filtered alerts to PDF">
+                        <i class="fas fa-file-pdf"></i> Export PDF
+                    </button>
                     <a href="/" class="btn btn-outline-secondary">
                         <i class="fas fa-map"></i> Back to Map
                     </a>
@@ -326,6 +329,12 @@
 </div>
 
 <script>
+// Export current filtered alerts to PDF
+function exportAlertsPDF() {
+    const params = new URLSearchParams(window.location.search);
+    window.open(`/alerts/export.pdf?${params.toString()}`, '_blank');
+}
+
 // Export current filtered alerts
 function exportCurrentAlerts() {
     try {
