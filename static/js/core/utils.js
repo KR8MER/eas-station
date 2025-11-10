@@ -77,6 +77,113 @@
     }
 
     /**
+     * Generate PDF and open print dialog
+     * @param {string} filename - Base filename for the PDF (without extension)
+     * @param {HTMLElement|string} element - Element to print (defaults to document.body)
+     */
+    function printPageAsPDF(filename = 'document', element = null) {
+        // Show loading toast
+        if (window.showToast) {
+            window.showToast('Generating PDF...', 'info');
+        }
+
+        // Determine element to print
+        const printElement = element
+            ? (typeof element === 'string' ? document.querySelector(element) : element)
+            : document.body;
+
+        if (!printElement) {
+            window.showToast && window.showToast('Error: Could not find content to print', 'error');
+            return;
+        }
+
+        // Create a clone to avoid modifying the original
+        const clone = printElement.cloneNode(true);
+
+        // Remove elements that shouldn't be printed
+        const elementsToRemove = clone.querySelectorAll('.d-print-none, .no-print, .btn, .navbar, .footer, .toast-container, .modal, .pagination');
+        elementsToRemove.forEach(el => el.remove());
+
+        // Configure PDF options
+        const opt = {
+            margin: [10, 10, 10, 10],
+            filename: `${filename}_${new Date().toISOString().split('T')[0]}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: {
+                scale: 2,
+                useCORS: true,
+                logging: false
+            },
+            jsPDF: {
+                unit: 'mm',
+                format: 'letter',
+                orientation: 'portrait'
+            }
+        };
+
+        // Generate PDF and open print dialog
+        html2pdf()
+            .set(opt)
+            .from(clone)
+            .toPdf()
+            .get('pdf')
+            .then(function(pdf) {
+                // Open print dialog
+                const pdfBlob = pdf.output('blob');
+                const pdfUrl = URL.createObjectURL(pdfBlob);
+
+                // Create a hidden iframe to load and print the PDF
+                const iframe = document.createElement('iframe');
+                iframe.style.position = 'fixed';
+                iframe.style.right = '0';
+                iframe.style.bottom = '0';
+                iframe.style.width = '0';
+                iframe.style.height = '0';
+                iframe.style.border = 'none';
+
+                iframe.onload = function() {
+                    try {
+                        iframe.contentWindow.print();
+                        // Clean up after a delay
+                        setTimeout(() => {
+                            document.body.removeChild(iframe);
+                            URL.revokeObjectURL(pdfUrl);
+                        }, 1000);
+                    } catch (e) {
+                        console.error('Print error:', e);
+                        // Fallback: download the PDF instead
+                        const link = document.createElement('a');
+                        link.href = pdfUrl;
+                        link.download = opt.filename;
+                        link.click();
+                        URL.revokeObjectURL(pdfUrl);
+                        document.body.removeChild(iframe);
+                        if (window.showToast) {
+                            window.showToast('PDF downloaded. Please open and print manually.', 'info');
+                        }
+                    }
+                };
+
+                document.body.appendChild(iframe);
+                iframe.src = pdfUrl;
+            })
+            .catch(function(error) {
+                console.error('PDF generation error:', error);
+                if (window.showToast) {
+                    window.showToast('Failed to generate PDF. Please try again.', 'error');
+                }
+            });
+    }
+
+    /**
+     * Legacy wrapper for backwards compatibility
+     * Use printPageAsPDF instead
+     */
+    function printPage() {
+        printPageAsPDF('page');
+    }
+
+    /**
      * Format date for display
      * @param {string|Date} date - Date to format
      * @param {boolean} includeTime - Whether to include time
@@ -199,9 +306,13 @@
 
     // Export functions to window
     window.exportToExcel = exportToExcel;
+    window.printPage = printPage;
+    window.printPageAsPDF = printPageAsPDF;
     window.EASUtils = {
         updateCurrentTime: updateCurrentTime,
         exportToExcel: exportToExcel,
+        printPage: printPage,
+        printPageAsPDF: printPageAsPDF,
         formatDate: formatDate,
         debounce: debounce,
         escapeHtml: escapeHtml,
