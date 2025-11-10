@@ -19,9 +19,14 @@
                         <h5 class="mb-0">Log Viewer</h5>
                     </div>
                     <div class="col-md-6 text-end">
-                        <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">
-                            <i class="fas fa-sync"></i> Refresh
-                        </button>
+                        <div class="btn-group" role="group">
+                            <a href="/logs/export.pdf?type={{ log_type }}&limit={{ limit }}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-file-pdf"></i> Export PDF
+                            </a>
+                            <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">
+                                <i class="fas fa-sync"></i> Refresh
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
