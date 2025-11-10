@@ -26,7 +26,7 @@ EAS Station’s reference build centers on a Raspberry Pi 5 (4 GB RAM baseli
 
 ## Core Services
 
-![Diagram showing the ingestion and control services flowing into the processing core, which then feeds verification and output capabilities.](static/docs/core-services-overview.svg)
+![Diagram showing the ingestion and control services flowing into the processing core, which then feeds verification and output capabilities.](../assets/diagrams/core-services-overview.svg)
 
 ## Software Stack
 The application combines open-source tooling and optional cloud integrations. Versions below match the pinned dependencies in `requirements.txt` unless noted otherwise.

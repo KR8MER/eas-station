@@ -6,7 +6,7 @@ unlocks a **one-button upgrade** experience for operators who maintain on-premis
 
 ## 1. Make sure the pipeline stays green
 
-1. Confirm the CI status badge at the top of the [README](../../README.md) is green before promoting a change.
+1. Confirm the CI status badge at the top of the [README](https://github.com/KR8MER/eas-station/blob/main/README.md) is green before promoting a change.
 2. If the workflow fails, inspect the run logs for container build issues, dependency errors, or Docker Hub authentication
    problems and fix them before shipping an upgrade.
 

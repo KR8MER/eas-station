@@ -8,7 +8,7 @@ If you're new to EAS Station, start here:
 
 | Document | Description | Audience |
 |----------|-------------|----------|
-| [🔧 Main README](../README.md) | Installation and overview | Everyone |
+| [🔧 Main README](https://github.com/KR8MER/eas-station/blob/main/README.md) | Installation and overview | Everyone |
 | [⚡ 5-Minute Quick Start](guides/HELP.md#getting-started) | Get running immediately | New users |
 | [🐳 Portainer Deployment](guides/PORTAINER_DEPLOYMENT.md) | Container-based setup | System admins |
 
@@ -72,7 +72,7 @@ If you're new to EAS Station, start here:
 | [🏗️ Architecture Overview](architecture/THEORY_OF_OPERATION.md) | System design and components |
 | [💻 Development Setup](development/AGENTS.md) | Local development environment |
 | [🎨 Frontend Documentation](frontend/FRONTEND_INDEX.md) | Complete UI and frontend guide |
-| [🔧 API Reference](../README.md#-api-endpoints) | REST API documentation |
+| [🔧 API Reference](https://github.com/KR8MER/eas-station/blob/main/README.md#-api-endpoints) | REST API documentation |
 | [🗺️ Project Structure](development/AGENTS.md#project-structure) | Code organization guide |
 
 ### Contributing
@@ -111,7 +111,7 @@ If you're new to EAS Station, start here:
 ### Deployment & Maintenance
 | Document | Description |
 |----------|-------------|
-| [🐳 Docker Deployment](../README.md#-quick-start) | Container setup and management |
+| [🐳 Docker Deployment](https://github.com/KR8MER/eas-station/blob/main/README.md#-quick-start) | Container setup and management |
 | [🚀 Portainer Quick Start](deployment/portainer/PORTAINER_QUICK_START.md) | Five-minute stack deployment |
 | [🗄️ Portainer Database Setup](deployment/portainer/PORTAINER_DATABASE_SETUP.md) | External database configuration |
 | [🌐 Portainer Network Setup](deployment/portainer/PORTAINER_NETWORK_SETUP.md) | Reverse proxy and DNS guidance |
@@ -145,9 +145,9 @@ docs/
 ## 🔍 Finding Information
 
 ### By User Type
-- **🎯 New Users**: Start with [Quick Start](../README.md#-quick-start)
+- **🎯 New Users**: Start with [Quick Start](https://github.com/KR8MER/eas-station/blob/main/README.md#-quick-start)
 - **👨‍💻 Operators**: See [Help & Operations Guide](guides/HELP.md)
-- **🔧 System Admins**: Check [Deployment Guides](../README.md#-quick-start)
+- **🔧 System Admins**: Check [Deployment Guides](https://github.com/KR8MER/eas-station/blob/main/README.md#-quick-start)
 - **💻 Developers**: Review [Development Setup](development/AGENTS.md)
 
 ### By Task
@@ -189,7 +189,7 @@ docs/
 ## 🧭 Navigation Tips
 
 - **Use Ctrl+F / Cmd+F** on this page to search for any keyword
-- **Start with [Main README](../README.md)** for visual navigation
+- **Start with [Main README](https://github.com/KR8MER/eas-station/blob/main/README.md)** for visual navigation
 - **Bookmark frequently used guides** from the web interface
 - **Check [CHANGELOG](reference/CHANGELOG.md)** for recent changes
 - **Read [Development Guide](development/AGENTS.md)** before contributing code

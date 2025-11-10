@@ -18,7 +18,7 @@ TEMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
 # Output directory
-OUTPUT_DIR="static/docs"
+OUTPUT_DIR="docs/assets/diagrams"
 mkdir -p "$OUTPUT_DIR"
 
 # Extract Mermaid diagrams from DATA_FLOW_SEQUENCES.md
@@ -45,7 +45,7 @@ echo ""
 echo "2. Extract individual diagrams to .mmd files"
 echo ""
 echo "3. Convert to SVG:"
-echo "   mmdc -i diagram.mmd -o static/docs/diagram.svg -t neutral -b transparent"
+echo "   mmdc -i diagram.mmd -o docs/assets/diagrams/diagram.svg -t neutral -b transparent"
 echo ""
 echo "For bulk conversion, see:"
 echo "   https://mermaid.js.org/ecosystem/integrations-community.html"

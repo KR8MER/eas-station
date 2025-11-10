@@ -10,7 +10,7 @@ This page provides an index of all professional diagrams and flowcharts availabl
 
 **Complete CAP alert ingestion workflow** showing data flow from external sources (NOAA/IPAWS) through validation, parsing, spatial processing, duplicate checking, and database storage.
 
-![Alert Processing Pipeline](../static/docs/alert-processing-pipeline.svg)
+![Alert Processing Pipeline](assets/diagrams/alert-processing-pipeline.svg)
 
 **Key Features:**
 - External CAP feed sources
@@ -25,7 +25,7 @@ This page provides an index of all professional diagrams and flowcharts availabl
 - Debugging alert ingestion issues
 - Planning CAP feed integrations
 
-**File:** [`static/docs/alert-processing-pipeline.svg`](../static/docs/alert-processing-pipeline.svg)
+**File:** [`assets/diagrams/alert-processing-pipeline.svg`](assets/diagrams/alert-processing-pipeline.svg)
 
 ---
 
@@ -33,7 +33,7 @@ This page provides an index of all professional diagrams and flowcharts availabl
 
 **Step-by-step EAS message generation and transmission** from operator initiation through SAME encoding, TTS narration, and final broadcast.
 
-![EAS Broadcast Workflow](../static/docs/broadcast-workflow.svg)
+![EAS Broadcast Workflow](assets/diagrams/broadcast-workflow.svg)
 
 **Key Features:**
 - Alert source selection (manual vs. CAP)
@@ -49,7 +49,7 @@ This page provides an index of all professional diagrams and flowcharts availabl
 - Understanding broadcast procedures
 - Troubleshooting workflow errors
 
-**File:** [`static/docs/broadcast-workflow.svg`](../static/docs/broadcast-workflow.svg)
+**File:** [`assets/diagrams/broadcast-workflow.svg`](assets/diagrams/broadcast-workflow.svg)
 
 ---
 
@@ -57,7 +57,7 @@ This page provides an index of all professional diagrams and flowcharts availabl
 
 **Complete visual guide for setting up Software-Defined Radio receivers** including hardware selection, software configuration, and testing procedures.
 
-![SDR Setup Flow](../static/docs/sdr-setup-flow.svg)
+![SDR Setup Flow](assets/diagrams/sdr-setup-flow.svg)
 
 **Key Features:**
 - **Phase 1:** Hardware setup (RTL-SDR, Airspy, antennas)
@@ -77,7 +77,7 @@ This page provides an index of all professional diagrams and flowcharts availabl
 - Adding new receivers
 - Troubleshooting receiver issues
 
-**File:** [`static/docs/sdr-setup-flow.svg`](../static/docs/sdr-setup-flow.svg)
+**File:** [`assets/diagrams/sdr-setup-flow.svg`](assets/diagrams/sdr-setup-flow.svg)
 
 **Related Documentation:** [SDR Setup Guide](guides/sdr_setup_guide.md)
 
@@ -87,7 +87,7 @@ This page provides an index of all professional diagrams and flowcharts availabl
 
 **Multi-source audio ingestion system** showing how different audio sources are routed through adapters, controllers, and monitoring systems.
 
-![Audio Source Routing](../static/docs/audio-source-routing.svg)
+![Audio Source Routing](assets/diagrams/audio-source-routing.svg)
 
 **Key Features:**
 - **Audio Sources:** SDR, ALSA, PulseAudio, File playback
@@ -103,7 +103,7 @@ This page provides an index of all professional diagrams and flowcharts availabl
 - Debugging audio issues
 - Implementing new source types
 
-**File:** [`static/docs/audio-source-routing.svg`](../static/docs/audio-source-routing.svg)
+**File:** [`assets/diagrams/audio-source-routing.svg`](assets/diagrams/audio-source-routing.svg)
 
 **Related Documentation:** [Audio Documentation](audio.md)
 
@@ -113,7 +113,7 @@ This page provides an index of all professional diagrams and flowcharts availabl
 
 **Physical deployment diagram** showing the complete Raspberry Pi 5 reference configuration with all peripherals, storage, and external connections.
 
-![Hardware Deployment](../static/docs/system-deployment-hardware.svg)
+![Hardware Deployment](assets/diagrams/system-deployment-hardware.svg)
 
 **Key Features:**
 - **Raspberry Pi 5 Core:** 8GB RAM, Docker containers
@@ -131,9 +131,9 @@ This page provides an index of all professional diagrams and flowcharts availabl
 - Understanding connections
 - Troubleshooting hardware issues
 
-**File:** [`static/docs/system-deployment-hardware.svg`](../static/docs/system-deployment-hardware.svg)
+**File:** [`assets/diagrams/system-deployment-hardware.svg`](assets/diagrams/system-deployment-hardware.svg)
 
-**Related Documentation:** [README - System Requirements](../README.md#system-requirements)
+**Related Documentation:** [README - System Requirements](https://github.com/KR8MER/eas-station/blob/main/README.md#system-requirements)
 
 ---
 
@@ -145,9 +145,9 @@ These diagrams were created earlier and provide high-level system overviews:
 
 **High-level platform architecture** showing major components and data flows.
 
-![EAS Station Architecture](../static/docs/eas-station-architecture.svg)
+![EAS Station Architecture](assets/diagrams/eas-station-architecture.svg)
 
-**File:** [`static/docs/eas-station-architecture.svg`](../static/docs/eas-station-architecture.svg)
+**File:** [`assets/diagrams/eas-station-architecture.svg`](assets/diagrams/eas-station-architecture.svg)
 
 ---
 
@@ -155,9 +155,9 @@ These diagrams were created earlier and provide high-level system overviews:
 
 **Core services diagram** showing three main operational areas in a dark theme design.
 
-![Core Services Overview](../static/docs/core-services-overview.svg)
+![Core Services Overview](assets/diagrams/core-services-overview.svg)
 
-**File:** [`static/docs/core-services-overview.svg`](../static/docs/core-services-overview.svg)
+**File:** [`assets/diagrams/core-services-overview.svg`](assets/diagrams/core-services-overview.svg)
 
 ---
 
@@ -225,7 +225,7 @@ In addition to the professional SVG diagrams above, the following documentation 
 
 ### README Architecture (Mermaid)
 
-**File:** [README.md](../README.md)
+**File:** [README.md](https://github.com/KR8MER/eas-station/blob/main/README.md)
 
 **Contains:**
 - Simple architecture overview
@@ -271,7 +271,7 @@ All professional SVG diagrams follow these standards:
 
 When adding new diagrams:
 
-1. Save as SVG in `static/docs/` directory
+1. Save as SVG in `docs/assets/diagrams/` directory
 2. Use consistent color scheme and typography
 3. Include accessibility metadata (title, description)
 4. Add to this index page
@@ -286,7 +286,7 @@ When adding new diagrams:
 - **[Theory of Operation](architecture/THEORY_OF_OPERATION.md)** - Conceptual overview and operational theory
 - **[SDR Setup Guide](guides/sdr_setup_guide.md)** - Radio receiver configuration
 - **[Audio Documentation](audio.md)** - Audio system details
-- **[README](../README.md)** - Project overview and quick start
+- **[README](https://github.com/KR8MER/eas-station/blob/main/README.md)** - Project overview and quick start
 
 ---
 
