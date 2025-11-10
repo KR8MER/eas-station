@@ -168,7 +168,9 @@ def _markdown_to_html(content: str) -> str:
         escaped_placeholder = escape(placeholder)
         # Keep mermaid code unescaped so Mermaid.js can parse it
         mermaid_div = f'<div class="mermaid">{mermaid_code}</div>'
+        # Replace both plain and paragraph-wrapped placeholders
         html = str(html).replace(str(escaped_placeholder), mermaid_div)
+        html = str(html).replace(f'<p>{escaped_placeholder}</p>', mermaid_div)
 
     return Markup(html)
 
