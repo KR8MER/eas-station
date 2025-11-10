@@ -1009,7 +1009,7 @@ function renderComponents(components, activation) {
         printBtn.href = activation.print_url;
         printBtn.target = '_blank';
         printBtn.rel = 'noopener';
-        printBtn.innerHTML = '<i class="fas fa-print me-1"></i> Print Summary';
+        printBtn.innerHTML = '<i class="fas fa-file-pdf me-1"></i> Export PDF';
         actionRow.appendChild(printBtn);
     }
 
@@ -1229,7 +1229,7 @@ function renderActivationRow(item) {
         <td class="text-break"><code>${item.same_header || ''}</code></td>
         <td class="text-center">
             <div class="btn-group btn-group-sm" role="group">
-                ${item.print_url ? `<a class="btn btn-outline-secondary" href="${item.print_url}" target="_blank" rel="noopener">Print</a>` : ''}
+                ${item.print_url ? `<a class="btn btn-outline-secondary" href="${item.print_url}" target="_blank" rel="noopener"><i class="fas fa-file-pdf"></i> Export PDF</a>` : ''}
                 ${item.export_url ? `<a class="btn btn-outline-primary" href="${item.export_url}" target="_blank" rel="noopener">JSON</a>` : ''}
                 <button type="button" class="btn btn-outline-danger" data-id="${item.id}" title="Delete activation">
                     <i class="fas fa-trash"></i>

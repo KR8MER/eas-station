@@ -1720,7 +1720,7 @@
                             actions.push(`<a class="btn btn-sm btn-outline-primary" href="${escapeHtml(composite.download_url)}" target="_blank" rel="noopener"><i class="fas fa-play"></i> Composite</a>`);
                         }
                         if (item.print_url) {
-                            actions.push(`<a class="btn btn-sm btn-outline-secondary" href="${escapeHtml(item.print_url)}" target="_blank" rel="noopener"><i class="fas fa-print"></i> Print</a>`);
+                            actions.push(`<a class="btn btn-sm btn-outline-secondary" href="${escapeHtml(item.print_url)}" target="_blank" rel="noopener"><i class="fas fa-file-pdf"></i> Export PDF</a>`);
                         }
                         if (item.export_url) {
                             actions.push(`<a class="btn btn-sm btn-outline-info" href="${escapeHtml(item.export_url)}" target="_blank" rel="noopener"><i class="fas fa-file-export"></i> Export</a>`);
@@ -3207,7 +3207,7 @@
                     ? new Date(activation.created_at).toLocaleString()
                     : 'just now';
                 if (activation.print_url) {
-                    actions.push(`<a class="btn btn-sm btn-outline-primary" href="${escapeHtml(activation.print_url)}" target="_blank" rel="noopener"><i class="fas fa-print"></i> Print Sheet</a>`);
+                    actions.push(`<a class="btn btn-sm btn-outline-primary" href="${escapeHtml(activation.print_url)}" target="_blank" rel="noopener"><i class="fas fa-file-pdf"></i> Export PDF</a>`);
                 }
                 if (activation.export_url) {
                     actions.push(`<a class="btn btn-sm btn-outline-secondary" href="${escapeHtml(activation.export_url)}" target="_blank" rel="noopener"><i class="fas fa-file-export"></i> Export JSON</a>`);
