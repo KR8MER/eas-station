@@ -288,8 +288,7 @@ app.secret_key = secret_key
 from app_utils.versioning import get_current_version
 
 
-SYSTEM_VERSION = get_current_version()
-app.config['SYSTEM_VERSION'] = SYSTEM_VERSION
+app.config['SYSTEM_VERSION'] = get_current_version()
 
 
 def generate_csrf_token() -> str:
@@ -640,7 +639,7 @@ def inject_global_vars():
         'current_local_time': local_now(),
         'timezone_name': get_location_timezone_name(),
         'led_available': LED_AVAILABLE,
-        'system_version': SYSTEM_VERSION,
+        'system_version': app.config.get('SYSTEM_VERSION', get_current_version()),
         'location_settings': location_settings,
         'boundary_type_config': BOUNDARY_TYPE_CONFIG,
         'boundary_group_labels': BOUNDARY_GROUP_LABELS,
@@ -661,6 +660,9 @@ def inject_global_vars():
 @app.before_request
 def before_request():
     """Before request hook for logging and setup"""
+    # Refresh dynamic metadata that may change between deployments.
+    app.config['SYSTEM_VERSION'] = get_current_version()
+
     # Log API requests for debugging
     if request.path.startswith('/api/') and request.method in ['POST', 'PUT', 'DELETE']:
         logger.info(f"{request.method} {request.path} from {request.remote_addr}")

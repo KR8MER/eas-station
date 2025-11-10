@@ -27,7 +27,8 @@ def _markdown_to_html(content: str) -> str:
     """
     # Extract mermaid blocks before escaping to preserve syntax
     mermaid_blocks = {}
-    mermaid_pattern = r'```mermaid\n(.*?)```'
+    # Support both Unix (\n) and Windows (\r\n) line endings after ```mermaid
+    mermaid_pattern = r'```mermaid\r?\n(.*?)```'
 
     def save_mermaid(match):
         placeholder = f'___MERMAID_BLOCK_{len(mermaid_blocks)}___'
