@@ -71,7 +71,6 @@ EOF
 # CORE SETTINGS (REQUIRED) - Auto-populated from environment
 # =============================================================================
 SECRET_KEY=${SECRET_KEY:-}
-APP_BUILD_VERSION=${APP_BUILD_VERSION:-}
 
 # Flask configuration
 FLASK_DEBUG=${FLASK_DEBUG:-false}

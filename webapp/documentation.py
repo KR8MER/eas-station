@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from flask import Flask, render_template, abort
+from flask import Flask, render_template, abort, make_response
 from markupsafe import escape, Markup
 
 logger = logging.getLogger(__name__)
@@ -246,6 +246,16 @@ def _get_docs_structure() -> Dict[str, List[Dict[str, str]]]:
     return structure
 
 
+def _render_no_cache(template_name: str, **context: Any):
+    """Render a template with response headers that disable caching."""
+
+    response = make_response(render_template(template_name, **context))
+    response.headers["Cache-Control"] = "no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
 def register_documentation_routes(app: Flask, logger_instance: Any) -> None:
     """Register documentation viewer routes."""
 
@@ -259,10 +269,10 @@ def register_documentation_routes(app: Flask, logger_instance: Any) -> None:
         """Documentation index page."""
         try:
             structure = _get_docs_structure()
-            return render_template('docs_index.html', structure=structure)
+            return _render_no_cache('docs_index.html', structure=structure)
         except Exception as exc:
             logger.error('Error rendering docs index: %s', exc)
-            return render_template('error.html',
+            return _render_no_cache('error.html',
                                    error='Unable to load documentation index',
                                    details=str(exc)), 500
 
@@ -295,7 +305,7 @@ def register_documentation_routes(app: Flask, logger_instance: Any) -> None:
                     markdown_content = f.read()
             except UnicodeDecodeError:
                 logger.error('Unable to decode file as UTF-8: %s', file_path)
-                return render_template('error.html',
+                return _render_no_cache('error.html',
                                        error='Unable to read documentation file',
                                        details='File encoding error'), 500
 
@@ -309,7 +319,7 @@ def register_documentation_routes(app: Flask, logger_instance: Any) -> None:
             # Get navigation structure
             structure = _get_docs_structure()
 
-            return render_template('doc_viewer.html',
+            return _render_no_cache('doc_viewer.html',
                                    title=title,
                                    content=html_content,
                                    doc_path=doc_path,
@@ -317,7 +327,7 @@ def register_documentation_routes(app: Flask, logger_instance: Any) -> None:
 
         except Exception as exc:
             logger.error('Error rendering documentation %s: %s', doc_path, exc)
-            return render_template('error.html',
+            return _render_no_cache('error.html',
                                    error='Unable to load documentation',
                                    details=str(exc)), 500
 
