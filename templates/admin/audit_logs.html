@@ -205,6 +205,9 @@
                     <button class="btn btn-success" onclick="exportLogs()">
                         <i class="fas fa-download"></i> Export CSV
                     </button>
+                    <button class="btn btn-outline-secondary" onclick="exportLogsPDF()">
+                        <i class="fas fa-file-pdf"></i> Export PDF
+                    </button>
                 </div>
             </div>
         </div>
@@ -499,6 +502,15 @@ async function exportLogs() {
     if (action) params.append('action', action);
 
     window.location.href = `/security/audit-logs/export?${params}`;
+}
+
+async function exportLogsPDF() {
+    const days = document.getElementById('filter-days').value;
+    const action = document.getElementById('filter-action').value;
+    const params = new URLSearchParams({ days });
+    if (action) params.append('action', action);
+
+    window.open(`/security/audit-logs/export.pdf?${params}`, '_blank');
 }
 </script>
 {% endblock %}

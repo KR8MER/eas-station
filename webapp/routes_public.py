@@ -6,11 +6,11 @@ import json
 from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, render_template, request, url_for
+from flask import Flask, render_template, request, url_for, Response
 from sqlalchemy import func, or_
 
 from app_core.alerts import get_active_alerts_query, get_expired_alerts_query
-from app_core.eas_storage import get_eas_static_prefix
+from app_core.eas_storage import get_eas_static_prefix, format_local_datetime
 from app_core.extensions import db
 from app_core.models import (
     AudioAlert,
@@ -28,6 +28,7 @@ from app_core.models import (
 )
 from app_core.system_health import get_system_health
 from app_utils import format_bytes, format_uptime, utc_now
+from app_utils.pdf_generator import generate_pdf_document
 
 
 def register(app: Flask, logger) -> None:
@@ -731,6 +732,125 @@ def register(app: Flask, logger) -> None:
             return (
                 "<h1>Error loading logs</h1>"
                 f"<p>{exc}</p><p><a href='/'>← Back to Main</a></p>"
+            )
+
+    @app.route("/logs/export.pdf")
+    def logs_export_pdf():
+        """Export system logs as PDF - server-side from database."""
+        try:
+            # Get filter parameters (same as logs() function)
+            log_type = request.args.get('type', 'system')
+            limit = min(int(request.args.get('limit', 100)), 500)
+
+            from datetime import datetime
+
+            logs_data = []
+            log_type_name = ""
+
+            if log_type == 'system':
+                log_type_name = "System Logs"
+                logs_result = (
+                    SystemLog.query
+                    .order_by(SystemLog.timestamp.desc())
+                    .limit(limit)
+                    .all()
+                )
+                logs_data = [{
+                    'timestamp': log.timestamp,
+                    'level': log.level,
+                    'module': log.module or 'system',
+                    'message': log.message,
+                    'details': log.details
+                } for log in logs_result]
+
+            elif log_type == 'polling':
+                log_type_name = "CAP Polling Logs"
+                logs_result = (
+                    PollHistory.query
+                    .order_by(PollHistory.timestamp.desc())
+                    .limit(limit)
+                    .all()
+                )
+                logs_data = [{
+                    'timestamp': log.timestamp,
+                    'level': 'ERROR' if log.error_message else 'SUCCESS' if log.status == 'success' else 'INFO',
+                    'module': 'CAP Polling',
+                    'message': f"Status: {log.status} | Fetched: {log.alerts_fetched} | New: {log.alerts_new} | Updated: {log.alerts_updated}",
+                    'details': {
+                        'execution_time_ms': log.execution_time_ms,
+                        'error': log.error_message,
+                        'data_source': log.data_source
+                    }
+                } for log in logs_result]
+
+            elif log_type == 'audio':
+                log_type_name = "Audio System Logs"
+                logs_result = (
+                    AudioAlert.query
+                    .order_by(AudioAlert.created_at.desc())
+                    .limit(limit)
+                    .all()
+                )
+                logs_data = [{
+                    'timestamp': log.created_at,
+                    'level': log.alert_level.upper(),
+                    'module': f'Audio: {log.source_name}',
+                    'message': f"[{log.alert_type}] {log.message}",
+                } for log in logs_result]
+
+            elif log_type == 'gpio':
+                log_type_name = "GPIO Activation Logs"
+                logs_result = (
+                    GPIOActivationLog.query
+                    .order_by(GPIOActivationLog.activated_at.desc())
+                    .limit(limit)
+                    .all()
+                )
+                logs_data = [{
+                    'timestamp': log.activated_at,
+                    'level': 'INFO',
+                    'module': f'GPIO Pin {log.pin}',
+                    'message': f"Type: {log.activation_type} | Operator: {log.operator or 'System'} | Duration: {log.duration_seconds or 'Active'}s",
+                } for log in logs_result]
+
+            # Build PDF sections
+            sections = []
+
+            log_lines = []
+            for log_entry in logs_data:
+                timestamp_str = format_local_datetime(log_entry['timestamp'], include_utc=True)
+                level = log_entry.get('level', 'INFO')
+                module = log_entry.get('module', 'System')
+                message = log_entry.get('message', '')
+
+                log_line = f"[{timestamp_str}] [{level}] {module}: {message}"
+                log_lines.append(log_line)
+
+            sections.append({
+                'heading': f'{log_type_name} (Last {len(logs_data)} entries)',
+                'content': log_lines if log_lines else ['No log entries found'],
+            })
+
+            # Generate PDF
+            pdf_bytes = generate_pdf_document(
+                title=f"{log_type_name} Export",
+                sections=sections,
+                subtitle=f"Showing last {limit} entries",
+                footer_text="Generated by EAS Station - Emergency Alert System Platform"
+            )
+
+            # Return as downloadable PDF
+            response = Response(pdf_bytes, mimetype="application/pdf")
+            response.headers["Content-Disposition"] = (
+                f"inline; filename=logs_{log_type}_{datetime.now().strftime('%Y%m%d')}.pdf"
+            )
+            return response
+
+        except Exception as exc:
+            route_logger.error('Error generating logs PDF: %s', exc)
+            return (
+                "<h1>Error generating PDF</h1>"
+                f"<p>{exc}</p><p><a href='/logs'>← Back to Logs</a></p>"
             )
 
 

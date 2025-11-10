@@ -18,9 +18,6 @@
             <button onclick="exportCurrentAlerts()" class="btn btn-success" title="Export current filtered alerts to Excel">
                 <i class="fas fa-file-excel"></i> Export
             </button>
-            <button onclick="printPage()" class="btn btn-secondary" title="Print this page">
-                <i class="fas fa-print"></i> Print
-            </button>
             <a href="/" class="btn btn-outline-secondary">
                 <i class="fas fa-map"></i> Back to Map
             </a>
@@ -399,11 +396,6 @@ function showToast(message, type) {
     } else {
         alert(message);
     }
-}
-
-// Print page function
-function printPage() {
-    window.print();
 }
 </script>
 {% endblock %}
