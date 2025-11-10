@@ -47,6 +47,9 @@ tracks releases under the 2.x series.
   - Deep blue to cyan gradient representing signal monitoring and alert processing
   - SVG filters for depth, glow effects, and contemporary design polish
 
+### Fixed
+- Reduced nginx static asset cache lifetime from 24 hours to five minutes so freshly deployed frontend changes appear without manual cache purges.
+
 ### Changed
 - **Consolidated stream support in Audio Sources system** - Removed stream support from RadioReceiver model and UI, centralizing all HTTP/M3U stream configuration through the Audio Sources page where StreamSourceAdapter already provided full functionality
   - Removed `source_type` and `stream_url` fields from RadioReceiver database model
