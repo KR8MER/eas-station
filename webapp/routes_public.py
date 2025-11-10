@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Flask, render_template, request, url_for, Response
 from sqlalchemy import func, or_
@@ -267,6 +267,170 @@ def register(app: Flask, logger) -> None:
             except Exception as exc:
                 route_logger.error("Error calculating duration stats: %s", exc)
                 stats_data["duration_stats"] = []
+
+            try:
+                recent_alerts = (
+                    db.session.query(
+                        CAPAlert.id,
+                        CAPAlert.identifier,
+                        CAPAlert.sent,
+                        CAPAlert.expires,
+                        CAPAlert.severity,
+                        CAPAlert.status,
+                        CAPAlert.event,
+                        CAPAlert.source,
+                    )
+                    .order_by(CAPAlert.sent.desc())
+                    .limit(2500)
+                    .all()
+                )
+
+                severities: set[str] = set()
+                statuses: set[str] = set()
+                events: set[str] = set()
+                daily_totals: Dict[str, int] = defaultdict(int)
+                hourly_matrix = [[0 for _ in range(24)] for _ in range(7)]
+                alert_events: List[Dict[str, Any]] = []
+
+                for (
+                    alert_id,
+                    identifier,
+                    sent,
+                    expires,
+                    severity,
+                    status,
+                    event,
+                    source,
+                ) in recent_alerts:
+                    if severity:
+                        severities.add(severity)
+                    if status:
+                        statuses.add(status)
+                    if event:
+                        events.add(event)
+
+                    if sent:
+                        day_key = sent.date().isoformat()
+                        daily_totals[day_key] += 1
+                        dow_index = ((sent.weekday() + 1) % 7)
+                        hour = sent.hour
+                        hourly_matrix[dow_index][hour] += 1
+
+                    alert_events.append(
+                        {
+                            "id": alert_id,
+                            "identifier": identifier,
+                            "sent": sent.isoformat() if sent else None,
+                            "expires": expires.isoformat() if expires else None,
+                            "severity": severity or "Unknown",
+                            "status": status or "Unknown",
+                            "event": event or "Unknown",
+                            "source": source or "Unknown",
+                        }
+                    )
+
+                sorted_daily = sorted(daily_totals.items())
+                daily_alerts = [
+                    {"date": day, "count": count} for day, count in sorted_daily
+                ]
+
+                stats_data["alert_events"] = alert_events
+                stats_data["filter_options"] = {
+                    "severities": sorted(severities),
+                    "statuses": sorted(statuses),
+                    "events": sorted(events),
+                }
+                stats_data["daily_alerts"] = daily_alerts
+                stats_data["recent_by_day"] = daily_alerts[-30:]
+                stats_data["dow_hour_matrix"] = hourly_matrix
+            except Exception as exc:
+                route_logger.error("Error preparing alert events for stats: %s", exc)
+                stats_data["alert_events"] = []
+                stats_data["filter_options"] = {
+                    "severities": [],
+                    "statuses": [],
+                    "events": [],
+                }
+                stats_data["daily_alerts"] = []
+                stats_data["recent_by_day"] = []
+                stats_data["dow_hour_matrix"] = [[0 for _ in range(24)] for _ in range(7)]
+
+            try:
+                polling_records = (
+                    PollHistory.query.order_by(PollHistory.timestamp.desc())
+                    .limit(200)
+                    .all()
+                )
+                if polling_records:
+                    total_runs = len(polling_records)
+                    success_values = {"success", "ok", "completed"}
+                    successes = sum(
+                        1
+                        for record in polling_records
+                        if (record.status or "").lower() in success_values
+                        and not record.error_message
+                    )
+                    failures = sum(
+                        1
+                        for record in polling_records
+                        if (record.status or "").lower() not in success_values
+                        or bool(record.error_message)
+                    )
+                    avg_execution = (
+                        sum(record.execution_time_ms or 0 for record in polling_records)
+                        / total_runs
+                    )
+                    last_run = polling_records[0]
+                    last_error = next(
+                        (record for record in polling_records if record.error_message),
+                        None,
+                    )
+                    recent_runs = [
+                        {
+                            "timestamp": record.timestamp.isoformat()
+                            if record.timestamp
+                            else None,
+                            "status": record.status,
+                            "alerts_fetched": record.alerts_fetched,
+                            "alerts_new": record.alerts_new,
+                            "alerts_updated": record.alerts_updated,
+                            "error": record.error_message,
+                            "execution_time_ms": record.execution_time_ms,
+                            "data_source": record.data_source,
+                        }
+                        for record in polling_records[:10]
+                    ]
+
+                    stats_data["polling"] = {
+                        "success_rate": successes / total_runs if total_runs else 0,
+                        "total_runs": total_runs,
+                        "failed_runs": failures,
+                        "average_execution_ms": avg_execution,
+                        "last_run_status": last_run.status if last_run else None,
+                        "last_run_timestamp": last_run.timestamp.isoformat()
+                        if last_run and last_run.timestamp
+                        else None,
+                        "last_error": last_error.error_message if last_error else None,
+                        "last_error_timestamp": last_error.timestamp.isoformat()
+                        if last_error and last_error.timestamp
+                        else None,
+                        "recent_runs": recent_runs,
+                    }
+                else:
+                    stats_data["polling"] = {
+                        "success_rate": 0,
+                        "total_runs": 0,
+                        "failed_runs": 0,
+                        "recent_runs": [],
+                    }
+            except Exception as exc:
+                route_logger.error("Error calculating polling metrics: %s", exc)
+                stats_data["polling"] = {
+                    "success_rate": 0,
+                    "total_runs": 0,
+                    "failed_runs": 0,
+                    "recent_runs": [],
+                }
 
             stats_data.setdefault("boundary_stats", [])
             stats_data.setdefault("alert_by_status", [])
@@ -772,112 +936,165 @@ def register(app: Flask, logger) -> None:
                 f"<p>{exc}</p><p><a href='/'>← Back to Main</a></p>"
             )
 
-    @app.route("/logs")
-    def logs():
-        """Comprehensive log viewer with filtering by log type."""
-        try:
-            # Get filter parameters
-            log_type = request.args.get('type', 'system')
-            limit = min(int(request.args.get('limit', 100)), 500)  # Max 500 records
+    def _load_logs_data(log_type: str, limit: int) -> Tuple[str, List[Dict[str, Any]]]:
+        """Load the requested log data and metadata for rendering or export."""
 
-            logs_data = []
+        log_type_name = "System Logs"
+        logs_data: List[Dict[str, Any]] = []
 
-            if log_type == 'system':
-                # System logs
-                logs_result = (
-                    SystemLog.query
-                    .order_by(SystemLog.timestamp.desc())
-                    .limit(limit)
-                    .all()
-                )
-                logs_data = [{
+        if log_type == 'system':
+            log_type_name = "System Logs"
+            logs_result = (
+                SystemLog.query
+                .order_by(SystemLog.timestamp.desc())
+                .limit(limit)
+                .all()
+            )
+            logs_data = [
+                {
                     'timestamp': log.timestamp,
                     'level': log.level,
                     'module': log.module or 'system',
                     'message': log.message,
-                    'details': log.details
-                } for log in logs_result]
+                    'details': log.details,
+                }
+                for log in logs_result
+            ]
 
-            elif log_type == 'polling':
-                # CAP polling logs
-                logs_result = (
-                    PollHistory.query
-                    .order_by(PollHistory.timestamp.desc())
-                    .limit(limit)
-                    .all()
-                )
-                logs_data = [{
+        elif log_type == 'polling':
+            log_type_name = "CAP Polling Logs"
+            logs_result = (
+                PollHistory.query
+                .order_by(PollHistory.timestamp.desc())
+                .limit(limit)
+                .all()
+            )
+            logs_data = [
+                {
                     'timestamp': log.timestamp,
-                    'level': 'ERROR' if log.error_message else 'SUCCESS' if log.status == 'success' else 'INFO',
+                    'level': 'ERROR'
+                    if log.error_message
+                    else 'SUCCESS'
+                    if (log.status or '').lower() == 'success'
+                    else 'INFO',
                     'module': 'CAP Polling',
-                    'message': f"Status: {log.status} | Fetched: {log.alerts_fetched} | New: {log.alerts_new} | Updated: {log.alerts_updated}",
+                    'message': (
+                        f"Status: {log.status} | Fetched: {log.alerts_fetched} | "
+                        f"New: {log.alerts_new} | Updated: {log.alerts_updated}"
+                    ),
                     'details': {
                         'execution_time_ms': log.execution_time_ms,
                         'error': log.error_message,
-                        'data_source': log.data_source
-                    }
-                } for log in logs_result]
+                        'data_source': log.data_source,
+                        'alerts_fetched': log.alerts_fetched,
+                        'alerts_new': log.alerts_new,
+                        'alerts_updated': log.alerts_updated,
+                    },
+                }
+                for log in logs_result
+            ]
 
-            elif log_type == 'polling_debug':
-                # Detailed polling debug logs
-                logs_result = (
-                    PollDebugRecord.query
-                    .order_by(PollDebugRecord.created_at.desc())
-                    .limit(limit)
-                    .all()
+        elif log_type == 'polling_debug':
+            log_type_name = "Polling Debug Logs"
+            logs_result = (
+                PollDebugRecord.query
+                .order_by(PollDebugRecord.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+            for record in logs_result:
+                status_value = (record.poll_status or 'UNKNOWN').upper()
+                identifier = record.alert_identifier or record.alert_event or 'Unknown alert'
+                if not record.parse_success:
+                    level = 'ERROR'
+                elif record.is_relevant:
+                    level = 'INFO'
+                else:
+                    level = 'WARNING'
+                message = (
+                    f"Run {record.poll_run_id}: {identifier} | Status {status_value} | "
+                    f"Relevant: {'yes' if record.is_relevant else 'no'} | Saved: {'yes' if record.was_saved else 'no'}"
                 )
-                logs_data = [{
-                    'timestamp': log.created_at,
-                    'level': 'DEBUG',
-                    'module': 'Polling Debug',
-                    'message': f"Alert: {log.alert_identifier} | Relevant: {log.is_relevant}",
-                    'details': {
-                        'alert_id': log.alert_id,
-                        'parse_success': log.parse_success,
-                        'geometry_valid': log.geometry_valid,
-                        'relevance_reason': log.relevance_reason,
-                        'zone_matches': log.zone_matches,
-                        'county_matches': log.county_matches
+                logs_data.append(
+                    {
+                        'timestamp': record.created_at,
+                        'level': level,
+                        'module': f"Polling Debug ({record.data_source or 'unknown'})",
+                        'message': message,
+                        'details': {
+                            'poll_run_id': record.poll_run_id,
+                            'poll_status': record.poll_status,
+                            'data_source': record.data_source,
+                            'alert_identifier': record.alert_identifier,
+                            'alert_event': record.alert_event,
+                            'alert_sent': record.alert_sent.isoformat()
+                            if record.alert_sent
+                            else None,
+                            'created_at': record.created_at.isoformat()
+                            if record.created_at
+                            else None,
+                            'is_relevant': record.is_relevant,
+                            'relevance_reason': record.relevance_reason,
+                            'relevance_matches': record.relevance_matches or [],
+                            'ugc_codes': record.ugc_codes or [],
+                            'area_desc': record.area_desc,
+                            'was_saved': record.was_saved,
+                            'was_new': record.was_new,
+                            'alert_db_id': record.alert_db_id,
+                            'parse_success': record.parse_success,
+                            'parse_error': record.parse_error,
+                            'polygon_count': record.polygon_count,
+                            'geometry_type': record.geometry_type,
+                            'raw_xml_present': record.raw_xml_present,
+                            'notes': record.notes,
+                        },
                     }
-                } for log in logs_result]
-
-            elif log_type == 'audio':
-                # Audio system alerts
-                logs_result = (
-                    AudioAlert.query
-                    .order_by(AudioAlert.created_at.desc())
-                    .limit(limit)
-                    .all()
                 )
-                logs_data = [{
+
+        elif log_type == 'audio':
+            log_type_name = "Audio System Logs"
+            logs_result = (
+                AudioAlert.query
+                .order_by(AudioAlert.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+            logs_data = [
+                {
                     'timestamp': log.created_at,
                     'level': log.alert_level.upper(),
-                    'module': f'Audio: {log.source_name}',
-                    'message': f"[{log.alert_type}] {log.message}",
+                    'module': f'Audio Alert: {log.source_name}',
+                    'message': log.message,
                     'details': {
-                        'source': log.source_name,
-                        'type': log.alert_type,
-                        'threshold': log.threshold_value,
-                        'actual': log.actual_value,
+                        'alert_type': log.alert_type,
                         'acknowledged': log.acknowledged,
-                        'resolved': log.resolved,
-                        'metadata': log.alert_metadata
-                    }
-                } for log in logs_result]
+                        'cleared': log.cleared,
+                        'created_at': log.created_at.isoformat() if log.created_at else None,
+                        'updated_at': log.updated_at.isoformat() if log.updated_at else None,
+                    },
+                }
+                for log in logs_result
+            ]
 
-            elif log_type == 'audio_metrics':
-                # Audio source metrics
-                logs_result = (
-                    AudioSourceMetrics.query
-                    .order_by(AudioSourceMetrics.timestamp.desc())
-                    .limit(limit)
-                    .all()
-                )
-                logs_data = [{
+        elif log_type == 'audio_metrics':
+            log_type_name = "Audio Metrics Logs"
+            logs_result = (
+                AudioSourceMetrics.query
+                .order_by(AudioSourceMetrics.timestamp.desc())
+                .limit(limit)
+                .all()
+            )
+            logs_data = [
+                {
                     'timestamp': log.timestamp,
-                    'level': 'WARNING' if log.silence_detected or log.clipping_detected else 'INFO',
+                    'level': 'WARNING'
+                    if log.silence_detected or log.clipping_detected
+                    else 'INFO',
                     'module': f'Audio Metrics: {log.source_name}',
-                    'message': f"Peak: {log.peak_level_db:.1f}dB | RMS: {log.rms_level_db:.1f}dB | SR: {log.sample_rate}Hz",
+                    'message': (
+                        f"Peak: {log.peak_level_db:.1f}dB | RMS: {log.rms_level_db:.1f}dB | "
+                        f"SR: {log.sample_rate}Hz"
+                    ),
                     'details': {
                         'source_type': log.source_type,
                         'channels': log.channels,
@@ -885,62 +1102,100 @@ def register(app: Flask, logger) -> None:
                         'silence': log.silence_detected,
                         'clipping': log.clipping_detected,
                         'buffer_utilization': log.buffer_utilization,
-                        'stream_info': log.source_metadata  # Using the mapped column name
-                    }
-                } for log in logs_result]
+                        'stream_info': log.source_metadata,
+                    },
+                }
+                for log in logs_result
+            ]
 
-            elif log_type == 'audio_health':
-                # Audio health status
-                logs_result = (
-                    AudioHealthStatus.query
-                    .order_by(AudioHealthStatus.timestamp.desc())
-                    .limit(limit)
-                    .all()
-                )
-                logs_data = [{
+        elif log_type == 'audio_health':
+            log_type_name = "Audio Health Logs"
+            logs_result = (
+                AudioHealthStatus.query
+                .order_by(AudioHealthStatus.timestamp.desc())
+                .limit(limit)
+                .all()
+            )
+            logs_data = [
+                {
                     'timestamp': log.timestamp,
-                    'level': 'ERROR' if log.error_detected else 'WARNING' if not log.is_healthy else 'INFO',
+                    'level': 'ERROR'
+                    if log.error_detected
+                    else 'WARNING'
+                    if not log.is_healthy
+                    else 'INFO',
                     'module': f'Audio Health: {log.source_name}',
-                    'message': f"Health Score: {log.health_score:.1f}/100 | Active: {log.is_active} | Uptime: {log.uptime_seconds:.1f}s",
+                    'message': (
+                        f"Health Score: {log.health_score:.1f}/100 | Active: {log.is_active} | "
+                        f"Uptime: {log.uptime_seconds:.1f}s"
+                    ),
                     'details': {
                         'healthy': log.is_healthy,
                         'silence_detected': log.silence_detected,
                         'silence_duration': log.silence_duration_seconds,
                         'time_since_signal': log.time_since_last_signal_seconds,
-                        'trend': f"{log.level_trend} ({log.trend_value_db:.1f}dB)" if log.level_trend else None,
-                        'metadata': log.health_metadata
-                    }
-                } for log in logs_result]
+                        'trend': (
+                            f"{log.level_trend} ({log.trend_value_db:.1f}dB)"
+                            if log.level_trend
+                            else None
+                        ),
+                        'metadata': log.health_metadata,
+                    },
+                }
+                for log in logs_result
+            ]
 
-            elif log_type == 'gpio':
-                # GPIO activation logs
-                logs_result = (
-                    GPIOActivationLog.query
-                    .order_by(GPIOActivationLog.activated_at.desc())
-                    .limit(limit)
-                    .all()
-                )
-                logs_data = [{
+        elif log_type == 'gpio':
+            log_type_name = "GPIO Activation Logs"
+            logs_result = (
+                GPIOActivationLog.query
+                .order_by(GPIOActivationLog.activated_at.desc())
+                .limit(limit)
+                .all()
+            )
+            logs_data = [
+                {
                     'timestamp': log.activated_at,
                     'level': 'INFO',
                     'module': f'GPIO Pin {log.pin}',
-                    'message': f"Type: {log.activation_type} | Operator: {log.operator or 'System'} | Duration: {log.duration_seconds or 'Active'}s",
+                    'message': (
+                        f"Type: {log.activation_type} | Operator: {log.operator or 'System'} | "
+                        f"Duration: {log.duration_seconds or 'Active'}s"
+                    ),
                     'details': {
                         'pin': log.pin,
                         'activation_type': log.activation_type,
-                        'activated_at': log.activated_at.isoformat() if log.activated_at else None,
-                        'deactivated_at': log.deactivated_at.isoformat() if log.deactivated_at else None,
+                        'activated_at': log.activated_at.isoformat()
+                        if log.activated_at
+                        else None,
+                        'deactivated_at': log.deactivated_at.isoformat()
+                        if log.deactivated_at
+                        else None,
                         'duration': log.duration_seconds,
                         'alert_id': log.alert_id,
-                        'reason': log.reason
-                    }
-                } for log in logs_result]
+                        'reason': log.reason,
+                    },
+                }
+                for log in logs_result
+            ]
+
+        return log_type_name, logs_data
+
+    @app.route("/logs")
+    def logs():
+        """Comprehensive log viewer with filtering by log type."""
+        try:
+            log_type = request.args.get('type', 'system')
+            limit = min(int(request.args.get('limit', 100)), 500)  # Max 500 records
+
+            log_type_name, logs_data = _load_logs_data(log_type, limit)
 
             return render_template(
                 "logs.html",
                 logs=logs_data,
                 log_type=log_type,
-                limit=limit
+                limit=limit,
+                log_type_name=log_type_name,
             )
 
         except Exception as exc:  # pragma: no cover - fallback content
@@ -954,108 +1209,43 @@ def register(app: Flask, logger) -> None:
     def logs_export_pdf():
         """Export system logs as PDF - server-side from database."""
         try:
-            # Get filter parameters (same as logs() function)
             log_type = request.args.get('type', 'system')
             limit = min(int(request.args.get('limit', 100)), 500)
 
             from datetime import datetime
 
-            logs_data = []
-            log_type_name = ""
+            log_type_name, logs_data = _load_logs_data(log_type, limit)
 
-            if log_type == 'system':
-                log_type_name = "System Logs"
-                logs_result = (
-                    SystemLog.query
-                    .order_by(SystemLog.timestamp.desc())
-                    .limit(limit)
-                    .all()
-                )
-                logs_data = [{
-                    'timestamp': log.timestamp,
-                    'level': log.level,
-                    'module': log.module or 'system',
-                    'message': log.message,
-                    'details': log.details
-                } for log in logs_result]
-
-            elif log_type == 'polling':
-                log_type_name = "CAP Polling Logs"
-                logs_result = (
-                    PollHistory.query
-                    .order_by(PollHistory.timestamp.desc())
-                    .limit(limit)
-                    .all()
-                )
-                logs_data = [{
-                    'timestamp': log.timestamp,
-                    'level': 'ERROR' if log.error_message else 'SUCCESS' if log.status == 'success' else 'INFO',
-                    'module': 'CAP Polling',
-                    'message': f"Status: {log.status} | Fetched: {log.alerts_fetched} | New: {log.alerts_new} | Updated: {log.alerts_updated}",
-                    'details': {
-                        'execution_time_ms': log.execution_time_ms,
-                        'error': log.error_message,
-                        'data_source': log.data_source
-                    }
-                } for log in logs_result]
-
-            elif log_type == 'audio':
-                log_type_name = "Audio System Logs"
-                logs_result = (
-                    AudioAlert.query
-                    .order_by(AudioAlert.created_at.desc())
-                    .limit(limit)
-                    .all()
-                )
-                logs_data = [{
-                    'timestamp': log.created_at,
-                    'level': log.alert_level.upper(),
-                    'module': f'Audio: {log.source_name}',
-                    'message': f"[{log.alert_type}] {log.message}",
-                } for log in logs_result]
-
-            elif log_type == 'gpio':
-                log_type_name = "GPIO Activation Logs"
-                logs_result = (
-                    GPIOActivationLog.query
-                    .order_by(GPIOActivationLog.activated_at.desc())
-                    .limit(limit)
-                    .all()
-                )
-                logs_data = [{
-                    'timestamp': log.activated_at,
-                    'level': 'INFO',
-                    'module': f'GPIO Pin {log.pin}',
-                    'message': f"Type: {log.activation_type} | Operator: {log.operator or 'System'} | Duration: {log.duration_seconds or 'Active'}s",
-                } for log in logs_result]
-
-            # Build PDF sections
             sections = []
 
-            log_lines = []
+            log_lines: List[str] = []
             for log_entry in logs_data:
-                timestamp_str = format_local_datetime(log_entry['timestamp'], include_utc=True)
+                timestamp_str = format_local_datetime(
+                    log_entry.get('timestamp'), include_utc=True
+                )
                 level = log_entry.get('level', 'INFO')
                 module = log_entry.get('module', 'System')
                 message = log_entry.get('message', '')
+                log_lines.append(f"[{timestamp_str}] [{level}] {module}: {message}")
 
-                log_line = f"[{timestamp_str}] [{level}] {module}: {message}"
-                log_lines.append(log_line)
+            if not log_lines:
+                log_lines.append('No log entries found')
 
-            sections.append({
-                'heading': f'{log_type_name} (Last {len(logs_data)} entries)',
-                'content': log_lines if log_lines else ['No log entries found'],
-            })
-
-            # Generate PDF
-            pdf_bytes = generate_pdf_document(
-                title=f"{log_type_name} Export",
-                sections=sections,
-                subtitle=f"Showing last {limit} entries",
-                footer_text="Generated by EAS Station - Emergency Alert System Platform"
+            heading_name = log_type_name or 'Logs'
+            sections.append(
+                {
+                    'heading': f"{heading_name} (Last {len(logs_data)} entries)",
+                    'content': log_lines,
+                }
             )
 
-            # Return as downloadable PDF
+            pdf_bytes = generate_pdf_document(
+                title=f"{heading_name} Export",
+                sections=sections,
+                subtitle=f"Showing last {limit} entries",
+                footer_text="Generated by EAS Station - Emergency Alert System Platform",
+            )
+
             response = Response(pdf_bytes, mimetype="application/pdf")
             response.headers["Content-Disposition"] = (
                 f"inline; filename=logs_{log_type}_{datetime.now().strftime('%Y%m%d')}.pdf"
@@ -1068,6 +1258,8 @@ def register(app: Flask, logger) -> None:
                 "<h1>Error generating PDF</h1>"
                 f"<p>{exc}</p><p><a href='/logs'>← Back to Logs</a></p>"
             )
+
+
 
 
 __all__ = ["register"]
