@@ -11,7 +11,7 @@
             </h1>
             <div class="d-flex gap-2 flex-wrap">
                 <a href="{{ url_for('audio_detail_pdf', message_id=message.id) }}" target="_blank" class="btn btn-info">
-                    <i class="fas fa-print"></i> Print
+                    <i class="fas fa-file-pdf"></i> Export PDF
                 </a>
                 {% if audio_url %}
                 <a class="btn btn-primary" href="{{ audio_url }}" target="_blank" rel="noopener">
