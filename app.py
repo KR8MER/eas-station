@@ -6,7 +6,7 @@ Flask-based CAP ingestion, SAME encoding, broadcast, and verification system
 Author: KR8MER Amateur Radio Emergency Communications
 Description: Multi-source alert aggregation with FCC-compliant SAME encoding, PostGIS spatial intelligence,
              SDR verification, and LED signage integration
-Version: 2.1.9 - Adds per-line LED formatting support and WYSIWYG message editing
+Version: 2.4.11 - Fixes Mermaid diagram rendering in documentation viewer
 """
 
 # =============================================================================

@@ -8,6 +8,13 @@
 <script>
     // Initialize Mermaid when DOM is ready
     document.addEventListener('DOMContentLoaded', function() {
+        // Decode HTML entities in mermaid blocks before Mermaid processes them
+        document.querySelectorAll('.mermaid').forEach(function(el) {
+            const textarea = document.createElement('textarea');
+            textarea.innerHTML = el.innerHTML;
+            el.textContent = textarea.value;
+        });
+
         mermaid.initialize({
             startOnLoad: true,
             theme: 'default',

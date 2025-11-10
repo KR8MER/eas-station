@@ -162,12 +162,14 @@ def _markdown_to_html(content: str) -> str:
     paragraphs = html.split('\n\n')
     html = ''.join(f'<p>{p}</p>' if not p.strip().startswith('<') else p for p in paragraphs)
 
-    # Restore mermaid blocks as div elements (don't escape mermaid syntax)
+    # Restore mermaid blocks as div elements with proper escaping
     for placeholder, mermaid_code in mermaid_blocks.items():
         # The placeholder was already escaped during the escape(content) step
         escaped_placeholder = escape(placeholder)
-        # Keep mermaid code unescaped so Mermaid.js can parse it
-        mermaid_div = f'<div class="mermaid">{mermaid_code}</div>'
+        # Escape the mermaid code so HTML tags in diagrams (like <br/>) don't get parsed
+        # Mermaid.js will read the text content and parse it correctly
+        escaped_mermaid = escape(mermaid_code)
+        mermaid_div = f'<div class="mermaid">{escaped_mermaid}</div>'
         # Replace both plain and paragraph-wrapped placeholders
         html = str(html).replace(str(escaped_placeholder), mermaid_div)
         html = str(html).replace(f'<p>{escaped_placeholder}</p>', mermaid_div)
