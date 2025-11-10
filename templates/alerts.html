@@ -329,7 +329,32 @@
 </div>
 
 <script>
-// Export current filtered alerts to PDF
+/**
+ * Export current filtered alerts to PDF
+ *
+ * This function triggers a server-side PDF export that respects all current
+ * filters applied on the alerts page. The PDF is opened in a new browser tab.
+ *
+ * Functionality:
+ * - Captures current URL query parameters (all active filters)
+ * - Constructs PDF export endpoint URL with filters intact
+ * - Opens PDF in new tab for viewing/downloading
+ *
+ * Filters preserved:
+ * - search: Text search term
+ * - status: Alert status filter
+ * - severity: Severity level filter
+ * - event: Event type filter
+ * - source: Alert source filter
+ * - show_expired: Include/exclude expired alerts
+ * - per_page: Pagination setting (informational)
+ *
+ * Example URL generated:
+ *   /alerts/export.pdf?search=tornado&severity=Extreme&show_expired=true
+ *
+ * @see /alerts/export.pdf route in webapp/routes_public.py
+ * @see docs/alerts-pdf-export.md for comprehensive documentation
+ */
 function exportAlertsPDF() {
     const params = new URLSearchParams(window.location.search);
     window.open(`/alerts/export.pdf?${params.toString()}`, '_blank');
