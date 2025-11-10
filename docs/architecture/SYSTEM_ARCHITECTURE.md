@@ -1090,7 +1090,7 @@ Detailed flowchart showing the complete CAP alert ingestion workflow from extern
 
 ![Alert Processing Pipeline](../assets/diagrams/alert-processing-pipeline.svg)
 
-**File:** [assets/diagrams/alert-processing-pipeline.svg](../assets/diagrams/alert-processing-pipeline.svg)
+**File:** [../assets/diagrams/alert-processing-pipeline.svg](../assets/diagrams/alert-processing-pipeline.svg)
 
 ---
 
@@ -1100,7 +1100,7 @@ Step-by-step workflow diagram illustrating the complete EAS message generation a
 
 ![EAS Broadcast Workflow](../assets/diagrams/broadcast-workflow.svg)
 
-**File:** [assets/diagrams/broadcast-workflow.svg](../assets/diagrams/broadcast-workflow.svg)
+**File:** [../assets/diagrams/broadcast-workflow.svg](../assets/diagrams/broadcast-workflow.svg)
 
 ---
 
@@ -1110,7 +1110,7 @@ Block diagram showing multi-source audio ingestion architecture with adapters, p
 
 ![Audio Source Routing](../assets/diagrams/audio-source-routing.svg)
 
-**File:** [assets/diagrams/audio-source-routing.svg](../assets/diagrams/audio-source-routing.svg)
+**File:** [../assets/diagrams/audio-source-routing.svg](../assets/diagrams/audio-source-routing.svg)
 
 ---
 
@@ -1120,7 +1120,7 @@ Physical deployment diagram showing Raspberry Pi 5 hardware configuration with a
 
 ![Hardware Deployment](../assets/diagrams/system-deployment-hardware.svg)
 
-**File:** [assets/diagrams/system-deployment-hardware.svg](../assets/diagrams/system-deployment-hardware.svg)
+**File:** [../assets/diagrams/system-deployment-hardware.svg](../assets/diagrams/system-deployment-hardware.svg)
 
 ---
 
