@@ -16,9 +16,9 @@
                 <i class="fas fa-file-export"></i> Export JSON
             </a>
             {% endif %}
-            <button type="button" class="btn btn-primary btn-sm ms-2" onclick="printPageAsPDF('manual_eas_activation');">
+            <a href="{{ url_for('eas.manual_eas_print_pdf', event_id=event.id) }}" target="_blank" class="btn btn-primary btn-sm ms-2">
                 <i class="fas fa-print"></i> Print
-            </button>
+            </a>
             {% if current_user %}
             <button type="button" class="btn btn-danger btn-sm ms-2" onclick="deleteManualActivation()" title="Delete this activation">
                 <i class="fas fa-trash"></i> Delete

@@ -10,9 +10,9 @@
                 <i class="fas fa-headphones"></i> Broadcast Audio Detail
             </h1>
             <div class="d-flex gap-2 flex-wrap">
-                <button type="button" class="btn btn-info" onclick="printPageAsPDF('audio_detail')">
+                <a href="{{ url_for('audio_detail_pdf', message_id=message.id) }}" target="_blank" class="btn btn-info">
                     <i class="fas fa-print"></i> Print
-                </button>
+                </a>
                 {% if audio_url %}
                 <a class="btn btn-primary" href="{{ audio_url }}" target="_blank" rel="noopener">
                     <i class="fas fa-download"></i> Download Audio

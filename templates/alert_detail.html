@@ -998,9 +998,9 @@
                                 <button type="button" class="btn btn-outline-info" onclick="toggleRawData()">
                                     <i class="fas fa-code"></i> <span id="raw-data-btn-text">View Raw CAP Data</span>
                                 </button>
-                                <button type="button" class="btn btn-outline-secondary" onclick="printPageAsPDF('alert_detail')">
+                                <a href="{{ url_for('alert_detail_pdf', alert_id=alert.id) }}" target="_blank" class="btn btn-outline-secondary">
                                     <i class="fas fa-print"></i> Print This Page
-                                </button>
+                                </a>
                                 <button type="button" class="btn btn-outline-success" onclick="findSimilarAlerts()">
                                     <i class="fas fa-search"></i> Find Similar Alerts
                                 </button>
