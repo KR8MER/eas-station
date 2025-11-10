@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from app_utils import versioning
 VERSION_FILE = ROOT / "VERSION"
 CHANGELOG_FILE = ROOT / "docs" / "reference" / "CHANGELOG.md"
 ENV_TEMPLATE = ROOT / ".env.example"
@@ -25,12 +30,11 @@ def test_version_file_exists() -> None:
     _read_version()
 
 
-def test_env_template_matches_version() -> None:
-    version = _read_version()
+def test_env_template_omits_build_version() -> None:
     env_contents = ENV_TEMPLATE.read_text(encoding="utf-8")
     assert (
-        f"APP_BUILD_VERSION={version}" in env_contents
-    ), "Update .env.example to advertise the current version"
+        "APP_BUILD_VERSION" not in env_contents
+    ), "Remove APP_BUILD_VERSION from .env.example to avoid stale deployments"
 
 
 def test_changelog_includes_current_version_entry() -> None:
@@ -41,6 +45,13 @@ def test_changelog_includes_current_version_entry() -> None:
         changelog,
         flags=re.MULTILINE,
     ), "Add a release heading for the current version to CHANGELOG.md"
+
+
+def test_version_resolver_matches_manifest(monkeypatch) -> None:
+    version = _read_version()
+    versioning._resolve_version.cache_clear()
+    monkeypatch.setenv("APP_BUILD_VERSION", "999.0.0")
+    assert versioning.get_current_version() == version
 
 
 def test_changelog_unreleased_section_has_entries() -> None:

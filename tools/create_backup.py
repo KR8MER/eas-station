@@ -12,6 +12,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List
 
+from app_utils.versioning import get_current_version
+
 
 def read_env(path: Path) -> Dict[str, str]:
     values: Dict[str, str] = {}
@@ -121,7 +123,7 @@ def write_metadata(target: Path, env: Dict[str, str], dump_cmd: str) -> None:
         "git_status": subprocess.run(
             ["git", "status", "-sb"], capture_output=True, text=True, check=True
         ).stdout.strip(),
-        "app_version": env.get("APP_BUILD_VERSION", "unknown"),
+        "app_version": get_current_version(),
         "database": {
             "host": env.get("POSTGRES_HOST", "unknown"),
             "port": env.get("POSTGRES_PORT", "5432"),

@@ -349,6 +349,8 @@ If you chose **Web editor** instead of Git Repository:
 
 > 💡 **Key Point:** When deploying from Git, you only need to override 5-7 variables. Everything else uses sensible defaults from `stack.env`!
 
+> 📦 **Versioning:** The running release number now comes directly from the repository `VERSION` manifest. You no longer need to set `APP_BUILD_VERSION` in your stack environment.
+
 #### Configuration Options
 
 In the Portainer stack configuration, scroll down to **Environment variables**. You have three options:
@@ -360,7 +362,6 @@ Click "Advanced mode" and paste your environment variables in `.env` format:
 ```ini
 # CORE APPLICATION SETTINGS
 SECRET_KEY=your-generated-secret-key-here
-APP_BUILD_VERSION=2.3.12
 NOAA_USER_AGENT=Your-Organization Emergency Alert Hub/2.1
 FLASK_DEBUG=false
 FLASK_ENV=production

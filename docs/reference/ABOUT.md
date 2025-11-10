@@ -82,7 +82,7 @@ For complete attribution details, see [`dependency_attribution.md`](dependency_a
 - **Issue Tracking:** Use GitHub issues for bug reports and feature requests.
 - **Documentation Updates:** User-facing changes must update the README, HELP, and CHANGELOG entries.
 - **Environment Variables:** Any new variables must be mirrored in `.env.example` per contributor guidelines.
-- **Release Accounting:** Each deployment must advertise its `APP_BUILD_VERSION`, log its commit hash, and append the relevant entry to [`CHANGELOG.md`](CHANGELOG.md) so the operational history is auditable.
+- **Release Accounting:** Each deployment must surface the repository `VERSION` manifest in the UI, log its commit hash, and append the relevant entry to [`CHANGELOG.md`](CHANGELOG.md) so the operational history is auditable.
 - **Automation Guardrails:** The repository `VERSION` file, shared version resolver, and release metadata test will fail builds when the reported version and changelog drift—keep them aligned before requesting review.
 - **Upgrade & Backup Tooling:** Use `python tools/create_backup.py` for pre-flight snapshots and `python tools/inplace_upgrade.py` to roll forward without wiping containers or volumes. The Admin console exposes one-click buttons for both tasks under System Operations, calling the same helpers and recording their status for operators.
 
