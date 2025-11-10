@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Dict, List, Optional
 
-from flask import flash, redirect, render_template, url_for
+from flask import flash, redirect, render_template, url_for, Response
 
 from app_core.models import CAPAlert, EASMessage
-from app_core.eas_storage import get_eas_static_prefix, load_or_cache_summary_payload
+from app_core.eas_storage import get_eas_static_prefix, load_or_cache_summary_payload, format_local_datetime
 from app_utils.eas import describe_same_header
 from app_utils.fips_codes import get_same_lookup, get_us_state_county_tree
+from app_utils.pdf_generator import generate_pdf_document
 
 
 def register_detail_routes(app, logger) -> None:
@@ -104,6 +106,132 @@ def register_detail_routes(app, logger) -> None:
             logger.error('Error loading audio detail %s: %s', message_id, exc)
             flash('Unable to load audio detail at this time.', 'error')
             return redirect(url_for('audio_history'))
+
+    @app.route('/audio/<int:message_id>/export.pdf')
+    def audio_detail_pdf(message_id: int):
+        """Generate archival PDF for audio message - server-side from database."""
+        try:
+            message = EASMessage.query.get_or_404(message_id)
+            alert = CAPAlert.query.get(message.cap_alert_id) if message.cap_alert_id else None
+            metadata = dict(message.metadata_payload or {})
+
+            # Build PDF sections
+            sections = []
+
+            # Message Information
+            event_name = (alert.event if alert and alert.event else metadata.get('event')) or 'Unknown Event'
+            severity = alert.severity if alert and alert.severity else metadata.get('severity')
+            status = alert.status if alert and alert.status else metadata.get('status')
+
+            message_info = [
+                f"Event: {event_name}",
+                f"SAME Header: {message.same_header or 'N/A'}",
+                f"Created: {format_local_datetime(message.created_at, include_utc=True)}",
+            ]
+
+            if severity:
+                message_info.append(f"Severity: {severity}")
+            if status:
+                message_info.append(f"Status: {status}")
+
+            sections.append({
+                'heading': 'Message Information',
+                'content': message_info,
+            })
+
+            # Linked Alert
+            if alert:
+                alert_info = [
+                    f"Alert Event: {alert.event or 'N/A'}",
+                    f"Alert Identifier: {alert.identifier or 'N/A'}",
+                ]
+                if alert.sent:
+                    alert_info.append(f"Alert Sent: {format_local_datetime(alert.sent, include_utc=True)}")
+
+                sections.append({
+                    'heading': 'Linked CAP Alert',
+                    'content': alert_info,
+                })
+
+            # Location Information
+            location_details = _build_location_details(message.same_header)
+            if location_details:
+                location_lines = []
+                for loc in location_details:
+                    loc_line = f"{loc.get('code', 'N/A')}: {loc.get('description', 'N/A')}"
+                    if loc.get('state_abbr'):
+                        loc_line += f" ({loc.get('state_abbr')})"
+                    if loc.get('scope'):
+                        loc_line += f" - {loc.get('scope')}"
+                    location_lines.append(loc_line)
+
+                sections.append({
+                    'heading': 'Affected Locations',
+                    'content': location_lines,
+                })
+
+            # Audio Segments
+            segment_metadata: Dict[str, Dict[str, object]] = {}
+            if isinstance(metadata.get('segments'), dict):
+                segment_metadata = {
+                    str(key): value
+                    for key, value in metadata['segments'].items()
+                    if isinstance(value, dict)
+                }
+
+            component_map = {
+                'same': ('same_audio_data', 'SAME Header Bursts'),
+                'attention': ('attention_audio_data', 'Attention Tone'),
+                'tts': ('tts_audio_data', 'Narration / TTS'),
+                'buffer': ('buffer_audio_data', 'Silence Buffer'),
+            }
+
+            segment_lines = []
+            for key, (attr, label) in component_map.items():
+                blob = getattr(message, attr)
+                if not blob:
+                    continue
+                metrics = segment_metadata.get(key, {})
+                duration = metrics.get('duration_seconds')
+                size = metrics.get('size_bytes')
+
+                segment_line = f"{label}"
+                if duration:
+                    segment_line += f" (Duration: {duration:.2f}s"
+                    if size:
+                        segment_line += f", Size: {size:,} bytes)"
+                    else:
+                        segment_line += ")"
+                elif size:
+                    segment_line += f" (Size: {size:,} bytes)"
+
+                segment_lines.append(segment_line)
+
+            if segment_lines:
+                sections.append({
+                    'heading': 'Audio Segments',
+                    'content': segment_lines,
+                })
+
+            # Generate PDF
+            pdf_bytes = generate_pdf_document(
+                title=f"Audio Message Detail Report - {event_name}",
+                sections=sections,
+                subtitle=f"Message ID: {message_id}",
+                footer_text="Generated by EAS Station - Emergency Alert System Platform"
+            )
+
+            # Return as downloadable PDF
+            response = Response(pdf_bytes, mimetype="application/pdf")
+            response.headers["Content-Disposition"] = (
+                f"inline; filename=audio_{message_id}_{datetime.now().strftime('%Y%m%d')}.pdf"
+            )
+            return response
+
+        except Exception as exc:
+            logger.error('Error generating audio PDF: %s', exc)
+            flash(f'Error generating PDF: {exc}', 'error')
+            return redirect(url_for('audio_detail', message_id=message_id))
 
 
 def _static_download(filename: Optional[str]) -> Optional[str]:

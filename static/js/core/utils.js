@@ -77,6 +77,15 @@
     }
 
     /**
+     * Legacy printPage function for backwards compatibility.
+     * Now simply calls window.print() for basic printing needs.
+     * For archival PDFs, use server-side PDF export routes.
+     */
+    function printPage() {
+        window.print();
+    }
+
+    /**
      * Format date for display
      * @param {string|Date} date - Date to format
      * @param {boolean} includeTime - Whether to include time
@@ -199,9 +208,11 @@
 
     // Export functions to window
     window.exportToExcel = exportToExcel;
+    window.printPage = printPage;
     window.EASUtils = {
         updateCurrentTime: updateCurrentTime,
         exportToExcel: exportToExcel,
+        printPage: printPage,
         formatDate: formatDate,
         debounce: debounce,
         escapeHtml: escapeHtml,
