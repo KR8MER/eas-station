@@ -722,7 +722,7 @@ sudo apt install qjackctl
 - [Raspberry Pi Audio Guide](https://www.raspberrypi.com/documentation/computers/configuration.html#audio-configuration)
 - [USB Audio Class Specification](https://www.usb.org/document-library/audio-devices-rev-30-and-adopters-agreement)
 - [Reference Pi Build Guide](../hardware/reference_pi_build.md)
-- [System Health Monitoring](../../README.md#system-health)
+- [System Health Monitoring](post_install.md#system-health-monitoring)
 
 ---
 

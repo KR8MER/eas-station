@@ -255,36 +255,36 @@ Professional flowcharts and block diagrams illustrating system architecture and 
 <table>
 <tr>
 <td width="50%">
-<a href="static/docs/alert-processing-pipeline.svg">
-<img src="static/docs/alert-processing-pipeline.svg" alt="Alert Processing Pipeline" />
+<a href="docs/assets/diagrams/alert-processing-pipeline.svg">
+<img src="docs/assets/diagrams/alert-processing-pipeline.svg" alt="Alert Processing Pipeline" />
 </a>
 <p align="center"><em><strong>Alert Processing Pipeline</strong></em><br/>CAP ingestion, validation, and storage workflow</p>
 </td>
 <td width="50%">
-<a href="static/docs/broadcast-workflow.svg">
-<img src="static/docs/broadcast-workflow.svg" alt="Broadcast Workflow" />
+<a href="docs/assets/diagrams/broadcast-workflow.svg">
+<img src="docs/assets/diagrams/broadcast-workflow.svg" alt="Broadcast Workflow" />
 </a>
 <p align="center"><em><strong>EAS Broadcast Workflow</strong></em><br/>SAME generation and transmission process</p>
 </td>
 </tr>
 <tr>
 <td width="50%">
-<a href="static/docs/sdr-setup-flow.svg">
-<img src="static/docs/sdr-setup-flow.svg" alt="SDR Setup Flow" />
+<a href="docs/assets/diagrams/sdr-setup-flow.svg">
+<img src="docs/assets/diagrams/sdr-setup-flow.svg" alt="SDR Setup Flow" />
 </a>
 <p align="center"><em><strong>SDR Setup & Configuration</strong></em><br/>Complete radio receiver setup guide</p>
 </td>
 <td width="50%">
-<a href="static/docs/audio-source-routing.svg">
-<img src="static/docs/audio-source-routing.svg" alt="Audio Source Routing" />
+<a href="docs/assets/diagrams/audio-source-routing.svg">
+<img src="docs/assets/diagrams/audio-source-routing.svg" alt="Audio Source Routing" />
 </a>
 <p align="center"><em><strong>Audio Source Architecture</strong></em><br/>Multi-source audio routing and monitoring</p>
 </td>
 </tr>
 <tr>
 <td colspan="2">
-<a href="static/docs/system-deployment-hardware.svg">
-<img src="static/docs/system-deployment-hardware.svg" alt="Hardware Deployment" />
+<a href="docs/assets/diagrams/system-deployment-hardware.svg">
+<img src="docs/assets/diagrams/system-deployment-hardware.svg" alt="Hardware Deployment" />
 </a>
 <p align="center"><em><strong>Hardware Deployment Architecture</strong></em><br/>Raspberry Pi 5 reference configuration with peripherals</p>
 </td>

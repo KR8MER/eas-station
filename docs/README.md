@@ -10,7 +10,7 @@ Welcome to the comprehensive documentation for **EAS Station** - an experimental
 | Document | Description |
 |----------|-------------|
 | [**Help & Operations Guide**](guides/HELP.md) | Daily operations, dashboard access, alert monitoring |
-| [**Quick Start**](../README.md#quick-start) | Get up and running in 5 minutes |
+| [**Quick Start**](https://github.com/KR8MER/eas-station/blob/main/README.md#quick-start) | Get up and running in 5 minutes |
 | [**Setup Instructions**](guides/SETUP_INSTRUCTIONS.md) | First-run wizard, environment validation |
 | [**Portainer Deployment**](guides/PORTAINER_DEPLOYMENT.md) | Complete guide for deploying and maintaining with Portainer |
 | [**Database Fixes**](guides/DATABASE_CONSISTENCY_FIXES.md) | Troubleshooting database connection issues |
@@ -23,7 +23,7 @@ Welcome to the comprehensive documentation for **EAS Station** - an experimental
 |----------|-------------|
 | [**IPAWS Feed Integration**](guides/ipaws_feed_integration.md) | Configure IPAWS/Pub-Sub polling |
 | [**Radio USB Passthrough**](guides/radio_usb_passthrough.md) | SDR receiver configuration for Docker |
-| [**API Reference**](../README.md#-api-endpoints) | REST API documentation |
+| [**API Reference**](https://github.com/KR8MER/eas-station/blob/main/README.md#-api-endpoints) | REST API documentation |
 
 ### For Developers
 | Document | Description |
@@ -123,7 +123,7 @@ docs/
 ## 🔍 Find What You Need
 
 ### By Task
-- **Setting up EAS Station for the first time?** → [Quick Start Guide](../README.md#quick-start)
+- **Setting up EAS Station for the first time?** → [Quick Start Guide](https://github.com/KR8MER/eas-station/blob/main/README.md#quick-start)
 - **Deploying with Portainer?** → [Portainer Deployment Guide](guides/PORTAINER_DEPLOYMENT.md)
 - **Operating the dashboard?** → [Help & Operations Guide](guides/HELP.md)
 - **Contributing code?** → [Developer Guidelines](development/AGENTS.md) + [Contributing](process/CONTRIBUTING.md)
@@ -137,7 +137,7 @@ docs/
 ### By Audience
 - **👨‍💼 Emergency Managers**: Start with [About](reference/ABOUT.md) and [Terms of Use](policies/TERMS_OF_USE.md)
 - **📻 Radio Operators**: [Help Guide](guides/HELP.md) → [IPAWS Integration](guides/ipaws_feed_integration.md)
-- **🎧 Audio Engineers**: [Audio Monitoring](audio/AUDIO_MONITORING.md) → [Professional Audio Subsystem](../PROFESSIONAL_AUDIO_SUBSYSTEM.md)
+- **🎧 Audio Engineers**: [Audio Monitoring](audio/AUDIO_MONITORING.md) → [Professional Audio Subsystem](PROFESSIONAL_AUDIO_SUBSYSTEM.md)
 - **💻 Developers**: [AGENTS.md](development/AGENTS.md) → [Contributing](process/CONTRIBUTING.md)
 - **🔧 System Administrators**: [Portainer Deployment](guides/PORTAINER_DEPLOYMENT.md) → [Environment Migration](guides/ENV_MIGRATION_GUIDE.md) → [Database Fixes](guides/DATABASE_CONSISTENCY_FIXES.md)
 

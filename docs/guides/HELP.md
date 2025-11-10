@@ -87,7 +87,7 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 | Manual CAP injection | `python manual_eas_event.py --help` |
 
 ## Getting Help
-- **Documentation:** Consult the [README](../../README.md) for architecture, deployment, and configuration details.
+- **Documentation:** Consult the [README](https://github.com/KR8MER/eas-station/blob/main/README.md) for architecture, deployment, and configuration details.
 - **Change Tracking:** Review the [CHANGELOG](../reference/CHANGELOG.md) for the latest updates and breaking changes.
 - **Issue Reporting:** Open a GitHub issue with logs, configuration details (without secrets), and replication steps.
 

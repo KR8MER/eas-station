@@ -1088,9 +1088,9 @@ For enhanced clarity and presentation, the following professional SVG diagrams a
 
 Detailed flowchart showing the complete CAP alert ingestion workflow from external sources through validation, parsing, spatial processing, and database storage.
 
-![Alert Processing Pipeline](../../static/docs/alert-processing-pipeline.svg)
+![Alert Processing Pipeline](../assets/diagrams/alert-processing-pipeline.svg)
 
-**File:** [static/docs/alert-processing-pipeline.svg](../../static/docs/alert-processing-pipeline.svg)
+**File:** [assets/diagrams/alert-processing-pipeline.svg](../assets/diagrams/alert-processing-pipeline.svg)
 
 ---
 
@@ -1098,9 +1098,9 @@ Detailed flowchart showing the complete CAP alert ingestion workflow from extern
 
 Step-by-step workflow diagram illustrating the complete EAS message generation and transmission process, from alert selection through SAME encoding to broadcast completion.
 
-![EAS Broadcast Workflow](../../static/docs/broadcast-workflow.svg)
+![EAS Broadcast Workflow](../assets/diagrams/broadcast-workflow.svg)
 
-**File:** [static/docs/broadcast-workflow.svg](../../static/docs/broadcast-workflow.svg)
+**File:** [assets/diagrams/broadcast-workflow.svg](../assets/diagrams/broadcast-workflow.svg)
 
 ---
 
@@ -1108,9 +1108,9 @@ Step-by-step workflow diagram illustrating the complete EAS message generation a
 
 Block diagram showing multi-source audio ingestion architecture with adapters, priority selection, monitoring systems, and database integration.
 
-![Audio Source Routing](../../static/docs/audio-source-routing.svg)
+![Audio Source Routing](../assets/diagrams/audio-source-routing.svg)
 
-**File:** [static/docs/audio-source-routing.svg](../../static/docs/audio-source-routing.svg)
+**File:** [assets/diagrams/audio-source-routing.svg](../assets/diagrams/audio-source-routing.svg)
 
 ---
 
@@ -1118,9 +1118,9 @@ Block diagram showing multi-source audio ingestion architecture with adapters, p
 
 Physical deployment diagram showing Raspberry Pi 5 hardware configuration with all peripherals, storage, and external connections.
 
-![Hardware Deployment](../../static/docs/system-deployment-hardware.svg)
+![Hardware Deployment](../assets/diagrams/system-deployment-hardware.svg)
 
-**File:** [static/docs/system-deployment-hardware.svg](../../static/docs/system-deployment-hardware.svg)
+**File:** [assets/diagrams/system-deployment-hardware.svg](../assets/diagrams/system-deployment-hardware.svg)
 
 ---
 

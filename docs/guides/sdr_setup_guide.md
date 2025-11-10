@@ -20,9 +20,9 @@ This guide will walk you through setting up Software Defined Radio (SDR) receive
 
 For a complete visual overview of the SDR setup process, see the professional flowchart below:
 
-![SDR Setup and Configuration Flow](../../static/docs/sdr-setup-flow.svg)
+![SDR Setup and Configuration Flow](../assets/diagrams/sdr-setup-flow.svg)
 
-**[View full-size diagram](../../static/docs/sdr-setup-flow.svg)**
+**[View full-size diagram](../assets/diagrams/sdr-setup-flow.svg)**
 
 ---
 

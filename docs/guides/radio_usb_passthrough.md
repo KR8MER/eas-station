@@ -283,6 +283,6 @@ Once USB passthrough is working:
 4. **Monitor Status**: Check the radio status page to see receiver signal locks
 
 For additional help, see:
-- [Radio Configuration Guide](radio_configuration.md)
-- [Troubleshooting Guide](../troubleshooting.md)
+- [Radio Configuration Guide](sdr_setup_guide.md)
+- [Troubleshooting Guide](HELP.md#troubleshooting)
 - [GitHub Issues](https://github.com/KR8MER/eas-station/issues)

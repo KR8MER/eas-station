@@ -13,7 +13,7 @@ A high-level index of major EAS Station capabilities, where they live in the UI,
 | Notification channels | Email/SMS notifications with templated messaging | **Configuration → Notifications** | [docs/guides/HELP.md](../guides/HELP.md#notifications), [docs/reference/ABOUT.md](ABOUT.md#notifications) | Document webhook integrations next |
 | Portainer deployment | One-click stack install/upgrade for Docker environments | N/A (external) | [docs/deployment/portainer/PORTAINER_QUICK_START.md](../deployment/portainer/PORTAINER_QUICK_START.md), [docs/guides/PORTAINER_DEPLOYMENT.md](../guides/PORTAINER_DEPLOYMENT.md) | Combine with network/database runbooks |
 | Setup wizard & environment config | First-run configuration, environment validation, `.env` migration | **Configuration → Environment** | [docs/guides/SETUP_INSTRUCTIONS.md](../guides/SETUP_INSTRUCTIONS.md), [docs/reference/ABOUT.md](ABOUT.md#configuration) | Needs troubleshooting FAQ |
-| API & integrations | REST/JSON APIs for automating alerts and ingest | `/api/*` | [docs/frontend/JAVASCRIPT_API.md](../frontend/JAVASCRIPT_API.md), [README.md](../../README.md#-api-endpoints) | Expand with authenticated examples |
+| API & integrations | REST/JSON APIs for automating alerts and ingest | `/api/*` | [docs/frontend/JAVASCRIPT_API.md](../frontend/JAVASCRIPT_API.md), [README.md](https://github.com/KR8MER/eas-station/blob/main/README.md#-api-endpoints) | Expand with authenticated examples |
 
 ## Coverage Gaps
 

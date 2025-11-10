@@ -1269,7 +1269,7 @@ If you encounter issues not covered here:
    - Look for error messages and stack traces
 
 2. **Review main documentation:**
-   - [README.md](../../README.md)
+   - [README.md](https://github.com/KR8MER/eas-station/blob/main/README.md)
    - [HELP.md](HELP.md)
 
 3. **Check system health:**

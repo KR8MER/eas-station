@@ -28,8 +28,8 @@ This directory contains historical development artifacts, phase tracking documen
 ## Current Status Information
 
 For current project status and roadmap information, please refer to:
-- Main repository [`README.md`](../../README.md)
-- Documentation index [`docs/README.md`](../README.md)
+- Main repository [`README.md`](https://github.com/KR8MER/eas-station/blob/main/README.md)
+- Documentation index [`docs/README.md`](../../README.md)
 - Roadmap documents in [`docs/roadmap/`](../roadmap/)
 
 ## Note

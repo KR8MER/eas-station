@@ -74,7 +74,7 @@ A comparable DASDEC3 bundle with redundant audio, DASDEC-G3 software license, an
 Before updating this gap analysis:
 
 - Review section headings and feature descriptions in the vendor PDFs/DOCX listed above so terminology mirrors the DASDEC3 documentation.
-- Confirm any hardware guidance remains achievable with the Raspberry Pi reference build documented in [`README.md`](../../README.md).
+- Confirm any hardware guidance remains achievable with the Raspberry Pi reference build documented in [`README.md`](https://github.com/KR8MER/eas-station/blob/main/README.md).
 - Cross-check roadmap tickets in [`master_todo.md`](master_todo.md) and [`eas_todo.md`](eas_todo.md) so new features are traced to manual capabilities.
 - Update `/about` and `/help` templates if new operator guidance or warnings are introduced here.
 
