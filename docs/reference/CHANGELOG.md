@@ -6,6 +6,7 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 ### Added
+- Added IPAWS poll debug export endpoints for Excel and PDF with UI buttons on `/debug/ipaws` for rapid sharing of poll runs.
 - Added comprehensive analytics and compliance enhancements with trend analysis and anomaly detection
   - Implemented `app_core/analytics/` module with metrics aggregation, trend analysis, and anomaly detection
   - Created `MetricSnapshot`, `TrendRecord`, and `AnomalyRecord` database models for time-series analytics
@@ -56,6 +57,7 @@ tracks releases under the 2.x series.
   - Clear separation of concerns: Radio = RF hardware, Audio = all audio ingestion sources
 
 ### Fixed
+- Restored `/stats` dashboard data by providing CAP alert history, reliability metrics, and polling debug visibility in `/logs`.
 - **Fixed Audio Sources page not loading sources** - Corrected missing element IDs and event listeners that prevented audio sources from displaying on `/settings/audio` page
   - Fixed element IDs to match JavaScript expectations (`active-sources-count`, `total-sources-count`, `sources-list`)
   - Fixed modal IDs to match JavaScript (`addSourceModal`, `deviceDiscoveryModal`)
