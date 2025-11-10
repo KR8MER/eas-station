@@ -111,7 +111,7 @@ EAS Station uses publicly available geographic data to provide spatial filtering
 
 | Data Source | Provider | License/Terms | Purpose |
 | --- | --- | --- | --- |
-| **Putnam County, Ohio GIS Data** | Putnam County GIS Office<br/>Greg Luersman, GIS Coordinator<br/>https://www.putnamcountygis.com/Downloads.html | Public Domain / Open Data | County boundaries, municipal boundaries, and reference geographic data for spatial filtering and alert targeting |
+| **Putnam County, Ohio GIS Data** | Putnam County GIS Office<br>Greg Luersman, GIS Coordinator<br>https://www.putnamcountygis.com/Downloads.html | Public Domain / Open Data | County boundaries, municipal boundaries, and reference geographic data for spatial filtering and alert targeting |
 
 **Attribution**: Geographic boundary data for Putnam County, Ohio, is provided by the Putnam County GIS Office under the direction of Greg Luersman, GIS Coordinator. This data is made freely available to the public through the Putnam County GIS Downloads portal.
 
