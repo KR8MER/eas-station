@@ -6,23 +6,13 @@
 <!-- Mermaid.js for diagram rendering -->
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script>
+    // Initialize Mermaid when DOM is ready
     document.addEventListener('DOMContentLoaded', function() {
-        // Convert code.language-mermaid blocks to divs for Mermaid rendering
-        document.querySelectorAll('code.language-mermaid').forEach(function(codeBlock) {
-            const pre = codeBlock.parentElement;
-            const mermaidDiv = document.createElement('div');
-            mermaidDiv.className = 'mermaid';
-            mermaidDiv.textContent = codeBlock.textContent;
-            pre.replaceWith(mermaidDiv);
-        });
-
-        // Initialize Mermaid
         mermaid.initialize({
             startOnLoad: true,
             theme: 'default',
             securityLevel: 'loose',
         });
-        mermaid.contentLoaded();
     });
 </script>
 
