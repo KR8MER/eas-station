@@ -6,7 +6,7 @@ Flask-based CAP ingestion, SAME encoding, broadcast, and verification system
 Author: KR8MER Amateur Radio Emergency Communications
 Description: Multi-source alert aggregation with FCC-compliant SAME encoding, PostGIS spatial intelligence,
              SDR verification, and LED signage integration
-Version: 2.4.12 - Fixes nginx static file caching for deployments
+Version: 2.4.14 - Adds automatic cache-busting for static assets to avoid stale deployments
 """
 
 # =============================================================================
@@ -290,6 +290,12 @@ from app_utils.versioning import get_current_version
 
 app.config['SYSTEM_VERSION'] = get_current_version()
 
+_static_version_env = os.environ.get('STATIC_ASSET_VERSION')
+if _static_version_env:
+    app.config['STATIC_ASSET_VERSION'] = _static_version_env.strip()
+else:
+    app.config['STATIC_ASSET_VERSION'] = app.config['SYSTEM_VERSION']
+
 
 def generate_csrf_token() -> str:
     token = session.get(CSRF_SESSION_KEY)
@@ -297,6 +303,19 @@ def generate_csrf_token() -> str:
         token = secrets.token_urlsafe(32)
         session[CSRF_SESSION_KEY] = token
     return token
+
+
+@app.url_defaults
+def add_static_cache_bust(endpoint: str, values: Dict[str, Any]) -> None:
+    """Append a cache-busting query parameter to all static asset URLs."""
+
+    if endpoint != 'static' or values is None:
+        return
+
+    if 'v' in values:
+        return
+
+    values['v'] = app.config.get('STATIC_ASSET_VERSION', get_current_version())
 
 
 def _build_database_url() -> str:
@@ -640,6 +659,7 @@ def inject_global_vars():
         'timezone_name': get_location_timezone_name(),
         'led_available': LED_AVAILABLE,
         'system_version': app.config.get('SYSTEM_VERSION', get_current_version()),
+        'static_asset_version': app.config.get('STATIC_ASSET_VERSION', get_current_version()),
         'location_settings': location_settings,
         'boundary_type_config': BOUNDARY_TYPE_CONFIG,
         'boundary_group_labels': BOUNDARY_GROUP_LABELS,
@@ -662,6 +682,8 @@ def before_request():
     """Before request hook for logging and setup"""
     # Refresh dynamic metadata that may change between deployments.
     app.config['SYSTEM_VERSION'] = get_current_version()
+    if not _static_version_env:
+        app.config['STATIC_ASSET_VERSION'] = app.config['SYSTEM_VERSION']
 
     # Log API requests for debugging
     if request.path.startswith('/api/') and request.method in ['POST', 'PUT', 'DELETE']:

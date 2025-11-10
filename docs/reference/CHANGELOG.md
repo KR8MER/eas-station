@@ -47,6 +47,9 @@ tracks releases under the 2.x series.
   - Deep blue to cyan gradient representing signal monitoring and alert processing
   - SVG filters for depth, glow effects, and contemporary design polish
 
+### Fixed
+- Reduced nginx static asset cache lifetime from 24 hours to five minutes so freshly deployed frontend changes appear without manual cache purges.
+
 ### Changed
 - **Consolidated stream support in Audio Sources system** - Removed stream support from RadioReceiver model and UI, centralizing all HTTP/M3U stream configuration through the Audio Sources page where StreamSourceAdapter already provided full functionality
   - Removed `source_type` and `stream_url` fields from RadioReceiver database model
@@ -262,6 +265,10 @@ tracks releases under the 2.x series.
   file label so frames no longer begin with an invalid "AAA" sequence that the manual forbids.
 - Prevented the LED fallback initializer from raising a `NameError` when the optional
   controller module is missing so deployments without sign hardware continue to boot.
+
+## [2.4.14] - 2025-11-10
+### Fixed
+- Added automatic cache-busting query parameters to all Flask-served static asset URLs so envoy/nginx layers fetch freshly deployed bundles instead of stale copies (Screenshot_7-11-2025_75931_wxalerts.k8tek.net.jpeg).
 
 ## [2.4.11] - 2025-11-09
 ### Fixed
