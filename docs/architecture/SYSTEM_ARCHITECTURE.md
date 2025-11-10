@@ -34,55 +34,55 @@ This document provides comprehensive architectural diagrams and flowcharts for t
 ```mermaid
 graph TB
     subgraph "External Sources"
-        NOAA[NOAA Weather Service<br/>CAP Feeds]
-        IPAWS[FEMA IPAWS<br/>CAP Feeds]
-        SDR_IN[SDR Receivers<br/>RF Input]
+        NOAA[NOAA Weather Service<br>CAP Feeds]
+        IPAWS[FEMA IPAWS<br>CAP Feeds]
+        SDR_IN[SDR Receivers<br>RF Input]
     end
 
     subgraph "EAS Station Core"
         subgraph "Ingestion Layer"
-            POLLER[CAP Pollers<br/>poller/]
-            VALIDATOR[CAP Validator<br/>Schema Enforcement]
+            POLLER[CAP Pollers<br>poller/]
+            VALIDATOR[CAP Validator<br>Schema Enforcement]
         end
 
         subgraph "Data Layer"
-            DB[(PostgreSQL 17<br/>+ PostGIS 3.4)]
-            SPATIAL[Spatial Engine<br/>Boundary Processing]
+            DB[(PostgreSQL 17<br>+ PostGIS 3.4)]
+            SPATIAL[Spatial Engine<br>Boundary Processing]
         end
 
         subgraph "Processing Layer"
-            ALERT_MGR[Alert Manager<br/>app_core/alerts.py]
-            AUDIO_CTRL[Audio Controller<br/>app_core/audio/]
-            RADIO_MGR[Radio Manager<br/>app_core/radio/]
+            ALERT_MGR[Alert Manager<br>app_core/alerts.py]
+            AUDIO_CTRL[Audio Controller<br>app_core/audio/]
+            RADIO_MGR[Radio Manager<br>app_core/radio/]
         end
 
         subgraph "Application Layer"
-            WEB[Web Application<br/>Flask + Bootstrap]
-            API[REST API<br/>JSON Endpoints]
-            HEALTH[System Health<br/>Monitoring]
+            WEB[Web Application<br>Flask + Bootstrap]
+            API[REST API<br>JSON Endpoints]
+            HEALTH[System Health<br>Monitoring]
         end
 
         subgraph "Output Layer"
-            SAME[SAME Generator<br/>app_utils/eas.py]
-            TTS[Text-to-Speech<br/>Google/AWS]
-            GPIO[GPIO Control<br/>Relay/Transmitter]
-            LED[LED Sign Controller<br/>Alpha Protocol]
+            SAME[SAME Generator<br>app_utils/eas.py]
+            TTS[Text-to-Speech<br>Google/AWS]
+            GPIO[GPIO Control<br>Relay/Transmitter]
+            LED[LED Sign Controller<br>Alpha Protocol]
         end
     end
 
     subgraph "Operator Interface"
-        BROWSER[Web Browser<br/>Dashboard/Admin]
+        BROWSER[Web Browser<br>Dashboard/Admin]
     end
 
     subgraph "Broadcast Outputs"
         TX[RF Transmitter]
         LED_SIGN[LED Signage]
-        AUDIO_OUT[Audio Files<br/>Archive]
+        AUDIO_OUT[Audio Files<br>Archive]
     end
 
     subgraph "Verification"
-        SDR_CAP[SDR Capture<br/>Receive/Verify]
-        DECODE[SAME Decoder<br/>Verification]
+        SDR_CAP[SDR Capture<br>Receive/Verify]
+        DECODE[SAME Decoder<br>Verification]
     end
 
     %% Connections
@@ -139,38 +139,38 @@ graph TB
 ```mermaid
 graph LR
     subgraph "Core Modules"
-        MODELS[app_core/models.py<br/>Database Models]
-        EXT[app_core/extensions.py<br/>Flask Extensions]
-        ALERTS[app_core/alerts.py<br/>Alert Management]
-        BOUNDARIES[app_core/boundaries.py<br/>Spatial Processing]
-        LOCATION[app_core/location.py<br/>Location Services]
+        MODELS[app_core/models.py<br>Database Models]
+        EXT[app_core/extensions.py<br>Flask Extensions]
+        ALERTS[app_core/alerts.py<br>Alert Management]
+        BOUNDARIES[app_core/boundaries.py<br>Spatial Processing]
+        LOCATION[app_core/location.py<br>Location Services]
     end
 
     subgraph "Audio System"
-        AUDIO_INGEST[app_core/audio/ingest.py<br/>Audio Controller]
-        AUDIO_SOURCES[app_core/audio/sources.py<br/>Source Adapters]
-        AUDIO_METER[app_core/audio/metering.py<br/>Monitoring]
+        AUDIO_INGEST[app_core/audio/ingest.py<br>Audio Controller]
+        AUDIO_SOURCES[app_core/audio/sources.py<br>Source Adapters]
+        AUDIO_METER[app_core/audio/metering.py<br>Monitoring]
     end
 
     subgraph "Radio System"
-        RADIO_MGR[app_core/radio/manager.py<br/>Radio Manager]
-        RADIO_DRV[app_core/radio/drivers.py<br/>SoapySDR Drivers]
+        RADIO_MGR[app_core/radio/manager.py<br>Radio Manager]
+        RADIO_DRV[app_core/radio/drivers.py<br>SoapySDR Drivers]
     end
 
     subgraph "Utilities"
-        EAS_UTIL[app_utils/eas.py<br/>SAME Generator]
-        UTILS[app_utils/__init__.py<br/>Common Utilities]
+        EAS_UTIL[app_utils/eas.py<br>SAME Generator]
+        UTILS[app_utils/__init__.py<br>Common Utilities]
     end
 
     subgraph "Web Application"
-        WEBAPP[webapp/__init__.py<br/>Flask App Factory]
-        ROUTES[webapp/admin/<br/>Route Handlers]
-        TEMPLATES[templates/<br/>Jinja2 Views]
+        WEBAPP[webapp/__init__.py<br>Flask App Factory]
+        ROUTES[webapp/admin/<br>Route Handlers]
+        TEMPLATES[templates/<br>Jinja2 Views]
     end
 
     subgraph "Background Services"
-        CAP_POLL[poller/cap_poller.py<br/>NOAA Poller]
-        IPAWS_POLL[poller/ipaws_poller.py<br/>IPAWS Poller]
+        CAP_POLL[poller/cap_poller.py<br>NOAA Poller]
+        IPAWS_POLL[poller/ipaws_poller.py<br>IPAWS Poller]
     end
 
     %% Dependencies
@@ -242,24 +242,24 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    START([Polling Interval<br/>Triggered]) --> FETCH[Fetch CAP Feed]
-    FETCH --> PARSE{Parse XML<br/>Successful?}
+    START([Polling Interval<br>Triggered]) --> FETCH[Fetch CAP Feed]
+    FETCH --> PARSE{Parse XML<br>Successful?}
 
     PARSE -->|No| LOG_ERR[Log Parse Error]
     LOG_ERR --> END([End])
 
-    PARSE -->|Yes| VALIDATE{Schema<br/>Valid?}
+    PARSE -->|Yes| VALIDATE{Schema<br>Valid?}
     VALIDATE -->|No| LOG_SCHEMA[Log Schema Error]
     LOG_SCHEMA --> END
 
     VALIDATE -->|Yes| EXTRACT[Extract Alert Data]
-    EXTRACT --> GEOM{Has<br/>Geometry?}
+    EXTRACT --> GEOM{Has<br>Geometry?}
 
     GEOM -->|No| USE_SAME[Use SAME Codes]
     GEOM -->|Yes| NORM_GEOM[Normalize Geometry]
 
     USE_SAME --> DUP_CHECK
-    NORM_GEOM --> DUP_CHECK{Duplicate<br/>Check}
+    NORM_GEOM --> DUP_CHECK{Duplicate<br>Check}
 
     DUP_CHECK -->|Duplicate| LOG_DUP[Log Duplicate]
     LOG_DUP --> END
@@ -282,13 +282,13 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    START([Alert with Geometry]) --> TYPE{Geometry<br/>Type?}
+    START([Alert with Geometry]) --> TYPE{Geometry<br>Type?}
 
     TYPE -->|Polygon| POLY[Parse Polygon Coords]
     TYPE -->|Circle| CIRCLE[Parse Center + Radius]
     TYPE -->|SAME Codes| SAME[Lookup FIPS Codes]
 
-    POLY --> VALID_POLY{Valid<br/>Polygon?}
+    POLY --> VALID_POLY{Valid<br>Polygon?}
     VALID_POLY -->|No| ERROR[Log Geometry Error]
     VALID_POLY -->|Yes| CREATE_GEOM[Create PostGIS Geometry]
 
@@ -322,10 +322,10 @@ flowchart TD
 ```mermaid
 graph TB
     subgraph "Audio Sources"
-        SDR_SRC[SDR Receiver<br/>RadioManager]
-        ALSA_SRC[ALSA Device<br/>hw:X,Y]
-        PULSE_SRC[PulseAudio<br/>Device Index]
-        FILE_SRC[Audio File<br/>WAV/MP3]
+        SDR_SRC[SDR Receiver<br>RadioManager]
+        ALSA_SRC[ALSA Device<br>hw:X,Y]
+        PULSE_SRC[PulseAudio<br>Device Index]
+        FILE_SRC[Audio File<br>WAV/MP3]
     end
 
     subgraph "Source Adapters"
@@ -342,9 +342,9 @@ graph TB
     end
 
     subgraph "Monitoring"
-        METER[AudioMeter<br/>Peak/RMS Levels]
-        SILENCE[SilenceDetector<br/>Threshold Detection]
-        HEALTH[HealthMonitor<br/>Health Score 0-100]
+        METER[AudioMeter<br>Peak/RMS Levels]
+        SILENCE[SilenceDetector<br>Threshold Detection]
+        HEALTH[HealthMonitor<br>Health Score 0-100]
     end
 
     subgraph "Database"
@@ -354,9 +354,9 @@ graph TB
     end
 
     subgraph "Web UI"
-        UI[Audio Sources Page<br/>/audio/sources]
-        API[REST API<br/>/api/audio/*]
-        JS[JavaScript Monitor<br/>Real-time Updates]
+        UI[Audio Sources Page<br>/audio/sources]
+        API[REST API<br>/api/audio/*]
+        JS[JavaScript Monitor<br>Real-time Updates]
     end
 
     %% Connections
@@ -467,7 +467,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    START([Operator Initiates<br/>EAS Workflow]) --> SELECT_TYPE{Alert Type}
+    START([Operator Initiates<br>EAS Workflow]) --> SELECT_TYPE{Alert Type}
 
     SELECT_TYPE -->|Manual| MANUAL[Select Event Code]
     SELECT_TYPE -->|From CAP| CAP_SELECT[Select CAP Alert]
@@ -477,28 +477,28 @@ flowchart TD
     EXTRACT --> CONFIG
 
     CONFIG --> SAME_GEN[Generate SAME Header]
-    SAME_GEN --> VALIDATE{SAME Header<br/>Valid?}
+    SAME_GEN --> VALIDATE{SAME Header<br>Valid?}
 
     VALIDATE -->|No| ERROR[Show Error]
     ERROR --> CONFIG
 
-    VALIDATE -->|Yes| NARR{Include<br/>Narration?}
+    VALIDATE -->|Yes| NARR{Include<br>Narration?}
 
     NARR -->|No| BUILD_AUDIO
     NARR -->|Yes| TTS[Generate TTS Audio]
-    TTS --> TTS_OK{TTS<br/>Success?}
+    TTS --> TTS_OK{TTS<br>Success?}
     TTS_OK -->|No| TTS_ERROR[TTS Error]
     TTS_ERROR --> NARR
     TTS_OK -->|Yes| BUILD_AUDIO
 
     BUILD_AUDIO[Build Complete Audio]
     BUILD_AUDIO --> PREVIEW[Show Preview Player]
-    PREVIEW --> APPROVE{Operator<br/>Approves?}
+    PREVIEW --> APPROVE{Operator<br>Approves?}
 
     APPROVE -->|No| CONFIG
     APPROVE -->|Yes| STORE_FILE[Store Audio File]
 
-    STORE_FILE --> GPIO_CHECK{GPIO<br/>Configured?}
+    STORE_FILE --> GPIO_CHECK{GPIO<br>Configured?}
 
     GPIO_CHECK -->|Yes| TRANSMIT[Key Transmitter]
     GPIO_CHECK -->|No| SKIP_TX[Skip Transmission]
@@ -508,7 +508,7 @@ flowchart TD
     UNKEY --> LED_CHECK
     SKIP_TX --> LED_CHECK
 
-    LED_CHECK{LED Sign<br/>Configured?}
+    LED_CHECK{LED Sign<br>Configured?}
 
     LED_CHECK -->|Yes| LED_SEND[Send LED Message]
     LED_CHECK -->|No| SKIP_LED[Skip LED]
@@ -530,18 +530,18 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    START([SAME Generator]) --> PREAMBLE[Generate Preamble<br/>16 bytes 0xAB]
-    PREAMBLE --> HEADER[Build SAME Header<br/>ZCZC-ORG-EEE-...]
-    HEADER --> ENCODE[FSK Encode<br/>520.83 baud]
-    ENCODE --> TRIPLET{Generate<br/>3x Headers}
+    START([SAME Generator]) --> PREAMBLE[Generate Preamble<br>16 bytes 0xAB]
+    PREAMBLE --> HEADER[Build SAME Header<br>ZCZC-ORG-EEE-...]
+    HEADER --> ENCODE[FSK Encode<br>520.83 baud]
+    ENCODE --> TRIPLET{Generate<br>3x Headers}
 
-    TRIPLET --> ATT_SIGNAL[Generate Attention<br/>853Hz + 960Hz]
-    ATT_SIGNAL --> NARRATION{Has<br/>Narration?}
+    TRIPLET --> ATT_SIGNAL[Generate Attention<br>853Hz + 960Hz]
+    ATT_SIGNAL --> NARRATION{Has<br>Narration?}
 
     NARRATION -->|Yes| TTS_AUDIO[Append TTS Audio]
     NARRATION -->|No| EOM
 
-    TTS_AUDIO --> EOM[Generate EOM<br/>NNNN x3]
+    TTS_AUDIO --> EOM[Generate EOM<br>NNNN x3]
     EOM --> SILENCE[Add 1s Silence]
     SILENCE --> OUTPUT[(Audio WAV File)]
 
@@ -603,19 +603,19 @@ sequenceDiagram
 ```mermaid
 flowchart TD
     START([SDR Monitoring Active]) --> SCAN[Scan Frequencies]
-    SCAN --> DETECT{Energy<br/>Detected?}
+    SCAN --> DETECT{Energy<br>Detected?}
 
     DETECT -->|No| WAIT[Wait]
     WAIT --> SCAN
 
     DETECT -->|Yes| RECORD[Start Recording]
-    RECORD --> SQUELCH{Squelch<br/>Open?}
+    RECORD --> SQUELCH{Squelch<br>Open?}
 
     SQUELCH -->|No| STOP_REC[Stop Recording]
     STOP_REC --> SCAN
 
     SQUELCH -->|Yes| CONTINUE[Continue Recording]
-    CONTINUE --> TIMEOUT{Max Duration<br/>Reached?}
+    CONTINUE --> TIMEOUT{Max Duration<br>Reached?}
 
     TIMEOUT -->|Yes| FINALIZE
     TIMEOUT -->|No| SQUELCH
@@ -623,13 +623,13 @@ flowchart TD
     FINALIZE[Finalize Recording]
     FINALIZE --> SAVE[Save Audio File]
     SAVE --> DECODE[Attempt SAME Decode]
-    DECODE --> VALID{Valid SAME<br/>Header?}
+    DECODE --> VALID{Valid SAME<br>Header?}
 
     VALID -->|No| LOG_FAIL[Log Decode Failure]
     LOG_FAIL --> SCAN
 
     VALID -->|Yes| EXTRACT[Extract SAME Data]
-    EXTRACT --> MATCH{Matches<br/>Transmitted?}
+    EXTRACT --> MATCH{Matches<br>Transmitted?}
 
     MATCH -->|Yes| VERIFY_OK[Mark as Verified]
     MATCH -->|No| MISMATCH[Log Mismatch]
@@ -878,7 +878,7 @@ flowchart TD
     SDR --> AUDIO[Check Audio System]
 
     AUDIO --> AGGREGATE[Aggregate Health Data]
-    AGGREGATE --> SCORE{Calculate<br/>Health Score}
+    AGGREGATE --> SCORE{Calculate<br>Health Score}
 
     SCORE -->|< 50| CRITICAL[Status: Critical]
     SCORE -->|50-79| WARNING[Status: Warning]
@@ -905,10 +905,10 @@ flowchart TD
 ```mermaid
 graph TB
     subgraph "Docker Compose Services"
-        APP[App Container<br/>Flask Web + API]
-        POLLER[Poller Container<br/>NOAA CAP Polling]
-        IPAWS[IPAWS Poller<br/>FEMA Polling]
-        DB[PostgreSQL Container<br/>Database + PostGIS]
+        APP[App Container<br>Flask Web + API]
+        POLLER[Poller Container<br>NOAA CAP Polling]
+        IPAWS[IPAWS Poller<br>FEMA Polling]
+        DB[PostgreSQL Container<br>Database + PostGIS]
     end
 
     subgraph "Shared Resources"
@@ -958,30 +958,30 @@ graph TB
         subgraph "Software Stack"
             HOST[Docker Engine 24+]
             subgraph "Containers"
-                APP_C[Web Application<br/>Python 3.12 + Flask]
-                POLL_C[CAP Poller<br/>Background Service]
-                IPAWS_C[IPAWS Poller<br/>Background Service]
-                DB_C[PostgreSQL 17<br/>PostGIS 3.4]
+                APP_C[Web Application<br>Python 3.12 + Flask]
+                POLL_C[CAP Poller<br>Background Service]
+                IPAWS_C[IPAWS Poller<br>Background Service]
+                DB_C[PostgreSQL 17<br>PostGIS 3.4]
             end
         end
 
         subgraph "Peripherals"
-            SDR1[RTL-SDR<br/>USB 3.0]
-            SDR2[Airspy<br/>USB 3.0]
-            GPIO_HAT[GPIO Relay HAT<br/>Transmitter Control]
-            AUDIO_HAT[Audio DAC HAT<br/>Balanced Output]
+            SDR1[RTL-SDR<br>USB 3.0]
+            SDR2[Airspy<br>USB 3.0]
+            GPIO_HAT[GPIO Relay HAT<br>Transmitter Control]
+            AUDIO_HAT[Audio DAC HAT<br>Balanced Output]
             ETH[Gigabit Ethernet]
         end
 
         subgraph "Storage"
-            NVME[NVMe SSD<br/>PCIe Gen 2]
+            NVME[NVMe SSD<br>PCIe Gen 2]
         end
     end
 
     subgraph "External Connections"
-        INTERNET[Internet<br/>CAP Feeds]
+        INTERNET[Internet<br>CAP Feeds]
         TX_EXT[FM Transmitter]
-        LED_EXT[LED Sign<br/>RS-232]
+        LED_EXT[LED Sign<br>RS-232]
         MONITOR[HDMI Monitor]
     end
 
@@ -1017,24 +1017,24 @@ graph TB
 ```mermaid
 graph TB
     subgraph "Application Server"
-        APP[EAS Station Application<br/>Docker Compose]
-        POLL[CAP Pollers<br/>Docker Containers]
+        APP[EAS Station Application<br>Docker Compose]
+        POLL[CAP Pollers<br>Docker Containers]
     end
 
     subgraph "Database Server"
-        PG[PostgreSQL 17<br/>Dedicated Server]
-        PGIS[PostGIS 3.4<br/>Extension]
-        BACKUP[Automated Backups<br/>pg_dump]
+        PG[PostgreSQL 17<br>Dedicated Server]
+        PGIS[PostGIS 3.4<br>Extension]
+        BACKUP[Automated Backups<br>pg_dump]
     end
 
     subgraph "Network"
-        FW[Firewall<br/>Port 5432]
-        VPN[VPN Tunnel<br/>Optional]
+        FW[Firewall<br>Port 5432]
+        VPN[VPN Tunnel<br>Optional]
     end
 
     subgraph "Monitoring"
-        PROM[Prometheus<br/>Metrics]
-        GRAF[Grafana<br/>Dashboards]
+        PROM[Prometheus<br>Metrics]
+        GRAF[Grafana<br>Dashboards]
     end
 
     APP --> FW

@@ -33,13 +33,13 @@ This sequence shows the complete path of a CAP alert from external sources throu
 
 ```mermaid
 sequenceDiagram
-    participant NOAA as NOAA/IPAWS<br/>CAP Feed
-    participant Poller as CAP Poller<br/>cap_poller.py
-    participant Parser as XML Parser<br/>parse_cap_xml()
-    participant AlertMgr as Alert Manager<br/>alerts.py
-    participant DB as PostgreSQL<br/>+ PostGIS
-    participant Spatial as Spatial Engine<br/>boundaries.py
-    participant WebUI as Web UI<br/>Dashboard
+    participant NOAA as NOAA/IPAWS<br>CAP Feed
+    participant Poller as CAP Poller<br>cap_poller.py
+    participant Parser as XML Parser<br>parse_cap_xml()
+    participant AlertMgr as Alert Manager<br>alerts.py
+    participant DB as PostgreSQL<br>+ PostGIS
+    participant Spatial as Spatial Engine<br>boundaries.py
+    participant WebUI as Web UI<br>Dashboard
 
     Note over Poller: Polling interval triggered
 
@@ -130,12 +130,12 @@ This sequence shows how SDR receivers continuously capture RF signals, convert t
 
 ```mermaid
 sequenceDiagram
-    participant RF as RF Signal<br/>(162.400 MHz)
-    participant Device as SDR Device<br/>(RTL-SDR/Airspy)
-    participant Driver as SoapySDR Driver<br/>drivers.py
-    participant Manager as Radio Manager<br/>manager.py
-    participant DB as Database<br/>receiver_status
-    participant WebUI as Web UI<br/>Monitoring
+    participant RF as RF Signal<br>(162.400 MHz)
+    participant Device as SDR Device<br>(RTL-SDR/Airspy)
+    participant Driver as SoapySDR Driver<br>drivers.py
+    participant Manager as Radio Manager<br>manager.py
+    participant DB as Database<br>receiver_status
+    participant WebUI as Web UI<br>Monitoring
 
     Note over Manager: System startup
 
@@ -145,7 +145,7 @@ sequenceDiagram
     Device-->>Driver: Device handle
 
     Driver->>Driver: Setup stream params
-    Note right of Driver: Format: CF32 (complex float32)<br/>Sample rate: 228 kHz
+    Note right of Driver: Format: CF32 (complex float32)<br>Sample rate: 228 kHz
 
     Driver->>Device: setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
     Device-->>Driver: Stream handle
@@ -227,13 +227,13 @@ This sequence shows how audio data from multiple sources (SDR, ALSA, PulseAudio,
 
 ```mermaid
 sequenceDiagram
-    participant Sources as Audio Sources<br/>(SDR/ALSA/Stream/File)
-    participant Adapters as Source Adapters<br/>sources.py
-    participant Controller as Audio Controller<br/>ingest.py
-    participant Meter as Audio Meter<br/>metering.py
-    participant Buffer as Audio Buffer<br/>Queue
-    participant Consumer as Audio Consumer<br/>(Broadcast/Monitor)
-    participant DB as Database<br/>Metrics
+    participant Sources as Audio Sources<br>(SDR/ALSA/Stream/File)
+    participant Adapters as Source Adapters<br>sources.py
+    participant Controller as Audio Controller<br>ingest.py
+    participant Meter as Audio Meter<br>metering.py
+    participant Buffer as Audio Buffer<br>Queue
+    participant Consumer as Audio Consumer<br>(Broadcast/Monitor)
+    participant DB as Database<br>Metrics
 
     Note over Controller: System startup
 
@@ -271,7 +271,7 @@ sequenceDiagram
 
         Adapters->>Controller: Audio chunk ready
         Controller->>Controller: Priority selection
-        Note right of Controller: Priority order:<br/>1. SDR (highest)<br/>2. ALSA<br/>3. PulseAudio<br/>4. Stream<br/>5. File (lowest)
+        Note right of Controller: Priority order:<br>1. SDR (highest)<br>2. ALSA<br>3. PulseAudio<br>4. Stream<br>5. File (lowest)
 
         Controller->>Controller: Select highest priority active source
         Controller->>Meter: process_chunk(audio_data)
@@ -291,7 +291,7 @@ sequenceDiagram
         end
 
         Meter->>Meter: Calculate health score
-        Note right of Meter: Score based on:<br/>- Signal level<br/>- Stability<br/>- Error rate
+        Note right of Meter: Score based on:<br>- Signal level<br>- Stability<br>- Error rate
 
         Meter->>Controller: Metrics (peak, rms, health)
         Controller->>DB: INSERT INTO audio_source_metrics
@@ -300,7 +300,7 @@ sequenceDiagram
         Buffer->>Consumer: dequeue()
 
         Consumer->>Consumer: Process audio
-        Note right of Consumer: Broadcast, monitor,<br/>or analysis
+        Note right of Consumer: Broadcast, monitor,<br>or analysis
     end
 
     Note over Sources,DB: Continuous flow until stop()
@@ -328,14 +328,14 @@ This sequence shows how EAS broadcasts trigger coordinated radio captures across
 
 ```mermaid
 sequenceDiagram
-    participant Broadcast as EAS Broadcast<br/>eas.py
-    participant Manager as Radio Manager<br/>manager.py
-    participant Receiver1 as Receiver 1<br/>(162.400 MHz)
-    participant Receiver2 as Receiver 2<br/>(162.550 MHz)
+    participant Broadcast as EAS Broadcast<br>eas.py
+    participant Manager as Radio Manager<br>manager.py
+    participant Receiver1 as Receiver 1<br>(162.400 MHz)
+    participant Receiver2 as Receiver 2<br>(162.550 MHz)
     participant Device1 as SDR Device 1
     participant Device2 as SDR Device 2
-    participant Storage as File Storage<br/>captures/
-    participant DB as Database<br/>receiver_status
+    participant Storage as File Storage<br>captures/
+    participant DB as Database<br>receiver_status
 
     Note over Broadcast: EAS message ready to transmit
 
@@ -410,7 +410,7 @@ sequenceDiagram
 
     loop For each receiver
         Manager->>DB: INSERT INTO radio_receiver_status
-        Note right of Manager: Capture metadata:<br/>- File path<br/>- Signal strength<br/>- Lock status<br/>- Duration
+        Note right of Manager: Capture metadata:<br>- File path<br>- Signal strength<br>- Lock status<br>- Duration
     end
 
     Manager-->>Broadcast: All captures complete
@@ -442,17 +442,17 @@ This sequence shows the complete data flow for generating an EAS message from al
 
 ```mermaid
 sequenceDiagram
-    participant Operator as Operator<br/>Web UI
-    participant Workflow as EAS Workflow<br/>eas.py
-    participant SAME as SAME Generator<br/>build_same_header()
-    participant FSK as FSK Encoder<br/>eas_fsk.py
-    participant TTS as TTS Provider<br/>eas_tts.py
-    participant Audio as Audio Builder<br/>build_files()
-    participant Storage as File Storage<br/>static/audio/
-    participant DB as Database<br/>eas_messages
+    participant Operator as Operator<br>Web UI
+    participant Workflow as EAS Workflow<br>eas.py
+    participant SAME as SAME Generator<br>build_same_header()
+    participant FSK as FSK Encoder<br>eas_fsk.py
+    participant TTS as TTS Provider<br>eas_tts.py
+    participant Audio as Audio Builder<br>build_files()
+    participant Storage as File Storage<br>static/audio/
+    participant DB as Database<br>eas_messages
 
     Operator->>Workflow: Submit EAS form
-    Note right of Operator: Event: TOR<br/>Areas: SAME codes<br/>Duration: 30 min
+    Note right of Operator: Event: TOR<br>Areas: SAME codes<br>Duration: 30 min
 
     Workflow->>Workflow: Validate input
     Workflow->>SAME: build_same_header(event, areas, duration)
@@ -467,7 +467,7 @@ sequenceDiagram
     Note right of SAME: 'TOR' → Tornado Warning
 
     SAME->>SAME: Format PSSCCC (location codes)
-    Note right of SAME: Multiple SAME codes:<br/>055079+055081+055083
+    Note right of SAME: Multiple SAME codes:<br>055079+055081+055083
 
     SAME->>SAME: Format TTTT (duration)
     Note right of SAME: 30 min → '0030'
@@ -486,10 +486,10 @@ sequenceDiagram
     Workflow->>FSK: encode_same_fsk(header)
 
     FSK->>FSK: Generate preamble
-    Note right of FSK: 16 bytes of 0xAB<br/>(alternating 1010 1011)
+    Note right of FSK: 16 bytes of 0xAB<br>(alternating 1010 1011)
 
     FSK->>FSK: Encode ASCII to FSK
-    Note right of FSK: MARK: 2083 Hz (binary 1)<br/>SPACE: 1563 Hz (binary 0)<br/>Baud: 520.83 Hz
+    Note right of FSK: MARK: 2083 Hz (binary 1)<br>SPACE: 1563 Hz (binary 0)<br>Baud: 520.83 Hz
 
     loop For each character
         FSK->>FSK: Get ASCII byte
@@ -507,7 +507,7 @@ sequenceDiagram
     FSK-->>Workflow: FSK audio buffer (header)
 
     Workflow->>Workflow: Generate attention tone
-    Note right of Workflow: 853 Hz + 960 Hz<br/>Duration: 8 seconds
+    Note right of Workflow: 853 Hz + 960 Hz<br>Duration: 8 seconds
 
     alt Narration enabled
         Workflow->>TTS: generate_speech(message_text)
@@ -525,7 +525,7 @@ sequenceDiagram
     Workflow->>Audio: build_files(components)
 
     Audio->>Audio: Concatenate segments
-    Note right of Audio: Order:<br/>1. SAME header × 3<br/>2. Attention tone<br/>3. TTS narration (optional)<br/>4. EOM × 3<br/>5. 1s silence
+    Note right of Audio: Order:<br>1. SAME header × 3<br>2. Attention tone<br>3. TTS narration (optional)<br>4. EOM × 3<br>5. 1s silence
 
     Audio->>Audio: Normalize audio levels
     Audio->>Audio: Apply fade in/out
@@ -536,7 +536,7 @@ sequenceDiagram
     Audio-->>Workflow: Complete audio file path
 
     Workflow->>DB: INSERT INTO eas_messages
-    Note right of Workflow: Store:<br/>- SAME header<br/>- Audio path<br/>- CAP alert ID<br/>- Timestamp
+    Note right of Workflow: Store:<br>- SAME header<br>- Audio path<br>- CAP alert ID<br>- Timestamp
 
     DB-->>Workflow: message_id
 
@@ -563,17 +563,17 @@ This sequence shows the end-to-end data flow from CAP alert fetch to broadcast t
 
 ```mermaid
 sequenceDiagram
-    participant NOAA as NOAA<br/>CAP Feed
-    participant Poller as CAP Poller<br/>cap_poller.py
-    participant DB as Database<br/>PostgreSQL
-    participant WebUI as Web UI<br/>Dashboard
+    participant NOAA as NOAA<br>CAP Feed
+    participant Poller as CAP Poller<br>cap_poller.py
+    participant DB as Database<br>PostgreSQL
+    participant WebUI as Web UI<br>Dashboard
     participant Operator as Operator
-    participant EAS as EAS Broadcaster<br/>eas.py
+    participant EAS as EAS Broadcaster<br>eas.py
     participant GPIO as GPIO Controller
     participant TX as Transmitter
     participant Radio as Radio Manager
     participant SDR as SDR Receivers
-    participant Verify as Verification<br/>System
+    participant Verify as Verification<br>System
 
     Note over NOAA,Poller: 1. Alert Ingestion Phase
 
