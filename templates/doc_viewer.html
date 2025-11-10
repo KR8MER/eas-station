@@ -7,12 +7,20 @@
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // Helper function to decode HTML entities
+        function decodeHtmlEntities(text) {
+            const textarea = document.createElement('textarea');
+            textarea.innerHTML = text;
+            return textarea.value;
+        }
+
         // Convert code.language-mermaid blocks to divs for Mermaid rendering
         document.querySelectorAll('code.language-mermaid').forEach(function(codeBlock) {
             const pre = codeBlock.parentElement;
             const mermaidDiv = document.createElement('div');
             mermaidDiv.className = 'mermaid';
-            mermaidDiv.textContent = codeBlock.textContent;
+            // Decode HTML entities that were escaped during markdown conversion
+            mermaidDiv.textContent = decodeHtmlEntities(codeBlock.innerHTML);
             pre.replaceWith(mermaidDiv);
         });
 
