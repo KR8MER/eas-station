@@ -592,7 +592,8 @@ def _correlate_and_decode_with_dll(samples: List[float], sample_rate: int) -> Tu
                                 # The 8th dash comes after station ID, which is what we want
                                 dash_count = msg_text.count('-')
                                 location_count = 0
-                                if '+' in msg_text:
+                                has_time_section = '+' in msg_text
+                                if has_time_section:
                                     pre_expiration, _ = msg_text.split('+', 1)
                                     location_segments = pre_expiration.split('-')[3:]
                                     for segment in location_segments:
@@ -600,17 +601,18 @@ def _correlate_and_decode_with_dll(samples: List[float], sample_rate: int) -> Tu
                                         if len(cleaned) == 6 and cleaned.isdigit():
                                             location_count += 1
 
-                                if location_count <= 0:
-                                    min_dashes = 6
-                                else:
-                                    min_dashes = 6 + max(location_count - 1, 0)
+                                    if location_count <= 0:
+                                        min_dashes = 6
+                                    else:
+                                        min_dashes = 6 + max(location_count - 1, 0)
 
-                                if dash_count >= min_dashes:
-                                    if 'ZCZC' in msg_text or 'NNNN' in msg_text:
-                                        messages.append(msg_text.strip())
-                                    current_msg = []
-                                    in_message = False
-                                    synced = False
+                                    # Only terminate if we have the time section and enough dashes
+                                    if dash_count >= min_dashes:
+                                        if 'ZCZC' in msg_text or 'NNNN' in msg_text:
+                                            messages.append(msg_text.strip())
+                                        current_msg = []
+                                        in_message = False
+                                        synced = False
                             elif len(current_msg) > MAX_MSG_LEN:
                                 # Safety: prevent runaway messages
                                 if 'ZCZC' in msg_text or 'NNNN' in msg_text:
