@@ -10,6 +10,7 @@ from flask import Flask, Response, abort, render_template, request, send_file, s
 from werkzeug.utils import secure_filename
 import time
 import uuid
+import threading
 
 from app_core.eas_storage import (
     build_alert_delivery_trends,
@@ -30,13 +31,15 @@ from app_utils.eas_detection import detect_eas_from_file
 
 
 # Progress tracking infrastructure
-# Store progress in Flask session with a unique key per operation
+# Use in-memory store with thread safety for cross-request access
+_progress_store: Dict[str, Dict] = {}
+_progress_lock = threading.Lock()
+
 class ProgressTracker:
-    """Track progress of long-running operations."""
+    """Track progress of long-running operations using shared memory store."""
 
     def __init__(self, operation_id: str):
         self.operation_id = operation_id
-        self.session_key = f"progress_{operation_id}"
 
     def update(self, step: str, current: int, total: int, message: str = ""):
         """Update progress for the current operation."""
@@ -48,45 +51,57 @@ class ProgressTracker:
             "percent": int((current / total * 100)) if total > 0 else 0,
             "timestamp": time.time()
         }
-        session[self.session_key] = progress_data
-        session.modified = True
+        with _progress_lock:
+            _progress_store[self.operation_id] = progress_data
 
     def complete(self, message: str = "Complete"):
         """Mark operation as complete."""
-        session[self.session_key] = {
-            "step": "complete",
-            "current": 100,
-            "total": 100,
-            "message": message,
-            "percent": 100,
-            "timestamp": time.time()
-        }
-        session.modified = True
+        with _progress_lock:
+            _progress_store[self.operation_id] = {
+                "step": "complete",
+                "current": 100,
+                "total": 100,
+                "message": message,
+                "percent": 100,
+                "timestamp": time.time()
+            }
 
     def error(self, message: str):
         """Mark operation as failed."""
-        session[self.session_key] = {
-            "step": "error",
-            "current": 0,
-            "total": 100,
-            "message": message,
-            "percent": 0,
-            "timestamp": time.time()
-        }
-        session.modified = True
+        with _progress_lock:
+            _progress_store[self.operation_id] = {
+                "step": "error",
+                "current": 0,
+                "total": 100,
+                "message": message,
+                "percent": 0,
+                "timestamp": time.time()
+            }
 
     @staticmethod
     def get(operation_id: str) -> Optional[Dict]:
         """Get progress data for an operation."""
-        return session.get(f"progress_{operation_id}")
+        with _progress_lock:
+            return _progress_store.get(operation_id)
 
     @staticmethod
     def clear(operation_id: str):
         """Clear progress data for an operation."""
-        session_key = f"progress_{operation_id}"
-        if session_key in session:
-            del session[session_key]
-            session.modified = True
+        with _progress_lock:
+            if operation_id in _progress_store:
+                del _progress_store[operation_id]
+
+    @staticmethod
+    def cleanup_old(max_age_seconds: int = 3600):
+        """Clean up progress data older than max_age_seconds."""
+        current_time = time.time()
+        with _progress_lock:
+            expired = [
+                op_id for op_id, data in _progress_store.items()
+                if current_time - data.get("timestamp", 0) > max_age_seconds
+            ]
+            for op_id in expired:
+                del _progress_store[op_id]
 
 
 def _extract_audio_segment_wav(audio_path: str, start_sample: int, end_sample: int, sample_rate: int) -> bytes:
@@ -343,10 +358,18 @@ def register(app: Flask, logger) -> None:
         stored_decode = None
         progress_id = None
 
+        # Clean up old progress data (older than 1 hour)
+        ProgressTracker.cleanup_old(max_age_seconds=3600)
+
         if request.method == "POST":
             # Generate a unique progress ID for this operation
             progress_id = request.form.get("progress_id") or str(uuid.uuid4())
             progress = ProgressTracker(progress_id)
+
+            route_logger.info(f"Starting audio decode with progress_id: {progress_id}")
+
+            # Initialize progress
+            progress.update("init", 0, 100, "Starting audio processing...")
 
             # Handle audio decode with progress tracking
             decode_result, decode_errors, stored_decode = _handle_audio_decode(progress=progress)
@@ -426,6 +449,7 @@ def register(app: Flask, logger) -> None:
         if request.method == "POST" and progress_id:
             progress = ProgressTracker(progress_id)
             progress.complete("Processing complete")
+            route_logger.info(f"Completed audio decode with progress_id: {progress_id}")
 
         return render_template(
             "eas/alert_verification.html",
@@ -447,11 +471,13 @@ def register(app: Flask, logger) -> None:
         progress_data = ProgressTracker.get(operation_id)
 
         if not progress_data:
+            route_logger.debug(f"Progress not found for operation_id: {operation_id}")
             return jsonify({
                 "status": "not_found",
                 "message": "No progress data found for this operation"
             }), 404
 
+        route_logger.debug(f"Progress for {operation_id}: {progress_data.get('percent')}% - {progress_data.get('message')}")
         return jsonify({
             "status": "ok",
             "progress": progress_data
