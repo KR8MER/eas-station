@@ -523,7 +523,7 @@ EOF
 ## Related Documentation
 
 - [Backup Strategy](backup_strategy.md) - Pre-upgrade backup and restore procedures
-- [Release Governance](../../roadmap/master_todo.md) - Version policy and testing requirements
+- [Release Governance](../roadmap/master_todo.md) - Version policy and testing requirements
 - [CHANGELOG](../reference/CHANGELOG.md) - Detailed release notes
 
 ## Emergency Contacts

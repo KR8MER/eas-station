@@ -7,7 +7,7 @@ The EAS Station frontend includes a comprehensive JavaScript API for interacting
 ## 📋 Table of Contents
 
 - [Core Modules](#core-modules)
-- [API Client](#api-client)
+- [API Client](#api-client-easapi)
 - [Real-time Updates](#real-time-updates)
 - [UI Components API](#ui-components-api)
 - [Data Visualization](#data-visualization)

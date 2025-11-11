@@ -10,38 +10,30 @@ This comprehensive reference documents all UI components available in the EAS St
 - [Navigation Bar](#navigation-bar)
 - [Breadcrumb Trail](#breadcrumb-trail)
 - [Tab Navigation](#tab-navigation)
-- [Sidebar Menu](#sidebar-menu)
 
 ### Form Components
 - [Input Fields](#input-fields)
 - [Select Dropdowns](#select-dropdowns)
-- [Checkboxes & Radio Buttons](#checkboxes--radio-buttons)
-- [Text Areas](#text-areas)
+- [Checkboxes & Radio Buttons](#checkboxes-radio-buttons)
 - [File Upload](#file-upload)
 
 ### Display Components
 - [Cards](#cards)
 - [Tables](#tables)
-- [Badges & Labels](#badges--labels)
+- [Badges & Labels](#badges-labels)
 - [Progress Bars](#progress-bars)
-- [Status Indicators](#status-indicators)
 
 ### Action Components
 - [Buttons](#buttons)
-- [Button Groups](#button-groups)
-- [Dropdown Menus](#dropdown-menus)
 - [Modal Dialogs](#modal-dialogs)
 
 ### Data Visualization
 - [Charts](#charts)
 - [Maps](#maps)
-- [Timelines](#timelines)
 
 ### Feedback Components
-- [Alerts & Notifications](#alerts--notifications)
+- [Alerts & Notifications](#alerts-notifications)
 - [Loading States](#loading-states)
-- [Tooltips](#tooltips)
-- [Popovers](#popovers)
 
 ---
 

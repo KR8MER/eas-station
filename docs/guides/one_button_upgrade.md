@@ -1,6 +1,6 @@
 # One-Button Upgrade Powered by the Docker Build Pipeline
 
-The GitHub Actions workflow at [`.github/workflows/build.yml`](../../.github/workflows/build.yml) builds and publishes a fresh
+The GitHub Actions workflow at [`.github/workflows/build.yml`](https://github.com/KR8MER/eas-station/blob/main/.github/workflows/build.yml) builds and publishes a fresh
 `kr8mer/eas-station:latest` image whenever commits reach the `main` branch. You can treat the passing run as the guardrail that
 unlocks a **one-button upgrade** experience for operators who maintain on-premises stations.
 

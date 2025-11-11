@@ -23,7 +23,7 @@ This document tracks the progress of the comprehensive 6-week UI/UX modernizatio
 - ✅ Component Library (`static/css/components.css`) - 600+ lines
 - ✅ System Health Redesign (`templates/system_health_new.html`) - 300+ lines
 - ✅ Dark Mode Overhaul (proper contrast, inverted colors)
-- ✅ Documentation (`docs/ui-modernization-plan.md`, `docs/ui-improvements-summary.md`)
+- ✅ Documentation (`docs/development/archive/UI_LAYOUT_ROADMAP.md`, `docs/development/archive/UI_CHANGES_SUMMARY.md`)
 
 #### Key Achievements
 - 95% improvement in dark mode readability
@@ -39,7 +39,7 @@ This document tracks the progress of the comprehensive 6-week UI/UX modernizatio
 **Effort:** ~30 hours
 
 #### Deliverables
-- ✅ Navigation Redesign Plan (`docs/navigation-redesign.md`) - 400+ lines
+- ✅ Navigation Redesign Plan (`docs/development/archive/UI_LAYOUT_ROADMAP.md`) - 400+ lines
 - ✅ Navigation Styles (`static/css/navigation.css`) - 700+ lines
 - ✅ Improved Base Template (`templates/base_new.html`) - 400+ lines
 - ✅ Mobile-responsive navigation
@@ -171,9 +171,9 @@ This document tracks the progress of the comprehensive 6-week UI/UX modernizatio
 2. `templates/base_new.html` (400+ lines) - Improved base template
 
 ### Documentation (4,500+ lines)
-1. `docs/ui-modernization-plan.md` (800+ lines) - Complete modernization plan
-2. `docs/ui-improvements-summary.md` (600+ lines) - Improvements summary
-3. `docs/navigation-redesign.md` (400+ lines) - Navigation redesign plan
+1. `docs/development/archive/UI_LAYOUT_ROADMAP.md` (800+ lines) - Complete modernization plan
+2. `docs/development/archive/UI_CHANGES_SUMMARY.md` (600+ lines) - Improvements summary
+3. `docs/development/archive/UI_LAYOUT_ROADMAP.md` (400+ lines) - Navigation redesign plan
 4. `docs/raspberry-pi-history.md` (450+ lines) - Raspberry Pi history
 5. `docs/project-philosophy.md` (500+ lines) - Project philosophy
 6. `docs/dasdec3-comparison.md` (600+ lines) - DASDEC3 comparison
@@ -296,17 +296,17 @@ This document tracks the progress of the comprehensive 6-week UI/UX modernizatio
 ## Resources
 
 ### Documentation
-- [UI Modernization Plan](docs/ui-modernization-plan.md)
-- [UI Improvements Summary](docs/ui-improvements-summary.md)
-- [Navigation Redesign](docs/navigation-redesign.md)
+- [UI Modernization Plan](UI_LAYOUT_ROADMAP.md)
+- [UI Improvements Summary](UI_CHANGES_SUMMARY.md)
+- [Navigation Redesign](UI_LAYOUT_ROADMAP.md#13-reorganize-navigation-structure)
 - [Phase 1 & 2 Complete](PHASE_1_2_COMPLETE.md)
 
 ### Code
-- [Design System CSS](static/css/design-system.css)
-- [Components CSS](static/css/components.css)
-- [Navigation CSS](static/css/navigation.css)
-- [System Health Template](templates/system_health_new.html)
-- [Base Template](templates/base_new.html)
+- Design System CSS: `static/css/design-system.css`
+- Components CSS: `static/css/components.css`
+- Navigation CSS: `static/css/navigation.css`
+- System Health Template: `templates/system_health_new.html`
+- Base Template: `templates/base_new.html`
 
 ### Pull Request
 - [PR #289](https://github.com/KR8MER/eas-station/pull/289)

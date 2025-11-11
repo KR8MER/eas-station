@@ -450,7 +450,7 @@ For FCC Part 11 certified operations:
 
 ## See Also
 
-- [System Health Monitoring](../guides/HELP.md#system-health)
-- [Admin Panel Guide](../guides/HELP.md#administration)
-- [EAS Broadcasting](../guides/HELP.md#eas-broadcasting)
+- [System Health Monitoring](../guides/HELP.md#monitoring-live-alerts)
+- [Admin Panel Guide](../guides/HELP.md#routine-operations)
+- [EAS Broadcasting](../guides/HELP.md#reviewing-compliance-weekly-tests)
 - [API Documentation](../frontend/JAVASCRIPT_API.md)

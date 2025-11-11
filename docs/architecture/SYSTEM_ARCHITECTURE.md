@@ -5,10 +5,10 @@
 This document provides comprehensive architectural diagrams and flowcharts for the entire EAS Station system, covering all major components, data flows, and operational workflows. It serves as a visual reference for understanding how the system operates from end to end.
 
 **Related Documents:**
-- [Data Flow Sequences](DATA_FLOW_SEQUENCES) - Detailed sequence diagrams showing data processing paths ⭐ NEW
-- [Theory of Operation](THEORY_OF_OPERATION) - Conceptual overview and protocol details
-- [Audio Ingest Documentation](../audio) - Audio ingest system specifics
-- [Help Guide](../guides/HELP) - Operational procedures
+- [Data Flow Sequences](DATA_FLOW_SEQUENCES.md) - Detailed sequence diagrams showing data processing paths ⭐ NEW
+- [Theory of Operation](THEORY_OF_OPERATION.md) - Conceptual overview and protocol details
+- [Audio Ingest Documentation](../audio.md) - Audio ingest system specifics
+- [Help Guide](../guides/HELP.md) - Operational procedures
 
 ---
 
@@ -1073,10 +1073,10 @@ This architecture document provides visual representations of:
 These diagrams serve as living documentation that should be updated as the system evolves.
 
 **Related Resources:**
-- [Data Flow Sequences](DATA_FLOW_SEQUENCES) - Detailed data processing paths ⭐ NEW
-- [Theory of Operation](THEORY_OF_OPERATION) - Detailed operational concepts
-- [Developer Guide](../development/AGENTS) - Code standards and practices
-- [Help Guide](../guides/HELP) - Operational procedures
+- [Data Flow Sequences](DATA_FLOW_SEQUENCES.md) - Detailed data processing paths ⭐ NEW
+- [Theory of Operation](THEORY_OF_OPERATION.md) - Detailed operational concepts
+- [Developer Guide](../development/AGENTS.md) - Code standards and practices
+- [Help Guide](../guides/HELP.md) - Operational procedures
 
 ---
 
@@ -1088,9 +1088,9 @@ For enhanced clarity and presentation, the following professional SVG diagrams a
 
 Detailed flowchart showing the complete CAP alert ingestion workflow from external sources through validation, parsing, spatial processing, and database storage.
 
-![Alert Processing Pipeline](assets/diagrams/alert-processing-pipeline.svg)
+![Alert Processing Pipeline](../assets/diagrams/alert-processing-pipeline.svg)
 
-**File:** [assets/diagrams/alert-processing-pipeline.svg](assets/diagrams/alert-processing-pipeline.svg)
+**File:** [../assets/diagrams/alert-processing-pipeline.svg](../assets/diagrams/alert-processing-pipeline.svg)
 
 ---
 
@@ -1098,9 +1098,9 @@ Detailed flowchart showing the complete CAP alert ingestion workflow from extern
 
 Step-by-step workflow diagram illustrating the complete EAS message generation and transmission process, from alert selection through SAME encoding to broadcast completion.
 
-![EAS Broadcast Workflow](assets/diagrams/broadcast-workflow.svg)
+![EAS Broadcast Workflow](../assets/diagrams/broadcast-workflow.svg)
 
-**File:** [assets/diagrams/broadcast-workflow.svg](assets/diagrams/broadcast-workflow.svg)
+**File:** [../assets/diagrams/broadcast-workflow.svg](../assets/diagrams/broadcast-workflow.svg)
 
 ---
 
@@ -1108,9 +1108,9 @@ Step-by-step workflow diagram illustrating the complete EAS message generation a
 
 Block diagram showing multi-source audio ingestion architecture with adapters, priority selection, monitoring systems, and database integration.
 
-![Audio Source Routing](assets/diagrams/audio-source-routing.svg)
+![Audio Source Routing](../assets/diagrams/audio-source-routing.svg)
 
-**File:** [assets/diagrams/audio-source-routing.svg](assets/diagrams/audio-source-routing.svg)
+**File:** [../assets/diagrams/audio-source-routing.svg](../assets/diagrams/audio-source-routing.svg)
 
 ---
 
@@ -1118,9 +1118,9 @@ Block diagram showing multi-source audio ingestion architecture with adapters, p
 
 Physical deployment diagram showing Raspberry Pi 5 hardware configuration with all peripherals, storage, and external connections.
 
-![Hardware Deployment](assets/diagrams/system-deployment-hardware.svg)
+![Hardware Deployment](../assets/diagrams/system-deployment-hardware.svg)
 
-**File:** [assets/diagrams/system-deployment-hardware.svg](assets/diagrams/system-deployment-hardware.svg)
+**File:** [../assets/diagrams/system-deployment-hardware.svg](../assets/diagrams/system-deployment-hardware.svg)
 
 ---
 
