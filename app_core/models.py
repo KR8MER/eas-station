@@ -308,6 +308,70 @@ class EASDecodedAudio(db.Model):
         }
 
 
+class ReceivedEASAlert(db.Model):
+    """
+    Tracks EAS alerts received from audio monitoring sources.
+    Records forwarding decisions and links to broadcast messages.
+    """
+    __tablename__ = "received_eas_alerts"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Reception details
+    received_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False, index=True)
+    source_name = db.Column(db.String(100), nullable=False, index=True)  # Which audio source detected this
+
+    # SAME header data
+    raw_same_header = db.Column(db.Text)  # Raw ZCZC string
+    event_code = db.Column(db.String(8), index=True)
+    event_name = db.Column(db.String(255))
+    originator_code = db.Column(db.String(8))
+    originator_name = db.Column(db.String(100))
+    fips_codes = db.Column(db.JSON, default=list)  # List of FIPS codes from alert
+    issue_datetime = db.Column(db.DateTime(timezone=True))
+    purge_datetime = db.Column(db.DateTime(timezone=True))
+    callsign = db.Column(db.String(16))
+
+    # Forwarding decision
+    forwarding_decision = db.Column(db.String(20), nullable=False, index=True)  # 'forwarded', 'ignored', 'error'
+    forwarding_reason = db.Column(db.Text)  # Why it was forwarded or ignored (e.g., "FIPS match: 039137")
+    matched_fips_codes = db.Column(db.JSON, default=list)  # Which configured FIPS codes matched
+
+    # Link to generated broadcast (if forwarded)
+    generated_message_id = db.Column(db.Integer, db.ForeignKey('eas_messages.id'), nullable=True)
+    generated_message = db.relationship('EASMessage', foreign_keys=[generated_message_id], backref='source_alerts')
+    forwarded_at = db.Column(db.DateTime(timezone=True))
+
+    # Full decoded data (JSON)
+    full_alert_data = db.Column(JSONB)  # Complete EASAlert object as JSON
+
+    # Quality metrics
+    decode_confidence = db.Column(db.Float)  # 0.0 to 1.0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "received_at": self.received_at.isoformat() if self.received_at else None,
+            "source_name": self.source_name,
+            "raw_same_header": self.raw_same_header,
+            "event_code": self.event_code,
+            "event_name": self.event_name,
+            "originator_code": self.originator_code,
+            "originator_name": self.originator_name,
+            "fips_codes": list(self.fips_codes or []),
+            "issue_datetime": self.issue_datetime.isoformat() if self.issue_datetime else None,
+            "purge_datetime": self.purge_datetime.isoformat() if self.purge_datetime else None,
+            "callsign": self.callsign,
+            "forwarding_decision": self.forwarding_decision,
+            "forwarding_reason": self.forwarding_reason,
+            "matched_fips_codes": list(self.matched_fips_codes or []),
+            "generated_message_id": self.generated_message_id,
+            "forwarded_at": self.forwarded_at.isoformat() if self.forwarded_at else None,
+            "decode_confidence": self.decode_confidence,
+            "full_alert_data": self.full_alert_data,
+        }
+
+
 class ManualEASActivation(db.Model):
     __tablename__ = "manual_eas_activations"
 

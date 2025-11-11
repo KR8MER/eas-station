@@ -24,9 +24,119 @@ import numpy as np
 
 from app_utils.eas_decode import decode_same_audio, SAMEAudioDecodeResult
 from app_utils import utc_now
+from app_utils.eas_codes import get_event_name, get_originator_name
 from .source_manager import AudioSourceManager
 
 logger = logging.getLogger(__name__)
+
+
+def _store_received_alert(
+    alert: EASAlert,
+    forwarding_decision: str,
+    forwarding_reason: str,
+    matched_fips: List[str],
+    generated_message_id: Optional[int] = None
+) -> None:
+    """
+    Store received EAS alert in database with forwarding decision.
+
+    Args:
+        alert: The received EAS alert
+        forwarding_decision: 'forwarded', 'ignored', or 'error'
+        forwarding_reason: Human-readable reason for the decision
+        matched_fips: List of FIPS codes that matched (if any)
+        generated_message_id: FK to eas_messages table if forwarded
+    """
+    try:
+        # Import here to avoid circular dependencies
+        from app_core.models import ReceivedEASAlert
+        from app_core.extensions import db
+        from flask import current_app, has_app_context
+
+        # Skip if not in Flask app context
+        if not has_app_context():
+            logger.debug("Not in Flask app context, skipping database storage")
+            return
+
+        # Extract data from alert
+        event_code = "UNKNOWN"
+        event_name = None
+        originator_code = "UNKNOWN"
+        originator_name = None
+        fips_codes = []
+        issue_datetime = None
+        purge_datetime = None
+        callsign = None
+        raw_same_header = None
+
+        if alert.headers and len(alert.headers) > 0:
+            first_header = alert.headers[0]
+            raw_same_header = first_header.get('raw_text')
+
+            if 'fields' in first_header:
+                fields = first_header['fields']
+                event_code = fields.get('event_code', 'UNKNOWN')
+                event_name = get_event_name(event_code)
+                originator_code = fields.get('originator', 'UNKNOWN')
+                originator_name = get_originator_name(originator_code)
+                callsign = fields.get('callsign')
+
+                # Extract FIPS codes
+                locations = fields.get('locations', [])
+                if isinstance(locations, list):
+                    for loc in locations:
+                        if isinstance(loc, dict):
+                            code = loc.get('code', '')
+                            if code:
+                                fips_codes.append(code)
+
+                # Extract timestamps
+                issue_time = fields.get('issue_time')
+                purge_time = fields.get('purge_time')
+                if issue_time:
+                    issue_datetime = datetime.fromisoformat(issue_time) if isinstance(issue_time, str) else issue_time
+                if purge_time:
+                    purge_datetime = datetime.fromisoformat(purge_time) if isinstance(purge_time, str) else purge_time
+
+        # Create database record
+        received_alert = ReceivedEASAlert(
+            received_at=alert.timestamp,
+            source_name=alert.source_name,
+            raw_same_header=raw_same_header,
+            event_code=event_code,
+            event_name=event_name,
+            originator_code=originator_code,
+            originator_name=originator_name,
+            fips_codes=fips_codes,
+            issue_datetime=issue_datetime,
+            purge_datetime=purge_datetime,
+            callsign=callsign,
+            forwarding_decision=forwarding_decision,
+            forwarding_reason=forwarding_reason,
+            matched_fips_codes=matched_fips,
+            generated_message_id=generated_message_id,
+            forwarded_at=utc_now() if forwarding_decision == 'forwarded' else None,
+            decode_confidence=alert.confidence,
+            full_alert_data={
+                'raw_text': alert.raw_text,
+                'headers': alert.headers,
+                'duration_seconds': alert.duration_seconds,
+                'audio_file_path': alert.audio_file_path,
+            }
+        )
+
+        db.session.add(received_alert)
+        db.session.commit()
+        logger.info(f"Stored received alert in database: {event_code} from {alert.source_name}")
+
+    except Exception as e:
+        logger.error(f"Failed to store received alert in database: {e}", exc_info=True)
+        # Don't let database errors break alert processing
+        try:
+            from app_core.extensions import db
+            db.session.rollback()
+        except:
+            pass
 
 
 @dataclass
@@ -107,20 +217,40 @@ def create_fips_filtering_callback(
 
         if matches:
             # Alert matches configured FIPS codes - FORWARD IT
+            matched_fips_list = list(sorted(matches))
+            forwarding_reason = f"FIPS match: {', '.join(matched_fips_list)}"
+
             log.warning(
                 f"✓ FIPS MATCH - FORWARDING ALERT: "
                 f"Event={event_code} | "
                 f"Originator={originator} | "
                 f"Alert FIPS={','.join(alert_fips_codes)} | "
                 f"Configured FIPS={','.join(configured_fips_codes)} | "
-                f"Matched={','.join(sorted(matches))}"
+                f"Matched={','.join(matched_fips_list)}"
             )
 
             try:
                 forward_callback(alert)
                 log.info(f"Alert forwarding completed successfully")
+
+                # Store as forwarded
+                _store_received_alert(
+                    alert=alert,
+                    forwarding_decision='forwarded',
+                    forwarding_reason=forwarding_reason,
+                    matched_fips=matched_fips_list,
+                    generated_message_id=None  # TODO: Link to generated message if available
+                )
             except Exception as e:
                 log.error(f"Error forwarding alert: {e}", exc_info=True)
+
+                # Store as error
+                _store_received_alert(
+                    alert=alert,
+                    forwarding_decision='error',
+                    forwarding_reason=f"Forwarding failed: {str(e)}",
+                    matched_fips=matched_fips_list
+                )
 
         else:
             # Alert does NOT match configured FIPS codes - IGNORE IT
@@ -130,6 +260,19 @@ def create_fips_filtering_callback(
                 f"Originator={originator} | "
                 f"Alert FIPS={','.join(alert_fips_codes) if alert_fips_codes else 'NONE'} | "
                 f"Configured FIPS={','.join(configured_fips_codes)}"
+            )
+
+            # Store as ignored
+            if alert_fips_codes:
+                forwarding_reason = f"No FIPS match. Alert FIPS: {', '.join(alert_fips_codes)}. Configured: {', '.join(configured_fips_codes)}"
+            else:
+                forwarding_reason = "No FIPS codes in alert"
+
+            _store_received_alert(
+                alert=alert,
+                forwarding_decision='ignored',
+                forwarding_reason=forwarding_reason,
+                matched_fips=[]
             )
 
     return fips_filtering_callback

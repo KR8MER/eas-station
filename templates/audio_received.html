@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block title %}Received Audio Alerts - EAS Station{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 text-primary mb-0">
+                    <i class="fas fa-radio"></i> Received Audio Alerts
+                </h1>
+                <div class="d-flex gap-2 flex-wrap">
+                    <a href="/audio" class="btn btn-outline-primary">
+                        <i class="fas fa-headphones"></i> Audio Archive
+                    </a>
+                    <a href="/" class="btn btn-outline-secondary">
+                        <i class="fas fa-map"></i> Back to Map
+                    </a>
+                </div>
+            </div>
+
+            <!-- Statistics Cards -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body text-center">
+                            <h3 class="mb-0">{{ stats.total }}</h3>
+                            <small>Total Received</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center">
+                            <h3 class="mb-0">{{ stats.forwarded }}</h3>
+                            <small>Forwarded</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-secondary text-white">
+                        <div class="card-body text-center">
+                            <h3 class="mb-0">{{ stats.ignored }}</h3>
+                            <small>Ignored</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-danger text-white">
+                        <div class="card-body text-center">
+                            <h3 class="mb-0">{{ stats.error }}</h3>
+                            <small>Errors</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Info Alert -->
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                This page shows EAS alerts received from audio monitoring sources. Alerts are automatically filtered by configured FIPS codes.
+            </div>
+
+            <!-- Filters -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-filter"></i> Filters
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="GET" class="row g-3 align-items-end">
+                        <div class="col-md-3">
+                            <label for="search" class="form-label">Search</label>
+                            <input type="text" class="form-control" id="search" name="search" value="{{ search }}" placeholder="Search event, header, or callsign">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="source" class="form-label">Audio Source</label>
+                            <select class="form-select" id="source" name="source">
+                                <option value="">All Sources</option>
+                                {% for source in sources %}
+                                <option value="{{ source }}" {% if source_filter == source %}selected{% endif %}>{{ source }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="event" class="form-label">Event Type</label>
+                            <select class="form-select" id="event" name="event">
+                                <option value="">All Events</option>
+                                {% for code, name in events %}
+                                <option value="{{ code }}" {% if event_filter == code %}selected{% endif %}>{{ code }} - {{ name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="decision" class="form-label">Decision</label>
+                            <select class="form-select" id="decision" name="decision">
+                                <option value="">All Decisions</option>
+                                {% for dec in decisions %}
+                                <option value="{{ dec }}" {% if decision_filter == dec %}selected{% endif %}>{{ dec|title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="fas fa-search"></i> Filter
+                            </button>
+                        </div>
+                    </form>
+                    {% if search or source_filter or event_filter or decision_filter %}
+                    <div class="mt-2">
+                        <a href="/audio/received" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-times"></i> Clear Filters
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Alerts Table -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-list"></i> Received Alerts
+                        <span class="badge bg-secondary">{{ pagination.total }} total</span>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if alerts %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 10%">Received</th>
+                                    <th style="width: 12%">Source</th>
+                                    <th style="width: 15%">Event</th>
+                                    <th style="width: 8%">Originator</th>
+                                    <th style="width: 15%">FIPS Codes</th>
+                                    <th style="width: 12%">Decision</th>
+                                    <th style="width: 20%">Reason</th>
+                                    <th style="width: 8%">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for alert in alerts %}
+                                <tr>
+                                    <td>
+                                        <small>{{ alert.received_at.strftime('%Y-%m-%d %H:%M:%S') if alert.received_at else 'N/A' }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">{{ alert.source_name }}</span>
+                                    </td>
+                                    <td>
+                                        <strong>{{ alert.event_code }}</strong>
+                                        {% if alert.event_name %}
+                                        <br><small class="text-muted">{{ alert.event_name }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small>{{ alert.originator_code or 'N/A' }}</small>
+                                        {% if alert.originator_name %}
+                                        <br><small class="text-muted">{{ alert.originator_name }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if alert.fips_codes %}
+                                        <small>{{ alert.fips_codes|join(', ') }}</small>
+                                        {% else %}
+                                        <small class="text-muted">None</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if alert.forwarding_decision == 'forwarded' %}
+                                        <span class="badge bg-success">
+                                            <i class="fas fa-check"></i> Forwarded
+                                        </span>
+                                        {% elif alert.forwarding_decision == 'ignored' %}
+                                        <span class="badge bg-secondary">
+                                            <i class="fas fa-times"></i> Ignored
+                                        </span>
+                                        {% elif alert.forwarding_decision == 'error' %}
+                                        <span class="badge bg-danger">
+                                            <i class="fas fa-exclamation-triangle"></i> Error
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">{{ alert.forwarding_reason or 'N/A' }}</small>
+                                    </td>
+                                    <td>
+                                        <a href="/audio/received/{{ alert.id }}" class="btn btn-sm btn-outline-primary" title="View details">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="fas fa-inbox fa-3x mb-3"></i>
+                        <p>No received alerts found matching your criteria.</p>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Pagination -->
+                {% if pagination.pages > 1 %}
+                <div class="card-footer">
+                    <nav aria-label="Alert pagination">
+                        <ul class="pagination justify-content-center mb-0">
+                            {% if pagination.has_prev %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ pagination.prev_num }}&per_page={{ per_page }}{% if search %}&search={{ search }}{% endif %}{% if source_filter %}&source={{ source_filter }}{% endif %}{% if event_filter %}&event={{ event_filter }}{% endif %}{% if decision_filter %}&decision={{ decision_filter }}{% endif %}">
+                                    Previous
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">Previous</span>
+                            </li>
+                            {% endif %}
+
+                            {% for p in range(1, pagination.pages + 1) %}
+                                {% if p == pagination.page %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ p }}</span>
+                                </li>
+                                {% elif p <= 3 or p > pagination.pages - 3 or (p >= pagination.page - 1 and p <= pagination.page + 1) %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ p }}&per_page={{ per_page }}{% if search %}&search={{ search }}{% endif %}{% if source_filter %}&source={{ source_filter }}{% endif %}{% if event_filter %}&event={{ event_filter }}{% endif %}{% if decision_filter %}&decision={{ decision_filter }}{% endif %}">
+                                        {{ p }}
+                                    </a>
+                                </li>
+                                {% elif p == 4 or p == pagination.pages - 3 %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if pagination.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ pagination.next_num }}&per_page={{ per_page }}{% if search %}&search={{ search }}{% endif %}{% if source_filter %}&source={{ source_filter }}{% endif %}{% if event_filter %}&event={{ event_filter }}{% endif %}{% if decision_filter %}&decision={{ decision_filter }}{% endif %}">
+                                    Next
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">Next</span>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    <div class="text-center text-muted small mt-2">
+                        Showing {{ (pagination.page - 1) * per_page + 1 }} to {{ min(pagination.page * per_page, pagination.total) }} of {{ pagination.total }} alerts
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
