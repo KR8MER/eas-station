@@ -69,7 +69,7 @@ ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["gunicorn", \
     "--bind", "0.0.0.0:5000", \
     "--workers", "1", \
-    "--threads", "4", \
+    "--threads", "2", \
     "--timeout", "300", \
     "--worker-class", "gthread", \
     "--worker-tmp-dir", "/dev/shm", \
