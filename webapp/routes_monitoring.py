@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 from pathlib import Path
+from typing import Dict, Any
 
 from flask import Flask, jsonify
 from sqlalchemy import text
@@ -71,6 +74,186 @@ def register(app: Flask, logger) -> None:
         """API health check endpoint (alias for /health)."""
         # Delegate to the main health check
         return health_check()
+
+    @app.route("/health/dependencies")
+    def health_dependencies():
+        """Comprehensive dependency health check endpoint.
+
+        Checks the health of all critical services and dependencies:
+        - PostgreSQL database
+        - Icecast streaming service
+        - Docker daemon
+        - Disk space
+        - Configuration files
+        """
+        dependencies: Dict[str, Any] = {}
+        overall_status = "healthy"
+
+        # 1. PostgreSQL Database
+        try:
+            db.session.execute(text("SELECT 1")).fetchone()
+            db_version = db.session.execute(text("SELECT version()")).fetchone()
+            dependencies["postgresql"] = {
+                "status": "healthy",
+                "message": "Database connected",
+                "version": db_version[0].split(" ")[1] if db_version else "unknown",
+            }
+        except Exception as exc:
+            dependencies["postgresql"] = {
+                "status": "unhealthy",
+                "message": str(exc),
+            }
+            overall_status = "unhealthy"
+
+        # 2. Icecast Service
+        icecast_enabled = app.config.get("ICECAST_ENABLED", False)
+        if icecast_enabled:
+            icecast_host = app.config.get("ICECAST_SERVER", "icecast")
+            icecast_port = app.config.get("ICECAST_PORT", 8000)
+            try:
+                import socket
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(2)
+                result = sock.connect_ex((icecast_host, int(icecast_port)))
+                sock.close()
+
+                if result == 0:
+                    dependencies["icecast"] = {
+                        "status": "healthy",
+                        "message": f"Icecast reachable at {icecast_host}:{icecast_port}",
+                    }
+                else:
+                    dependencies["icecast"] = {
+                        "status": "degraded",
+                        "message": f"Icecast not reachable at {icecast_host}:{icecast_port}",
+                    }
+                    overall_status = "degraded" if overall_status == "healthy" else overall_status
+            except Exception as exc:
+                dependencies["icecast"] = {
+                    "status": "degraded",
+                    "message": f"Cannot check Icecast: {exc}",
+                }
+                overall_status = "degraded" if overall_status == "healthy" else overall_status
+        else:
+            dependencies["icecast"] = {
+                "status": "disabled",
+                "message": "Icecast streaming not enabled",
+            }
+
+        # 3. Docker Daemon
+        docker_cmd = shutil.which("docker")
+        if docker_cmd:
+            try:
+                result = subprocess.run(
+                    [docker_cmd, "info"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0:
+                    dependencies["docker"] = {
+                        "status": "healthy",
+                        "message": "Docker daemon accessible",
+                    }
+                else:
+                    dependencies["docker"] = {
+                        "status": "degraded",
+                        "message": "Docker daemon not responding",
+                    }
+                    overall_status = "degraded" if overall_status == "healthy" else overall_status
+            except Exception as exc:
+                dependencies["docker"] = {
+                    "status": "degraded",
+                    "message": f"Cannot check Docker: {exc}",
+                }
+                overall_status = "degraded" if overall_status == "healthy" else overall_status
+        else:
+            dependencies["docker"] = {
+                "status": "unknown",
+                "message": "Docker command not found",
+            }
+
+        # 4. Disk Space
+        try:
+            repo_root = Path(__file__).resolve().parents[1]
+            stat = shutil.disk_usage(repo_root)
+            used_percent = (stat.used / stat.total) * 100
+            free_gb = stat.free / (1024 ** 3)
+
+            disk_status = "healthy"
+            if used_percent > 90:
+                disk_status = "unhealthy"
+                overall_status = "unhealthy"
+            elif used_percent > 80:
+                disk_status = "degraded"
+                overall_status = "degraded" if overall_status == "healthy" else overall_status
+
+            dependencies["disk_space"] = {
+                "status": disk_status,
+                "message": f"{used_percent:.1f}% used, {free_gb:.1f} GB free",
+                "used_percent": round(used_percent, 1),
+                "free_gb": round(free_gb, 1),
+                "total_gb": round(stat.total / (1024 ** 3), 1),
+            }
+        except Exception as exc:
+            dependencies["disk_space"] = {
+                "status": "unknown",
+                "message": f"Cannot check disk space: {exc}",
+            }
+
+        # 5. Critical Configuration Files
+        config_files = [".env", "docker-compose.yml"]
+        config_status = []
+        for config_file in config_files:
+            config_path = Path(config_file)
+            if config_path.exists():
+                config_status.append(f"{config_file}: present")
+            else:
+                config_status.append(f"{config_file}: MISSING")
+                overall_status = "degraded" if overall_status == "healthy" else overall_status
+
+        dependencies["configuration"] = {
+            "status": "healthy" if all("present" in s for s in config_status) else "degraded",
+            "message": ", ".join(config_status),
+        }
+
+        # 6. Backup Directory
+        backup_dir = Path("backups")
+        if backup_dir.exists():
+            try:
+                backup_count = sum(1 for p in backup_dir.iterdir() if p.is_dir() and p.name.startswith("backup-"))
+                dependencies["backups"] = {
+                    "status": "healthy",
+                    "message": f"{backup_count} backup(s) available",
+                    "count": backup_count,
+                }
+            except Exception as exc:
+                dependencies["backups"] = {
+                    "status": "unknown",
+                    "message": f"Cannot check backups: {exc}",
+                }
+        else:
+            dependencies["backups"] = {
+                "status": "warning",
+                "message": "No backup directory found",
+            }
+
+        # Prepare response
+        http_status = 200
+        if overall_status == "unhealthy":
+            http_status = 503  # Service Unavailable
+        elif overall_status == "degraded":
+            http_status = 200  # Still functional, but degraded
+
+        return jsonify(
+            {
+                "status": overall_status,
+                "timestamp": utc_now().isoformat(),
+                "local_timestamp": local_now().isoformat(),
+                "version": _system_version(),
+                "dependencies": dependencies,
+            }
+        ), http_status
 
     @app.route("/ping")
     def ping():

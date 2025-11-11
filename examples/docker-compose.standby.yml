@@ -1,0 +1,138 @@
+# Docker Compose Override for Warm-Standby / Secondary Node Configuration
+#
+# This configuration demonstrates how to set up a warm-standby EAS Station instance
+# that can take over if the primary node fails.
+#
+# DEPLOYMENT SCENARIOS:
+#
+# 1. WARM STANDBY (Recommended):
+#    - Runs on a separate physical machine
+#    - Syncs backups from primary via rsync/network storage
+#    - Can be activated manually or automatically
+#    - Database is restored from backup when failover occurs
+#
+# 2. COLD STANDBY:
+#    - Minimal resource usage
+#    - Only monitoring services running
+#    - Full activation requires restoration
+#
+# USAGE:
+#   docker compose -f docker-compose.yml -f examples/docker-compose.standby.yml up -d
+
+version: '3.8'
+
+services:
+  # Standby application container (read-only mode)
+  app:
+    environment:
+      # Mark as standby node
+      - DEPLOYMENT_MODE=standby
+      - STANDBY_MODE=true
+      - READ_ONLY_MODE=true
+
+      # Disable active broadcasting
+      - EAS_BROADCAST_ENABLED=false
+      - ENABLE_AUDIO_ALERTS=false
+
+      # Connect to primary database (read-only replica if available)
+      - POSTGRES_HOST=${PRIMARY_POSTGRES_HOST:-primary-host.example.com}
+      - POSTGRES_PORT=${PRIMARY_POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-alerts}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+
+      # Sync settings
+      - STANDBY_PRIMARY_URL=${PRIMARY_URL:-https://primary.example.com}
+      - STANDBY_SYNC_INTERVAL=${SYNC_INTERVAL:-300}  # 5 minutes
+
+    labels:
+      - "eas.role=standby"
+      - "eas.primary=${PRIMARY_URL:-https://primary.example.com}"
+
+    # Reduced resource limits for standby
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Disable pollers on standby (reduce load)
+  noaa-poller:
+    profiles:
+      - disabled
+    deploy:
+      replicas: 0
+
+  ipaws-poller:
+    profiles:
+      - disabled
+    deploy:
+      replicas: 0
+
+  # Keep nginx running for health checks and failover readiness
+  nginx:
+    labels:
+      - "eas.role=standby-proxy"
+
+  # Database: Use read-only replica or disable embedded DB
+  alerts-db:
+    profiles:
+      - disabled  # Use primary's database
+    deploy:
+      replicas: 0
+
+  # Icecast can be disabled on standby
+  icecast:
+    profiles:
+      - disabled
+    deploy:
+      replicas: 0
+
+  # Add a sync service for backup synchronization
+  backup-sync:
+    image: eas-station:latest
+    container_name: eas-backup-sync
+    restart: unless-stopped
+    volumes:
+      - /var/backups/eas-station-primary:/backups/primary:ro  # NFS mount from primary
+      - /var/backups/eas-station-local:/backups/local  # Local backup storage
+      - app-config:/app-config
+    environment:
+      - SYNC_MODE=standby
+      - PRIMARY_BACKUP_PATH=/backups/primary
+      - LOCAL_BACKUP_PATH=/backups/local
+    command: >
+      sh -c '
+      while true; do
+        echo "[$(date)] Syncing backups from primary..."
+        rsync -avz --delete /backups/primary/ /backups/local/ || echo "Sync failed"
+        echo "[$(date)] Sync complete. Next sync in 5 minutes."
+        sleep 300
+      done
+      '
+    profiles:
+      - sync
+
+volumes:
+  alerts-db-data:
+    # Don't use local database on standby
+    external: false
+
+  app-config:
+    # Mount primary config via NFS or copy during failover
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/backups/eas-station-primary/latest-config
+
+  # Add backup volume for local storage
+  standby-backups:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/backups/eas-station-local

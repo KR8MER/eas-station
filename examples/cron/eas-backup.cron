@@ -1,9 +1,21 @@
-# EAS Station Daily Backup
-# Add this to your crontab with: sudo crontab -e
-# This example runs daily at 2:00 AM
-
+# EAS Station Automated Backup
+#
+# This cron job runs the backup scheduler daily at 2:00 AM
+#
+# Installation:
+#   1. Copy this file to /etc/cron.d/eas-backup
+#   2. Adjust paths and email as needed
+#   3. Ensure the script is executable
+#
+# Format: minute hour day month weekday user command
+#
 # Daily backup at 2:00 AM
-0 2 * * * cd /opt/eas-station && /usr/bin/python3 tools/create_backup.py --output-dir /var/backups/eas-station --label scheduled >> /var/log/eas-backup.log 2>&1
+0 2 * * * root cd /opt/eas-station && /usr/bin/python3 tools/backup_scheduler.py --output-dir /var/backups/eas-station --label scheduled --log-file /var/log/eas-backup.log --notify admin@example.com >> /var/log/eas-backup.log 2>&1
 
-# Alternative: Weekly backup on Sundays at 3:00 AM
-# 0 3 * * 0 cd /opt/eas-station && /usr/bin/python3 tools/create_backup.py --output-dir /var/backups/eas-station --label weekly >> /var/log/eas-backup.log 2>&1
+# Alternative schedules (comment out the line above and uncomment one below):
+#
+# Every 6 hours
+# 0 */6 * * * root cd /opt/eas-station && /usr/bin/python3 tools/backup_scheduler.py --output-dir /var/backups/eas-station --label scheduled --log-file /var/log/eas-backup.log >> /var/log/eas-backup.log 2>&1
+#
+# Weekly (Sunday at 3 AM)
+# 0 3 * * 0 root cd /opt/eas-station && /usr/bin/python3 tools/backup_scheduler.py --output-dir /var/backups/eas-station --label weekly --log-file /var/log/eas-backup.log --notify admin@example.com >> /var/log/eas-backup.log 2>&1
