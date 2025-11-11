@@ -43,11 +43,12 @@
 {% set show_admin_audit = can_view_logs %}
 {% set show_admin_security = is_authenticated %}
 {% set show_admin_operations = can_manage_config %}
+{% set show_admin_backups = can_manage_config or can_view_logs %}
 {% set show_admin_intersections = can_view_alerts %}
 {% set show_admin_alert_validation = can_view_alerts %}
 {% set show_admin_compliance = can_view_alerts %}
 {% set show_admin_analytics = can_manage_analytics or can_view_alerts %}
-{% set show_admin_dropdown = is_authenticated and (show_admin_rbac or show_admin_audit or show_admin_security or show_admin_operations or show_admin_intersections or show_admin_alert_validation or show_admin_compliance or show_admin_analytics) %}
+{% set show_admin_dropdown = is_authenticated and (show_admin_rbac or show_admin_audit or show_admin_security or show_admin_operations or show_admin_backups or show_admin_intersections or show_admin_alert_validation or show_admin_compliance or show_admin_analytics) %}
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top shadow-sm">
     <div class="container-fluid">
@@ -343,12 +344,19 @@
                             <li><hr class="dropdown-divider"></li>
                             {% endif %}
                             {% endif %}
-                            {% if show_admin_operations or show_admin_intersections %}
+                            {% if show_admin_operations or show_admin_backups or show_admin_intersections %}
                             <li><h6 class="dropdown-header">Operations & Maintenance</h6></li>
                             {% if show_admin_operations %}
                             <li>
                                 <a class="dropdown-item" href="/admin/operations">
                                     <i class="fas fa-cogs"></i> Admin Operations
+                                </a>
+                            </li>
+                            {% endif %}
+                            {% if show_admin_backups %}
+                            <li>
+                                <a class="dropdown-item" href="/admin/backups">
+                                    <i class="fas fa-database"></i> Backup & Restore
                                 </a>
                             </li>
                             {% endif %}
