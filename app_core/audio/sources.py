@@ -167,8 +167,8 @@ class SDRSourceAdapter(AudioSourceAdapter):
                                 raw = np.frombuffer(audio_data, dtype=np.int16)
                                 iq_array = raw.astype(np.float32) / 32768.0
                             except (ValueError, TypeError) as fallback_exc:
-                                self._logger.error("Failed to convert audio data: %s (fallback also failed: %s)", exc, fallback_exc)
-                                continue
+                                logger.error("Failed to convert audio data: %s (fallback also failed: %s)", exc, fallback_exc)
+                                return None
 
                         # Convert interleaved I/Q to complex
                         iq_complex = iq_array[0::2] + 1j * iq_array[1::2]
