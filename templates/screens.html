@@ -724,8 +724,7 @@ async function editScreen(id) {
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-        const data = await response.json();
-        const screen = data.screen;
+        const screen = await response.json();
 
         // Populate form
         document.getElementById('screenModalTitle').textContent = 'Edit Screen';
@@ -848,8 +847,7 @@ async function editRotation(id) {
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-        const data = await response.json();
-        const rotation = data.rotation;
+        const rotation = await response.json();
 
         // Populate form
         document.getElementById('rotationModalTitle').textContent = 'Edit Rotation';
@@ -892,7 +890,7 @@ function loadScreensForRotation() {
 }
 
 // Add screen to rotation
-function addScreenToRotation() {
+function addScreenToRotation(screenId = null, duration = 10) {
     const container = document.getElementById('rotation-screens-list');
     const index = container.children.length;
 
@@ -902,9 +900,9 @@ function addScreenToRotation() {
         <span class="rotation-order">${index + 1}.</span>
         <select class="form-select form-select-sm" style="flex: 1;" required>
             <option value="">Select screen...</option>
-            ${availableScreensForRotation.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+            ${availableScreensForRotation.map(s => `<option value="${s.id}" ${s.id === screenId ? 'selected' : ''}>${s.name}</option>`).join('')}
         </select>
-        <input type="number" class="form-control form-control-sm" placeholder="Duration (sec)" value="10" min="1" style="width: 120px;">
+        <input type="number" class="form-control form-control-sm" placeholder="Duration (sec)" value="${duration}" min="1" style="width: 120px;">
         <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.parentElement.remove()">
             <i class="fas fa-times"></i>
         </button>
