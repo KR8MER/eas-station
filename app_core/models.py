@@ -55,6 +55,13 @@ def _log_warning(message: str) -> None:
         current_app.logger.warning(message)
 
 
+def _log_info(message: str) -> None:
+    """Log an info message using the configured Flask application logger."""
+
+    if has_app_context():
+        current_app.logger.info(message)
+
+
 class NWSZone(db.Model):
     """Reference table containing NOAA public forecast zone metadata."""
 
@@ -179,7 +186,15 @@ class AdminUser(db.Model):
                     return False
                 hashed = hashlib.sha256(salt_bytes + password.encode("utf-8")).hexdigest()
                 if hashed == self.password_hash:
+                    # Upgrade to new password hash format
                     self.set_password(password)
+                    try:
+                        db.session.add(self)
+                        db.session.commit()
+                        _log_info(f"Upgraded password hash for user {self.username} to pbkdf2 format")
+                    except Exception as exc:
+                        db.session.rollback()
+                        _log_warning(f"Failed to persist password hash upgrade for user {self.username}: {exc}")
                     return True
             return False
 

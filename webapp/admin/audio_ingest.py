@@ -162,8 +162,22 @@ def _start_audio_sources_background(app: Flask) -> None:
             # In multi-worker environments, we need to ensure only ONE worker
             # starts the audio source decoders to prevent duplicate FFmpeg processes
             import os
+            import tempfile
 
-            lock_file_path = '/tmp/eas-audio-initialization.lock'
+            # Use secure lock file location with fallback chain
+            # Priority: /var/lock > /run > tempfile.gettempdir()
+            lock_dirs = ['/var/lock', '/run', tempfile.gettempdir()]
+            lock_dir = None
+            for candidate in lock_dirs:
+                if os.path.isdir(candidate) and os.access(candidate, os.W_OK):
+                    lock_dir = candidate
+                    break
+
+            if lock_dir is None:
+                logger.warning("No suitable lock directory found; using current directory")
+                lock_dir = '.'
+
+            lock_file_path = os.path.join(lock_dir, 'eas-audio-initialization.lock')
 
             lock_file, acquired = _try_acquire_lock(lock_file_path, mode='a')
             if not acquired:

@@ -152,7 +152,8 @@ def _start_background_operation(
         success = False
         returncode: Optional[int] = None
         try:
-            logger.info("Starting %s operation via command: %s", name, " ".join(command))
+            # Log operation name only, not full command (may contain sensitive data)
+            logger.info("Starting %s operation", name)
             completed = subprocess.run(
                 command,
                 capture_output=True,

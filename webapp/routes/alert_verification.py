@@ -228,8 +228,8 @@ def register(app: Flask, logger) -> None:
             # Clean up temp file
             try:
                 os.unlink(temp_path)
-            except:
-                pass
+            except OSError as exc:
+                route_logger.debug("Failed to clean up temp file %s: %s", temp_path, exc)
 
             if decode_result and request.form.get("store_results") == "on":
                 try:

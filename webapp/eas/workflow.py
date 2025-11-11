@@ -746,8 +746,8 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                     'heading': 'Generation Metadata',
                     'content': metadata_str,
                 })
-            except:
-                pass
+            except (TypeError, ValueError) as exc:
+                logger.warning('Failed to serialize generation metadata: %s', exc)
 
         # Generate PDF
         pdf_bytes = generate_pdf_document(
