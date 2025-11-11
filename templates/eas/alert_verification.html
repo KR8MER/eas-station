@@ -14,7 +14,7 @@
         </div>
         <p id="progress-message" class="text-center text-muted mb-0">Initializing...</p>
         <p class="text-center text-muted small mt-3 mb-0">
-            <i class="fas fa-info-circle"></i> Large files may take 1-2 minutes to process.<br>
+            <i class="fas fa-info-circle"></i> Large files may take 2-4 minutes to process.<br>
             Please do not close this window.
         </p>
     </div>
@@ -690,14 +690,14 @@
                             });
                     }, 500); // Poll every 500ms
 
-                    // Fallback: Hide overlay after 3 minutes (safety net)
+                    // Fallback: Hide overlay after 5 minutes (safety net matching server timeout)
                     setTimeout(function() {
                         if (progressOverlay.style.display === 'flex') {
                             clearInterval(pollInterval);
                             updateProgress(100, 'Processing... (This may take a while)');
                             // The page will reload when the server responds
                         }
-                    }, 180000);
+                    }, 300000);
                 });
             }
 
