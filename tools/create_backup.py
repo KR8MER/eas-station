@@ -45,6 +45,25 @@ def ensure_directory(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
+def detect_git_command() -> Optional[str]:
+    """Detect the git command path.
+
+    Returns:
+        Full path to git executable, or None if not found
+    """
+    git_path = shutil.which("git")
+    if git_path is not None:
+        return git_path
+
+    # Try common locations as fallback
+    common_paths = ["/usr/bin/git", "/usr/local/bin/git", "/bin/git"]
+    for path in common_paths:
+        if Path(path).exists():
+            return path
+
+    return None
+
+
 def detect_compose_command() -> List[str]:
     docker_path = shutil.which("docker")
     legacy_path = shutil.which("docker-compose")
@@ -125,14 +144,30 @@ def run_pg_dump(env: Dict[str, str], output_path: Path) -> str:
 
 
 def write_metadata(target: Path, env: Dict[str, str], dump_cmd: str) -> None:
+    """Write backup metadata to a JSON file."""
+    git_cmd = detect_git_command()
+    git_commit = "unknown"
+    git_status = "unknown"
+
+    if git_cmd:
+        try:
+            git_commit = subprocess.run(
+                [git_cmd, "rev-parse", "HEAD"], capture_output=True, text=True, check=False
+            ).stdout.strip() or "unknown"
+        except Exception:
+            pass
+
+        try:
+            git_status = subprocess.run(
+                [git_cmd, "status", "-sb"], capture_output=True, text=True, check=False
+            ).stdout.strip() or "unknown"
+        except Exception:
+            pass
+
     metadata = {
         "timestamp": datetime.utcnow().isoformat() + "Z",
-        "git_commit": subprocess.run(
-            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
-        ).stdout.strip(),
-        "git_status": subprocess.run(
-            ["git", "status", "-sb"], capture_output=True, text=True, check=True
-        ).stdout.strip(),
+        "git_commit": git_commit,
+        "git_status": git_status,
         "app_version": get_current_version(),
         "database": {
             "host": env.get("POSTGRES_HOST", "unknown"),
@@ -362,15 +397,30 @@ Examples:
         print()
 
     # 5. Persist metadata
+    git_cmd = detect_git_command()
+    git_commit = "unknown"
+    git_branch = "unknown"
+
+    if git_cmd:
+        try:
+            git_commit = subprocess.run(
+                [git_cmd, "rev-parse", "HEAD"], capture_output=True, text=True, check=False
+            ).stdout.strip() or "unknown"
+        except Exception:
+            pass
+
+        try:
+            git_branch = subprocess.run(
+                [git_cmd, "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, check=False
+            ).stdout.strip() or "unknown"
+        except Exception:
+            pass
+
     metadata = {
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "label": args.label,
-        "git_commit": subprocess.run(
-            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=False
-        ).stdout.strip() or "unknown",
-        "git_branch": subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, check=False
-        ).stdout.strip() or "unknown",
+        "git_commit": git_commit,
+        "git_branch": git_branch,
         "app_version": get_current_version(),
         "database": {
             "host": env_values.get("POSTGRES_HOST", "unknown"),
