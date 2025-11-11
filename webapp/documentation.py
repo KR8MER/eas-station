@@ -31,7 +31,7 @@ def _markdown_to_html(content: str) -> str:
     mermaid_pattern = r'```mermaid\r?\n(.*?)```'
 
     def save_mermaid(match):
-        placeholder = f'%%%MERMAID_BLOCK_{len(mermaid_blocks)}%%%'
+        placeholder = f'%%%MERMAIDBLOCK{len(mermaid_blocks)}%%%'
         mermaid_blocks[placeholder] = match.group(1)
         return placeholder
 
