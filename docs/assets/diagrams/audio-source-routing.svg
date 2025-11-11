@@ -223,7 +223,7 @@
   <!-- Web UI Output -->
   <rect x="470" y="450" width="420" height="210" rx="8" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
   <text x="680" y="475" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e40af">
-    Web UI & API
+    Web UI &amp; API
   </text>
 
   <!-- UI Box -->
