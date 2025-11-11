@@ -1375,20 +1375,176 @@ def _detect_audio_sample_rate(path: str) -> int:
     return 16000
 
 
-def decode_same_audio(path: str, *, sample_rate: Optional[int] = None) -> SAMEAudioDecodeResult:
-    """Decode SAME headers from a WAV or MP3 file located at ``path``.
+def _calculate_adjusted_confidence(
+    raw_confidence: float,
+    headers: List[SAMEHeaderDetails],
+    frame_count: int,
+    frame_errors: int
+) -> float:
+    """Calculate an adjusted confidence score based on decode quality indicators.
 
-    If sample_rate is not provided, it will be auto-detected from the audio file.
-    This is the recommended approach as it prevents sample rate mismatch issues.
+    The raw correlation-based confidence is conservative. Boost it when we have
+    strong indicators of a good decode.
     """
+    # Start with raw confidence
+    confidence = raw_confidence
 
-    if not os.path.exists(path):
-        raise AudioDecodeError(f"Audio file does not exist: {path}")
+    if headers:
+        # Strong indicator: valid ZCZC header decoded
+        for header in headers:
+            header_text = header.header
 
-    # Auto-detect sample rate from audio file if not provided
-    if sample_rate is None:
-        sample_rate = _detect_audio_sample_rate(path)
+            # Check for clean ASCII (no control characters except CR/LF)
+            has_clean_ascii = all(
+                32 <= ord(c) <= 126 or c in "\r\n"
+                for c in header_text
+            )
 
+            # Check for valid ZCZC structure
+            has_valid_structure = (
+                header_text.startswith("ZCZC-") and
+                header_text.count('-') >= 6 and  # Minimum dashes for valid header
+                '+' in header_text  # Has time field
+            )
+
+            # Check for completion (ends with dash or callsign)
+            is_complete = header_text.endswith("-") or (
+                header_text.count('-') >= 7 and len(header_text) > 50
+            )
+
+            # Calculate quality boost
+            quality_multiplier = 1.0
+
+            if has_clean_ascii:
+                quality_multiplier += 0.3  # +30% for clean ASCII
+
+            if has_valid_structure:
+                quality_multiplier += 0.4  # +40% for valid structure
+
+            if is_complete:
+                quality_multiplier += 0.3  # +30% for complete header
+
+            # Apply boost (can increase confidence up to 2x for perfect decode)
+            confidence *= quality_multiplier
+
+    # Factor in frame error rate
+    if frame_count > 0:
+        error_rate = frame_errors / frame_count
+        # Penalize high error rates, reward low ones
+        if error_rate < 0.05:  # <5% errors
+            confidence *= 1.1  # +10% bonus
+        elif error_rate > 0.4:  # >40% errors
+            confidence *= 0.8  # -20% penalty
+
+    # Cap at 1.0
+    return min(confidence, 1.0)
+
+
+def _score_decode_result(result: SAMEAudioDecodeResult, expected_rate: int, actual_rate: int) -> float:
+    """Score a decode result for multi-rate selection.
+
+    Higher score = better decode quality.
+    """
+    score = 0.0
+
+    # Major bonus for finding valid headers
+    if result.headers:
+        score += 1000.0
+
+        # Bonus for each header found
+        score += len(result.headers) * 100.0
+
+        # Check header quality
+        for header in result.headers:
+            # Valid ZCZC header structure
+            if header.header.startswith("ZCZC-"):
+                score += 500.0
+
+            # Complete header (ends with dash)
+            if header.header.endswith("-"):
+                score += 200.0
+
+            # Check if all characters are valid ASCII (no control chars)
+            valid_chars = all(
+                32 <= ord(c) <= 126 or c in "\r\n"
+                for c in header.header
+            )
+            if valid_chars:
+                score += 300.0
+
+            # Longer headers are generally better (more complete)
+            score += len(header.header)
+
+    # Confidence scoring (scale: 0.0-1.0 -> 0-500 points)
+    score += result.bit_confidence * 500.0
+
+    # Low frame error rate is good
+    if result.frame_count > 0:
+        error_rate = result.frame_errors / result.frame_count
+        score += (1.0 - error_rate) * 200.0
+
+    # Prefer sample rate close to file metadata (small penalty if different)
+    if expected_rate > 0 and actual_rate != expected_rate:
+        rate_diff_pct = abs(actual_rate - expected_rate) / expected_rate
+        score -= rate_diff_pct * 50.0
+
+    return score
+
+
+def _try_multiple_sample_rates(path: str, native_rate: int) -> Tuple[SAMEAudioDecodeResult, int, bool]:
+    """Try decoding at multiple sample rates and return the best result.
+
+    Returns: (best_result, best_rate, rate_mismatch_detected)
+    """
+    # Common sample rates to try (in order of preference)
+    candidate_rates = [
+        native_rate,  # Try native rate first
+        22050,
+        24000,
+        16000,
+        44100,
+        48000,
+    ]
+
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_rates = []
+    for rate in candidate_rates:
+        if rate not in seen:
+            seen.add(rate)
+            unique_rates.append(rate)
+
+    best_result: Optional[SAMEAudioDecodeResult] = None
+    best_score = -float('inf')
+    best_rate = native_rate
+
+    for rate in unique_rates:
+        try:
+            # Try decoding at this sample rate
+            result = _decode_at_sample_rate(path, rate)
+
+            # Score this result
+            score = _score_decode_result(result, native_rate, rate)
+
+            if score > best_score:
+                best_score = score
+                best_result = result
+                best_rate = rate
+
+        except (AudioDecodeError, Exception):
+            # This rate didn't work, try next one
+            continue
+
+    if best_result is None:
+        raise AudioDecodeError("Unable to decode SAME audio at any sample rate")
+
+    rate_mismatch = (best_rate != native_rate)
+
+    return best_result, best_rate, rate_mismatch
+
+
+def _decode_at_sample_rate(path: str, sample_rate: int) -> SAMEAudioDecodeResult:
+    """Internal helper to decode at a specific sample rate."""
     samples, pcm_bytes = _read_audio_samples(path, sample_rate)
     sample_count = len(samples)
     if sample_count == 0:
@@ -1400,8 +1556,6 @@ def decode_same_audio(path: str, *, sample_rate: Optional[int] = None) -> SAMEAu
     correlation_confidence: Optional[float] = None
 
     # Enable correlation decoder to handle external files with timing variations
-    # The correlation/DLL decoder uses a different approach that may work better
-    # for files that don't match the exact timing of internally-generated files.
     USE_CORRELATION_DECODER = True
 
     if USE_CORRELATION_DECODER:
@@ -1649,6 +1803,14 @@ def decode_same_audio(path: str, *, sample_rate: Optional[int] = None) -> SAMEAu
     frame_count = int(metadata.get("frame_count") or 0)
     frame_errors = int(metadata.get("frame_errors") or 0)
 
+    # Apply adjusted confidence scoring based on decode quality
+    adjusted_confidence = _calculate_adjusted_confidence(
+        bit_confidence,
+        headers,
+        frame_count,
+        frame_errors
+    )
+
     return SAMEAudioDecodeResult(
         raw_text=raw_text,
         headers=headers,
@@ -1657,10 +1819,44 @@ def decode_same_audio(path: str, *, sample_rate: Optional[int] = None) -> SAMEAu
         frame_errors=frame_errors,
         duration_seconds=duration_seconds,
         sample_rate=sample_rate,
-        bit_confidence=bit_confidence,
+        bit_confidence=adjusted_confidence,
         min_bit_confidence=min_bit_confidence,
         segments=segments,
     )
+
+
+def decode_same_audio(path: str, *, sample_rate: Optional[int] = None) -> SAMEAudioDecodeResult:
+    """Decode SAME headers from a WAV or MP3 file located at ``path``.
+
+    If sample_rate is not provided, multi-rate auto-detection will be used to find
+    the best sample rate. This handles files with incorrect sample rate metadata.
+
+    If sample_rate is provided explicitly, it will be used directly without trying
+    other rates.
+    """
+
+    if not os.path.exists(path):
+        raise AudioDecodeError(f"Audio file does not exist: {path}")
+
+    # If sample rate is explicitly provided, use it directly
+    if sample_rate is not None:
+        return _decode_at_sample_rate(path, sample_rate)
+
+    # Auto-detect and try multiple rates
+    native_rate = _detect_audio_sample_rate(path)
+    result, actual_rate, rate_mismatch = _try_multiple_sample_rates(path, native_rate)
+
+    # Log warning if sample rate mismatch detected
+    if rate_mismatch and result.headers:
+        import warnings
+        warnings.warn(
+            f"Sample rate mismatch detected: file metadata indicates {native_rate} Hz, "
+            f"but signal decoded successfully at {actual_rate} Hz. "
+            f"The file may have been resampled incorrectly or have incorrect metadata.",
+            UserWarning
+        )
+
+    return result
 
 
 __all__ = [
