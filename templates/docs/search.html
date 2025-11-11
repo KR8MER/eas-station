@@ -1,0 +1,340 @@
+{% extends "base.html" %}
+
+{% block title %}Documentation Search{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1><i class="fas fa-search"></i> Documentation Search</h1>
+            <p class="text-muted">Search through runbooks, guides, and reference documentation</p>
+        </div>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="row mb-4">
+        <div class="col-md-8 mx-auto">
+            <div class="input-group input-group-lg">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input type="text" class="form-control" id="search-input"
+                       placeholder="Search for backup, restore, security, alerts, etc..."
+                       autofocus>
+                <button class="btn btn-primary" type="button" onclick="performSearch()">
+                    Search
+                </button>
+            </div>
+            <div class="form-text">Try: "how to restore backup", "outage response", "RBAC permissions", "alert validation"</div>
+        </div>
+    </div>
+
+    <!-- Quick Links -->
+    <div class="row mb-4">
+        <div class="col">
+            <h5>Quick Access</h5>
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h6 class="card-title"><i class="fas fa-database text-info"></i> Backup & Recovery</h6>
+                            <ul class="list-unstyled small">
+                                <li><a href="/docs/runbooks/backup_strategy">Backup Strategy</a></li>
+                                <li><a href="/docs/runbooks/outage_response">Outage Response</a></li>
+                                <li><a href="/admin/backups">Backup Management</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h6 class="card-title"><i class="fas fa-shield-alt text-success"></i> Security</h6>
+                            <ul class="list-unstyled small">
+                                <li><a href="/docs/rbac/visual"><strong>Visual Permission Tree</strong></a></li>
+                                <li><a href="/docs/RBAC_PERMISSION_TREE">Permission Tree (Text)</a></li>
+                                <li><a href="/admin/rbac">RBAC Management</a></li>
+                                <li><a href="/security/settings">Security Settings</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h6 class="card-title"><i class="fas fa-cogs text-warning"></i> Operations</h6>
+                            <ul class="list-unstyled small">
+                                <li><a href="/admin/operations">Admin Operations</a></li>
+                                <li><a href="/health/dependencies">System Health</a></li>
+                                <li><a href="/admin/compliance">Compliance Dashboard</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h6 class="card-title"><i class="fas fa-book text-primary"></i> Reference</h6>
+                            <ul class="list-unstyled small">
+                                <li><a href="/docs/ABOUT">About EAS Station</a></li>
+                                <li><a href="/docs/CHANGELOG">Changelog</a></li>
+                                <li><a href="/help">Help & Support</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Results -->
+    <div id="search-results" style="display: none;">
+        <div class="row">
+            <div class="col">
+                <h5>Search Results <span class="badge bg-primary" id="result-count">0</span></h5>
+                <div id="results-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- All Documentation -->
+    <div class="row" id="all-docs">
+        <div class="col">
+            <h5>All Documentation</h5>
+            <div class="accordion" id="docsAccordion">
+                <!-- Runbooks -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#runbooks">
+                            <i class="fas fa-clipboard-list me-2"></i> Operator Runbooks
+                        </button>
+                    </h2>
+                    <div id="runbooks" class="accordion-collapse collapse show" data-bs-parent="#docsAccordion">
+                        <div class="accordion-body">
+                            <div class="list-group">
+                                <a href="/docs/runbooks/backup_strategy" class="list-group-item list-group-item-action">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h6 class="mb-1">Backup & Recovery Strategy</h6>
+                                        <small class="text-muted">Runbook</small>
+                                    </div>
+                                    <p class="mb-1 small">Complete guide to backup procedures, recovery procedures, and retention policies</p>
+                                    <small>Keywords: backup, restore, disaster recovery, RPO, RTO, retention</small>
+                                </a>
+                                <a href="/docs/runbooks/outage_response" class="list-group-item list-group-item-action">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h6 class="mb-1">Outage Response Runbook</h6>
+                                        <small class="text-muted">Runbook</small>
+                                    </div>
+                                    <p class="mb-1 small">Step-by-step procedures for responding to system outages and service degradation</p>
+                                    <small>Keywords: outage, incident response, troubleshooting, failover, emergency</small>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Deployment Guides -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#deployment">
+                            <i class="fas fa-rocket me-2"></i> Deployment Guides
+                        </button>
+                    </h2>
+                    <div id="deployment" class="accordion-collapse collapse" data-bs-parent="#docsAccordion">
+                        <div class="accordion-body">
+                            <div class="list-group">
+                                <a href="/docs/deployment/STANDBY_DEPLOYMENT" class="list-group-item list-group-item-action">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h6 class="mb-1">Warm-Standby Deployment Guide</h6>
+                                        <small class="text-muted">Guide</small>
+                                    </div>
+                                    <p class="mb-1 small">Configure and deploy a warm-standby EAS Station instance for high availability</p>
+                                    <small>Keywords: standby, failover, high availability, HA, redundancy</small>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Security -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#security">
+                            <i class="fas fa-shield-alt me-2"></i> Security & Access Control
+                        </button>
+                    </h2>
+                    <div id="security" class="accordion-collapse collapse" data-bs-parent="#docsAccordion">
+                        <div class="accordion-body">
+                            <div class="list-group">
+                                <a href="/docs/RBAC_PERMISSION_TREE" class="list-group-item list-group-item-action">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h6 class="mb-1">RBAC Permission Tree</h6>
+                                        <small class="text-muted">Reference</small>
+                                    </div>
+                                    <p class="mb-1 small">Visual representation of role-based access control permissions</p>
+                                    <small>Keywords: RBAC, permissions, roles, access control, authentication</small>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reference -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#reference">
+                            <i class="fas fa-book me-2"></i> Reference Documentation
+                        </button>
+                    </h2>
+                    <div id="reference" class="accordion-collapse collapse" data-bs-parent="#docsAccordion">
+                        <div class="accordion-body">
+                            <div class="list-group">
+                                <a href="/docs/ABOUT" class="list-group-item list-group-item-action">
+                                    <h6 class="mb-1">About EAS Station</h6>
+                                    <p class="mb-1 small">Project overview, goals, and features</p>
+                                </a>
+                                <a href="/docs/CHANGELOG" class="list-group-item list-group-item-action">
+                                    <h6 class="mb-1">Changelog</h6>
+                                    <p class="mb-1 small">Version history and release notes</p>
+                                </a>
+                                <a href="/help" class="list-group-item list-group-item-action">
+                                    <h6 class="mb-1">Help & Support</h6>
+                                    <p class="mb-1 small">Get help with using EAS Station</p>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Documentation index for searching
+const docsIndex = [
+    {
+        title: "Backup & Recovery Strategy",
+        url: "/docs/runbooks/backup_strategy",
+        category: "Runbook",
+        description: "Complete guide to backup procedures, recovery procedures, and retention policies for EAS Station",
+        keywords: ["backup", "restore", "disaster recovery", "RPO", "RTO", "retention", "snapshot", "recovery point", "recovery time"]
+    },
+    {
+        title: "Outage Response Runbook",
+        url: "/docs/runbooks/outage_response",
+        category: "Runbook",
+        description: "Step-by-step procedures for responding to system outages and service degradation",
+        keywords: ["outage", "incident response", "troubleshooting", "failover", "emergency", "downtime", "service degradation", "critical"]
+    },
+    {
+        title: "Warm-Standby Deployment",
+        url: "/docs/deployment/STANDBY_DEPLOYMENT",
+        category: "Guide",
+        description: "Configure and deploy a warm-standby EAS Station instance for high availability",
+        keywords: ["standby", "failover", "high availability", "HA", "redundancy", "secondary", "backup site"]
+    },
+    {
+        title: "Visual RBAC Permission Tree",
+        url: "/docs/rbac/visual",
+        category: "Security",
+        description: "Interactive graphical representation of role-based access control permissions and role hierarchy",
+        keywords: ["RBAC", "permissions", "roles", "access control", "authentication", "authorization", "security", "visual", "graphic", "diagram", "hierarchy"]
+    },
+    {
+        title: "RBAC Permission Tree (Text)",
+        url: "/docs/RBAC_PERMISSION_TREE",
+        category: "Reference",
+        description: "Detailed text-based documentation of role-based access control permissions",
+        keywords: ["RBAC", "permissions", "roles", "access control", "authentication", "authorization", "security", "documentation"]
+    },
+    {
+        title: "Backup Management",
+        url: "/admin/backups",
+        category: "Interface",
+        description: "Web interface for creating, managing, and restoring backups",
+        keywords: ["backup", "restore", "create backup", "download backup", "validate backup", "delete backup"]
+    },
+    {
+        title: "Admin Operations",
+        url: "/admin/operations",
+        category: "Interface",
+        description: "Administrative operations including backup, upgrade, and database maintenance",
+        keywords: ["operations", "admin", "maintenance", "upgrade", "database optimization"]
+    },
+    {
+        title: "System Health Check",
+        url: "/health/dependencies",
+        category: "API",
+        description: "Check the health of all critical services and dependencies",
+        keywords: ["health", "status", "dependencies", "monitoring", "services", "database", "icecast", "docker"]
+    }
+];
+
+// Search functionality
+function performSearch() {
+    const query = document.getElementById('search-input').value.toLowerCase().trim();
+    if (!query) return;
+
+    const results = docsIndex.filter(doc => {
+        const searchText = `${doc.title} ${doc.description} ${doc.keywords.join(' ')}`.toLowerCase();
+        return searchText.includes(query);
+    });
+
+    displayResults(results, query);
+}
+
+function displayResults(results, query) {
+    const resultsContainer = document.getElementById('results-container');
+    const resultCount = document.getElementById('result-count');
+    const searchResults = document.getElementById('search-results');
+    const allDocs = document.getElementById('all-docs');
+
+    if (results.length === 0) {
+        resultsContainer.innerHTML = `
+            <div class="alert alert-warning">
+                <i class="fas fa-search"></i> No results found for "<strong>${query}</strong>".
+                <p class="mb-0 mt-2">Try different keywords or browse all documentation below.</p>
+            </div>
+        `;
+    } else {
+        let html = '<div class="list-group">';
+        results.forEach(doc => {
+            html += `
+                <a href="${doc.url}" class="list-group-item list-group-item-action">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h6 class="mb-1">${highlightQuery(doc.title, query)}</h6>
+                        <small class="text-muted">${doc.category}</small>
+                    </div>
+                    <p class="mb-1 small">${highlightQuery(doc.description, query)}</p>
+                </a>
+            `;
+        });
+        html += '</div>';
+        resultsContainer.innerHTML = html;
+    }
+
+    resultCount.textContent = results.length;
+    searchResults.style.display = 'block';
+    allDocs.style.display = 'none';
+}
+
+function highlightQuery(text, query) {
+    const regex = new RegExp(`(${query})`, 'gi');
+    return text.replace(regex, '<mark>$1</mark>');
+}
+
+// Search on Enter key
+document.getElementById('search-input').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        performSearch();
+    }
+});
+
+// Clear search
+document.getElementById('search-input').addEventListener('input', function() {
+    if (this.value === '') {
+        document.getElementById('search-results').style.display = 'none';
+        document.getElementById('all-docs').style.display = 'block';
+    }
+});
+</script>
+{% endblock %}

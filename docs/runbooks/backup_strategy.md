@@ -40,13 +40,23 @@ EAS Station implements a comprehensive **3-2-1 backup strategy**:
 | **Backup Retention** | 7d / 4w / 6m | Daily/Weekly/Monthly |
 | **Test Frequency** | Monthly | Restore test required |
 
-### Tools
+### Tools and Interfaces
+
+**Primary Interface: Web UI** (No command line required)
+
+| Interface | Purpose | Location |
+|-----------|---------|----------|
+| **Backup Management** | Create, restore, download, validate, and delete backups | [/admin/backups](/admin/backups) |
+| **Quick Backup** | One-click backup creation | [/admin/operations](/admin/operations) |
+| **System Health** | Monitor backup directory, database, disk space | [/health/dependencies](/health/dependencies) |
+
+**Command Line Tools** (For automation and advanced users)
 
 | Tool | Purpose | Location |
 |------|---------|----------|
-| `create_backup.py` | Create backups | `tools/create_backup.py` |
-| `restore_backup.py` | Restore backups | `tools/restore_backup.py` |
-| `backup_scheduler.py` | Automate backups | `tools/backup_scheduler.py` |
+| `create_backup.py` | Create backups via CLI | `tools/create_backup.py` |
+| `restore_backup.py` | Restore backups via CLI | `tools/restore_backup.py` |
+| `backup_scheduler.py` | Automate backups (cron/systemd) | `tools/backup_scheduler.py` |
 | `rotate_backups.py` | Apply retention policy | `tools/rotate_backups.py` |
 
 ---
@@ -94,62 +104,48 @@ EAS Station implements a comprehensive **3-2-1 backup strategy**:
 
 ## Backup Procedures
 
-### Method 1: Manual Backup (Recommended for Pre-Upgrade)
+### Method 1: Web Interface (Recommended - No Command Line Required)
 
-#### Full Backup
+The easiest way to create backups is through the web interface at **[/admin/backups](/admin/backups)**.
 
-```bash
-cd /opt/eas-station
+#### Creating a Manual Backup
 
-# Create comprehensive backup
-python3 tools/create_backup.py \
-    --output-dir /var/backups/eas-station \
-    --label manual
+1. **Navigate to Backup Management:**
+   - Click **Admin** → **Backup & Restore** in the navigation menu
+   - Or go directly to: `https://your-station.example.com/admin/backups`
 
-# Verify backup was created
-ls -lh /var/backups/eas-station/backup-*
-```
+2. **Review System Health:**
+   - Check the dashboard at the top showing database, disk space, and backup directory status
+   - Ensure all systems are healthy (green checkmarks)
 
-**Expected Output:**
-```
-Creating backup: /var/backups/eas-station/backup-20250111-143022-manual
+3. **Create Backup:**
+   - In the "Create New Backup" card, enter a label (e.g., "before-upgrade", "manual")
+   - Select what to include:
+     - ✓ **Include media files** (static/eas_messages, uploads) - adds ~2-5 MB
+     - ✓ **Include Docker volumes** (app-config, certbot-conf) - adds ~1 MB
+   - Click **Create Backup Now**
 
-Backing up configuration files...
-  ✓ Configuration files backed up
+4. **Monitor Progress:**
+   - A progress bar will appear showing backup status
+   - Typical completion time: 1-3 minutes
+   - You'll see a success message with backup details
 
-Backing up PostgreSQL database...
-  ✓ Database backed up (15.3 MB)
+5. **Verify Backup:**
+   - The new backup appears in the "Existing Backups" table below
+   - Check the size, timestamp, and green checkmark for validity
 
-Backing up media directories...
-  ✓ static/eas_messages backed up (2.1 MB)
+**Quick Backup Option:**
+- Uncheck "Include media files" and "Include Docker volumes" for faster backups (30-60 seconds)
+- Useful before quick configuration changes
 
-Backing up Docker volumes...
-  ✓ Volume 'app-config' backed up (0.5 MB)
-  ✓ Volume 'certbot-conf' backed up (0.1 MB)
+#### Using the Quick Backup from Operations Page
 
-============================================================
-Backup completed successfully!
-Location: /var/backups/eas-station/backup-20250111-143022-manual
-Total size: 18.0 MB
-Database: ✓
-Media directories: 1
-Docker volumes: 2
-============================================================
-```
+For one-click backups:
 
-#### Quick Backup (Config + Database Only)
-
-For faster backups before quick changes:
-
-```bash
-python3 tools/create_backup.py \
-    --output-dir /var/backups/eas-station \
-    --label quick \
-    --no-media \
-    --no-volumes
-```
-
-This typically completes in 30-60 seconds.
+1. Go to **[/admin/operations](/admin/operations)**
+2. Scroll to the "Backup & Recovery" section
+3. Enter a label and click **Create Backup**
+4. For full backup management (restore, download, delete), click **Manage Backups**
 
 ### Method 2: Automated Backup (Recommended for Production)
 
@@ -238,87 +234,53 @@ ls -lh app-config-backup.tar.gz
 
 **Time Required:** 15-30 minutes
 
+**Required Role:** Admin only (restore operations are restricted)
+
 #### Prerequisites
 
 - Backup directory accessible
-- Fresh EAS Station installation (git cloned)
-- Docker and Docker Compose installed
+- EAS Station web interface running
+- Admin account credentials
 
-#### Procedure
+#### Web Interface Procedure (Recommended)
 
-1. **Stop services** (if running):
-   ```bash
-   cd /opt/eas-station
-   docker compose down
-   ```
+1. **Access Backup Management:**
+   - Navigate to **[/admin/backups](/admin/backups)**
+   - Review the list of available backups
+   - Check the "Valid" column to ensure backup integrity
 
-2. **Identify backup to restore:**
-   ```bash
-   ls -lht /var/backups/eas-station/
-   
-   # Or if using remote backups
-   ls -lht /mnt/remote-backups/eas-station/
-   ```
+2. **Select Backup to Restore:**
+   - Find the backup you want to restore (usually the most recent before the issue)
+   - Click the **Restore** button in the Actions column
 
-3. **Validate backup integrity:**
-   ```bash
-   python3 tools/restore_backup.py \
-       --backup-dir /var/backups/eas-station/backup-20250111-143022 \
-       --dry-run
-   ```
-   
-   **Expected output:**
-   ```
-   Backup validation for: backup-20250111-143022
-     Created: 2025-01-11T14:30:22Z
-     Version: 2.1.0
-     Database: ✓
-     Config: ✓
-     Media archives: 1
-     Docker volumes: 2
-   
-   ✓ Backup validation passed
-   ```
+3. **Review Restore Options:**
+   - A modal will appear with restore options:
+     - **Full Restore** - Restores database, config, media, and volumes (recommended)
+     - **Database Only** - Only restores the database (for database corruption)
+     - **Configuration Only** - Only restores .env and docker-compose.yml
+   - Read the warning carefully - restore operations will overwrite current data
 
-4. **Create safety backup** (if possible):
-   ```bash
-   # Backup current state before restoring
-   python3 tools/create_backup.py --label pre-restore
-   ```
+4. **Create Safety Backup (Recommended):**
+   - Before clicking "Restore", create a current backup first
+   - This allows rollback if the restore doesn't work as expected
+   - Click "Cancel", create a backup labeled "pre-restore", then return
 
-5. **Restore the backup:**
-   ```bash
-   python3 tools/restore_backup.py \
-       --backup-dir /var/backups/eas-station/backup-20250111-143022
-   
-   # You will be prompted to confirm each step
-   # Review carefully before confirming
-   ```
+5. **Confirm and Execute:**
+   - Select your restore option (usually "Full Restore")
+   - Click **Confirm Restore**
+   - Monitor the progress bar - typical time is 5-15 minutes
+   - Do not close your browser during restoration
 
-6. **Start services:**
-   ```bash
-   docker compose up -d
-   ```
+6. **Verify Restoration:**
+   - After completion, check the System Health dashboard at the top
+   - All indicators should be green (Database, Disk Space, Backup Directory)
+   - Navigate to **[/health/dependencies](/health/dependencies)** for detailed health check
 
-7. **Verify restoration:**
-   ```bash
-   # Wait for services to start
-   sleep 30
-   
-   # Check health
-   curl http://localhost/health/dependencies | jq
-   
-   # Check logs
-   docker compose logs --tail=50
-   
-   # Access web interface
-   curl -I http://localhost/
-   ```
-
-8. **Functional testing:**
-   - Log in to web interface
-   - Check recent alerts
-   - Verify configuration settings
+7. **Functional Testing:**
+   - Log in to web interface (you may need to log in again)
+   - Check the map at **[/](/)**
+   - Verify recent alerts at **[/alerts](/alerts)**
+   - Review configuration at **[/admin/settings](/admin/settings)**
    - Test alert generation (if applicable)
 
 ### Database-Only Restore
@@ -327,20 +289,48 @@ ls -lh app-config-backup.tar.gz
 
 **Time Required:** 5-10 minutes
 
+#### Web Interface Procedure
+
+1. **Navigate to [/admin/backups](/admin/backups)**
+2. **Select the backup** you want to restore
+3. **Click Restore** button
+4. **In the modal, select "Database Only"** restore mode
+5. **Click Confirm Restore**
+6. **Monitor progress** - database restore is typically faster (2-5 minutes)
+7. **Verify** - check that recent alerts appear correctly
+
+The web interface automatically handles stopping/starting services as needed.
+
+### Advanced: Command Line Procedures
+
+> **Note:** The web interface at /admin/backups is the recommended method for all backup and restore operations. Command line procedures are provided for automation, scripting, and troubleshooting scenarios.
+
+#### CLI: Full System Restore
+
 ```bash
-# Stop application (keep database running if possible)
-docker compose stop app noaa-poller ipaws-poller
+# 1. Stop services (if running)
+cd /opt/eas-station
+docker compose down
 
-# Restore database only
+# 2. List available backups
+ls -lht /var/backups/eas-station/
+
+# 3. Validate backup integrity
 python3 tools/restore_backup.py \
-    --backup-dir /var/backups/eas-station/latest \
-    --database-only \
-    --force
+    --backup-dir /var/backups/eas-station/backup-20250111-143022 \
+    --dry-run
 
-# Restart application
-docker compose start app noaa-poller ipaws-poller
+# 4. Create safety backup (if possible)
+python3 tools/create_backup.py --label pre-restore
 
-# Verify
+# 5. Restore the backup
+python3 tools/restore_backup.py \
+    --backup-dir /var/backups/eas-station/backup-20250111-143022
+
+# 6. Start services
+docker compose up -d
+
+# 7. Verify
 curl http://localhost/health
 ```
 

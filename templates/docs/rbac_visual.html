@@ -1,0 +1,639 @@
+{% extends "base.html" %}
+
+{% block title %}RBAC Permission Tree{% endblock %}
+
+{% block extra_css %}
+<style>
+.role-card {
+    border-radius: 8px;
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+}
+
+.role-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.permission-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    margin: 0.2rem;
+}
+
+.hierarchy-diagram {
+    position: relative;
+    padding: 2rem 0;
+}
+
+.hierarchy-level {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    margin-bottom: 3rem;
+    position: relative;
+}
+
+.hierarchy-connector {
+    position: absolute;
+    border-left: 2px solid #6c757d;
+    height: 2rem;
+    top: -2rem;
+    left: 50%;
+}
+
+.hierarchy-branch {
+    position: absolute;
+    border-top: 2px solid #6c757d;
+    height: 2px;
+    top: -2rem;
+}
+
+.permission-category {
+    background: #f8f9fa;
+    border-left: 4px solid;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.category-alerts { border-left-color: #0d6efd; }
+.category-eas { border-left-color: #dc3545; }
+.category-system { border-left-color: #6f42c1; }
+.category-logs { border-left-color: #fd7e14; }
+.category-receivers { border-left-color: #20c997; }
+.category-gpio { border-left-color: #ffc107; }
+.category-api { border-left-color: #0dcaf0; }
+
+.comparison-table {
+    font-size: 0.9rem;
+}
+
+.comparison-table th {
+    position: sticky;
+    top: 0;
+    background: white;
+    z-index: 10;
+}
+
+.feature-row:hover {
+    background-color: #f8f9fa;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1><i class="fas fa-sitemap"></i> RBAC Permission Tree</h1>
+            <p class="text-muted">Visual representation of role-based access control permissions</p>
+        </div>
+        <div class="col-auto">
+            <a href="/docs/RBAC_PERMISSION_TREE" class="btn btn-outline-secondary">
+                <i class="fas fa-file-alt"></i> Text Version
+            </a>
+        </div>
+    </div>
+
+    <!-- Role Hierarchy Diagram -->
+    <div class="row mb-5">
+        <div class="col">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-sitemap"></i> Role Hierarchy</h5>
+                </div>
+                <div class="card-body">
+                    <div class="hierarchy-diagram">
+                        <!-- Level 1: Admin -->
+                        <div class="hierarchy-level">
+                            <div class="card role-card border-danger" style="width: 20rem;" onclick="showRoleDetails('admin')">
+                                <div class="card-body text-center">
+                                    <h4 class="text-danger"><i class="fas fa-crown"></i> Admin</h4>
+                                    <div class="badge bg-danger mb-2">All 22 Permissions</div>
+                                    <p class="small mb-0">Complete system control</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Connector lines -->
+                        <div style="text-align: center; color: #6c757d; font-size: 2rem; margin: -1.5rem 0;">
+                            <i class="fas fa-level-down-alt"></i>
+                        </div>
+
+                        <!-- Level 2: Operator & Viewer -->
+                        <div class="hierarchy-level">
+                            <div class="card role-card border-warning" style="width: 18rem;" onclick="showRoleDetails('operator')">
+                                <div class="card-body text-center">
+                                    <h5 class="text-warning"><i class="fas fa-bolt"></i> Operator</h5>
+                                    <div class="badge bg-warning mb-2">16 Permissions</div>
+                                    <p class="small mb-0">Can broadcast & control</p>
+                                </div>
+                            </div>
+                            <div class="card role-card border-info" style="width: 18rem;" onclick="showRoleDetails('viewer')">
+                                <div class="card-body text-center">
+                                    <h5 class="text-info"><i class="fas fa-eye"></i> Viewer</h5>
+                                    <div class="badge bg-info mb-2">10 Permissions</div>
+                                    <p class="small mb-0">Read-only monitoring</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Connector to Demo -->
+                        <div style="text-align: center; color: #6c757d; font-size: 2rem; margin: -1.5rem 0 -0.5rem 0;">
+                            <i class="fas fa-level-down-alt"></i>
+                        </div>
+
+                        <!-- Level 3: Demo -->
+                        <div class="hierarchy-level" style="justify-content: center;">
+                            <div class="card role-card border-secondary" style="width: 18rem;" onclick="showRoleDetails('demo')">
+                                <div class="card-body text-center">
+                                    <h5 class="text-secondary"><i class="fas fa-theater-masks"></i> Demo</h5>
+                                    <div class="badge bg-secondary mb-2">4 Permissions</div>
+                                    <p class="small mb-0">Limited demo access</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Role Comparison -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-danger h-100">
+                <div class="card-header bg-danger text-white">
+                    <h6 class="mb-0"><i class="fas fa-crown"></i> Admin</h6>
+                </div>
+                <div class="card-body">
+                    <div class="badge bg-success w-100 mb-2">✓ All Alerts</div>
+                    <div class="badge bg-success w-100 mb-2">✓ All EAS</div>
+                    <div class="badge bg-success w-100 mb-2">✓ All System</div>
+                    <div class="badge bg-success w-100 mb-2">✓ All Logs</div>
+                    <div class="badge bg-success w-100 mb-2">✓ All Receivers</div>
+                    <div class="badge bg-success w-100 mb-2">✓ All GPIO</div>
+                    <div class="badge bg-success w-100 mb-2">✓ All API</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-warning h-100">
+                <div class="card-header bg-warning text-dark">
+                    <h6 class="mb-0"><i class="fas fa-bolt"></i> Operator</h6>
+                </div>
+                <div class="card-body">
+                    <div class="badge bg-success w-100 mb-2">✓ View/Create Alerts</div>
+                    <div class="badge bg-success w-100 mb-2">✓ Broadcast EAS</div>
+                    <div class="badge bg-success w-100 mb-2">✓ View Config</div>
+                    <div class="badge bg-success w-100 mb-2">✓ View/Export Logs</div>
+                    <div class="badge bg-success w-100 mb-2">✓ View Receivers</div>
+                    <div class="badge bg-success w-100 mb-2">✓ Control GPIO</div>
+                    <div class="badge bg-danger w-100 mb-2">✗ Modify System</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-info h-100">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0"><i class="fas fa-eye"></i> Viewer</h6>
+                </div>
+                <div class="card-body">
+                    <div class="badge bg-success w-100 mb-2">✓ View Alerts</div>
+                    <div class="badge bg-success w-100 mb-2">✓ View EAS</div>
+                    <div class="badge bg-success w-100 mb-2">✓ View Config</div>
+                    <div class="badge bg-success w-100 mb-2">✓ View/Export Logs</div>
+                    <div class="badge bg-success w-100 mb-2">✓ View Receivers</div>
+                    <div class="badge bg-danger w-100 mb-2">✗ No Broadcast</div>
+                    <div class="badge bg-danger w-100 mb-2">✗ No Control</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-secondary h-100">
+                <div class="card-header bg-secondary text-white">
+                    <h6 class="mb-0"><i class="fas fa-theater-masks"></i> Demo</h6>
+                </div>
+                <div class="card-body">
+                    <div class="badge bg-success w-100 mb-2">✓ View Alerts</div>
+                    <div class="badge bg-success w-100 mb-2">✓ View EAS</div>
+                    <div class="badge bg-success w-100 mb-2">✓ View Receivers</div>
+                    <div class="badge bg-success w-100 mb-2">✓ View GPIO</div>
+                    <div class="badge bg-danger w-100 mb-2">✗ No Config</div>
+                    <div class="badge bg-danger w-100 mb-2">✗ No Logs</div>
+                    <div class="badge bg-danger w-100 mb-2">✗ No Export</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Permission Matrix -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-table"></i> Detailed Permission Matrix</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover comparison-table mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Category</th>
+                                    <th>Permission</th>
+                                    <th class="text-center">Admin</th>
+                                    <th class="text-center">Operator</th>
+                                    <th class="text-center">Viewer</th>
+                                    <th class="text-center">Demo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Alerts -->
+                                <tr class="feature-row">
+                                    <td rowspan="4" class="align-middle"><strong><i class="fas fa-exclamation-triangle text-primary"></i> Alerts</strong></td>
+                                    <td>View alerts, history, map</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                </tr>
+                                <tr class="feature-row">
+                                    <td>Create manual alerts</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                </tr>
+                                <tr class="feature-row">
+                                    <td>Delete alerts</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                </tr>
+                                <tr class="feature-row">
+                                    <td>Export alert data</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                </tr>
+
+                                <!-- EAS Broadcast -->
+                                <tr class="feature-row table-warning">
+                                    <td rowspan="4" class="align-middle"><strong><i class="fas fa-broadcast-tower text-danger"></i> EAS Broadcast</strong></td>
+                                    <td>View EAS workflow</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                </tr>
+                                <tr class="feature-row table-warning">
+                                    <td><strong>Initiate broadcasts</strong> 🔴</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                </tr>
+                                <tr class="feature-row table-warning">
+                                    <td><strong>Manual EAS activation</strong> 🔴</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                </tr>
+                                <tr class="feature-row table-warning">
+                                    <td>Cancel broadcasts</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                </tr>
+
+                                <!-- System -->
+                                <tr class="feature-row">
+                                    <td rowspan="4" class="align-middle"><strong><i class="fas fa-cogs text-secondary"></i> System</strong></td>
+                                    <td><strong>Modify configuration</strong></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                </tr>
+                                <tr class="feature-row">
+                                    <td>View configuration</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                </tr>
+                                <tr class="feature-row">
+                                    <td><strong>Manage users/roles</strong></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                </tr>
+                                <tr class="feature-row">
+                                    <td>View users</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                </tr>
+
+                                <!-- Logs -->
+                                <tr class="feature-row">
+                                    <td rowspan="3" class="align-middle"><strong><i class="fas fa-file-alt text-info"></i> Logs</strong></td>
+                                    <td>View system/audit logs</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                </tr>
+                                <tr class="feature-row">
+                                    <td>Export logs</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                </tr>
+                                <tr class="feature-row">
+                                    <td>Delete logs</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                </tr>
+
+                                <!-- Receivers -->
+                                <tr class="feature-row">
+                                    <td rowspan="3" class="align-middle"><strong><i class="fas fa-radio text-success"></i> Receivers</strong></td>
+                                    <td>View receivers/status</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                </tr>
+                                <tr class="feature-row">
+                                    <td>Configure receivers</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                </tr>
+                                <tr class="feature-row">
+                                    <td>Delete receivers</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                </tr>
+
+                                <!-- GPIO -->
+                                <tr class="feature-row table-warning">
+                                    <td rowspan="2" class="align-middle"><strong><i class="fas fa-microchip text-warning"></i> GPIO</strong></td>
+                                    <td>View GPIO status</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                </tr>
+                                <tr class="feature-row table-warning">
+                                    <td><strong>Control GPIO/relays</strong> 🔴</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                </tr>
+
+                                <!-- API -->
+                                <tr class="feature-row">
+                                    <td rowspan="2" class="align-middle"><strong><i class="fas fa-code text-primary"></i> API</strong></td>
+                                    <td>Read data (GET)</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                </tr>
+                                <tr class="feature-row">
+                                    <td>Modify data (POST/PUT/DELETE)</td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-success">✓</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">✗</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer text-muted small">
+                    <strong>Legend:</strong>
+                    <span class="badge bg-success">✓</span> = Permitted |
+                    <span class="badge bg-danger">✗</span> = Denied |
+                    🔴 = Critical permission
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0"><i class="fas fa-lightbulb"></i> Best Practices</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="mb-0">
+                        <li><strong>Admin:</strong> Use only for system administration tasks</li>
+                        <li><strong>Operator:</strong> Daily operations and broadcast control</li>
+                        <li><strong>Viewer:</strong> Monitoring, reporting, and auditing</li>
+                        <li><strong>Demo:</strong> Public demonstrations and training</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-warning text-dark">
+                    <h6 class="mb-0"><i class="fas fa-shield-alt"></i> Security Notes</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="mb-0">
+                        <li>Demo role prevents accidental broadcasts during demos</li>
+                        <li>Viewer role is ideal for compliance officers</li>
+                        <li>Only Admins can modify system configuration</li>
+                        <li>All roles require authentication</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Related Links -->
+    <div class="row mt-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="fas fa-link"></i> Related Documentation</h6>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a href="/admin/rbac" class="btn btn-sm btn-primary">
+                            <i class="fas fa-users-cog"></i> RBAC Management
+                        </a>
+                        <a href="/docs/RBAC_PERMISSION_TREE" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-file-alt"></i> Detailed Text Version
+                        </a>
+                        <a href="/docs/security/SECURITY_ANALYSIS_EXECUTIVE_SUMMARY" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-shield-alt"></i> Security Analysis
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showRoleDetails(role) {
+    const details = {
+        admin: {
+            title: 'Admin Role',
+            icon: 'crown',
+            color: 'danger',
+            permissions: 22,
+            description: 'Full system administrator with unrestricted access',
+            features: [
+                'Configure system settings and environment variables',
+                'Manage user accounts and roles',
+                'Initiate and cancel EAS broadcasts',
+                'Control GPIO relays and equipment',
+                'Add/modify/delete receivers and audio sources',
+                'Access and export all logs and audit trails',
+                'Delete alerts and log entries',
+                'Full API access (read and write)'
+            ]
+        },
+        operator: {
+            title: 'Operator Role',
+            icon: 'bolt',
+            color: 'warning',
+            permissions: 16,
+            description: 'Alert operator with broadcast capabilities',
+            features: [
+                'Initiate EAS broadcasts',
+                'Control GPIO relays',
+                'Create manual alerts',
+                'View and export logs',
+                'Export alert data',
+                'View system configuration',
+                'View user list',
+                'Full API access (read and write)'
+            ],
+            limitations: [
+                'Cannot modify system configuration',
+                'Cannot manage users or roles',
+                'Cannot delete alerts or logs',
+                'Cannot add/modify/delete receivers'
+            ]
+        },
+        viewer: {
+            title: 'Viewer Role',
+            icon: 'eye',
+            color: 'info',
+            permissions: 10,
+            description: 'Read-only monitoring and reporting',
+            features: [
+                'View alerts and EAS workflow',
+                'View system configuration',
+                'View and export logs',
+                'View receivers and GPIO status',
+                'Export alert data',
+                'View user list',
+                'Read-only API access'
+            ],
+            limitations: [
+                'Cannot initiate broadcasts or control equipment',
+                'Cannot create or delete alerts',
+                'Cannot modify any settings',
+                'Cannot manage users',
+                'Cannot control GPIO'
+            ]
+        },
+        demo: {
+            title: 'Demo Role',
+            icon: 'theater-masks',
+            color: 'secondary',
+            permissions: 4,
+            description: 'Limited demonstration access (SAFE MODE)',
+            features: [
+                'View alerts and alert history',
+                'View EAS workflow (read-only)',
+                'View SDR receivers and audio monitoring',
+                'View GPIO relay status'
+            ],
+            limitations: [
+                'Cannot initiate EAS broadcasts',
+                'Cannot control GPIO relays',
+                'Cannot export any data',
+                'Cannot view system configuration',
+                'Cannot access logs or audit trails',
+                'Cannot view user accounts',
+                'Cannot create, modify, or delete anything',
+                'No API access'
+            ]
+        }
+    };
+
+    const data = details[role];
+    let html = `
+        <div class="modal fade" id="roleModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-${data.color} text-white">
+                        <h5 class="modal-title"><i class="fas fa-${data.icon}"></i> ${data.title}</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-${data.color}">
+                            <strong>${data.permissions} Permissions</strong> - ${data.description}
+                        </div>
+                        <h6><i class="fas fa-check-circle text-success"></i> Can Do:</h6>
+                        <ul>
+                            ${data.features.map(f => `<li>${f}</li>`).join('')}
+                        </ul>
+    `;
+
+    if (data.limitations) {
+        html += `
+                        <h6><i class="fas fa-times-circle text-danger"></i> Cannot Do:</h6>
+                        <ul>
+                            ${data.limitations.map(l => `<li>${l}</li>`).join('')}
+                        </ul>
+        `;
+    }
+
+    html += `
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Remove existing modal
+    const existingModal = document.getElementById('roleModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // Add new modal
+    document.body.insertAdjacentHTML('beforeend', html);
+    const modal = new bootstrap.Modal(document.getElementById('roleModal'));
+    modal.show();
+}
+</script>
+{% endblock %}
