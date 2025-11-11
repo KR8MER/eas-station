@@ -10,7 +10,7 @@ This page provides an index of all professional diagrams and flowcharts availabl
 
 **Complete CAP alert ingestion workflow** showing data flow from external sources (NOAA/IPAWS) through validation, parsing, spatial processing, duplicate checking, and database storage.
 
-![Alert Processing Pipeline](/docs//docs/assets/diagrams/alert-processing-pipeline.svg)
+![Alert Processing Pipeline](/docs/assets/diagrams/alert-processing-pipeline.svg)
 
 **Key Features:**
 - External CAP feed sources
@@ -25,7 +25,7 @@ This page provides an index of all professional diagrams and flowcharts availabl
 - Debugging alert ingestion issues
 - Planning CAP feed integrations
 
-**File:** [`/docs//docs/assets/diagrams/alert-processing-pipeline.svg`](/docs//docs/assets/diagrams/alert-processing-pipeline.svg)
+**File:** [`/docs/assets/diagrams/alert-processing-pipeline.svg`](/docs/assets/diagrams/alert-processing-pipeline.svg)
 
 ---
 
@@ -33,7 +33,7 @@ This page provides an index of all professional diagrams and flowcharts availabl
 
 **Step-by-step EAS message generation and transmission** from operator initiation through SAME encoding, TTS narration, and final broadcast.
 
-![EAS Broadcast Workflow](/docs//docs/assets/diagrams/broadcast-workflow.svg)
+![EAS Broadcast Workflow](/docs/assets/diagrams/broadcast-workflow.svg)
 
 **Key Features:**
 - Alert source selection (manual vs. CAP)
@@ -271,7 +271,7 @@ All professional SVG diagrams follow these standards:
 
 When adding new diagrams:
 
-1. Save as SVG in `docs//docs/assets/diagrams/` directory
+1. Save as SVG in `docs/assets/diagrams/` directory
 2. Use consistent color scheme and typography
 3. Include accessibility metadata (title, description)
 4. Add to this index page

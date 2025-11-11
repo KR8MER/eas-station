@@ -9,48 +9,48 @@ Welcome to the comprehensive documentation for **EAS Station** - an experimental
 ### For Operators
 | Document | Description |
 |----------|-------------|
-| [**Help & Operations Guide**](guides/HELP.md) | Daily operations, dashboard access, alert monitoring |
+| [**Help & Operations Guide**](/docs/guides/HELP) | Daily operations, dashboard access, alert monitoring |
 | [**Quick Start**](https://github.com/KR8MER/eas-station/blob/main/README.md#quick-start) | Get up and running in 5 minutes |
-| [**Setup Instructions**](guides/SETUP_INSTRUCTIONS.md) | First-run wizard, environment validation |
-| [**Portainer Deployment**](guides/PORTAINER_DEPLOYMENT.md) | Complete guide for deploying and maintaining with Portainer |
-| [**Database Fixes**](guides/DATABASE_CONSISTENCY_FIXES.md) | Troubleshooting database connection issues |
-| [**Environment Migration**](guides/ENV_MIGRATION_GUIDE.md) | Migrating .env configuration between versions |
-| [**One-Button Upgrade**](guides/one_button_upgrade.md) | Automated upgrade workflow |
-| [**Audio Monitoring**](audio/AUDIO_MONITORING.md) | Live stream viewer, waveform analysis, troubleshooting |
+| [**Setup Instructions**](/docs/guides/SETUP_INSTRUCTIONS) | First-run wizard, environment validation |
+| [**Portainer Deployment**](/docs/guides/PORTAINER_DEPLOYMENT) | Complete guide for deploying and maintaining with Portainer |
+| [**Database Fixes**](/docs/guides/DATABASE_CONSISTENCY_FIXES) | Troubleshooting database connection issues |
+| [**Environment Migration**](/docs/guides/ENV_MIGRATION_GUIDE) | Migrating .env configuration between versions |
+| [**One-Button Upgrade**](/docs/guides/one_button_upgrade) | Automated upgrade workflow |
+| [**Audio Monitoring**](/docs/audio/AUDIO_MONITORING) | Live stream viewer, waveform analysis, troubleshooting |
 
 ### For Integrators
 | Document | Description |
 |----------|-------------|
-| [**IPAWS Feed Integration**](guides/ipaws_feed_integration.md) | Configure IPAWS/Pub-Sub polling |
-| [**Radio USB Passthrough**](guides/radio_usb_passthrough.md) | SDR receiver configuration for Docker |
+| [**IPAWS Feed Integration**](/docs/guides/ipaws_feed_integration) | Configure IPAWS/Pub-Sub polling |
+| [**Radio USB Passthrough**](/docs/guides/radio_usb_passthrough) | SDR receiver configuration for Docker |
 | [**API Reference**](https://github.com/KR8MER/eas-station/blob/main/README.md#-api-endpoints) | REST API documentation |
 
 ### For Developers
 | Document | Description |
 |----------|-------------|
-| [**Developer Guidelines (AGENTS.md)**](development/AGENTS.md) | Code style, patterns, security practices, testing |
-| [**Contributing Guide**](process/CONTRIBUTING.md) | How to contribute, DCO workflow |
-| [**PR Description Template**](process/PR_DESCRIPTION.md) | Pull request checklist |
-| [**Git Workflow**](development/git_workflow.md) | Syncing branches and development workflow |
+| [**Developer Guidelines (AGENTS.md)**](/docs/development/AGENTS) | Code style, patterns, security practices, testing |
+| [**Contributing Guide**](/docs/process/CONTRIBUTING) | How to contribute, DCO workflow |
+| [**PR Description Template**](/docs/process/PR_DESCRIPTION) | Pull request checklist |
+| [**Git Workflow**](/docs/development/git_workflow) | Syncing branches and development workflow |
 
 ### Project Information
 | Document | Description |
 |----------|-------------|
-| [**About**](reference/ABOUT.md) | Project mission, architecture, technology stack |
-| [**Changelog**](reference/CHANGELOG.md) | Complete version history and release notes |
-| [**Feature Matrix**](reference/FEATURE_MATRIX.md) | Documentation coverage by feature |
-| [**Roadmap**](roadmap/) | Feature planning and requirements |
-| [**DASDEC3 Comparison**](roadmap/DASDEC3_COMPARISON.md) | Gap analysis vs. commercial encoder/decoder |
-| [**DASDEC3 Manuals (Reference)**](Version%205.1%20Software_Users%20Guide_R1.0%205-31-23.pdf) | Vendor manual, quick start, Grob Systems dossier |
-| [**License Attribution**](reference/dependency_attribution.md) | Open-source dependencies and licenses |
-| [**System Architecture**](architecture/SYSTEM_ARCHITECTURE.md) | Comprehensive flowcharts and component diagrams |
-| [**Theory of Operation**](architecture/THEORY_OF_OPERATION.md) | End-to-end system flow and SAME protocol internals |
+| [**About**](/docs/reference/ABOUT) | Project mission, architecture, technology stack |
+| [**Changelog**](/docs/reference/CHANGELOG) | Complete version history and release notes |
+| [**Feature Matrix**](/docs/reference/FEATURE_MATRIX) | Documentation coverage by feature |
+| [**Roadmap**](/docs/roadmap/master_todo) | Feature planning and requirements |
+| [**DASDEC3 Comparison**](/docs/roadmap/DASDEC3_COMPARISON) | Gap analysis vs. commercial encoder/decoder |
+| [**DASDEC3 Manuals (Reference)**](https://github.com/KR8MER/eas-station/blob/main/docs/Version%205.1%20Software_Users%20Guide_R1.0%205-31-23.pdf) | Vendor manual, quick start, Grob Systems dossier |
+| [**License Attribution**](/docs/reference/dependency_attribution) | Open-source dependencies and licenses |
+| [**System Architecture**](/docs/architecture/SYSTEM_ARCHITECTURE) | Comprehensive flowcharts and component diagrams |
+| [**Theory of Operation**](/docs/architecture/THEORY_OF_OPERATION) | End-to-end system flow and SAME protocol internals |
 
 ### Legal & Policies
 | Document | Description |
 |----------|-------------|
-| [**Terms of Use**](policies/TERMS_OF_USE.md) | Legal disclaimers and acceptable use |
-| [**Privacy Policy**](policies/PRIVACY_POLICY.md) | Data handling and privacy guidance |
+| [**Terms of Use**](/docs/policies/TERMS_OF_USE) | Legal disclaimers and acceptable use |
+| [**Privacy Policy**](/docs/policies/PRIVACY_POLICY) | Data handling and privacy guidance |
 
 ---
 
@@ -124,22 +124,22 @@ docs/
 
 ### By Task
 - **Setting up EAS Station for the first time?** → [Quick Start Guide](https://github.com/KR8MER/eas-station/blob/main/README.md#quick-start)
-- **Deploying with Portainer?** → [Portainer Deployment Guide](guides/PORTAINER_DEPLOYMENT.md)
-- **Operating the dashboard?** → [Help & Operations Guide](guides/HELP.md)
-- **Contributing code?** → [Developer Guidelines](development/AGENTS.md) + [Contributing](process/CONTRIBUTING.md)
-- **Troubleshooting issues?** → [Database Fixes](guides/DATABASE_CONSISTENCY_FIXES.md) + [Help Guide](guides/HELP.md)
-- **Integrating with IPAWS?** → [IPAWS Integration Guide](guides/ipaws_feed_integration.md)
-- **Configuring SDR hardware?** → [Radio USB Passthrough](guides/radio_usb_passthrough.md)
-- **Monitoring audio feeds?** → [Audio Monitoring](audio/AUDIO_MONITORING.md)
-- **Understanding the architecture?** → [System Architecture](architecture/SYSTEM_ARCHITECTURE.md) + [Theory of Operation](architecture/THEORY_OF_OPERATION.md) + [About](reference/ABOUT.md)
-- **Checking version history?** → [Changelog](reference/CHANGELOG.md)
+- **Deploying with Portainer?** → [Portainer Deployment Guide](/docs/guides/PORTAINER_DEPLOYMENT)
+- **Operating the dashboard?** → [Help & Operations Guide](/docs/guides/HELP)
+- **Contributing code?** → [Developer Guidelines](/docs/development/AGENTS) + [Contributing](/docs/process/CONTRIBUTING)
+- **Troubleshooting issues?** → [Database Fixes](/docs/guides/DATABASE_CONSISTENCY_FIXES) + [Help Guide](/docs/guides/HELP)
+- **Integrating with IPAWS?** → [IPAWS Integration Guide](/docs/guides/ipaws_feed_integration)
+- **Configuring SDR hardware?** → [Radio USB Passthrough](/docs/guides/radio_usb_passthrough)
+- **Monitoring audio feeds?** → [Audio Monitoring](/docs/audio/AUDIO_MONITORING)
+- **Understanding the architecture?** → [System Architecture](/docs/architecture/SYSTEM_ARCHITECTURE) + [Theory of Operation](/docs/architecture/THEORY_OF_OPERATION) + [About](/docs/reference/ABOUT)
+- **Checking version history?** → [Changelog](/docs/reference/CHANGELOG)
 
 ### By Audience
-- **👨‍💼 Emergency Managers**: Start with [About](reference/ABOUT.md) and [Terms of Use](policies/TERMS_OF_USE.md)
-- **📻 Radio Operators**: [Help Guide](guides/HELP.md) → [IPAWS Integration](guides/ipaws_feed_integration.md)
-- **🎧 Audio Engineers**: [Audio Monitoring](audio/AUDIO_MONITORING.md) → [Professional Audio Subsystem](PROFESSIONAL_AUDIO_SUBSYSTEM.md)
-- **💻 Developers**: [AGENTS.md](development/AGENTS.md) → [Contributing](process/CONTRIBUTING.md)
-- **🔧 System Administrators**: [Portainer Deployment](guides/PORTAINER_DEPLOYMENT.md) → [Environment Migration](guides/ENV_MIGRATION_GUIDE.md) → [Database Fixes](guides/DATABASE_CONSISTENCY_FIXES.md)
+- **👨‍💼 Emergency Managers**: Start with [About](/docs/reference/ABOUT) and [Terms of Use](/docs/policies/TERMS_OF_USE)
+- **📻 Radio Operators**: [Help Guide](/docs/guides/HELP) → [IPAWS Integration](/docs/guides/ipaws_feed_integration)
+- **🎧 Audio Engineers**: [Audio Monitoring](/docs/audio/AUDIO_MONITORING) → [Professional Audio Subsystem](/docs/PROFESSIONAL_AUDIO_SUBSYSTEM)
+- **💻 Developers**: [AGENTS.md](/docs/development/AGENTS) → [Contributing](/docs/process/CONTRIBUTING)
+- **🔧 System Administrators**: [Portainer Deployment](/docs/guides/PORTAINER_DEPLOYMENT) → [Environment Migration](/docs/guides/ENV_MIGRATION_GUIDE) → [Database Fixes](/docs/guides/DATABASE_CONSISTENCY_FIXES)
 
 ---
 
@@ -149,7 +149,7 @@ docs/
 |--------|-------|
 | Total Documentation Files | 18+ markdown files |
 | Total Lines of Documentation | 3,300+ lines |
-| Last Updated | See [CHANGELOG.md](reference/CHANGELOG.md) |
+| Last Updated | See [CHANGELOG.md](/docs/reference/CHANGELOG) |
 | Primary Maintainer | [KR8MER](https://github.com/KR8MER) |
 
 ---
@@ -168,11 +168,11 @@ In addition to these markdown files, EAS Station provides **web-based documentat
 
 ## 🆘 Getting Help
 
-1. **Check the documentation**: Start with [HELP.md](guides/HELP.md) or [INDEX.md](INDEX.md)
-2. **Review troubleshooting**: [Database Fixes](guides/DATABASE_CONSISTENCY_FIXES.md)
-3. **Search the codebase**: Use the comprehensive [INDEX.md](INDEX.md)
+1. **Check the documentation**: Start with [HELP.md](/docs/guides/HELP) or [INDEX.md](/docs/INDEX)
+2. **Review troubleshooting**: [Database Fixes](/docs/guides/DATABASE_CONSISTENCY_FIXES)
+3. **Search the codebase**: Use the comprehensive [INDEX.md](/docs/INDEX)
 4. **File an issue**: [GitHub Issues](https://github.com/KR8MER/eas-station/issues)
-5. **Review changelog**: Check if your issue is addressed in [CHANGELOG.md](reference/CHANGELOG.md)
+5. **Review changelog**: Check if your issue is addressed in [CHANGELOG.md](/docs/reference/CHANGELOG)
 
 ---
 
@@ -180,8 +180,8 @@ In addition to these markdown files, EAS Station provides **web-based documentat
 
 Documentation improvements are always welcome! Please:
 
-1. Follow the [Contributing Guide](process/CONTRIBUTING.md)
-2. Keep the [Developer Guidelines](development/AGENTS.md) in mind
+1. Follow the [Contributing Guide](/docs/process/CONTRIBUTING)
+2. Keep the [Developer Guidelines](/docs/development/AGENTS) in mind
 3. Update this README if you add new documentation files
 4. Use clear, concise language appropriate for your audience
 5. Include code examples where applicable
