@@ -161,9 +161,14 @@ class SDRSourceAdapter(AudioSourceAdapter):
                         # Assume interleaved I/Q as float32 or int16
                         try:
                             iq_array = np.frombuffer(audio_data, dtype=np.float32)
-                        except:
-                            raw = np.frombuffer(audio_data, dtype=np.int16)
-                            iq_array = raw.astype(np.float32) / 32768.0
+                        except (ValueError, TypeError) as exc:
+                            # Fallback to int16 if float32 conversion fails
+                            try:
+                                raw = np.frombuffer(audio_data, dtype=np.int16)
+                                iq_array = raw.astype(np.float32) / 32768.0
+                            except (ValueError, TypeError) as fallback_exc:
+                                self._logger.error("Failed to convert audio data: %s (fallback also failed: %s)", exc, fallback_exc)
+                                continue
 
                         # Convert interleaved I/Q to complex
                         iq_complex = iq_array[0::2] + 1j * iq_array[1::2]

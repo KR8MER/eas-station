@@ -138,29 +138,18 @@ def register(app, logger):
                     import os
 
                     # Check BEFORE write
-                    setup_logger.info("=== PRE-WRITE DIAGNOSTICS ===")
-                    setup_logger.info(f"Current user: uid={os.getuid()}, gid={os.getgid()}")
-                    setup_logger.info(f"ENV_OUTPUT_PATH: {ENV_OUTPUT_PATH}")
+                    setup_logger.debug("Preparing to write environment configuration")
                     if ENV_OUTPUT_PATH.exists():
-                        stat_before = ENV_OUTPUT_PATH.stat()
-                        setup_logger.info(f"File exists - size: {stat_before.st_size}, perms: {oct(stat_before.st_mode)}, owner: uid={stat_before.st_uid}")
-                        setup_logger.info(f"File is writable: {os.access(ENV_OUTPUT_PATH, os.W_OK)}")
+                        setup_logger.debug("Configuration file exists, will be updated")
                     else:
-                        setup_logger.info("File does not exist yet")
-                        parent_dir = ENV_OUTPUT_PATH.parent
-                        setup_logger.info(f"Parent dir writable: {os.access(parent_dir, os.W_OK)}")
+                        setup_logger.debug("Configuration file does not exist, will be created")
 
                     result_path = write_env_file(state=state, updates=cleaned, create_backup=create_backup)
 
                     # Check AFTER write
-                    setup_logger.info("=== POST-WRITE DIAGNOSTICS ===")
                     setup_logger.info(f"Successfully wrote .env file to: {result_path}")
-                    setup_logger.info(f".env file exists: {result_path.exists()}")
                     if result_path.exists():
-                        stat_after = result_path.stat()
-                        setup_logger.info(f".env file size: {stat_after.st_size} bytes")
-                        setup_logger.info(f".env file permissions: {oct(stat_after.st_mode)}")
-                        setup_logger.info(f".env file owner: uid={stat_after.st_uid}, gid={stat_after.st_gid}")
+                        setup_logger.debug("Configuration file written successfully")
 
                         # Try to read back what we just wrote
                         try:

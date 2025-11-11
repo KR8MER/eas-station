@@ -175,7 +175,7 @@ if _docker_icecast_enabled and _docker_icecast_enabled.lower() in ('true', '1', 
     if _docker_icecast_password:
         # Preserve docker-compose Icecast password for auto-streaming
         os.environ['ICECAST_SOURCE_PASSWORD'] = _docker_icecast_password
-        logger.debug("Preserved Icecast auto-config password from docker environment")
+        logger.debug("Preserved Icecast auto-config from docker environment")
 
 # Create Flask app
 app = Flask(__name__)

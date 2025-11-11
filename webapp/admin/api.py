@@ -162,8 +162,8 @@ def register_api_routes(app, logger):
             return jsonify(response_data)
 
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.error("Error getting alert geometry: %s", exc)
-            return jsonify({'error': str(exc)}), 500
+            logger.error("Error getting alert geometry: %s", exc, exc_info=True)
+            return jsonify({'error': 'Failed to retrieve alert geometry'}), 500
 
     @app.route('/alerts/<int:alert_id>')
     def alert_detail(alert_id):
@@ -326,8 +326,8 @@ def register_api_routes(app, logger):
             )
 
         except Exception as exc:
-            logger.error('Error in alert_detail route: %s', exc)
-            flash(f'Error loading alert details: {exc}', 'error')
+            logger.error('Error in alert_detail route: %s', exc, exc_info=True)
+            flash('Error loading alert details. Please try again.', 'error')
             return redirect(url_for('index'))
 
     @app.route('/alerts/<int:alert_id>/export.pdf')
@@ -425,8 +425,8 @@ def register_api_routes(app, logger):
             return response
 
         except Exception as exc:
-            logger.error('Error generating alert PDF: %s', exc)
-            flash(f'Error generating PDF: {exc}', 'error')
+            logger.error('Error generating alert PDF: %s', exc, exc_info=True)
+            flash('Error generating PDF. Please try again.', 'error')
             return redirect(url_for('alert_detail', alert_id=alert_id))
 
     @app.route('/api/alerts')
@@ -538,8 +538,8 @@ def register_api_routes(app, logger):
             )
 
         except Exception as exc:
-            logger.error('Error getting alerts: %s', exc)
-            return jsonify({'error': str(exc)}), 500
+            logger.error('Error getting alerts: %s', exc, exc_info=True)
+            return jsonify({'error': 'Failed to retrieve alerts'}), 500
 
     @app.route('/api/alerts/historical')
     def get_historical_alerts():
@@ -645,8 +645,8 @@ def register_api_routes(app, logger):
             return jsonify({'type': 'FeatureCollection', 'features': features})
 
         except Exception as exc:
-            logger.error('Error getting historical alerts: %s', exc)
-            return jsonify({'error': str(exc)}), 500
+            logger.error('Error getting historical alerts: %s', exc, exc_info=True)
+            return jsonify({'error': 'Failed to retrieve historical alerts'}), 500
 
     @app.route('/api/boundaries')
     def get_boundaries():
@@ -700,8 +700,8 @@ def register_api_routes(app, logger):
 
             return jsonify({'type': 'FeatureCollection', 'features': features})
         except Exception as exc:
-            logger.error('Error fetching boundaries: %s', exc)
-            return jsonify({'error': str(exc)}), 500
+            logger.error('Error fetching boundaries: %s', exc, exc_info=True)
+            return jsonify({'error': 'Failed to retrieve boundaries'}), 500
 
     @app.route('/api/system_status')
     def api_system_status():
@@ -862,8 +862,8 @@ def register_api_routes(app, logger):
                 }
             )
         except Exception as exc:
-            logger.error('Error getting system status: %s', exc)
-            return jsonify({'error': f'Failed to get system status: {exc}'}), 500
+            logger.error('Error getting system status: %s', exc, exc_info=True)
+            return jsonify({'error': 'Failed to get system status'}), 500
 
     @app.route('/api/system_health')
     def api_system_health():
@@ -872,8 +872,8 @@ def register_api_routes(app, logger):
             health_data = get_system_health()
             return jsonify(health_data)
         except Exception as exc:
-            logger.error('Error getting system health via API: %s', exc)
-            return jsonify({'error': str(exc)}), 500
+            logger.error('Error getting system health via API: %s', exc, exc_info=True)
+            return jsonify({'error': 'Failed to get system health'}), 500
 
 
 __all__ = ['register_api_routes']
