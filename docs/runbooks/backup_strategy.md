@@ -1,431 +1,802 @@
-# EAS Station Backup Strategy
+# EAS Station Backup and Recovery Strategy
+
+**Purpose:** Complete guide to backup procedures, recovery procedures, and retention policies for EAS Station.
+
+**Audience:** System administrators, DevOps engineers
+
+**Last Updated:** 2025-01-11
+
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Backup Components](#backup-components)
+3. [Backup Procedures](#backup-procedures)
+4. [Recovery Procedures](#recovery-procedures)
+5. [Retention Policy](#retention-policy)
+6. [Testing](#testing)
+7. [Troubleshooting](#troubleshooting)
+
+---
 
 ## Overview
 
-This document describes the backup and recovery strategy for EAS Station deployments. A comprehensive backup strategy protects against data loss, enables disaster recovery, and ensures compliance with audit trail requirements.
+### Backup Strategy
 
-## What Gets Backed Up
+EAS Station implements a comprehensive **3-2-1 backup strategy**:
 
-The `tools/create_backup.py` utility creates snapshots containing:
+- **3** copies of data (production + 2 backups)
+- **2** different storage media types
+- **1** copy off-site
 
-1. **Configuration Files**
-   - `.env` - Environment variables and secrets
-   - `docker-compose.yml` - Container orchestration configuration
-   - `docker-compose.embedded-db.yml` - Optional embedded database configuration
+### Recovery Objectives
 
-2. **Database Dump**
-   - Complete PostgreSQL database export (`.sql` format)
-   - Includes all tables: alerts, boundaries, users, audit logs, GPIO logs, etc.
-   - Preserves PostGIS spatial data and indexes
+| Metric | Target | Notes |
+|--------|--------|-------|
+| **RPO** (Recovery Point Objective) | 15 minutes | Max data loss acceptable |
+| **RTO** (Recovery Time Objective) | 30 minutes | Max downtime acceptable |
+| **Backup Frequency** | Every 6 hours | Automated via scheduler |
+| **Backup Retention** | 7d / 4w / 6m | Daily/Weekly/Monthly |
+| **Test Frequency** | Monthly | Restore test required |
 
-3. **Metadata**
-   - Timestamp of backup creation
-   - Git commit hash and branch
-   - Application version
-   - Database connection details (sanitized)
-   - Backup command used for restore reference
+### Tools
 
-## Backup Frequency Recommendations
+| Tool | Purpose | Location |
+|------|---------|----------|
+| `create_backup.py` | Create backups | `tools/create_backup.py` |
+| `restore_backup.py` | Restore backups | `tools/restore_backup.py` |
+| `backup_scheduler.py` | Automate backups | `tools/backup_scheduler.py` |
+| `rotate_backups.py` | Apply retention policy | `tools/rotate_backups.py` |
 
-### Production Deployments
+---
 
-| Backup Type | Frequency | Retention | Purpose |
-|-------------|-----------|-----------|---------|
-| **Scheduled** | Daily at 2:00 AM | 7 daily, 4 weekly, 6 monthly | Regular protection |
-| **Pre-Upgrade** | Before each upgrade | Keep all | Rollback capability |
-| **Pre-Configuration** | Before major config changes | 30 days | Recovery from mistakes |
+## Backup Components
 
-### Lab/Testing Environments
+### What Gets Backed Up
 
-| Backup Type | Frequency | Retention | Purpose |
-|-------------|-----------|-----------|---------|
-| **Scheduled** | Weekly | 4 weekly | Basic protection |
-| **Manual** | As needed | 30 days | Experimental snapshots |
+#### 1. Configuration Files
+- `.env` - Application configuration
+- `docker-compose.yml` - Container orchestration
+- `stack.env` - Stack defaults
 
-## Automated Backup Setup
+**Why:** Required to recreate exact environment
 
-### Option 1: Systemd Timer (Recommended for Linux)
+#### 2. PostgreSQL Database
+- Full SQL dump of all tables
+- Includes alert history, user data, configurations
+- Approximately 10-500 MB depending on alert volume
 
-**1. Copy systemd unit files:**
-```bash
-sudo cp examples/systemd/eas-backup.service /etc/systemd/system/
-sudo cp examples/systemd/eas-backup.timer /etc/systemd/system/
-```
+**Why:** Contains all application state and historical data
 
-**2. Edit the service file if your installation path differs:**
-```bash
-sudo nano /etc/systemd/system/eas-backup.service
-```
+#### 3. Media Files
+- `static/eas_messages/` - Generated EAS audio files
+- `static/uploads/` - User-uploaded files
+- `uploads/` - Application uploads
 
-Update the `WorkingDirectory` and `ExecStart` paths to match your installation.
+**Why:** Generated content that may be needed for audit/replay
 
-**3. Enable and start the timer:**
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable eas-backup.timer
-sudo systemctl start eas-backup.timer
-```
+#### 4. Docker Volumes
+- `app-config` - Persistent configuration
+- `certbot-conf` - SSL certificates
+- `alerts-db-data` - Database files (if using embedded DB)
 
-**4. Verify the timer is active:**
-```bash
-sudo systemctl status eas-backup.timer
-sudo systemctl list-timers | grep eas-backup
-```
+**Why:** Critical persistent data outside containers
 
-**5. Test the backup manually:**
-```bash
-sudo systemctl start eas-backup.service
-sudo journalctl -u eas-backup.service -f
-```
+### What Does NOT Get Backed Up
 
-### Option 2: Cron (Alternative)
+- **Log files** - Retained separately, not in backups
+- **Temporary files** - Recreated automatically
+- **Downloaded/cached data** - Can be re-fetched
+- **Docker images** - Rebuilt from source
 
-**1. Copy the cron example:**
-```bash
-cp examples/cron/eas-backup.cron /tmp/eas-backup.cron
-```
+---
 
-**2. Edit paths if needed:**
-```bash
-nano /tmp/eas-backup.cron
-```
+## Backup Procedures
 
-**3. Install to root crontab:**
-```bash
-sudo crontab -e
-# Paste the contents of /tmp/eas-backup.cron
-```
+### Method 1: Manual Backup (Recommended for Pre-Upgrade)
 
-**4. Verify cron job:**
-```bash
-sudo crontab -l | grep eas-backup
-```
+#### Full Backup
 
-## Manual Backup Creation
-
-### Standard Backup
 ```bash
 cd /opt/eas-station
-python3 tools/create_backup.py
+
+# Create comprehensive backup
+python3 tools/create_backup.py \
+    --output-dir /var/backups/eas-station \
+    --label manual
+
+# Verify backup was created
+ls -lh /var/backups/eas-station/backup-*
 ```
 
-### Pre-Upgrade Backup
+**Expected Output:**
+```
+Creating backup: /var/backups/eas-station/backup-20250111-143022-manual
+
+Backing up configuration files...
+  ✓ Configuration files backed up
+
+Backing up PostgreSQL database...
+  ✓ Database backed up (15.3 MB)
+
+Backing up media directories...
+  ✓ static/eas_messages backed up (2.1 MB)
+
+Backing up Docker volumes...
+  ✓ Volume 'app-config' backed up (0.5 MB)
+  ✓ Volume 'certbot-conf' backed up (0.1 MB)
+
+============================================================
+Backup completed successfully!
+Location: /var/backups/eas-station/backup-20250111-143022-manual
+Total size: 18.0 MB
+Database: ✓
+Media directories: 1
+Docker volumes: 2
+============================================================
+```
+
+#### Quick Backup (Config + Database Only)
+
+For faster backups before quick changes:
+
 ```bash
-cd /opt/eas-station
-python3 tools/create_backup.py --label pre-upgrade
+python3 tools/create_backup.py \
+    --output-dir /var/backups/eas-station \
+    --label quick \
+    --no-media \
+    --no-volumes
 ```
 
-### Custom Output Directory
+This typically completes in 30-60 seconds.
+
+### Method 2: Automated Backup (Recommended for Production)
+
+#### Using Systemd Timer (Recommended)
+
+1. **Configure the service:**
+   ```bash
+   sudo nano /etc/systemd/system/eas-backup.service
+   ```
+   
+   Update paths and email:
+   ```ini
+   ExecStart=/usr/bin/python3 /opt/eas-station/tools/backup_scheduler.py \
+       --output-dir /var/backups/eas-station \
+       --label scheduled \
+       --log-file /var/log/eas-backup.log \
+       --notify admin@example.com
+   ```
+
+2. **Install and enable:**
+   ```bash
+   sudo cp examples/systemd/eas-backup.service /etc/systemd/system/
+   sudo cp examples/systemd/eas-backup.timer /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable eas-backup.timer
+   sudo systemctl start eas-backup.timer
+   ```
+
+3. **Verify timer is active:**
+   ```bash
+   sudo systemctl status eas-backup.timer
+   sudo systemctl list-timers | grep eas
+   ```
+
+4. **Test manual run:**
+   ```bash
+   sudo systemctl start eas-backup.service
+   sudo journalctl -u eas-backup.service -f
+   ```
+
+#### Using Cron
+
+1. **Install cron job:**
+   ```bash
+   sudo cp examples/cron/eas-backup.cron /etc/cron.d/eas-backup
+   sudo nano /etc/cron.d/eas-backup  # Update paths and email
+   ```
+
+2. **Verify installation:**
+   ```bash
+   sudo cat /etc/cron.d/eas-backup
+   sudo ls -l /etc/cron.d/eas-backup
+   ```
+
+3. **Test immediately:**
+   ```bash
+   sudo run-parts --test /etc/cron.d
+   ```
+
+### Method 3: Docker Volume Backup
+
+For backing up individual Docker volumes:
+
 ```bash
-cd /opt/eas-station
-python3 tools/create_backup.py --output-dir /mnt/external/eas-backups
+# List volumes
+docker volume ls
+
+# Backup a specific volume
+docker run --rm \
+    -v eas-station_app-config:/data:ro \
+    -v $(pwd):/backup \
+    busybox \
+    tar czf /backup/app-config-backup.tar.gz -C /data .
+
+# Verify backup
+ls -lh app-config-backup.tar.gz
 ```
 
-## Backup Retention and Rotation
+---
 
-The `tools/rotate_backups.py` utility implements a grandfather-father-son retention policy:
-
-- **Daily backups**: Keep the 7 most recent
-- **Weekly backups**: Keep 4 most recent Sunday backups
-- **Monthly backups**: Keep 6 most recent backups from the 1st of the month
-
-### Manual Rotation
-
-**Dry run (preview what would be deleted):**
-```bash
-python3 tools/rotate_backups.py --dry-run
-```
-
-**Apply default retention policy:**
-```bash
-python3 tools/rotate_backups.py
-```
-
-**Custom retention policy:**
-```bash
-python3 tools/rotate_backups.py \
-  --keep-daily 14 \
-  --keep-weekly 8 \
-  --keep-monthly 12
-```
-
-### Automated Rotation
-
-Add rotation to the backup systemd service by editing `/etc/systemd/system/eas-backup.service`:
-
-```ini
-[Service]
-Type=oneshot
-User=root
-WorkingDirectory=/opt/eas-station
-ExecStart=/usr/bin/python3 /opt/eas-station/tools/create_backup.py --output-dir /var/backups/eas-station --label scheduled
-ExecStartPost=/usr/bin/python3 /opt/eas-station/tools/rotate_backups.py --backup-dir /var/backups/eas-station
-```
-
-Then reload and restart:
-```bash
-sudo systemctl daemon-reload
-sudo systemctl restart eas-backup.service
-```
-
-For cron, add a second job:
-```cron
-# Rotate backups daily at 3:00 AM (after backup completes)
-0 3 * * * cd /opt/eas-station && /usr/bin/python3 tools/rotate_backups.py --backup-dir /var/backups/eas-station >> /var/log/eas-backup.log 2>&1
-```
-
-## Restore Procedures
+## Recovery Procedures
 
 ### Full System Restore
 
-**1. Stop running services:**
+**Scenario:** Complete system failure, need to restore everything.
+
+**Time Required:** 15-30 minutes
+
+#### Prerequisites
+
+- Backup directory accessible
+- Fresh EAS Station installation (git cloned)
+- Docker and Docker Compose installed
+
+#### Procedure
+
+1. **Stop services** (if running):
+   ```bash
+   cd /opt/eas-station
+   docker compose down
+   ```
+
+2. **Identify backup to restore:**
+   ```bash
+   ls -lht /var/backups/eas-station/
+   
+   # Or if using remote backups
+   ls -lht /mnt/remote-backups/eas-station/
+   ```
+
+3. **Validate backup integrity:**
+   ```bash
+   python3 tools/restore_backup.py \
+       --backup-dir /var/backups/eas-station/backup-20250111-143022 \
+       --dry-run
+   ```
+   
+   **Expected output:**
+   ```
+   Backup validation for: backup-20250111-143022
+     Created: 2025-01-11T14:30:22Z
+     Version: 2.1.0
+     Database: ✓
+     Config: ✓
+     Media archives: 1
+     Docker volumes: 2
+   
+   ✓ Backup validation passed
+   ```
+
+4. **Create safety backup** (if possible):
+   ```bash
+   # Backup current state before restoring
+   python3 tools/create_backup.py --label pre-restore
+   ```
+
+5. **Restore the backup:**
+   ```bash
+   python3 tools/restore_backup.py \
+       --backup-dir /var/backups/eas-station/backup-20250111-143022
+   
+   # You will be prompted to confirm each step
+   # Review carefully before confirming
+   ```
+
+6. **Start services:**
+   ```bash
+   docker compose up -d
+   ```
+
+7. **Verify restoration:**
+   ```bash
+   # Wait for services to start
+   sleep 30
+   
+   # Check health
+   curl http://localhost/health/dependencies | jq
+   
+   # Check logs
+   docker compose logs --tail=50
+   
+   # Access web interface
+   curl -I http://localhost/
+   ```
+
+8. **Functional testing:**
+   - Log in to web interface
+   - Check recent alerts
+   - Verify configuration settings
+   - Test alert generation (if applicable)
+
+### Database-Only Restore
+
+**Scenario:** Database corruption, but configuration is fine.
+
+**Time Required:** 5-10 minutes
+
 ```bash
-cd /opt/eas-station
-docker compose down
+# Stop application (keep database running if possible)
+docker compose stop app noaa-poller ipaws-poller
+
+# Restore database only
+python3 tools/restore_backup.py \
+    --backup-dir /var/backups/eas-station/latest \
+    --database-only \
+    --force
+
+# Restart application
+docker compose start app noaa-poller ipaws-poller
+
+# Verify
+curl http://localhost/health
 ```
 
-**2. Restore configuration files:**
+### Configuration-Only Restore
+
+**Scenario:** Configuration error, need to revert settings.
+
+**Time Required:** 2-5 minutes
+
 ```bash
-BACKUP_DIR=/var/backups/eas-station/backup-20250305-143022
-cp $BACKUP_DIR/.env .env
-cp $BACKUP_DIR/docker-compose.yml docker-compose.yml
-```
+# Restore configuration files only
+python3 tools/restore_backup.py \
+    --backup-dir /var/backups/eas-station/backup-20250111-143022 \
+    --skip-database \
+    --skip-media \
+    --skip-volumes
 
-**3. Restore database:**
-```bash
-# Option A: Using docker compose (if alerts-db service exists)
-docker compose up -d alerts-db
-docker compose exec -T alerts-db psql -U postgres -d alerts < $BACKUP_DIR/alerts_database.sql
-
-# Option B: Using psql directly
-PGPASSWORD=$(grep POSTGRES_PASSWORD .env | cut -d= -f2 | tr -d '"') \
-  psql -h localhost -U postgres -d alerts < $BACKUP_DIR/alerts_database.sql
-```
-
-**4. Restart services:**
-```bash
-docker compose up -d
-```
-
-**5. Verify restore:**
-```bash
-docker compose logs -f
-curl http://localhost:8080/health
-curl http://localhost:8080/api/release-manifest
-```
-
-### Partial Restore (Configuration Only)
-
-If you only need to restore configuration:
-```bash
-BACKUP_DIR=/var/backups/eas-station/backup-20250305-143022
-cp $BACKUP_DIR/.env .env
+# Restart services to apply new configuration
 docker compose restart
 ```
 
-### Database Only Restore
+### Individual File Restore
 
-To restore only the database without touching configuration:
+**Scenario:** Need to restore just one file.
+
 ```bash
-BACKUP_DIR=/var/backups/eas-station/backup-20250305-143022
-docker compose exec -T alerts-db psql -U postgres -d alerts < $BACKUP_DIR/alerts_database.sql
-docker compose restart app poller ipaws-poller
+# Extract specific file from backup
+BACKUP_DIR="/var/backups/eas-station/backup-20250111-143022"
+
+# Restore .env file
+cp "$BACKUP_DIR/.env" .env.restored
+diff .env .env.restored
+
+# Restore from media archive
+cd /opt/eas-station
+tar xzf "$BACKUP_DIR/eas-messages.tar.gz" \
+    --wildcards \
+    "eas_messages/specific-file.wav"
 ```
 
-## Off-Site Backup Storage
+### Point-in-Time Recovery
 
-For disaster recovery, store backups off-site:
+**Scenario:** Need to restore to a specific date/time.
 
-### Option 1: rsync to Remote Server
+```bash
+# List backups by date
+ls -lht /var/backups/eas-station/
+
+# Restore from specific timestamp
+python3 tools/restore_backup.py \
+    --backup-dir /var/backups/eas-station/backup-20250111-020000-scheduled
+```
+
+---
+
+## Retention Policy
+
+### Grandfather-Father-Son (GFS) Strategy
+
+| Type | Retention | Description | Storage Location |
+|------|-----------|-------------|------------------|
+| **Daily** (Son) | 7 days | Most recent 7 backups | Local disk |
+| **Weekly** (Father) | 4 weeks | Sunday backups from last 4 weeks | Local + NAS |
+| **Monthly** (Grandfather) | 6 months | 1st of month backups | Local + Off-site |
+
+### Automatic Rotation
+
+The `backup_scheduler.py` automatically applies retention policy:
+
+```bash
+# Manual rotation
+python3 tools/rotate_backups.py \
+    --backup-dir /var/backups/eas-station \
+    --keep-daily 7 \
+    --keep-weekly 4 \
+    --keep-monthly 6
+
+# Dry run to preview what would be deleted
+python3 tools/rotate_backups.py \
+    --backup-dir /var/backups/eas-station \
+    --dry-run
+```
+
+**Expected output:**
+```
+Found 42 backup(s) in /var/backups/eas-station
+Retention policy: 7 daily, 4 weekly, 6 monthly
+
+Deleting: backup-20241201-020000 (age: 42 days, size: 15.2 MB)
+Deleting: backup-20241208-020000 (age: 35 days, size: 16.1 MB)
+...
+
+Summary: Kept 17 backup(s), deleted 25 backup(s)
+```
+
+### Storage Requirements
+
+**Example sizing** (your actual sizes may vary):
+
+```
+Daily backups (7):   7 × 20 MB  = 140 MB
+Weekly backups (4):  4 × 20 MB  = 80 MB
+Monthly backups (6): 6 × 20 MB  = 120 MB
+-------------------------------------------
+Total storage:                    340 MB
+```
+
+**Recommendation:** Allocate at least 1 GB for backup storage.
+
+### Off-Site Backup
+
+**Option 1: rsync to remote server**
+
 ```bash
 #!/bin/bash
-# /opt/eas-station/tools/sync_backups_offsite.sh
+# /opt/eas-station/sync-to-offsite.sh
+
+LOCAL_DIR="/var/backups/eas-station"
+REMOTE_HOST="backup-server.example.com"
+REMOTE_DIR="/backups/eas-station"
+
 rsync -avz --delete \
-  /var/backups/eas-station/ \
-  backup-server:/backups/eas-station/ \
-  --exclude='*.tmp'
+    "$LOCAL_DIR/" \
+    "${REMOTE_HOST}:${REMOTE_DIR}/" \
+    2>&1 | logger -t eas-offsite-sync
 ```
 
-Run after each backup via systemd `ExecStartPost` or as a separate cron job.
+Schedule via cron:
+```
+0 4 * * * /opt/eas-station/sync-to-offsite.sh
+```
 
-### Option 2: Cloud Storage (S3, Azure Blob, etc.)
+**Option 2: Cloud storage (AWS S3, Azure Blob, etc.)**
 
-Use AWS CLI, Azure CLI, or rclone:
 ```bash
 # AWS S3 example
-aws s3 sync /var/backups/eas-station/ s3://my-bucket/eas-station-backups/
-
-# rclone example (works with many cloud providers)
-rclone sync /var/backups/eas-station/ remote:eas-station-backups/
+aws s3 sync /var/backups/eas-station/ \
+    s3://my-bucket/eas-station-backups/ \
+    --delete \
+    --storage-class STANDARD_IA
 ```
 
-## Backup Verification
+---
 
-### Automatic Verification
+## Testing
 
-The backup script stores metadata that can be used for verification:
-```bash
-cat /var/backups/eas-station/backup-20250305-143022/metadata.json
-```
+### Monthly Restore Test
 
-### Manual Verification
+**Required:** Test backup restoration monthly to ensure backups are valid.
 
-Test restore in a separate environment:
-```bash
-# 1. Spin up a test database
-docker run -d --name test-postgres \
-  -e POSTGRES_PASSWORD=testpass \
-  -p 5433:5432 \
-  postgis/postgis:15-3.3
+#### Test Procedure
 
-# 2. Restore backup
-docker exec -i test-postgres psql -U postgres -d postgres \
-  < /var/backups/eas-station/backup-20250305-143022/alerts_database.sql
+1. **Create test environment:**
+   ```bash
+   # Use a separate directory or VM
+   mkdir -p /opt/eas-station-test
+   cd /opt/eas-station-test
+   git clone https://github.com/KR8MER/eas-station.git .
+   ```
 
-# 3. Verify data
-docker exec test-postgres psql -U postgres -d alerts -c "SELECT COUNT(*) FROM cap_alerts;"
+2. **Restore from production backup:**
+   ```bash
+   python3 tools/restore_backup.py \
+       --backup-dir /var/backups/eas-station/latest \
+       --force
+   ```
 
-# 4. Clean up
-docker stop test-postgres
-docker rm test-postgres
-```
+3. **Verify restoration:**
+   ```bash
+   docker compose up -d
+   sleep 30
+   curl http://localhost/health/dependencies
+   ```
 
-## Monitoring Backup Status
+4. **Functional tests:**
+   - Access web interface
+   - Check database content
+   - Verify configuration
+   - Test basic functionality
 
-### Check Backup Logs (systemd)
-```bash
-sudo journalctl -u eas-backup.service -n 50
-sudo journalctl -u eas-backup.service --since today
-```
+5. **Document results:**
+   ```bash
+   # Create test report
+   cat > /var/log/restore-test-$(date +%Y%m%d).txt << REPORT
+   Restore Test - $(date)
+   
+   Backup Used: $(ls -ld /var/backups/eas-station/latest)
+   Restoration Time: [X minutes]
+   Database Records: [count]
+   Health Check: [PASS/FAIL]
+   Functional Test: [PASS/FAIL]
+   
+   Issues Found: [None or describe]
+   
+   Tester: [Your name]
+   REPORT
+   ```
 
-### Check Backup Logs (cron)
-```bash
-tail -f /var/log/eas-backup.log
-```
+6. **Clean up:**
+   ```bash
+   cd /opt/eas-station-test
+   docker compose down -v
+   cd /opt
+   rm -rf eas-station-test
+   ```
 
-### Alert on Backup Failures
-
-Add to systemd service:
-```ini
-[Service]
-OnFailure=backup-failure-notification@%n.service
-```
-
-Or monitor cron via email:
-```cron
-MAILTO=admin@example.com
-0 2 * * * cd /opt/eas-station && python3 tools/create_backup.py --output-dir /var/backups/eas-station 2>&1
-```
-
-## Storage Requirements
-
-### Estimate Backup Size
-
-Database size varies based on:
-- Number of received alerts (typically 100-500 per day)
-- Number of boundary polygons (1,000-10,000 depending on configuration)
-- Audit log retention (grows over time)
-
-**Typical sizes:**
-- Fresh install: ~50 MB
-- 1 month operation: ~200-500 MB
-- 1 year operation: ~2-5 GB
-
-**Configuration files:** ~1 MB total
-
-### Storage Recommendations
-
-| Deployment | Daily Backups | Weekly/Monthly | Total Storage |
-|------------|---------------|----------------|---------------|
-| **Lab** | 50 MB × 7 = 350 MB | 50 MB × 4 = 200 MB | ~600 MB |
-| **Production** | 500 MB × 7 = 3.5 GB | 500 MB × 10 = 5 GB | ~10 GB |
-
-Add 50% margin for growth: **15-20 GB recommended for production**
-
-## Security Considerations
-
-### Backup Encryption
-
-For sensitive deployments, encrypt backups at rest:
+### Automated Test Script
 
 ```bash
 #!/bin/bash
-# Encrypt backup after creation
-BACKUP_DIR=$(ls -td /var/backups/eas-station/backup-* | head -1)
-tar czf - "$BACKUP_DIR" | \
-  openssl enc -aes-256-cbc -salt -pbkdf2 -out "${BACKUP_DIR}.tar.gz.enc"
-rm -rf "$BACKUP_DIR"
+# /opt/eas-station/test-restore.sh
+
+set -e
+
+TEST_DIR="/tmp/eas-restore-test-$$"
+BACKUP_DIR="/var/backups/eas-station/latest"
+LOG_FILE="/var/log/eas-restore-test-$(date +%Y%m%d).log"
+
+{
+    echo "=== EAS Station Restore Test ==="
+    echo "Started: $(date)"
+    echo ""
+    
+    # Create test environment
+    echo "Creating test environment..."
+    mkdir -p "$TEST_DIR"
+    cd "$TEST_DIR"
+    git clone https://github.com/KR8MER/eas-station.git . --quiet
+    
+    # Restore backup
+    echo "Restoring from backup: $BACKUP_DIR"
+    python3 tools/restore_backup.py \
+        --backup-dir "$BACKUP_DIR" \
+        --force
+    
+    # Start services
+    echo "Starting services..."
+    docker compose up -d
+    sleep 30
+    
+    # Health check
+    echo "Running health check..."
+    if curl -f http://localhost/health; then
+        echo "✓ Health check PASSED"
+    else
+        echo "✗ Health check FAILED"
+        exit 1
+    fi
+    
+    # Cleanup
+    echo "Cleaning up..."
+    docker compose down -v
+    cd /
+    rm -rf "$TEST_DIR"
+    
+    echo ""
+    echo "=== Test PASSED ==="
+    echo "Completed: $(date)"
+    
+} 2>&1 | tee "$LOG_FILE"
 ```
 
-### Access Control
-
-Restrict backup directory permissions:
-```bash
-sudo chown -R root:root /var/backups/eas-station
-sudo chmod 700 /var/backups/eas-station
+Schedule monthly:
+```
+0 3 1 * * /opt/eas-station/test-restore.sh
 ```
 
-### Credential Protection
-
-The `.env` file contains sensitive credentials. Consider:
-1. Encrypting backups (see above)
-2. Using separate secret management (e.g., HashiCorp Vault)
-3. Restricting access to backup storage
+---
 
 ## Troubleshooting
 
-### Backup Script Fails
+### Backup Issues
 
-**Check logs:**
-```bash
-sudo journalctl -u eas-backup.service -n 100
+#### Backup Script Fails
+
+**Problem:** `create_backup.py` exits with error
+
+**Solutions:**
+
+1. Check disk space:
+   ```bash
+   df -h /var/backups
+   ```
+
+2. Check permissions:
+   ```bash
+   ls -ld /var/backups/eas-station
+   sudo chown -R $(whoami) /var/backups/eas-station
+   ```
+
+3. Check database connectivity:
+   ```bash
+   docker compose exec alerts-db pg_isready
+   ```
+
+4. Run in verbose mode:
+   ```bash
+   python3 -u tools/create_backup.py --label debug 2>&1 | tee /tmp/backup-debug.log
+   ```
+
+#### Backup Too Large
+
+**Problem:** Backups consuming too much disk space
+
+**Solutions:**
+
+1. Check what's using space:
+   ```bash
+   du -sh /var/backups/eas-station/*
+   ```
+
+2. Adjust retention policy:
+   ```bash
+   python3 tools/rotate_backups.py \
+       --backup-dir /var/backups/eas-station \
+       --keep-daily 3 \
+       --keep-weekly 2 \
+       --keep-monthly 3
+   ```
+
+3. Exclude media if not needed:
+   ```bash
+   python3 tools/create_backup.py --no-media
+   ```
+
+4. Compress older backups:
+   ```bash
+   find /var/backups/eas-station -name "backup-*" -mtime +7 \
+       -type d -exec tar czf {}.tar.gz {} \; -exec rm -rf {} \;
+   ```
+
+### Restore Issues
+
+#### Database Restore Fails
+
+**Problem:** Error during database restoration
+
+**Solutions:**
+
+1. Check database is accessible:
+   ```bash
+   docker compose ps alerts-db
+   docker compose logs alerts-db
+   ```
+
+2. Manually verify backup SQL:
+   ```bash
+   head -100 /var/backups/eas-station/latest/alerts_database.sql
+   tail -100 /var/backups/eas-station/latest/alerts_database.sql
+   ```
+
+3. Try restoring manually:
+   ```bash
+   docker compose exec -T alerts-db psql -U postgres < \
+       /var/backups/eas-station/latest/alerts_database.sql
+   ```
+
+4. Check PostgreSQL version compatibility:
+   ```bash
+   # Compare versions
+   docker compose exec alerts-db psql -U postgres -c "SELECT version();"
+   grep "PostgreSQL" /var/backups/eas-station/latest/alerts_database.sql | head -1
+   ```
+
+#### Missing Backup Files
+
+**Problem:** Backup directory empty or missing files
+
+**Solutions:**
+
+1. Check backup actually ran:
+   ```bash
+   sudo journalctl -u eas-backup.service -n 100
+   tail -100 /var/log/eas-backup.log
+   ```
+
+2. Check timer is enabled:
+   ```bash
+   sudo systemctl status eas-backup.timer
+   ```
+
+3. Check alternative backup locations:
+   ```bash
+   find / -type d -name "backup-2025*" 2>/dev/null
+   ```
+
+4. Restore from off-site if available:
+   ```bash
+   rsync -avz backup-server:/backups/eas-station/ /var/backups/eas-station/
+   ```
+
+---
+
+## Appendix A: Backup Checklist
+
+### Pre-Upgrade Checklist
+
+- [ ] Create manual backup with label
+- [ ] Verify backup completed successfully
+- [ ] Test backup can be read
+- [ ] Document backup location
+- [ ] Document current system state
+- [ ] Have rollback plan ready
+
+### Monthly Maintenance Checklist
+
+- [ ] Run restore test
+- [ ] Verify automated backups are running
+- [ ] Check backup disk space
+- [ ] Review retention policy
+- [ ] Verify off-site sync working
+- [ ] Update documentation if needed
+
+### Quarterly Review Checklist
+
+- [ ] Review backup strategy
+- [ ] Test disaster recovery procedure
+- [ ] Verify backup restoration times
+- [ ] Update RTO/RPO targets if needed
+- [ ] Review storage costs
+- [ ] Train team on recovery procedures
+
+---
+
+## Appendix B: Backup Metadata
+
+Each backup includes a `metadata.json` file:
+
+```json
+{
+  "timestamp": "2025-01-11T14:30:22Z",
+  "label": "scheduled",
+  "git_commit": "abc123def456",
+  "git_branch": "main",
+  "app_version": "2.1.0",
+  "database": {
+    "host": "alerts-db",
+    "port": "5432",
+    "name": "alerts",
+    "user": "postgres",
+    "command": "pg_dump -U postgres -d alerts"
+  },
+  "summary": {
+    "config": true,
+    "database": true,
+    "media": ["eas-messages"],
+    "volumes": ["app-config", "certbot-conf"],
+    "total_size_mb": 18.5
+  }
+}
 ```
 
-**Common issues:**
-1. **PostgreSQL not accessible**: Verify `POSTGRES_*` variables in `.env`
-2. **Disk full**: Check storage with `df -h`
-3. **Permissions**: Ensure script runs as root or user with database access
+And a `README.txt` with human-readable information.
 
-### Restore Fails
+---
 
-**Database restore errors:**
-```bash
-# Check PostgreSQL version compatibility
-docker compose exec alerts-db psql --version
-
-# Check for conflicting data
-docker compose exec alerts-db psql -U postgres -d alerts -c "\dt"
-```
-
-**Configuration issues:**
-```bash
-# Validate .env syntax
-grep -v '^#' .env | grep -v '^$' | grep '='
-
-# Check Docker Compose syntax
-docker compose config
-```
-
-## Related Documentation
-
-- [Upgrade Procedures](upgrade_checklist.md) - Pre-upgrade backup workflow
-- [Disaster Recovery](outage_response.md) - Emergency restore procedures
-- [Security Hardening](../MIGRATION_SECURITY.md) - Backup encryption and access control
-
-## Audit Trail
-
-All backups include metadata for audit purposes:
-- Timestamp (UTC)
-- Git commit hash and branch
-- Application version
-- Database connection details
-
-Access metadata:
-```bash
-cat /var/backups/eas-station/backup-20250305-143022/metadata.json | jq
-```
-
-Query backup history:
-```bash
-ls -lth /var/backups/eas-station/
-```
+**Document Version:** 1.0  
+**Next Review Date:** [3 months from today]  
+**Owner:** [Your team name]

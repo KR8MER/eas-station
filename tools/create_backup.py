@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a snapshot of configuration files and the Postgres database."""
+"""Create a comprehensive snapshot of configuration, database, media, and Docker volumes."""
 from __future__ import annotations
 
 import argparse
@@ -8,11 +8,21 @@ import os
 import shutil
 import subprocess
 import sys
+import tarfile
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Optional
 
-from app_utils.versioning import get_current_version
+try:
+    from app_utils.versioning import get_current_version
+except ImportError:
+    # Fallback if app_utils not in path
+    def get_current_version():
+        """Fallback version getter."""
+        version_file = Path(__file__).parent.parent / "VERSION"
+        if version_file.exists():
+            return version_file.read_text().strip()
+        return "unknown"
 
 
 def read_env(path: Path) -> Dict[str, str]:
@@ -144,16 +154,117 @@ def copy_files(files: Iterable[Path], destination: Path) -> None:
         shutil.copy2(file_path, target_path)
 
 
+def backup_directory(source: Path, destination: Path, name: str) -> Optional[int]:
+    """Backup a directory by creating a tarball.
+
+    Args:
+        source: Source directory to backup
+        destination: Destination directory for the tarball
+        name: Name for the tarball (without .tar.gz extension)
+
+    Returns:
+        Size in bytes of the created tarball, or None if source doesn't exist
+    """
+    if not source.exists() or not source.is_dir():
+        return None
+
+    tarball_path = destination / f"{name}.tar.gz"
+    with tarfile.open(tarball_path, "w:gz") as tar:
+        tar.add(source, arcname=source.name)
+
+    return tarball_path.stat().st_size
+
+
+def backup_docker_volume(compose_cmd: List[str], volume_name: str, destination: Path) -> Optional[int]:
+    """Backup a Docker volume to a tarball.
+
+    Args:
+        compose_cmd: Docker compose command (e.g., ['docker', 'compose'])
+        volume_name: Name of the volume to backup
+        destination: Destination directory for the tarball
+
+    Returns:
+        Size in bytes of the created tarball, or None if backup failed
+    """
+    if not compose_cmd:
+        return None
+
+    # Get the full volume name (includes project prefix)
+    result = subprocess.run(
+        [*compose_cmd, "volume", "ls", "--format", "{{.Name}}"],
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        return None
+
+    full_volume_name = None
+    for line in result.stdout.splitlines():
+        if volume_name in line:
+            full_volume_name = line.strip()
+            break
+
+    if not full_volume_name:
+        return None
+
+    tarball_path = destination / f"volume-{volume_name}.tar.gz"
+
+    # Use docker run to backup the volume
+    backup_cmd = [
+        "docker", "run", "--rm",
+        "-v", f"{full_volume_name}:/data:ro",
+        "-v", f"{destination.absolute()}:/backup",
+        "busybox",
+        "tar", "czf", f"/backup/{tarball_path.name}", "-C", "/data", "."
+    ]
+
+    result = subprocess.run(backup_cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        return None
+
+    if tarball_path.exists():
+        return tarball_path.stat().st_size
+    return None
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Create a configuration and database backup")
+    parser = argparse.ArgumentParser(
+        description="Create a comprehensive backup of EAS Station",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Full backup (recommended)
+  python create_backup.py
+
+  # Backup with custom label
+  python create_backup.py --label pre-upgrade
+
+  # Database and config only (fast)
+  python create_backup.py --no-media --no-volumes
+
+  # Custom output directory
+  python create_backup.py --output-dir /var/backups/eas-station
+        """,
+    )
     parser.add_argument(
         "--output-dir",
         default="backups",
-        help="Directory where the backup snapshot should be stored.",
+        help="Directory where the backup snapshot should be stored (default: backups)",
     )
     parser.add_argument(
         "--label",
-        help="Optional label appended to the backup folder name (e.g., pre-upgrade).",
+        help="Optional label appended to the backup folder name (e.g., pre-upgrade)",
+    )
+    parser.add_argument(
+        "--no-media",
+        action="store_true",
+        help="Skip backing up media files (EAS messages, uploads)",
+    )
+    parser.add_argument(
+        "--no-volumes",
+        action="store_true",
+        help="Skip backing up Docker volumes",
     )
     args = parser.parse_args()
 
@@ -162,20 +273,151 @@ def main() -> None:
     output_dir = Path(args.output_dir).resolve() / folder_name
     ensure_directory(output_dir)
 
+    print(f"Creating backup: {output_dir}")
+    print()
+
+    backup_summary = {
+        "config": False,
+        "database": False,
+        "media": [],
+        "volumes": [],
+        "total_size_mb": 0.0,
+    }
+
+    # 1. Copy configuration artifacts
+    print("Backing up configuration files...")
     env_path = Path(".env")
     env_values = read_env(env_path)
+    copy_files(
+        [env_path, Path("docker-compose.yml"), Path("docker-compose.embedded-db.yml"), Path("stack.env")],
+        output_dir
+    )
+    backup_summary["config"] = True
+    print("  ✓ Configuration files backed up")
+    print()
 
-    # Copy configuration artifacts for safekeeping.
-    copy_files([env_path, Path("docker-compose.yml"), Path("docker-compose.embedded-db.yml")], output_dir)
-
-    # Dump the database to disk.
+    # 2. Dump the database
+    print("Backing up PostgreSQL database...")
     dump_path = output_dir / "alerts_database.sql"
-    dump_command = run_pg_dump(env_values, dump_path)
+    try:
+        dump_command = run_pg_dump(env_values, dump_path)
+        db_size_mb = dump_path.stat().st_size / (1024 * 1024)
+        backup_summary["database"] = True
+        backup_summary["total_size_mb"] += db_size_mb
+        print(f"  ✓ Database backed up ({db_size_mb:.1f} MB)")
+    except Exception as exc:
+        print(f"  ✗ Database backup failed: {exc}")
+        dump_command = "FAILED"
+    print()
 
-    # Persist metadata for auditing.
-    write_metadata(output_dir / "metadata.json", env_values, dump_command)
+    # 3. Backup media directories
+    if not args.no_media:
+        print("Backing up media directories...")
+        media_dirs = [
+            ("static/eas_messages", "eas-messages"),
+            ("static/uploads", "uploads"),
+            ("uploads", "app-uploads"),
+        ]
 
-    print(f"Backup completed: {output_dir}")
+        for source_path, archive_name in media_dirs:
+            source = Path(source_path)
+            if source.exists():
+                try:
+                    size = backup_directory(source, output_dir, archive_name)
+                    if size:
+                        size_mb = size / (1024 * 1024)
+                        backup_summary["media"].append(archive_name)
+                        backup_summary["total_size_mb"] += size_mb
+                        print(f"  ✓ {source_path} backed up ({size_mb:.1f} MB)")
+                except Exception as exc:
+                    print(f"  ✗ Failed to backup {source_path}: {exc}")
+        print()
+
+    # 4. Backup Docker volumes
+    if not args.no_volumes:
+        print("Backing up Docker volumes...")
+        compose_cmd = detect_compose_command()
+
+        if compose_cmd:
+            volumes = [
+                "app-config",
+                "certbot-conf",
+                "alerts-db-data",
+            ]
+
+            for volume in volumes:
+                try:
+                    size = backup_docker_volume(compose_cmd, volume, output_dir)
+                    if size:
+                        size_mb = size / (1024 * 1024)
+                        backup_summary["volumes"].append(volume)
+                        backup_summary["total_size_mb"] += size_mb
+                        print(f"  ✓ Volume '{volume}' backed up ({size_mb:.1f} MB)")
+                    else:
+                        print(f"  - Volume '{volume}' not found or empty")
+                except Exception as exc:
+                    print(f"  ✗ Failed to backup volume '{volume}': {exc}")
+        else:
+            print("  - Docker not available, skipping volume backups")
+        print()
+
+    # 5. Persist metadata
+    metadata = {
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "label": args.label,
+        "git_commit": subprocess.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=False
+        ).stdout.strip() or "unknown",
+        "git_branch": subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, check=False
+        ).stdout.strip() or "unknown",
+        "app_version": get_current_version(),
+        "database": {
+            "host": env_values.get("POSTGRES_HOST", "unknown"),
+            "port": env_values.get("POSTGRES_PORT", "5432"),
+            "name": env_values.get("POSTGRES_DB", "alerts"),
+            "user": env_values.get("POSTGRES_USER", "postgres"),
+            "command": dump_command,
+        },
+        "summary": backup_summary,
+    }
+
+    (output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
+    (output_dir / "README.txt").write_text(
+        f"""EAS Station Backup
+==================
+
+Created: {metadata['timestamp']}
+Version: {metadata['app_version']}
+Git Commit: {metadata['git_commit']}
+Git Branch: {metadata['git_branch']}
+Label: {metadata.get('label') or 'N/A'}
+
+Contents:
+---------
+- Configuration files (.env, docker-compose.yml)
+- PostgreSQL database dump (alerts_database.sql)
+"""
+        + (f"- Media archives ({len(backup_summary['media'])} directories)\n" if backup_summary['media'] else "")
+        + (f"- Docker volumes ({len(backup_summary['volumes'])} volumes)\n" if backup_summary['volumes'] else "")
+        + f"\nTotal Size: {backup_summary['total_size_mb']:.1f} MB\n\n"
+        + """Restoration:
+-----------
+To restore this backup, use the restore_backup.py tool:
+    python tools/restore_backup.py --backup-dir <path-to-this-directory>
+
+For manual restoration, see docs/runbooks/backup_strategy.md
+"""
+    )
+
+    print("=" * 60)
+    print(f"Backup completed successfully!")
+    print(f"Location: {output_dir}")
+    print(f"Total size: {backup_summary['total_size_mb']:.1f} MB")
+    print(f"Database: {'✓' if backup_summary['database'] else '✗'}")
+    print(f"Media directories: {len(backup_summary['media'])}")
+    print(f"Docker volumes: {len(backup_summary['volumes'])}")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
