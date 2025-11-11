@@ -164,6 +164,14 @@ def get_field_mappings() -> Dict[str, Dict[str, List[str]]]:
             "name_fields": ["FULLNAME", "RAILROAD", "NAME"],
             "description_fields": ["LINEARID", "MTFCC", "ShapeSTLength"],
         },
+        "rivers": {
+            "name_fields": ["FULLNAME", "NAME", "GNIS_NAME"],
+            "description_fields": ["LINEARID", "MTFCC", "GNIS_ID", "Shape_Leng"],
+        },
+        "waterbodies": {
+            "name_fields": ["FULLNAME", "NAME", "GNIS_NAME"],
+            "description_fields": ["HYDROID", "MTFCC", "GNIS_ID", "AWATER", "Shape_Area"],
+        },
     }
 
 

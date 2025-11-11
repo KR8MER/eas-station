@@ -760,7 +760,15 @@ Before committing changes:
 flask==2.3.3
 requests==2.31.0
 new-library==1.2.3  # Add with version
+pyshp==2.3.1  # Shapefile reader for converting boundary files to GeoJSON
 ```
+
+**Current Python Dependencies:**
+- **pyshp 2.3.1** - Shapefile reader library for ESRI Shapefile (.shp) processing
+  - Used for converting TIGER/Line shapefiles to GeoJSON format
+  - Enables web-based shapefile upload and conversion in admin interface
+  - Required for `/admin/upload_shapefile` and `/admin/list_shapefiles` endpoints
+  - Lightweight alternative to GDAL/Fiona (no complex system dependencies)
 
 #### For System Packages and Infrastructure Components:
 
