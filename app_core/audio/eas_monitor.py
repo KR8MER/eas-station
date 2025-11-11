@@ -255,21 +255,12 @@ class ContinuousEASMonitor:
         temp_wav_path: str
     ) -> None:
         """Handle detected EAS alert."""
-        # Check if this is a duplicate (within cooldown period)
         current_time = time.time()
-        if self._last_alert_time:
-            time_since_last = current_time - self._last_alert_time
-            if time_since_last < 30.0:  # 30 second cooldown
-                logger.debug(f"Ignoring duplicate alert (within cooldown: {time_since_last:.1f}s)")
-                return
-
-        self._last_alert_time = current_time
-        self._alerts_detected += 1
 
         # Get active source name
         source_name = self.audio_manager.get_active_source() or "unknown"
 
-        # Create alert object
+        # Create alert object for logging
         alert = EASAlert(
             timestamp=utc_now(),
             raw_text=result.raw_text,
@@ -278,6 +269,67 @@ class ContinuousEASMonitor:
             duration_seconds=result.duration_seconds,
             source_name=source_name
         )
+
+        # === COMPREHENSIVE LOGGING FOR ALL ALERTS (BEFORE FILTERING) ===
+        # This logs EVERY alert detected, regardless of FIPS codes or forwarding criteria
+        # Useful for auditing and troubleshooting
+        try:
+            # Extract key alert details
+            event_code = "UNKNOWN"
+            originator = "UNKNOWN"
+            location_codes = []
+
+            if alert.headers and len(alert.headers) > 0:
+                first_header = alert.headers[0]
+                if 'fields' in first_header:
+                    fields = first_header['fields']
+                    event_code = fields.get('event_code', 'UNKNOWN')
+                    originator = fields.get('originator', 'UNKNOWN')
+
+                    # Extract location codes (FIPS codes)
+                    locations = fields.get('locations', [])
+                    if isinstance(locations, list):
+                        for loc in locations:
+                            if isinstance(loc, dict):
+                                code = loc.get('code', '')
+                                if code:
+                                    location_codes.append(code)
+
+            # Log comprehensive alert information (always logged for auditing)
+            logger.warning(
+                f"🔔 AUDIO ALERT RECEIVED: "
+                f"Event={event_code} | "
+                f"Originator={originator} | "
+                f"FIPS Codes={','.join(location_codes) if location_codes else 'NONE'} | "
+                f"Source={source_name} | "
+                f"Confidence={alert.confidence:.1%} | "
+                f"Raw={alert.raw_text}"
+            )
+
+            # Also log as structured data for easier parsing
+            logger.info(
+                f"Audio alert details: event_code={event_code}, "
+                f"originator={originator}, "
+                f"location_codes={location_codes}, "
+                f"source={source_name}, "
+                f"confidence={alert.confidence}, "
+                f"timestamp={alert.timestamp.isoformat()}"
+            )
+
+        except Exception as e:
+            logger.error(f"Error logging alert details: {e}", exc_info=True)
+        # === END COMPREHENSIVE LOGGING ===
+
+        # Check if this is a duplicate (within cooldown period)
+        # Note: Duplicates are still LOGGED above, but not processed further
+        if self._last_alert_time:
+            time_since_last = current_time - self._last_alert_time
+            if time_since_last < 30.0:  # 30 second cooldown
+                logger.debug(f"Alert within cooldown period ({time_since_last:.1f}s) - logged but not activating")
+                return
+
+        self._last_alert_time = current_time
+        self._alerts_detected += 1
 
         # Save audio file if requested
         if self.save_audio_files:
@@ -292,13 +344,13 @@ class ContinuousEASMonitor:
             except Exception as e:
                 logger.error(f"Failed to save alert audio: {e}")
 
-        # Log alert
+        # Log alert activation (this means the alert passed cooldown and will be processed/forwarded)
         logger.warning(
-            f"🚨 EAS ALERT DETECTED: {alert.raw_text} "
+            f"🚨 EAS ALERT ACTIVATING: {alert.raw_text} "
             f"(source: {source_name}, confidence: {alert.confidence:.1%})"
         )
 
-        # Trigger callback
+        # Trigger callback (this will apply FIPS filtering and forward if matching)
         if self.alert_callback:
             try:
                 self.alert_callback(alert)
