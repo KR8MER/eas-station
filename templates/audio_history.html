@@ -11,11 +11,8 @@
                     <i class="fas fa-headphones"></i> Audio Archive
                 </h1>
                 <div class="d-flex gap-2 flex-wrap">
-                    <button type="button" class="btn btn-success" onclick="exportAudioArchive()" title="Export visible audio records">
-                        <i class="fas fa-file-export"></i> Export
-                    </button>
-                    <button type="button" class="btn btn-info" onclick="window.print()" title="Print this page">
-                        <i class="fas fa-print"></i> Print
+                    <button type="button" class="btn btn-success" onclick="exportAudioArchive()" title="Export visible audio records to Excel">
+                        <i class="fas fa-file-export"></i> Export to Excel
                     </button>
                     {% if current_user %}
                     <button type="button" class="btn btn-danger" onclick="showPurgeModal()" title="Purge old audio messages">
@@ -427,7 +424,7 @@ async function executePurge() {
 
         if (!response.ok) {
             const errorMessage = result.error || 'Failed to purge audio messages';
-            showToast(errorMessage, 'error');
+            showToast(errorMessage, 'danger');
             return;
         }
 
@@ -453,7 +450,7 @@ async function executePurge() {
         }, 1500);
     } catch (error) {
         console.error('Purge failed:', error);
-        showToast('Failed to purge audio messages', 'error');
+        showToast('Failed to purge audio messages: ' + error.message, 'danger');
     }
 }
 </script>

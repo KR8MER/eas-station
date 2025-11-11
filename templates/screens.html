@@ -519,16 +519,24 @@ let availableScreensForRotation = [];
 document.addEventListener('DOMContentLoaded', function() {
     loadScreens();
     loadRotations();
+
+    // Add event listeners for filters
+    document.getElementById('screen-search')?.addEventListener('input', renderScreens);
+    document.getElementById('display-type-filter')?.addEventListener('change', renderScreens);
+    document.getElementById('enabled-filter')?.addEventListener('change', renderScreens);
 });
 
 // Load all screens
 async function loadScreens() {
+    console.log('Loading screens...');
     try {
         const response = await fetch('/api/screens');
+        console.log('Screens API response status:', response.status);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         const data = await response.json();
+        console.log('Screens loaded:', data.screens?.length || 0);
         allScreens = data.screens || [];
         renderScreens();
     } catch (error) {
@@ -537,6 +545,9 @@ async function loadScreens() {
             <div class="empty-state">
                 <i class="fas fa-exclamation-triangle text-warning"></i>
                 <p>Error loading screens: ${error.message}</p>
+                <button class="btn btn-primary mt-3" onclick="loadScreens()">
+                    <i class="fas fa-sync"></i> Retry
+                </button>
             </div>
         `;
     }
@@ -631,12 +642,15 @@ function renderScreens() {
 
 // Load rotations
 async function loadRotations() {
+    console.log('Loading rotations...');
     try {
         const response = await fetch('/api/rotations');
+        console.log('Rotations API response status:', response.status);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         const data = await response.json();
+        console.log('Rotations loaded:', data.rotations?.length || 0);
         allRotations = data.rotations || [];
         renderRotations();
     } catch (error) {
@@ -645,6 +659,9 @@ async function loadRotations() {
             <div class="empty-state">
                 <i class="fas fa-exclamation-triangle text-warning"></i>
                 <p>Error loading rotations: ${error.message}</p>
+                <button class="btn btn-primary mt-3" onclick="loadRotations()">
+                    <i class="fas fa-sync"></i> Retry
+                </button>
             </div>
         `;
     }
@@ -776,7 +793,7 @@ function saveScreen() {
         .then(response => response.json())
         .then(result => {
             if (result.error) {
-                showToast(result.error, 'error');
+                showToast(result.error, 'danger');
             } else {
                 showToast(`Screen ${isEdit ? 'updated' : 'created'} successfully`, 'success');
                 bootstrap.Modal.getInstance(document.getElementById('screenModal')).hide();
@@ -784,11 +801,11 @@ function saveScreen() {
             }
         })
         .catch(error => {
-            showToast('Error saving screen: ' + error, 'error');
+            showToast('Error saving screen: ' + error, 'danger');
         });
 
     } catch (error) {
-        showToast('Invalid JSON: ' + error.message, 'error');
+        showToast('Invalid JSON: ' + error.message, 'danger');
     }
 }
 
@@ -802,14 +819,14 @@ function displayScreen(id) {
     .then(response => response.json())
     .then(data => {
         if (data.error) {
-            showToast(data.error, 'error');
+            showToast(data.error, 'danger');
         } else {
             showToast('Screen displayed successfully', 'success');
             loadScreens();
         }
     })
     .catch(error => {
-        showToast('Error displaying screen: ' + error, 'error');
+        showToast('Error displaying screen: ' + error, 'danger');
     });
 }
 
@@ -826,7 +843,7 @@ function deleteScreen(id, name) {
         loadScreens();
     })
     .catch(error => {
-        showToast('Error deleting screen: ' + error, 'error');
+        showToast('Error deleting screen: ' + error, 'danger');
     });
 }
 
@@ -880,13 +897,20 @@ async function editRotation(id) {
 }
 
 // Load screens for rotation picker
-function loadScreensForRotation() {
+async function loadScreensForRotation() {
     const displayType = document.getElementById('rotation-display-type').value;
-    fetch(`/api/screens?display_type=${displayType}&enabled=true`)
-        .then(response => response.json())
-        .then(data => {
-            availableScreensForRotation = data.screens || [];
-        });
+    try {
+        const response = await fetch(`/api/screens?display_type=${displayType}&enabled=true`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        const data = await response.json();
+        availableScreensForRotation = data.screens || [];
+    } catch (error) {
+        console.error('Error loading screens for rotation:', error);
+        showToast(`Error loading screens: ${error.message}`, 'danger');
+        availableScreensForRotation = [];
+    }
 }
 
 // Add screen to rotation
@@ -922,7 +946,7 @@ function saveRotation() {
     }));
 
     if (screens.length === 0) {
-        showToast('Add at least one screen to the rotation', 'error');
+        showToast('Add at least one screen to the rotation', 'danger');
         return;
     }
 
@@ -947,7 +971,7 @@ function saveRotation() {
     .then(response => response.json())
     .then(result => {
         if (result.error) {
-            showToast(result.error, 'error');
+            showToast(result.error, 'danger');
         } else {
             showToast(`Rotation ${isEdit ? 'updated' : 'created'} successfully`, 'success');
             bootstrap.Modal.getInstance(document.getElementById('rotationModal')).hide();
@@ -955,7 +979,7 @@ function saveRotation() {
         }
     })
     .catch(error => {
-        showToast('Error saving rotation: ' + error, 'error');
+        showToast('Error saving rotation: ' + error, 'danger');
     });
 }
 
@@ -972,13 +996,8 @@ function deleteRotation(id, name) {
         loadRotations();
     })
     .catch(error => {
-        showToast('Error deleting rotation: ' + error, 'error');
+        showToast('Error deleting rotation: ' + error, 'danger');
     });
 }
-
-// Add event listeners for filters
-document.getElementById('screen-search')?.addEventListener('input', renderScreens);
-document.getElementById('display-type-filter')?.addEventListener('change', renderScreens);
-document.getElementById('enabled-filter')?.addEventListener('change', renderScreens);
 </script>
 {% endblock %}
