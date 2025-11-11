@@ -1265,7 +1265,6 @@ def collect_compliance_log_entries(
         alert_query = (
             CAPAlert.query.filter(CAPAlert.sent >= window_start)
             .order_by(CAPAlert.sent.desc())
-            .options(joinedload(CAPAlert.eas_messages))
         )
 
         for alert in alert_query:
