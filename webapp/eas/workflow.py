@@ -742,9 +742,11 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             try:
                 import json
                 metadata_str = json.dumps(event.generation_metadata, indent=2)
+                # Split JSON into lines to preserve formatting in PDF
+                metadata_lines = metadata_str.split('\n')
                 sections.append({
                     'heading': 'Generation Metadata',
-                    'content': metadata_str,
+                    'content': metadata_lines,
                 })
             except (TypeError, ValueError) as exc:
                 logger.warning('Failed to serialize generation metadata: %s', exc)

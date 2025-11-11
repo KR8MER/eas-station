@@ -11,11 +11,9 @@
             </p>
         </div>
         <div class="d-print-none">
-            {% if summary_url %}
-            <a class="btn btn-outline-primary btn-sm" href="{{ summary_url }}" target="_blank" rel="noopener">
+            <a class="btn btn-outline-primary btn-sm" href="{{ url_for('eas.manual_eas_export', event_id=event.id) }}" target="_blank" rel="noopener">
                 <i class="fas fa-file-export"></i> Export JSON
             </a>
-            {% endif %}
             <a href="{{ url_for('eas.manual_eas_print_pdf', event_id=event.id) }}" target="_blank" class="btn btn-primary btn-sm ms-2">
                 <i class="fas fa-file-pdf"></i> Export PDF
             </a>
