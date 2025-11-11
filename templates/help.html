@@ -251,10 +251,45 @@
                             </h2>
                             <div id="boundariesCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
                                 <div class="accordion-body">
+                                    <h6><i class="fas fa-upload me-2"></i>Importing Boundary Data</h6>
+                                    <p>The system supports two methods for importing geographic boundary data:</p>
                                     <ul>
-                                        <li><strong>Import Boundaries:</strong> Use the GIS boundary management tools to upload and configure coverage areas.</li>
-                                        <li><strong>Alert Configuration:</strong> Set up alert routing and notification preferences in the admin panel.</li>
-                                        <li><strong>Filter Settings:</strong> Configure geographic and event-based alert filtering.</li>
+                                        <li><strong>GeoJSON Files:</strong> Upload GeoJSON files directly via the "Upload Files" tab</li>
+                                        <li><strong>Shapefiles:</strong> Upload ESRI Shapefiles (ZIP archives with .shp, .shx, .dbf files) or import existing shapefiles from the server</li>
+                                    </ul>
+
+                                    <h6 class="mt-3"><i class="fas fa-map me-2"></i>Using Shapefiles</h6>
+                                    <p>Navigate to <strong>Admin → Upload Files</strong> and scroll to the "Upload Shapefiles" section:</p>
+                                    <ol>
+                                        <li><strong>View Server Files:</strong> Click "Refresh List" to see shapefiles already on the server (e.g., in <code>/streams and ponds</code>)</li>
+                                        <li><strong>Import Existing:</strong> Click "Import" next to any complete shapefile to convert and load it into the database</li>
+                                        <li><strong>Upload New:</strong> Upload a ZIP file containing all shapefile components and select the boundary type</li>
+                                    </ol>
+
+                                    <div class="alert alert-info mt-3">
+                                        <i class="fas fa-lightbulb"></i>
+                                        <strong>Tip:</strong> The system automatically detects water features (rivers, lakes) from TIGER/Line shapefiles. For Putnam County (FIPS 39137), water boundary files are pre-loaded in the <code>streams and ponds</code> directory.
+                                    </div>
+
+                                    <h6 class="mt-3"><i class="fas fa-layer-group me-2"></i>Supported Boundary Types</h6>
+                                    <ul class="list-unstyled">
+                                        <li>🌊 <strong>Rivers & Streams</strong> - Linear water features</li>
+                                        <li>💧 <strong>Lakes & Ponds</strong> - Area water bodies</li>
+                                        <li>⚡ <strong>Electric Providers</strong> - Utility service areas</li>
+                                        <li>🏘️ <strong>Villages & Townships</strong> - Municipal boundaries</li>
+                                        <li>🏫 <strong>School Districts</strong></li>
+                                        <li>🔥 <strong>Fire Districts</strong></li>
+                                        <li>🚑 <strong>EMS Districts</strong></li>
+                                        <li>🚆 <strong>Railroads</strong> - Rail corridors</li>
+                                        <li>📞 <strong>Telephone Providers</strong></li>
+                                        <li>🗺️ <strong>County Outlines</strong></li>
+                                    </ul>
+
+                                    <h6 class="mt-3"><i class="fas fa-cog me-2"></i>Additional Configuration</h6>
+                                    <ul>
+                                        <li><strong>Alert Configuration:</strong> Set up alert routing and notification preferences in the admin panel</li>
+                                        <li><strong>Filter Settings:</strong> Configure geographic and event-based alert filtering</li>
+                                        <li><strong>Intersection Calculation:</strong> After uploading boundaries, calculate intersections via <strong>Operations → Calculate Intersections</strong></li>
                                     </ul>
                                 </div>
                             </div>

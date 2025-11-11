@@ -392,6 +392,77 @@
                     </form>
                     <!-- Upload Status -->
                     <div id="uploadStatus" class="mt-3"></div>
+
+                    <!-- Shapefile Upload Section -->
+                    <hr class="my-5">
+                    <div class="mb-4">
+                        <h4 class="mb-2"><i class="fas fa-map text-info"></i> Upload Shapefiles</h4>
+                        <p class="text-muted">Upload ESRI Shapefiles (.shp with companion files) or use existing shapefiles from the server.</p>
+                    </div>
+
+                    <!-- Existing Shapefiles on Server -->
+                    <div class="card shadow-sm mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-server"></i> Available Shapefiles on Server</h5>
+                        </div>
+                        <div class="card-body">
+                            <button type="button" class="btn btn-outline-primary mb-3" onclick="loadServerShapefiles()">
+                                <i class="fas fa-sync"></i> Refresh List
+                            </button>
+                            <div id="serverShapefilesList">
+                                <div class="text-center py-3">
+                                    <p class="text-muted">Click "Refresh List" to see available shapefiles</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Upload New Shapefile (ZIP) -->
+                    <div class="card shadow-sm">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-file-archive"></i> Upload New Shapefile (ZIP)</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted small">
+                                <i class="fas fa-info-circle"></i>
+                                Upload a ZIP file containing all shapefile components (.shp, .shx, .dbf, .prj files)
+                            </p>
+                            <form id="shapefileUploadForm" enctype="multipart/form-data">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="shapefileBoundaryType" class="form-label fw-bold">Boundary Type</label>
+                                            <select id="shapefileBoundaryType" name="boundary_type" class="form-select" required>
+                                                <option value="">Select boundary type...</option>
+                                                <option value="rivers">🌊 Rivers & Streams</option>
+                                                <option value="waterbodies">💧 Lakes & Ponds</option>
+                                                <option value="electric">⚡ Electric Providers</option>
+                                                <option value="villages">🏘️ Villages</option>
+                                                <option value="school">🏫 School Districts</option>
+                                                <option value="fire">🔥 Fire Districts</option>
+                                                <option value="ems">🚑 EMS Districts</option>
+                                                <option value="township">🏘️ Townships</option>
+                                                <option value="telephone">📞 Telephone Providers</option>
+                                                <option value="railroads">🚆 Railroads</option>
+                                                <option value="county">🗺️ County Outlines</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="shapefileZip" class="form-label fw-bold">Shapefile ZIP</label>
+                                            <input type="file" id="shapefileZip" name="file" class="form-control" accept=".zip" required>
+                                            <div class="form-text">Must include .shp, .shx, .dbf files (minimum)</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-upload"></i> Upload & Convert Shapefile
+                                </button>
+                            </form>
+                            <div id="shapefileUploadStatus" class="mt-3"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Preview Tab -->
@@ -4503,6 +4574,163 @@
                 submitBtn.disabled = false;
             }
         });
+
+        // Shapefile upload handling
+        document.getElementById('shapefileUploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const boundaryType = document.getElementById('shapefileBoundaryType').value;
+            if (!boundaryType) {
+                showShapefileStatus('Please select a boundary type.', 'warning');
+                return;
+            }
+
+            const formData = new FormData(this);
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<span class="loading-spinner"></span> Converting...';
+            submitBtn.disabled = true;
+
+            try {
+                const response = await fetch('/admin/upload_shapefile', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    showShapefileStatus(
+                        `✅ ${result.success}<br>` +
+                        `<small>Added ${result.boundaries_added} features to database</small>`,
+                        'success'
+                    );
+                    this.reset();
+                    loadBoundaries();
+                } else {
+                    showShapefileStatus(`❌ ${result.error}`, 'danger');
+                }
+            } catch (error) {
+                showShapefileStatus(`❌ Upload error: ${error.message}`, 'danger');
+            } finally {
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            }
+        });
+
+        // Load shapefiles available on server
+        async function loadServerShapefiles() {
+            const listDiv = document.getElementById('serverShapefilesList');
+            listDiv.innerHTML = '<div class="text-center py-3"><span class="loading-spinner"></span> Loading...</div>';
+
+            try {
+                const response = await fetch('/admin/list_shapefiles');
+                const result = await response.json();
+
+                if (!response.ok) {
+                    listDiv.innerHTML = `<div class="alert alert-danger">${result.error}</div>`;
+                    return;
+                }
+
+                if (!result.shapefiles || result.shapefiles.length === 0) {
+                    listDiv.innerHTML = `
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i> No shapefiles found in: ${result.directory || '/streams and ponds'}
+                        </div>`;
+                    return;
+                }
+
+                let html = `<div class="table-responsive"><table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Filename</th>
+                            <th>Size</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+                result.shapefiles.forEach(shp => {
+                    const statusBadge = shp.complete
+                        ? '<span class="badge bg-success">Complete</span>'
+                        : '<span class="badge bg-warning">Missing files</span>';
+
+                    const actionBtn = shp.complete
+                        ? `<button class="btn btn-sm btn-primary" onclick="convertServerShapefile('${shp.path}', '${shp.suggested_type}')">
+                               <i class="fas fa-download"></i> Import
+                           </button>`
+                        : '<button class="btn btn-sm btn-secondary" disabled>Incomplete</button>';
+
+                    html += `
+                        <tr>
+                            <td><small class="font-monospace">${shp.filename}</small></td>
+                            <td>${shp.size_mb.toFixed(2)} MB</td>
+                            <td><span class="badge bg-info">${shp.suggested_label}</span></td>
+                            <td>${statusBadge}</td>
+                            <td>${actionBtn}</td>
+                        </tr>`;
+                });
+
+                html += '</tbody></table></div>';
+                listDiv.innerHTML = html;
+
+            } catch (error) {
+                listDiv.innerHTML = `<div class="alert alert-danger">Error loading shapefiles: ${error.message}</div>`;
+            }
+        }
+
+        // Convert and import a shapefile from the server
+        async function convertServerShapefile(path, suggestedType) {
+            if (!confirm(`Import shapefile as '${formatBoundaryLabel(suggestedType)}' boundaries?`)) {
+                return;
+            }
+
+            const listDiv = document.getElementById('serverShapefilesList');
+            const originalHTML = listDiv.innerHTML;
+            listDiv.innerHTML = '<div class="text-center py-3"><span class="loading-spinner"></span> Converting and importing...</div>';
+
+            try {
+                const formData = new FormData();
+                formData.append('shapefile_path', path);
+                formData.append('boundary_type', suggestedType);
+
+                const response = await fetch('/admin/upload_shapefile', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    showShapefileStatus(
+                        `✅ ${result.success}<br>` +
+                        `<small>Imported ${result.boundaries_added} features</small>`,
+                        'success'
+                    );
+                    loadBoundaries();
+                    loadServerShapefiles(); // Refresh the list
+                } else {
+                    showShapefileStatus(`❌ ${result.error}`, 'danger');
+                    listDiv.innerHTML = originalHTML; // Restore list
+                }
+            } catch (error) {
+                showShapefileStatus(`❌ Import error: ${error.message}`, 'danger');
+                listDiv.innerHTML = originalHTML; // Restore list
+            }
+        }
+
+        // Show status for shapefile operations
+        function showShapefileStatus(message, type) {
+            const statusDiv = document.getElementById('shapefileUploadStatus');
+            const alertClass = `alert-${type === 'success' ? 'success-custom' :
+                                        type === 'danger' ? 'danger-custom' :
+                                        'warning-custom'}`;
+            statusDiv.innerHTML = `<div class="alert-custom ${alertClass}">${message}</div>`;
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 8000);
+        }
+
         // Preview extraction
         async function previewExtraction() {
             const form = document.getElementById('previewForm');
