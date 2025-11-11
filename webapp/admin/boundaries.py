@@ -239,6 +239,63 @@ def extract_feature_metadata(
     }
 
 
+def convert_shapefile_to_geojson(shapefile_path: str) -> Dict[str, Any]:
+    """
+    Convert a shapefile to GeoJSON format.
+
+    Args:
+        shapefile_path: Path to the .shp file
+
+    Returns:
+        GeoJSON FeatureCollection dictionary
+
+    Raises:
+        ImportError: If pyshp library is not installed
+        Exception: If shapefile cannot be read
+    """
+    import shapefile
+
+    # Read the shapefile
+    sf = shapefile.Reader(shapefile_path)
+
+    # Get field names (skip deletion flag field)
+    fields = sf.fields[1:]
+    field_names = [field[0] for field in fields]
+
+    # Convert to GeoJSON features
+    features = []
+
+    for shape_record in sf.shapeRecords():
+        shape = shape_record.shape
+        record = shape_record.record
+
+        # Build properties from attributes
+        properties = {}
+        for i, field_name in enumerate(field_names):
+            value = record[i]
+            # Convert bytes to string if needed
+            if isinstance(value, bytes):
+                value = value.decode('utf-8', errors='ignore')
+            properties[field_name] = value
+
+        # Convert shape to GeoJSON geometry using __geo_interface__
+        geometry = shape.__geo_interface__
+
+        # Create GeoJSON feature
+        feature = {
+            "type": "Feature",
+            "properties": properties,
+            "geometry": geometry
+        }
+        features.append(feature)
+
+    # Create GeoJSON FeatureCollection
+    return {
+        "type": "FeatureCollection",
+        "features": features
+    }
+
+
 def register_boundary_routes(app: Flask, logger) -> None:
     """Attach administrative boundary management endpoints to the Flask app."""
 
@@ -438,6 +495,200 @@ def register_boundary_routes(app: Flask, logger) -> None:
         except Exception as exc:  # pragma: no cover - defensive
             route_logger.error("Error uploading boundaries: %s", exc)
             return jsonify({"error": f"Upload failed: {exc}"}), 500
+
+    @app.route("/admin/list_shapefiles", methods=["GET"])
+    def list_shapefiles():
+        """List available shapefiles in the server directory."""
+        try:
+            from pathlib import Path
+
+            base_dir = Path("/home/user/eas-station")
+            shapefile_dir = base_dir / "streams and ponds"
+
+            if not shapefile_dir.exists():
+                return jsonify({
+                    "shapefiles": [],
+                    "message": "Shapefile directory not found"
+                })
+
+            # Find all .shp files
+            shp_files = list(shapefile_dir.glob("*.shp"))
+
+            shapefiles = []
+            for shp_file in shp_files:
+                # Check for companion files
+                shp_path = shp_file.stem
+                has_shx = (shapefile_dir / f"{shp_path}.shx").exists()
+                has_dbf = (shapefile_dir / f"{shp_path}.dbf").exists()
+                has_prj = (shapefile_dir / f"{shp_path}.prj").exists()
+
+                complete = has_shx and has_dbf
+
+                # Suggest boundary type based on filename
+                suggested_type = "unknown"
+                if "linear" in shp_file.name.lower() or "stream" in shp_file.name.lower():
+                    suggested_type = "rivers"
+                elif "area" in shp_file.name.lower() or "water" in shp_file.name.lower():
+                    suggested_type = "waterbodies"
+
+                shapefiles.append({
+                    "filename": shp_file.name,
+                    "path": str(shp_file),
+                    "size_mb": shp_file.stat().st_size / (1024 * 1024),
+                    "complete": complete,
+                    "has_shx": has_shx,
+                    "has_dbf": has_dbf,
+                    "has_prj": has_prj,
+                    "suggested_type": suggested_type,
+                    "suggested_label": get_boundary_display_label(suggested_type)
+                })
+
+            return jsonify({
+                "shapefiles": shapefiles,
+                "directory": str(shapefile_dir)
+            })
+
+        except Exception as exc:
+            route_logger.error("Error listing shapefiles: %s", exc)
+            return jsonify({"error": f"Failed to list shapefiles: {exc}"}), 500
+
+    @app.route("/admin/upload_shapefile", methods=["POST"])
+    def upload_shapefile():
+        """Upload shapefile (with companion files) and convert to boundaries."""
+        try:
+            import io
+            import tempfile
+            import zipfile
+            from pathlib import Path
+
+            try:
+                import shapefile
+            except ImportError:
+                return jsonify({
+                    "error": "Shapefile library not installed. Install pyshp: pip install pyshp==2.3.1"
+                }), 500
+
+            raw_boundary_type = request.form.get("boundary_type", "unknown")
+            boundary_type = normalize_boundary_type(raw_boundary_type)
+            boundary_label = get_boundary_display_label(raw_boundary_type)
+
+            # Handle ZIP file upload containing shapefile components
+            if "file" in request.files:
+                file = request.files["file"]
+                if file.filename == "":
+                    return jsonify({"error": "No file selected"}), 400
+
+                # Accept either .zip or .shp files
+                filename_lower = file.filename.lower()
+
+                if filename_lower.endswith(".zip"):
+                    # Extract ZIP to temporary directory
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        zip_data = io.BytesIO(file.read())
+                        with zipfile.ZipFile(zip_data, 'r') as zip_ref:
+                            zip_ref.extractall(tmpdir)
+
+                        # Find .shp file in extracted contents
+                        shp_files = list(Path(tmpdir).glob("**/*.shp"))
+                        if not shp_files:
+                            return jsonify({
+                                "error": "No .shp file found in ZIP archive"
+                            }), 400
+
+                        shp_path = str(shp_files[0])
+                        geojson_data = convert_shapefile_to_geojson(shp_path)
+
+                elif filename_lower.endswith(".shp"):
+                    return jsonify({
+                        "error": "Please upload a ZIP file containing .shp, .shx, .dbf, and .prj files"
+                    }), 400
+                else:
+                    return jsonify({
+                        "error": "File must be a ZIP archive containing shapefile components"
+                    }), 400
+
+            # Handle directory path for existing shapefiles on server
+            elif "shapefile_path" in request.form:
+                shp_path = request.form["shapefile_path"]
+                if not Path(shp_path).exists():
+                    return jsonify({"error": f"Shapefile not found: {shp_path}"}), 400
+
+                geojson_data = convert_shapefile_to_geojson(shp_path)
+            else:
+                return jsonify({
+                    "error": "Either file upload or shapefile_path must be provided"
+                }), 400
+
+            # Now process the GeoJSON using existing logic
+            features = geojson_data.get("features", [])
+            boundaries_added = 0
+            errors: List[str] = []
+
+            for i, feature in enumerate(features):
+                try:
+                    properties = feature.get("properties", {}) or {}
+                    geometry = feature.get("geometry")
+
+                    if not geometry:
+                        errors.append(f"Feature {i + 1}: No geometry")
+                        continue
+
+                    name, description = extract_name_and_description(
+                        properties, boundary_type
+                    )
+
+                    geometry_json = json.dumps(geometry)
+
+                    boundary = Boundary(
+                        name=name,
+                        type=boundary_type,
+                        description=description,
+                        created_at=utc_now(),
+                        updated_at=utc_now(),
+                    )
+
+                    boundary.geom = db.session.execute(
+                        text("SELECT ST_SetSRID(ST_GeomFromGeoJSON(:geom), 4326)"),
+                        {"geom": geometry_json},
+                    ).scalar()
+
+                    db.session.add(boundary)
+                    boundaries_added += 1
+
+                except Exception as exc:
+                    errors.append(f"Feature {i + 1}: {exc}")
+
+            try:
+                db.session.commit()
+                route_logger.info(
+                    "Successfully uploaded %s %s boundaries from shapefile",
+                    boundaries_added,
+                    boundary_label,
+                )
+            except Exception as exc:
+                db.session.rollback()
+                return jsonify({"error": f"Database error: {exc}"}), 500
+
+            response_data = {
+                "success": (
+                    f"Successfully uploaded {boundaries_added} {boundary_label} "
+                    f"boundaries from shapefile"
+                ),
+                "boundaries_added": boundaries_added,
+                "total_features": len(features),
+                "errors": errors[:10] if errors else [],
+                "normalized_type": boundary_type,
+                "display_label": boundary_label,
+            }
+
+            if errors:
+                response_data["warning"] = f"{len(errors)} features had errors"
+
+            return jsonify(response_data)
+
+        except Exception as exc:
+            route_logger.error("Error uploading shapefile: %s", exc)
+            return jsonify({"error": f"Shapefile upload failed: {exc}"}), 500
 
     @app.route("/admin/clear_boundaries/<boundary_type>", methods=["DELETE"])
     def clear_boundaries(boundary_type: str):

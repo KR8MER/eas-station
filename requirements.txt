@@ -67,3 +67,6 @@ Pillow==10.4.0  # Image processing for VFD graphics rendering
 # Multi-Factor Authentication (MFA) support
 pyotp==2.9.0  # TOTP (Time-based One-Time Password) generation and verification
 qrcode==8.0  # QR code generation for MFA enrollment
+
+# Geospatial data processing
+pyshp==2.3.1  # Shapefile reader for converting boundary files to GeoJSON
