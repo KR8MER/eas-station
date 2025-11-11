@@ -39,33 +39,33 @@
 ## Direct Links to Major Sections
 
 ### Data & Models
-- [Core Models & Data Layer](#core-models--data-layer) - 24 database tables
-- [Database Schema Overview](#database-schema-overview) - Complete schema
-- [Configuration & Environment Variables](#configuration--environment-variables) - All config vars
+- [Core Models & Data Layer](FUNCTION_TREE.md#core-models-data-layer) - 24 database tables
+- [Database Schema Overview](FUNCTION_TREE.md#database-schema-overview) - Complete schema
+- [Configuration & Environment Variables](FUNCTION_TREE.md#configuration-environment-variables) - All config vars
 
 ### Authentication & Access
-- [Authentication & RBAC](#authentication--rbac) - User management
-- [Security Features](#security-features) - Protection mechanisms
+- [Authentication & RBAC](FUNCTION_TREE.md#authentication-rbac) - User management
+- [Security Features](FUNCTION_TREE.md#security-features) - Protection mechanisms
 
 ### Processing & Control
-- [Audio System](#audio-system) - Audio capture & processing
-- [EAS/SAME Processing](#eassame-processing) - Alert encoding
-- [GPIO & Relay Control](#gpio--relay-control) - Hardware control
-- [Radio Management](#radio-management) - SDR receivers
+- [Audio System](FUNCTION_TREE.md#audio-system) - Audio capture & processing
+- [EAS/SAME Processing](FUNCTION_TREE.md#eassame-processing) - Alert encoding
+- [GPIO & Relay Control](FUNCTION_TREE.md#gpio-relay-control) - Hardware control
+- [Radio Management](FUNCTION_TREE.md#radio-management) - SDR receivers
 
 ### Web & API
-- [Web API Routes](#web-api-routes) - Public API endpoints
-- [Admin Interface Routes](#admin-interface-routes) - Admin API endpoints
+- [Web API Routes](FUNCTION_TREE.md#web-api-routes) - Public API endpoints
+- [Admin Interface Routes](FUNCTION_TREE.md#admin-interface-routes) - Admin API endpoints
 
 ### Analytics & Monitoring
-- [Analytics & Monitoring](#analytics--monitoring) - Metrics & anomalies
-- [System Health Monitoring](#system-health-systemhealthpy) - Health tracking
+- [Analytics & Monitoring](FUNCTION_TREE.md#analytics-monitoring) - Metrics & anomalies
+- [System Health Monitoring](FUNCTION_TREE.md#system-health-systemhealthpy) - Health tracking
 
 ### Displays
-- [LED/VFD Display Control](#ledvfd-display-control) - Hardware interfaces
+- [LED/VFD Display Control](FUNCTION_TREE.md#ledvfd-display-control) - Hardware interfaces
 
 ### Utilities
-- [Utilities & Helpers](#utilities--helpers) - Formatting, conversion, etc.
+- [Utilities & Helpers](FUNCTION_TREE.md#utilities-helpers) - Formatting, conversion, etc.
 
 ---
 

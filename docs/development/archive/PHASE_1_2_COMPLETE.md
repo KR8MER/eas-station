@@ -61,7 +61,7 @@ We've successfully completed Phases 1 and 2 of the comprehensive UI/UX moderniza
 
 ### Phase 2: Navigation Redesign ✅
 
-#### 1. Navigation Redesign Plan (`docs/navigation-redesign.md`)
+#### 1. Navigation Redesign Plan (`docs/development/archive/UI_LAYOUT_ROADMAP.md`)
 - Comprehensive analysis of current issues
 - Proposed simplified structure
 - Mobile navigation strategy
@@ -134,21 +134,21 @@ Dashboard (direct link)
 
 ### Comprehensive Guides (4,500+ lines total)
 
-1. **docs/ui-modernization-plan.md** (800+ lines)
+1. **docs/development/archive/UI_LAYOUT_ROADMAP.md** (800+ lines)
    - Complete 6-week modernization plan
    - Detailed analysis of issues
    - Phase-by-phase implementation
    - Design system specifications
    - Success metrics
 
-2. **docs/ui-improvements-summary.md** (600+ lines)
+2. **docs/development/archive/UI_CHANGES_SUMMARY.md** (600+ lines)
    - Problems and solutions
    - Before/after comparisons
    - Usage guide
    - Migration guide
    - Next steps
 
-3. **docs/navigation-redesign.md** (400+ lines)
+3. **docs/development/archive/UI_LAYOUT_ROADMAP.md** (400+ lines)
    - Navigation analysis
    - Proposed structure
    - Mobile strategy
@@ -431,8 +431,8 @@ The foundation is set for a modern, professional UI that:
 
 1. **Review the documentation:**
    - Start with `UI_MODERNIZATION_SUMMARY.md`
-   - Read `docs/ui-modernization-plan.md` for full plan
-   - Check `docs/ui-improvements-summary.md` for usage guide
+   - Read `docs/development/archive/UI_LAYOUT_ROADMAP.md` for full plan
+   - Check `docs/development/archive/UI_CHANGES_SUMMARY.md` for usage guide
 
 2. **Test the new components:**
    - Activate `system_health_new.html`

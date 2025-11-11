@@ -21,7 +21,7 @@ If you're new to EAS Station, start here:
 | [📊 All Diagrams Index](/docs/DIAGRAMS) | Complete visual documentation index | Browse all diagrams |
 | [🔄 Alert Processing Pipeline](DIAGRAMS.md#1-alert-processing-pipeline) | CAP ingestion workflow | Understanding alert flow |
 | [📡 EAS Broadcast Workflow](DIAGRAMS.md#2-eas-broadcast-workflow) | SAME generation & transmission | Operator training |
-| [📻 SDR Setup Flow](DIAGRAMS.md#3-sdr-setup--configuration-flow) | Radio receiver configuration | Hardware setup |
+| [📻 SDR Setup Flow](DIAGRAMS.md#3-sdr-setup-configuration-flow) | Radio receiver configuration | Hardware setup |
 | [🔊 Audio Source Routing](DIAGRAMS.md#4-audio-source-routing-architecture) | Audio ingestion architecture | Audio troubleshooting |
 | [🖥️ Hardware Deployment](DIAGRAMS.md#5-hardware-deployment-architecture) | Raspberry Pi reference config | Physical installation |
 
@@ -73,16 +73,16 @@ If you're new to EAS Station, start here:
 | [💻 Development Setup](/docs/development/AGENTS) | Local development environment |
 | [🎨 Frontend Documentation](/docs/frontend/FRONTEND_INDEX) | Complete UI and frontend guide |
 | [🔧 API Reference](https://github.com/KR8MER/eas-station/blob/main/README.md#-api-endpoints) | REST API documentation |
-| [🗺️ Project Structure](development/AGENTS.md#project-structure) | Code organization guide |
+| [🗺️ Project Structure](development/AGENTS.md) | Code organization guide |
 
 ### Contributing
 | Document | Description |
 |----------|-------------|
 | [📋 Contributing Guide](/docs/process/CONTRIBUTING) | How to contribute code |
 | [✅ Pull Request Process](/docs/process/PR_DESCRIPTION) | PR guidelines and templates |
-| [🐛 Issue Reporting](process/CONTRIBUTING.md#issues) | Bug report guidelines |
-| [📝 Code Standards](development/AGENTS.md#coding-standards) | Style and quality standards |
-| [🎨 Frontend Development](frontend/FRONTEND_INDEX.md#-development) | UI development guidelines |
+| [🐛 Issue Reporting](process/CONTRIBUTING.md#how-to-contribute) | Bug report guidelines |
+| [📝 Code Standards](development/AGENTS.md) | Style and quality standards |
+| [🎨 Frontend Development](frontend/FRONTEND_INDEX.md) | UI development guidelines |
 
 ## 📈 Project Information
 
@@ -103,8 +103,8 @@ If you're new to EAS Station, start here:
 | [🎵 Audio System Changelog (2025-11-07)](/docs/CHANGELOG_2025-11-07) | **NEW:** Professional audio subsystem build log |
 | [📊 Documentation Audit](/docs/documentation_audit) | Documentation status and maintenance tracking |
 | [🗃️ Documentation Archive](/docs/archive/README) | Historical bug reports & security analyses |
-| [🔐 Security Policy](development/AGENTS.md#security) | Security considerations |
-| [📜 License](../LICENSE) | MIT License terms |
+| [🔐 Security Policy](development/AGENTS.md) | Security considerations |
+| [📜 License](https://github.com/KR8MER/eas-station/blob/main/LICENSE) | MIT License terms |
 
 ## 🏢 Operational Documentation
 
@@ -117,8 +117,8 @@ If you're new to EAS Station, start here:
 | [🌐 Portainer Network Setup](/docs/deployment/portainer/PORTAINER_NETWORK_SETUP) | Reverse proxy and DNS guidance |
 | [🔄 One-Button Upgrade](/docs/guides/one_button_upgrade) | Automated update process |
 | [🧰 Post Install Checklist](/docs/deployment/post_install) | Finalize services and accounts |
-| [📊 Performance Tuning](guides/HELP.md#optimization) | Optimization guidelines |
-| [🔍 Monitoring & Logging](guides/HELP.md#monitoring) | System observability |
+| [📊 Performance Tuning](audio.md#performance-optimization) | Optimization guidelines |
+| [🔍 Monitoring & Logging](guides/HELP.md#troubleshooting) | System observability |
 
 ### Compliance & Standards
 | Document | Description |
@@ -126,7 +126,7 @@ If you're new to EAS Station, start here:
 | [📡 FCC Part 11 Compliance](reference/CFR-2010-title47-vol1-sec11-31.xml) | Regulatory requirements |
 | [🌐 CAP Protocol Guide](/docs/guides/ipaws_feed_integration) | Common Alert Protocol implementation |
 | [📻 SAME Encoding Standards](/docs/architecture/THEORY_OF_OPERATION) | Standard Alert Messaging Protocol |
-| [🗺️ Geographic Standards](guides/HELP.md#geographic-filtering) | Location-based filtering rules |
+| [🗺️ Geographic Standards](guides/HELP.md#managing-boundaries-and-alerts) | Location-based filtering rules |
 
 ## 📁 File Organization
 
@@ -151,11 +151,11 @@ docs/
 - **💻 Developers**: Review [Development Setup](/docs/development/AGENTS)
 
 ### By Task
-- **🚀 Installation**: [Installation Guides](#-quick-start)
-- **⚙️ Configuration**: [Configuration & Setup](#-configuration--setup)
+- **🚀 Installation**: [Installation Guides](#quick-start)
+- **⚙️ Configuration**: [Configuration & Setup](#configuration-setup)
 - **🔧 Troubleshooting**: [Help & Operations](guides/HELP.md#troubleshooting)
-- **🛠️ Development**: [Developer Documentation](#-developer-documentation)
-- **📈 Project Info**: [Project Information](#-project-information)
+- **🛠️ Development**: [Developer Documentation](#developer-documentation)
+- **📈 Project Info**: [Project Information](#project-information)
 
 ## 🆘 Getting Help
 

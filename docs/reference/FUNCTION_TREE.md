@@ -8,16 +8,16 @@
 
 ## Table of Contents
 
-1. [Core Models & Data Layer](#core-models--data-layer)
-2. [Authentication & RBAC](#authentication--rbac)
+1. [Core Models & Data Layer](#core-models-data-layer)
+2. [Authentication & RBAC](#authentication-rbac)
 3. [Audio System](#audio-system)
 4. [Radio Management](#radio-management)
 5. [EAS/SAME Processing](#eassame-processing)
-6. [GPIO & Relay Control](#gpio--relay-control)
+6. [GPIO & Relay Control](#gpio-relay-control)
 7. [Web API Routes](#web-api-routes)
 8. [Admin Interface Routes](#admin-interface-routes)
-9. [Utilities & Helpers](#utilities--helpers)
-10. [Analytics & Monitoring](#analytics--monitoring)
+9. [Utilities & Helpers](#utilities-helpers)
+10. [Analytics & Monitoring](#analytics-monitoring)
 11. [LED/VFD Display Control](#ledvfd-display-control)
 
 ---
@@ -849,6 +849,7 @@
 | `update_location_settings(data)` | Update location settings | 160 |
 | `describe_location_reference(...)` | Describe location reference | 308 |
 
+<a id="system-health-systemhealthpy"></a>
 ### System Health (app_core/system_health.py)
 
 | Function | Purpose | Line |
