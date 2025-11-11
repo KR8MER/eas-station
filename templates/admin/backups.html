@@ -1,0 +1,514 @@
+{% extends "base.html" %}
+
+{% block title %}Backup & Restore{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1><i class="fas fa-database"></i> Backup & Restore</h1>
+            <p class="text-muted">Manage system backups and restore operations</p>
+        </div>
+    </div>
+
+    <!-- Health Status -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Backup Directory</h6>
+                    <p class="mb-0">
+                        {% if health.backup_dir_exists %}
+                            <span class="badge bg-success">✓ Available</span>
+                        {% else %}
+                            <span class="badge bg-danger">✗ Not Found</span>
+                        {% endif %}
+                    </p>
+                    <small class="text-muted">{{ backup_dir }}</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Total Backups</h6>
+                    <h3 class="mb-0">{{ health.backup_count or 0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Latest Backup</h6>
+                    <p class="mb-0">
+                        {% if health.latest_backup %}
+                            {{ health.latest_backup[:19] }}
+                        {% else %}
+                            <span class="text-muted">None</span>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Latest Size</h6>
+                    <h3 class="mb-0">
+                        {% if health.latest_backup_size %}
+                            {{ health.latest_backup_size }} MB
+                        {% else %}
+                            -
+                        {% endif %}
+                    </h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Backup Section -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-plus-circle"></i> Create New Backup</h5>
+                </div>
+                <div class="card-body">
+                    <form id="create-backup-form">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <label for="backup-label" class="form-label">Backup Label (Optional)</label>
+                                <input type="text" class="form-control" id="backup-label"
+                                       placeholder="e.g., before-upgrade">
+                                <small class="form-text text-muted">Descriptive name for this backup</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Options</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="include-media" checked>
+                                    <label class="form-check-label" for="include-media">
+                                        Include media files
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="include-volumes" checked>
+                                    <label class="form-check-label" for="include-volumes">
+                                        Include Docker volumes
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <button type="submit" class="btn btn-primary btn-lg w-100">
+                                    <i class="fas fa-save"></i> Create Backup Now
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <!-- Progress Display -->
+                    <div id="backup-progress" class="mt-3" style="display: none;">
+                        <div class="alert alert-info">
+                            <div class="d-flex align-items-center">
+                                <div class="spinner-border spinner-border-sm me-2" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <span id="backup-progress-text">Creating backup...</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Result Display -->
+                    <div id="backup-result" class="mt-3" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Backup List -->
+    <div class="row">
+        <div class="col">
+            <div class="card">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0"><i class="fas fa-list"></i> Available Backups</h5>
+                </div>
+                <div class="card-body">
+                    {% if backups %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Label</th>
+                                        <th>Version</th>
+                                        <th>Size</th>
+                                        <th>Contents</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for backup in backups %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ backup.timestamp[:10] }}</strong><br>
+                                            <small class="text-muted">{{ backup.timestamp[11:19] if backup.timestamp|length > 19 else '' }}</small>
+                                        </td>
+                                        <td>
+                                            {% if backup.label %}
+                                                <span class="badge bg-info">{{ backup.label }}</span>
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ backup.version }}</td>
+                                        <td>{{ backup.size_mb }} MB</td>
+                                        <td>
+                                            <small>
+                                                {% if backup.summary.database %}
+                                                    <i class="fas fa-database text-success" title="Database"></i>
+                                                {% endif %}
+                                                {% if backup.summary.config %}
+                                                    <i class="fas fa-cog text-success" title="Config"></i>
+                                                {% endif %}
+                                                {% if backup.summary.media %}
+                                                    <i class="fas fa-file-audio text-success" title="Media ({{ backup.summary.media|length }})"></i>
+                                                {% endif %}
+                                                {% if backup.summary.volumes %}
+                                                    <i class="fas fa-hdd text-success" title="Volumes ({{ backup.summary.volumes|length }})"></i>
+                                                {% endif %}
+                                            </small>
+                                        </td>
+                                        <td>
+                                            <div class="btn-group" role="group">
+                                                <button class="btn btn-sm btn-info"
+                                                        onclick="validateBackup('{{ backup.name }}')"
+                                                        title="Validate">
+                                                    <i class="fas fa-check-circle"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-success"
+                                                        onclick="downloadBackup('{{ backup.name }}')"
+                                                        title="Download">
+                                                    <i class="fas fa-download"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-warning"
+                                                        onclick="showRestoreModal('{{ backup.name }}')"
+                                                        title="Restore">
+                                                    <i class="fas fa-undo"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-danger"
+                                                        onclick="deleteBackup('{{ backup.name }}')"
+                                                        title="Delete">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            No backups found. Create your first backup above.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Documentation Links -->
+    <div class="row mt-4">
+        <div class="col">
+            <div class="card border-info">
+                <div class="card-body">
+                    <h6><i class="fas fa-book"></i> Documentation</h6>
+                    <ul>
+                        <li><a href="/docs/runbooks/backup_strategy">Backup Strategy Guide</a></li>
+                        <li><a href="/docs/runbooks/outage_response">Outage Response Runbook</a></li>
+                        <li><a href="/docs/search">Search Documentation</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Restore Modal -->
+<div class="modal fade" id="restoreModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title"><i class="fas fa-exclamation-triangle"></i> Restore Backup</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger">
+                    <h6><strong>⚠️ WARNING: This will overwrite current data!</strong></h6>
+                    <p class="mb-0">Restoring a backup will replace your current database, configuration, and media files with the backup contents. This action cannot be undone.</p>
+                </div>
+
+                <p><strong>Backup to restore:</strong> <span id="restore-backup-name"></span></p>
+
+                <form id="restore-form">
+                    <div class="mb-3">
+                        <label class="form-label">Restore Options</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="restore-mode" id="restore-full" value="full" checked>
+                            <label class="form-check-label" for="restore-full">
+                                <strong>Full Restore</strong> - Restore everything (Recommended)
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="restore-mode" id="restore-db-only" value="database">
+                            <label class="form-check-label" for="restore-db-only">
+                                <strong>Database Only</strong> - Restore only the database
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="restore-mode" id="restore-custom" value="custom">
+                            <label class="form-check-label" for="restore-custom">
+                                <strong>Custom</strong> - Choose what to restore
+                            </label>
+                        </div>
+                    </div>
+
+                    <div id="custom-restore-options" style="display: none;">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="skip-database">
+                            <label class="form-check-label" for="skip-database">
+                                Skip database restore
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="skip-media">
+                            <label class="form-check-label" for="skip-media">
+                                Skip media files restore
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="skip-volumes">
+                            <label class="form-check-label" for="skip-volumes">
+                                Skip Docker volumes restore
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info mt-3">
+                        <strong>💡 Recommendation:</strong> Create a backup of your current system before restoring, just in case you need to revert.
+                    </div>
+                </form>
+
+                <div id="restore-progress" style="display: none;">
+                    <div class="alert alert-warning">
+                        <div class="d-flex align-items-center">
+                            <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                            <span>Restoring backup... This may take several minutes.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="restore-result" style="display: none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" onclick="executeRestore()">
+                    <i class="fas fa-undo"></i> Restore Backup
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentRestoreBackup = null;
+
+// Show/hide custom restore options
+document.querySelectorAll('input[name="restore-mode"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        document.getElementById('custom-restore-options').style.display =
+            this.value === 'custom' ? 'block' : 'none';
+    });
+});
+
+// Create Backup
+document.getElementById('create-backup-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const label = document.getElementById('backup-label').value || 'manual';
+    const includeMedia = document.getElementById('include-media').checked;
+    const includeVolumes = document.getElementById('include-volumes').checked;
+
+    const progressDiv = document.getElementById('backup-progress');
+    const resultDiv = document.getElementById('backup-result');
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+
+    // Show progress
+    progressDiv.style.display = 'block';
+    resultDiv.style.display = 'none';
+    submitBtn.disabled = true;
+
+    try {
+        const response = await fetch('/api/backups/create', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({label, include_media: includeMedia, include_volumes: includeVolumes})
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <h6><i class="fas fa-check-circle"></i> Backup Created Successfully!</h6>
+                    <p class="mb-0">Backup: <strong>${data.backup_name || 'See list below'}</strong></p>
+                </div>
+            `;
+            // Reload page to show new backup
+            setTimeout(() => window.location.reload(), 2000);
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <h6><i class="fas fa-exclamation-circle"></i> Backup Failed</h6>
+                    <p class="mb-0">${data.message}</p>
+                    <details class="mt-2">
+                        <summary>Error Details</summary>
+                        <pre class="mb-0 mt-2">${data.error}</pre>
+                    </details>
+                </div>
+            `;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <h6><i class="fas fa-exclamation-circle"></i> Error</h6>
+                <p class="mb-0">${error.message}</p>
+            </div>
+        `;
+    } finally {
+        progressDiv.style.display = 'none';
+        resultDiv.style.display = 'block';
+        submitBtn.disabled = false;
+    }
+});
+
+// Show Restore Modal
+function showRestoreModal(backupName) {
+    currentRestoreBackup = backupName;
+    document.getElementById('restore-backup-name').textContent = backupName;
+    document.getElementById('restore-result').style.display = 'none';
+    new bootstrap.Modal(document.getElementById('restoreModal')).show();
+}
+
+// Execute Restore
+async function executeRestore() {
+    if (!currentRestoreBackup) return;
+
+    const mode = document.querySelector('input[name="restore-mode"]:checked').value;
+    const progressDiv = document.getElementById('restore-progress');
+    const resultDiv = document.getElementById('restore-result');
+
+    const payload = {
+        backup_name: currentRestoreBackup,
+        database_only: mode === 'database',
+        skip_database: mode === 'custom' && document.getElementById('skip-database').checked,
+        skip_media: mode === 'custom' && document.getElementById('skip-media').checked,
+        skip_volumes: mode === 'custom' && document.getElementById('skip-volumes').checked,
+    };
+
+    progressDiv.style.display = 'block';
+    resultDiv.style.display = 'none';
+
+    try {
+        const response = await fetch('/api/backups/restore', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <h6><i class="fas fa-check-circle"></i> Restore Completed!</h6>
+                    <p>The backup has been restored successfully. You may need to restart services.</p>
+                </div>
+            `;
+            setTimeout(() => window.location.reload(), 3000);
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <h6><i class="fas fa-exclamation-circle"></i> Restore Failed</h6>
+                    <p class="mb-0">${data.message}</p>
+                    <details class="mt-2">
+                        <summary>Error Details</summary>
+                        <pre class="mb-0 mt-2">${data.error}</pre>
+                    </details>
+                </div>
+            `;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <h6><i class="fas fa-exclamation-circle"></i> Error</h6>
+                <p class="mb-0">${error.message}</p>
+            </div>
+        `;
+    } finally {
+        progressDiv.style.display = 'none';
+        resultDiv.style.display = 'block';
+    }
+}
+
+// Validate Backup
+async function validateBackup(backupName) {
+    try {
+        const response = await fetch(`/api/backups/validate/${backupName}`);
+        const data = await response.json();
+
+        if (data.valid) {
+            alert(`✓ Backup is valid!\n\n` +
+                  `Database: ${data.checks.database ? '✓' : '✗'} (${data.checks.database_size_mb} MB)\n` +
+                  `Config: ${data.checks.config ? '✓' : '✗'}\n` +
+                  `Metadata: ${data.checks.metadata ? '✓' : '✗'}`);
+        } else {
+            alert(`✗ Backup validation failed!\n\nMissing files: ${data.missing_files.join(', ')}`);
+        }
+    } catch (error) {
+        alert(`Error validating backup: ${error.message}`);
+    }
+}
+
+// Download Backup
+function downloadBackup(backupName) {
+    window.location.href = `/api/backups/download/${backupName}`;
+}
+
+// Delete Backup
+async function deleteBackup(backupName) {
+    if (!confirm(`Are you sure you want to delete backup "${backupName}"?\n\nThis action cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/backups/delete', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({backup_name: backupName})
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            alert('Backup deleted successfully');
+            window.location.reload();
+        } else {
+            alert(`Failed to delete backup: ${data.message}`);
+        }
+    } catch (error) {
+        alert(`Error deleting backup: ${error.message}`);
+    }
+}
+</script>
+{% endblock %}
