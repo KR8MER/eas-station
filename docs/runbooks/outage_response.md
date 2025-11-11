@@ -1,10 +1,10 @@
 # EAS Station Outage Response Runbook
 
-**Purpose:** This runbook provides step-by-step procedures for responding to EAS Station outages and service degradation.
+**Purpose:** Standardized procedures for responding to EAS Station outages and service degradation incidents.
 
 **Audience:** System administrators, on-call engineers, emergency management coordinators
 
-**Last Updated:** 2025-01-11
+**Last Updated:** 2025-11-11
 
 ---
 
@@ -12,35 +12,45 @@
 
 ### Emergency Contacts
 
-- **Primary On-Call:** [Your contact info]
-- **Secondary On-Call:** [Backup contact]
-- **Emergency Management:** [EM contact]
-- **Vendor Support:** [If applicable]
+Configure your emergency contacts in your deployment documentation:
+- **Primary On-Call:** [Configure in your operations procedures]
+- **Secondary On-Call:** [Configure in your operations procedures]
+- **Emergency Management:** [Configure in your operations procedures]
+- **System Vendor Support:** [If applicable]
 
 ### Critical URLs
 
-- **Primary Instance:** `https://eas.example.com`
-- **Standby Instance:** `https://eas-standby.example.com`
-- **Health Check:** `https://eas.example.com/health/dependencies`
-- **Monitoring Dashboard:** [URL]
+The system uses environment variables defined in the persistent configuration (`CONFIG_PATH=/app-config/.env`):
+
+- **Primary Instance:** `https://${DOMAIN_NAME}` (from `DOMAIN_NAME` environment variable)
+- **Standby Instance:** `https://${STANDBY_DOMAIN_NAME}` (if configured)
+- **Health Check:** `https://${DOMAIN_NAME}/health/dependencies`
+- **System Health:** `https://${DOMAIN_NAME}/health`
+- **Admin Dashboard:** `https://${DOMAIN_NAME}/admin`
 
 ### Critical Commands
 
 ```bash
-# Quick health check
-curl https://eas.example.com/health/dependencies | jq
+# View persistent configuration (first 10 lines)
+docker compose exec app cat /app-config/.env | head -10
+
+# Quick health check (replace ${DOMAIN_NAME} with your actual domain)
+curl https://${DOMAIN_NAME}/health/dependencies | jq
 
 # Service status
 docker compose ps
 
-# Recent logs
+# Recent logs (last 100 lines, follow mode)
 docker compose logs --tail=100 --follow
 
-# Restart services
+# Restart all services
 docker compose restart
 
-# Full restore from backup
-python3 tools/restore_backup.py --backup-dir /var/backups/eas-station/latest
+# Full system restore from backup
+# Note: BACKUP_DIR can be configured in environment, defaults to /var/backups/eas-station
+python3 tools/restore_backup.py \
+    --backup-dir ${BACKUP_DIR:-/var/backups/eas-station}/latest \
+    --force
 ```
 
 ---
@@ -54,15 +64,15 @@ python3 tools/restore_backup.py --backup-dir /var/backups/eas-station/latest
 Check multiple indicators:
 
 ```bash
-# Test health endpoint
-curl -v https://eas.example.com/health
-curl -v https://eas.example.com/health/dependencies
+# Test health endpoint (replace ${DOMAIN_NAME} with your actual domain)
+curl -v https://${DOMAIN_NAME}/health
+curl -v https://${DOMAIN_NAME}/health/dependencies
 
 # Check from external network
-curl -v https://eas.example.com/ping
+curl -v https://${DOMAIN_NAME}/ping
 
 # Review monitoring alerts
-# Check your monitoring system (Nagios, Prometheus, etc.)
+# Check your monitoring system (Nagios, Prometheus, Uptime Robot, etc.)
 ```
 
 **Decision Point:** Is the service actually down?
@@ -110,11 +120,15 @@ Next Update: [Time]
 
 **Container Status:**
 ```bash
-cd /opt/eas-station
+# Navigate to deployment directory (typically /opt/eas-station or configured location)
+cd /opt/eas-station  # Or your configured deployment path
 docker compose ps
 
 # Expected output: All services "Up" and healthy
 # If any service is down, note which ones
+
+# Check persistent configuration
+docker compose exec app ls -la /app-config/.env
 ```
 
 **System Resources:**

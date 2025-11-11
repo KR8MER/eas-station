@@ -266,32 +266,57 @@ def register_documentation_routes(app: Flask, logger_instance: Any) -> None:
 
     @app.route('/docs')
     def docs_index():
-        """Documentation index page with search."""
+        """Documentation index page."""
         try:
             structure = _get_docs_structure()
-            return _render_no_cache('docs/search.html', structure=structure)
+            return _render_no_cache('docs_index.html', structure=structure)
         except Exception as exc:
             logger.error('Error rendering docs index: %s', exc)
             return _render_no_cache('error.html',
                                    error='Unable to load documentation index',
                                    details=str(exc)), 500
 
-    @app.route('/docs/browse')
-    def docs_browse():
-        """Documentation browse page (old style)."""
+    @app.route('/docs/search')
+    def docs_search():
+        """Documentation search page."""
         try:
             structure = _get_docs_structure()
-            return _render_no_cache('docs_index.html', structure=structure)
+            return _render_no_cache('docs/search.html', structure=structure)
         except Exception as exc:
-            logger.error('Error rendering docs browse: %s', exc)
+            logger.error('Error rendering docs search: %s', exc)
             return _render_no_cache('error.html',
-                                   error='Unable to load documentation index',
+                                   error='Unable to load documentation search',
                                    details=str(exc)), 500
 
     @app.route('/docs/rbac/visual')
     def docs_rbac_visual():
         """Visual RBAC permission tree."""
         return _render_no_cache('docs/rbac_visual.html')
+
+    @app.route('/docs/assets/<path:asset_path>')
+    def serve_doc_asset(asset_path: str):
+        """Serve static assets from docs/assets directory."""
+        from flask import send_from_directory
+
+        # Security: prevent directory traversal
+        if '..' in asset_path or asset_path.startswith('/'):
+            abort(404)
+
+        assets_dir = docs_root / 'assets'
+        asset_file = assets_dir / asset_path
+
+        # Check if file exists and is within assets directory
+        if not asset_file.exists() or not asset_file.is_file():
+            logger.warning('Asset file not found: %s', asset_file)
+            abort(404)
+
+        try:
+            asset_file.resolve().relative_to(assets_dir.resolve())
+        except ValueError:
+            logger.warning('Attempted access outside assets directory: %s', asset_file)
+            abort(404)
+
+        return send_from_directory(assets_dir, asset_path)
 
     @app.route('/docs/<path:doc_path>')
     def view_doc(doc_path: str):
