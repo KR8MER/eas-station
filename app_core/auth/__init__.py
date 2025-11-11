@@ -6,17 +6,21 @@ This module provides:
 - Multi-factor authentication (MFA/TOTP)
 - Security audit logging
 - Permission decorators
+- Authentication decorators
 """
 
 from .roles import Role, Permission, require_permission, has_permission
 from .mfa import MFAManager, generate_totp_secret, verify_totp_code
 from .audit import AuditLogger, AuditAction
+from .decorators import require_auth, require_role
 
 __all__ = [
     'Role',
     'Permission',
     'require_permission',
     'has_permission',
+    'require_auth',
+    'require_role',
     'MFAManager',
     'generate_totp_secret',
     'verify_totp_code',
