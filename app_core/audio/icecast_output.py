@@ -53,6 +53,7 @@ class IcecastConfig:
     format: StreamFormat = StreamFormat.MP3
     public: bool = False
     sample_rate: int = 44100  # Audio sample rate in Hz
+    channels: int = 1  # Audio channels (1 = mono, 2 = stereo)
     admin_user: Optional[str] = None
     admin_password: Optional[str] = None
     metadata_poll_interval: float = 1.0
@@ -243,7 +244,7 @@ class IcecastStreamer:
                 'ffmpeg',
                 '-f', 's16le',  # Input: 16-bit PCM
                 '-ar', str(self.config.sample_rate),  # Sample rate
-                '-ac', '1',      # Mono
+                '-ac', str(max(1, int(self.config.channels))),
                 '-i', 'pipe:0',  # Read from stdin
             ]
 
@@ -335,8 +336,8 @@ class IcecastStreamer:
             samples = self.audio_source.get_audio_chunk(timeout=0.5)
             prebuffer_attempts += 1
             if samples is not None:
-                pcm_data = (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16)
-                buffer.append(pcm_data.tobytes())
+                pcm_bytes = self._samples_to_pcm_bytes(samples)
+                buffer.append(pcm_bytes)
 
         if len(buffer) < prebuffer_target:
             logger.error(
@@ -360,9 +361,8 @@ class IcecastStreamer:
                 samples = self.audio_source.get_audio_chunk(timeout=0.1)
 
                 if samples is not None:
-                    # Convert float32 [-1, 1] to int16 PCM
-                    pcm_data = (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16)
-                    buffer.append(pcm_data.tobytes())
+                    pcm_bytes = self._samples_to_pcm_bytes(samples)
+                    buffer.append(pcm_bytes)
                     self._consecutive_empty_reads = 0  # Reset counter on successful read
                 else:
                     # Track consecutive empty reads to diagnose source issues
@@ -492,6 +492,28 @@ class IcecastStreamer:
 
         logger.error("Failed to restart FFmpeg (%s)", reason)
         return False
+
+    def _samples_to_pcm_bytes(self, samples: np.ndarray) -> bytes:
+        """Convert audio samples into interleaved int16 PCM bytes."""
+
+        array = np.asarray(samples, dtype=np.float32)
+        channels = max(1, int(self.config.channels))
+
+        if array.ndim == 1:
+            if channels > 1:
+                array = np.repeat(array[:, np.newaxis], channels, axis=1)
+            else:
+                array = array[:, np.newaxis]
+        elif array.shape[1] != channels:
+            if array.shape[1] > channels:
+                array = array[:, :channels]
+            else:
+                pad = np.zeros((array.shape[0], channels - array.shape[1]), dtype=np.float32)
+                array = np.concatenate((array, pad), axis=1)
+
+        clipped = np.clip(array, -1.0, 1.0)
+        pcm = (clipped * 32767.0).astype(np.int16, copy=False)
+        return pcm.tobytes()
 
     def _maybe_update_metadata(self) -> None:
         """Push updated now-playing metadata to Icecast when it changes."""

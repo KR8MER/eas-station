@@ -158,6 +158,8 @@ class AutoStreamingService:
                     sample_rate = audio_source.sample_rate
 
                 # Create Icecast configuration
+                channels = 2 if getattr(audio_source.config, 'channels', 1) > 1 else 1
+
                 config = IcecastConfig(
                     server=self.icecast_server,
                     port=self.icecast_port,
@@ -170,6 +172,7 @@ class AutoStreamingService:
                     format=self.default_format,
                     public=False,
                     sample_rate=sample_rate,
+                    channels=channels,
                     admin_user=self.icecast_admin_user,
                     admin_password=self.icecast_admin_password,
                 )

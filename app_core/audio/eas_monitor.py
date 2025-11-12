@@ -230,7 +230,31 @@ def create_fips_filtering_callback(
             )
 
             try:
-                forward_callback(alert)
+                result = forward_callback(alert)
+                generated_message_id = None
+                if isinstance(result, dict):
+                    generated_message_id = result.get('message_id') or result.get('id')
+                elif hasattr(result, 'id'):
+                    generated_message_id = getattr(result, 'id')
+                elif isinstance(result, (int, float)):
+                    generated_message_id = int(result)
+                elif isinstance(result, (list, tuple)) and result:
+                    first = result[0]
+                    if isinstance(first, dict):
+                        generated_message_id = first.get('message_id') or first.get('id')
+                    elif hasattr(first, 'id'):
+                        generated_message_id = getattr(first, 'id')
+
+                if generated_message_id is not None:
+                    try:
+                        generated_message_id = int(generated_message_id)
+                    except (TypeError, ValueError):
+                        logger.debug(
+                            "Forward callback returned non-integer message id %r; ignoring",
+                            generated_message_id,
+                        )
+                        generated_message_id = None
+
                 log.info(f"Alert forwarding completed successfully")
 
                 # Store as forwarded
@@ -239,7 +263,7 @@ def create_fips_filtering_callback(
                     forwarding_decision='forwarded',
                     forwarding_reason=forwarding_reason,
                     matched_fips=matched_fips_list,
-                    generated_message_id=None  # TODO: Link to generated message if available
+                    generated_message_id=generated_message_id
                 )
             except Exception as e:
                 log.error(f"Error forwarding alert: {e}", exc_info=True)
