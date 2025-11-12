@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from typing import Dict, List, Optional
@@ -31,15 +32,41 @@ from app_utils.eas_detection import detect_eas_from_file
 
 
 # Progress tracking infrastructure
-# Use in-memory store with thread safety for cross-request access
-_progress_store: Dict[str, Dict] = {}
+# Persist to the filesystem so multiple workers can share state
 _progress_lock = threading.Lock()
+_progress_dir = os.path.join(tempfile.gettempdir(), "alert_verification_progress")
+os.makedirs(_progress_dir, exist_ok=True)
+
+
+def _sanitize_operation_id(operation_id: str) -> str:
+    """Return a filesystem-safe operation identifier."""
+
+    return "".join(ch for ch in operation_id if ch.isalnum() or ch in {"-", "_"})
+
+
+def _progress_path(operation_id: str) -> str:
+    """Resolve the storage path for a progress payload."""
+
+    safe_id = _sanitize_operation_id(operation_id)
+    return os.path.join(_progress_dir, f"{safe_id}.json")
 
 class ProgressTracker:
-    """Track progress of long-running operations using shared memory store."""
+    """Track progress of long-running operations using a shared file store."""
 
     def __init__(self, operation_id: str):
         self.operation_id = operation_id
+
+    def _write_payload(self, payload: Dict) -> None:
+        """Persist a progress payload to disk atomically."""
+
+        payload = dict(payload)
+        payload["timestamp"] = time.time()
+        target_path = _progress_path(self.operation_id)
+        temp_path = f"{target_path}.{uuid.uuid4().hex}.tmp"
+
+        with open(temp_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle)
+        os.replace(temp_path, target_path)
 
     def update(self, step: str, current: int, total: int, message: str = ""):
         """Update progress for the current operation."""
@@ -49,59 +76,78 @@ class ProgressTracker:
             "total": total,
             "message": message,
             "percent": int((current / total * 100)) if total > 0 else 0,
-            "timestamp": time.time()
         }
         with _progress_lock:
-            _progress_store[self.operation_id] = progress_data
+            self._write_payload(progress_data)
 
     def complete(self, message: str = "Complete"):
         """Mark operation as complete."""
         with _progress_lock:
-            _progress_store[self.operation_id] = {
+            self._write_payload({
                 "step": "complete",
                 "current": 100,
                 "total": 100,
                 "message": message,
                 "percent": 100,
-                "timestamp": time.time()
-            }
+            })
 
     def error(self, message: str):
         """Mark operation as failed."""
         with _progress_lock:
-            _progress_store[self.operation_id] = {
+            self._write_payload({
                 "step": "error",
                 "current": 0,
                 "total": 100,
                 "message": message,
                 "percent": 0,
-                "timestamp": time.time()
-            }
+            })
 
     @staticmethod
     def get(operation_id: str) -> Optional[Dict]:
         """Get progress data for an operation."""
         with _progress_lock:
-            return _progress_store.get(operation_id)
+            path = _progress_path(operation_id)
+            try:
+                with open(path, "r", encoding="utf-8") as handle:
+                    return json.load(handle)
+            except FileNotFoundError:
+                return None
+            except (OSError, json.JSONDecodeError):  # pragma: no cover - defensive
+                return None
 
     @staticmethod
     def clear(operation_id: str):
         """Clear progress data for an operation."""
         with _progress_lock:
-            if operation_id in _progress_store:
-                del _progress_store[operation_id]
+            path = _progress_path(operation_id)
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                return
+            except OSError:  # pragma: no cover - defensive
+                return
 
     @staticmethod
     def cleanup_old(max_age_seconds: int = 3600):
         """Clean up progress data older than max_age_seconds."""
         current_time = time.time()
         with _progress_lock:
-            expired = [
-                op_id for op_id, data in _progress_store.items()
-                if current_time - data.get("timestamp", 0) > max_age_seconds
-            ]
-            for op_id in expired:
-                del _progress_store[op_id]
+            try:
+                for filename in os.listdir(_progress_dir):
+                    if not filename.endswith(".json"):
+                        continue
+                    path = os.path.join(_progress_dir, filename)
+                    try:
+                        modified = os.path.getmtime(path)
+                    except OSError:
+                        continue
+                    if current_time - modified > max_age_seconds:
+                        try:
+                            os.remove(path)
+                        except OSError:
+                            continue
+            except OSError:  # pragma: no cover - defensive
+                return
 
 
 def _extract_audio_segment_wav(audio_path: str, start_sample: int, end_sample: int, sample_rate: int) -> bytes:
