@@ -49,6 +49,7 @@ tracks releases under the 2.x series.
 
 ### Fixed
 - Reduced nginx static asset cache lifetime from 24 hours to five minutes so freshly deployed frontend changes appear without manual cache purges.
+- Prevented alert verification page timeouts by offloading audio decoding to a background worker and persisting progress/results for UI polling.
 
 ### Changed
 - **Consolidated stream support in Audio Sources system** - Removed stream support from RadioReceiver model and UI, centralizing all HTTP/M3U stream configuration through the Audio Sources page where StreamSourceAdapter already provided full functionality
