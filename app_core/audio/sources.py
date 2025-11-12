@@ -569,6 +569,9 @@ class StreamSourceAdapter(AudioSourceAdapter):
         self._metadata_stop_event = threading.Event()
         self._metadata_lock = threading.Lock()
         self._last_icy_metadata: Optional[str] = None
+        self._last_logged_error: Optional[str] = None  # Track last error to suppress duplicates
+        self._error_count: int = 0  # Count consecutive duplicate errors
+        self._last_error_log_time: float = 0.0  # Timestamp of last error log
 
     def _resolve_stream_url(self, url: str) -> str:
         """Validate the configured URL and resolve playlists when needed."""
@@ -620,7 +623,8 @@ class StreamSourceAdapter(AudioSourceAdapter):
             '-reconnect_streamed', '1',
             '-reconnect_on_network_error', '1',
             '-reconnect_delay_max', '5',
-            '-fflags', '+genpts',
+            '-fflags', '+genpts+igndts',  # Generate timestamps, ignore DTS errors
+            '-err_detect', 'ignore_err',  # Tolerate stream corruption/errors
             '-i', stream_url,
             '-vn',
             '-acodec', 'pcm_s16le',
@@ -754,15 +758,33 @@ class StreamSourceAdapter(AudioSourceAdapter):
                     break
                 text = raw_line.decode('utf-8', errors='replace').strip()
                 if text:
-                    # Log ALL FFmpeg output for debugging stream issues
-                    # Check for critical errors first
+                    # Check for duplicate errors to suppress spam
+                    current_time = time.time()
+                    is_duplicate = (text == self._last_logged_error)
+
+                    if is_duplicate:
+                        self._error_count += 1
+                        # Only log every 100th duplicate error OR after 60 seconds
+                        if self._error_count % 100 != 0 and (current_time - self._last_error_log_time) < 60.0:
+                            continue  # Suppress this duplicate
+                    else:
+                        # Reset counter for new error
+                        if self._error_count > 1:
+                            logger.warning(
+                                f"{self.config.name}: (Previous error repeated {self._error_count} times, suppressed)"
+                            )
+                        self._error_count = 0
+                        self._last_logged_error = text
+
+                    self._last_error_log_time = current_time
+
+                    # Log based on severity
                     lower_text = text.lower()
                     if any(keyword in lower_text for keyword in ['error', 'failed', 'invalid', 'unable']):
                         logger.error(f"{self.config.name}: FFmpeg ERROR: {text}")
                     elif any(keyword in lower_text for keyword in ['warning', 'deprecated']):
                         logger.warning(f"{self.config.name}: FFmpeg: {text}")
                     else:
-                        # Log info messages at debug level to reduce noise
                         logger.debug(f"{self.config.name}: FFmpeg: {text}")
         except Exception as exc:
             logger.debug(f"{self.config.name}: stderr pump stopped: {exc}")
