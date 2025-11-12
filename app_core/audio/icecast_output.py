@@ -110,6 +110,7 @@ class IcecastStreamer:
         self._metadata_poll_interval = max(self.config.metadata_poll_interval, 0.5)
         self._source_timeout = max(getattr(self.config, 'source_timeout', 30.0) or 0.0, 0.0)
         self._last_write_time = 0.0
+        self._last_buffer_warning = 0.0  # Throttle buffer warnings to avoid log spam
 
         # Extended metadata (album art, song length, etc.)
         self._last_artwork_url: Optional[str] = None
@@ -315,10 +316,11 @@ class IcecastStreamer:
         # CRITICAL: Pre-buffer audio to prevent stuttering/clipping
         # Build up a buffer before starting to feed FFmpeg
         from collections import deque
-        buffer = deque(maxlen=200)  # Up to 10 seconds of audio (200 * 50ms chunks)
-        prebuffer_target = 20  # Pre-fill with 1 second before starting (reduced for faster startup)
+        buffer = deque(maxlen=500)  # Up to 25 seconds of audio (500 * 50ms chunks) - increased from 200
+        prebuffer_target = 50  # Pre-fill with 2.5 seconds before starting - increased from 20
+        buffer_low_watermark = 100  # Warn if buffer drops below 5 seconds (20% of max)
 
-        logger.info(f"Pre-buffering {prebuffer_target} chunks (~1 second) for smooth Icecast streaming")
+        logger.info(f"Pre-buffering {prebuffer_target} chunks (~{prebuffer_target*50}ms) for smooth Icecast streaming")
         prebuffer_timeout = time.time() + 10.0  # 10 seconds max to prebuffer
 
         while len(buffer) < prebuffer_target and time.time() < prebuffer_timeout:
@@ -357,8 +359,21 @@ class IcecastStreamer:
                     self._ffmpeg_process.stdin.flush()
                     self._bytes_sent += len(chunk)
                     wrote_chunk = True
+
+                    # Monitor buffer health and warn if running low (throttled to avoid spam)
+                    buffer_level = len(buffer)
+                    if buffer_level < buffer_low_watermark:
+                        now_warn = time.time()
+                        if now_warn - self._last_buffer_warning > 30.0:  # Max one warning per 30s
+                            logger.warning(
+                                f"Icecast buffer running low: {buffer_level}/{buffer.maxlen} chunks "
+                                f"({buffer_level*50}ms / {buffer.maxlen*50}ms). "
+                                "Audio source may be blocking or too slow."
+                            )
+                            self._last_buffer_warning = now_warn
                 elif not buffer:
                     # Buffer empty - slow down to avoid busy loop
+                    logger.error("Icecast buffer completely empty! Audio source starved.")
                     time.sleep(0.01)
 
                 if wrote_chunk:
