@@ -754,7 +754,16 @@ class StreamSourceAdapter(AudioSourceAdapter):
                     break
                 text = raw_line.decode('utf-8', errors='replace').strip()
                 if text:
-                    logger.warning(f"{self.config.name}: FFmpeg stderr: {text}")
+                    # Log ALL FFmpeg output for debugging stream issues
+                    # Check for critical errors first
+                    lower_text = text.lower()
+                    if any(keyword in lower_text for keyword in ['error', 'failed', 'invalid', 'unable']):
+                        logger.error(f"{self.config.name}: FFmpeg ERROR: {text}")
+                    elif any(keyword in lower_text for keyword in ['warning', 'deprecated']):
+                        logger.warning(f"{self.config.name}: FFmpeg: {text}")
+                    else:
+                        # Log info messages at debug level to reduce noise
+                        logger.debug(f"{self.config.name}: FFmpeg: {text}")
         except Exception as exc:
             logger.debug(f"{self.config.name}: stderr pump stopped: {exc}")
 
@@ -813,6 +822,10 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
                 if not chunk:
                     if process.poll() is not None:
+                        logger.error(
+                            f"{self.config.name}: FFmpeg decoder exited unexpectedly. "
+                            f"Check if stream URL is accessible: {self._resolved_stream_url}"
+                        )
                         self._restart_ffmpeg_process("decoder exited")
                     break
 
@@ -824,6 +837,7 @@ class StreamSourceAdapter(AudioSourceAdapter):
             return None
 
         if len(self._pcm_backlog) < target_bytes:
+            # No data available - this is normal during buffering
             return None
 
         raw = bytes(self._pcm_backlog[:target_bytes])
