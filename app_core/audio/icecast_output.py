@@ -111,6 +111,7 @@ class IcecastStreamer:
         self._source_timeout = max(getattr(self.config, 'source_timeout', 30.0) or 0.0, 0.0)
         self._last_write_time = 0.0
         self._last_buffer_warning = 0.0  # Throttle buffer warnings to avoid log spam
+        self._consecutive_empty_reads = 0  # Track consecutive failed reads from audio source
 
         # Extended metadata (album art, song length, etc.)
         self._last_artwork_url: Optional[str] = None
@@ -321,16 +322,28 @@ class IcecastStreamer:
         buffer_low_watermark = 100  # Warn if buffer drops below 5 seconds (20% of max)
 
         logger.info(f"Pre-buffering {prebuffer_target} chunks (~{prebuffer_target*50}ms) for smooth Icecast streaming")
+
+        # Diagnostic: Check audio source type and status
+        source_type = type(self.audio_source).__name__
+        source_status = getattr(self.audio_source, 'status', 'unknown')
+        logger.info(f"Audio source: {source_type}, Status: {source_status}")
+
         prebuffer_timeout = time.time() + 10.0  # 10 seconds max to prebuffer
+        prebuffer_attempts = 0
 
         while len(buffer) < prebuffer_target and time.time() < prebuffer_timeout:
             samples = self.audio_source.get_audio_chunk(timeout=0.5)
+            prebuffer_attempts += 1
             if samples is not None:
                 pcm_data = (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16)
                 buffer.append(pcm_data.tobytes())
 
         if len(buffer) < prebuffer_target:
-            logger.warning(f"Pre-buffer timeout: only filled {len(buffer)}/{prebuffer_target} chunks (~{len(buffer)*50}ms of audio)")
+            logger.error(
+                f"Pre-buffer timeout: only filled {len(buffer)}/{prebuffer_target} chunks "
+                f"(~{len(buffer)*50}ms of audio) after {prebuffer_attempts} attempts. "
+                f"Audio source {source_type} may not be providing data. Check source status!"
+            )
         else:
             logger.info(f"Pre-buffer complete: {len(buffer)} chunks (~{len(buffer)*50}ms of audio)")
 
@@ -350,6 +363,22 @@ class IcecastStreamer:
                     # Convert float32 [-1, 1] to int16 PCM
                     pcm_data = (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16)
                     buffer.append(pcm_data.tobytes())
+                    self._consecutive_empty_reads = 0  # Reset counter on successful read
+                else:
+                    # Track consecutive empty reads to diagnose source issues
+                    self._consecutive_empty_reads += 1
+                    if self._consecutive_empty_reads == 100:  # After 10 seconds of no data (100 * 0.1s timeout)
+                        logger.error(
+                            f"Audio source has not provided data for 10+ seconds. "
+                            f"Buffer: {len(buffer)}/{buffer.maxlen} chunks. "
+                            "Check if audio source is running and configured correctly."
+                        )
+                    elif self._consecutive_empty_reads == 500:  # After 50 seconds
+                        logger.critical(
+                            f"Audio source completely starved for 50+ seconds! "
+                            f"This indicates a serious issue with the audio source. "
+                            f"Buffer exhausted. Check logs for audio source errors."
+                        )
 
                 # Feed FFmpeg from buffer (always try to send, even if we just got None)
                 # This keeps FFmpeg fed even when source is temporarily slow
@@ -373,7 +402,11 @@ class IcecastStreamer:
                             self._last_buffer_warning = now_warn
                 elif not buffer:
                     # Buffer empty - slow down to avoid busy loop
-                    logger.error("Icecast buffer completely empty! Audio source starved.")
+                    # Throttle error logging to avoid spam (max 1 per 10 seconds)
+                    now_error = time.time()
+                    if now_error - self._last_buffer_warning > 10.0:
+                        logger.error("Icecast buffer completely empty! Audio source starved.")
+                        self._last_buffer_warning = now_error
                     time.sleep(0.01)
 
                 if wrote_chunk:
