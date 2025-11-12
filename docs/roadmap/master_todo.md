@@ -56,22 +56,25 @@ Each roadmap item below references the requirement(s) it unlocks so contributors
 
 ## 5. Resilience & Disaster Recovery (Requirement 5)
 - **Goal**: Maintain service continuity during hardware or network outages.
-- **Status**: No automated backup, health probing, or multi-site guidance is in place.
+- **Status**: ✅ Dependency health checks and automated backup rotation are online; the remaining gap is formal standby orchestration and operator-facing recovery guidance.
+- **Delivered**:
+  1. ✅ Added `/health` and `/health/dependencies` probes in `webapp/routes_monitoring.py` covering database, Redis, Icecast, and audio services for orchestrator visibility.
+  2. ✅ Implemented scheduled backup rotation via `tools/rotate_backups.py` with systemd/cron examples under `examples/` (shared with Requirement 10).
+  3. ✅ Persisted received-alert forwarding metadata (including downstream message identifiers) to enable end-to-end compliance auditing.
 - **Plan**:
-  1. Create `tools/backup_scheduler.py` to orchestrate rolling database/media snapshots and restore validation.
-  2. Add `/health/dependencies` probes that cover database, Redis, and audio services for orchestration checks.
-  3. Provide optional warm-standby synchronization via `docker-compose.override.yml` samples and documented rsync strategies.
-  4. Author operator runbooks in `docs/runbooks/outage_response.md` for failover activation and verification.
+  1. Publish an outage-response playbook in `docs/runbooks/outage_response.md` detailing failover, restore validation, and health verification steps.
+  2. Provide optional warm-standby synchronization guidance (rsync snapshots, replicated PostgreSQL, and Docker compose overrides) for geographically diverse deployments.
+  3. Automate post-restore validation scripts that replay recent alerts and confirm GPIO/audio signalling before rejoining service.
 
 ## 6. Deployment & Setup Experience (Requirement 6)
 - **Goal**: Reduce onboarding time for lab evaluators and contributors.
-- **Status**: Environment bootstrapping is manual, with scattered notes across documentation.
+- **Status**: The `.env` setup wizard and environment editor exist, and Icecast rebroadcast settings now persist through the API/UI; hardware deployment notes and automated validation remain outstanding.
 - **Plan**:
-  1. Build `tools/setup_wizard.py` to capture station metadata, audio profiles, and receiver definitions into `.env` and the database.
-  2. Expand `docker-compose.yml` with optional services for audio capture daemons and document udev/USB permissions under `docs/deployment/audio_hardware.md`.
+  1. Expand `tools/setup_wizard.py` with receiver/audio presets and document the happy path in `docs/deployment/quick_start.md`.
+  2. Extend `docker-compose.yml` with optional audio capture daemons and document udev/USB permissions under `docs/deployment/audio_hardware.md`.
   3. Document the reference Raspberry Pi build—including relay HAT pinouts, RS-232 adapter configuration, and supported USB audio chipsets—in `docs/hardware/reference_pi_build.md`.
   4. Add integration tests (pytest) that mock ingest/output paths and GPIO behaviors under `tests/` to protect against regressions.
-  5. Centralize post-install checklists in `docs/deployment/post_install.md`.
+  5. Centralize post-install and upgrade verification checklists in `docs/deployment/post_install.md`.
 
 ## 7. Analytics & Compliance Enhancements (Requirement 7) ✅ COMPLETE
 - **Goal**: Give operators actionable insight into alert flow health and compliance posture.
@@ -130,3 +133,8 @@ Maintaining this document:
 - Update status bullets to reflect newly completed milestones.
 - Link to relevant PRs or issues for traceability.
 - Keep safety disclaimers and legal obligations visible when new functionality might impact operational risk.
+
+## Recommended Future Enhancements
+- Capture RBDS metadata surfaced by the new demodulator in a web dashboard widget and expose it via the analytics API for downstream signage.
+- Add a standby node bootstrap script that replays the latest backup, re-seeds SSL credentials, and validates Icecast connectivity before promoting the node.
+- Ship configurable Icecast stream profiles (per-source bitrate/format overrides) so FM stereo feeds can be published alongside low-bandwidth monitoring streams.

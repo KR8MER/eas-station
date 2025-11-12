@@ -236,20 +236,23 @@ class AudioSourceAdapter(ABC):
 
         # Calculate audio levels
         if len(audio_chunk) > 0:
+            samples_for_metrics = audio_chunk
+            if isinstance(audio_chunk, np.ndarray) and audio_chunk.ndim > 1:
+                samples_for_metrics = audio_chunk.mean(axis=1)
             # Peak level in dBFS
-            peak = np.max(np.abs(audio_chunk))
+            peak = np.max(np.abs(samples_for_metrics))
             peak_db = 20 * np.log10(max(peak, 1e-10))
 
             # RMS level in dBFS
-            rms = np.sqrt(np.mean(audio_chunk ** 2))
+            rms = np.sqrt(np.mean(samples_for_metrics ** 2))
             rms_db = 20 * np.log10(max(rms, 1e-10))
 
             # Silence detection
             silence_detected = rms_db < self.config.silence_threshold_db
 
             # Update visualization buffers
-            self._update_waveform_buffer(audio_chunk)
-            self._update_spectrogram_buffer(audio_chunk)
+            self._update_waveform_buffer(samples_for_metrics)
+            self._update_spectrogram_buffer(samples_for_metrics)
         else:
             peak_db = rms_db = -np.inf
             silence_detected = True

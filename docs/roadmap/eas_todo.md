@@ -45,9 +45,10 @@
 
 ## 6. Configuration & Deployment Tooling
 - [ ] Ship setup and deployment tooling.
-  - Provide guided setup scripts (`tools/setup_wizard.py`) that populate `.env`, radio configs, and audio profiles.
-  - Extend Docker services (update `docker-compose.yml`) with containers for audio capture (PulseAudio/JACK) and hardware access, documenting udev rules in `docs/deployment/audio_hardware.md`.
-  - Add automated tests (pytest-based under `tests/`) covering ingest/output mocks and GPIO logic to prevent regressions.
+  - [x] Provide guided setup scripts (`tools/setup_wizard.py`) that populate `.env`, radio configs, and audio profiles.
+  - [x] Persist Icecast rebroadcast configuration through `/api/audio/icecast/config` and the Audio Settings UI so operator changes survive restarts.
+  - [ ] Extend Docker services (update `docker-compose.yml`) with containers for audio capture (PulseAudio/JACK) and hardware access, documenting udev rules in `docs/deployment/audio_hardware.md`.
+  - [ ] Add automated tests (pytest-based under `tests/`) covering ingest/output mocks and GPIO logic to prevent regressions.
 
 ## 7. Alert Verification & Analytics
 - [x] Build an alert verification pipeline.
@@ -66,7 +67,13 @@
 
 ## 9. Resilience & Disaster Recovery
 - [ ] Improve resilience for severe weather outages.
-  - Create automated database backup routines (`tools/backup_scheduler.py`) and provide restore playbooks in `docs/disaster_recovery.md`.
-  - Add health probes for dependent services (database, Redis, audio daemons) exposed via `/health/dependencies` endpoint.
-  - Implement an optional cold-standby node synchronization workflow using `docker-compose.override.yml` examples for multi-site deployments.
-  - Provide operator runbooks in `docs/runbooks/outage_response.md` describing failover activation and validation steps.
+  - [x] Add health probes for dependent services (database, Redis, audio daemons, Icecast) exposed via `/health/dependencies` endpoint.
+  - [x] Store forwarded-alert metadata with downstream message identifiers to support compliance traceability in `ReceivedEASAlert` records.
+  - [ ] Provide rotating backup orchestration docs tying together `tools/rotate_backups.py`, systemd timers, and off-site replication.
+  - [ ] Implement an optional cold-standby node synchronization workflow using `docker-compose.override.yml` examples for multi-site deployments.
+  - [ ] Provide operator runbooks in `docs/runbooks/outage_response.md` describing failover activation and validation steps.
+
+## 10. Stereo & RBDS Demodulation Enhancements
+- [x] Deliver FM stereo demodulation with RBDS extraction in `app_core/radio/demodulation.py` so SDR sources can surface PS name, Radio Text, and PTY metadata.
+- [ ] Surface RBDS metadata in the radio settings UI and expose it through the analytics API for logging dashboards.
+- [ ] Package standby-node bootstrap scripts that restore the latest backup, re-key TLS certificates, and verify Icecast connectivity before entering service.
