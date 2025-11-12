@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
-from typing import Dict, List, Optional
-
-from flask import Flask, Response, abort, render_template, request, send_file, session, jsonify
-from werkzeug.utils import secure_filename
 import time
 import uuid
 import threading
+from collections import OrderedDict
+from types import SimpleNamespace
+from typing import Dict, List, Optional, Tuple, OrderedDict as TypingOrderedDict
+
+from flask import (
+    Flask,
+    Response,
+    abort,
+    jsonify,
+    render_template,
+    request,
+    send_file,
+    url_for,
+)
+from werkzeug.utils import secure_filename
 
 from app_core.eas_storage import (
     build_alert_delivery_trends,
@@ -26,20 +38,56 @@ import struct
 import numpy as np
 from app_utils import format_local_datetime
 from app_utils.export import generate_csv
-from app_utils.eas_decode import AudioDecodeError, SAMEAudioDecodeResult, decode_same_audio
+from app_utils.eas_decode import (
+    AudioDecodeError,
+    SAMEAudioDecodeResult,
+    SAMEAudioSegment,
+    SAMEHeaderDetails,
+    decode_same_audio,
+)
 from app_utils.eas_detection import detect_eas_from_file
 
 
 # Progress tracking infrastructure
-# Use in-memory store with thread safety for cross-request access
-_progress_store: Dict[str, Dict] = {}
+# Persist to the filesystem so multiple workers can share state
 _progress_lock = threading.Lock()
+_progress_dir = os.path.join(tempfile.gettempdir(), "alert_verification_progress")
+os.makedirs(_progress_dir, exist_ok=True)
+
+_result_lock = threading.Lock()
+_result_dir = os.path.join(_progress_dir, "results")
+os.makedirs(_result_dir, exist_ok=True)
+
+
+def _sanitize_operation_id(operation_id: str) -> str:
+    """Return a filesystem-safe operation identifier."""
+
+    return "".join(ch for ch in operation_id if ch.isalnum() or ch in {"-", "_"})
+
+
+def _progress_path(operation_id: str) -> str:
+    """Resolve the storage path for a progress payload."""
+
+    safe_id = _sanitize_operation_id(operation_id)
+    return os.path.join(_progress_dir, f"{safe_id}.json")
 
 class ProgressTracker:
-    """Track progress of long-running operations using shared memory store."""
+    """Track progress of long-running operations using a shared file store."""
 
     def __init__(self, operation_id: str):
         self.operation_id = operation_id
+
+    def _write_payload(self, payload: Dict) -> None:
+        """Persist a progress payload to disk atomically."""
+
+        payload = dict(payload)
+        payload["timestamp"] = time.time()
+        target_path = _progress_path(self.operation_id)
+        temp_path = f"{target_path}.{uuid.uuid4().hex}.tmp"
+
+        with open(temp_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle)
+        os.replace(temp_path, target_path)
 
     def update(self, step: str, current: int, total: int, message: str = ""):
         """Update progress for the current operation."""
@@ -49,60 +97,194 @@ class ProgressTracker:
             "total": total,
             "message": message,
             "percent": int((current / total * 100)) if total > 0 else 0,
-            "timestamp": time.time()
         }
         with _progress_lock:
-            _progress_store[self.operation_id] = progress_data
+            self._write_payload(progress_data)
 
     def complete(self, message: str = "Complete"):
         """Mark operation as complete."""
         with _progress_lock:
-            _progress_store[self.operation_id] = {
+            self._write_payload({
                 "step": "complete",
                 "current": 100,
                 "total": 100,
                 "message": message,
                 "percent": 100,
-                "timestamp": time.time()
-            }
+            })
 
     def error(self, message: str):
         """Mark operation as failed."""
         with _progress_lock:
-            _progress_store[self.operation_id] = {
+            self._write_payload({
                 "step": "error",
                 "current": 0,
                 "total": 100,
                 "message": message,
                 "percent": 0,
-                "timestamp": time.time()
-            }
+            })
 
     @staticmethod
     def get(operation_id: str) -> Optional[Dict]:
         """Get progress data for an operation."""
         with _progress_lock:
-            return _progress_store.get(operation_id)
+            path = _progress_path(operation_id)
+            try:
+                with open(path, "r", encoding="utf-8") as handle:
+                    return json.load(handle)
+            except FileNotFoundError:
+                return None
+            except (OSError, json.JSONDecodeError):  # pragma: no cover - defensive
+                return None
 
     @staticmethod
     def clear(operation_id: str):
         """Clear progress data for an operation."""
         with _progress_lock:
-            if operation_id in _progress_store:
-                del _progress_store[operation_id]
+            path = _progress_path(operation_id)
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                return
+            except OSError:  # pragma: no cover - defensive
+                return
 
     @staticmethod
     def cleanup_old(max_age_seconds: int = 3600):
         """Clean up progress data older than max_age_seconds."""
         current_time = time.time()
         with _progress_lock:
-            expired = [
-                op_id for op_id, data in _progress_store.items()
-                if current_time - data.get("timestamp", 0) > max_age_seconds
-            ]
-            for op_id in expired:
-                del _progress_store[op_id]
+            try:
+                for filename in os.listdir(_progress_dir):
+                    if not filename.endswith(".json"):
+                        continue
+                    path = os.path.join(_progress_dir, filename)
+                    try:
+                        modified = os.path.getmtime(path)
+                    except OSError:
+                        continue
+                    if current_time - modified > max_age_seconds:
+                        try:
+                            os.remove(path)
+                        except OSError:
+                            continue
+            except OSError:  # pragma: no cover - defensive
+                return
 
+
+class OperationResultStore:
+    """Persist alert verification results for asynchronous retrieval."""
+
+    @staticmethod
+    def _path(operation_id: str) -> str:
+        safe_id = _sanitize_operation_id(operation_id)
+        return os.path.join(_result_dir, f"{safe_id}.json")
+
+    @classmethod
+    def save(cls, operation_id: str, payload: Dict) -> None:
+        data = dict(payload or {})
+        target_path = cls._path(operation_id)
+        temp_path = f"{target_path}.{uuid.uuid4().hex}.tmp"
+
+        with _result_lock:
+            with open(temp_path, "w", encoding="utf-8") as handle:
+                json.dump(data, handle)
+            os.replace(temp_path, target_path)
+
+    @classmethod
+    def load(cls, operation_id: str) -> Optional[Dict]:
+        with _result_lock:
+            try:
+                with open(cls._path(operation_id), "r", encoding="utf-8") as handle:
+                    return json.load(handle)
+            except FileNotFoundError:
+                return None
+            except (OSError, json.JSONDecodeError):  # pragma: no cover - defensive
+                return None
+
+    @classmethod
+    def clear(cls, operation_id: str) -> None:
+        with _result_lock:
+            try:
+                os.remove(cls._path(operation_id))
+            except FileNotFoundError:
+                return
+            except OSError:  # pragma: no cover - defensive
+                return
+
+    @classmethod
+    def cleanup_old(cls, max_age_seconds: int = 3600) -> None:
+        current_time = time.time()
+        with _result_lock:
+            try:
+                for filename in os.listdir(_result_dir):
+                    if not filename.endswith(".json"):
+                        continue
+                    path = os.path.join(_result_dir, filename)
+                    try:
+                        modified = os.path.getmtime(path)
+                    except OSError:
+                        continue
+                    if current_time - modified > max_age_seconds:
+                        try:
+                            os.remove(path)
+                        except OSError:
+                            continue
+            except OSError:  # pragma: no cover - defensive
+                return
+
+
+def _serialize_decode_result(decode_result: SAMEAudioDecodeResult) -> Dict[str, object]:
+    payload = decode_result.to_dict()
+    segment_audio: Dict[str, str] = {}
+
+    for name, segment in decode_result.segments.items():
+        wav_bytes = getattr(segment, "wav_bytes", None)
+        if wav_bytes:
+            segment_audio[name] = base64.b64encode(wav_bytes).decode("ascii")
+
+    payload["segment_audio"] = segment_audio
+    return payload
+
+
+def _deserialize_decode_result(data: Dict[str, object]) -> SAMEAudioDecodeResult:
+    headers: List[SAMEHeaderDetails] = []
+    for header_data in data.get("headers", []):
+        headers.append(
+            SAMEHeaderDetails(
+                header=header_data.get("header", ""),
+                fields=dict(header_data.get("fields") or {}),
+                confidence=float(header_data.get("confidence", 0.0)),
+                summary=header_data.get("summary"),
+            )
+        )
+
+    segments: TypingOrderedDict[str, SAMEAudioSegment] = OrderedDict()
+    segment_meta = data.get("segments", {}) or {}
+    segment_audio = data.get("segment_audio", {}) or {}
+
+    for name, meta in segment_meta.items():
+        audio_b64 = segment_audio.get(name)
+        wav_bytes = base64.b64decode(audio_b64) if audio_b64 else b""
+        segments[name] = SAMEAudioSegment(
+            label=meta.get("label") or name,
+            start_sample=int(meta.get("start_sample") or 0),
+            end_sample=int(meta.get("end_sample") or 0),
+            sample_rate=int(meta.get("sample_rate") or data.get("sample_rate") or 0),
+            wav_bytes=wav_bytes,
+        )
+
+    return SAMEAudioDecodeResult(
+        raw_text=data.get("raw_text", ""),
+        headers=headers,
+        bit_count=int(data.get("bit_count") or 0),
+        frame_count=int(data.get("frame_count") or 0),
+        frame_errors=int(data.get("frame_errors") or 0),
+        duration_seconds=float(data.get("duration_seconds") or 0.0),
+        sample_rate=int(data.get("sample_rate") or 0),
+        bit_confidence=float(data.get("bit_confidence") or 0.0),
+        min_bit_confidence=float(data.get("min_bit_confidence") or 0.0),
+        segments=segments,
+    )
 
 def _extract_audio_segment_wav(audio_path: str, start_sample: int, end_sample: int, sample_rate: int) -> bytes:
     """Extract a segment of audio and return as WAV bytes.
@@ -164,6 +346,87 @@ def _extract_audio_segment_wav(audio_path: str, start_sample: int, end_sample: i
             return buffer.getvalue()
 
 
+class _PCMBuffer:
+    """Helper for quickly rendering WAV segments from cached PCM samples."""
+
+    def __init__(self, *, sample_rate: int, samples: np.ndarray, origin_start: int = 0):
+        self.sample_rate = int(sample_rate)
+        self.samples = samples.astype(np.int16, copy=True)
+        self.origin_start = max(0, int(origin_start))
+
+    @property
+    def sample_count(self) -> int:
+        return int(self.samples.size)
+
+    @classmethod
+    def from_segment(cls, segment: Optional[SAMEAudioSegment]) -> Optional["_PCMBuffer"]:
+        if not segment or not getattr(segment, "wav_bytes", None):
+            return None
+
+        try:
+            with wave.open(io.BytesIO(segment.wav_bytes), "rb") as handle:
+                sample_rate = handle.getframerate()
+                sample_width = handle.getsampwidth()
+                frames = handle.readframes(handle.getnframes())
+        except Exception:
+            return None
+
+        if not frames:
+            return None
+
+        if sample_width == 2:
+            samples = np.frombuffer(frames, dtype=np.int16)
+        else:
+            dtype_map = {1: np.int8, 4: np.int32}
+            dtype = dtype_map.get(sample_width)
+            if dtype is None:
+                return None
+            raw = np.frombuffer(frames, dtype=dtype).astype(np.float32)
+            scale = float(2 ** (sample_width * 8 - 1))
+            if not scale:
+                return None
+            samples = np.clip(raw / scale, -1.0, 1.0)
+            samples = (samples * 32767.0).astype(np.int16)
+
+        if samples.size == 0:
+            return None
+
+        return cls(sample_rate=sample_rate, samples=samples, origin_start=segment.start_sample)
+
+    def build_segment(self, label: str, start_sample: int, end_sample: int) -> Optional[SAMEAudioSegment]:
+        if end_sample <= start_sample:
+            return None
+
+        relative_start = max(0, start_sample - self.origin_start)
+        relative_end = max(relative_start, end_sample - self.origin_start)
+        relative_end = min(relative_end, self.sample_count)
+        relative_start = min(relative_start, relative_end)
+
+        if relative_end <= relative_start:
+            return None
+
+        actual_start = self.origin_start + relative_start
+        actual_end = actual_start + (relative_end - relative_start)
+        pcm_slice = self.samples[relative_start:relative_end]
+        if pcm_slice.size == 0:
+            return None
+
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as wav_out:
+            wav_out.setnchannels(1)
+            wav_out.setsampwidth(2)
+            wav_out.setframerate(self.sample_rate)
+            wav_out.writeframes(pcm_slice.tobytes())
+
+        return SAMEAudioSegment(
+            label=label,
+            start_sample=actual_start,
+            end_sample=actual_end,
+            sample_rate=self.sample_rate,
+            wav_bytes=buffer.getvalue(),
+        )
+
+
 def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: Optional[ProgressTracker] = None):
     """
     Perform comprehensive EAS detection and return properly separated segments.
@@ -205,6 +468,13 @@ def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: 
         # Step 2: Build segment dictionary with comprehensive segments
         segments = {}
         sample_rate = detection_result.sample_rate or same_result.sample_rate
+        pcm_cache = _PCMBuffer.from_segment(same_result.segments.get('buffer'))
+        if pcm_cache and pcm_cache.sample_rate != sample_rate:
+            pcm_cache = None
+        if not pcm_cache:
+            pcm_cache = _PCMBuffer.from_segment(same_result.segments.get('message'))
+            if pcm_cache and pcm_cache.sample_rate != sample_rate:
+                pcm_cache = None
 
         # Add SAME header segment (from original decode)
         if 'header' in same_result.segments:
@@ -215,22 +485,29 @@ def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: 
             # Take the first/longest tone as the attention tone
             tone = max(detection_result.alert_tones, key=lambda t: t.duration_seconds)
 
-            tone_wav = _extract_audio_segment_wav(
-                audio_path,
-                tone.start_sample,
-                tone.end_sample,
-                sample_rate
-            )
+            tone_segment: Optional[SAMEAudioSegment] = None
+            if pcm_cache:
+                tone_segment = pcm_cache.build_segment(
+                    'attention_tone',
+                    tone.start_sample,
+                    tone.end_sample,
+                )
 
-            # Create a segment object similar to SAMEAudioSegment
-            from app_utils.eas_decode import SAMEAudioSegment
-            tone_segment = SAMEAudioSegment(
-                label='attention_tone',
-                start_sample=tone.start_sample,
-                end_sample=tone.end_sample,
-                sample_rate=sample_rate,
-                wav_bytes=tone_wav
-            )
+            if not tone_segment:
+                tone_wav = _extract_audio_segment_wav(
+                    audio_path,
+                    tone.start_sample,
+                    tone.end_sample,
+                    sample_rate
+                )
+
+                tone_segment = SAMEAudioSegment(
+                    label='attention_tone',
+                    start_sample=tone.start_sample,
+                    end_sample=tone.end_sample,
+                    sample_rate=sample_rate,
+                    wav_bytes=tone_wav
+                )
             segments['attention_tone'] = tone_segment
 
             route_logger.info(f"Extracted {tone.tone_type.upper()} tone: "
@@ -243,21 +520,29 @@ def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: 
                            detection_result.narration_segments[0] if detection_result.narration_segments else None)
 
             if narration:
-                narration_wav = _extract_audio_segment_wav(
-                    audio_path,
-                    narration.start_sample,
-                    narration.end_sample,
-                    sample_rate
-                )
+                narration_segment: Optional[SAMEAudioSegment] = None
+                if pcm_cache:
+                    narration_segment = pcm_cache.build_segment(
+                        'narration',
+                        narration.start_sample,
+                        narration.end_sample,
+                    )
 
-                from app_utils.eas_decode import SAMEAudioSegment
-                narration_segment = SAMEAudioSegment(
-                    label='narration',
-                    start_sample=narration.start_sample,
-                    end_sample=narration.end_sample,
-                    sample_rate=sample_rate,
-                    wav_bytes=narration_wav
-                )
+                if not narration_segment:
+                    narration_wav = _extract_audio_segment_wav(
+                        audio_path,
+                        narration.start_sample,
+                        narration.end_sample,
+                        sample_rate
+                    )
+
+                    narration_segment = SAMEAudioSegment(
+                        label='narration',
+                        start_sample=narration.start_sample,
+                        end_sample=narration.end_sample,
+                        sample_rate=sample_rate,
+                        wav_bytes=narration_wav
+                    )
                 segments['narration'] = narration_segment
 
                 route_logger.info(f"Extracted narration: {narration.duration_seconds:.2f}s "
@@ -287,6 +572,52 @@ def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: 
         route_logger.error(f"Comprehensive detection failed: {e}", exc_info=True)
         # Fallback to basic decode
         return decode_same_audio(audio_path), None
+
+
+def _process_temp_audio_file(
+    temp_path: str,
+    filename: str,
+    mimetype: str,
+    store_results: bool,
+    route_logger,
+    progress: Optional[ProgressTracker] = None,
+) -> Tuple[Optional[SAMEAudioDecodeResult], List[str], Optional[object]]:
+    """Decode an uploaded audio file stored at temp_path."""
+
+    errors: List[str] = []
+    decode_result: Optional[SAMEAudioDecodeResult] = None
+    stored_record = None
+
+    try:
+        decode_result, _ = _detect_comprehensive_eas_segments(
+            temp_path,
+            route_logger,
+            progress=progress,
+        )
+    except AudioDecodeError as exc:
+        if progress:
+            progress.error(f"Audio decode error: {str(exc)}")
+        errors.append(str(exc))
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        route_logger.error("Unexpected failure decoding SAME audio: %s", exc)
+        if progress:
+            progress.error("Unable to decode audio payload")
+        errors.append("Unable to decode audio payload. See logs for details.")
+
+    if decode_result and store_results:
+        if progress:
+            progress.update("storage", 1, 1, "Storing decode results...")
+        try:
+            stored_record = record_audio_decode_result(
+                filename=filename,
+                content_type=mimetype,
+                decode_payload=decode_result,
+            )
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            route_logger.error("Failed to store decoded audio payload: %s", exc)
+            errors.append("Decoded results were generated but could not be stored.")
+
+    return decode_result, errors, stored_record
 
 
 def register(app: Flask, logger) -> None:
@@ -340,33 +671,28 @@ def register(app: Flask, logger) -> None:
                 progress.error("Unsupported file type")
             return None, ["Unsupported file type. Upload a .wav or .mp3 file."], None
 
-        errors: List[str] = []
-        decode_result: Optional[SAMEAudioDecodeResult] = None
-        stored_record = None
+        store_results = request.form.get("store_results") == "on"
 
         if progress:
             progress.update("upload", 2, 4, "Uploading and preparing audio file...")
+
+        decode_result: Optional[SAMEAudioDecodeResult] = None
+        errors: List[str] = []
+        stored_record = None
 
         with tempfile.NamedTemporaryFile(suffix=extension, delete=False) as temp_file:
             upload.save(temp_file.name)
             temp_path = temp_file.name
 
         try:
-            # Use comprehensive detection to properly separate all EAS elements
-            decode_result, detection_result = _detect_comprehensive_eas_segments(
+            decode_result, errors, stored_record = _process_temp_audio_file(
                 temp_path,
+                filename,
+                upload.mimetype or "application/octet-stream",
+                store_results,
                 route_logger,
-                progress=progress
+                progress=progress,
             )
-        except AudioDecodeError as exc:
-            if progress:
-                progress.error(f"Audio decode error: {str(exc)}")
-            errors.append(str(exc))
-        except Exception as exc:  # pragma: no cover - defensive fallback
-            route_logger.error("Unexpected failure decoding SAME audio: %s", exc)
-            if progress:
-                progress.error("Unable to decode audio payload")
-            errors.append("Unable to decode audio payload. See logs for details.")
         finally:
             # Clean up temp file
             try:
@@ -374,20 +700,153 @@ def register(app: Flask, logger) -> None:
             except OSError as exc:
                 route_logger.debug("Failed to clean up temp file %s: %s", temp_path, exc)
 
-            if decode_result and request.form.get("store_results") == "on":
-                if progress:
-                    progress.update("storage", 1, 1, "Storing decode results...")
-                try:
-                    stored_record = record_audio_decode_result(
-                        filename=filename,
-                        content_type=upload.mimetype,
-                        decode_payload=decode_result,
-                    )
-                except Exception as exc:  # pragma: no cover - defensive fallback
-                    route_logger.error("Failed to store decoded audio payload: %s", exc)
-                    errors.append("Decoded results were generated but could not be stored.")
-
         return decode_result, errors, stored_record
+
+    def _async_decode_worker(
+        progress_id: str,
+        temp_path: str,
+        filename: str,
+        mimetype: str,
+        store_results: bool,
+    ) -> None:
+        progress = ProgressTracker(progress_id)
+        progress.update("init", 0, 100, "Starting audio processing...")
+
+        with app.app_context():
+            decode_result: Optional[SAMEAudioDecodeResult] = None
+            errors: List[str] = []
+            stored_record = None
+
+            try:
+                decode_result, errors, stored_record = _process_temp_audio_file(
+                    temp_path,
+                    filename,
+                    mimetype,
+                    store_results,
+                    route_logger,
+                    progress=progress,
+                )
+            except Exception as exc:  # pragma: no cover - defensive fallback
+                route_logger.error("Async alert verification failed: %s", exc, exc_info=True)
+                errors = ["Unable to decode audio payload. See logs for details."]
+                progress.error(errors[0])
+            else:
+                if errors and not decode_result:
+                    progress.error(errors[0])
+                else:
+                    progress.complete("Processing complete")
+
+            result_payload: Dict[str, object] = {"decode_errors": errors}
+            if decode_result:
+                result_payload["decode_result"] = _serialize_decode_result(decode_result)
+            if stored_record:
+                result_payload["stored_decode"] = {
+                    "id": getattr(stored_record, "id", None),
+                    "original_filename": getattr(stored_record, "original_filename", None),
+                }
+
+            OperationResultStore.save(progress_id, result_payload)
+
+        try:
+            os.unlink(temp_path)
+        except OSError as exc:  # pragma: no cover - defensive cleanup
+            route_logger.debug("Failed to remove temp file %s: %s", temp_path, exc)
+
+    @app.route("/admin/alert-verification/operations", methods=["POST"])
+    def start_alert_verification_operation():
+        window_days = _resolve_window_days()
+
+        if "audio_file" not in request.files:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Please choose a WAV or MP3 file containing SAME bursts.",
+                    }
+                ),
+                400,
+            )
+
+        upload = request.files["audio_file"]
+        if not upload or not upload.filename:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Please choose a WAV or MP3 file containing SAME bursts.",
+                    }
+                ),
+                400,
+            )
+
+        progress_id = request.form.get("progress_id") or str(uuid.uuid4())
+        filename = secure_filename(upload.filename)
+        extension = os.path.splitext(filename.lower())[1]
+        if extension not in {".wav", ".mp3"}:
+            ProgressTracker(progress_id).error("Unsupported file type")
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Unsupported file type. Upload a .wav or .mp3 file.",
+                    }
+                ),
+                400,
+            )
+
+        store_results = request.form.get("store_results") == "on"
+        mimetype = upload.mimetype or "application/octet-stream"
+
+        progress = ProgressTracker(progress_id)
+        progress.update("upload", 1, 4, "Validating audio file...")
+
+        with tempfile.NamedTemporaryFile(suffix=extension, delete=False) as temp_file:
+            upload.save(temp_file.name)
+            temp_path = temp_file.name
+
+        progress.update("upload", 2, 4, "Uploading and preparing audio file...")
+
+        thread = threading.Thread(
+            target=_async_decode_worker,
+            args=(progress_id, temp_path, filename, mimetype, store_results),
+            daemon=True,
+        )
+
+        try:
+            thread.start()
+        except RuntimeError as exc:  # pragma: no cover - defensive fallback
+            route_logger.error("Failed to launch async alert verification: %s", exc)
+            progress.error("Unable to start audio processing")
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "Unable to start audio processing. Please try again.",
+                    }
+                ),
+                500,
+            )
+
+        redirect_url = url_for(
+            "alert_verification",
+            days=window_days,
+            result_id=progress_id,
+        )
+
+        return (
+            jsonify(
+                {
+                    "status": "accepted",
+                    "progress_id": progress_id,
+                    "redirect_url": redirect_url,
+                }
+            ),
+            202,
+        )
 
     @app.route("/admin/alert-verification", methods=["GET", "POST"])
     def alert_verification():
@@ -399,6 +858,22 @@ def register(app: Flask, logger) -> None:
 
         # Clean up old progress data (older than 1 hour)
         ProgressTracker.cleanup_old(max_age_seconds=3600)
+        OperationResultStore.cleanup_old(max_age_seconds=3600)
+
+        result_id = request.args.get("result_id")
+        if result_id:
+            stored_payload = OperationResultStore.load(result_id)
+            if stored_payload:
+                decode_errors = stored_payload.get("decode_errors") or []
+                serialized_result = stored_payload.get("decode_result")
+                if serialized_result:
+                    decode_result = _deserialize_decode_result(serialized_result)
+                stored_info = stored_payload.get("stored_decode")
+                if stored_info:
+                    stored_decode = SimpleNamespace(**stored_info)
+                OperationResultStore.clear(result_id)
+                ProgressTracker.clear(result_id)
+                progress_id = result_id
 
         if request.method == "POST":
             # Generate a unique progress ID for this operation
