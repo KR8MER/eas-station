@@ -25,6 +25,17 @@ def _markdown_to_html(content: str) -> str:
     This is a simple markdown converter. For production, consider using
     markdown2 or mistune for more complete markdown support.
     """
+    # Extract HTML anchor tags before escaping to preserve them
+    anchor_tags = {}
+    anchor_pattern = r'<a\s+name=["\']([^"\']+)["\']\s*></a>'
+
+    def save_anchor(match):
+        placeholder = f'%%%ANCHORTAG{len(anchor_tags)}%%%'
+        anchor_tags[placeholder] = match.group(0)
+        return placeholder
+
+    content = re.sub(anchor_pattern, save_anchor, content)
+
     # Extract mermaid blocks before escaping to preserve syntax
     mermaid_blocks = {}
     # Support both Unix (\n) and Windows (\r\n) line endings after ```mermaid
@@ -173,6 +184,13 @@ def _markdown_to_html(content: str) -> str:
         # Replace both plain and paragraph-wrapped placeholders
         html = str(html).replace(str(escaped_placeholder), mermaid_div)
         html = str(html).replace(f'<p>{escaped_placeholder}</p>', mermaid_div)
+
+    # Restore HTML anchor tags
+    for placeholder, anchor_tag in anchor_tags.items():
+        # The placeholder was already escaped during the escape(content) step
+        escaped_placeholder = escape(placeholder)
+        # Replace the placeholder with the original anchor tag
+        html = str(html).replace(str(escaped_placeholder), anchor_tag)
 
     return Markup(html)
 
