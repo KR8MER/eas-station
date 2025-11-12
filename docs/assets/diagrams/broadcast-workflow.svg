@@ -149,7 +149,7 @@
   <g id="transmit-group">
     <!-- Store & Transmit -->
     <rect x="650" y="1000" width="140" height="65" rx="6" fill="url(#bw-grad-complete)" filter="url(#bw-shadow)"/>
-    <text x="720" y="1022" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Store & Transmit</text>
+    <text x="720" y="1022" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Store &amp; Transmit</text>
     <text x="720" y="1040" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#ede9fe">• Save WAV file</text>
     <text x="720" y="1054" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#ede9fe">• Key transmitter (GPIO)</text>
 

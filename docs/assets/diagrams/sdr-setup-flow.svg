@@ -33,7 +33,7 @@
 
   <!-- Title Section -->
   <text x="450" y="35" font-family="Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" fill="#1e293b">
-    SDR Setup & Configuration
+    SDR Setup &amp; Configuration
   </text>
   <text x="450" y="58" font-family="Arial, sans-serif" font-size="13" text-anchor="middle" fill="#64748b">
     Complete workflow for Software-Defined Radio receiver setup
@@ -134,7 +134,7 @@
 
   <!-- Step 6: Enable -->
   <rect x="640" y="510" width="180" height="50" rx="6" fill="url(#sdr-grad-config)" filter="url(#sdr-shadow)"/>
-  <text x="730" y="532" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">6. Enable & Save</text>
+  <text x="730" y="532" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="white">6. Enable &amp; Save</text>
   <text x="730" y="550" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#d1fae5">✓ Enabled  ✓ Auto-start</text>
 
   <path d="M 610,535 L 640,535" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#sdr-arrow)"/>
@@ -142,7 +142,7 @@
   <!-- Phase 3: Testing & Verification -->
   <rect x="50" y="640" width="800" height="200" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
   <text x="60" y="665" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#92400e">
-    Phase 3: Testing & Verification
+    Phase 3: Testing &amp; Verification
   </text>
 
   <!-- Monitor Status -->
