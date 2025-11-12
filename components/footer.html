@@ -111,6 +111,15 @@
                 </div>
             </div>
 
+            <!-- Tech Stack Badges -->
+            <div class="tech-stack-badges">
+                <img src="https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11">
+                <img src="https://img.shields.io/badge/Flask-3.0-000000?style=flat-square&logo=flask&logoColor=white" alt="Flask 3.0">
+                <img src="https://img.shields.io/badge/PostgreSQL-17-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL 17">
+                <img src="https://img.shields.io/badge/Docker-Enabled-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker">
+                <img src="https://img.shields.io/badge/Bootstrap-5-7952B3?style=flat-square&logo=bootstrap&logoColor=white" alt="Bootstrap 5">
+            </div>
+
             <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: var(--spacing-sm);">
                 This system provides emergency weather alerts from NOAA.
                 For life-threatening emergencies, always call 911 immediately.
@@ -172,6 +181,26 @@
 .footer-meta-link:focus {
     color: var(--accent-primary);
     text-decoration: underline;
+}
+
+.tech-stack-badges {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    padding: 0.75rem 0;
+}
+
+.tech-stack-badges img {
+    height: 20px;
+    opacity: 0.9;
+    transition: opacity 0.2s ease;
+}
+
+.tech-stack-badges img:hover {
+    opacity: 1;
 }
 
 .btn-close {
