@@ -154,26 +154,46 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
         }
 
         try:
-            processes = []
-            for proc in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent", "username"]):
+            observed_processes: List[Tuple[psutil.Process, Dict[str, Any]]] = []
+
+            for proc in psutil.process_iter(["pid", "name", "username"]):
                 try:
-                    proc.cpu_percent()
+                    proc.cpu_percent(None)
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
 
-            time.sleep(0.1)
+                observed_processes.append((proc, dict(proc.info)))
 
-            for proc in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent", "username"]):
+            # Allow a short interval so psutil can calculate CPU deltas using the same
+            # Process instances collected above. Using new Process objects here would
+            # reset the internal CPU counters and always report 0%.
+            time.sleep(0.3)
+
+            processes: List[Dict[str, Any]] = []
+            for proc, metadata in observed_processes:
                 try:
-                    pinfo = proc.as_dict(
-                        attrs=["pid", "name", "cpu_percent", "memory_percent", "username"]
-                    )
-                    if pinfo["cpu_percent"] is not None:
-                        processes.append(pinfo)
+                    cpu_percent = proc.cpu_percent(None)
+                    memory_percent = proc.memory_percent()
+                    name = metadata.get("name") or proc.name()
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
 
-            processes.sort(key=lambda x: x["cpu_percent"] or 0, reverse=True)
+                if cpu_percent is None:
+                    cpu_percent = 0.0
+                if memory_percent is None:
+                    memory_percent = 0.0
+
+                processes.append(
+                    {
+                        "pid": metadata.get("pid", proc.pid),
+                        "name": name,
+                        "username": metadata.get("username"),
+                        "cpu_percent": cpu_percent,
+                        "memory_percent": memory_percent,
+                    }
+                )
+
+            processes.sort(key=lambda entry: entry.get("cpu_percent", 0) or 0, reverse=True)
             process_info["top_processes"] = processes[:10]
         except Exception:
             pass
@@ -908,6 +928,15 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
     result: Dict[str, Any] = {"available": False, "devices": [], "error": None}
 
     smartctl_path = shutil.which("smartctl")
+    if not smartctl_path:
+        for candidate in (
+            "/usr/sbin/smartctl",
+            "/sbin/smartctl",
+            "/usr/local/sbin/smartctl",
+        ):
+            if os.path.exists(candidate) and os.access(candidate, os.X_OK):
+                smartctl_path = candidate
+                break
     if not smartctl_path:
         result["error"] = "smartctl utility not installed"
         return result
