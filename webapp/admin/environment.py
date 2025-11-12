@@ -393,6 +393,28 @@ ENV_CATEGORIES = {
                 'max': 300,
                 'category': 'gpio_enabled',
             },
+            {
+                'key': 'EAS_GPIO_WATCHDOG_SECONDS',
+                'label': 'Watchdog Timeout (seconds)',
+                'type': 'number',
+                'default': '300',
+                'description': 'Maximum activation duration before automatic safety shutdown',
+                'min': 5,
+                'max': 3600,
+                'category': 'gpio_enabled',
+            },
+            {
+                'key': 'GPIO_ADDITIONAL_PINS',
+                'label': 'Additional Pins',
+                'type': 'textarea',
+                'description': (
+                    'One pin per line as PIN:Name:State:Hold:Watchdog. '
+                    'State is HIGH or LOW. Example: 22:Aux Relay:LOW:2:120'
+                ),
+                'placeholder': '22:Aux Relay:LOW:2:120',
+                'rows': 3,
+                'category': 'gpio_enabled',
+            },
         ],
     },
     'tts': {

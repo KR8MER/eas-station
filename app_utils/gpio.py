@@ -11,12 +11,14 @@ This module provides reliable, auditable control over GPIO pins with features in
 
 from __future__ import annotations
 
+import os
+import re
 import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 try:  # pragma: no cover - GPIO hardware is optional and platform specific
     import RPi.GPIO as RPiGPIO  # type: ignore
@@ -436,6 +438,59 @@ class GPIOController:
 
             return result
 
+    def activate_all(
+        self,
+        activation_type: GPIOActivationType = GPIOActivationType.AUTOMATIC,
+        operator: Optional[str] = None,
+        alert_id: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> Dict[int, bool]:
+        """Activate all configured pins.
+
+        Args:
+            activation_type: Reason for the activation (manual/automatic/test/override)
+            operator: Operator username if applicable
+            alert_id: Alert identifier when triggered by alert processing
+            reason: Human-readable explanation for the activation
+
+        Returns:
+            Mapping of pin number to activation success state.
+        """
+
+        results: Dict[int, bool] = {}
+        with self._lock:
+            pins = list(self._pins.keys())
+
+        for pin in pins:
+            results[pin] = self.activate(
+                pin=pin,
+                activation_type=activation_type,
+                operator=operator,
+                alert_id=alert_id,
+                reason=reason,
+            )
+
+        return results
+
+    def deactivate_all(self, force: bool = False) -> Dict[int, bool]:
+        """Deactivate all configured pins.
+
+        Args:
+            force: If ``True`` the hold time is ignored for each pin.
+
+        Returns:
+            Mapping of pin number to deactivation success state.
+        """
+
+        results: Dict[int, bool] = {}
+        with self._lock:
+            pins = list(self._pins.keys())
+
+        for pin in pins:
+            results[pin] = self.deactivate(pin=pin, force=force)
+
+        return results
+
     def _start_watchdog(self, pin: int, timeout_seconds: float) -> None:
         """Start watchdog timer for a pin.
 
@@ -532,6 +587,175 @@ class GPIOController:
             self.cleanup()
         except Exception:
             pass  # Suppress exceptions in destructor
+
+
+def load_gpio_pin_configs_from_env(logger=None) -> List[GPIOPinConfig]:
+    """Load GPIO pin configurations from environment variables.
+
+    The loader understands the following environment variables:
+
+    - ``EAS_GPIO_PIN`` / ``EAS_GPIO_ACTIVE_STATE`` / ``EAS_GPIO_HOLD_SECONDS`` /
+      ``EAS_GPIO_WATCHDOG_SECONDS`` for the primary transmitter relay.
+    - ``GPIO_ADDITIONAL_PINS``: comma or newline separated entries in the form
+      ``pin:name:state:hold:watchdog`` where state is ``HIGH``/``LOW``.
+    - ``GPIO_PIN_<N>`` variables for pin-specific overrides using
+      ``STATE:HOLD:WATCHDOG:NAME`` or a simplified value such as ``HIGH``.
+
+    Args:
+        logger: Optional logger used for diagnostic warnings.
+
+    Returns:
+        List of :class:`GPIOPinConfig` entries ready to be registered with a
+        :class:`GPIOController` instance.
+    """
+
+    def _log(level: str, message: str) -> None:
+        if logger is None:
+            return
+        log_method = getattr(logger, level, None)
+        if callable(log_method):
+            log_method(message)
+
+    def _parse_active_state(value: Optional[str], default: bool = True) -> bool:
+        if value is None:
+            return default
+        return str(value).strip().upper() != "LOW"
+
+    def _parse_float(value: Optional[str], default: float) -> float:
+        if value is None or value == "":
+            return default
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _add_config(
+        configs: List[GPIOPinConfig],
+        seen: set,
+        pin: int,
+        name: str,
+        active_high: bool,
+        hold_seconds: float,
+        watchdog_seconds: float,
+    ) -> None:
+        if pin in seen:
+            _log("warning", f"Duplicate GPIO pin {pin} ignored")
+            return
+        if pin < 2 or pin > 27:
+            _log("error", f"GPIO pin {pin} is outside the supported BCM range (2-27)")
+            return
+
+        configs.append(
+            GPIOPinConfig(
+                pin=pin,
+                name=name or f"GPIO Pin {pin}",
+                active_high=active_high,
+                hold_seconds=max(0.1, hold_seconds or 0.0),
+                watchdog_seconds=max(1.0, watchdog_seconds or 0.0),
+                enabled=True,
+            )
+        )
+        seen.add(pin)
+
+    configs: List[GPIOPinConfig] = []
+    seen_pins: set = set()
+
+    # Primary EAS GPIO pin
+    eas_gpio_pin = os.getenv("EAS_GPIO_PIN", "").strip()
+    if eas_gpio_pin:
+        try:
+            pin_number = int(eas_gpio_pin)
+        except ValueError:
+            _log("error", f"Invalid EAS_GPIO_PIN value '{eas_gpio_pin}' - expected integer")
+        else:
+            active_high = _parse_active_state(os.getenv("EAS_GPIO_ACTIVE_STATE", "HIGH"))
+            hold_seconds = _parse_float(os.getenv("EAS_GPIO_HOLD_SECONDS"), 5.0)
+            watchdog_seconds = _parse_float(os.getenv("EAS_GPIO_WATCHDOG_SECONDS"), 300.0)
+            _add_config(
+                configs,
+                seen_pins,
+                pin_number,
+                "EAS Transmitter PTT",
+                active_high,
+                hold_seconds,
+                watchdog_seconds,
+            )
+
+    # Additional pins declared in GPIO_ADDITIONAL_PINS
+    additional = os.getenv("GPIO_ADDITIONAL_PINS", "").strip()
+    if additional:
+        entries = [entry.strip() for entry in re.split(r"[,\n]+", additional) if entry.strip()]
+        for entry in entries:
+            parts = [part.strip() for part in entry.split(":")]
+            if not parts:
+                continue
+            try:
+                pin_number = int(parts[0])
+            except ValueError:
+                _log("error", f"Invalid GPIO_ADDITIONAL_PINS entry '{entry}' - pin must be numeric")
+                continue
+
+            name = parts[1] if len(parts) > 1 and parts[1] else f"GPIO Pin {pin_number}"
+            active_high = _parse_active_state(parts[2] if len(parts) > 2 else None)
+            hold_seconds = _parse_float(parts[3] if len(parts) > 3 else None, 5.0)
+            watchdog_seconds = _parse_float(parts[4] if len(parts) > 4 else None, 300.0)
+
+            _add_config(
+                configs,
+                seen_pins,
+                pin_number,
+                name,
+                active_high,
+                hold_seconds,
+                watchdog_seconds,
+            )
+
+    # Individual GPIO_PIN_<number> overrides
+    pin_pattern = re.compile(r"^GPIO_PIN_(\d+)$")
+    for key, value in os.environ.items():
+        match = pin_pattern.match(key)
+        if not match:
+            continue
+
+        pin_number = int(match.group(1))
+        raw_value = (value or "").strip()
+
+        active_high = True
+        hold_seconds = 5.0
+        watchdog_seconds = 300.0
+        name = f"GPIO Pin {pin_number}"
+
+        if ":" in raw_value:
+            parts = [part.strip() for part in raw_value.split(":")]
+            active_high = _parse_active_state(parts[0] if parts else None)
+            if len(parts) > 1:
+                hold_seconds = _parse_float(parts[1], 5.0)
+            if len(parts) > 2:
+                watchdog_seconds = _parse_float(parts[2], 300.0)
+            if len(parts) > 3 and parts[3]:
+                name = parts[3]
+        elif raw_value:
+            upper_value = raw_value.upper()
+            if upper_value in {"HIGH", "LOW"}:
+                active_high = upper_value != "LOW"
+            else:
+                try:
+                    int(raw_value)
+                except ValueError:
+                    _log("warning", f"Ignoring GPIO_PIN_{pin_number} value '{raw_value}' - expected HIGH/LOW or numeric pin")
+                # Name defaults; hold/watchdog remain defaults
+
+        _add_config(
+            configs,
+            seen_pins,
+            pin_number,
+            name,
+            active_high,
+            hold_seconds,
+            watchdog_seconds,
+        )
+
+    return configs
 
 
 # Backwards compatibility wrapper for existing code

@@ -6,6 +6,9 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 ### Added
+- Added multi-pin GPIO configuration loader with persistent environment editor support, ensuring
+  Raspberry Pi deployments can drive multiple relays with active-high/low settings and automatic
+  watchdog enforcement during alert playout.
 - Added IPAWS poll debug export endpoints for Excel and PDF with UI buttons on `/debug/ipaws` for rapid sharing of poll runs.
 - Added comprehensive analytics and compliance enhancements with trend analysis and anomaly detection
   - Implemented `app_core/analytics/` module with metrics aggregation, trend analysis, and anomaly detection

@@ -51,6 +51,10 @@ EAS_GPIO_WATCHDOG_SECONDS=300        # Maximum activation time (safety timeout)
 GPIO_ADDITIONAL_PINS="27:Emergency Relay:HIGH:3.0:600,22:LED Sign:HIGH:0.5:120"
 ```
 
+These same fields are available in the web UI under **Settings → Environment → GPIO Control**
+for deployments using the persistent environment editor. Update the values there and restart
+the services to apply the new relay mapping.
+
 ### Pin Configuration Details
 
 - **PIN**: BCM GPIO pin number (0-27 depending on Pi model)

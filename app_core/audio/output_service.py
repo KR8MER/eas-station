@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
+from app_utils.gpio import GPIOActivationType, GPIOController
+
 from .playout_queue import AudioPlayoutQueue, PlayoutItem
 
 
@@ -88,7 +90,7 @@ class AudioOutputService:
         queue: AudioPlayoutQueue,
         config: Dict[str, Any],
         logger: Optional[logging.Logger] = None,
-        gpio_controller: Optional[Any] = None,
+        gpio_controller: Optional[GPIOController] = None,
     ):
         """
         Initialize the audio output service.
@@ -97,7 +99,7 @@ class AudioOutputService:
             queue: AudioPlayoutQueue instance to manage
             config: EAS configuration dictionary
             logger: Logger instance
-            gpio_controller: Optional GPIORelayController for transmitter control
+            gpio_controller: Optional GPIOController for transmitter control
         """
         self.queue = queue
         self.config = config
@@ -259,8 +261,16 @@ class AudioOutputService:
             gpio_activated = False
             if self.gpio_controller:
                 try:
-                    self.gpio_controller.activate(self.logger)
-                    gpio_activated = True
+                    alert_id = getattr(item, 'alert_id', None)
+                    activation_reason = f"Queued alert playout ({item.event_code or 'unknown'})"
+                    activation_results = self.gpio_controller.activate_all(
+                        activation_type=GPIOActivationType.AUTOMATIC,
+                        alert_id=str(alert_id) if alert_id else None,
+                        reason=activation_reason,
+                    )
+                    gpio_activated = any(activation_results.values())
+                    if not gpio_activated:
+                        self.logger.warning('GPIO controller configured but no pins activated')
                 except Exception as exc:
                     self.logger.warning(f'GPIO activation failed: {exc}')
 
@@ -289,7 +299,7 @@ class AudioOutputService:
             # Deactivate GPIO relay
             if gpio_activated:
                 try:
-                    self.gpio_controller.deactivate(self.logger)
+                    self.gpio_controller.deactivate_all()
                 except Exception as exc:
                     self.logger.warning(f'GPIO deactivation failed: {exc}')
 

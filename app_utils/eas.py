@@ -27,7 +27,12 @@ from .eas_fsk import (
     generate_fsk_samples,
 )
 from .eas_tts import TTSEngine
-from .gpio import GPIORelayController  # Import from unified GPIO module
+from .gpio import (
+    GPIOActivationType,
+    GPIOController,
+    GPIOPinConfig,
+    load_gpio_pin_configs_from_env,
+)
 
 MANUAL_FIPS_ENV_TOKENS = {'ALL', 'ANY', 'US', 'USA', '*'}
 
@@ -72,6 +77,8 @@ def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
     else:
         web_subdir = 'eas_messages'
 
+    gpio_configs = load_gpio_pin_configs_from_env()
+
     config: Dict[str, object] = {
         'enabled': os.getenv('EAS_BROADCAST_ENABLED', 'false').lower() == 'true',
         'originator': (os.getenv('EAS_ORIGINATOR') or 'WXR')[:3].upper(),
@@ -83,6 +90,18 @@ def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
         'gpio_pin': os.getenv('EAS_GPIO_PIN'),
         'gpio_active_state': os.getenv('EAS_GPIO_ACTIVE_STATE', 'HIGH').upper(),
         'gpio_hold_seconds': float(os.getenv('EAS_GPIO_HOLD_SECONDS', '5') or 5),
+        'gpio_watchdog_seconds': float(os.getenv('EAS_GPIO_WATCHDOG_SECONDS', '300') or 300),
+        'gpio_additional_pins': os.getenv('GPIO_ADDITIONAL_PINS', '').strip(),
+        'gpio_pin_configs': [
+            {
+                'pin': cfg.pin,
+                'name': cfg.name,
+                'active_high': cfg.active_high,
+                'hold_seconds': cfg.hold_seconds,
+                'watchdog_seconds': cfg.watchdog_seconds,
+            }
+            for cfg in gpio_configs
+        ],
         'sample_rate': int(os.getenv('EAS_SAMPLE_RATE', '16000') or 16000),
         'tts_provider': (os.getenv('EAS_TTS_PROVIDER') or '').strip().lower(),
         'azure_speech_key': os.getenv('AZURE_SPEECH_KEY'),
@@ -621,9 +640,6 @@ def _run_command(command: Sequence[str], logger) -> None:
             logger.warning(f"Failed to run command {' '.join(command)}: {exc}")
 
 
-# GPIORelayController is now imported from app_utils.gpio module
-
-
 class EASAudioGenerator:
     def __init__(self, config: Dict[str, object], logger) -> None:
         self.config = config
@@ -959,7 +975,8 @@ class EASBroadcaster:
         self.location_settings = location_settings or {}
         self.enabled = bool(config.get('enabled'))
         self.audio_generator = EASAudioGenerator(config, logger)
-        self.gpio_controller: Optional[GPIORelayController] = None
+        self.gpio_controller: Optional[GPIOController] = None
+        self.gpio_pin_configs: List[GPIOPinConfig] = []
         self.playout_queue = playout_queue  # Optional AudioPlayoutQueue for queued playback
 
         if not self.enabled:
@@ -972,17 +989,31 @@ class EASBroadcaster:
                 self.audio_generator.output_dir,
             )
 
-        gpio_pin = config.get('gpio_pin')
-        if gpio_pin and self.enabled:
-            try:
-                pin_number = int(str(gpio_pin))
-                active_high = str(config.get('gpio_active_state', 'HIGH')).upper() != 'LOW'
-                hold = float(config.get('gpio_hold_seconds', 5))
-                self.gpio_controller = GPIORelayController(pin=pin_number, active_high=active_high, hold_seconds=hold)
-                self.logger.info('Configured GPIO relay on pin %s', pin_number)
-            except Exception as exc:  # pragma: no cover - hardware setup
-                self.logger.warning(f"GPIO relay unavailable: {exc}")
-                self.gpio_controller = None
+        if self.enabled:
+            gpio_configs = load_gpio_pin_configs_from_env(self.logger)
+            if gpio_configs:
+                try:
+                    gpio_logger = (
+                        self.logger.getChild('gpio')
+                        if hasattr(self.logger, 'getChild')
+                        else self.logger
+                    )
+                    controller = GPIOController(
+                        db_session=self.db_session,
+                        logger=gpio_logger,
+                    )
+                    for config_entry in gpio_configs:
+                        controller.add_pin(config_entry)
+
+                    self.gpio_controller = controller
+                    self.gpio_pin_configs = gpio_configs
+                    self.logger.info(
+                        'Configured GPIO controller with %s pin(s)',
+                        len(gpio_configs),
+                    )
+                except Exception as exc:  # pragma: no cover - hardware setup
+                    self.logger.warning(f"GPIO controller unavailable: {exc}")
+                    self.gpio_controller = None
 
     def _play_audio(self, audio_path: str) -> None:
         cmd = self.config.get('audio_player_cmd')
@@ -1184,21 +1215,35 @@ class EASBroadcaster:
 
         # Immediate mode: play synchronously (legacy behavior)
         controller = self.gpio_controller
+        activated_any = False
         if controller:
             try:  # pragma: no cover - hardware specific
-                controller.activate(self.logger)
+                alert_identifier = (
+                    getattr(alert, 'identifier', None)
+                    or payload.get('identifier')
+                )
+                activation_reason = f"Automatic alert playout ({event_code or 'unknown'})"
+                activation_results = controller.activate_all(
+                    activation_type=GPIOActivationType.AUTOMATIC,
+                    operator=None,
+                    alert_id=str(alert_identifier) if alert_identifier else None,
+                    reason=activation_reason,
+                )
+                activated_any = any(activation_results.values())
+                if not activated_any:
+                    self.logger.warning('GPIO controller configured but no pins activated')
             except Exception as exc:
                 self.logger.warning(f"GPIO activation failed: {exc}")
-                controller = None
+                activated_any = False
 
         try:
             self._play_audio(audio_path)
             if eom_path:
                 self._play_audio(eom_path)
         finally:
-            if controller:
+            if controller and activated_any:
                 try:  # pragma: no cover - hardware specific
-                    controller.deactivate(self.logger)
+                    controller.deactivate_all()
                 except Exception as exc:
                     self.logger.warning(f"GPIO release failed: {exc}")
 
