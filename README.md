@@ -16,6 +16,25 @@ EAS Station is a software-defined drop-in replacement for commercial EAS encoder
 
 ---
 
+## 📋 State EAS Plan Documentation
+
+**Ohio Emergency Alert System Plan** (FCC-approved March 2019) is now documented:
+- **[📖 Ohio EAS Documentation](docs/OHIO_EAS_README.md)** - Complete plan, station listings, test procedures
+- **[📊 Event Code Analysis](docs/EAS_EVENT_CODES_COMPLETE.md)** - All 78+ FCC event codes with implementation status
+- **[⚠️ Critical Alert](docs/EAS_CRITICAL_ALERT.md)** - 6 missing critical codes identified (SQW, ISW, WCW, LSW, LFW, EQE)
+
+**Event Code Update (Nov 2025)**: Added 6 critical missing codes to codebase:
+- **SQW** (Snow Squall Warning) - Sudden whiteout conditions on highways
+- **ISW** (Ice Storm Warning) - Significant ice accumulation
+- **WCW** (Wind Chill Warning) - Dangerous wind chills
+- **LSW** (Lake Effect Snow Warning) - Heavy lake effect snow
+- **LFW** (Lakeshore Flood Warning) - Lake Erie lakeshore flooding
+- **EQE** (Earthquake Early Warning) - ShakeAlert system warning
+
+The system now supports **67 event codes** (up from 61) and can encode/decode all missing codes using the originator reference in plain language output.
+
+---
+
 ## ✨ Key Features
 
 | Feature | Description |
