@@ -1,8 +1,11 @@
+import io
 import sys
 import threading
+import wave
 from collections import OrderedDict
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,3 +70,37 @@ def test_operation_result_store(tmp_path, monkeypatch):
     alert_verification.OperationResultStore.cleanup_old(max_age_seconds=0)
     alert_verification.OperationResultStore.clear("test-op")
     assert alert_verification.OperationResultStore.load("test-op") is None
+
+
+def test_pcm_buffer_builds_segments():
+    sample_rate = 22050
+    # Generate one second of ramp samples
+    pcm_samples = np.linspace(-0.5, 0.5, sample_rate, dtype=np.float32)
+    pcm_int16 = np.clip(pcm_samples * 32767.0, -32768, 32767).astype(np.int16)
+
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav_out:
+        wav_out.setnchannels(1)
+        wav_out.setsampwidth(2)
+        wav_out.setframerate(sample_rate)
+        wav_out.writeframes(pcm_int16.tobytes())
+
+    segment = SAMEAudioSegment(
+        label="buffer",
+        start_sample=0,
+        end_sample=pcm_int16.size,
+        sample_rate=sample_rate,
+        wav_bytes=buffer.getvalue(),
+    )
+
+    cache = alert_verification._PCMBuffer.from_segment(segment)
+    assert cache is not None
+
+    sub_segment = cache.build_segment("slice", 100, 1000)
+    assert sub_segment is not None
+    assert sub_segment.start_sample == 100
+    assert sub_segment.end_sample == 1000
+
+    with wave.open(io.BytesIO(sub_segment.wav_bytes), "rb") as handle:
+        assert handle.getframerate() == sample_rate
+        assert handle.getnframes() == 900

@@ -346,6 +346,87 @@ def _extract_audio_segment_wav(audio_path: str, start_sample: int, end_sample: i
             return buffer.getvalue()
 
 
+class _PCMBuffer:
+    """Helper for quickly rendering WAV segments from cached PCM samples."""
+
+    def __init__(self, *, sample_rate: int, samples: np.ndarray, origin_start: int = 0):
+        self.sample_rate = int(sample_rate)
+        self.samples = samples.astype(np.int16, copy=True)
+        self.origin_start = max(0, int(origin_start))
+
+    @property
+    def sample_count(self) -> int:
+        return int(self.samples.size)
+
+    @classmethod
+    def from_segment(cls, segment: Optional[SAMEAudioSegment]) -> Optional["_PCMBuffer"]:
+        if not segment or not getattr(segment, "wav_bytes", None):
+            return None
+
+        try:
+            with wave.open(io.BytesIO(segment.wav_bytes), "rb") as handle:
+                sample_rate = handle.getframerate()
+                sample_width = handle.getsampwidth()
+                frames = handle.readframes(handle.getnframes())
+        except Exception:
+            return None
+
+        if not frames:
+            return None
+
+        if sample_width == 2:
+            samples = np.frombuffer(frames, dtype=np.int16)
+        else:
+            dtype_map = {1: np.int8, 4: np.int32}
+            dtype = dtype_map.get(sample_width)
+            if dtype is None:
+                return None
+            raw = np.frombuffer(frames, dtype=dtype).astype(np.float32)
+            scale = float(2 ** (sample_width * 8 - 1))
+            if not scale:
+                return None
+            samples = np.clip(raw / scale, -1.0, 1.0)
+            samples = (samples * 32767.0).astype(np.int16)
+
+        if samples.size == 0:
+            return None
+
+        return cls(sample_rate=sample_rate, samples=samples, origin_start=segment.start_sample)
+
+    def build_segment(self, label: str, start_sample: int, end_sample: int) -> Optional[SAMEAudioSegment]:
+        if end_sample <= start_sample:
+            return None
+
+        relative_start = max(0, start_sample - self.origin_start)
+        relative_end = max(relative_start, end_sample - self.origin_start)
+        relative_end = min(relative_end, self.sample_count)
+        relative_start = min(relative_start, relative_end)
+
+        if relative_end <= relative_start:
+            return None
+
+        actual_start = self.origin_start + relative_start
+        actual_end = actual_start + (relative_end - relative_start)
+        pcm_slice = self.samples[relative_start:relative_end]
+        if pcm_slice.size == 0:
+            return None
+
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as wav_out:
+            wav_out.setnchannels(1)
+            wav_out.setsampwidth(2)
+            wav_out.setframerate(self.sample_rate)
+            wav_out.writeframes(pcm_slice.tobytes())
+
+        return SAMEAudioSegment(
+            label=label,
+            start_sample=actual_start,
+            end_sample=actual_end,
+            sample_rate=self.sample_rate,
+            wav_bytes=buffer.getvalue(),
+        )
+
+
 def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: Optional[ProgressTracker] = None):
     """
     Perform comprehensive EAS detection and return properly separated segments.
@@ -387,6 +468,13 @@ def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: 
         # Step 2: Build segment dictionary with comprehensive segments
         segments = {}
         sample_rate = detection_result.sample_rate or same_result.sample_rate
+        pcm_cache = _PCMBuffer.from_segment(same_result.segments.get('buffer'))
+        if pcm_cache and pcm_cache.sample_rate != sample_rate:
+            pcm_cache = None
+        if not pcm_cache:
+            pcm_cache = _PCMBuffer.from_segment(same_result.segments.get('message'))
+            if pcm_cache and pcm_cache.sample_rate != sample_rate:
+                pcm_cache = None
 
         # Add SAME header segment (from original decode)
         if 'header' in same_result.segments:
@@ -397,22 +485,29 @@ def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: 
             # Take the first/longest tone as the attention tone
             tone = max(detection_result.alert_tones, key=lambda t: t.duration_seconds)
 
-            tone_wav = _extract_audio_segment_wav(
-                audio_path,
-                tone.start_sample,
-                tone.end_sample,
-                sample_rate
-            )
+            tone_segment: Optional[SAMEAudioSegment] = None
+            if pcm_cache:
+                tone_segment = pcm_cache.build_segment(
+                    'attention_tone',
+                    tone.start_sample,
+                    tone.end_sample,
+                )
 
-            # Create a segment object similar to SAMEAudioSegment
-            from app_utils.eas_decode import SAMEAudioSegment
-            tone_segment = SAMEAudioSegment(
-                label='attention_tone',
-                start_sample=tone.start_sample,
-                end_sample=tone.end_sample,
-                sample_rate=sample_rate,
-                wav_bytes=tone_wav
-            )
+            if not tone_segment:
+                tone_wav = _extract_audio_segment_wav(
+                    audio_path,
+                    tone.start_sample,
+                    tone.end_sample,
+                    sample_rate
+                )
+
+                tone_segment = SAMEAudioSegment(
+                    label='attention_tone',
+                    start_sample=tone.start_sample,
+                    end_sample=tone.end_sample,
+                    sample_rate=sample_rate,
+                    wav_bytes=tone_wav
+                )
             segments['attention_tone'] = tone_segment
 
             route_logger.info(f"Extracted {tone.tone_type.upper()} tone: "
@@ -425,21 +520,29 @@ def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: 
                            detection_result.narration_segments[0] if detection_result.narration_segments else None)
 
             if narration:
-                narration_wav = _extract_audio_segment_wav(
-                    audio_path,
-                    narration.start_sample,
-                    narration.end_sample,
-                    sample_rate
-                )
+                narration_segment: Optional[SAMEAudioSegment] = None
+                if pcm_cache:
+                    narration_segment = pcm_cache.build_segment(
+                        'narration',
+                        narration.start_sample,
+                        narration.end_sample,
+                    )
 
-                from app_utils.eas_decode import SAMEAudioSegment
-                narration_segment = SAMEAudioSegment(
-                    label='narration',
-                    start_sample=narration.start_sample,
-                    end_sample=narration.end_sample,
-                    sample_rate=sample_rate,
-                    wav_bytes=narration_wav
-                )
+                if not narration_segment:
+                    narration_wav = _extract_audio_segment_wav(
+                        audio_path,
+                        narration.start_sample,
+                        narration.end_sample,
+                        sample_rate
+                    )
+
+                    narration_segment = SAMEAudioSegment(
+                        label='narration',
+                        start_sample=narration.start_sample,
+                        end_sample=narration.end_sample,
+                        sample_rate=sample_rate,
+                        wav_bytes=narration_wav
+                    )
                 segments['narration'] = narration_segment
 
                 route_logger.info(f"Extracted narration: {narration.duration_seconds:.2f}s "
