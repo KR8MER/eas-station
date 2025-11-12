@@ -114,6 +114,61 @@ ORIGINATOR_DESCRIPTIONS = {
     'PEP': 'National Public Warning System (PEP)',
 }
 
+# County abbreviations for Lima Ohio EAS Operational Area
+COUNTY_ABBREVIATIONS = {
+    'ALLE': 'Allen',
+    'AUGL': 'Auglaize',
+    'HANC': 'Hancock',
+    'HARD': 'Hardin',
+    'MERC': 'Mercer',
+    'PAUL': 'Paulding',
+    'PUTN': 'Putnam',
+    'VANW': 'Van Wert',
+}
+
+def decode_county_originator(originator_code: str) -> Optional[str]:
+    """
+    Decode county-based originator codes.
+
+    Format: XXXXCOEM or XXXXCOSO
+    Where:
+    - XXXX = 4-letter county abbreviation
+    - CO = County
+    - EM = Emergency Management
+    - SO = Sheriff's Office
+
+    Examples:
+    - PUTNCOSO = Putnam County Sheriff's Office
+    - PUTNCOEM = Putnam County Emergency Management
+    """
+    code = originator_code.upper().strip()
+
+    # Check if it matches the county pattern (8 characters)
+    if len(code) != 8:
+        return None
+
+    # Extract components
+    county_abbr = code[:4]
+    middle = code[4:6]  # Should be 'CO'
+    suffix = code[6:8]  # Either 'EM' or 'SO'
+
+    # Validate the middle part
+    if middle != 'CO':
+        return None
+
+    # Get county name
+    county_name = COUNTY_ABBREVIATIONS.get(county_abbr)
+    if not county_name:
+        return None
+
+    # Decode the suffix
+    if suffix == 'EM':
+        return f"{county_name} County Emergency Management"
+    elif suffix == 'SO':
+        return f"{county_name} County Sheriff's Office"
+
+    return None
+
 PRIMARY_ORIGINATORS: Tuple[str, ...] = ('EAS', 'CIV', 'WXR', 'PEP')
 
 
