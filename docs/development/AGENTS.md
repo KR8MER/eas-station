@@ -285,6 +285,64 @@ if alert.geom and boundary.geom:
 - **Avoid jQuery** - Use vanilla JavaScript
 - **Handle errors gracefully** - Show user-friendly messages
 
+### Template Structure & Page Elements
+
+**CRITICAL**: Know which files are actually being used vs orphaned duplicates.
+
+#### Active Template Files
+
+| Element | Active File | Lines | Status |
+|---------|------------|-------|--------|
+| **Base Template** | `templates/base.html` | 163 | ✅ All pages extend this |
+| **Navbar** | `templates/components/navbar_new.html` | 404 | ✅ Included in base.html |
+| **Footer** | Inline in `templates/base.html` | 103-144 | ✅ Inline in base template |
+| **System Banner** | Inline in `templates/base.html` | 72-81 | ✅ Inline in base template |
+| **Flash Messages** | Inline in `templates/base.html` | 84-95 | ✅ Inline in base template |
+
+#### Orphaned Files (DO NOT EDIT)
+
+| File | Status | Action Required |
+|------|--------|----------------|
+| `templates/base_new.html` | ❌ Not used anywhere | DELETE |
+| `templates/components/navbar.html` | ❌ Has RBAC features but unused | Evaluate then DELETE |
+| `components/navbar.html` | ❌ Wrong directory | DELETE |
+| `components/footer.html` | ❌ Was deleted (not included) | Already removed |
+| `components/page_header.html` | ⚠️ Macro component, wrong location | MOVE to templates/components/ if used |
+
+#### When Making Changes to Page Elements
+
+**Changing the Navbar:**
+- ✅ Edit: `templates/components/navbar_new.html`
+- ❌ Don't edit: `templates/components/navbar.html` (orphaned)
+- ❌ Don't edit: `components/navbar.html` (wrong location)
+
+**Changing the Footer:**
+- ✅ Edit: `templates/base.html` (lines 103-144)
+- ❌ Don't edit: `components/footer.html` (deleted - was orphaned)
+
+**Changing System Status Banner:**
+- ✅ Edit: `templates/base.html` (lines 72-81)
+
+**Changing Flash Messages:**
+- ✅ Edit: `templates/base.html` (lines 84-95)
+
+**Creating New Pages:**
+- ✅ Always extend `base.html`
+- ✅ Use `{% block content %}` for page content
+- ✅ Add navigation link to `templates/components/navbar_new.html`
+- ❌ Never extend `base_new.html` (orphaned)
+
+#### Quick Verification
+
+Before editing any template file:
+
+1. **Search for usage**: `grep -r "include.*filename" templates/`
+2. **Check extends**: `grep -r "extends.*filename" templates/`
+3. **Verify in Python**: `grep -r "render_template.*filename" .`
+4. **Consult documentation**: See [docs/frontend/TEMPLATE_STRUCTURE.md](../frontend/TEMPLATE_STRUCTURE.md)
+
+**Complete template architecture documentation**: [docs/frontend/TEMPLATE_STRUCTURE.md](../frontend/TEMPLATE_STRUCTURE.md)
+
 ---
 
 ## 🔒 Security Guidelines
