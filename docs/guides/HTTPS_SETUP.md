@@ -298,8 +298,10 @@ sudo netstat -tlnp | grep :80
    Edit `docker-compose.yml`:
    ```yaml
    ports:
-     - "8080:80"    # Use port 8080 instead
-     - "8443:443"   # Use port 8443 instead
+     - "0.0.0.0:8080:80"  # Use port 8080 for IPv4 clients
+     - "[::]:8080:80"     # Use port 8080 for IPv6 clients
+     - "0.0.0.0:8443:443" # Use port 8443 for IPv4 clients
+     - "[::]:8443:443"    # Use port 8443 for IPv6 clients
    ```
 
    ⚠️ **Note:** Let's Encrypt requires port 80 for validation
