@@ -105,24 +105,63 @@ class ProgressTracker:
 
 
 def _extract_audio_segment_wav(audio_path: str, start_sample: int, end_sample: int, sample_rate: int) -> bytes:
-    """Extract a segment of audio and return as WAV bytes."""
-    with wave.open(audio_path, 'rb') as wf:
-        n_channels = wf.getnchannels()
-        sampwidth = wf.getsampwidth()
+    """Extract a segment of audio and return as WAV bytes.
 
-        # Read the specific segment
-        wf.setpos(start_sample)
-        frames = wf.readframes(end_sample - start_sample)
+    Supports both WAV and MP3 files.
+    """
+    file_ext = os.path.splitext(audio_path)[1].lower()
 
-        # Create WAV file in memory
-        buffer = io.BytesIO()
-        with wave.open(buffer, 'wb') as wav_out:
-            wav_out.setnchannels(n_channels)
-            wav_out.setsampwidth(sampwidth)
-            wav_out.setframerate(sample_rate)
-            wav_out.writeframes(frames)
+    if file_ext == '.mp3':
+        # Handle MP3 files using pydub
+        try:
+            from pydub import AudioSegment
 
-        return buffer.getvalue()
+            # Load MP3 file
+            audio = AudioSegment.from_mp3(audio_path)
+
+            # Convert to mono if needed
+            if audio.channels > 1:
+                audio = audio.set_channels(1)
+
+            # Ensure correct sample rate
+            if audio.frame_rate != sample_rate:
+                audio = audio.set_frame_rate(sample_rate)
+
+            # Calculate time positions in milliseconds
+            start_ms = int((start_sample / sample_rate) * 1000)
+            end_ms = int((end_sample / sample_rate) * 1000)
+
+            # Extract segment
+            segment = audio[start_ms:end_ms]
+
+            # Export as WAV bytes
+            buffer = io.BytesIO()
+            segment.export(buffer, format="wav")
+            return buffer.getvalue()
+
+        except ImportError:
+            raise AudioDecodeError(
+                "pydub is required for MP3 file support. Install with: pip install pydub"
+            )
+    else:
+        # Handle WAV files directly
+        with wave.open(audio_path, 'rb') as wf:
+            n_channels = wf.getnchannels()
+            sampwidth = wf.getsampwidth()
+
+            # Read the specific segment
+            wf.setpos(start_sample)
+            frames = wf.readframes(end_sample - start_sample)
+
+            # Create WAV file in memory
+            buffer = io.BytesIO()
+            with wave.open(buffer, 'wb') as wav_out:
+                wav_out.setnchannels(n_channels)
+                wav_out.setsampwidth(sampwidth)
+                wav_out.setframerate(sample_rate)
+                wav_out.writeframes(frames)
+
+            return buffer.getvalue()
 
 
 def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: Optional[ProgressTracker] = None):

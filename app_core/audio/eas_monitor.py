@@ -290,8 +290,8 @@ class ContinuousEASMonitor:
     def __init__(
         self,
         audio_manager: AudioSourceManager,
-        buffer_duration: float = 120.0,
-        scan_interval: float = 2.0,
+        buffer_duration: float = 30.0,  # Reduced from 120s to 30s for faster scanning
+        scan_interval: float = 5.0,  # Increased from 2s to 5s to reduce CPU load
         sample_rate: int = 22050,
         alert_callback: Optional[Callable[[EASAlert], None]] = None,
         save_audio_files: bool = True,
@@ -302,8 +302,8 @@ class ContinuousEASMonitor:
 
         Args:
             audio_manager: AudioSourceManager instance providing audio
-            buffer_duration: Seconds of audio to buffer for analysis (default: 120s)
-            scan_interval: Seconds between decode attempts (default: 2s)
+            buffer_duration: Seconds of audio to buffer for analysis (default: 30s)
+            scan_interval: Seconds between decode attempts (default: 5s)
             sample_rate: Audio sample rate in Hz (default: 22050)
             alert_callback: Optional callback function called when alert detected
             save_audio_files: Whether to save audio files of detected alerts
@@ -333,6 +333,8 @@ class ContinuousEASMonitor:
         self._alerts_detected = 0
         self._scans_performed = 0
         self._last_alert_time: Optional[float] = None
+        self._active_scans = 0  # Track concurrent scans
+        self._scan_lock = threading.Lock()  # Protect scan counter
 
         logger.info(
             f"Initialized ContinuousEASMonitor: buffer={buffer_duration}s, "
@@ -428,27 +430,59 @@ class ContinuousEASMonitor:
                 self._buffer_pos = remaining
 
     def _get_buffer_contents(self) -> np.ndarray:
-        """Get current buffer contents in correct order."""
+        """Get current buffer contents in correct order.
+
+        Returns a COPY of the buffer to avoid holding locks during processing.
+        """
         with self._buffer_lock:
-            # Return buffer starting from current position (oldest data first)
+            # Return a COPY starting from current position (oldest data first)
+            # Using .copy() ensures we don't hold the lock during decode
             return np.concatenate([
                 self._audio_buffer[self._buffer_pos:],
                 self._audio_buffer[:self._buffer_pos]
-            ])
+            ]).copy()
 
     def _scan_for_alerts(self) -> None:
-        """Scan buffered audio for EAS alerts."""
+        """Scan buffered audio for EAS alerts (non-blocking).
+
+        Launches scan in background thread to prevent blocking audio stream.
+        """
+        # Check if too many scans are running
+        with self._scan_lock:
+            if self._active_scans >= 2:
+                logger.warning(
+                    f"Skipping EAS scan: {self._active_scans} scans already active. "
+                    "Consider increasing scan_interval or reducing buffer_duration."
+                )
+                return
+
+            self._active_scans += 1
+
+        # Get buffer copy (fast, lock released immediately)
+        audio_samples = self._get_buffer_contents()
+
+        # Launch scan in background thread
+        scan_thread = threading.Thread(
+            target=self._scan_worker,
+            args=(audio_samples,),
+            name=f"eas-scan-{self._scans_performed}",
+            daemon=True
+        )
+        scan_thread.start()
+
+    def _scan_worker(self, audio_samples: np.ndarray) -> None:
+        """Worker thread that performs the actual EAS scan.
+
+        This runs in background to avoid blocking the audio stream.
+        """
         try:
             self._scans_performed += 1
-
-            # Get audio buffer
-            audio_samples = self._get_buffer_contents()
 
             # Save to temporary WAV file for decoder
             temp_wav = self._save_to_temp_wav(audio_samples)
 
             try:
-                # Run decoder
+                # Run decoder (this is the slow part - now in background)
                 result = decode_same_audio(temp_wav, sample_rate=self.sample_rate)
 
                 # Check if we found an alert
@@ -466,6 +500,10 @@ class ContinuousEASMonitor:
 
         except Exception as e:
             logger.error(f"Error scanning for alerts: {e}", exc_info=True)
+        finally:
+            # Decrement active scan counter
+            with self._scan_lock:
+                self._active_scans -= 1
 
     def _save_to_temp_wav(self, samples: np.ndarray) -> str:
         """Save samples to temporary WAV file."""
