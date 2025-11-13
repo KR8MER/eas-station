@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Any
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template
 from sqlalchemy import text
 from alembic import command, config as alembic_config
 from alembic.script import ScriptDirectory
@@ -286,6 +286,35 @@ def register(app: Flask, logger) -> None:
                 "timestamp": utc_now().isoformat(),
                 "local_timestamp": local_now().isoformat(),
             }
+        )
+
+    @app.route("/help/version")
+    def help_version():
+        """Version information page with user-friendly HTML display."""
+        import json
+
+        location = get_location_settings()
+        version_data = {
+            "version": _system_version(),
+            "name": "NOAA CAP Alerts System",
+            "author": "KR8MER Amateur Radio Emergency Communications",
+            "description": (
+                f"Emergency alert system for {location['county_name']}, "
+                f"{location['state_code']}"
+            ),
+            "timezone": get_location_timezone_name(),
+            "led_available": LED_AVAILABLE,
+            "timestamp": utc_now().isoformat(),
+            "local_timestamp": local_now().isoformat(),
+        }
+
+        # Pretty-print JSON for display
+        version_json = json.dumps(version_data, indent=2)
+
+        return render_template(
+            "version.html",
+            version_info=version_data,
+            version_json=version_json
         )
 
     @app.route("/api/release-manifest")
