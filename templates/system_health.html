@@ -270,19 +270,32 @@
                         </div>
                         {% endif %}
 
+                        {% if platform_data.bios_vendor or platform_data.bios_version or platform_data.bios_date %}
                         <hr>
+                        {% if platform_data.bios_vendor %}
                         <div class="metric-row">
                             <span class="metric-label">BIOS Vendor:</span>
-                            <span class="metric-value">{{ platform_data.bios_vendor or 'Unknown' }}</span>
+                            <span class="metric-value">{{ platform_data.bios_vendor }}</span>
                         </div>
+                        {% endif %}
+                        {% if platform_data.bios_version %}
                         <div class="metric-row">
                             <span class="metric-label">BIOS Version:</span>
-                            <span class="metric-value">{{ platform_data.bios_version or 'Unknown' }}</span>
+                            <span class="metric-value">{{ platform_data.bios_version }}</span>
                         </div>
+                        {% endif %}
+                        {% if platform_data.bios_date %}
                         <div class="metric-row">
                             <span class="metric-label">BIOS Date:</span>
-                            <span class="metric-value">{{ platform_data.bios_date or 'Unknown' }}</span>
+                            <span class="metric-value">{{ platform_data.bios_date }}</span>
                         </div>
+                        {% endif %}
+                        {% else %}
+                        <hr>
+                        <div class="metric-row">
+                            <span class="metric-label text-muted"><em>Firmware information not available on this platform</em></span>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -1566,9 +1579,18 @@
             const boardName = escapeHtml(data.board_name || 'Unknown');
             const boardVersion = data.board_version ? `<div class="metric-row"><span class="metric-label">Board Version:</span><span class="metric-value">${escapeHtml(String(data.board_version))}</span></div>` : '';
             const assetTag = data.chassis_asset_tag ? `<div class="metric-row"><span class="metric-label">Asset Tag:</span><span class="metric-value">${escapeHtml(String(data.chassis_asset_tag))}</span></div>` : '';
-            const biosVendor = escapeHtml(data.bios_vendor || 'Unknown');
-            const biosVersion = escapeHtml(data.bios_version || 'Unknown');
-            const biosDate = escapeHtml(data.bios_date || 'Unknown');
+            
+            // Only show BIOS section if at least one BIOS field is available
+            const hasBiosInfo = data.bios_vendor || data.bios_version || data.bios_date;
+            let biosSection = '';
+            if (hasBiosInfo) {
+                const biosVendor = data.bios_vendor ? `<div class="metric-row"><span class="metric-label">BIOS Vendor:</span><span class="metric-value">${escapeHtml(String(data.bios_vendor))}</span></div>` : '';
+                const biosVersion = data.bios_version ? `<div class="metric-row"><span class="metric-label">BIOS Version:</span><span class="metric-value">${escapeHtml(String(data.bios_version))}</span></div>` : '';
+                const biosDate = data.bios_date ? `<div class="metric-row"><span class="metric-label">BIOS Date:</span><span class="metric-value">${escapeHtml(String(data.bios_date))}</span></div>` : '';
+                biosSection = `<hr>${biosVendor}${biosVersion}${biosDate}`;
+            } else {
+                biosSection = '<hr><div class="metric-row"><span class="metric-label text-muted"><em>Firmware information not available on this platform</em></span></div>';
+            }
 
             return `
                 <div class="card health-card h-100">
@@ -1594,19 +1616,7 @@
                         ${boardVersion}
                         ${assetTag}
 
-                        <hr>
-                        <div class="metric-row">
-                            <span class="metric-label">BIOS Vendor:</span>
-                            <span class="metric-value">${biosVendor}</span>
-                        </div>
-                        <div class="metric-row">
-                            <span class="metric-label">BIOS Version:</span>
-                            <span class="metric-value">${biosVersion}</span>
-                        </div>
-                        <div class="metric-row">
-                            <span class="metric-label">BIOS Date:</span>
-                            <span class="metric-value">${biosDate}</span>
-                        </div>
+                        ${biosSection}
                     </div>
                 </div>
             `;
