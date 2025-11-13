@@ -32,6 +32,9 @@ from requests import exceptions as requests_exceptions
 
 logger = logging.getLogger(__name__)
 
+# Delay before restarting FFmpeg after a failure (seconds)
+ICECAST_RESTART_DELAY = 5.0
+
 
 class StreamFormat(Enum):
     """Supported streaming formats."""
@@ -164,16 +167,19 @@ class IcecastStreamer:
 
     def stop(self) -> None:
         """Stop streaming."""
-        logger.info("Stopping Icecast streamer")
+        logger.info(f"Stopping Icecast streamer for mount {self.config.mount}")
         self._stop_event.set()
 
         # Stop FFmpeg
         if self._ffmpeg_process:
             try:
+                logger.debug(f"Terminating FFmpeg process for mount {self.config.mount}")
                 self._ffmpeg_process.terminate()
                 self._ffmpeg_process.wait(timeout=5.0)
+                logger.info(f"FFmpeg process terminated successfully for mount {self.config.mount}")
             except Exception:
                 try:
+                    logger.warning(f"Force-killing FFmpeg process for mount {self.config.mount}")
                     self._ffmpeg_process.kill()
                 except Exception:
                     pass
@@ -197,7 +203,7 @@ class IcecastStreamer:
         if pending_thread and pending_thread.is_alive():
             pending_thread.join(timeout=2.0)
 
-        logger.info("Stopped Icecast streamer")
+        logger.info(f"Stopped Icecast streamer for mount {self.config.mount}")
 
     def _read_ffmpeg_stderr(self) -> None:
         """Read and log FFmpeg stderr output to prevent buffer blocking."""
@@ -284,7 +290,7 @@ class IcecastStreamer:
                 icecast_url
             ])
 
-            logger.info(f"Starting FFmpeg Icecast streamer: {' '.join(cmd[:10])}...")
+            logger.info(f"Starting FFmpeg Icecast streamer for mount {self.config.mount}: {' '.join(cmd[:10])}...")
 
             self._ffmpeg_process = subprocess.Popen(
                 cmd,
@@ -302,6 +308,7 @@ class IcecastStreamer:
             )
             self._stderr_reader_thread.start()
 
+            logger.info(f"FFmpeg process started successfully for mount {self.config.mount} (PID: {self._ffmpeg_process.pid})")
             return True
 
         except Exception as e:
@@ -433,16 +440,18 @@ class IcecastStreamer:
                     continue
 
             except BrokenPipeError as exc:
-                logger.error("Icecast FFmpeg pipe closed: %s", exc)
+                logger.error(f"Icecast FFmpeg pipe closed for mount {self.config.mount}: {exc}")
+                logger.info(f"Waiting {ICECAST_RESTART_DELAY} seconds before restarting FFmpeg...")
                 if not self._restart_ffmpeg("ffmpeg pipe closed"):
                     time.sleep(5.0)
             except OSError as exc:
                 if exc.errno == errno.EPIPE:
-                    logger.error("Icecast FFmpeg write EPIPE: %s", exc)
+                    logger.error(f"Icecast FFmpeg write EPIPE for mount {self.config.mount}: {exc}")
+                    logger.info(f"Waiting {ICECAST_RESTART_DELAY} seconds before restarting FFmpeg...")
                     if not self._restart_ffmpeg("ffmpeg EPIPE"):
                         time.sleep(5.0)
                 else:
-                    logger.error(f"Error feeding Icecast stream: {exc}")
+                    logger.error(f"Error feeding Icecast stream for mount {self.config.mount}: {exc}")
                     time.sleep(1.0)
             except Exception as e:
                 logger.error(f"Error feeding Icecast stream: {e}")
@@ -459,18 +468,22 @@ class IcecastStreamer:
         process = self._ffmpeg_process
         stderr_thread = self._stderr_reader_thread
 
+        logger.warning(f"FFmpeg process restart triggered for mount {self.config.mount}: {reason}")
+
         if process:
             try:
+                logger.debug(f"Terminating FFmpeg process for mount {self.config.mount} (PID: {process.pid})")
                 process.terminate()
                 try:
                     process.wait(timeout=2.0)
+                    logger.debug(f"FFmpeg process terminated gracefully for mount {self.config.mount}")
                 except subprocess.TimeoutExpired:
-                    logger.debug("FFmpeg did not terminate gracefully; killing process")
+                    logger.debug(f"FFmpeg did not terminate gracefully for mount {self.config.mount}; killing process")
                     process.kill()
                 except Exception as exc:  # pylint: disable=broad-except
-                    logger.debug("Error waiting for FFmpeg termination: %s", exc)
+                    logger.debug(f"Error waiting for FFmpeg termination for mount {self.config.mount}: {exc}")
             except Exception as exc:  # pylint: disable=broad-except
-                logger.debug("Error terminating FFmpeg: %s", exc)
+                logger.debug(f"Error terminating FFmpeg for mount {self.config.mount}: {exc}")
 
         # Wait for stderr reader thread to finish
         if stderr_thread and stderr_thread.is_alive():
@@ -480,17 +493,23 @@ class IcecastStreamer:
         self._stderr_reader_thread = None
         self._reconnect_count += 1
         self._last_error = reason
-        logger.warning("Restarting Icecast FFmpeg pipeline (%s)", reason)
+
+        if self._stop_event.is_set():
+            return False
+
+        # Add delay before restart to prevent rapid restart cycles
+        logger.info(f"Waiting {ICECAST_RESTART_DELAY} seconds before restarting FFmpeg for mount {self.config.mount}...")
+        time.sleep(ICECAST_RESTART_DELAY)
 
         if self._stop_event.is_set():
             return False
 
         if self._start_ffmpeg():
             self._last_write_time = time.time()
-            logger.info("FFmpeg restarted successfully")
+            logger.info(f"FFmpeg restarted successfully for mount {self.config.mount}")
             return True
 
-        logger.error("Failed to restart FFmpeg (%s)", reason)
+        logger.error(f"Failed to restart FFmpeg for mount {self.config.mount} ({reason})")
         return False
 
     def _samples_to_pcm_bytes(self, samples: np.ndarray) -> bytes:

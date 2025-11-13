@@ -36,6 +36,7 @@ def test_restart_ffmpeg_resets_encoder(monkeypatch):
         def __init__(self):
             self.terminated = False
             self.killed = False
+            self.pid = 12345
 
         def terminate(self):
             self.terminated = True
@@ -55,7 +56,13 @@ def test_restart_ffmpeg_resets_encoder(monkeypatch):
         streamer._ffmpeg_process = new_process
         return True
 
+    # Mock time.sleep to avoid waiting during tests
+    sleep_calls = []
+    def fake_sleep(seconds):
+        sleep_calls.append(seconds)
+
     monkeypatch.setattr(streamer, "_start_ffmpeg", fake_start_ffmpeg)
+    monkeypatch.setattr(time, "sleep", fake_sleep)
 
     previous_restarts = streamer._reconnect_count
     result = streamer._restart_ffmpeg("test reason")
@@ -67,3 +74,5 @@ def test_restart_ffmpeg_resets_encoder(monkeypatch):
     assert streamer._reconnect_count == previous_restarts + 1
     assert streamer._last_error == "test reason"
     assert streamer._last_write_time <= time.time()
+    # Verify that the restart delay was called
+    assert 5.0 in sleep_calls, f"Expected ICECAST_RESTART_DELAY (5.0s) in sleep calls, got {sleep_calls}"
