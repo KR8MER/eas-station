@@ -19,7 +19,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, Iterable, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Protocol, Set
 
 try:  # pragma: no cover - GPIO hardware is optional and platform specific
     from gpiozero import OutputDevice
