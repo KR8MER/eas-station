@@ -419,7 +419,7 @@ jmcgee@octa.org
 
 ### Local Area Chairs
 
-See [Full Committee Contact List](./OHIO_EAS_CONTACTS.md) for all 12 operational area chairs and vice-chairs.
+Complete contact information for all 12 operational area chairs and vice-chairs is provided in the sections above.
 
 ---
 
