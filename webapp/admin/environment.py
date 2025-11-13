@@ -947,6 +947,8 @@ def register_environment_routes(app, logger):
 
             # Read current .env
             env_vars = read_env_file()
+            
+            logger.info(f'Updating environment variables: {list(data["variables"].keys())}')
 
             # Update variables
             updates = data['variables']
@@ -957,9 +959,11 @@ def register_environment_routes(app, logger):
                     for var_config in cat_data['variables']:
                         if var_config['key'] == key:
                             found = True
+                            logger.debug(f'Found variable {key} in category configuration')
 
                             # Don't update if it's a masked sensitive value
                             if var_config.get('sensitive') and value == '••••••••':
+                                logger.debug(f'Skipping masked sensitive value for {key}')
                                 continue
 
                             # Validate required fields
@@ -971,10 +975,13 @@ def register_environment_routes(app, logger):
                         break
 
                 if not found:
+                    logger.error(f'Unknown variable attempted to be updated: {key}')
                     raise BadRequest(f'Unknown variable: {key}')
 
                 # Update value
+                old_value = env_vars.get(key, '')
                 env_vars[key] = str(value)
+                logger.debug(f'Updated {key}: {len(old_value)} chars -> {len(str(value))} chars')
 
             # Auto-populate zone codes from FIPS codes if zone codes are empty
             fips_codes_raw = env_vars.get("EAS_MANUAL_FIPS_CODES", "").strip()
@@ -995,21 +1002,24 @@ def register_environment_routes(app, logger):
                     logger.warning(f"Failed to auto-derive zone codes from FIPS: {zone_exc}")
 
             # Write to .env file
+            env_path = get_env_file_path()
+            logger.info(f'Writing environment variables to {env_path}')
             write_env_file(env_vars)
-
-            logger.info(f'Updated {len(updates)} environment variables')
+            logger.info(f'Successfully updated {len(updates)} environment variables and wrote to {env_path}')
 
             return jsonify({
                 'success': True,
                 'message': f'Updated {len(updates)} environment variable(s). Restart required for changes to take effect.',
                 'restart_required': True,
+                'saved_variables': list(updates.keys()),
             })
 
         except BadRequest as e:
+            logger.warning(f'Bad request updating environment variables: {e}')
             return jsonify({'error': str(e)}), 400
         except Exception as e:
-            logger.error(f'Error updating environment variables: {e}')
-            return jsonify({'error': 'Failed to update environment variables'}), 500
+            logger.error(f'Error updating environment variables: {e}', exc_info=True)
+            return jsonify({'error': f'Failed to update environment variables: {str(e)}'}), 500
 
     @app.route('/api/environment/validate')
     @require_permission('system.view_config')

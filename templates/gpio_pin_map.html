@@ -302,7 +302,14 @@
             if (!response.ok || data.error) {
                 throw new Error(data.error || data.message || 'Unknown error');
             }
-            showMessage('✓ Saved pin behavior map successfully! Changes will take effect after restarting the service.', 'success');
+            
+            // Show detailed success message
+            let message = '✓ Saved pin behavior map successfully!';
+            if (data.saved_variables && data.saved_variables.length > 0) {
+                message += ` (${data.saved_variables.join(', ')})`;
+            }
+            message += ' Changes will take effect after restarting the service.';
+            showMessage(message, 'success');
             clearUnsavedChanges();
         } catch (error) {
             console.error('Failed to save pin map', error);
