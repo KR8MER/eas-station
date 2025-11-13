@@ -1,41 +1,212 @@
 # Ohio Emergency Alert System (EAS) Plan Documentation
 
-**Document Version:** December 2018 (FCC Approved: March 18, 2019)
-**Status:** ⚠️ REQUIRES UPDATES - Missing current event codes
+**Document Version:** December 2018 (FCC Approved: March 18, 2019)  
+**Status:** ⚠️ REQUIRES UPDATES - Missing current event codes  
+**Last Review:** 2025
 
 ---
 
 ## Table of Contents
 
 1. [System Overview](#system-overview)
-2. [Event Codes - WARNING CRITICAL](#event-codes---critical)
-3. [Missing Event Codes](#missing-event-codes)
-4. [Ohio EAS Structure](#ohio-eas-structure)
-5. [State & Local Primary Stations](#state--local-primary-stations)
-6. [Operational Areas](#operational-areas)
-7. [Notification Procedures](#notification-procedures)
-8. [Committee Contacts](#committee-contacts)
+2. [Ohio EAS Authority & Structure](#ohio-eas-authority--structure)
+3. [Event Codes Reference](#event-codes-reference)
+4. [Missing Event Codes](#missing-event-codes)
+5. [Ohio EAS Structure](#ohio-eas-structure)
+6. [State & Local Primary Stations](#state--local-primary-stations)
+7. [Ohio EAS Monitoring Network](#ohio-eas-monitoring-network)
+8. [Notification Procedures](#notification-procedures)
+9. [Committee Contacts](#committee-contacts)
+10. [NOAA Weather Radio Coverage](#noaa-weather-radio-stations-serving-ohio)
 
 ---
 
 ## System Overview
 
 ### Purpose
+
 The Ohio EAS provides procedures for designated federal, state, and local government officials to issue emergency information, instructions, and warnings to the general public through the broadcast and cable television media.
 
-### Authority
-- **FCC Regulation:** 47 CFR, Part 11
-- **Coverage:** All 88 Ohio counties grouped into 12 Local Operational Areas
-- **State Primary Station:** WNCI-FM 97.9 (Columbus)
-- **Alternate State Primary:** WBNS-FM 97.1 (Columbus)
+### Coverage & Scope
 
-### National Primary Stations in Ohio
-- **WTAM** 1100 AM (Cleveland)
-- **WLW** 700 AM (Cincinnati)
+```mermaid
+graph TB
+    subgraph "Ohio EAS Coverage"
+        OHIO[Ohio State<br>88 Counties]
+        
+        subgraph "12 Operational Areas"
+            A1[1. Central<br>Columbus]
+            A2[2. Central & East Lakeshore<br>Cleveland]
+            A3[3. East Central<br>Canton]
+            A4[4. Lima]
+            A5[5. North Central<br>Mansfield]
+            A6[6. Northwest<br>Toledo]
+            A7[7. South Central<br>Portsmouth]
+            A8[8. Southeast<br>Athens]
+            A9[9. Southwest<br>Cincinnati]
+            A10[10. Upper Ohio Valley<br>Steubenville]
+            A11[11. West Central<br>Dayton]
+            A12[12. Youngstown]
+        end
+        
+        OHIO --> A1
+        OHIO --> A2
+        OHIO --> A3
+        OHIO --> A4
+        OHIO --> A5
+        OHIO --> A6
+        OHIO --> A7
+        OHIO --> A8
+        OHIO --> A9
+        OHIO --> A10
+        OHIO --> A11
+        OHIO --> A12
+    end
+    
+    style OHIO fill:#2c3e50,stroke:#34495e,stroke-width:3px,color:#fff
+    style A1 fill:#3498db,stroke:#2980b9,color:#fff
+    style A2 fill:#3498db,stroke:#2980b9,color:#fff
+    style A3 fill:#3498db,stroke:#2980b9,color:#fff
+    style A4 fill:#3498db,stroke:#2980b9,color:#fff
+    style A5 fill:#3498db,stroke:#2980b9,color:#fff
+    style A6 fill:#3498db,stroke:#2980b9,color:#fff
+    style A7 fill:#3498db,stroke:#2980b9,color:#fff
+    style A8 fill:#3498db,stroke:#2980b9,color:#fff
+    style A9 fill:#3498db,stroke:#2980b9,color:#fff
+    style A10 fill:#3498db,stroke:#2980b9,color:#fff
+    style A11 fill:#3498db,stroke:#2980b9,color:#fff
+    style A12 fill:#3498db,stroke:#2980b9,color:#fff
+```
 
 ---
 
-## Event Codes - WARNING CRITICAL
+## Ohio EAS Authority & Structure
+
+### Regulatory Framework
+
+```mermaid
+graph TD
+    FCC[FCC Rules<br>47 CFR Part 11]
+    FEMA[FEMA IPAWS<br>National Coordination]
+    OHIO[Ohio EAS Plan<br>FCC Approved 2019]
+    
+    SECC[State Emergency<br>Communications Committee]
+    LECC[Local Emergency<br>Communications Committees<br>12 Areas]
+    
+    STATIONS[Participating Stations<br>Broadcast & Cable]
+    
+    FCC --> OHIO
+    FEMA --> OHIO
+    OHIO --> SECC
+    SECC --> LECC
+    LECC --> STATIONS
+    
+    style FCC fill:#e74c3c,stroke:#c0392b,stroke-width:2px,color:#fff
+    style FEMA fill:#e74c3c,stroke:#c0392b,stroke-width:2px,color:#fff
+    style OHIO fill:#3498db,stroke:#2980b9,stroke-width:2px,color:#fff
+    style SECC fill:#2ecc71,stroke:#27ae60,stroke-width:2px,color:#fff
+    style LECC fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
+    style STATIONS fill:#9b59b6,stroke:#8e44ad,stroke-width:2px,color:#fff
+```
+
+### Key Authority Information
+
+| Element | Details |
+|---------|---------|
+| **FCC Regulation** | 47 CFR, Part 11 |
+| **Coverage** | All 88 Ohio counties grouped into 12 Local Operational Areas |
+| **State Primary Station** | WNCI-FM 97.9 (Columbus) |
+| **Alternate State Primary** | WBNS-FM 97.1 (Columbus) |
+| **FCC Approval Date** | March 18, 2019 |
+| **Plan Version** | December 2018 |
+
+### National Primary Stations in Ohio
+
+```mermaid
+graph LR
+    subgraph "National Primary Stations"
+        WTAM[WTAM 1100 AM<br>Cleveland<br>Northern Ohio]
+        WLW[WLW 700 AM<br>Cincinnati<br>Southern Ohio]
+    end
+    
+    subgraph "Coverage"
+        NORTH[Northern Ohio<br>Cleveland Metro<br>Lakeshore Counties]
+        SOUTH[Southern Ohio<br>Cincinnati Metro<br>Border Counties]
+    end
+    
+    WTAM --> NORTH
+    WLW --> SOUTH
+    
+    style WTAM fill:#e74c3c,stroke:#c0392b,stroke-width:3px,color:#fff
+    style WLW fill:#e74c3c,stroke:#c0392b,stroke-width:3px,color:#fff
+    style NORTH fill:#3498db,stroke:#2980b9,color:#fff
+    style SOUTH fill:#3498db,stroke:#2980b9,color:#fff
+```
+
+---
+
+## Event Codes Reference
+
+### Event Code Priority Hierarchy
+
+```mermaid
+graph TB
+    subgraph "CRITICAL - Immediate Action Required"
+        EAN[EAN - Emergency Action Notification]
+        TOR[TOR - Tornado Warning]
+        EQW[EQW - Earthquake Warning]
+        NUW[NUW - Nuclear Warning]
+        EVI[EVI - Evacuation Immediate]
+        SPW[SPW - Shelter In Place]
+    end
+    
+    subgraph "HIGH PRIORITY - Immediate Threat"
+        FFW[FFW - Flash Flood Warning]
+        HMW[HMW - Hazardous Materials]
+        FRW[FRW - Fire Warning]
+        CDW[CDW - Civil Danger]
+        LEW[LEW - Law Enforcement]
+        TOE[TOE - 911 Outage]
+    end
+    
+    subgraph "MEDIUM PRIORITY - Safety Warning"
+        CAE[CAE - Child Abduction<br>AMBER Alert]
+        CEM[CEM - Civil Emergency]
+        RHW[RHW - Radiological Hazard]
+        SQW[SQW - Snow Squall ⚠️ NEW]
+    end
+    
+    subgraph "ADMINISTRATIVE"
+        RMT[RMT - Monthly Test]
+        RWT[RWT - Weekly Test]
+        NPT[NPT - National Test]
+        EAT[EAT - Emergency Termination]
+    end
+    
+    style EAN fill:#8b0000,stroke:#600,stroke-width:3px,color:#fff
+    style TOR fill:#e74c3c,stroke:#c0392b,stroke-width:2px,color:#fff
+    style EQW fill:#e74c3c,stroke:#c0392b,stroke-width:2px,color:#fff
+    style NUW fill:#e74c3c,stroke:#c0392b,stroke-width:2px,color:#fff
+    style EVI fill:#e74c3c,stroke:#c0392b,stroke-width:2px,color:#fff
+    style SPW fill:#e74c3c,stroke:#c0392b,stroke-width:2px,color:#fff
+    
+    style FFW fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
+    style HMW fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
+    style FRW fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
+    style CDW fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
+    style LEW fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
+    style TOE fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
+    
+    style CAE fill:#3498db,stroke:#2980b9,stroke-width:2px,color:#fff
+    style CEM fill:#3498db,stroke:#2980b9,stroke-width:2px,color:#fff
+    style RHW fill:#3498db,stroke:#2980b9,stroke-width:2px,color:#fff
+    style SQW fill:#3498db,stroke:#2980b9,stroke-width:2px,color:#fff
+    
+    style RMT fill:#95a5a6,stroke:#7f8c8d,stroke-width:2px,color:#fff
+    style RWT fill:#95a5a6,stroke:#7f8c8d,stroke-width:2px,color:#fff
+    style NPT fill:#95a5a6,stroke:#7f8c8d,stroke-width:2px,color:#fff
+    style EAT fill:#95a5a6,stroke:#7f8c8d,stroke-width:2px,color:#fff
+```
 
 ### ⚠️ REQUIRED WARNING CODES
 **All stations MUST program these codes into EAS equipment:**
@@ -84,48 +255,100 @@ The Ohio EAS provides procedures for designated federal, state, and local govern
 
 ## ⚠️ MISSING EVENT CODES
 
+### Update Status Overview
+
+```mermaid
+pie title Ohio EAS Event Code Status
+    "Required Codes Present" : 20
+    "Optional Codes Present" : 22
+    "Missing Critical Codes" : 8
+    "Missing High Priority" : 12
+    "Missing Medium/Low" : 15
+```
+
 ### Critical Missing Codes (Added Since 2018)
+
+The following event codes have been added to the national EAS system since the 2018 Ohio plan approval and are **NOT** currently included in the Ohio plan:
+
+#### High-Priority Weather Warnings (Ohio-Relevant)
+
+```mermaid
+graph TB
+    subgraph "CRITICAL - Immediate Implementation Required"
+        SQW[SQW - Snow Squall Warning<br>⚠️ Critical for Ohio winters<br>Zero-visibility conditions]
+        EQE[EQE - Earthquake Early Warning<br>⚠️ National priority<br>Seconds matter for safety]
+        ISW[ISW - Ice Storm Warning<br>⚠️ Critical for Ohio<br>Infrastructure damage]
+    end
+    
+    subgraph "HIGH PRIORITY - Seasonal Threats"
+        LSW[LSW - Lake Effect Snow<br>Critical for lakeshore areas]
+        WCW[WCW - Wind Chill Warning<br>Dangerous cold exposure]
+        LFW[LFW - Lakeshore Flood<br>Lake Erie storm surge]
+        DSW[DSW - Dust Storm Warning<br>I-70/I-71 corridor risk]
+    end
+    
+    subgraph "MODERATE PRIORITY - Regional Threats"
+        SSW[SSW - Storm Surge Warning<br>Coastal/Lake Erie]
+        TSW[TSW - Tsunami Warning<br>Low probability]
+        HUW[HUW - Hurricane Warning<br>Rare but possible]
+        TRW[TRW - Tropical Storm<br>Remnant systems]
+    end
+    
+    style SQW fill:#8b0000,stroke:#600,stroke-width:3px,color:#fff
+    style EQE fill:#8b0000,stroke:#600,stroke-width:3px,color:#fff
+    style ISW fill:#8b0000,stroke:#600,stroke-width:3px,color:#fff
+    
+    style LSW fill:#e74c3c,stroke:#c0392b,stroke-width:2px,color:#fff
+    style WCW fill:#e74c3c,stroke:#c0392b,stroke-width:2px,color:#fff
+    style LFW fill:#e74c3c,stroke:#c0392b,stroke-width:2px,color:#fff
+    style DSW fill:#e74c3c,stroke:#c0392b,stroke-width:2px,color:#fff
+    
+    style SSW fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
+    style TSW fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
+    style HUW fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
+    style TRW fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
+```
 
 **WEATHER WARNINGS - HIGH PRIORITY:**
 
-| Code | Event Name | Status | Priority |
-|------|------------|--------|----------|
-| **SQW** | Snow Squall Warning | ❌ MISSING | **CRITICAL** |
-| **DSW** | Dust Storm Warning | ❌ MISSING | HIGH |
-| **SSW** | Storm Surge Warning | ❌ MISSING | HIGH |
-| **TSW** | Tsunami Warning | ❌ MISSING | HIGH |
-| **HUW** | Hurricane Warning | ❌ MISSING | HIGH |
-| **TRW** | Tropical Storm Warning | ❌ MISSING | HIGH |
+| Code | Event Name | Status | Priority | Ohio Relevance |
+|------|------------|--------|----------|----------------|
+| **SQW** | Snow Squall Warning | ❌ MISSING | **CRITICAL** | Heavy lake-effect, I-90 corridor |
+| **DSW** | Dust Storm Warning | ❌ MISSING | HIGH | Farm counties, interstate safety |
+| **SSW** | Storm Surge Warning | ❌ MISSING | HIGH | Lake Erie shoreline |
+| **TSW** | Tsunami Warning | ❌ MISSING | HIGH | Low probability, national coverage |
+| **HUW** | Hurricane Warning | ❌ MISSING | HIGH | Rare but remnants affect Ohio |
+| **TRW** | Tropical Storm Warning | ❌ MISSING | HIGH | Remnant systems common |
 
 **ADDITIONAL WEATHER CODES:**
 
-| Code | Event Name | Status | Priority |
-|------|------------|--------|----------|
-| **AVW** | Avalanche Warning | ❌ MISSING | MEDIUM |
-| **AVA** | Avalanche Watch | ❌ MISSING | LOW |
-| **CFW** | Coastal Flood Warning | ❌ MISSING | MEDIUM |
-| **CFA** | Coastal Flood Watch | ❌ MISSING | LOW |
-| **CFS** | Coastal Flood Statement | ❌ MISSING | LOW |
-| **EQE** | Earthquake Early Warning | ❌ MISSING | **CRITICAL** |
-| **ECW** | Extreme Cold Warning | ❌ MISSING | MEDIUM |
-| **ECA** | Extreme Cold Watch | ❌ MISSING | LOW |
-| **EHW** | Extreme Heat Warning | ❌ MISSING | MEDIUM |
-| **FWW** | Fire Weather Warning | ❌ MISSING | MEDIUM |
-| **FZW** | Freeze Warning | ❌ MISSING | MEDIUM |
-| **HFW** | Hard Freeze Warning | ❌ MISSING | MEDIUM |
-| **HTA** | Heat Advisory | ❌ MISSING | LOW |
-| **HLS** | Hurricane Statement | ❌ MISSING | MEDIUM |
-| **HUA** | Hurricane Watch | ❌ MISSING | MEDIUM |
-| **ISW** | Ice Storm Warning | ❌ MISSING | HIGH |
-| **LFW** | Lakeshore Flood Warning | ❌ MISSING | MEDIUM |
-| **LFA** | Lakeshore Flood Watch | ❌ MISSING | LOW |
-| **LSW** | Lake Effect Snow Warning | ❌ MISSING | MEDIUM |
-| **SSA** | Storm Surge Watch | ❌ MISSING | MEDIUM |
-| **TRA** | Tropical Storm Watch | ❌ MISSING | MEDIUM |
-| **TSA** | Tsunami Watch | ❌ MISSING | MEDIUM |
-| **VOW** | Volcano Warning | ❌ MISSING | LOW |
-| **WCW** | Wind Chill Warning | ❌ MISSING | MEDIUM |
-| **WCA** | Wind Chill Watch | ❌ MISSING | LOW |
+| Code | Event Name | Status | Priority | Ohio Relevance |
+|------|------------|--------|----------|----------------|
+| **AVW** | Avalanche Warning | ❌ MISSING | MEDIUM | Not applicable to Ohio |
+| **AVA** | Avalanche Watch | ❌ MISSING | LOW | Not applicable to Ohio |
+| **CFW** | Coastal Flood Warning | ❌ MISSING | MEDIUM | Lake Erie = inland sea |
+| **CFA** | Coastal Flood Watch | ❌ MISSING | LOW | Lake Erie shoreline |
+| **CFS** | Coastal Flood Statement | ❌ MISSING | LOW | Lake Erie shoreline |
+| **EQE** | Earthquake Early Warning | ❌ MISSING | **CRITICAL** | National priority system |
+| **ECW** | Extreme Cold Warning | ❌ MISSING | MEDIUM | Common Ohio winter threat |
+| **ECA** | Extreme Cold Watch | ❌ MISSING | LOW | Common Ohio winter threat |
+| **EHW** | Extreme Heat Warning | ❌ MISSING | MEDIUM | Summer health risk |
+| **FWW** | Fire Weather Warning | ❌ MISSING | MEDIUM | Dry season brush fires |
+| **FZW** | Freeze Warning | ❌ MISSING | MEDIUM | Agriculture impact |
+| **HFW** | Hard Freeze Warning | ❌ MISSING | MEDIUM | Agriculture impact |
+| **HTA** | Heat Advisory | ❌ MISSING | LOW | Summer health advisory |
+| **HLS** | Hurricane Statement | ❌ MISSING | MEDIUM | Follow-up information |
+| **HUA** | Hurricane Watch | ❌ MISSING | MEDIUM | Advance warning |
+| **ISW** | Ice Storm Warning | ❌ MISSING | HIGH | Critical Ohio winter threat |
+| **LFW** | Lakeshore Flood Warning | ❌ MISSING | MEDIUM | Lake Erie seiche events |
+| **LFA** | Lakeshore Flood Watch | ❌ MISSING | LOW | Lake Erie shoreline |
+| **LSW** | Lake Effect Snow Warning | ❌ MISSING | MEDIUM | Critical for snow belt |
+| **SSA** | Storm Surge Watch | ❌ MISSING | MEDIUM | Lake Erie |
+| **TRA** | Tropical Storm Watch | ❌ MISSING | MEDIUM | Advance warning |
+| **TSA** | Tsunami Watch | ❌ MISSING | MEDIUM | Not applicable to Ohio |
+| **VOW** | Volcano Warning | ❌ MISSING | LOW | Not applicable to Ohio |
+| **WCW** | Wind Chill Warning | ❌ MISSING | MEDIUM | Critical Ohio winter threat |
+| **WCA** | Wind Chill Watch | ❌ MISSING | LOW | Common Ohio winter condition |
 
 **OTHER CRITICAL CODES:**
 
@@ -138,6 +361,30 @@ The Ohio EAS provides procedures for designated federal, state, and local govern
 
 ## Action Items
 
+### Implementation Roadmap
+
+```mermaid
+gantt
+    title Ohio EAS Plan Update Timeline
+    dateFormat YYYY-MM-DD
+    section Phase 1 - Critical Codes
+    Identify missing codes          :done, p1a, 2025-01-01, 30d
+    Priority assessment             :done, p1b, after p1a, 14d
+    Equipment compatibility testing :active, p1c, after p1b, 45d
+    
+    section Phase 2 - Plan Update
+    Draft updated plan              :p2a, after p1c, 30d
+    SECC review & approval          :p2b, after p2a, 21d
+    Submit to FCC                   :p2c, after p2b, 7d
+    FCC review period               :p2d, after p2c, 90d
+    
+    section Phase 3 - Implementation
+    Notify all stations             :p3a, after p2d, 14d
+    Equipment programming           :p3b, after p3a, 60d
+    System-wide testing             :p3c, after p3b, 30d
+    Full operational capability     :milestone, p3d, after p3c, 0d
+```
+
 ### Immediate Actions Required
 
 1. **Update Ohio EAS Plan** to include missing event codes
@@ -148,6 +395,48 @@ The Ohio EAS provides procedures for designated federal, state, and local govern
    - ✅ **LSW** - Lake Effect Snow Warning (Critical for lakeshore areas)
    - ✅ **WCW** - Wind Chill Warning (Critical for Ohio winters)
    - ✅ **LFW** - Lakeshore Flood Warning (Relevant for Lake Erie)
+
+3. **Test encoder/decoder compatibility** with all current FCC event codes
+
+4. **Submit updated plan** to FCC for approval
+
+5. **Notify all participating stations** of required updates
+
+### Equipment Compatibility Testing
+
+```mermaid
+graph LR
+    subgraph "Testing Process"
+        A[Identify Equipment<br>Models in Use]
+        B[Check Firmware<br>Versions]
+        C[Test New Codes]
+        D[Document Results]
+        E[Update Plan]
+    end
+    
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    
+    subgraph "Common Equipment"
+        SAGE[SAGE Digital ENDEC]
+        DASDEC[DASDEC EAS]
+        TFT[TFT EAS Units]
+        CUSTOM[Custom/Software<br>Solutions]
+    end
+    
+    E --> SAGE
+    E --> DASDEC
+    E --> TFT
+    E --> CUSTOM
+    
+    style A fill:#3498db,stroke:#2980b9,color:#fff
+    style B fill:#3498db,stroke:#2980b9,color:#fff
+    style C fill:#3498db,stroke:#2980b9,color:#fff
+    style D fill:#3498db,stroke:#2980b9,color:#fff
+    style E fill:#2ecc71,stroke:#27ae60,color:#fff
+```
 
 3. **Test encoder/decoder compatibility** with all current FCC event codes
 
