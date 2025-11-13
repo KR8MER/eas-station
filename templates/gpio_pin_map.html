@@ -79,6 +79,28 @@
     </div>
 
     <div id="pinMapAlert" class="alert d-none" role="alert"></div>
+    
+    <!-- Success toast notification -->
+    <div class="position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+        <div id="saveSuccessToast" class="toast align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas fa-check-circle me-2"></i>
+                    <span id="toastMessage">Changes saved successfully!</span>
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+        <div id="saveErrorToast" class="toast align-items-center text-bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    <span id="errorToastMessage">Failed to save changes</span>
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
 
     <div class="alert alert-info" role="alert">
         <div class="d-flex align-items-start">
@@ -211,6 +233,25 @@
         alertBox.className = `alert alert-${variant}`;
         alertBox.textContent = message;
         alertBox.classList.remove('d-none');
+        
+        // Also show toast notification
+        if (variant === 'success') {
+            const toast = document.getElementById('saveSuccessToast');
+            const toastMessage = document.getElementById('toastMessage');
+            if (toast && toastMessage) {
+                toastMessage.textContent = message;
+                const bsToast = new bootstrap.Toast(toast, { delay: 5000 });
+                bsToast.show();
+            }
+        } else if (variant === 'danger') {
+            const toast = document.getElementById('saveErrorToast');
+            const errorMessage = document.getElementById('errorToastMessage');
+            if (toast && errorMessage) {
+                errorMessage.textContent = message;
+                const bsToast = new bootstrap.Toast(toast, { delay: 8000 });
+                bsToast.show();
+            }
+        }
     }
 
     function hideMessage() {
@@ -304,12 +345,30 @@
             }
             
             // Show detailed success message
-            let message = '✓ Saved pin behavior map successfully!';
+            let message = '✓ GPIO behavior matrix saved successfully to .env file!';
             if (data.saved_variables && data.saved_variables.length > 0) {
-                message += ` (${data.saved_variables.join(', ')})`;
+                message += ` Variable saved: ${data.saved_variables.join(', ')}.`;
             }
-            message += ' Changes will take effect after restarting the service.';
+            if (data.restart_required) {
+                message += ' Restart the service to apply changes: docker compose restart';
+            }
             showMessage(message, 'success');
+            
+            // Update the alert to include a link to verify
+            if (alertBox) {
+                alertBox.innerHTML = `
+                    <div>
+                        <i class="fas fa-check-circle me-2"></i>
+                        ${message}
+                    </div>
+                    <div class="mt-2">
+                        <a href="/settings/environment" class="btn btn-sm btn-success">
+                            <i class="fas fa-eye"></i> View in Environment Settings
+                        </a>
+                    </div>
+                `;
+            }
+            
             clearUnsavedChanges();
         } catch (error) {
             console.error('Failed to save pin map', error);
