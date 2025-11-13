@@ -51,6 +51,7 @@ tracks releases under the 2.x series.
 - Ensured Docker Compose publishes nginx ports on both IPv4 and IPv6 addresses so external scanners can reach the HTTPS endpoint over IPv6.
 - Reduced nginx static asset cache lifetime from 24 hours to five minutes so freshly deployed frontend changes appear without manual cache purges.
 - Prevented alert verification page timeouts by offloading audio decoding to a background worker and persisting progress/results for UI polling.
+- Added Raspberry Pi 5-compatible `lgpio` fallback for GPIO control so BCM pins configured as active-high no longer enter an error state when `RPi.GPIO` is unavailable.
 
 ### Changed
 - **Consolidated stream support in Audio Sources system** - Removed stream support from RadioReceiver model and UI, centralizing all HTTP/M3U stream configuration through the Audio Sources page where StreamSourceAdapter already provided full functionality
