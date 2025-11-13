@@ -548,6 +548,45 @@ def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: 
                 route_logger.info(f"Extracted narration: {narration.duration_seconds:.2f}s "
                                 f"at {narration.start_sample / sample_rate:.2f}s, "
                                 f"speech={narration.contains_speech}")
+        elif 'buffer' in same_result.segments and not detection_result.alert_tones:
+            # Fallback: If no narration detected and no tones, extract narration from buffer
+            # This helps when the audio doesn't have clear attention tones
+            buffer_seg = same_result.segments['buffer']
+            header_seg = same_result.segments.get('header')
+            eom_seg = same_result.segments.get('eom')
+            
+            # Calculate narration bounds: after both header AND eom, to end of buffer
+            # (since EOM often overlaps with or is before the end of header)
+            narration_start = buffer_seg.start_sample
+            if header_seg and eom_seg:
+                # Start after whichever ends later
+                narration_start = max(header_seg.end_sample, eom_seg.end_sample)
+            elif header_seg:
+                narration_start = header_seg.end_sample
+            elif eom_seg:
+                narration_start = eom_seg.end_sample
+                
+            narration_end = buffer_seg.end_sample
+            
+            # Only create narration if there's meaningful content
+            narration_duration = (narration_end - narration_start) / sample_rate
+            if narration_duration > 0.5:  # At least 0.5 seconds
+                route_logger.info(f"No specific narration detected; extracting {narration_duration:.2f}s from buffer as narration fallback")
+                
+                narration_wav = _extract_audio_segment_wav(
+                    audio_path,
+                    narration_start,
+                    narration_end,
+                    sample_rate
+                )
+                
+                segments['narration'] = SAMEAudioSegment(
+                    label='narration',
+                    start_sample=narration_start,
+                    end_sample=narration_end,
+                    sample_rate=sample_rate,
+                    wav_bytes=narration_wav
+                )
 
         # Add EOM segment (from original decode)
         if 'eom' in same_result.segments:
@@ -558,11 +597,31 @@ def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: 
             segments['buffer'] = same_result.segments['buffer']
 
         if progress:
+            progress.update("decode", 5, 6, "Building composite audio segment...")
+
+        # Build composite audio segment combining all individual segments
+        composite = _build_composite_audio_segment(segments, sample_rate)
+        if composite:
+            route_logger.info(f"Created composite segment: {composite.duration_seconds:.2f}s")
+
+        if progress:
             progress.update("decode", 6, 6, "Finalizing audio segments...")
 
-        # Update the decode result with comprehensive segments
+        # Update the decode result with comprehensive segments in desired order
+        # Composite first, then individual segments in chronological order
         same_result.segments.clear()
-        same_result.segments.update(segments)
+        ordered_segments = OrderedDict()
+        
+        # Add composite first if available
+        if composite:
+            ordered_segments['composite'] = composite
+        
+        # Then add individual segments in order
+        for key in ['header', 'attention_tone', 'narration', 'eom', 'buffer']:
+            if key in segments:
+                ordered_segments[key] = segments[key]
+        
+        same_result.segments.update(ordered_segments)
 
         return same_result, detection_result
 
@@ -572,6 +631,104 @@ def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: 
         route_logger.error(f"Comprehensive detection failed: {e}", exc_info=True)
         # Fallback to basic decode
         return decode_same_audio(audio_path), None
+
+
+def _build_composite_audio_segment(segments: Dict[str, SAMEAudioSegment], sample_rate: int, audio_path: Optional[str] = None) -> Optional[SAMEAudioSegment]:
+    """
+    Build a composite audio segment that represents the complete EAS alert.
+    
+    Strategy:
+    1. If we have individual segments (header, tone, narration, eom), combine them
+    2. Otherwise, use the buffer segment which contains the full audio
+    
+    Args:
+        segments: Dictionary of detected segments
+        sample_rate: Audio sample rate
+        audio_path: Optional path to original audio file for fallback extraction
+        
+    Returns:
+        Composite SAMEAudioSegment or None if no segments available
+    """
+    # Check if we have buffer segment - it contains the full alert audio
+    if 'buffer' in segments:
+        buffer_seg = segments['buffer']
+        return SAMEAudioSegment(
+            label='composite',
+            start_sample=buffer_seg.start_sample,
+            end_sample=buffer_seg.end_sample,
+            sample_rate=buffer_seg.sample_rate,
+            wav_bytes=buffer_seg.wav_bytes
+        )
+    
+    # Fallback: combine individual segments
+    # Define the order of segments for the composite
+    segment_order = ['header', 'attention_tone', 'narration', 'eom']
+    
+    # Collect PCM buffers for each segment
+    pcm_buffers = []
+    start_sample = None
+    end_sample = None
+    
+    for segment_name in segment_order:
+        segment = segments.get(segment_name)
+        if not segment or not segment.wav_bytes:
+            continue
+            
+        # Extract PCM data from WAV bytes
+        try:
+            with wave.open(io.BytesIO(segment.wav_bytes), 'rb') as wf:
+                seg_sample_rate = wf.getframerate()
+                sample_width = wf.getsampwidth()
+                frames = wf.readframes(wf.getnframes())
+                
+                # Convert to int16 PCM
+                if sample_width == 2:
+                    pcm_data = np.frombuffer(frames, dtype=np.int16)
+                else:
+                    # Convert other formats to int16
+                    dtype_map = {1: np.int8, 4: np.int32}
+                    dtype = dtype_map.get(sample_width)
+                    if dtype is None:
+                        continue
+                    raw = np.frombuffer(frames, dtype=dtype).astype(np.float32)
+                    scale = float(2 ** (sample_width * 8 - 1))
+                    if not scale:
+                        continue
+                    normalized = np.clip(raw / scale, -1.0, 1.0)
+                    pcm_data = (normalized * 32767.0).astype(np.int16)
+                
+                pcm_buffers.append(pcm_data)
+                
+                # Track overall start and end samples
+                if start_sample is None:
+                    start_sample = segment.start_sample
+                end_sample = segment.end_sample
+                
+        except Exception as e:
+            # Skip this segment if we can't process it
+            continue
+    
+    if not pcm_buffers:
+        return None
+    
+    # Concatenate all PCM buffers
+    composite_pcm = np.concatenate(pcm_buffers)
+    
+    # Create WAV file
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'wb') as wav_out:
+        wav_out.setnchannels(1)
+        wav_out.setsampwidth(2)
+        wav_out.setframerate(sample_rate)
+        wav_out.writeframes(composite_pcm.tobytes())
+    
+    return SAMEAudioSegment(
+        label='composite',
+        start_sample=start_sample or 0,
+        end_sample=end_sample or len(composite_pcm),
+        sample_rate=sample_rate,
+        wav_bytes=buffer.getvalue(),
+    )
 
 
 def _process_temp_audio_file(
@@ -1042,6 +1199,7 @@ def register(app: Flask, logger) -> None:
             "narration": "narration_audio_data",
             "eom": "eom_audio_data",
             "buffer": "buffer_audio_data",
+            "composite": "composite_audio_data",
             "message": "message_audio_data",  # Deprecated, for backward compatibility
         }
 

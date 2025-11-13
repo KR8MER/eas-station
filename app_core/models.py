@@ -286,6 +286,7 @@ class EASDecodedAudio(db.Model):
     narration_audio_data = db.Column(db.LargeBinary)  # Voice narration segment
     eom_audio_data = db.Column(db.LargeBinary)
     buffer_audio_data = db.Column(db.LargeBinary)
+    composite_audio_data = db.Column(db.LargeBinary)  # Complete alert audio (all segments combined)
     # Deprecated: kept for backward compatibility with old decodes
     message_audio_data = db.Column(db.LargeBinary)
 
@@ -304,6 +305,7 @@ class EASDecodedAudio(db.Model):
             "has_narration_audio": self.narration_audio_data is not None,
             "has_eom_audio": self.eom_audio_data is not None,
             "has_buffer_audio": self.buffer_audio_data is not None,
+            "has_composite_audio": self.composite_audio_data is not None,
             "has_message_audio": self.message_audio_data is not None,  # Deprecated
         }
 
