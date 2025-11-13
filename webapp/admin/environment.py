@@ -367,9 +367,9 @@ ENV_CATEGORIES = {
         'variables': [
             {
                 'key': 'EAS_GPIO_PIN',
-                'label': 'Primary GPIO Pin',
+                'label': 'Primary Pin (BCM GPIO Number)',
                 'type': 'number',
-                'description': 'Main GPIO pin for relay control (typically used for transmitter keying). Leave empty to disable GPIO completely.',
+                'description': 'BCM GPIO pin number for relay control (e.g., GPIO 17 = BCM pin 17, physical pin 11). Leave empty to disable GPIO completely.',
                 'placeholder': 'e.g., 17',
                 'min': 2,
                 'max': 27,
@@ -419,10 +419,11 @@ ENV_CATEGORIES = {
                 'type': 'textarea',
                 'rows': 4,
                 'description': (
-                    'JSON object that maps BCM pins to lists of behaviors. '
-                    'Use the GPIO Pin Map page (System → GPIO Pin Map) to edit this value.'
+                    'JSON object that maps BCM GPIO pin numbers to lists of behaviors. '
+                    'Use the GPIO Pin Map page (System → GPIO Pin Map) to edit this value. '
+                    'Example: {"17": ["duration_of_alert"], "18": ["playout"]}'
                 ),
-                'placeholder': '{"18": ["duration_of_alert", "playout"]}',
+                'placeholder': '{"17": ["duration_of_alert"], "18": ["playout"]}',
                 'category': 'gpio_enabled',
             },
         ],

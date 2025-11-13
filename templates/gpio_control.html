@@ -102,7 +102,7 @@
 
                         <div class="mb-3">
                             <small class="text-muted">
-                                <strong>Pin:</strong> GPIO {{ pin_info.pin }}<br>
+                                <strong>BCM GPIO:</strong> GPIO {{ pin_info.pin }}<br>
                                 <strong>Mode:</strong> Active {{ 'High' if pin_info.active_high else 'Low' }}<br>
                                 {% if pin_info.is_active %}
                                     <strong>Active for:</strong> {{ "%.1f"|format(pin_info.active_seconds) }}s<br>
@@ -166,7 +166,7 @@
                         <div class="timeline-item {{ 'success' if log.success else 'error' }}">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div>
-                                    <strong>GPIO {{ log.pin }}</strong>
+                                    <strong>BCM GPIO {{ log.pin }}</strong>
                                     <span class="badge bg-primary ms-2">{{ log.activation_type }}</span>
                                     {% if log.operator %}
                                         <span class="badge bg-info ms-1">{{ log.operator }}</span>
