@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 780" role="img" aria-labelledby="title desc">
+  <title id="title">EAS Station Platform Badge</title>
+  <desc id="desc">Rounded badge with radio tower shield logo and the words EAS Station emergency communication platform</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f8fafc" />
+      <stop offset="100%" stop-color="#e2e8f0" />
+    </linearGradient>
+    <linearGradient id="shield" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1f9cf5" />
+      <stop offset="100%" stop-color="#156fda" />
+    </linearGradient>
+    <filter id="cardShadow" x="-20%" y="-20%" width="140%" height="160%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#0f172a" flood-opacity="0.12" />
+    </filter>
+    <linearGradient id="tower" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#1e293b" />
+    </linearGradient>
+  </defs>
+
+  <rect width="360" height="780" fill="url(#bg)" rx="48" ry="48" />
+
+  <g transform="translate(40 210)" filter="url(#cardShadow)">
+    <rect x="0" y="0" width="280" height="360" rx="28" ry="28" fill="#ffffff" stroke="#1d4ed8" stroke-width="2" />
+    <g transform="translate(52 70)">
+      <path d="M88 0 C115 10 128 34 128 64 C128 100 108 136 88 152 C68 136 48 100 48 64 C48 34 61 10 88 0 Z" fill="url(#shield)" />
+      <g transform="translate(76 40)">
+        <rect x="-4" y="32" width="8" height="56" rx="4" fill="url(#tower)" />
+        <polygon points="0,-8 -10,16 10,16" fill="#ffffff" />
+        <path d="M-24 28 C-6 20 -6 8 0 0 C6 8 6 20 24 28" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round" />
+        <path d="M-32 10 C-14 2 -14 -14 0 -24 C14 -14 14 2 32 10" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round" stroke-opacity="0.85" />
+      </g>
+      <g transform="translate(120 118)">
+        <polygon points="0,0 18,-32 36,0" fill="#ef4444" />
+        <rect x="16" y="-24" width="4" height="14" rx="1.5" fill="#ffffff" />
+        <circle cx="18" cy="-6" r="3" fill="#ffffff" />
+      </g>
+    </g>
+
+    <g transform="translate(58 246)">
+      <text x="0" y="0" font-family="'Poppins', 'Segoe UI', sans-serif" font-size="36" font-weight="600" fill="#0f172a">EAS Station</text>
+      <text x="0" y="38" font-family="'Poppins', 'Segoe UI', sans-serif" font-size="14" letter-spacing="3" fill="#1f2937">EMERGENCY COMMUNICATION PLATFORM</text>
+    </g>
+  </g>
+
+  <circle cx="334" cy="744" r="12" fill="#1f9cf5" opacity="0.35" />
+</svg>
