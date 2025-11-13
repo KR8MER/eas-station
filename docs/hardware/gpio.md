@@ -62,12 +62,13 @@ For a visual overview of every Raspberry Pi header pin and its alert behaviors, 
 its physical layout with the following capabilities:
 
 - Highlight whether a pin is configured, its BCM number, and active-high/low state.
-- Assign alert behaviors to each GPIO-capable pin using simple checkboxes.
+- Assign one alert behavior per GPIO-capable pin using radio button selection.
 - Persist selections to the `GPIO_PIN_BEHAVIOR_MATRIX` environment variable so they are
   applied automatically during alert playout.
 
 Available behaviors include:
 
+- **None** – No automatic behavior (manual control only).
 - **Duration of Alert** – Hold the pin active until the alert audio and EOM finish.
 - **Audio Playout** – Activate only while tones and audio files are being played.
 - **Flash Beacon** – Blink the pin repeatedly at the start of the alert (for strobes or stack lights).

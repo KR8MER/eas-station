@@ -37,7 +37,7 @@
         <div class="col-12 col-lg-10">
             <h2><i class="fas fa-map"></i> Raspberry Pi GPIO Pin Map</h2>
             <p class="text-muted mb-0">
-                Assign alert behaviors to each Raspberry Pi header pin. Behaviors determine when a pin is driven active
+                Assign one alert behavior to each Raspberry Pi header pin. The behavior determines when a pin is driven active
                 (respecting its configured active-high or active-low state).
             </p>
         </div>
@@ -103,12 +103,27 @@
                         </div>
 
                         <div class="behavior-grid" aria-label="Behaviors for GPIO {{ pin.bcm }}">
+                            <div class="form-check">
+                                <input class="form-check-input behavior-radio" type="radio"
+                                       name="pin{{ pin.bcm }}-behavior"
+                                       id="pin{{ pin.bcm }}-none"
+                                       data-bcm="{{ pin.bcm }}"
+                                       data-behavior=""
+                                       value=""
+                                       {% if not pin.behaviors %}checked{% endif %}>
+                                <label class="form-check-label behavior-label" for="pin{{ pin.bcm }}-none">
+                                    <span>None</span>
+                                    <small>No automatic behavior</small>
+                                </label>
+                            </div>
                             {% for behavior in behavior_options %}
                             <div class="form-check">
-                                <input class="form-check-input behavior-checkbox" type="checkbox"
+                                <input class="form-check-input behavior-radio" type="radio"
+                                       name="pin{{ pin.bcm }}-behavior"
                                        id="pin{{ pin.bcm }}-{{ behavior.value }}"
                                        data-bcm="{{ pin.bcm }}"
                                        data-behavior="{{ behavior.value }}"
+                                       value="{{ behavior.value }}"
                                        {% if behavior.value in pin.behaviors %}checked{% endif %}>
                                 <label class="form-check-label behavior-label" for="pin{{ pin.bcm }}-{{ behavior.value }}">
                                     <span>{{ behavior.label }}</span>
@@ -160,20 +175,20 @@
 
     function buildBehaviorMatrix() {
         const matrix = {};
-        document.querySelectorAll('.behavior-checkbox').forEach((checkbox) => {
-            if (!checkbox.checked) {
-                return;
+        // Get all unique BCM pins from radio buttons
+        const pins = new Set();
+        document.querySelectorAll('.behavior-radio').forEach((radio) => {
+            if (radio.dataset.bcm) {
+                pins.add(radio.dataset.bcm);
             }
-            const bcm = checkbox.dataset.bcm;
-            const behavior = checkbox.dataset.behavior;
-            if (!bcm || !behavior) {
-                return;
-            }
-            if (!matrix[bcm]) {
-                matrix[bcm] = [];
-            }
-            if (!matrix[bcm].includes(behavior)) {
-                matrix[bcm].push(behavior);
+        });
+        
+        // For each pin, find the selected behavior
+        pins.forEach((bcm) => {
+            const selected = document.querySelector(`input[name="pin${bcm}-behavior"]:checked`);
+            if (selected && selected.dataset.behavior) {
+                // Store as array with single value for backward compatibility
+                matrix[bcm] = [selected.dataset.behavior];
             }
         });
         return matrix;
@@ -214,8 +229,11 @@
     }
 
     function clearMatrix() {
-        document.querySelectorAll('.behavior-checkbox').forEach((checkbox) => {
-            checkbox.checked = false;
+        // Set all pins back to "None"
+        document.querySelectorAll('.behavior-radio').forEach((radio) => {
+            if (radio.dataset.behavior === '') {
+                radio.checked = true;
+            }
         });
         showMessage('Cleared selections. Remember to save to persist the changes.', 'warning');
     }
