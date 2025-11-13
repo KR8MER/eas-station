@@ -228,7 +228,48 @@ _PIN_FACTORY_READY = False
 _PIN_FACTORY_ATTEMPTED = False
 
 
-def _ensure_pin_factory(logger=None) -> bool:
+def _explain_environment_issue(detail: str) -> Optional[str]:
+    """Return a human-friendly explanation for a GPIO backend failure."""
+
+    message = detail.strip()
+    if not message:
+        return None
+
+    lowered = message.lower()
+
+    if "/dev/gpiomem" in lowered or "/dev/mem" in lowered:
+        return (
+            "Process cannot open /dev/gpiomem. Run the service as root or add the "
+            "container user to the gpio group and expose /dev/gpiomem when running "
+            "inside Docker."
+        )
+
+    if "permission denied" in lowered and "/sys/class/gpio" in lowered:
+        return (
+            "Kernel sysfs GPIO interface is present but permission denied. Ensure "
+            "the process has write access to /sys/class/gpio or run the container "
+            "with --privileged."
+        )
+
+    if "read-only file system" in lowered and "/sys/class/gpio" in lowered:
+        return (
+            "The GPIO sysfs filesystem is mounted read-only. Remount it writable or "
+            "start the container with --privileged and pass the host /sys/class/gpio "
+            "through."
+        )
+
+    if "unable to load any default pin factory" in lowered:
+        return (
+            "gpiozero could not find a working pin factory. Install lgpio or pigpio, "
+            "or expose Raspberry Pi GPIO devices to the container."
+        )
+
+    return None
+
+
+def _ensure_pin_factory(
+    logger=None, issue_recorder: Optional[Callable[[str], None]] = None
+) -> bool:
     """Ensure gpiozero has a usable pin factory, falling back to MockFactory."""
 
     global _PIN_FACTORY_READY, _PIN_FACTORY_ATTEMPTED
@@ -263,12 +304,16 @@ def _ensure_pin_factory(logger=None) -> bool:
                             "gpiozero hardware backends unavailable; using MockFactory fallback"
                         )
                 except Exception as mock_exc:  # pragma: no cover - unexpected failure
+                    if issue_recorder is not None:
+                        issue_recorder(str(mock_exc))
                     if logger:
                         logger.error(
                             "Failed to initialize gpiozero MockFactory fallback: %s",
                             mock_exc,
                         )
             else:
+                if issue_recorder is not None:
+                    issue_recorder(str(exc))
                 if logger:
                     reason = fallback_exc or RuntimeError(
                         "gpiozero pin factory returned None"
@@ -304,11 +349,6 @@ def _create_gpio_backend(exclude: Optional[Set[type]] = None) -> Optional[GPIOBa
             exclude_set.add(backend_type)
             continue
         return backend
-
-    try:
-        return _SysfsGPIOBackend()
-    except Exception:
-        pass
 
     return None
 
@@ -489,7 +529,14 @@ class GPIOController:
         self._devices: Dict[int, Any] = {}
         self._backend: Optional[GPIOBackend] = None
         self._backend_failures: Set[type] = set()
-        self._gpiozero_available = bool(OutputDevice is not None and _ensure_pin_factory(logger))
+        self._environment_issues: Set[str] = set()
+        self._gpiozero_available = bool(
+            OutputDevice is not None
+            and _ensure_pin_factory(
+                logger,
+                issue_recorder=self._record_environment_issue,
+            )
+        )
         self._initialized = self._gpiozero_available
 
         if self._gpiozero_available:
@@ -504,6 +551,12 @@ class GPIOController:
                 )
         elif self.logger:
             self.logger.warning("gpiozero OutputDevice not available - GPIO control disabled")
+
+    def _record_environment_issue(self, detail: str) -> None:
+        explanation = _explain_environment_issue(detail)
+        message = explanation or detail
+        if message:
+            self._environment_issues.add(message)
 
     def _current_backend_label(self, backend: Optional[GPIOBackend] = None) -> str:
         target = backend if backend is not None else self._backend
@@ -532,6 +585,7 @@ class GPIOController:
                         self._current_backend_label(backend),
                         exc,
                     )
+                self._record_environment_issue(str(exc))
                 self._backend_failures.add(type(backend))
                 continue
 
@@ -568,6 +622,7 @@ class GPIOController:
                         self._current_backend_label(backend),
                         exc,
                     )
+                self._record_environment_issue(str(exc))
                 self._backend_failures.add(type(backend))
                 self._backend = None
                 failure_messages.append(
@@ -616,6 +671,7 @@ class GPIOController:
                         config.pin,
                         exc,
                     )
+                self._record_environment_issue(str(exc))
                 self._gpiozero_available = False
                 device = self._setup_backend_device(config, fallback_reason=str(exc))
                 if device is not None:
@@ -796,6 +852,7 @@ class GPIOController:
                 )
                 self._save_activation_event(event)
 
+                self._record_environment_issue(str(exc))
                 if self.logger:
                     self.logger.error(f"Failed to activate pin {pin}: {exc}")
 
@@ -865,6 +922,7 @@ class GPIOController:
 
             except Exception as exc:
                 self._states[pin] = GPIOState.ERROR
+                self._record_environment_issue(str(exc))
                 if self.logger:
                     self.logger.error(f"Failed to deactivate pin {pin}: {exc}")
                 return False
@@ -915,6 +973,12 @@ class GPIOController:
                     result[pin]['operator'] = event.operator
 
             return result
+
+    def get_environment_issues(self) -> List[str]:
+        """Return detected environment issues preventing GPIO access."""
+
+        with self._lock:
+            return sorted(self._environment_issues)
 
     def activate_all(
         self,
