@@ -193,19 +193,35 @@ class SDRSourceAdapter(AudioSourceAdapter):
                     return audio_array
 
                 else:
-                    # No demodulation, just convert PCM to float32
+                    # No demodulation - handle raw IQ samples
+                    # When no demodulator is configured, we still get IQ samples from the SDR
+                    # Convert them to mono audio by taking the magnitude (envelope detection)
                     if isinstance(audio_data, bytes):
-                        # Assume 16-bit PCM
-                        audio_array = np.frombuffer(audio_data, dtype=np.int16)
-                        # Convert to float32 normalized to [-1, 1]
-                        audio_array = audio_array.astype(np.float32) / 32768.0
+                        # Assume interleaved I/Q as float32 or int16
+                        try:
+                            iq_array = np.frombuffer(audio_data, dtype=np.float32)
+                        except (ValueError, TypeError):
+                            try:
+                                raw = np.frombuffer(audio_data, dtype=np.int16)
+                                iq_array = raw.astype(np.float32) / 32768.0
+                            except (ValueError, TypeError) as exc:
+                                logger.error(f"Failed to convert IQ data: {exc}")
+                                return None
+                        
+                        # Convert interleaved I/Q to complex
+                        iq_complex = iq_array[0::2] + 1j * iq_array[1::2]
+                        # Simple envelope detection for raw IQ
+                        audio_array = np.abs(iq_complex).astype(np.float32)
                     else:
-                        audio_array = np.array(audio_data, dtype=np.float32)
+                        # Numpy array (complex64)
+                        iq_complex = np.array(audio_data, dtype=np.complex64)
+                        # Simple envelope detection for raw IQ
+                        audio_array = np.abs(iq_complex).astype(np.float32)
 
                     return audio_array
 
         except Exception as e:
-            logger.error(f"Error reading SDR audio: {e}")
+            logger.error(f"Error reading SDR audio: {e}", exc_info=True)
 
         return None
 

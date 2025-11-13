@@ -279,14 +279,12 @@ class _SoapySDRReceiver(ReceiverInterface):
         args: Dict[str, str] = {"driver": self.driver_hint}
 
         # Use the device serial number if available for precise device identification
-        # If serial is provided, use ONLY serial (don't mix with device_id)
         if self.config.serial:
             args["serial"] = self.config.serial
         # Use channel/device_id as fallback identification only if no serial
         elif self.config.channel is not None:
-            # For consistency, set both device_id and serial from channel
+            # Only set device_id, not serial (serial is for hardware serial numbers only)
             args["device_id"] = str(self.config.channel)
-            args["serial"] = str(self.config.channel)
 
         # Label is for human reference only, not device identification
         if self.config.identifier:
