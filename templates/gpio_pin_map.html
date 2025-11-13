@@ -230,28 +230,48 @@
     let hasUnsavedChanges = false;
 
     function showMessage(message, variant) {
-        if (!alertBox) { return; }
+        console.log(`showMessage called: ${variant} - ${message}`);
+        if (!alertBox) { 
+            console.error('Alert box element not found');
+            return; 
+        }
         alertBox.className = `alert alert-${variant}`;
         alertBox.textContent = message;
         alertBox.classList.remove('d-none');
+        console.log('Alert box updated successfully');
         
         // Also show toast notification
-        if (variant === 'success') {
-            const toast = document.getElementById('saveSuccessToast');
-            const toastMessage = document.getElementById('toastMessage');
-            if (toast && toastMessage) {
-                toastMessage.textContent = message;
-                const bsToast = new bootstrap.Toast(toast, { delay: 5000 });
-                bsToast.show();
+        try {
+            if (variant === 'success') {
+                const toast = document.getElementById('saveSuccessToast');
+                const toastMessage = document.getElementById('toastMessage');
+                if (toast && toastMessage) {
+                    toastMessage.textContent = message;
+                    if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+                        const bsToast = new bootstrap.Toast(toast, { delay: 5000 });
+                        bsToast.show();
+                        console.log('Success toast shown');
+                    } else {
+                        console.warn('Bootstrap Toast not available');
+                    }
+                }
+            } else if (variant === 'danger') {
+                const toast = document.getElementById('saveErrorToast');
+                const errorMessage = document.getElementById('errorToastMessage');
+                if (toast && errorMessage) {
+                    errorMessage.textContent = message;
+                    if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+                        const bsToast = new bootstrap.Toast(toast, { delay: 8000 });
+                        bsToast.show();
+                        console.log('Error toast shown');
+                    } else {
+                        console.warn('Bootstrap Toast not available');
+                    }
+                }
             }
-        } else if (variant === 'danger') {
-            const toast = document.getElementById('saveErrorToast');
-            const errorMessage = document.getElementById('errorToastMessage');
-            if (toast && errorMessage) {
-                errorMessage.textContent = message;
-                const bsToast = new bootstrap.Toast(toast, { delay: 8000 });
-                bsToast.show();
-            }
+        } catch (toastError) {
+            console.error('Failed to show toast notification:', toastError);
+            // Don't let toast errors break the main flow
         }
     }
 
@@ -313,7 +333,13 @@
     }
 
     async function saveMatrix() {
+        console.log('saveMatrix function called');
         hideMessage();
+        if (!saveButton) {
+            console.error('Save button not found!');
+            alert('Error: Save button element not found');
+            return;
+        }
         saveButton.disabled = true;
         saveButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving';
 
@@ -330,6 +356,7 @@
         console.log('Payload JSON:', JSON.stringify(payload, null, 2));
 
         try {
+            console.log('Starting fetch request to /api/environment/variables...');
             const response = await fetch('/api/environment/variables', {
                 method: 'PUT',
                 headers: {
@@ -337,19 +364,27 @@
                 },
                 body: JSON.stringify(payload)
             });
+            console.log('Fetch completed');
             
             console.log('Response status:', response.status);
             console.log('Response headers:', Object.fromEntries(response.headers.entries()));
             
+            // Clone response before reading to allow re-reading if needed
+            const responseClone = response.clone();
             let data;
             try {
                 data = await response.json();
                 console.log('Response data:', data);
             } catch (jsonError) {
                 console.error('Failed to parse response as JSON:', jsonError);
-                const text = await response.text();
-                console.error('Response text:', text);
-                throw new Error(`Server returned non-JSON response (status ${response.status}): ${text.substring(0, 200)}`);
+                try {
+                    const text = await responseClone.text();
+                    console.error('Response text:', text);
+                    throw new Error(`Server returned non-JSON response (status ${response.status}): ${text.substring(0, 200)}`);
+                } catch (textError) {
+                    console.error('Failed to read response text:', textError);
+                    throw new Error(`Server returned non-JSON response (status ${response.status}) and failed to read response text`);
+                }
             }
             
             if (!response.ok) {
@@ -377,30 +412,41 @@
             if (data.restart_required) {
                 message += ' Restart the service to apply changes: docker compose restart';
             }
+            console.log('About to show success message:', message);
             showMessage(message, 'success');
             
             // Update the alert to include a link to verify
-            if (alertBox) {
-                alertBox.innerHTML = `
-                    <div>
-                        <i class="fas fa-check-circle me-2"></i>
-                        ${message}
-                    </div>
-                    <div class="mt-2">
-                        <a href="/settings/environment" class="btn btn-sm btn-success">
-                            <i class="fas fa-eye"></i> View in Environment Settings
-                        </a>
-                    </div>
-                `;
-            }
+            // Wait a moment to ensure the message is shown first
+            setTimeout(() => {
+                if (alertBox) {
+                    alertBox.innerHTML = `
+                        <div>
+                            <i class="fas fa-check-circle me-2"></i>
+                            ${message}
+                        </div>
+                        <div class="mt-2">
+                            <a href="/settings/environment" class="btn btn-sm btn-success">
+                                <i class="fas fa-eye"></i> View in Environment Settings
+                            </a>
+                        </div>
+                    `;
+                    console.log('Alert box updated with link');
+                }
+            }, 100);
             
             clearUnsavedChanges();
         } catch (error) {
             console.error('Failed to save pin map', error);
-            showMessage(`✗ Failed to save behavior map: ${error.message}`, 'danger');
+            console.error('Error stack:', error.stack);
+            const errorMsg = `✗ Failed to save behavior map: ${error.message}`;
+            console.log('About to show error message:', errorMsg);
+            showMessage(errorMsg, 'danger');
         } finally {
-            saveButton.disabled = false;
-            saveButton.innerHTML = '<i class="fas fa-save"></i> Save Behaviors';
+            console.log('saveMatrix finally block');
+            if (saveButton) {
+                saveButton.disabled = false;
+                saveButton.innerHTML = '<i class="fas fa-save"></i> Save Behaviors';
+            }
         }
     }
 
@@ -425,7 +471,12 @@
     });
 
     if (saveButton) {
-        saveButton.addEventListener('click', saveMatrix);
+        saveButton.addEventListener('click', () => {
+            console.log('Save button clicked!');
+            saveMatrix();
+        });
+    } else {
+        console.error('Save button element not found during initialization');
     }
     if (clearButton) {
         clearButton.addEventListener('click', clearMatrix);
