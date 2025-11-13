@@ -10,7 +10,7 @@ If you're new to EAS Station, start here:
 |----------|-------------|----------|
 | [🔧 Main README](https://github.com/KR8MER/eas-station/blob/main/README.md) | Installation and overview | Everyone |
 | [⚡ 5-Minute Quick Start](guides/HELP.md#getting-started) | Get running immediately | New users |
-| [🐳 Portainer Deployment](/docs/guides/PORTAINER_DEPLOYMENT) | Container-based setup | System admins |
+| [🐳 Portainer Deployment](guides/PORTAINER_DEPLOYMENT.md) | Container-based setup | System admins |
 
 ## 📊 Visual Documentation
 
@@ -18,7 +18,7 @@ If you're new to EAS Station, start here:
 
 | Diagram | Description | Use Case |
 |---------|-------------|----------|
-| [📊 All Diagrams Index](/docs/DIAGRAMS) | Complete visual documentation index | Browse all diagrams |
+| [📊 All Diagrams Index](DIAGRAMS.md) | Complete visual documentation index | Browse all diagrams |
 | [🔄 Alert Processing Pipeline](DIAGRAMS.md#1-alert-processing-pipeline) | CAP ingestion workflow | Understanding alert flow |
 | [📡 EAS Broadcast Workflow](DIAGRAMS.md#2-eas-broadcast-workflow) | SAME generation & transmission | Operator training |
 | [📻 SDR Setup Flow](DIAGRAMS.md#3-sdr-setup-configuration-flow) | Radio receiver configuration | Hardware setup |
@@ -30,8 +30,8 @@ If you're new to EAS Station, start here:
 ### Daily Operations
 | Document | Description |
 |----------|-------------|
-| [📋 Help & Operations Guide](/docs/guides/HELP) | Complete operator manual |
-| [🎨 Frontend User Guide](/docs/frontend/USER_INTERFACE_GUIDE) | Web interface navigation and usage |
+| [📋 Help & Operations Guide](guides/HELP.md) | Complete operator manual |
+| [🎨 Frontend User Guide](frontend/USER_INTERFACE_GUIDE.md) | Web interface navigation and usage |
 | [🎯 Alert Management](guides/HELP.md#managing-boundaries-and-alerts) | Creating and managing alerts |
 | [📊 System Monitoring](guides/HELP.md#routine-operations) | Dashboard and health checks |
 | [🔧 Troubleshooting](guides/HELP.md#troubleshooting) | Common issues and solutions |
@@ -39,47 +39,47 @@ If you're new to EAS Station, start here:
 ### Configuration & Setup
 | Document | Description |
 |----------|-------------|
-| [📡 SDR Setup Guide](/docs/guides/sdr_setup_guide) | Radio receiver configuration |
-| [🌐 IPAWS Integration](/docs/guides/ipaws_feed_integration) | Federal alert source setup |
-| [🔄 Environment Migration](/docs/guides/ENV_MIGRATION_GUIDE) | Moving between versions |
-| [🗄️ Database Setup](/docs/guides/DATABASE_CONSISTENCY_FIXES) | PostgreSQL/PostGIS configuration |
-| [🛠️ Setup Instructions](/docs/guides/SETUP_INSTRUCTIONS) | Initial wizard and environment checklist |
+| [📡 SDR Setup Guide](guides/sdr_setup_guide.md) | Radio receiver configuration |
+| [🌐 IPAWS Integration](guides/ipaws_feed_integration.md) | Federal alert source setup |
+| [🔄 Environment Migration](guides/ENV_MIGRATION_GUIDE.md) | Moving between versions |
+| [🗄️ Database Setup](guides/DATABASE_CONSISTENCY_FIXES.md) | PostgreSQL/PostGIS configuration |
+| [🛠️ Setup Instructions](guides/SETUP_INSTRUCTIONS.md) | Initial wizard and environment checklist |
 
 ### Hardware Integration
 | Document | Description |
 |----------|-------------|
 | [⚡ GPIO Relay Control](guides/HELP.md#managing-receivers) | Transmitter keying setup |
 | [🔊 Audio Configuration](guides/HELP.md#audio-generation-errors) | Sound card and audio routing |
-| [🎧 Professional Audio Subsystem](/docs/PROFESSIONAL_AUDIO_SUBSYSTEM) | **NEW:** 24/7 audio monitoring architecture |
-| [🔗 Audio System Access Guide](/docs/AUDIO_SYSTEM_ACCESS_GUIDE) | **NEW:** Quick reference for audio features |
-| [🎧 Audio Monitoring Dashboard](/docs/audio/AUDIO_MONITORING) | Live stream viewer and troubleshooting |
+| [🎧 Professional Audio Subsystem](PROFESSIONAL_AUDIO_SUBSYSTEM.md) | **NEW:** 24/7 audio monitoring architecture |
+| [🔗 Audio System Access Guide](AUDIO_SYSTEM_ACCESS_GUIDE.md) | **NEW:** Quick reference for audio features |
+| [🎧 Audio Monitoring Dashboard](audio/AUDIO_MONITORING.md) | Live stream viewer and troubleshooting |
 | [💡 LED Sign Integration](guides/HELP.md#led-sign-not-responding) | Alpha Protocol signage |
-| [📻 Radio Management](/docs/guides/radio_usb_passthrough) | USB radio devices |
+| [📻 Radio Management](guides/radio_usb_passthrough.md) | USB radio devices |
 
 ### Web Interface & Frontend
 | Document | Description |
 |----------|-------------|
-| [🎨 UI Components Library](/docs/frontend/COMPONENT_LIBRARY) | Complete component reference |
-| [📱 Responsive Design Guide](/docs/frontend/RESPONSIVE_DESIGN) | Mobile-first design principles |
-| [🎨 Theming & Customization](/docs/frontend/THEMING_CUSTOMIZATION) | Theme system and branding |
-| [🚀 JavaScript API](/docs/frontend/JAVASCRIPT_API) | Frontend API documentation |
+| [🎨 UI Components Library](frontend/COMPONENT_LIBRARY.md) | Complete component reference |
+| [📱 Responsive Design Guide](frontend/RESPONSIVE_DESIGN.md) | Mobile-first design principles |
+| [🎨 Theming & Customization](frontend/THEMING_CUSTOMIZATION.md) | Theme system and branding |
+| [🚀 JavaScript API](frontend/JAVASCRIPT_API.md) | Frontend API documentation |
 
 ## 🛠️ Developer Documentation
 
 ### Getting Started
 | Document | Description |
 |----------|-------------|
-| [🏗️ Architecture Overview](/docs/architecture/THEORY_OF_OPERATION) | System design and components |
-| [💻 Development Setup](/docs/development/AGENTS) | Local development environment |
-| [🎨 Frontend Documentation](/docs/frontend/FRONTEND_INDEX) | Complete UI and frontend guide |
+| [🏗️ Architecture Overview](architecture/THEORY_OF_OPERATION.md) | System design and components |
+| [💻 Development Setup](development/AGENTS.md) | Local development environment |
+| [🎨 Frontend Documentation](frontend/FRONTEND_INDEX.md) | Complete UI and frontend guide |
 | [🔧 API Reference](https://github.com/KR8MER/eas-station/blob/main/README.md#-api-endpoints) | REST API documentation |
 | [🗺️ Project Structure](development/AGENTS.md) | Code organization guide |
 
 ### Contributing
 | Document | Description |
 |----------|-------------|
-| [📋 Contributing Guide](/docs/process/CONTRIBUTING) | How to contribute code |
-| [✅ Pull Request Process](/docs/process/PR_DESCRIPTION) | PR guidelines and templates |
+| [📋 Contributing Guide](process/CONTRIBUTING.md) | How to contribute code |
+| [✅ Pull Request Process](process/PR_DESCRIPTION.md) | PR guidelines and templates |
 | [🐛 Issue Reporting](process/CONTRIBUTING.md#how-to-contribute) | Bug report guidelines |
 | [📝 Code Standards](development/AGENTS.md) | Style and quality standards |
 | [🎨 Frontend Development](frontend/FRONTEND_INDEX.md) | UI development guidelines |
@@ -89,15 +89,15 @@ If you're new to EAS Station, start here:
 ### Planning & Roadmap
 | Document | Description |
 |----------|-------------|
-| [🗺️ Project Roadmap](/docs/roadmap/master_todo) | Current development priorities |
-| [🎯 Feature Timeline](/docs/roadmap/dasdec3-feature-roadmap) | Release schedule and milestones |
-| [🏆 DASDEC3 Comparison](/docs/dasdec3-comparison) | Hardware replacement analysis |
-| [📋 Project Philosophy](/docs/project-philosophy) | Goals and principles |
+| [🗺️ Project Roadmap](roadmap/master_todo.md) | Current development priorities |
+| [🎯 Feature Timeline](roadmap/dasdec3-feature-roadmap.md) | Release schedule and milestones |
+| [🏆 DASDEC3 Comparison](dasdec3-comparison.md) | Hardware replacement analysis |
+| [📋 Project Philosophy](project-philosophy.md) | Goals and principles |
 
 ### Reference Materials
 | Document | Description |
 |----------|-------------|
-| [📖 About EAS Station](/docs/reference/ABOUT) | Project background and goals |
+| [📖 About EAS Station](reference/ABOUT.md) | Project background and goals |
 | [📄 Changelog](/docs/reference/CHANGELOG) | Version history and changes |
 | [🧭 Feature Matrix](/docs/reference/FEATURE_MATRIX) | Documentation coverage by feature |
 | [🎵 Audio System Changelog (2025-11-07)](/docs/CHANGELOG_2025-11-07) | **NEW:** Professional audio subsystem build log |

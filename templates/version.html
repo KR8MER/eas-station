@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+{% block title %}System Version | EAS Station{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-8 col-xl-7">
+            <!-- Header -->
+            <div class="card shadow-sm mb-4 border-0">
+                <div class="card-body p-4 p-md-5">
+                    <div class="text-center mb-4">
+                        <img src="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}" alt="EAS Station logo" class="img-fluid mb-3" style="max-width: 200px;">
+                        <h1 class="display-6 fw-bold mb-3">System Information</h1>
+                        <p class="lead text-muted">EAS Station Version and Configuration</p>
+                    </div>
+
+                    <!-- Version Information -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-12">
+                            <div class="card bg-primary text-white">
+                                <div class="card-body text-center py-4">
+                                    <i class="fas fa-code-branch fa-2x mb-3"></i>
+                                    <h2 class="h3 mb-2">Version {{ version_info.version }}</h2>
+                                    <p class="mb-0">{{ version_info.name }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- System Details -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>System Details</h5>
+                        </div>
+                        <div class="card-body">
+                            <dl class="row mb-0">
+                                <dt class="col-sm-4 text-muted">System Name</dt>
+                                <dd class="col-sm-8">{{ version_info.name }}</dd>
+
+                                <dt class="col-sm-4 text-muted">Description</dt>
+                                <dd class="col-sm-8">{{ version_info.description }}</dd>
+
+                                <dt class="col-sm-4 text-muted">Author</dt>
+                                <dd class="col-sm-8">{{ version_info.author }}</dd>
+
+                                <dt class="col-sm-4 text-muted">Version</dt>
+                                <dd class="col-sm-8">
+                                    <span class="badge bg-primary">{{ version_info.version }}</span>
+                                </dd>
+                            </dl>
+                        </div>
+                    </div>
+
+                    <!-- Time Information -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Time Information</h5>
+                        </div>
+                        <div class="card-body">
+                            <dl class="row mb-0">
+                                <dt class="col-sm-4 text-muted">Timezone</dt>
+                                <dd class="col-sm-8">{{ version_info.timezone }}</dd>
+
+                                <dt class="col-sm-4 text-muted">Local Time</dt>
+                                <dd class="col-sm-8">
+                                    <code>{{ version_info.local_timestamp }}</code>
+                                </dd>
+
+                                <dt class="col-sm-4 text-muted">UTC Time</dt>
+                                <dd class="col-sm-8">
+                                    <code>{{ version_info.timestamp }}</code>
+                                </dd>
+                            </dl>
+                        </div>
+                    </div>
+
+                    <!-- Features -->
+                    <div class="card mb-4">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0"><i class="fas fa-toggle-on me-2"></i>Features</h5>
+                        </div>
+                        <div class="card-body">
+                            <dl class="row mb-0">
+                                <dt class="col-sm-4 text-muted">LED Signs</dt>
+                                <dd class="col-sm-8">
+                                    {% if version_info.led_available %}
+                                        <span class="badge bg-success"><i class="fas fa-check me-1"></i>Available</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary"><i class="fas fa-times me-1"></i>Not Available</span>
+                                    {% endif %}
+                                </dd>
+                            </dl>
+                        </div>
+                    </div>
+
+                    <!-- JSON API Response -->
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0"><i class="fas fa-code me-2"></i>JSON API Response</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted small mb-2">This data is also available in JSON format at <code>/version</code></p>
+                            <pre class="bg-dark text-light p-3 rounded"><code>{{ version_json }}</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Links -->
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4">
+                    <h5 class="mb-3"><i class="fas fa-link me-2"></i>Quick Links</h5>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <a href="/" class="btn btn-outline-primary w-100">
+                                <i class="fas fa-home me-2"></i>Dashboard
+                            </a>
+                        </div>
+                        <div class="col-md-6">
+                            <a href="/docs" class="btn btn-outline-secondary w-100">
+                                <i class="fas fa-book me-2"></i>Documentation
+                            </a>
+                        </div>
+                        <div class="col-md-6">
+                            <a href="/about" class="btn btn-outline-info w-100">
+                                <i class="fas fa-info-circle me-2"></i>About
+                            </a>
+                        </div>
+                        <div class="col-md-6">
+                            <a href="/version" class="btn btn-outline-success w-100" target="_blank">
+                                <i class="fas fa-file-code me-2"></i>JSON API
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
