@@ -1,0 +1,367 @@
+{% extends "base.html" %}
+
+{% block title %}Audio Pipeline Tests{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="mb-4">
+        <i class="fas fa-flask"></i> Audio Pipeline Test Suite
+    </h1>
+    
+    <p class="lead mb-4">
+        Run and monitor tests for audio ingest, playout queue, and output service components.
+    </p>
+
+    <!-- Test Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-primary">
+                <div class="card-body text-center">
+                    <h3 class="text-primary" id="total-tests">81</h3>
+                    <p class="text-muted mb-0">Total Tests</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-success">
+                <div class="card-body text-center">
+                    <h3 class="text-success" id="passed-tests">--</h3>
+                    <p class="text-muted mb-0">Passed</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-danger">
+                <div class="card-body text-center">
+                    <h3 class="text-danger" id="failed-tests">--</h3>
+                    <p class="text-muted mb-0">Failed</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-warning">
+                <div class="card-body text-center">
+                    <h3 class="text-warning" id="skipped-tests">--</h3>
+                    <p class="text-muted mb-0">Skipped</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Test Modules -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-cubes"></i> Test Modules
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div id="test-modules-list">
+                        <p class="text-muted">Loading test modules...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Test Controls -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-play-circle"></i> Run Tests
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label for="test-module-select">Select Test Module:</label>
+                        <select class="form-control" id="test-module-select">
+                            <option value="">All Tests (81 tests)</option>
+                            <option value="test_audio_playout_queue">Playout Queue Tests (39 tests)</option>
+                            <option value="test_audio_output_service">Output Service Tests (29 tests)</option>
+                            <option value="test_audio_pipeline_integration">Integration Tests (13 tests)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="verbose-output" checked>
+                        <label class="form-check-label" for="verbose-output">
+                            Verbose output
+                        </label>
+                    </div>
+                    
+                    <button class="btn btn-primary btn-lg" id="run-tests-btn">
+                        <i class="fas fa-play"></i> Run Tests
+                    </button>
+                    
+                    <button class="btn btn-secondary btn-lg ml-2" id="stop-tests-btn" style="display:none;">
+                        <i class="fas fa-stop"></i> Stop
+                    </button>
+                    
+                    <div class="mt-3" id="test-progress" style="display:none;">
+                        <div class="progress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" 
+                                 style="width: 100%"
+                                 id="test-progress-bar">
+                                Running tests...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Test Results -->
+    <div class="row mb-4" id="test-results-section" style="display:none;">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-bar"></i> Test Results
+                    </h5>
+                    <span class="badge" id="test-status-badge">--</span>
+                </div>
+                <div class="card-body">
+                    <div class="alert" id="test-summary-alert" role="alert">
+                        <strong id="test-summary-text">--</strong>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <strong>Executed:</strong> <span id="test-timestamp">--</span>
+                    </div>
+                    
+                    <!-- Test Details Table -->
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover" id="test-details-table">
+                            <thead>
+                                <tr>
+                                    <th>Status</th>
+                                    <th>Test Name</th>
+                                    <th>Module</th>
+                                </tr>
+                            </thead>
+                            <tbody id="test-details-body">
+                                <!-- Populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Detailed Output -->
+                    <div class="mt-3">
+                        <button class="btn btn-sm btn-outline-secondary" 
+                                type="button" 
+                                data-toggle="collapse" 
+                                data-target="#test-output-collapse">
+                            <i class="fas fa-terminal"></i> Show Detailed Output
+                        </button>
+                        
+                        <div class="collapse mt-2" id="test-output-collapse">
+                            <div class="card card-body bg-dark text-light">
+                                <pre id="test-output" style="max-height: 500px; overflow-y: auto; margin: 0;">--</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .stat-box {
+        padding: 10px;
+        text-align: center;
+    }
+    .stat-box h3 {
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+    .badge-test-passed {
+        background-color: #28a745;
+    }
+    .badge-test-failed {
+        background-color: #dc3545;
+    }
+    .badge-test-skipped {
+        background-color: #ffc107;
+        color: #212529;
+    }
+    #test-output {
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+    .test-module-card {
+        transition: all 0.2s;
+        cursor: pointer;
+        border: 1px solid #dee2e6;
+        margin-bottom: 10px;
+    }
+    .test-module-card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Load test modules
+    loadTestModules();
+    
+    // Run tests button
+    document.getElementById('run-tests-btn').addEventListener('click', runTests);
+});
+
+function loadTestModules() {
+    fetch('/api/audio/tests/modules')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderTestModules(data.modules);
+            } else {
+                document.getElementById('test-modules-list').innerHTML = 
+                    '<div class="alert alert-danger">Error loading test modules: ' + data.error + '</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading test modules:', error);
+            document.getElementById('test-modules-list').innerHTML = 
+                '<div class="alert alert-danger">Error loading test modules</div>';
+        });
+}
+
+function renderTestModules(modules) {
+    const container = document.getElementById('test-modules-list');
+    container.innerHTML = '';
+    
+    modules.forEach(module => {
+        const card = document.createElement('div');
+        card.className = 'test-module-card p-3';
+        card.innerHTML = `
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h6 class="mb-1"><i class="fas fa-cube"></i> ${module.name}</h6>
+                    <p class="text-muted small mb-0">${module.description}</p>
+                </div>
+                <div class="text-right">
+                    <span class="badge badge-info">${module.test_count} tests</span>
+                </div>
+            </div>
+        `;
+        
+        card.addEventListener('click', function() {
+            document.getElementById('test-module-select').value = module.id;
+        });
+        
+        container.appendChild(card);
+    });
+}
+
+function runTests() {
+    const module = document.getElementById('test-module-select').value;
+    const verbose = document.getElementById('verbose-output').checked;
+    
+    // Show progress
+    document.getElementById('test-progress').style.display = 'block';
+    document.getElementById('run-tests-btn').disabled = true;
+    document.getElementById('test-results-section').style.display = 'none';
+    
+    // Call API
+    fetch('/api/audio/tests/run', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            test_module: module || null,
+            verbose: verbose
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Hide progress
+        document.getElementById('test-progress').style.display = 'none';
+        document.getElementById('run-tests-btn').disabled = false;
+        
+        // Show results
+        displayTestResults(data);
+    })
+    .catch(error => {
+        console.error('Error running tests:', error);
+        document.getElementById('test-progress').style.display = 'none';
+        document.getElementById('run-tests-btn').disabled = false;
+        alert('Error running tests: ' + error.message);
+    });
+}
+
+function displayTestResults(data) {
+    // Update summary cards
+    document.getElementById('passed-tests').textContent = data.passed || 0;
+    document.getElementById('failed-tests').textContent = data.failed || 0;
+    document.getElementById('skipped-tests').textContent = data.skipped || 0;
+    
+    // Show results section
+    document.getElementById('test-results-section').style.display = 'block';
+    
+    // Update status badge
+    const statusBadge = document.getElementById('test-status-badge');
+    if (data.success) {
+        statusBadge.textContent = 'PASSED';
+        statusBadge.className = 'badge badge-success badge-lg';
+    } else {
+        statusBadge.textContent = 'FAILED';
+        statusBadge.className = 'badge badge-danger badge-lg';
+    }
+    
+    // Update summary alert
+    const summaryAlert = document.getElementById('test-summary-alert');
+    const summaryText = document.getElementById('test-summary-text');
+    summaryText.textContent = data.summary || 'No summary available';
+    summaryAlert.className = data.success ? 'alert alert-success' : 'alert alert-danger';
+    
+    // Update timestamp
+    const timestamp = new Date(data.timestamp);
+    document.getElementById('test-timestamp').textContent = timestamp.toLocaleString();
+    
+    // Update test details table
+    const tbody = document.getElementById('test-details-body');
+    tbody.innerHTML = '';
+    
+    if (data.test_details && data.test_details.length > 0) {
+        data.test_details.forEach(test => {
+            const row = tbody.insertRow();
+            
+            // Status cell
+            const statusCell = row.insertCell();
+            const statusBadge = document.createElement('span');
+            statusBadge.className = 'badge badge-' + (test.status === 'passed' ? 'success' : 'danger');
+            statusBadge.textContent = test.status.toUpperCase();
+            statusCell.appendChild(statusBadge);
+            
+            // Test name cell
+            const nameCell = row.insertCell();
+            nameCell.textContent = test.name;
+            
+            // Module cell
+            const moduleCell = row.insertCell();
+            moduleCell.textContent = test.module;
+            moduleCell.className = 'text-muted small';
+        });
+    } else {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">No test details available</td></tr>';
+    }
+    
+    // Update detailed output
+    document.getElementById('test-output').textContent = data.output || 'No output available';
+    
+    // Scroll to results
+    document.getElementById('test-results-section').scrollIntoView({ behavior: 'smooth' });
+}
+</script>
+{% endblock %}

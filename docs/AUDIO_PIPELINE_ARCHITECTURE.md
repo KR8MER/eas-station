@@ -98,113 +98,183 @@ For each alert, the service plays the complete FCC-required sequence:
 
 ## Architecture Diagram
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Audio Ingest Layer                        │
-├─────────────────────────────────────────────────────────────┤
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
-│  │   SDR    │  │   ALSA   │  │  Stream  │  │   File   │   │
-│  │  Source  │  │  Source  │  │  Source  │  │  Source  │   │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘   │
-│       │             │              │             │          │
-│       └─────────────┴──────────────┴─────────────┘          │
-│                            │                                 │
-│                  ┌─────────▼─────────┐                      │
-│                  │ AudioIngestController │                   │
-│                  └─────────┬─────────┘                      │
-└────────────────────────────┼──────────────────────────────────┘
-                             │
-                             │ PCM Frames + Metrics
-                             │
-┌────────────────────────────▼──────────────────────────────────┐
-│                    Alert Processing                           │
-├─────────────────────────────────────────────────────────────┤
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │         EAS Decoder & Alert Generator                │   │
-│  │  (SAME decoding, CAP parsing, IPAWS ingestion)       │   │
-│  └────────────────────────┬─────────────────────────────┘   │
-└────────────────────────────┼──────────────────────────────────┘
-                             │
-                             │ Alert Metadata + Audio Files
-                             │
-┌────────────────────────────▼──────────────────────────────────┐
-│                    Playout Queue Layer                        │
-├─────────────────────────────────────────────────────────────┤
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │           AudioPlayoutQueue (Priority Heap)          │   │
-│  │  ┌────────────────────────────────────────────────┐  │   │
-│  │  │ EAN (Presidential)         [Highest Priority]  │  │   │
-│  │  ├────────────────────────────────────────────────┤  │   │
-│  │  │ NPT (Nationwide Test)                          │  │   │
-│  │  ├────────────────────────────────────────────────┤  │   │
-│  │  │ TOR, SVR (Local)                               │  │   │
-│  │  ├────────────────────────────────────────────────┤  │   │
-│  │  │ SPW (State)                                    │  │   │
-│  │  ├────────────────────────────────────────────────┤  │   │
-│  │  │ NIC (National)                                 │  │   │
-│  │  ├────────────────────────────────────────────────┤  │   │
-│  │  │ RMT, RWT (Test)                [Lower Priority]│  │   │
-│  │  └────────────────────────────────────────────────┘  │   │
-│  └──────────────────────────┬───────────────────────────┘   │
-└────────────────────────────┼──────────────────────────────────┘
-                             │
-                             │ Next PlayoutItem
-                             │
-┌────────────────────────────▼──────────────────────────────────┐
-│                    Output Service Layer                       │
-├─────────────────────────────────────────────────────────────┤
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │         AudioOutputService (Background Worker)       │   │
-│  └────────────────┬───────────────┬─────────────────────┘   │
-│                   │               │                          │
-│                   │               │                          │
-│         ┌─────────▼─────┐  ┌──────▼──────┐                  │
-│         │  Audio Device  │  │ GPIO Control│                  │
-│         │  (ALSA/JACK)  │  │  (Relays)   │                  │
-│         └───────┬────────┘  └─────┬───────┘                  │
-└─────────────────┼─────────────────┼──────────────────────────┘
-                  │                 │
-                  │                 │
-         ┌────────▼────────┐  ┌─────▼──────┐
-         │   Transmitter   │  │  Signage   │
-         │   (FM/Audio)    │  │   (LED)    │
-         └─────────────────┘  └────────────┘
+```mermaid
+graph TB
+    subgraph Ingest["Audio Ingest Layer"]
+        SDR[SDR Source]
+        ALSA[ALSA Source]
+        Stream[Stream Source]
+        File[File Source]
+        SDR --> IngestCtrl[AudioIngestController]
+        ALSA --> IngestCtrl
+        Stream --> IngestCtrl
+        File --> IngestCtrl
+    end
+    
+    subgraph AlertProc["Alert Processing"]
+        Decoder[EAS Decoder & Alert Generator<br/>SAME decoding, CAP parsing, IPAWS]
+    end
+    
+    subgraph QueueLayer["Playout Queue Layer"]
+        Queue[AudioPlayoutQueue<br/>Priority Heap]
+        PrioList["<b>FCC Precedence Order:</b><br/>1. EAN (Presidential)<br/>2. NPT (Nationwide Test)<br/>3. TOR, SVR (Local)<br/>4. SPW (State)<br/>5. NIC (National)<br/>6. RMT, RWT (Test)"]
+        Queue -.-> PrioList
+    end
+    
+    subgraph OutputLayer["Output Service Layer"]
+        OutputSvc[AudioOutputService<br/>Background Worker]
+        AudioDev[Audio Device<br/>ALSA/JACK]
+        GPIO[GPIO Control<br/>Relays]
+        OutputSvc --> AudioDev
+        OutputSvc --> GPIO
+    end
+    
+    subgraph Hardware["Hardware"]
+        Transmitter[Transmitter<br/>FM/Audio]
+        Signage[Signage<br/>LED]
+        AudioDev --> Transmitter
+        GPIO --> Signage
+    end
+    
+    IngestCtrl -->|PCM Frames + Metrics| Decoder
+    Decoder -->|Alert Metadata + Audio Files| Queue
+    Queue -->|Next PlayoutItem| OutputSvc
+    
+    style Ingest fill:#e3f2fd
+    style AlertProc fill:#fff3e0
+    style QueueLayer fill:#f3e5f5
+    style OutputLayer fill:#e8f5e9
+    style Hardware fill:#fce4ec
+    style PrioList fill:#fff9c4,stroke:#f57f17,stroke-width:2px
 ```
 
 ## Data Flow
 
 ### 1. Alert Ingestion Flow
-```
-NOAA/IPAWS → CAP Parser → EAS Encoder → Audio Generation → Playout Queue
+
+```mermaid
+flowchart LR
+    A[NOAA/IPAWS] --> B[CAP Parser]
+    B --> C[EAS Encoder]
+    C --> D[Audio Generation]
+    D --> E[Playout Queue]
+    
+    style A fill:#e3f2fd
+    style B fill:#fff3e0
+    style C fill:#f3e5f5
+    style D fill:#e8f5e9
+    style E fill:#ffebee
 ```
 
 ### 2. Queue Priority Flow
-```
-Alert Arrives → Determine Precedence → Calculate Priority Tuple
-             → Insert into Heap → Check Preemption
-             → [Interrupt Current?] → Dequeue Next
+
+```mermaid
+flowchart TD
+    A[Alert Arrives] --> B[Determine Precedence]
+    B --> C[Calculate Priority Tuple<br/>precedence, severity, urgency, timestamp]
+    C --> D[Insert into Heap]
+    D --> E{Preemption<br/>Required?}
+    E -->|Yes| F[Interrupt Current]
+    E -->|No| G[Continue Queue]
+    F --> H[Dequeue Next]
+    G --> H
+    
+    style E fill:#fff3e0,stroke:#f57c00,stroke-width:3px
+    style F fill:#ffcdd2
+    style H fill:#c8e6c9
 ```
 
 ### 3. Playout Execution Flow
-```
-Dequeue Item → Activate GPIO → Play SAME Header (3×)
-            → Play Attention Signal → Play Voice Message
-            → Play EOM (3×) → Deactivate GPIO
-            → Mark Completed → Log Event
+
+```mermaid
+sequenceDiagram
+    participant Q as Playout Queue
+    participant S as Output Service
+    participant G as GPIO
+    participant A as Audio Device
+    
+    Q->>S: Dequeue Item
+    S->>G: Activate GPIO
+    G-->>S: Activated
+    
+    S->>A: Play SAME Header (3×)
+    A-->>S: Complete
+    
+    S->>A: Play Attention Signal<br/>(853Hz + 960Hz, 8-25s)
+    A-->>S: Complete
+    
+    S->>A: Play Voice Message
+    A-->>S: Complete
+    
+    S->>A: Play EOM (3×)
+    A-->>S: Complete
+    
+    S->>G: Deactivate GPIO
+    G-->>S: Deactivated
+    
+    S->>Q: Mark Completed
+    Q-->>S: Logged
 ```
 
 ## Threading Model
 
 ### Thread Safety
-All components use appropriate synchronization:
-- **Ingest**: `threading.Event` for stop signals
-- **Queue**: `threading.RLock` for queue operations
-- **Output**: Background thread with queue polling
+
+```mermaid
+graph LR
+    subgraph IngestThread["Ingest Thread"]
+        IT[Audio Source Thread]
+        Event[threading.Event<br/>Stop Signal]
+        IT -.->|monitors| Event
+    end
+    
+    subgraph QueueOps["Queue Operations"]
+        Lock[threading.RLock]
+        Enqueue[Enqueue]
+        Dequeue[Dequeue]
+        Status[Status Check]
+        
+        Lock -->|protects| Enqueue
+        Lock -->|protects| Dequeue
+        Lock -->|protects| Status
+    end
+    
+    subgraph OutputThread["Output Thread"]
+        BG[Background Worker]
+        Poll[Poll Queue]
+        BG -->|runs| Poll
+    end
+    
+    IngestThread -->|produces| QueueOps
+    QueueOps -->|consumed by| OutputThread
+    
+    style IngestThread fill:#e3f2fd
+    style QueueOps fill:#f3e5f5
+    style OutputThread fill:#e8f5e9
+    style Lock fill:#ffcdd2,stroke:#c62828,stroke-width:2px
+```
 
 ### Concurrency Patterns
-1. **Producer-Consumer**: Ingest → Queue → Output
-2. **Priority-based**: Higher priority alerts preempt lower
-3. **Non-blocking**: Async operations where possible
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle: System Start
+    Idle --> Ingesting: Source Activated
+    Ingesting --> Queued: Alert Detected
+    Queued --> Playing: Dequeue
+    Playing --> Queued: Next Alert
+    Playing --> Preempted: High Priority Alert
+    Preempted --> Requeued: Original Alert
+    Requeued --> Queued: Back in Queue
+    Playing --> Completed: Playout Finished
+    Completed --> Idle: Queue Empty
+    Completed --> Queued: More Alerts
+    
+    note right of Preempted
+        Presidential alerts
+        preempt all others
+    end note
+```
 
 ## Configuration
 
