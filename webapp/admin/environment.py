@@ -367,52 +367,50 @@ ENV_CATEGORIES = {
         'variables': [
             {
                 'key': 'EAS_GPIO_PIN',
-                'label': 'GPIO Pin',
+                'label': 'Primary GPIO Pin',
                 'type': 'number',
-                'description': 'GPIO pin number for relay control (leave empty to disable). Disabling this will gray out other GPIO settings.',
+                'description': 'Main GPIO pin for relay control (typically used for transmitter keying). Leave empty to disable GPIO completely.',
                 'placeholder': 'e.g., 17',
                 'min': 2,
                 'max': 27,
             },
             {
                 'key': 'EAS_GPIO_ACTIVE_STATE',
-                'label': 'Active State',
+                'label': 'Primary Pin Active State',
                 'type': 'select',
                 'options': ['HIGH', 'LOW'],
                 'default': 'HIGH',
-                'description': 'GPIO active state',
+                'description': 'Electrical state when the primary pin is activated (HIGH = 3.3V, LOW = 0V)',
                 'category': 'gpio_enabled',
             },
             {
                 'key': 'EAS_GPIO_HOLD_SECONDS',
-                'label': 'Hold Duration (seconds)',
+                'label': 'Primary Pin Hold Duration',
                 'type': 'number',
                 'default': '5',
-                'description': 'How long to activate GPIO relay',
+                'description': 'How long to keep the primary pin activated (in seconds)',
                 'min': 1,
                 'max': 300,
                 'category': 'gpio_enabled',
             },
             {
                 'key': 'EAS_GPIO_WATCHDOG_SECONDS',
-                'label': 'Watchdog Timeout (seconds)',
+                'label': 'Primary Pin Watchdog Timeout',
                 'type': 'number',
                 'default': '300',
-                'description': 'Maximum activation duration before automatic safety shutdown',
+                'description': 'Maximum time the primary pin can stay active before automatic safety shutdown (in seconds)',
                 'min': 5,
                 'max': 3600,
                 'category': 'gpio_enabled',
             },
             {
                 'key': 'GPIO_ADDITIONAL_PINS',
-                'label': 'Additional Pins',
-                'type': 'textarea',
+                'label': 'Additional GPIO Pins',
+                'type': 'gpio_pin_builder',
                 'description': (
-                    'One pin per line as PIN:Name:State:Hold:Watchdog. '
-                    'State is HIGH or LOW. Example: 22:Aux Relay:LOW:2:120'
+                    'Configure additional GPIO pins beyond the primary pin. '
+                    'Click "Add Pin" to configure each additional relay or output.'
                 ),
-                'placeholder': '22:Aux Relay:LOW:2:120',
-                'rows': 3,
                 'category': 'gpio_enabled',
             },
             {
