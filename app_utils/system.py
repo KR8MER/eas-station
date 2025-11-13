@@ -51,12 +51,12 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
         os_details = _collect_operating_system_details()
 
         cpu_info = {
-            "physical_cores": psutil.cpu_count(logical=False),
-            "total_cores": psutil.cpu_count(logical=True),
-            "max_frequency": cpu_freq.max if cpu_freq else 0,
-            "current_frequency": cpu_freq.current if cpu_freq else 0,
+            "physical_cores": psutil.cpu_count(logical=False) or 0,
+            "total_cores": psutil.cpu_count(logical=True) or 0,
+            "max_frequency": cpu_freq.max if cpu_freq and cpu_freq.max else None,
+            "current_frequency": cpu_freq.current if cpu_freq and cpu_freq.current else None,
             "cpu_usage_percent": cpu_usage_percent,
-            "cpu_usage_per_core": cpu_usage_per_core,
+            "cpu_usage_per_core": cpu_usage_per_core if cpu_usage_per_core else [],
         }
 
         memory = psutil.virtual_memory()
