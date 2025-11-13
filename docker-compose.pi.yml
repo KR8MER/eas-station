@@ -1,0 +1,24 @@
+# Raspberry Pi GPIO Device Override
+#
+# This docker-compose override file adds Raspberry Pi-specific GPIO device mappings
+# that are required for GPIO relay control on Raspberry Pi hardware.
+#
+# On non-Raspberry Pi hosts, Docker will fail with "error gathering device information"
+# if /dev/gpiomem or /dev/gpiochip0 are missing. This override allows the base compose
+# files to work on any host, with GPIO features enabled only when needed.
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.pi.yml up -d
+# Or with embedded database:
+#   docker-compose -f docker-compose.embedded-db.yml -f docker-compose.pi.yml up -d
+#
+# The app_utils/gpio.py module will gracefully fall back to a no-op backend if
+# GPIO hardware is not available, so it's safe to run without this override.
+
+services:
+  app:
+    devices:
+      - /dev/gpiomem:/dev/gpiomem    # GPIO memory access for user-space GPIO control
+      - /dev/gpiochip0:/dev/gpiochip0  # GPIO chip device for modern GPIO libraries (lgpio)
+    group_add:
+      - gpio  # Add container user to gpio group for device permissions
