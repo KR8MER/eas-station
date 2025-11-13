@@ -14,6 +14,7 @@ from flask import (
     session,
 )
 
+from app_core.auth.roles import require_permission
 from app_core.extensions import db
 from app_core.models import GPIOActivationLog
 from app_utils.gpio import (
@@ -118,6 +119,7 @@ def register(app: Flask, logger) -> None:
         return session.get("username", "anonymous")
 
     @app.route("/api/gpio/status")
+    @require_permission('gpio.view')
     def gpio_status():
         """Get current status of all configured GPIO pins."""
         try:
@@ -139,6 +141,7 @@ def register(app: Flask, logger) -> None:
             )
 
     @app.route("/api/gpio/activate/<int:pin>", methods=["POST"])
+    @require_permission('gpio.control')
     def gpio_activate(pin: int):
         """Manually activate a GPIO pin.
 
@@ -199,6 +202,7 @@ def register(app: Flask, logger) -> None:
             )
 
     @app.route("/api/gpio/deactivate/<int:pin>", methods=["POST"])
+    @require_permission('gpio.control')
     def gpio_deactivate(pin: int):
         """Manually deactivate a GPIO pin.
 
@@ -241,6 +245,7 @@ def register(app: Flask, logger) -> None:
             )
 
     @app.route("/api/gpio/history")
+    @require_permission('gpio.view')
     def gpio_history():
         """Get GPIO activation history.
 
@@ -294,6 +299,7 @@ def register(app: Flask, logger) -> None:
             )
 
     @app.route("/api/gpio/statistics")
+    @require_permission('gpio.view')
     def gpio_statistics():
         """Get GPIO activation statistics.
 
@@ -367,6 +373,7 @@ def register(app: Flask, logger) -> None:
             )
 
     @app.route("/admin/gpio")
+    @require_permission('gpio.view')
     def gpio_control_panel():
         """Render the GPIO control panel page."""
         try:
@@ -401,6 +408,7 @@ def register(app: Flask, logger) -> None:
             )
 
     @app.route("/admin/gpio/pin-map")
+    @require_permission('gpio.view')
     def gpio_pin_map():
         """Render the interactive Raspberry Pi pin map."""
 
