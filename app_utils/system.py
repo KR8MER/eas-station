@@ -719,6 +719,7 @@ def _collect_platform_details() -> Dict[str, Any]:
     """Return chassis / firmware metadata using DMI and device-tree sources."""
 
     details: Dict[str, Any] = {}
+    has_dmi = False
 
     base_path = Path("/sys/devices/virtual/dmi/id")
     if base_path.exists():
@@ -740,12 +741,20 @@ def _collect_platform_details() -> Dict[str, Any]:
             value = _safe_read_text(base_path / filename)
             if value is not None:
                 details[key] = value
+                has_dmi = True
 
     # Augment with device-tree metadata when available (common on ARM boards).
     dt_details = _collect_device_tree_details()
     if dt_details:
         for key, value in dt_details.items():
             details.setdefault(key, value)
+        
+        # If we have device-tree data but no DMI BIOS info, mark BIOS fields as not applicable
+        if dt_details and not has_dmi:
+            # Remove any empty/placeholder BIOS fields that might confuse the UI
+            for bios_key in ["bios_vendor", "bios_version", "bios_date"]:
+                if bios_key in details and not details[bios_key]:
+                    del details[bios_key]
 
     return details
 
@@ -976,7 +985,12 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
             "error": None,
         }
 
-        command = [smartctl_path, "--json=o", "-H", "-A", "-n", "standby,now", path]
+        # Detect device type and add appropriate flags for smartctl
+        device_type_flag = _detect_device_type(device, path, logger)
+        command = [smartctl_path, "--json=o", "-H", "-A", "-n", "standby,now"]
+        if device_type_flag:
+            command.extend(["-d", device_type_flag])
+        command.append(path)
 
         try:
             completed = subprocess.run(
@@ -996,9 +1010,18 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
         device_result["exit_status"] = completed.returncode
 
         raw_output = (completed.stdout or "").strip()
+        stderr_output = (completed.stderr or "").strip()
+        
+        # Log stderr for debugging, but don't necessarily treat it as an error
+        if stderr_output and logger:
+            logger.debug("smartctl stderr for %s: %s", path, stderr_output)
+        
         if not raw_output:
-            if completed.stderr:
-                device_result["error"] = completed.stderr.strip()
+            # Provide more detailed error message
+            error_msg = stderr_output if stderr_output else f"No output from smartctl (exit code: {completed.returncode})"
+            device_result["error"] = error_msg
+            if logger:
+                logger.warning("No smartctl output for %s: %s", path, error_msg)
             result["devices"].append(device_result)
             continue
 
@@ -1021,6 +1044,9 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
             status_text = smart_status.get("status") or smart_status.get("string")
             if status_text:
                 device_result["overall_status"] = str(status_text)
+            # If still unknown but smartctl succeeded, log for debugging
+            elif logger and completed.returncode == 0:
+                logger.debug("SMART status unavailable for %s despite successful smartctl execution", path)
 
         device_result["temperature_celsius"] = _extract_temperature(report)
         device_result["power_on_hours"] = _extract_attribute_value(report, "Power_On_Hours")
@@ -1036,10 +1062,9 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
 
         _populate_nvme_metrics(device_result, report)
 
-        if completed.stderr:
-            stderr = completed.stderr.strip()
-            if stderr:
-                device_result["error"] = stderr
+        # Only store stderr as error if it indicates a real problem
+        if stderr_output and completed.returncode != 0:
+            device_result["error"] = stderr_output
 
         result["devices"].append(device_result)
 
@@ -1068,13 +1093,29 @@ def _collect_temperature_readings(logger, smart_info: Optional[Dict[str, Any]]) 
             current = getattr(entry, "current", None)
             if current is None:
                 continue
+            
+            # Validate current temperature
+            if not isinstance(current, (int, float)):
+                continue
+            current_float = float(current)
+            if not _is_valid_temperature(current_float):
+                if logger:
+                    logger.debug("Skipping invalid temperature reading from psutil: %s = %s°C", name, current_float)
+                continue
+            
+            # Validate high/critical thresholds
+            high = getattr(entry, "high", None)
+            critical = getattr(entry, "critical", None)
+            high_float = float(high) if isinstance(high, (int, float)) and _is_valid_temperature(float(high)) else None
+            critical_float = float(critical) if isinstance(critical, (int, float)) and _is_valid_temperature(float(critical)) else None
+            
             _add_temperature_entry(
                 readings,
                 name,
                 getattr(entry, "label", None) or "Sensor",
-                float(current),
-                getattr(entry, "high", None),
-                getattr(entry, "critical", None),
+                current_float,
+                high_float,
+                critical_float,
             )
 
     thermal_root = Path("/sys/class/thermal")
@@ -1109,6 +1150,14 @@ def _collect_temperature_readings(logger, smart_info: Optional[Dict[str, Any]]) 
             temperature = device.get("temperature_celsius")
             if temperature is None:
                 continue
+            if not isinstance(temperature, (int, float)):
+                continue
+            temp_float = float(temperature)
+            # Validate temperature from SMART data
+            if not _is_valid_temperature(temp_float):
+                if logger:
+                    logger.debug("Skipping invalid temperature from SMART: %s = %s°C", device.get("name"), temp_float)
+                continue
             label = (
                 device.get("product")
                 or device.get("model")
@@ -1120,7 +1169,7 @@ def _collect_temperature_readings(logger, smart_info: Optional[Dict[str, Any]]) 
                 readings,
                 "Storage",
                 label,
-                float(temperature),
+                temp_float,
                 None,
                 None,
             )
@@ -1141,12 +1190,20 @@ def _add_temperature_entry(
 ) -> None:
     if current is None:
         return
+    
+    # Validate all temperature values are reasonable
+    if not _is_valid_temperature(current):
+        return
+    
+    # Validate high/critical thresholds if present
+    validated_high = high if high and _is_valid_temperature(high) else None
+    validated_critical = critical if critical and _is_valid_temperature(critical) else None
 
     entry = {
         "label": label,
         "current": current,
-        "high": high,
-        "critical": critical,
+        "high": validated_high,
+        "critical": validated_critical,
     }
 
     container.setdefault(group, []).append(entry)
@@ -1161,7 +1218,53 @@ def _parse_temperature_value(raw: Optional[str]) -> Optional[float]:
         return None
     if value > 1000:
         value = value / 1000.0
+    # Validate the temperature is in a reasonable range
+    if not _is_valid_temperature(value):
+        return None
     return value
+
+
+def _is_valid_temperature(temp: float) -> bool:
+    """Check if temperature value is within reasonable bounds for Celsius."""
+    # Allow range from -50°C to 150°C (should cover all realistic hardware scenarios)
+    return -50 <= temp <= 150
+
+
+def _detect_device_type(device: Dict[str, Any], path: str, logger) -> Optional[str]:
+    """Detect the device type and return appropriate smartctl -d flag value."""
+    
+    # Check device name patterns for NVMe devices
+    name = device.get("name") or ""
+    if name.startswith("nvme"):
+        return "nvme"
+    
+    # Check transport type from lsblk
+    transport = (device.get("transport") or "").lower()
+    if transport == "nvme":
+        return "nvme"
+    
+    # Check path patterns
+    if "nvme" in path.lower():
+        return "nvme"
+    
+    # For USB devices, try auto detection
+    if transport in ("usb", "usb-storage"):
+        return "auto"
+    
+    # Check if device has SCSI transport
+    if transport in ("sata", "scsi", "ata"):
+        # Let smartctl auto-detect SATA/SCSI devices
+        return "auto"
+    
+    # For MMC/SD cards
+    if name.startswith("mmcblk"):
+        # Most SD cards don't support SMART
+        if logger:
+            logger.debug("Skipping SMART for MMC/SD device %s", path)
+        return None
+    
+    # Default: let smartctl auto-detect
+    return "auto"
 
 
 def _iter_disk_devices(devices: List[Dict[str, Any]]):
@@ -1181,16 +1284,33 @@ def _extract_temperature(report: Dict[str, Any]) -> Optional[float]:
     if isinstance(temperature, dict):
         current = temperature.get("current")
         if isinstance(current, (int, float)):
-            return float(current)
+            temp_value = float(current)
+            # Validate temperature is in reasonable range for Celsius
+            if -50 <= temp_value <= 150:
+                return temp_value
+            # If out of range, it might be in a different unit - skip it
+            return None
 
     nvme_info = report.get("nvme_smart_health_information_log")
     if isinstance(nvme_info, dict):
         current = nvme_info.get("temperature")
         if isinstance(current, (int, float)):
+            temp_value = float(current)
             # NVMe devices commonly report temperature in Kelvin; convert when it appears elevated.
-            if current > 200:
-                return float(current - 273.15)
-            return float(current)
+            # Kelvin absolute zero is -273.15°C, so valid Kelvin values are > 273
+            if temp_value > 200:
+                # Likely Kelvin, convert to Celsius
+                celsius = temp_value - 273.15
+                # Validate the converted temperature is reasonable
+                if -50 <= celsius <= 150:
+                    return celsius
+                # If still unreasonable, return None
+                return None
+            # If already in Celsius range, validate and return
+            elif -50 <= temp_value <= 150:
+                return temp_value
+            # Otherwise, unreasonable value
+            return None
 
     return None
 
