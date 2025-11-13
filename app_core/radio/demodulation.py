@@ -335,7 +335,7 @@ class AMDemodulator:
         self.dc_offset = 0.0
         self.dc_alpha = 0.001  # DC removal filter coefficient
 
-    def demodulate(self, iq_samples: np.ndarray) -> np.ndarray:
+    def demodulate(self, iq_samples: np.ndarray) -> Tuple[np.ndarray, None]:
         """
         Demodulate AM signal from IQ samples using envelope detection.
 
@@ -343,10 +343,10 @@ class AMDemodulator:
             iq_samples: Complex IQ samples
 
         Returns:
-            Audio samples
+            Tuple of (audio samples, None) - consistent with FM demodulator interface
         """
         if len(iq_samples) == 0:
-            return np.array([], dtype=np.float32)
+            return np.array([], dtype=np.float32), None
 
         # Envelope detection - compute magnitude
         audio = np.abs(iq_samples)
@@ -365,7 +365,7 @@ class AMDemodulator:
         if max_val > 0:
             audio = audio / max_val
 
-        return audio.astype(np.float32)
+        return audio.astype(np.float32), None
 
     def _resample(self, signal: np.ndarray, from_rate: int, to_rate: int) -> np.ndarray:
         """Simple resampling using linear interpolation."""
