@@ -67,8 +67,9 @@
         <div class="col-12 col-lg-10">
             <h2><i class="fas fa-map"></i> Raspberry Pi GPIO Pin Map</h2>
             <p class="text-muted mb-0">
-                Assign one alert behavior to each Raspberry Pi header pin. The behavior determines when a pin is driven active
-                (respecting its configured active-high or active-low state).
+                Assign alert behaviors to GPIO pins. Pin numbers (1-40) refer to physical header positions. 
+                BCM numbers refer to Broadcom GPIO identifiers (e.g., BCM GPIO 17 = Physical Pin 11).
+                Behaviors determine when a pin is driven active (respecting its configured active-high or active-low state).
             </p>
         </div>
         <div class="col-12 col-lg-2 text-lg-end mt-3 mt-lg-0">
@@ -326,6 +327,7 @@
         };
         
         console.log('Payload:', payload);
+        console.log('Payload JSON:', JSON.stringify(payload, null, 2));
 
         try {
             const response = await fetch('/api/environment/variables', {
@@ -337,11 +339,34 @@
             });
             
             console.log('Response status:', response.status);
-            const data = await response.json();
-            console.log('Response data:', data);
+            console.log('Response headers:', Object.fromEntries(response.headers.entries()));
             
-            if (!response.ok || data.error) {
-                throw new Error(data.error || data.message || 'Unknown error');
+            let data;
+            try {
+                data = await response.json();
+                console.log('Response data:', data);
+            } catch (jsonError) {
+                console.error('Failed to parse response as JSON:', jsonError);
+                const text = await response.text();
+                console.error('Response text:', text);
+                throw new Error(`Server returned non-JSON response (status ${response.status}): ${text.substring(0, 200)}`);
+            }
+            
+            if (!response.ok) {
+                // Handle specific error cases
+                if (response.status === 401) {
+                    throw new Error('Authentication required. Please log in to save GPIO behaviors.');
+                } else if (response.status === 403) {
+                    throw new Error('Permission denied. You need "system.configure" permission to modify environment variables.');
+                } else if (data.error) {
+                    throw new Error(data.error);
+                } else {
+                    throw new Error(data.message || `Server error (status ${response.status})`);
+                }
+            }
+            
+            if (data.error) {
+                throw new Error(data.error);
             }
             
             // Show detailed success message

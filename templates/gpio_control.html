@@ -102,7 +102,7 @@
 
                         <div class="mb-3">
                             <small class="text-muted">
-                                <strong>Pin:</strong> GPIO {{ pin_info.pin }}<br>
+                                <strong>BCM GPIO:</strong> GPIO {{ pin_info.pin }}<br>
                                 <strong>Mode:</strong> Active {{ 'High' if pin_info.active_high else 'Low' }}<br>
                                 {% if pin_info.is_active %}
                                     <strong>Active for:</strong> {{ "%.1f"|format(pin_info.active_seconds) }}s<br>
@@ -166,7 +166,7 @@
                         <div class="timeline-item {{ 'success' if log.success else 'error' }}">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div>
-                                    <strong>GPIO {{ log.pin }}</strong>
+                                    <strong>BCM GPIO {{ log.pin }}</strong>
                                     <span class="badge bg-primary ms-2">{{ log.activation_type }}</span>
                                     {% if log.operator %}
                                         <span class="badge bg-info ms-1">{{ log.operator }}</span>
@@ -375,118 +375,150 @@ function updatePinStates(pins) {
     });
 }
 
-// Load saved preference
+// Load saved preference and set up event listeners
 document.addEventListener('DOMContentLoaded', () => {
     const savedPreference = localStorage.getItem('gpioAutoRefresh');
     if (savedPreference === 'true') {
         toggleAutoRefresh();
     }
-});
 
-// Auto-refresh toggle button
-document.getElementById('auto-refresh-toggle').addEventListener('click', toggleAutoRefresh);
-
-// Activate pin button click
-document.querySelectorAll('.activate-pin').forEach(btn => {
-    btn.addEventListener('click', function() {
-        currentPin = parseInt(this.dataset.pin);
-        document.getElementById('modal-pin-name').textContent = this.dataset.name;
-        const modal = new bootstrap.Modal(document.getElementById('activationModal'));
-        modal.show();
-    });
-});
-
-// Confirm activation
-document.getElementById('confirm-activate').addEventListener('click', async function() {
-    const reason = document.getElementById('activation-reason').value.trim();
-    const activationType = document.getElementById('activation-type').value;
-
-    if (!reason) {
-        alert('Please enter a reason for activation');
-        return;
+    // Auto-refresh toggle button
+    const autoRefreshToggle = document.getElementById('auto-refresh-toggle');
+    if (autoRefreshToggle) {
+        autoRefreshToggle.addEventListener('click', toggleAutoRefresh);
     }
 
-    try {
-        const response = await fetch(`/api/gpio/activate/${currentPin}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ reason, activation_type: activationType })
+    // Activate pin button click
+    document.querySelectorAll('.activate-pin').forEach(btn => {
+        btn.addEventListener('click', function() {
+            currentPin = parseInt(this.dataset.pin);
+            const modalPinName = document.getElementById('modal-pin-name');
+            if (modalPinName) {
+                modalPinName.textContent = this.dataset.name;
+            }
+            const modalElement = document.getElementById('activationModal');
+            if (modalElement) {
+                const modal = new bootstrap.Modal(modalElement);
+                modal.show();
+            }
         });
+    });
 
-        const data = await response.json();
+    // Confirm activation
+    const confirmActivateBtn = document.getElementById('confirm-activate');
+    if (confirmActivateBtn) {
+        confirmActivateBtn.addEventListener('click', async function() {
+            const reasonInput = document.getElementById('activation-reason');
+            const typeInput = document.getElementById('activation-type');
+            
+            if (!reasonInput || !typeInput) {
+                alert('Form elements not found');
+                return;
+            }
+            
+            const reason = reasonInput.value.trim();
+            const activationType = typeInput.value;
 
-        if (data.success) {
-            bootstrap.Modal.getInstance(document.getElementById('activationModal')).hide();
-            window.location.reload();
-        } else {
-            alert('Activation failed: ' + data.error);
-        }
-    } catch (error) {
-        alert('Error activating pin: ' + error.message);
+            if (!reason) {
+                alert('Please enter a reason for activation');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/gpio/activate/${currentPin}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason, activation_type: activationType })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const modalElement = document.getElementById('activationModal');
+                    if (modalElement) {
+                        const modalInstance = bootstrap.Modal.getInstance(modalElement);
+                        if (modalInstance) {
+                            modalInstance.hide();
+                        }
+                    }
+                    window.location.reload();
+                } else {
+                    alert('Activation failed: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error activating pin:', error);
+                alert('Error activating pin: ' + error.message);
+            }
+        });
     }
-});
 
-// Deactivate pin
-document.querySelectorAll('.deactivate-pin').forEach(btn => {
-    btn.addEventListener('click', async function() {
-        const pin = parseInt(this.dataset.pin);
+    // Deactivate pin
+    document.querySelectorAll('.deactivate-pin').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            const pin = parseInt(this.dataset.pin);
 
-        if (!confirm(`Deactivate GPIO ${pin}?`)) {
-            return;
-        }
-
-        try {
-            const response = await fetch(`/api/gpio/deactivate/${pin}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ force: false })
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                window.location.reload();
-            } else {
-                alert('Deactivation failed: ' + data.error);
+            if (!confirm(`Deactivate BCM GPIO ${pin}?`)) {
+                return;
             }
-        } catch (error) {
-            alert('Error deactivating pin: ' + error.message);
-        }
-    });
-});
 
-// Force deactivate pin
-document.querySelectorAll('.force-deactivate-pin').forEach(btn => {
-    btn.addEventListener('click', async function() {
-        const pin = parseInt(this.dataset.pin);
+            try {
+                const response = await fetch(`/api/gpio/deactivate/${pin}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ force: false })
+                });
 
-        if (!confirm(`FORCE deactivate GPIO ${pin}? This will ignore hold time and immediately deactivate the relay.`)) {
-            return;
-        }
+                const data = await response.json();
 
-        try {
-            const response = await fetch(`/api/gpio/deactivate/${pin}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ force: true })
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                window.location.reload();
-            } else {
-                alert('Force deactivation failed: ' + data.error);
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    alert('Deactivation failed: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error deactivating pin:', error);
+                alert('Error deactivating pin: ' + error.message);
             }
-        } catch (error) {
-            alert('Error force deactivating pin: ' + error.message);
-        }
+        });
     });
-});
 
-// Refresh button
-document.getElementById('refresh-btn').addEventListener('click', function() {
-    window.location.reload();
+    // Force deactivate pin
+    document.querySelectorAll('.force-deactivate-pin').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            const pin = parseInt(this.dataset.pin);
+
+            if (!confirm(`FORCE deactivate BCM GPIO ${pin}? This will ignore hold time and immediately deactivate the relay.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/gpio/deactivate/${pin}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ force: true })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    alert('Force deactivation failed: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error force deactivating pin:', error);
+                alert('Error force deactivating pin: ' + error.message);
+            }
+        });
+    });
+
+    // Refresh button
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', function() {
+            window.location.reload();
+        });
+    }
 });
 </script>
 {% endblock %}
