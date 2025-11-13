@@ -415,6 +415,18 @@ ENV_CATEGORIES = {
                 'rows': 3,
                 'category': 'gpio_enabled',
             },
+            {
+                'key': 'GPIO_PIN_BEHAVIOR_MATRIX',
+                'label': 'Pin Behavior Matrix',
+                'type': 'textarea',
+                'rows': 4,
+                'description': (
+                    'JSON object that maps BCM pins to lists of behaviors. '
+                    'Use the GPIO Pin Map page (System → GPIO Pin Map) to edit this value.'
+                ),
+                'placeholder': '{"18": ["duration_of_alert", "playout"]}',
+                'category': 'gpio_enabled',
+            },
         ],
     },
     'tts': {

@@ -55,6 +55,29 @@ These same fields are available in the web UI under **Settings → Environment �
 for deployments using the persistent environment editor. Update the values there and restart
 the services to apply the new relay mapping.
 
+### Interactive Pin Map (Web UI)
+
+For a visual overview of every Raspberry Pi header pin and its alert behaviors, open
+**System → GPIO Pin Map** in the navigation bar. The pin map displays the 40-pin header in
+its physical layout with the following capabilities:
+
+- Highlight whether a pin is configured, its BCM number, and active-high/low state.
+- Assign alert behaviors to each GPIO-capable pin using simple checkboxes.
+- Persist selections to the `GPIO_PIN_BEHAVIOR_MATRIX` environment variable so they are
+  applied automatically during alert playout.
+
+Available behaviors include:
+
+- **Duration of Alert** – Hold the pin active until the alert audio and EOM finish.
+- **Audio Playout** – Activate only while tones and audio files are being played.
+- **Flash Beacon** – Blink the pin repeatedly at the start of the alert (for strobes or stack lights).
+- **5 Second Pulse** – Drive the pin active for five seconds when playout begins.
+- **Incoming Alert** – Pulse the pin when a new alert is ingested or queued.
+- **Forwarding Alert** – Pulse the pin when an alert is forwarded from monitoring inputs.
+
+The pin map is the recommended way to manage behavior profiles—manual edits to
+`GPIO_PIN_BEHAVIOR_MATRIX` should only be performed for scripted deployments.
+
 ### Pin Configuration Details
 
 - **PIN**: BCM GPIO pin number (0-27 depending on Pi model)

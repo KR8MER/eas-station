@@ -16,7 +16,14 @@ from flask import (
 
 from app_core.extensions import db
 from app_core.models import GPIOActivationLog
-from app_utils.gpio import GPIOActivationType, load_gpio_pin_configs_from_env
+from app_utils.gpio import (
+    GPIOActivationType,
+    GPIOBehavior,
+    GPIO_BEHAVIOR_LABELS,
+    load_gpio_behavior_matrix_from_env,
+    load_gpio_pin_configs_from_env,
+)
+from app_utils.pi_pinout import PIN_ROWS
 from app_utils.time import utc_now
 
 
@@ -61,6 +68,50 @@ def register(app: Flask, logger) -> None:
                     config.name,
                     exc,
                 )
+
+        behavior_manager = getattr(controller, "behavior_manager", None)
+        if behavior_manager:
+            behavior_manager.update_pin_configs(configs)
+            behavior_manager.update_behavior_matrix(
+                load_gpio_behavior_matrix_from_env(route_logger)
+            )
+
+    def _build_pin_entry(pin_def, config_map, behavior_matrix):
+        entry = {
+            "physical": pin_def.physical,
+            "name": pin_def.name,
+            "type": pin_def.pin_type,
+            "bcm": pin_def.bcm,
+            "description": pin_def.description,
+            "is_gpio": pin_def.is_gpio,
+            "configured": False,
+            "active_high": None,
+            "behaviors": [],
+        }
+
+        if pin_def.is_gpio and pin_def.bcm is not None:
+            config = config_map.get(pin_def.bcm)
+            entry["configured"] = config is not None
+            entry["active_high"] = config.active_high if config else None
+            behaviors = behavior_matrix.get(pin_def.bcm, set())
+            entry["behaviors"] = [behavior.value for behavior in sorted(behaviors, key=lambda b: b.value)]
+
+        return entry
+
+    def _build_pin_rows():
+        configs = load_gpio_pin_configs_from_env(route_logger)
+        behavior_matrix = load_gpio_behavior_matrix_from_env(route_logger)
+        config_map = {cfg.pin: cfg for cfg in configs}
+
+        rows = []
+        for left_pin, right_pin in PIN_ROWS:
+            rows.append(
+                {
+                    "left": _build_pin_entry(left_pin, config_map, behavior_matrix),
+                    "right": _build_pin_entry(right_pin, config_map, behavior_matrix),
+                }
+            )
+        return rows
 
     def _get_current_user() -> str:
         """Get current username from session."""
@@ -345,6 +396,54 @@ def register(app: Flask, logger) -> None:
                 render_template(
                     "error.html",
                     error_message=f"Failed to load GPIO control panel: {exc}",
+                ),
+                500,
+            )
+
+    @app.route("/admin/gpio/pin-map")
+    def gpio_pin_map():
+        """Render the interactive Raspberry Pi pin map."""
+
+        try:
+            pin_rows = _build_pin_rows()
+            behavior_order = [
+                GPIOBehavior.DURATION_OF_ALERT,
+                GPIOBehavior.PLAYOUT,
+                GPIOBehavior.FLASH,
+                GPIOBehavior.FIVE_SECONDS,
+                GPIOBehavior.INCOMING_ALERT,
+                GPIOBehavior.FORWARDING_ALERT,
+            ]
+            behavior_descriptions = {
+                GPIOBehavior.DURATION_OF_ALERT.value: "Hold the relay active until the alert finishes.",
+                GPIOBehavior.PLAYOUT.value: "Activate while tones and audio playout are running.",
+                GPIOBehavior.FLASH.value: "Blink the pin rapidly at the start of the alert to drive strobes.",
+                GPIOBehavior.FIVE_SECONDS.value: "Pulse the pin for five seconds when playout begins.",
+                GPIOBehavior.INCOMING_ALERT.value: "Pulse when a new alert is ingested or queued.",
+                GPIOBehavior.FORWARDING_ALERT.value: "Pulse when an alert is forwarded from monitoring inputs.",
+            }
+            behavior_options = [
+                {
+                    "value": behavior.value,
+                    "label": GPIO_BEHAVIOR_LABELS.get(
+                        behavior, behavior.value.replace("_", " ").title()
+                    ),
+                    "description": behavior_descriptions.get(behavior.value, ""),
+                }
+                for behavior in behavior_order
+            ]
+
+            return render_template(
+                "gpio_pin_map.html",
+                pin_rows=pin_rows,
+                behavior_options=behavior_options,
+            )
+        except Exception as exc:  # pragma: no cover - rendering safety
+            route_logger.error(f"Failed to render GPIO pin map: {exc}")
+            return (
+                render_template(
+                    "error.html",
+                    error_message=f"Failed to load GPIO pin map: {exc}",
                 ),
                 500,
             )

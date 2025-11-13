@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}GPIO Pin Map - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+    .pin-card {
+        border-left: 4px solid #0d6efd;
+        height: 100%;
+    }
+    .pin-card.power { border-left-color: #ffc107; }
+    .pin-card.ground { border-left-color: #6c757d; }
+    .pin-card.gpio.configured { border-left-color: #28a745; }
+    .pin-card.gpio:not(.configured) { border-left-color: #0d6efd; }
+    .behavior-grid {
+        display: grid;
+        gap: 0.75rem;
+    }
+    @media (min-width: 768px) {
+        .behavior-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+    .behavior-label {
+        display: flex;
+        flex-direction: column;
+    }
+    .behavior-label small {
+        color: var(--bs-secondary-color);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12 col-lg-10">
+            <h2><i class="fas fa-map"></i> Raspberry Pi GPIO Pin Map</h2>
+            <p class="text-muted mb-0">
+                Assign alert behaviors to each Raspberry Pi header pin. Behaviors determine when a pin is driven active
+                (respecting its configured active-high or active-low state).
+            </p>
+        </div>
+        <div class="col-12 col-lg-2 text-lg-end mt-3 mt-lg-0">
+            <button class="btn btn-outline-secondary" id="reloadPinMap">
+                <i class="fas fa-rotate"></i> Reload
+            </button>
+        </div>
+    </div>
+
+    <div id="pinMapAlert" class="alert d-none" role="alert"></div>
+
+    <div class="alert alert-info" role="alert">
+        <i class="fas fa-info-circle"></i>
+        Changes are written to <code>GPIO_PIN_BEHAVIOR_MATRIX</code> in the environment configuration. A service restart is
+        required for alert playback to use updated mappings.
+    </div>
+
+    {% for row in pin_rows %}
+    <div class="row g-3 align-items-stretch mb-3">
+        {% for side in ['left', 'right'] %}
+        {% set pin = row[side] %}
+        <div class="col-md-6">
+            <div class="card pin-card {{ pin.type }} {% if pin.is_gpio %}gpio{% endif %} {% if pin.configured %}configured{% endif %}" data-physical="{{ pin.physical }}" {% if pin.is_gpio and pin.bcm is not none %}data-bcm="{{ pin.bcm }}"{% endif %}>
+                <div class="card-body d-flex flex-column h-100">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="badge bg-primary me-2">Pin {{ pin.physical }}</span>
+                            <strong>{{ pin.name }}</strong>
+                        </div>
+                        {% if pin.is_gpio and pin.bcm is not none %}
+                        <span class="badge bg-dark">BCM {{ pin.bcm }}</span>
+                        {% endif %}
+                    </div>
+
+                    {% if pin.description %}
+                    <p class="text-muted small mb-2">{{ pin.description }}</p>
+                    {% endif %}
+
+                    {% if not pin.is_gpio %}
+                        <div class="alert alert-light border-secondary small mb-0" role="status">
+                            {% if pin.type == 'power' %}
+                                <i class="fas fa-bolt"></i> Power rail
+                            {% elif pin.type == 'ground' %}
+                                <i class="fas fa-plug"></i> Ground reference
+                            {% else %}
+                                Non-GPIO function
+                            {% endif %}
+                        </div>
+                    {% elif pin.bcm is none %}
+                        <div class="alert alert-warning small mb-0" role="status">
+                            <i class="fas fa-exclamation-triangle"></i> GPIO mapping unavailable for this pin.
+                        </div>
+                    {% else %}
+                        <div class="mb-3">
+                            {% if pin.configured %}
+                                <span class="badge bg-success me-2">Configured</span>
+                                <span class="text-muted small">Active {{ 'HIGH' if pin.active_high else 'LOW' }}</span>
+                            {% else %}
+                                <span class="badge bg-secondary me-2">Not configured</span>
+                                <span class="text-muted small">Assign in Settings → Environment to control this pin.</span>
+                            {% endif %}
+                        </div>
+
+                        <div class="behavior-grid" aria-label="Behaviors for GPIO {{ pin.bcm }}">
+                            {% for behavior in behavior_options %}
+                            <div class="form-check">
+                                <input class="form-check-input behavior-checkbox" type="checkbox"
+                                       id="pin{{ pin.bcm }}-{{ behavior.value }}"
+                                       data-bcm="{{ pin.bcm }}"
+                                       data-behavior="{{ behavior.value }}"
+                                       {% if behavior.value in pin.behaviors %}checked{% endif %}>
+                                <label class="form-check-label behavior-label" for="pin{{ pin.bcm }}-{{ behavior.value }}">
+                                    <span>{{ behavior.label }}</span>
+                                    {% if behavior.description %}
+                                    <small>{{ behavior.description }}</small>
+                                    {% endif %}
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+
+    <div class="d-flex justify-content-end gap-2 mt-4">
+        <button class="btn btn-outline-secondary" id="clearPinMap">
+            <i class="fas fa-eraser"></i> Clear All
+        </button>
+        <button class="btn btn-primary" id="savePinMap">
+            <i class="fas fa-save"></i> Save Behaviors
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const alertBox = document.getElementById('pinMapAlert');
+    const saveButton = document.getElementById('savePinMap');
+    const clearButton = document.getElementById('clearPinMap');
+    const reloadButton = document.getElementById('reloadPinMap');
+
+    function showMessage(message, variant) {
+        if (!alertBox) { return; }
+        alertBox.className = `alert alert-${variant}`;
+        alertBox.textContent = message;
+        alertBox.classList.remove('d-none');
+    }
+
+    function hideMessage() {
+        if (!alertBox) { return; }
+        alertBox.classList.add('d-none');
+    }
+
+    function buildBehaviorMatrix() {
+        const matrix = {};
+        document.querySelectorAll('.behavior-checkbox').forEach((checkbox) => {
+            if (!checkbox.checked) {
+                return;
+            }
+            const bcm = checkbox.dataset.bcm;
+            const behavior = checkbox.dataset.behavior;
+            if (!bcm || !behavior) {
+                return;
+            }
+            if (!matrix[bcm]) {
+                matrix[bcm] = [];
+            }
+            if (!matrix[bcm].includes(behavior)) {
+                matrix[bcm].push(behavior);
+            }
+        });
+        return matrix;
+    }
+
+    async function saveMatrix() {
+        hideMessage();
+        saveButton.disabled = true;
+        saveButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving';
+
+        const matrix = buildBehaviorMatrix();
+        const payload = {
+            variables: {
+                GPIO_PIN_BEHAVIOR_MATRIX: Object.keys(matrix).length ? JSON.stringify(matrix) : ''
+            }
+        };
+
+        try {
+            const response = await fetch('/api/environment/variables', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+            if (!response.ok || data.error) {
+                throw new Error(data.error || data.message || 'Unknown error');
+            }
+            showMessage('Saved pin behavior map. Restart services to apply changes.', 'success');
+        } catch (error) {
+            console.error('Failed to save pin map', error);
+            showMessage(`Failed to save behavior map: ${error.message}`, 'danger');
+        } finally {
+            saveButton.disabled = false;
+            saveButton.innerHTML = '<i class="fas fa-save"></i> Save Behaviors';
+        }
+    }
+
+    function clearMatrix() {
+        document.querySelectorAll('.behavior-checkbox').forEach((checkbox) => {
+            checkbox.checked = false;
+        });
+        showMessage('Cleared selections. Remember to save to persist the changes.', 'warning');
+    }
+
+    if (saveButton) {
+        saveButton.addEventListener('click', saveMatrix);
+    }
+    if (clearButton) {
+        clearButton.addEventListener('click', clearMatrix);
+    }
+    if (reloadButton) {
+        reloadButton.addEventListener('click', () => window.location.reload());
+    }
+})();
+</script>
+{% endblock %}

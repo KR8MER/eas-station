@@ -29,8 +29,10 @@ from .eas_fsk import (
 from .eas_tts import TTSEngine
 from .gpio import (
     GPIOActivationType,
+    GPIOBehaviorManager,
     GPIOController,
     GPIOPinConfig,
+    load_gpio_behavior_matrix_from_env,
     load_gpio_pin_configs_from_env,
 )
 
@@ -78,6 +80,7 @@ def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
         web_subdir = 'eas_messages'
 
     gpio_configs = load_gpio_pin_configs_from_env()
+    gpio_behavior_matrix = load_gpio_behavior_matrix_from_env()
 
     config: Dict[str, object] = {
         'enabled': os.getenv('EAS_BROADCAST_ENABLED', 'false').lower() == 'true',
@@ -102,6 +105,10 @@ def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
             }
             for cfg in gpio_configs
         ],
+        'gpio_behavior_matrix': {
+            str(pin): [behavior.value for behavior in sorted(behaviors, key=lambda b: b.value)]
+            for pin, behaviors in gpio_behavior_matrix.items()
+        },
         'sample_rate': int(os.getenv('EAS_SAMPLE_RATE', '16000') or 16000),
         'tts_provider': (os.getenv('EAS_TTS_PROVIDER') or '').strip().lower(),
         'azure_speech_key': os.getenv('AZURE_SPEECH_KEY'),
@@ -977,6 +984,7 @@ class EASBroadcaster:
         self.audio_generator = EASAudioGenerator(config, logger)
         self.gpio_controller: Optional[GPIOController] = None
         self.gpio_pin_configs: List[GPIOPinConfig] = []
+        self.gpio_behavior_manager: Optional[GPIOBehaviorManager] = None
         self.playout_queue = playout_queue  # Optional AudioPlayoutQueue for queued playback
 
         if not self.enabled:
@@ -1007,6 +1015,16 @@ class EASBroadcaster:
 
                     self.gpio_controller = controller
                     self.gpio_pin_configs = gpio_configs
+                    behavior_matrix = load_gpio_behavior_matrix_from_env(self.logger)
+                    self.gpio_behavior_manager = GPIOBehaviorManager(
+                        controller=controller,
+                        pin_configs=gpio_configs,
+                        behavior_matrix=behavior_matrix,
+                        logger=gpio_logger.getChild('behavior')
+                        if hasattr(gpio_logger, 'getChild')
+                        else gpio_logger,
+                    )
+                    controller.behavior_manager = self.gpio_behavior_manager
                     self.logger.info(
                         'Configured GPIO controller with %s pin(s)',
                         len(gpio_configs),
@@ -1158,6 +1176,21 @@ class EASBroadcaster:
             }
         )
 
+        alert_identifier = getattr(alert, 'identifier', None) or payload.get('identifier')
+        behavior_manager = self.gpio_behavior_manager
+        if behavior_manager:
+            behavior_manager.trigger_incoming_alert(
+                alert_id=str(alert_identifier) if alert_identifier else None,
+                event_code=event_code,
+            )
+
+            forwarding_decision = str(payload.get('forwarding_decision', '') or '').lower()
+            if forwarding_decision == 'forwarded' or bool(payload.get('forwarded', False)):
+                behavior_manager.trigger_forwarding_alert(
+                    alert_id=str(alert_identifier) if alert_identifier else None,
+                    event_code=event_code,
+                )
+
         # Create and persist database record BEFORE queue/immediate mode split
         # This ensures both modes have consistent database tracking
         segment_metadata = {
@@ -1215,26 +1248,34 @@ class EASBroadcaster:
 
         # Immediate mode: play synchronously (legacy behavior)
         controller = self.gpio_controller
+        behavior_manager = self.gpio_behavior_manager
         activated_any = False
+        manager_handled = False
         if controller:
             try:  # pragma: no cover - hardware specific
-                alert_identifier = (
-                    getattr(alert, 'identifier', None)
-                    or payload.get('identifier')
-                )
                 activation_reason = f"Automatic alert playout ({event_code or 'unknown'})"
-                activation_results = controller.activate_all(
-                    activation_type=GPIOActivationType.AUTOMATIC,
-                    operator=None,
-                    alert_id=str(alert_identifier) if alert_identifier else None,
-                    reason=activation_reason,
-                )
-                activated_any = any(activation_results.values())
+                if behavior_manager:
+                    manager_handled = behavior_manager.start_alert(
+                        alert_id=str(alert_identifier) if alert_identifier else None,
+                        event_code=event_code,
+                        reason=activation_reason,
+                    )
+                    activated_any = activated_any or manager_handled
+
                 if not activated_any:
-                    self.logger.warning('GPIO controller configured but no pins activated')
+                    activation_results = controller.activate_all(
+                        activation_type=GPIOActivationType.AUTOMATIC,
+                        operator=None,
+                        alert_id=str(alert_identifier) if alert_identifier else None,
+                        reason=activation_reason,
+                    )
+                    activated_any = any(activation_results.values())
+                    if not activated_any:
+                        self.logger.warning('GPIO controller configured but no pins activated')
             except Exception as exc:
                 self.logger.warning(f"GPIO activation failed: {exc}")
                 activated_any = False
+                manager_handled = False
 
         try:
             self._play_audio(audio_path)
@@ -1243,7 +1284,13 @@ class EASBroadcaster:
         finally:
             if controller and activated_any:
                 try:  # pragma: no cover - hardware specific
-                    controller.deactivate_all()
+                    if manager_handled and behavior_manager:
+                        behavior_manager.end_alert(
+                            alert_id=str(alert_identifier) if alert_identifier else None,
+                            event_code=event_code,
+                        )
+                    elif activated_any:
+                        controller.deactivate_all()
                 except Exception as exc:
                     self.logger.warning(f"GPIO release failed: {exc}")
 
