@@ -33,6 +33,21 @@ def test_add_pin_records_configuration_when_gpio_unavailable():
     assert states[17]["state"] == GPIOState.ERROR.value
 
 
+def test_environment_issue_reporting():
+    """Environment diagnostics should summarize known GPIO failures."""
+
+    controller = GPIOController()
+    controller._record_environment_issue("Permission denied writing to /sys/class/gpio/export")
+    controller._record_environment_issue("Permission denied writing to /sys/class/gpio/export")
+    controller._record_environment_issue("unable to open /dev/gpiomem")
+
+    issues = controller.get_environment_issues()
+
+    assert len(issues) == 2
+    assert any("permission" in issue.lower() for issue in issues)
+    assert any("/dev/gpiomem" in issue for issue in issues)
+
+
 def test_load_gpio_pin_configs_from_env(monkeypatch):
     """Environment parsing should produce structured GPIO configurations."""
 
