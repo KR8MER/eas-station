@@ -295,6 +295,11 @@ def _create_gpio_backend(exclude: Optional[Set[type]] = None) -> Optional[GPIOBa
             continue
         return backend
 
+    try:
+        return _SysfsGPIOBackend()
+    except Exception:
+        pass
+
     return None
 
 
