@@ -389,33 +389,279 @@ The Ohio EAS provides procedures for designated federal, state, and local govern
 
 ---
 
+## Ohio EAS Monitoring Network
+
+### Network Architecture Diagram
+
+The following diagram illustrates the hierarchical monitoring relationships between National Primary (NP), State Primary (SP), and Local Primary (LP) stations across Ohio's 12 operational areas.
+
+```mermaid
+graph TB
+    subgraph "National Level"
+        NP1[WTAM 1100 AM<br>Cleveland - National Primary]
+        NP2[WLW 700 AM<br>Cincinnati - National Primary]
+    end
+
+    subgraph "State Level"
+        SP1[WNCI 97.9 FM<br>Columbus - State Primary]
+        SP2[WBNS-FM 97.1 FM<br>Columbus - State Alternate]
+    end
+
+    subgraph "Central Area - Columbus"
+        C_LP1[LP-1: WNCI 97.9 FM]
+        C_LP2[LP-2: WBNS-FM 97.1 FM]
+        C_LP3[LP-3: WHIZ-FM 92.7 FM<br>Zanesville]
+    end
+
+    subgraph "Central & East Lakeshore - Cleveland"
+        CEL_LP1[LP-1: WTAM 1100 AM]
+        CEL_LP2[LP-2: WCPN 90.3 FM]
+        CEL_LP3[LP-3: WKSV 89.1 FM<br>Thompson]
+    end
+
+    subgraph "East Central - Canton"
+        EC_LP1[LP-1: WHBC-FM 94.1 FM]
+        EC_LP2[LP-2: WQMX 94.9 FM<br>Medina]
+    end
+
+    subgraph "Lima Area"
+        L_LP1[LP-1: WIMT 102.1 FM]
+        L_LP2[LP-2: WKXA 100.5 FM<br>Findlay]
+    end
+
+    subgraph "North Central - Mansfield"
+        NC_LP1[LP-1: WVNO 106.1 FM]
+        NC_LP2[LP-2: WNCO-FM 101.3 FM<br>Ashland]
+    end
+
+    subgraph "Northwest - Toledo"
+        NW_LP1[LP-1: WRVF 101.5 FM]
+        NW_LP2[LP-2: WIOT 104.7 FM]
+        NW_LP3A[LP-3: WDFM 98.1 FM<br>Defiance]
+        NW_LP3B[LP-3: WCKY-FM 103.7 FM<br>Pemberville]
+    end
+
+    subgraph "South Central - Portsmouth"
+        SC_LP1[LP-1: WPYK 104.1 FM]
+        SC_LP2[LP-2: WKKJ 94.3 FM<br>Chillicothe]
+    end
+
+    subgraph "Southeast - Athens"
+        SE_LP1[LP-1: WOUB-FM 91.3 FM]
+        SE_LP2[LP-2: WXTQ 105.5 FM]
+    end
+
+    subgraph "Southwest - Cincinnati"
+        SW_LP1[LP-1: WLW 700 AM]
+        SW_LP2[LP-2: WRRM 98.5 FM]
+    end
+
+    subgraph "Upper Ohio Valley"
+        UOV_LP1[LP-1: WEGW 107.5 FM<br>Wheeling, WV]
+        UOV_LP2[LP-2: WBNV 93.5 FM<br>Barnesville]
+        UOV_LP3[LP-3: WOUC-FM 89.1 FM<br>Cambridge]
+    end
+
+    subgraph "West Central - Dayton"
+        WC_LP1[LP-1: WHKO 99.1 FM]
+        WC_LP2[LP-2: WTUE 104.7 FM]
+        WC_LP3A[LP-3: WEEC 100.7 FM<br>Springfield]
+        WC_LP3B[LP-3: WHIO-FM 95.7 FM<br>Piqua]
+    end
+
+    subgraph "Youngstown Area"
+        Y_LP1[LP-1: WMXY 98.9 FM]
+        Y_LP2[LP-2: WYSU 88.5 FM]
+    end
+
+    %% National to State connections
+    NP1 --> SP1
+    NP2 --> SP1
+    SP1 --> SP2
+
+    %% State to Regional connections
+    SP1 --> C_LP1
+    SP1 --> CEL_LP1
+    SP1 --> EC_LP1
+    SP1 --> L_LP1
+    SP1 --> NC_LP1
+    SP1 --> NW_LP1
+    SP1 --> SC_LP1
+    SP1 --> SE_LP1
+    SP1 --> SW_LP1
+    SP1 --> UOV_LP1
+    SP1 --> WC_LP1
+    SP1 --> Y_LP1
+
+    %% Central Area
+    C_LP1 --> C_LP2
+    C_LP1 --> C_LP3
+    C_LP2 --> C_LP3
+
+    %% Central & East Lakeshore
+    CEL_LP1 --> CEL_LP2
+    CEL_LP1 --> CEL_LP3
+    CEL_LP2 --> CEL_LP3
+
+    %% East Central
+    EC_LP1 --> EC_LP2
+
+    %% Lima
+    L_LP1 --> L_LP2
+
+    %% North Central
+    NC_LP1 --> NC_LP2
+
+    %% Northwest
+    NW_LP1 --> NW_LP2
+    NW_LP1 --> NW_LP3A
+    NW_LP1 --> NW_LP3B
+    NW_LP2 --> NW_LP3A
+    NW_LP2 --> NW_LP3B
+
+    %% South Central
+    SC_LP1 --> SC_LP2
+
+    %% Southeast
+    SE_LP1 --> SE_LP2
+
+    %% Southwest
+    SW_LP1 --> SW_LP2
+
+    %% Upper Ohio Valley
+    UOV_LP1 --> UOV_LP2
+    UOV_LP1 --> UOV_LP3
+    UOV_LP2 --> UOV_LP3
+
+    %% West Central
+    WC_LP1 --> WC_LP2
+    WC_LP1 --> WC_LP3A
+    WC_LP1 --> WC_LP3B
+    WC_LP2 --> WC_LP3A
+    WC_LP2 --> WC_LP3B
+
+    %% Youngstown
+    Y_LP1 --> Y_LP2
+
+    %% Styling
+    classDef national fill:#e74c3c,stroke:#c0392b,stroke-width:3px,color:#fff
+    classDef state fill:#3498db,stroke:#2980b9,stroke-width:3px,color:#fff
+    classDef lp1 fill:#2ecc71,stroke:#27ae60,stroke-width:2px,color:#fff
+    classDef lp2 fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
+    classDef lp3 fill:#9b59b6,stroke:#8e44ad,stroke-width:2px,color:#fff
+
+    class NP1,NP2 national
+    class SP1,SP2 state
+    class C_LP1,CEL_LP1,EC_LP1,L_LP1,NC_LP1,NW_LP1,SC_LP1,SE_LP1,SW_LP1,UOV_LP1,WC_LP1,Y_LP1 lp1
+    class C_LP2,CEL_LP2,EC_LP2,L_LP2,NC_LP2,NW_LP2,SC_LP2,SE_LP2,SW_LP2,UOV_LP2,WC_LP2,Y_LP2 lp2
+    class C_LP3,CEL_LP3,NW_LP3A,NW_LP3B,UOV_LP3,WC_LP3A,WC_LP3B lp3
+```
+
+### Network Legend
+
+| Color | Designation | Role |
+|-------|-------------|------|
+| 🔴 **Red** | National Primary (NP) | Receives alerts from federal authorities, distributes to state level |
+| 🔵 **Blue** | State Primary (SP) | Receives from NP stations, distributes to all LP-1 stations statewide |
+| 🟢 **Green** | Local Primary 1 (LP-1) | Primary monitoring source for each operational area |
+| 🟠 **Orange** | Local Primary 2 (LP-2) | Backup to LP-1, monitors LP-1 |
+| 🟣 **Purple** | Local Primary 3 (LP-3) | Bridges operational areas, covers gaps in LP-1/LP-2 coverage |
+
+### Monitoring Requirements by Station Type
+
+#### All Participating Stations
+- **MUST** monitor both LP-1 and LP-2 for their operational area
+- **SHOULD** monitor appropriate NOAA Weather Radio
+- **MUST** relay EAN (Emergency Action Notification) immediately
+
+#### LP-1 Stations (Primary)
+- **MUST** monitor State Primary (WNCI 97.9 FM)
+- **MUST** monitor other LP stations in adjacent areas (per FCC attachment)
+- **SHOULD** monitor National Primary stations when practical
+
+#### LP-2 Stations (Secondary)
+- **MUST** monitor corresponding LP-1 in their area
+- **MUST** monitor State Primary (WNCI 97.9 FM)
+- Acts as backup if LP-1 fails or signal unreliable
+
+#### LP-3 Stations (Tertiary/Bridge)
+- **MUST** monitor both LP-1 and LP-2 in their area
+- **PRIMARY PURPOSE:** Bridge coverage gaps between operational areas
+- **SECONDARY PURPOSE:** Provide redundancy when LP-1 or LP-2 signal unreliable
+- **DEPLOYMENT:** Strategic placement in border counties or signal-challenged areas
+
+### Alert Flow Path Example
+
+```mermaid
+sequenceDiagram
+    participant Fed as Federal Authority<br>(FEMA/NWS)
+    participant NP as National Primary<br>WTAM/WLW
+    participant SP as State Primary<br>WNCI
+    participant LP1 as LP-1 Stations<br>(12 Areas)
+    participant LP2 as LP-2 Stations<br>(Backup)
+    participant LP3 as LP-3 Stations<br>(Bridge)
+    participant PS as Participating Stations<br>(Broadcast/Cable)
+
+    Fed->>NP: Emergency Alert Issued
+    NP->>SP: Alert Transmitted
+    SP->>LP1: Alert Distributed Statewide
+    LP1->>LP2: LP-2 Monitors LP-1
+    LP1->>LP3: LP-3 Monitors LP-1
+    LP2->>LP3: LP-3 Monitors LP-2
+    LP1->>PS: All Stations Monitor LP-1
+    LP2->>PS: All Stations Monitor LP-2
+    LP3->>PS: Bridge Areas Monitor LP-3
+    PS->>PS: Stations Relay to Public
+```
+
+### Cross-Area Monitoring
+
+Some operational areas have overlapping coverage or require cross-monitoring:
+
+- **Cleveland (CEL)** ↔ **Youngstown**: Geographic proximity requires coordination
+- **Toledo (NW)** ↔ **Lima**: LP-3 stations bridge these areas
+- **Dayton (WC)** ↔ **Cincinnati (SW)**: I-75 corridor coordination
+- **Upper Ohio Valley** ↔ **Southeast**: Appalachian region coverage
+- **Central (Columbus)** → **All Areas**: State Primary hub
+
+---
+
 ## Committee Contacts
 
 ### State Emergency Communications Committee (SECC)
 
-**Chair:**
-Greg Savoldi
-Radio Station WNCI
-2323 West 5th Avenue, Suite 200
-Columbus, OH 43204
-Phone: 614-487-2485 | Mobile: 614-496-2121
-gregsavoldi@iheartmedia.com
+#### Chair
 
-**Vice-Chair:**
-Dave Ford
-Ohio Emergency Management Agency
-2855 West Dublin-Granville Road
-Columbus, OH 43235-2206
-Phone: 614-889-7154 | 24/7: 614-889-7150
-rdford@dps.state.oh.us
+| | |
+|---|---|
+| **Name** | Greg Savoldi |
+| **Organization** | Radio Station WNCI |
+| **Address** | 2323 West 5th Avenue, Suite 200<br>Columbus, OH 43204 |
+| **Phone** | 614-487-2485 |
+| **Mobile** | 614-496-2121 |
+| **Email** | [gregsavoldi@iheartmedia.com](mailto:gregsavoldi@iheartmedia.com) |
 
-**Cable Co-Chair:**
-Jonathon McGee, Executive Director
-Ohio Cable Telecommunications Association
-50 West Broad Street, Suite 1118
-Columbus, OH 43215
-Phone: 614-461-4014
-jmcgee@octa.org
+#### Vice-Chair
+
+| | |
+|---|---|
+| **Name** | Dave Ford |
+| **Organization** | Ohio Emergency Management Agency |
+| **Address** | 2855 West Dublin-Granville Road<br>Columbus, OH 43235-2206 |
+| **Phone** | 614-889-7154 |
+| **24/7 Line** | 614-889-7150 |
+| **Email** | [rdford@dps.state.oh.us](mailto:rdford@dps.state.oh.us) |
+
+#### Cable Co-Chair
+
+| | |
+|---|---|
+| **Name** | Jonathon McGee |
+| **Title** | Executive Director |
+| **Organization** | Ohio Cable Telecommunications Association |
+| **Address** | 50 West Broad Street, Suite 1118<br>Columbus, OH 43215 |
+| **Phone** | 614-461-4014 |
+| **Email** | [jmcgee@octa.org](mailto:jmcgee@octa.org) |
 
 ### Local Area Chairs
 
