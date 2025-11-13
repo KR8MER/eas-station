@@ -329,9 +329,9 @@ class IcecastStreamer:
         # CRITICAL: Pre-buffer audio to prevent stuttering/clipping
         # Build up a buffer before starting to feed FFmpeg
         from collections import deque
-        buffer = deque(maxlen=500)  # Up to 25 seconds of audio (500 * 50ms chunks) - increased from 200
-        prebuffer_target = 100  # Pre-fill with 5 seconds before starting - increased from 50 to prevent buffer empty errors
-        buffer_low_watermark = 100  # Warn if buffer drops below 5 seconds (20% of max)
+        buffer = deque(maxlen=600)  # Up to 30 seconds of audio (600 * 50ms chunks) - increased from 500
+        prebuffer_target = 150  # Pre-fill with 7.5 seconds before starting - increased from 100 to prevent buffer empty errors
+        buffer_low_watermark = 150  # Warn if buffer drops below 7.5 seconds (25% of max) - increased from 100
 
         logger.info(f"Pre-buffering {prebuffer_target} chunks (~{prebuffer_target*50}ms) for smooth Icecast streaming")
 
@@ -340,11 +340,11 @@ class IcecastStreamer:
         source_status = getattr(self.audio_source, 'status', 'unknown')
         logger.info(f"Audio source: {source_type}, Status: {source_status}")
 
-        prebuffer_timeout = time.time() + 10.0  # 10 seconds max to prebuffer
+        prebuffer_timeout = time.time() + 15.0  # 15 seconds max to prebuffer
         prebuffer_attempts = 0
 
         while len(buffer) < prebuffer_target and time.time() < prebuffer_timeout:
-            samples = self.audio_source.get_audio_chunk(timeout=0.5)
+            samples = self.audio_source.get_audio_chunk(timeout=1.0)  # Increased from 0.5s to 1.0s
             prebuffer_attempts += 1
             if samples is not None:
                 pcm_bytes = self._samples_to_pcm_bytes(samples)
@@ -369,7 +369,7 @@ class IcecastStreamer:
             try:
                 wrote_chunk = False
                 # Read audio from source and add to buffer
-                samples = self.audio_source.get_audio_chunk(timeout=0.1)
+                samples = self.audio_source.get_audio_chunk(timeout=0.5)  # Increased from 0.1s to 0.5s
 
                 if samples is not None:
                     pcm_bytes = self._samples_to_pcm_bytes(samples)
@@ -413,12 +413,12 @@ class IcecastStreamer:
                             self._last_buffer_warning = now_warn
                 elif not buffer:
                     # Buffer empty - slow down to avoid busy loop
-                    # Throttle error logging to avoid spam (max 1 per 10 seconds)
+                    # Throttle error logging to avoid spam (max 1 per 30 seconds)
                     now_error = time.time()
-                    if now_error - self._last_buffer_warning > 10.0:
+                    if now_error - self._last_buffer_warning > 30.0:  # Increased from 10s to 30s
                         logger.error("Icecast buffer completely empty! Audio source starved.")
                         self._last_buffer_warning = now_error
-                    time.sleep(0.01)
+                    time.sleep(0.05)  # Increased from 0.01s to 0.05s to reduce CPU usage
 
                 if wrote_chunk:
                     self._last_write_time = time.time()
@@ -964,7 +964,8 @@ class IcecastStreamer:
                 if attempt < max_retries:
                     # Calculate exponential backoff delay
                     current_delay = retry_delay * (2 ** attempt)
-                    logger.warning(
+                    # Use DEBUG level for early attempts since this is expected during mount initialization
+                    logger.debug(
                         "Icecast metadata update returned 400 for %s (attempt %d/%d): %s. "
                         "Retrying in %.1f seconds...",
                         self.config.mount,
@@ -976,9 +977,10 @@ class IcecastStreamer:
                     time.sleep(current_delay)
                     continue  # Retry the request
                 else:
-                    # Final attempt failed
-                    logger.warning(
-                        "Icecast metadata update returned 400 for %s after %d attempts: %s",
+                    # Final attempt failed - use DEBUG since this is common during startup
+                    logger.debug(
+                        "Icecast metadata update returned 400 for %s after %d attempts: %s. "
+                        "This is normal during mount initialization.",
                         self.config.mount,
                         max_retries + 1,
                         response.text.strip()[:200],
