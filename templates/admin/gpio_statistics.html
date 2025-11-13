@@ -91,8 +91,20 @@
 {% block content %}
 <div class="stats-header">
     <div class="container">
-        <h1><i class="fas fa-chart-pie"></i> GPIO Statistics</h1>
-        <p class="mb-0">Relay activation analytics and usage patterns</p>
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1><i class="fas fa-chart-pie"></i> GPIO Statistics</h1>
+                <p class="mb-0">Relay activation analytics and usage patterns</p>
+            </div>
+            <div>
+                <a class="btn btn-light me-2" href="{{ url_for('gpio_control_panel') }}">
+                    <i class="fas fa-microchip"></i> GPIO Control
+                </a>
+                <a class="btn btn-light" href="{{ url_for('gpio_pin_map') }}">
+                    <i class="fas fa-map"></i> Pin Map
+                </a>
+            </div>
+        </div>
     </div>
 </div>
 
