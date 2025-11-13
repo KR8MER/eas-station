@@ -39,8 +39,7 @@ python tests/test_template_blocks.py
 {% block nav_title %}{% endblock %}    # Navigation title (if needed)
 {% block extra_css %}{% endblock %}    # Additional CSS files/styles
 {% block content %}{% endblock %}      # Main page content
-{% block scripts %}{% endblock %}      # Page-specific JavaScript (preferred)
-{% block extra_js %}{% endblock %}     # Legacy JavaScript block (for compatibility)
+{% block scripts %}{% endblock %}      # Page-specific JavaScript (STANDARD - use this)
 ```
 
 #### When Adding a New Block
@@ -51,18 +50,18 @@ python tests/test_template_blocks.py
 
 #### JavaScript Block Usage
 
-**⚠️ Note:** We have two JavaScript blocks for compatibility:
-- `{% block scripts %}` - Preferred, used by 13 templates
-- `{% block extra_js %}` - Legacy, used by 5 templates (gpio, led, screens, analytics)
+**✅ STANDARDIZED:** All templates now use `{% block scripts %}` for JavaScript.
 
-**Best Practice:** Use `{% block scripts %}` for new templates to match the majority.
+- **Use:** `{% block scripts %}` for ALL JavaScript
+- **Don't use:** `extra_js` (deprecated and removed)
+- **All 18 templates** now consistently use `scripts`
 
 ### 3. Code Review Checklist
 
 When reviewing PRs that modify templates:
 
 - [ ] Check that all `{% block ... %}` declarations exist in `base.html`
-- [ ] Verify JavaScript blocks use either `scripts` or `extra_js` (not a new name)
+- [ ] Verify JavaScript blocks use `scripts` (NOT `extra_js` - deprecated)
 - [ ] Run `python tests/test_template_blocks.py` locally
 - [ ] Test the actual page in a browser (click buttons, submit forms, etc.)
 - [ ] Check browser console for JavaScript errors
@@ -184,15 +183,16 @@ Added `{% block extra_js %}` to `base.html` alongside the existing `{% block scr
 
 ## Future Improvements
 
-### Consider Standardizing on One Block Name
+## Standardization Complete ✅
 
-Currently we support both `scripts` and `extra_js` for compatibility. In a future major version, consider:
+**All templates now use `{% block scripts %}`** for JavaScript. The migration included:
 
-1. Standardizing on `{% block scripts %}` (most common)
-2. Migrating the 5 templates using `extra_js` to `scripts`
-3. Removing the `extra_js` block from `base.html`
+1. ✅ Updated 5 templates (gpio_control, gpio_pin_map, led_control, screens, analytics_dashboard)
+2. ✅ Removed deprecated `extra_js` block from `base.html`
+3. ✅ Updated tests to enforce the standard
+4. ✅ All 18 templates now consistent
 
-This would simplify the template structure and reduce confusion.
+The test now **fails** if any template uses the deprecated `extra_js` block, preventing future inconsistencies.
 
 ### Enhanced Testing
 

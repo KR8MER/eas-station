@@ -85,8 +85,7 @@ def test_critical_blocks_exist_in_base():
         'title': 'Page title',
         'content': 'Main page content',
         'extra_css': 'Additional CSS',
-        'extra_js': 'Additional JavaScript',
-        'scripts': 'Legacy JavaScript block (for compatibility)',
+        'scripts': 'Page-specific JavaScript',
     }
     
     defined_blocks = set(re.findall(r'\{%\s*block\s+(\w+)\s*%\}', base_content))
@@ -137,21 +136,17 @@ def test_js_block_consistency():
     print(f"Templates using '{{% block scripts %}}': {len(js_block_usage['scripts'])}")
     
     # Report usage
-    if js_block_usage['extra_js']:
-        print("\nTemplates using 'extra_js':")
-        for template in sorted(js_block_usage['extra_js']):
-            print(f"  - {template}")
-    
     if js_block_usage['scripts']:
-        print("\nTemplates using 'scripts':")
-        for template in sorted(js_block_usage['scripts']):
-            print(f"  - {template}")
+        print(f"\n✓ All {len(js_block_usage['scripts'])} templates consistently use 'scripts' block")
     
-    # Warn if inconsistent (both block names are used)
-    if js_block_usage['extra_js'] and js_block_usage['scripts']:
-        print("\n⚠ WARNING: Mixed JavaScript block usage detected!")
-        print("Consider standardizing on one block name for consistency.")
-        print("Current solution: base.html defines both blocks for compatibility.")
+    # Error if extra_js is still used (should be migrated)
+    if js_block_usage['extra_js']:
+        error_msg = "ERROR: Templates still using deprecated 'extra_js' block:\n"
+        for template in sorted(js_block_usage['extra_js']):
+            error_msg += f"  - {template}\n"
+        error_msg += "\nAll templates should use '{% block scripts %}' for consistency."
+        error_msg += "\nRun: sed -i 's/{% block extra_js %}/{% block scripts %}/g' <template_file>"
+        raise AssertionError(error_msg)
 
 
 if __name__ == "__main__":
