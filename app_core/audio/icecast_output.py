@@ -645,9 +645,6 @@ class IcecastStreamer:
             # Remove standalone key=value patterns (no quotes)
             text = re.sub(r'\s+\w+=\S+', '', text)
 
-            # Collapse extraneous whitespace (including newlines)
-            text = ' '.join(text.split())
-            
             # Decode URL-encoded characters (e.g., %20 -> space)
             # This handles metadata from sources like iHeartMedia that include URL encoding
             try:
@@ -655,6 +652,10 @@ class IcecastStreamer:
             except Exception:
                 # If unquote fails for any reason, keep the original text
                 pass
+            
+            # Collapse extraneous whitespace (including newlines)
+            # This must happen AFTER URL decoding to handle decoded spaces properly
+            text = ' '.join(text.split())
             
             return text or None
 
