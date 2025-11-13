@@ -915,9 +915,11 @@ graph LR
 
 ## Ohio EAS Monitoring Network
 
-### Network Architecture Diagram
+### Network Architecture Overview
 
-The following diagram illustrates the hierarchical monitoring relationships between National Primary (NP), State Primary (SP), and Local Primary (LP) stations across Ohio's 12 operational areas.
+The Ohio EAS Monitoring Network consists of a hierarchical structure with National Primary (NP), State Primary (SP), and Local Primary (LP) stations across Ohio's 12 operational areas. The following sections break down this network by level and region for clarity.
+
+### National and State Level Hierarchy
 
 ```mermaid
 graph TB
@@ -931,21 +933,133 @@ graph TB
         SP2[WBNS-FM 97.1 FM<br>Columbus - State Alternate]
     end
 
+    %% National to State connections
+    NP1 --> SP1
+    NP2 --> SP1
+    SP1 --> SP2
+
+    classDef national fill:#e74c3c,stroke:#c0392b,stroke-width:3px,color:#fff
+    classDef state fill:#3498db,stroke:#2980b9,stroke-width:3px,color:#fff
+
+    class NP1,NP2 national
+    class SP1,SP2 state
+```
+
+**National Primary Stations:**
+- **WTAM 1100 AM** (Cleveland) - Serves Northern Ohio
+- **WLW 700 AM** (Cincinnati) - Serves Southern Ohio
+
+**State Primary Stations:**
+- **WNCI 97.9 FM** (Columbus) - State Primary, receives from NP stations
+- **WBNS-FM 97.1 FM** (Columbus) - State Alternate
+
+---
+
+### Central Ohio Region
+
+```mermaid
+graph TB
+    SP1[State Primary<br>WNCI 97.9 FM]
+    
     subgraph "Central Area - Columbus"
         C_LP1[LP-1: WNCI 97.9 FM]
         C_LP2[LP-2: WBNS-FM 97.1 FM]
         C_LP3[LP-3: WHIZ-FM 92.7 FM<br>Zanesville]
     end
 
+    SP1 --> C_LP1
+    C_LP1 --> C_LP2
+    C_LP1 --> C_LP3
+    C_LP2 --> C_LP3
+
+    classDef state fill:#3498db,stroke:#2980b9,stroke-width:3px,color:#fff
+    classDef lp1 fill:#2ecc71,stroke:#27ae60,stroke-width:2px,color:#fff
+    classDef lp2 fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
+    classDef lp3 fill:#9b59b6,stroke:#8e44ad,stroke-width:2px,color:#fff
+
+    class SP1 state
+    class C_LP1 lp1
+    class C_LP2 lp2
+    class C_LP3 lp3
+```
+
+**Stations:**
+- LP-1: WNCI 97.9 FM (Columbus)
+- LP-2: WBNS-FM 97.1 FM (Columbus)
+- LP-3: WHIZ-FM 92.7 FM (Zanesville)
+
+---
+
+### Northern Ohio Region
+
+```mermaid
+graph TB
+    SP1[State Primary<br>WNCI 97.9 FM]
+    
     subgraph "Central & East Lakeshore - Cleveland"
         CEL_LP1[LP-1: WTAM 1100 AM]
         CEL_LP2[LP-2: WCPN 90.3 FM]
         CEL_LP3[LP-3: WKSV 89.1 FM<br>Thompson]
     end
 
+    subgraph "Youngstown Area"
+        Y_LP1[LP-1: WMXY 98.9 FM]
+        Y_LP2[LP-2: WYSU 88.5 FM]
+    end
+
     subgraph "East Central - Canton"
         EC_LP1[LP-1: WHBC-FM 94.1 FM]
         EC_LP2[LP-2: WQMX 94.9 FM<br>Medina]
+    end
+
+    SP1 --> CEL_LP1
+    SP1 --> Y_LP1
+    SP1 --> EC_LP1
+    
+    CEL_LP1 --> CEL_LP2
+    CEL_LP1 --> CEL_LP3
+    CEL_LP2 --> CEL_LP3
+    
+    Y_LP1 --> Y_LP2
+    EC_LP1 --> EC_LP2
+
+    classDef state fill:#3498db,stroke:#2980b9,stroke-width:3px,color:#fff
+    classDef lp1 fill:#2ecc71,stroke:#27ae60,stroke-width:2px,color:#fff
+    classDef lp2 fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
+    classDef lp3 fill:#9b59b6,stroke:#8e44ad,stroke-width:2px,color:#fff
+
+    class SP1 state
+    class CEL_LP1,Y_LP1,EC_LP1 lp1
+    class CEL_LP2,Y_LP2,EC_LP2 lp2
+    class CEL_LP3 lp3
+```
+
+**Cleveland/Lakeshore:**
+- LP-1: WTAM 1100 AM (Cleveland)
+- LP-2: WCPN 90.3 FM (Cleveland)
+- LP-3: WKSV 89.1 FM (Thompson)
+
+**Youngstown:**
+- LP-1: WMXY 98.9 FM (Youngstown)
+- LP-2: WYSU 88.5 FM (Youngstown)
+
+**Canton:**
+- LP-1: WHBC-FM 94.1 FM (Canton)
+- LP-2: WQMX 94.9 FM (Medina)
+
+---
+
+### Northwest Ohio Region
+
+```mermaid
+graph TB
+    SP1[State Primary<br>WNCI 97.9 FM]
+    
+    subgraph "Northwest - Toledo"
+        NW_LP1[LP-1: WRVF 101.5 FM]
+        NW_LP2[LP-2: WIOT 104.7 FM]
+        NW_LP3A[LP-3: WDFM 98.1 FM<br>Defiance]
+        NW_LP3B[LP-3: WCKY-FM 103.7 FM<br>Pemberville]
     end
 
     subgraph "Lima Area"
@@ -958,32 +1072,55 @@ graph TB
         NC_LP2[LP-2: WNCO-FM 101.3 FM<br>Ashland]
     end
 
-    subgraph "Northwest - Toledo"
-        NW_LP1[LP-1: WRVF 101.5 FM]
-        NW_LP2[LP-2: WIOT 104.7 FM]
-        NW_LP3A[LP-3: WDFM 98.1 FM<br>Defiance]
-        NW_LP3B[LP-3: WCKY-FM 103.7 FM<br>Pemberville]
-    end
+    SP1 --> NW_LP1
+    SP1 --> L_LP1
+    SP1 --> NC_LP1
+    
+    NW_LP1 --> NW_LP2
+    NW_LP1 --> NW_LP3A
+    NW_LP1 --> NW_LP3B
+    NW_LP2 --> NW_LP3A
+    NW_LP2 --> NW_LP3B
+    
+    L_LP1 --> L_LP2
+    NC_LP1 --> NC_LP2
 
-    subgraph "South Central - Portsmouth"
-        SC_LP1[LP-1: WPYK 104.1 FM]
-        SC_LP2[LP-2: WKKJ 94.3 FM<br>Chillicothe]
-    end
+    classDef state fill:#3498db,stroke:#2980b9,stroke-width:3px,color:#fff
+    classDef lp1 fill:#2ecc71,stroke:#27ae60,stroke-width:2px,color:#fff
+    classDef lp2 fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
+    classDef lp3 fill:#9b59b6,stroke:#8e44ad,stroke-width:2px,color:#fff
 
-    subgraph "Southeast - Athens"
-        SE_LP1[LP-1: WOUB-FM 91.3 FM]
-        SE_LP2[LP-2: WXTQ 105.5 FM]
-    end
+    class SP1 state
+    class NW_LP1,L_LP1,NC_LP1 lp1
+    class NW_LP2,L_LP2,NC_LP2 lp2
+    class NW_LP3A,NW_LP3B lp3
+```
 
+**Toledo:**
+- LP-1: WRVF 101.5 FM (Toledo)
+- LP-2: WIOT 104.7 FM (Toledo)
+- LP-3: WDFM 98.1 FM (Defiance)
+- LP-3: WCKY-FM 103.7 FM (Pemberville)
+
+**Lima:**
+- LP-1: WIMT 102.1 FM (Lima)
+- LP-2: WKXA 100.5 FM (Findlay)
+
+**Mansfield:**
+- LP-1: WVNO 106.1 FM (Mansfield)
+- LP-2: WNCO-FM 101.3 FM (Ashland)
+
+---
+
+### Southwest Ohio Region
+
+```mermaid
+graph TB
+    SP1[State Primary<br>WNCI 97.9 FM]
+    
     subgraph "Southwest - Cincinnati"
         SW_LP1[LP-1: WLW 700 AM]
         SW_LP2[LP-2: WRRM 98.5 FM]
-    end
-
-    subgraph "Upper Ohio Valley"
-        UOV_LP1[LP-1: WEGW 107.5 FM<br>Wheeling, WV]
-        UOV_LP2[LP-2: WBNV 93.5 FM<br>Barnesville]
-        UOV_LP3[LP-3: WOUC-FM 89.1 FM<br>Cambridge]
     end
 
     subgraph "West Central - Dayton"
@@ -993,93 +1130,96 @@ graph TB
         WC_LP3B[LP-3: WHIO-FM 95.7 FM<br>Piqua]
     end
 
-    subgraph "Youngstown Area"
-        Y_LP1[LP-1: WMXY 98.9 FM]
-        Y_LP2[LP-2: WYSU 88.5 FM]
-    end
-
-    %% National to State connections
-    NP1 --> SP1
-    NP2 --> SP1
-    SP1 --> SP2
-
-    %% State to Regional connections
-    SP1 --> C_LP1
-    SP1 --> CEL_LP1
-    SP1 --> EC_LP1
-    SP1 --> L_LP1
-    SP1 --> NC_LP1
-    SP1 --> NW_LP1
-    SP1 --> SC_LP1
-    SP1 --> SE_LP1
     SP1 --> SW_LP1
-    SP1 --> UOV_LP1
     SP1 --> WC_LP1
-    SP1 --> Y_LP1
-
-    %% Central Area
-    C_LP1 --> C_LP2
-    C_LP1 --> C_LP3
-    C_LP2 --> C_LP3
-
-    %% Central & East Lakeshore
-    CEL_LP1 --> CEL_LP2
-    CEL_LP1 --> CEL_LP3
-    CEL_LP2 --> CEL_LP3
-
-    %% East Central
-    EC_LP1 --> EC_LP2
-
-    %% Lima
-    L_LP1 --> L_LP2
-
-    %% North Central
-    NC_LP1 --> NC_LP2
-
-    %% Northwest
-    NW_LP1 --> NW_LP2
-    NW_LP1 --> NW_LP3A
-    NW_LP1 --> NW_LP3B
-    NW_LP2 --> NW_LP3A
-    NW_LP2 --> NW_LP3B
-
-    %% South Central
-    SC_LP1 --> SC_LP2
-
-    %% Southeast
-    SE_LP1 --> SE_LP2
-
-    %% Southwest
+    
     SW_LP1 --> SW_LP2
-
-    %% Upper Ohio Valley
-    UOV_LP1 --> UOV_LP2
-    UOV_LP1 --> UOV_LP3
-    UOV_LP2 --> UOV_LP3
-
-    %% West Central
+    
     WC_LP1 --> WC_LP2
     WC_LP1 --> WC_LP3A
     WC_LP1 --> WC_LP3B
     WC_LP2 --> WC_LP3A
     WC_LP2 --> WC_LP3B
 
-    %% Youngstown
-    Y_LP1 --> Y_LP2
-
-    %% Styling
-    classDef national fill:#e74c3c,stroke:#c0392b,stroke-width:3px,color:#fff
     classDef state fill:#3498db,stroke:#2980b9,stroke-width:3px,color:#fff
     classDef lp1 fill:#2ecc71,stroke:#27ae60,stroke-width:2px,color:#fff
     classDef lp2 fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
     classDef lp3 fill:#9b59b6,stroke:#8e44ad,stroke-width:2px,color:#fff
 
-    class NP1,NP2 national
-    class SP1,SP2 state
-    class C_LP1,CEL_LP1,EC_LP1,L_LP1,NC_LP1,NW_LP1,SC_LP1,SE_LP1,SW_LP1,UOV_LP1,WC_LP1,Y_LP1 lp1
-    class C_LP2,CEL_LP2,EC_LP2,L_LP2,NC_LP2,NW_LP2,SC_LP2,SE_LP2,SW_LP2,UOV_LP2,WC_LP2,Y_LP2 lp2
-    class C_LP3,CEL_LP3,NW_LP3A,NW_LP3B,UOV_LP3,WC_LP3A,WC_LP3B lp3
+    class SP1 state
+    class SW_LP1,WC_LP1 lp1
+    class SW_LP2,WC_LP2 lp2
+    class WC_LP3A,WC_LP3B lp3
 ```
+
+**Cincinnati:**
+- LP-1: WLW 700 AM (Cincinnati)
+- LP-2: WRRM 98.5 FM (Cincinnati)
+
+**Dayton:**
+- LP-1: WHKO 99.1 FM (Dayton)
+- LP-2: WTUE 104.7 FM (Dayton)
+- LP-3: WEEC 100.7 FM (Springfield)
+- LP-3: WHIO-FM 95.7 FM (Piqua)
+
+---
+
+### Southeast Ohio Region
+
+```mermaid
+graph TB
+    SP1[State Primary<br>WNCI 97.9 FM]
+    
+    subgraph "Southeast - Athens"
+        SE_LP1[LP-1: WOUB-FM 91.3 FM]
+        SE_LP2[LP-2: WXTQ 105.5 FM]
+    end
+
+    subgraph "South Central - Portsmouth"
+        SC_LP1[LP-1: WPYK 104.1 FM]
+        SC_LP2[LP-2: WKKJ 94.3 FM<br>Chillicothe]
+    end
+
+    subgraph "Upper Ohio Valley"
+        UOV_LP1[LP-1: WEGW 107.5 FM<br>Wheeling, WV]
+        UOV_LP2[LP-2: WBNV 93.5 FM<br>Barnesville]
+        UOV_LP3[LP-3: WOUC-FM 89.1 FM<br>Cambridge]
+    end
+
+    SP1 --> SE_LP1
+    SP1 --> SC_LP1
+    SP1 --> UOV_LP1
+    
+    SE_LP1 --> SE_LP2
+    SC_LP1 --> SC_LP2
+    
+    UOV_LP1 --> UOV_LP2
+    UOV_LP1 --> UOV_LP3
+    UOV_LP2 --> UOV_LP3
+
+    classDef state fill:#3498db,stroke:#2980b9,stroke-width:3px,color:#fff
+    classDef lp1 fill:#2ecc71,stroke:#27ae60,stroke-width:2px,color:#fff
+    classDef lp2 fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
+    classDef lp3 fill:#9b59b6,stroke:#8e44ad,stroke-width:2px,color:#fff
+
+    class SP1 state
+    class SE_LP1,SC_LP1,UOV_LP1 lp1
+    class SE_LP2,SC_LP2,UOV_LP2 lp2
+    class UOV_LP3 lp3
+```
+
+**Athens:**
+- LP-1: WOUB-FM 91.3 FM (Athens)
+- LP-2: WXTQ 105.5 FM (Athens)
+
+**Portsmouth:**
+- LP-1: WPYK 104.1 FM (Portsmouth)
+- LP-2: WKKJ 94.3 FM (Chillicothe)
+
+**Upper Ohio Valley:**
+- LP-1: WEGW 107.5 FM (Wheeling, WV)
+- LP-2: WBNV 93.5 FM (Barnesville)
+- LP-3: WOUC-FM 89.1 FM (Cambridge)
 
 ### Network Legend
 
