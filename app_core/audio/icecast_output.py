@@ -24,7 +24,7 @@ import traceback
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Optional, Tuple
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import numpy as np
 import requests
@@ -647,6 +647,15 @@ class IcecastStreamer:
 
             # Collapse extraneous whitespace (including newlines)
             text = ' '.join(text.split())
+            
+            # Decode URL-encoded characters (e.g., %20 -> space)
+            # This handles metadata from sources like iHeartMedia that include URL encoding
+            try:
+                text = unquote(text)
+            except Exception:
+                # If unquote fails for any reason, keep the original text
+                pass
+            
             return text or None
 
         now_playing = metadata.get('now_playing')
