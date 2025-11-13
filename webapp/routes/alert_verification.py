@@ -558,11 +558,31 @@ def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: 
             segments['buffer'] = same_result.segments['buffer']
 
         if progress:
+            progress.update("decode", 5, 6, "Building composite audio segment...")
+
+        # Build composite audio segment combining all individual segments
+        composite = _build_composite_audio_segment(segments, sample_rate)
+        if composite:
+            route_logger.info(f"Created composite segment: {composite.duration_seconds:.2f}s")
+
+        if progress:
             progress.update("decode", 6, 6, "Finalizing audio segments...")
 
-        # Update the decode result with comprehensive segments
+        # Update the decode result with comprehensive segments in desired order
+        # Composite first, then individual segments in chronological order
         same_result.segments.clear()
-        same_result.segments.update(segments)
+        ordered_segments = OrderedDict()
+        
+        # Add composite first if available
+        if composite:
+            ordered_segments['composite'] = composite
+        
+        # Then add individual segments in order
+        for key in ['header', 'attention_tone', 'narration', 'eom', 'buffer']:
+            if key in segments:
+                ordered_segments[key] = segments[key]
+        
+        same_result.segments.update(ordered_segments)
 
         return same_result, detection_result
 
@@ -572,6 +592,90 @@ def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: 
         route_logger.error(f"Comprehensive detection failed: {e}", exc_info=True)
         # Fallback to basic decode
         return decode_same_audio(audio_path), None
+
+
+def _build_composite_audio_segment(segments: Dict[str, SAMEAudioSegment], sample_rate: int) -> Optional[SAMEAudioSegment]:
+    """
+    Build a composite audio segment that combines all individual segments in order.
+    
+    The composite includes: header -> attention_tone -> narration -> eom (in chronological order).
+    Buffer is not included as it's padding audio.
+    
+    Args:
+        segments: Dictionary of detected segments
+        sample_rate: Audio sample rate
+        
+    Returns:
+        Composite SAMEAudioSegment or None if no segments available
+    """
+    # Define the order of segments for the composite
+    segment_order = ['header', 'attention_tone', 'narration', 'eom']
+    
+    # Collect PCM buffers for each segment
+    pcm_buffers = []
+    start_sample = None
+    end_sample = None
+    
+    for segment_name in segment_order:
+        segment = segments.get(segment_name)
+        if not segment or not segment.wav_bytes:
+            continue
+            
+        # Extract PCM data from WAV bytes
+        try:
+            with wave.open(io.BytesIO(segment.wav_bytes), 'rb') as wf:
+                seg_sample_rate = wf.getframerate()
+                sample_width = wf.getsampwidth()
+                frames = wf.readframes(wf.getnframes())
+                
+                # Convert to int16 PCM
+                if sample_width == 2:
+                    pcm_data = np.frombuffer(frames, dtype=np.int16)
+                else:
+                    # Convert other formats to int16
+                    dtype_map = {1: np.int8, 4: np.int32}
+                    dtype = dtype_map.get(sample_width)
+                    if dtype is None:
+                        continue
+                    raw = np.frombuffer(frames, dtype=dtype).astype(np.float32)
+                    scale = float(2 ** (sample_width * 8 - 1))
+                    if not scale:
+                        continue
+                    normalized = np.clip(raw / scale, -1.0, 1.0)
+                    pcm_data = (normalized * 32767.0).astype(np.int16)
+                
+                pcm_buffers.append(pcm_data)
+                
+                # Track overall start and end samples
+                if start_sample is None:
+                    start_sample = segment.start_sample
+                end_sample = segment.end_sample
+                
+        except Exception as e:
+            # Skip this segment if we can't process it
+            continue
+    
+    if not pcm_buffers:
+        return None
+    
+    # Concatenate all PCM buffers
+    composite_pcm = np.concatenate(pcm_buffers)
+    
+    # Create WAV file
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'wb') as wav_out:
+        wav_out.setnchannels(1)
+        wav_out.setsampwidth(2)
+        wav_out.setframerate(sample_rate)
+        wav_out.writeframes(composite_pcm.tobytes())
+    
+    return SAMEAudioSegment(
+        label='composite',
+        start_sample=start_sample or 0,
+        end_sample=end_sample or len(composite_pcm),
+        sample_rate=sample_rate,
+        wav_bytes=buffer.getvalue(),
+    )
 
 
 def _process_temp_audio_file(
@@ -1042,6 +1146,7 @@ def register(app: Flask, logger) -> None:
             "narration": "narration_audio_data",
             "eom": "eom_audio_data",
             "buffer": "buffer_audio_data",
+            "composite": "composite_audio_data",
             "message": "message_audio_data",  # Deprecated, for backward compatibility
         }
 

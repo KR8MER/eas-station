@@ -124,6 +124,9 @@ def record_audio_decode_result(
         buffer_audio_data=(
             segments.get("buffer").wav_bytes if "buffer" in segments else None
         ),
+        composite_audio_data=(
+            segments.get("composite").wav_bytes if "composite" in segments else None
+        ),
         # Deprecated: keep for backward compatibility
         message_audio_data=(
             segments.get("message").wav_bytes if "message" in segments else None
