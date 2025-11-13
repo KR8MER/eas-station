@@ -1282,7 +1282,7 @@ class EASBroadcaster:
             if eom_path:
                 self._play_audio(eom_path)
         finally:
-            if controller:
+            if controller and activated_any:
                 try:  # pragma: no cover - hardware specific
                     if manager_handled and behavior_manager:
                         behavior_manager.end_alert(

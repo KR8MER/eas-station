@@ -26,6 +26,138 @@ try:  # pragma: no cover - GPIO hardware is optional and platform specific
 except Exception:  # pragma: no cover - gracefully handle non-RPi environments
     OutputDevice = None  # type: ignore[assignment]
 
+try:  # pragma: no cover - Pi 5 prefers lgpio backend
+    import lgpio as LGPIO  # type: ignore
+except Exception:  # pragma: no cover - not all environments ship with lgpio
+    LGPIO = None
+
+
+class GPIOBackend(Protocol):
+    """Protocol describing the backend interface needed by the controller."""
+
+    BCM: object
+    OUT: object
+    HIGH: int
+    LOW: int
+
+    def setmode(self, mode: object) -> None:
+        ...
+
+    def setup(self, pin: int, mode: object, *, initial: int) -> None:
+        ...
+
+    def output(self, pin: int, value: int) -> None:
+        ...
+
+    def cleanup(self, pin: Optional[int] = None) -> None:
+        ...
+
+
+class _RPiGPIOBackend:
+    """Adapter around the legacy RPi.GPIO module."""
+
+    def __init__(self) -> None:
+        if RPiGPIO is None:  # pragma: no cover - guard in case import fails later
+            raise RuntimeError("RPi.GPIO module unavailable")
+        self.BCM = RPiGPIO.BCM
+        self.OUT = RPiGPIO.OUT
+        self.HIGH = int(RPiGPIO.HIGH)
+        self.LOW = int(RPiGPIO.LOW)
+
+    def setmode(self, mode: object) -> None:
+        RPiGPIO.setmode(mode)
+
+    def setup(self, pin: int, mode: object, *, initial: int) -> None:
+        RPiGPIO.setup(pin, mode, initial=initial)
+
+    def output(self, pin: int, value: int) -> None:
+        RPiGPIO.output(pin, value)
+
+    def cleanup(self, pin: Optional[int] = None) -> None:
+        if pin is None:
+            RPiGPIO.cleanup()
+        else:
+            RPiGPIO.cleanup(pin)
+
+
+class _LGPIOBackend:
+    """Adapter for the modern lgpio library used on Raspberry Pi 5."""
+
+    def __init__(self) -> None:
+        if LGPIO is None:  # pragma: no cover - guard in case import fails later
+            raise RuntimeError("lgpio module unavailable")
+        self.BCM = "BCM"  # Pin numbering hint for logging purposes
+        self.OUT = "out"
+        self.HIGH = 1
+        self.LOW = 0
+        self._claimed_pins: set[int] = set()
+        self._chip: Optional[int] = None
+        self._free = getattr(LGPIO, "gpio_free", getattr(LGPIO, "gpio_release", None))
+
+    def _ensure_chip(self) -> None:
+        if self._chip is None:
+            # Open the primary gpiochip (0). On Pi boards BCM numbering maps here.
+            self._chip = LGPIO.gpiochip_open(0)
+
+    def setmode(self, mode: object) -> None:  # pragma: no cover - lgpio ignores modes
+        self._ensure_chip()
+
+    def setup(self, pin: int, mode: object, *, initial: int) -> None:
+        self._ensure_chip()
+        # Claim the line for output and drive it to the requested resting level.
+        LGPIO.gpio_claim_output(self._chip, pin, initial)
+        self._claimed_pins.add(pin)
+
+    def output(self, pin: int, value: int) -> None:
+        if self._chip is None:
+            raise RuntimeError("lgpio chip handle not initialized")
+        LGPIO.gpio_write(self._chip, pin, value)
+
+    def cleanup(self, pin: Optional[int] = None) -> None:
+        if self._chip is None:
+            return
+
+        if pin is None:
+            pins = list(self._claimed_pins)
+        else:
+            pins = [pin] if pin in self._claimed_pins else []
+
+        for line in pins:
+            try:
+                # Drive the line low before releasing for predictable state.
+                LGPIO.gpio_write(self._chip, line, self.LOW)
+            except Exception:
+                # Ignore failures when releasing (e.g., already freed)
+                pass
+            if self._free is not None:
+                try:
+                    self._free(self._chip, line)
+                except Exception:
+                    pass
+            self._claimed_pins.discard(line)
+
+        if pin is None or not self._claimed_pins:
+            LGPIO.gpiochip_close(self._chip)
+            self._chip = None
+
+
+def _create_gpio_backend() -> Optional[GPIOBackend]:
+    """Return the best available GPIO backend for this platform."""
+
+    if RPiGPIO is not None:
+        try:
+            return _RPiGPIOBackend()
+        except Exception:
+            pass
+
+    if LGPIO is not None:
+        try:
+            return _LGPIOBackend()
+        except Exception:
+            pass
+
+    return None
+
 
 class GPIOState(Enum):
     """GPIO pin state enumeration."""
@@ -1254,6 +1386,7 @@ class GPIORelayController:
     active_high: bool
     hold_seconds: float
     activated_at: Optional[float] = field(default=None, init=False)
+    _backend: Optional[GPIOBackend] = field(default=None, init=False, repr=False)
 
     _device: Optional[Any] = field(default=None, init=False, repr=False)
 
