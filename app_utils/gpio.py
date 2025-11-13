@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Protocol, Set
 
 try:  # pragma: no cover - GPIO hardware is optional and platform specific
@@ -124,6 +125,77 @@ class _LGPIOBackend:
             self._chip = None
 
 
+class _SysfsGPIOBackend:
+    """Fallback backend that drives GPIO via the Linux sysfs interface."""
+
+    def __init__(self) -> None:
+        self.BCM = "BCM"
+        self.OUT = "out"
+        self.HIGH = 1
+        self.LOW = 0
+        self._base_path = Path("/sys/class/gpio")
+        if not self._base_path.exists():
+            raise RuntimeError("/sys/class/gpio is not available on this system")
+        self._export_path = self._base_path / "export"
+        self._unexport_path = self._base_path / "unexport"
+        self._active_pins: Set[int] = set()
+
+    def setmode(self, mode: object) -> None:  # pragma: no cover - sysfs ignores modes
+        return
+
+    def _write(self, path: Path, value: str) -> None:
+        try:
+            with path.open("w") as handle:
+                handle.write(value)
+        except FileNotFoundError as exc:  # pragma: no cover - platform specific
+            raise RuntimeError(f"GPIO path {path} not found") from exc
+        except PermissionError as exc:  # pragma: no cover - requires elevated perms
+            raise RuntimeError(f"Permission denied writing to {path}") from exc
+        except OSError as exc:  # pragma: no cover - unexpected IO failure
+            raise RuntimeError(f"Failed to write to {path}: {exc}") from exc
+
+    def setup(self, pin: int, mode: object, *, initial: int) -> None:
+        if mode != self.OUT:
+            raise ValueError("sysfs backend supports output mode only")
+
+        gpio_path = self._base_path / f"gpio{pin}"
+        if not gpio_path.exists():
+            self._write(self._export_path, f"{pin}")
+            deadline = time.monotonic() + 1.0
+            while not gpio_path.exists():  # pragma: no cover - timing sensitive
+                if time.monotonic() > deadline:
+                    raise RuntimeError(f"Timed out waiting for {gpio_path} to appear")
+                time.sleep(0.01)
+
+        self._write(gpio_path / "direction", "out")
+        self._write(gpio_path / "value", "1" if initial == self.HIGH else "0")
+        self._active_pins.add(pin)
+
+    def output(self, pin: int, value: int) -> None:
+        if pin not in self._active_pins:
+            self.setup(pin, self.OUT, initial=self.LOW)
+        gpio_path = self._base_path / f"gpio{pin}" / "value"
+        self._write(gpio_path, "1" if value == self.HIGH else "0")
+
+    def cleanup(self, pin: Optional[int] = None) -> None:
+        if pin is None:
+            pins = list(self._active_pins)
+        else:
+            pins = [pin] if pin in self._active_pins else []
+
+        for number in pins:
+            value_path = self._base_path / f"gpio{number}" / "value"
+            try:
+                self._write(value_path, "0")
+            except Exception:
+                pass
+            try:
+                self._write(self._unexport_path, f"{number}")
+            except Exception:
+                pass
+            self._active_pins.discard(number)
+
+
 _PIN_FACTORY_READY = False
 _PIN_FACTORY_ATTEMPTED = False
 
@@ -183,7 +255,32 @@ def _create_gpio_backend() -> Optional[GPIOBackend]:
         except Exception:
             pass
 
+    try:
+        return _SysfsGPIOBackend()
+    except Exception:
+        pass
+
     return None
+
+
+class _BackendPinDevice:
+    """Adapter that exposes gpiozero-like methods for GPIOBackend instances."""
+
+    def __init__(self, backend: GPIOBackend, pin: int, active_high: bool) -> None:
+        self._backend = backend
+        self._pin = pin
+        self._active_value = backend.HIGH if active_high else backend.LOW
+        self._inactive_value = backend.LOW if active_high else backend.HIGH
+        self._backend.setup(self._pin, self._backend.OUT, initial=self._inactive_value)
+
+    def on(self) -> None:
+        self._backend.output(self._pin, self._active_value)
+
+    def off(self) -> None:
+        self._backend.output(self._pin, self._inactive_value)
+
+    def close(self) -> None:
+        self._backend.cleanup(self._pin)
 
 
 class GPIOState(Enum):
@@ -340,13 +437,121 @@ class GPIOController:
         self._lock = threading.RLock()
         self._watchdog_threads: Dict[int, threading.Thread] = {}
         self._devices: Dict[int, Any] = {}
-        self._initialized = _ensure_pin_factory(logger)
+        self._backend: Optional[GPIOBackend] = None
+        self._gpiozero_available = bool(OutputDevice is not None and _ensure_pin_factory(logger))
+        self._initialized = self._gpiozero_available
 
-        if self._initialized:
+        if self._gpiozero_available:
             if self.logger:
                 self.logger.info("GPIO controller initialized using gpiozero OutputDevice")
+        elif self._ensure_backend():
+            self._initialized = True
+            if self.logger:
+                self.logger.info(
+                    "GPIO controller initialized using %s",
+                    self._current_backend_label(),
+                )
         elif self.logger:
             self.logger.warning("gpiozero OutputDevice not available - GPIO control disabled")
+
+    def _current_backend_label(self) -> str:
+        if self._backend is None:
+            return "gpiozero OutputDevice"
+        name = self._backend.__class__.__name__.lstrip("_")
+        if name.lower().endswith("backend"):
+            name = name[:-7]
+        return f"{name or 'GPIO'} backend"
+
+    def _ensure_backend(self) -> bool:
+        if self._backend is not None:
+            return True
+
+        backend = _create_gpio_backend()
+        if backend is None:
+            return False
+
+        try:
+            backend.setmode(backend.BCM)
+        except Exception as exc:
+            if self.logger:
+                self.logger.error(f"Failed to initialize fallback GPIO backend: {exc}")
+            return False
+
+        self._backend = backend
+        return True
+
+    def _setup_backend_device(
+        self, config: GPIOPinConfig, *, fallback_reason: Optional[str] = None
+    ) -> Optional[_BackendPinDevice]:
+        if not self._ensure_backend():
+            if self.logger and fallback_reason:
+                self.logger.error(
+                    "GPIO fallback backend unavailable after gpiozero failure on pin %s: %s",
+                    config.pin,
+                    fallback_reason,
+                )
+            return None
+
+        assert self._backend is not None
+
+        try:
+            device = _BackendPinDevice(self._backend, config.pin, config.active_high)
+        except Exception as exc:
+            if self.logger:
+                self.logger.error(
+                    "Failed to setup pin %s using %s: %s",
+                    config.pin,
+                    self._current_backend_label(),
+                    exc,
+                )
+            return None
+
+        device.off()
+        self._initialized = True
+        self._gpiozero_available = False
+
+        if self.logger and fallback_reason:
+            self.logger.warning(
+                "Falling back to %s for pin %s after gpiozero failure: %s",
+                self._current_backend_label(),
+                config.pin,
+                fallback_reason,
+            )
+
+        return device
+
+    def _get_or_create_device(self, config: GPIOPinConfig) -> Optional[Any]:
+        device = self._devices.get(config.pin)
+        if device is not None:
+            return device
+
+        if self._gpiozero_available and OutputDevice is not None:
+            try:
+                device = OutputDevice(
+                    config.pin,
+                    active_high=config.active_high,
+                    initial_value=False,
+                )
+                device.off()
+                self._devices[config.pin] = device
+                return device
+            except Exception as exc:
+                if self.logger:
+                    self.logger.error(
+                        "Failed to initialize gpiozero OutputDevice for pin %s: %s",
+                        config.pin,
+                        exc,
+                    )
+                self._gpiozero_available = False
+                device = self._setup_backend_device(config, fallback_reason=str(exc))
+                if device is not None:
+                    self._devices[config.pin] = device
+                return device
+
+        device = self._setup_backend_device(config)
+        if device is not None:
+            self._devices[config.pin] = device
+        return device
 
     def add_pin(self, config: GPIOPinConfig) -> None:
         """Add a GPIO pin to the controller.
@@ -364,7 +569,8 @@ class GPIOController:
 
             self._pins[config.pin] = config
 
-            if not self._initialized or OutputDevice is None:
+            device = self._get_or_create_device(config)
+            if device is None:
                 # Record the configuration even when GPIO hardware isn't available so the
                 # application can still display configured pins in the UI.
                 self._states[config.pin] = GPIOState.ERROR
@@ -374,26 +580,13 @@ class GPIOController:
                     )
                 return
 
-            try:
-                device = OutputDevice(
-                    config.pin,
-                    active_high=config.active_high,
-                    initial_value=False,
+            self._states[config.pin] = GPIOState.INACTIVE
+            if self.logger:
+                self.logger.info(
+                    f"Configured GPIO pin {config.pin} ({config.name}) using {self._current_backend_label()}: "
+                    f"active_{'high' if config.active_high else 'low'}, "
+                    f"hold={config.hold_seconds}s, watchdog={config.watchdog_seconds}s"
                 )
-                device.off()
-                self._devices[config.pin] = device
-                self._states[config.pin] = GPIOState.INACTIVE
-                if self.logger:
-                    self.logger.info(
-                        f"Configured GPIO pin {config.pin} ({config.name}): "
-                        f"active_{'high' if config.active_high else 'low'}, "
-                        f"hold={config.hold_seconds}s, watchdog={config.watchdog_seconds}s"
-                    )
-            except Exception as exc:
-                self._states[config.pin] = GPIOState.ERROR
-                if self.logger:
-                    self.logger.error(f"Failed to setup pin {config.pin}: {exc}")
-                raise
 
     def remove_pin(self, pin: int) -> None:
         """Remove a GPIO pin from the controller.
@@ -460,25 +653,16 @@ class GPIOController:
                     self.logger.warning(f"Pin {pin} is already active")
                 return False
 
-            if not self._initialized or OutputDevice is None:
-                if self.logger:
-                    self.logger.warning(f"Cannot activate pin {pin}: GPIO not available")
-                return False
-
             try:
                 # Apply debounce delay
                 if config.debounce_ms > 0:
                     time.sleep(config.debounce_ms / 1000.0)
 
-                device = self._devices.get(pin)
+                device = self._get_or_create_device(config)
                 if device is None:
-                    device = OutputDevice(
-                        config.pin,
-                        active_high=config.active_high,
-                        initial_value=False,
-                    )
-                    device.off()
-                    self._devices[pin] = device
+                    if self.logger:
+                        self.logger.warning(f"Cannot activate pin {pin}: GPIO not available")
+                    return False
 
                 # Activate the pin
                 device.on()
@@ -554,11 +738,6 @@ class GPIOController:
                     self.logger.debug(f"Pin {pin} is not active")
                 return True  # Already inactive
 
-            if not self._initialized or OutputDevice is None:
-                if self.logger:
-                    self.logger.warning(f"Cannot deactivate pin {pin}: GPIO not available")
-                return False
-
             try:
                 # Respect hold time unless forced
                 if not force and pin in self._activation_times:
@@ -569,17 +748,13 @@ class GPIOController:
                             self.logger.debug(f"Waiting {remaining:.2f}s for hold time on pin {pin}")
                         time.sleep(remaining)
 
-                device = self._devices.get(pin)
-                if device is None and OutputDevice is not None:
-                    device = OutputDevice(
-                        config.pin,
-                        active_high=config.active_high,
-                        initial_value=False,
-                    )
-                    self._devices[pin] = device
+                device = self._get_or_create_device(config)
+                if device is None:
+                    if self.logger:
+                        self.logger.warning(f"Cannot deactivate pin {pin}: GPIO not available")
+                    return False
 
-                if device is not None:
-                    device.off()
+                device.off()
 
                 self._states[pin] = GPIOState.INACTIVE
 
