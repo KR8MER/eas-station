@@ -95,8 +95,8 @@ services:
       - /dev/bus/usb:/dev/bus/usb
 
       # GPIO Device Passthrough (Raspberry Pi)
-      # Uncomment the following line to enable GPIO access on Raspberry Pi:
-      # - /dev/gpiomem:/dev/gpiomem  # GPIO memory access for Raspberry Pi
+      # GPIO access enabled by default - fails gracefully if hardware not available
+      - /dev/gpiomem:/dev/gpiomem  # GPIO memory access for Raspberry Pi
 
       # NVMe Device Passthrough (optional)
       # Uncomment the following lines if you have NVMe drives and want SMART monitoring:
