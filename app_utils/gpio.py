@@ -26,6 +26,138 @@ try:  # pragma: no cover - GPIO hardware is optional and platform specific
 except Exception:  # pragma: no cover - gracefully handle non-RPi environments
     RPiGPIO = None
 
+try:  # pragma: no cover - Pi 5 prefers lgpio backend
+    import lgpio as LGPIO  # type: ignore
+except Exception:  # pragma: no cover - not all environments ship with lgpio
+    LGPIO = None
+
+
+class GPIOBackend(Protocol):
+    """Protocol describing the backend interface needed by the controller."""
+
+    BCM: object
+    OUT: object
+    HIGH: int
+    LOW: int
+
+    def setmode(self, mode: object) -> None:
+        ...
+
+    def setup(self, pin: int, mode: object, *, initial: int) -> None:
+        ...
+
+    def output(self, pin: int, value: int) -> None:
+        ...
+
+    def cleanup(self, pin: Optional[int] = None) -> None:
+        ...
+
+
+class _RPiGPIOBackend:
+    """Adapter around the legacy RPi.GPIO module."""
+
+    def __init__(self) -> None:
+        if RPiGPIO is None:  # pragma: no cover - guard in case import fails later
+            raise RuntimeError("RPi.GPIO module unavailable")
+        self.BCM = RPiGPIO.BCM
+        self.OUT = RPiGPIO.OUT
+        self.HIGH = int(RPiGPIO.HIGH)
+        self.LOW = int(RPiGPIO.LOW)
+
+    def setmode(self, mode: object) -> None:
+        RPiGPIO.setmode(mode)
+
+    def setup(self, pin: int, mode: object, *, initial: int) -> None:
+        RPiGPIO.setup(pin, mode, initial=initial)
+
+    def output(self, pin: int, value: int) -> None:
+        RPiGPIO.output(pin, value)
+
+    def cleanup(self, pin: Optional[int] = None) -> None:
+        if pin is None:
+            RPiGPIO.cleanup()
+        else:
+            RPiGPIO.cleanup(pin)
+
+
+class _LGPIOBackend:
+    """Adapter for the modern lgpio library used on Raspberry Pi 5."""
+
+    def __init__(self) -> None:
+        if LGPIO is None:  # pragma: no cover - guard in case import fails later
+            raise RuntimeError("lgpio module unavailable")
+        self.BCM = "BCM"  # Pin numbering hint for logging purposes
+        self.OUT = "out"
+        self.HIGH = 1
+        self.LOW = 0
+        self._claimed_pins: set[int] = set()
+        self._chip: Optional[int] = None
+        self._free = getattr(LGPIO, "gpio_free", getattr(LGPIO, "gpio_release", None))
+
+    def _ensure_chip(self) -> None:
+        if self._chip is None:
+            # Open the primary gpiochip (0). On Pi boards BCM numbering maps here.
+            self._chip = LGPIO.gpiochip_open(0)
+
+    def setmode(self, mode: object) -> None:  # pragma: no cover - lgpio ignores modes
+        self._ensure_chip()
+
+    def setup(self, pin: int, mode: object, *, initial: int) -> None:
+        self._ensure_chip()
+        # Claim the line for output and drive it to the requested resting level.
+        LGPIO.gpio_claim_output(self._chip, pin, initial)
+        self._claimed_pins.add(pin)
+
+    def output(self, pin: int, value: int) -> None:
+        if self._chip is None:
+            raise RuntimeError("lgpio chip handle not initialized")
+        LGPIO.gpio_write(self._chip, pin, value)
+
+    def cleanup(self, pin: Optional[int] = None) -> None:
+        if self._chip is None:
+            return
+
+        if pin is None:
+            pins = list(self._claimed_pins)
+        else:
+            pins = [pin] if pin in self._claimed_pins else []
+
+        for line in pins:
+            try:
+                # Drive the line low before releasing for predictable state.
+                LGPIO.gpio_write(self._chip, line, self.LOW)
+            except Exception:
+                # Ignore failures when releasing (e.g., already freed)
+                pass
+            if self._free is not None:
+                try:
+                    self._free(self._chip, line)
+                except Exception:
+                    pass
+            self._claimed_pins.discard(line)
+
+        if pin is None or not self._claimed_pins:
+            LGPIO.gpiochip_close(self._chip)
+            self._chip = None
+
+
+def _create_gpio_backend() -> Optional[GPIOBackend]:
+    """Return the best available GPIO backend for this platform."""
+
+    if RPiGPIO is not None:
+        try:
+            return _RPiGPIOBackend()
+        except Exception:
+            pass
+
+    if LGPIO is not None:
+        try:
+            return _LGPIOBackend()
+        except Exception:
+            pass
+
+    return None
+
 
 class GPIOState(Enum):
     """GPIO pin state enumeration."""
@@ -181,20 +313,27 @@ class GPIOController:
         self._lock = threading.RLock()
         self._watchdog_threads: Dict[int, threading.Thread] = {}
         self._initialized = False
+        self._backend: Optional[GPIOBackend] = None
 
-        if RPiGPIO is not None:
+        backend = _create_gpio_backend()
+        if backend is not None:
             try:
-                RPiGPIO.setmode(RPiGPIO.BCM)
+                backend.setmode(backend.BCM)
+                self._backend = backend
                 self._initialized = True
                 if self.logger:
-                    self.logger.info("GPIO controller initialized in BCM mode")
+                    backend_name = backend.__class__.__name__.lstrip('_').replace('Backend', '')
+                    self.logger.info(
+                        f"GPIO controller initialized using {backend_name} backend in BCM mode"
+                    )
             except Exception as exc:
                 if self.logger:
-                    self.logger.error(f"Failed to initialize GPIO: {exc}")
+                    self.logger.error(f"Failed to initialize GPIO backend: {exc}")
+                self._backend = None
                 self._initialized = False
         else:
             if self.logger:
-                self.logger.warning("RPi.GPIO not available - GPIO control disabled")
+                self.logger.warning("No supported GPIO backend available - GPIO control disabled")
 
     def add_pin(self, config: GPIOPinConfig) -> None:
         """Add a GPIO pin to the controller.
@@ -212,7 +351,7 @@ class GPIOController:
 
             self._pins[config.pin] = config
 
-            if not self._initialized or RPiGPIO is None:
+            if not self._initialized or self._backend is None:
                 # Record the configuration even when GPIO hardware isn't available so the
                 # application can still display configured pins in the UI.
                 self._states[config.pin] = GPIOState.ERROR
@@ -225,11 +364,11 @@ class GPIOController:
             self._states[config.pin] = GPIOState.INACTIVE
 
             # Setup the pin
-            active_level = RPiGPIO.HIGH if config.active_high else RPiGPIO.LOW
-            resting_level = RPiGPIO.LOW if config.active_high else RPiGPIO.HIGH
+            active_level = self._backend.HIGH if config.active_high else self._backend.LOW
+            resting_level = self._backend.LOW if config.active_high else self._backend.HIGH
 
             try:
-                RPiGPIO.setup(config.pin, RPiGPIO.OUT, initial=resting_level)
+                self._backend.setup(config.pin, self._backend.OUT, initial=resting_level)
                 if self.logger:
                     self.logger.info(
                         f"Configured GPIO pin {config.pin} ({config.name}): "
@@ -255,9 +394,9 @@ class GPIOController:
                     self.deactivate(pin, force=True)
 
                 # Cleanup the pin
-                if self._initialized and RPiGPIO is not None:
+                if self._initialized and self._backend is not None:
                     try:
-                        RPiGPIO.cleanup(pin)
+                        self._backend.cleanup(pin)
                     except Exception as exc:
                         if self.logger:
                             self.logger.warning(f"Error cleaning up pin {pin}: {exc}")
@@ -306,7 +445,7 @@ class GPIOController:
                     self.logger.warning(f"Pin {pin} is already active")
                 return False
 
-            if not self._initialized or RPiGPIO is None:
+            if not self._initialized or self._backend is None:
                 if self.logger:
                     self.logger.warning(f"Cannot activate pin {pin}: GPIO not available")
                 return False
@@ -317,8 +456,8 @@ class GPIOController:
                     time.sleep(config.debounce_ms / 1000.0)
 
                 # Activate the pin
-                active_level = RPiGPIO.HIGH if config.active_high else RPiGPIO.LOW
-                RPiGPIO.output(pin, active_level)
+                active_level = self._backend.HIGH if config.active_high else self._backend.LOW
+                self._backend.output(pin, active_level)
 
                 activation_time = time.monotonic()
                 self._activation_times[pin] = activation_time
@@ -391,7 +530,7 @@ class GPIOController:
                     self.logger.debug(f"Pin {pin} is not active")
                 return True  # Already inactive
 
-            if not self._initialized or RPiGPIO is None:
+            if not self._initialized or self._backend is None:
                 if self.logger:
                     self.logger.warning(f"Cannot deactivate pin {pin}: GPIO not available")
                 return False
@@ -407,8 +546,8 @@ class GPIOController:
                         time.sleep(remaining)
 
                 # Deactivate the pin
-                resting_level = RPiGPIO.LOW if config.active_high else RPiGPIO.HIGH
-                RPiGPIO.output(pin, resting_level)
+                resting_level = self._backend.LOW if config.active_high else self._backend.HIGH
+                self._backend.output(pin, resting_level)
 
                 self._states[pin] = GPIOState.INACTIVE
 
@@ -618,9 +757,9 @@ class GPIOController:
                     self.deactivate(pin, force=True)
 
             # Cleanup GPIO
-            if self._initialized and RPiGPIO is not None:
+            if self._initialized and self._backend is not None:
                 try:
-                    RPiGPIO.cleanup()
+                    self._backend.cleanup()
                     if self.logger:
                         self.logger.info("GPIO cleanup complete")
                 except Exception as exc:
@@ -1239,32 +1378,36 @@ class GPIORelayController:
     active_high: bool
     hold_seconds: float
     activated_at: Optional[float] = field(default=None, init=False)
+    _backend: Optional[GPIOBackend] = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:  # pragma: no cover - hardware specific
-        if RPiGPIO is None:
-            raise RuntimeError('RPi.GPIO not available')
-        self._active_level = RPiGPIO.HIGH if self.active_high else RPiGPIO.LOW
-        self._resting_level = RPiGPIO.LOW if self.active_high else RPiGPIO.HIGH
-        RPiGPIO.setmode(RPiGPIO.BCM)
-        RPiGPIO.setup(self.pin, RPiGPIO.OUT, initial=self._resting_level)
+        backend = _create_gpio_backend()
+        if backend is None:
+            raise RuntimeError('No supported GPIO backend available')
+
+        backend.setmode(backend.BCM)
+        self._backend = backend
+        self._active_level = backend.HIGH if self.active_high else backend.LOW
+        self._resting_level = backend.LOW if self.active_high else backend.HIGH
+        backend.setup(self.pin, backend.OUT, initial=self._resting_level)
 
     def activate(self, logger) -> None:  # pragma: no cover - hardware specific
-        if RPiGPIO is None:
+        if self._backend is None:
             return
-        RPiGPIO.output(self.pin, self._active_level)
+        self._backend.output(self.pin, self._active_level)
         self.activated_at = time.monotonic()
         if logger:
             logger.debug('Activated GPIO relay on pin %s', self.pin)
 
     def deactivate(self, logger) -> None:  # pragma: no cover - hardware specific
-        if RPiGPIO is None:
+        if self._backend is None:
             return
         if self.activated_at is not None:
             elapsed = time.monotonic() - self.activated_at
             remaining = max(0.0, self.hold_seconds - elapsed)
             if remaining > 0:
                 time.sleep(remaining)
-        RPiGPIO.output(self.pin, self._resting_level)
+        self._backend.output(self.pin, self._resting_level)
         self.activated_at = None
         if logger:
             logger.debug('Released GPIO relay on pin %s', self.pin)
