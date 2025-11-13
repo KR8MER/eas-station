@@ -537,16 +537,124 @@ graph LR
 
 ## Notification Procedures
 
+### Emergency Alert Activation Workflow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Auth as Authorized<br>Official
+    participant EOC as Emergency<br>Operations Center
+    participant IPAWS as IPAWS/<br>OEAS System
+    participant SP as State Primary<br>WNCI
+    participant LP as Local Primary<br>Stations (12)
+    participant Part as Participating<br>Stations
+    participant Public as General<br>Public
+
+    Auth->>EOC: Determine Alert Needed
+    EOC->>IPAWS: Create CAP Message
+    IPAWS->>SP: Distribute Alert
+    SP->>LP: Relay to All LPs
+    LP->>Part: Monitor & Relay
+    Part->>Public: Broadcast Alert
+    Public->>Public: Take Action
+    
+    Note over Auth,Public: Statewide activation: 2-5 minutes<br>Local activation: 1-3 minutes
+```
+
+### Authorized Notifiers by Level
+
+```mermaid
+graph TB
+    subgraph "State Level - Statewide Authority"
+        GOV[Governor of Ohio<br>All Event Types]
+        EMA[Ohio EMA Director<br>State Emergencies]
+        OSP[Ohio State Highway Patrol<br>Transportation]
+    end
+    
+    subgraph "Federal Level - Weather Only"
+        NWS[National Weather Service<br>Weather Alerts Only]
+    end
+    
+    subgraph "County Level - Local Area Only"
+        COEMA[County EMA Directors<br>County Emergencies]
+        SHERIFF[County Sheriffs<br>Law Enforcement]
+    end
+    
+    subgraph "Activation Methods"
+        IPAWS_SYS[IPAWS System]
+        OEAS[Ohio Digital EAS]
+        DIRECT[Direct Encoder]
+        PHONE[Telephone Notifier]
+    end
+    
+    GOV --> IPAWS_SYS
+    EMA --> IPAWS_SYS
+    EMA --> OEAS
+    OSP --> IPAWS_SYS
+    NWS --> IPAWS_SYS
+    NWS --> DIRECT
+    COEMA --> PHONE
+    COEMA --> IPAWS_SYS
+    SHERIFF --> PHONE
+    
+    IPAWS_SYS --> BROADCAST[Broadcast Network]
+    OEAS --> BROADCAST
+    DIRECT --> BROADCAST
+    PHONE --> BROADCAST
+    
+    style GOV fill:#e74c3c,stroke:#c0392b,stroke-width:3px,color:#fff
+    style NWS fill:#3498db,stroke:#2980b9,stroke-width:2px,color:#fff
+    style IPAWS_SYS fill:#f39c12,stroke:#e67e22,stroke-width:3px,color:#fff
+    style BROADCAST fill:#2ecc71,stroke:#27ae60,stroke-width:3px,color:#fff
+```
+
 ### Authorized Notifiers
 
-1. Governor of the State of Ohio
-2. Ohio Emergency Management Agency
-3. Ohio State Highway Patrol
-4. National Weather Service (weather alerts only)
-5. County Emergency Management Agency Directors (local area only)
-6. County Sheriffs (local area only)
+| Level | Officials | Event Types | Method |
+|-------|-----------|-------------|--------|
+| **State** | Governor of Ohio | All events | IPAWS/OEAS |
+| **State** | Ohio EMA Director | State emergencies | IPAWS/OEAS |
+| **State** | Ohio State Highway Patrol | Transportation emergencies | IPAWS |
+| **Federal** | National Weather Service | Weather alerts only | NOAA WR/IPAWS |
+| **County** | County EMA Directors | Local area only | IPAWS/Phone |
+| **County** | County Sheriffs | Local area only | Phone Notifier |
 
 ### State Activation Process
+
+```mermaid
+graph LR
+    subgraph "Statewide Alerts"
+        EOC[Ohio EOC/<br>Joint Dispatch<br>Facility]
+        PRIVATE[Private<br>Radio Link]
+        SP[State Primary<br>WNCI 97.9 FM]
+        IPAWS1[IPAWS<br>Distribution]
+        OEAS1[Ohio Digital<br>EAS Network]
+    end
+    
+    subgraph "Local Alerts"
+        LOCAL[Local<br>Authority]
+        LP[Local Primary<br>Stations]
+        IPAWS2[IPAWS<br>CAP]
+        DIRECT[Direct<br>Encoder]
+    end
+    
+    EOC --> PRIVATE
+    EOC --> IPAWS1
+    EOC --> OEAS1
+    PRIVATE --> SP
+    IPAWS1 --> SP
+    OEAS1 --> SP
+    
+    LOCAL --> LP
+    LOCAL --> IPAWS2
+    LOCAL --> DIRECT
+    IPAWS2 --> LP
+    DIRECT --> LP
+    
+    style EOC fill:#e74c3c,stroke:#c0392b,stroke-width:2px,color:#fff
+    style SP fill:#3498db,stroke:#2980b9,stroke-width:3px,color:#fff
+    style LP fill:#2ecc71,stroke:#27ae60,stroke-width:2px,color:#fff
+```
 
 **Statewide Alerts:**
 - Sent from Ohio Emergency Operations Center/Joint Dispatch Facility (EOC/JDF)
@@ -560,24 +668,119 @@ graph LR
 
 ### Weather Alerts
 
+```mermaid
+graph TB
+    subgraph "NWS Offices Serving Ohio"
+        CLE[NWS Cleveland<br>Northern Ohio]
+        ILN[NWS Wilmington<br>Southwest Ohio]
+        PIT[NWS Pittsburgh<br>East Ohio]
+        IWX[NWS Northern Indiana<br>Northwest Ohio]
+        RLX[NWS Charleston<br>Southeast Ohio]
+    end
+    
+    subgraph "NOAA Weather Radio"
+        WXK23[Multiple NOAA<br>Transmitters<br>Statewide Coverage]
+    end
+    
+    subgraph "Distribution"
+        SAME[SAME Encoder<br>162.400-162.550 MHz]
+        IPAWS_W[IPAWS<br>Integration]
+    end
+    
+    CLE --> WXK23
+    ILN --> WXK23
+    PIT --> WXK23
+    IWX --> WXK23
+    RLX --> WXK23
+    
+    WXK23 --> SAME
+    WXK23 --> IPAWS_W
+    
+    SAME --> STATIONS[EAS Station<br>Receivers]
+    IPAWS_W --> STATIONS
+    
+    style WXK23 fill:#3498db,stroke:#2980b9,stroke-width:3px,color:#fff
+    style STATIONS fill:#2ecc71,stroke:#27ae60,stroke-width:2px,color:#fff
+```
+
 - **Sole Authority:** National Weather Service (NWS)
 - **Primary Method:** NOAA Weather Radio SAME (Specific Area Message Encoder)
-- **Coverage:** Multiple NWS offices serve Ohio (see NOAA station list)
+- **Coverage:** Multiple NWS offices serve Ohio (see NOAA station list below)
 
 ---
 
 ## Test Procedures
 
+### Testing Hierarchy
+
+```mermaid
+graph TB
+    subgraph "Weekly Tests - RWT"
+        RWT[Required Weekly Test<br>All Stations<br>Weekly<br>Header + EOM Only]
+    end
+    
+    subgraph "Monthly Tests - RMT"
+        RMT_STATE[Ohio Statewide RMT<br>2nd Wednesday<br>Alternates Day/Night<br>Full System Test]
+        RMT_IPAWS[IPAWS RMT<br>Minimum 4/year<br>Tests IPAWS Path]
+        RMT_OEAS[OEAS CAP RMT<br>Minimum 4/year<br>Tests Ohio Digital EAS]
+    end
+    
+    subgraph "National Tests"
+        NPT[National Periodic Test<br>Annual or As Scheduled<br>Tests National System]
+    end
+    
+    RWT -->|Weekly| STATIONS[All EAS<br>Stations]
+    RMT_STATE -->|Monthly| STATIONS
+    RMT_IPAWS -->|Quarterly+| STATIONS
+    RMT_OEAS -->|Quarterly+| STATIONS
+    NPT -->|Annual| STATIONS
+    
+    style RWT fill:#95a5a6,stroke:#7f8c8d,stroke-width:2px,color:#fff
+    style RMT_STATE fill:#3498db,stroke:#2980b9,stroke-width:2px,color:#fff
+    style RMT_IPAWS fill:#3498db,stroke:#2980b9,stroke-width:2px,color:#fff
+    style RMT_OEAS fill:#3498db,stroke:#2980b9,stroke-width:2px,color:#fff
+    style NPT fill:#e74c3c,stroke:#c0392b,stroke-width:2px,color:#fff
+    style STATIONS fill:#2ecc71,stroke:#27ae60,stroke-width:2px,color:#fff
+```
+
 ### Required Weekly Test (RWT)
+
 - Conducted weekly by all stations
 - Tests EAS header and end-of-message codes
 - FCC mandated
+- No audio message required
+- Must be logged
 
 ### Required Monthly Test (RMT)
-- **Statewide tests** conducted by Ohio EOC
-- **Schedule:** 2nd Wednesday of each month (see table below)
+
+```mermaid
+gantt
+    title Ohio Statewide RMT Schedule (Annual Cycle)
+    dateFormat MM-DD
+    axisFormat %B
+    
+    section Daytime 9:50 AM
+    January SP/LP-1        :milestone, 01-08, 0d
+    March SP/LP-1 (1st Wed):milestone, 03-06, 0d
+    May SP/LP-2            :milestone, 05-14, 0d
+    July SP/LP-1           :milestone, 07-09, 0d
+    September SP/LP-2      :milestone, 09-10, 0d
+    November SP/LP-1       :milestone, 11-12, 0d
+    
+    section Nighttime 3:50 AM
+    February SP/LP-2       :crit, milestone, 02-12, 0d
+    April SP/LP-1          :crit, milestone, 04-09, 0d
+    June SP/LP-2           :crit, milestone, 06-11, 0d
+    August SP/LP-1         :crit, milestone, 08-13, 0d
+    October SP/LP-1        :crit, milestone, 10-08, 0d
+    December SP/LP-2       :crit, milestone, 12-10, 0d
+```
+
+**Statewide tests** conducted by Ohio EOC:
+- **Schedule:** 2nd Wednesday of each month (except March - see below)
 - Tests alternate between day/night and LP-1/LP-2
 - Must be retransmitted within 60 minutes
+- Full audio message transmitted
 
 #### RMT Schedule
 
@@ -599,8 +802,40 @@ graph LR
 *March test conducted 1st Wednesday during Severe Weather Awareness Week
 
 ### IPAWS & OEAS Testing
+
+```mermaid
+graph LR
+    subgraph "Annual Requirements"
+        IPAWS_MIN[IPAWS Tests<br>Minimum 4 RMTs<br>Per Year]
+        OEAS_MIN[OEAS CAP Tests<br>Minimum 4 RMTs<br>Per Year]
+    end
+    
+    subgraph "Testing Paths"
+        IPAWS_PATH[IPAWS<br>Distribution<br>Path]
+        OEAS_PATH[Ohio Digital EAS<br>CAP Network<br>Path]
+    end
+    
+    subgraph "Verification"
+        LOG[Test Logs<br>Documentation]
+        COMPLIANCE[FCC<br>Compliance]
+    end
+    
+    IPAWS_MIN --> IPAWS_PATH
+    OEAS_MIN --> OEAS_PATH
+    
+    IPAWS_PATH --> LOG
+    OEAS_PATH --> LOG
+    LOG --> COMPLIANCE
+    
+    style IPAWS_MIN fill:#3498db,stroke:#2980b9,stroke-width:2px,color:#fff
+    style OEAS_MIN fill:#3498db,stroke:#2980b9,stroke-width:2px,color:#fff
+    style COMPLIANCE fill:#2ecc71,stroke:#27ae60,stroke-width:2px,color:#fff
+```
+
 - Minimum **4 RMTs annually via IPAWS**
 - Minimum **4 RMTs annually via OEAS CAP network**
+- Tests verify multiple distribution paths
+- Ensures redundancy and reliability
 
 ---
 
