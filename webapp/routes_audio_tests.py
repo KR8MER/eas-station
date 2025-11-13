@@ -66,6 +66,9 @@ def register(app: Flask, logger) -> None:
                 timeout=120,  # 2 minute timeout
             )
             
+            # Log subprocess completion
+            route_logger.info(f"Pytest completed with return code: {result.returncode}")
+            
             # Parse output
             output_lines = result.stdout.split('\n')
             
@@ -105,6 +108,22 @@ def register(app: Flask, logger) -> None:
                     summary = line.strip()
                     break
             
+            # Log test results
+            route_logger.info(f"Test results: {passed} passed, {failed} failed, {skipped} skipped, {errors} errors")
+            if summary:
+                route_logger.info(f"Test summary: {summary}")
+            
+            # Log stderr if present
+            if result.stderr:
+                route_logger.warning(f"Pytest stderr output: {result.stderr[:500]}")
+            
+            # Log a preview of stdout for debugging
+            if result.stdout:
+                stdout_preview = result.stdout[:500] if len(result.stdout) > 500 else result.stdout
+                route_logger.debug(f"Pytest stdout preview: {stdout_preview}")
+            else:
+                route_logger.warning("Pytest produced no stdout output")
+            
             return {
                 "success": result.returncode == 0,
                 "return_code": result.returncode,
@@ -121,14 +140,14 @@ def register(app: Flask, logger) -> None:
             }
             
         except subprocess.TimeoutExpired:
-            route_logger.error("Test execution timed out")
+            route_logger.error("Test execution timed out after 120 seconds")
             return {
                 "success": False,
                 "error": "Test execution timed out after 120 seconds",
                 "timestamp": utc_now().isoformat(),
             }
         except Exception as exc:
-            route_logger.error(f"Error running tests: {exc}")
+            route_logger.error(f"Error running tests: {exc}", exc_info=True)
             return {
                 "success": False,
                 "error": str(exc),
@@ -165,6 +184,12 @@ def register(app: Flask, logger) -> None:
             route_logger.info(f"Running audio tests: module={test_module}, verbose={verbose}")
             
             results = _run_pytest(test_module, verbose)
+            
+            # Log the result status
+            if results.get("success"):
+                route_logger.info(f"Test execution successful: {results.get('passed', 0)} passed, {results.get('failed', 0)} failed")
+            else:
+                route_logger.error(f"Test execution failed: {results.get('error', 'Unknown error')}")
             
             return jsonify(results)
             
