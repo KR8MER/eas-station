@@ -47,6 +47,10 @@ gunicorn==23.0.0
 # Development and debugging (optional)
 # flask-debugtoolbar==0.13.1  # Uncomment for development
 
+# Testing framework (required for web UI test runner)
+pytest==8.3.4
+pytest-asyncio==0.24.0  # For async test support
+
 # Optional speech synthesis support
 # azure-cognitiveservices-speech==1.38.0  # Required when enabling Azure AI voiceovers
 pyttsx3==2.90  # Offline text-to-speech engine for the pyttsx3 provider
