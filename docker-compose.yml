@@ -95,8 +95,10 @@ services:
       - /dev/bus/usb:/dev/bus/usb
 
       # GPIO Device Passthrough (Raspberry Pi)
-      # GPIO access enabled by default - fails gracefully if hardware not available
-      - /dev/gpiomem:/dev/gpiomem  # GPIO memory access for Raspberry Pi
+      # GPIO devices are NOT mounted by default to allow deployment on non-Pi hosts.
+      # If running on Raspberry Pi and need GPIO access, use the Pi override:
+      #   docker-compose -f docker-compose.yml -f docker-compose.pi.yml up -d
+      # See docker-compose.pi.yml for Raspberry Pi GPIO configuration.
 
       # NVMe Device Passthrough (optional)
       # Uncomment the following lines if you have NVMe drives and want SMART monitoring:

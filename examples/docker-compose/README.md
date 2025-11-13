@@ -309,15 +309,17 @@ docker-compose up -d
    sudo usermod -aG gpio $USER
    ```
 
-3. Update override file:
-   ```yaml
-   services:
-     app:
-       devices:
-         - /dev/gpiomem:/dev/gpiomem
-       group_add:
-         - gpio
+3. Use the Raspberry Pi GPIO override file:
+   ```bash
+   # For standard deployment:
+   docker-compose -f docker-compose.yml -f docker-compose.pi.yml up -d
+   
+   # Or with embedded database:
+   docker-compose -f docker-compose.embedded-db.yml -f docker-compose.pi.yml up -d
    ```
+   
+   The `docker-compose.pi.yml` override adds required GPIO device mappings
+   (`/dev/gpiomem` and `/dev/gpiochip0`) and gpio group membership.
 
 4. See `docs/hardware/gpio.md` for detailed GPIO setup
 
