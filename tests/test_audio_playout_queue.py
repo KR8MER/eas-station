@@ -562,18 +562,21 @@ class TestAudioPlayoutQueue:
         """Test re-queueing an interrupted item."""
         queue = AudioPlayoutQueue()
         
+        # Use queue's next_queue_id to create original item so they differ
+        original_queue_id = queue.get_next_queue_id()
         original = PlayoutItem(
             precedence_level=PrecedenceLevel.LOCAL,
             severity=SeverityLevel.SEVERE,
             urgency=UrgencyLevel.IMMEDIATE,
             timestamp=time.time(),
-            queue_id=1,
+            queue_id=original_queue_id,
             event_code="TOR",
         )
 
         requeued = queue.requeue_interrupted_item(original)
 
         assert requeued.queue_id != original.queue_id
+        assert requeued.queue_id == original_queue_id + 1  # Should get next sequential ID
         assert requeued.event_code == original.event_code
         assert requeued.metadata["requeued"] is True
         assert requeued.metadata["original_queue_id"] == original.queue_id
