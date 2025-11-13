@@ -11,6 +11,7 @@ The EAS Station application is built entirely on open-source libraries. The tabl
 | Flask 3.0.3 | Pallets Projects (founded by Armin Ronacher) | BSD-3-Clause | Core web framework powering the operator UI and REST API. |
 | Flask-SQLAlchemy 3.1.1 | Pallets Projects | BSD-3-Clause | Integrates SQLAlchemy ORM with Flask’s application context and configuration system. |
 | GeoAlchemy2 0.15.2 | GeoAlchemy maintainers (Olivier Verdier & contributors) | MIT | Adds spatial column types and functions so PostGIS geometries can be queried through SQLAlchemy. |
+| gpiozero 2.0.1 | Raspberry Pi Foundation & contributors | MIT | Provides high-level GPIO device controls used to drive relay outputs on Raspberry Pi hardware. |
 | greenlet 3.2.4 | Armin Ronacher & contributors | MIT | Implements lightweight coroutines used internally by SQLAlchemy for async-aware database engines. |
 | gunicorn 23.0.0 | Benoît Chesneau & Gunicorn maintainers | MIT | Production WSGI server that hosts the Flask application. |
 | idna 3.11 | Kim Davies & contributors | BSD-3-Clause | Implements Internationalized Domain Name handling for outbound HTTP requests. |
@@ -48,7 +49,6 @@ The following packages are commented in `requirements.txt` and only required whe
 | python-dateutil 2.8.2 | Dateutil maintainers (led by Gustavo Niemeyer) | BSD-3-Clause | Enhances datetime parsing in integrations that require ISO8601 variations. |
 | azure-cognitiveservices-speech 1.38.0 | Microsoft Azure Cognitive Services team | MIT | Cloud-based speech synthesis provider for narrated alerts. |
 | flask-debugtoolbar 0.13.1 | Flask DebugToolbar maintainers | BSD-3-Clause | Development-only debugging overlay. |
-| RPi.GPIO 0.7.1+ | Ben Croston & contributors | MIT | Raspberry Pi GPIO control for relay boards (Raspberry Pi hardware only). |
 
 ## System Package Dependencies
 

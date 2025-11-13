@@ -348,15 +348,18 @@ broadcaster = EASBroadcaster(
 
 ### Common Issues
 
-**Problem: "RPi.GPIO not available"**
+**Problem: "gpiozero not available"**
 
 **Solution:**
 ```bash
-# Install RPi.GPIO
-pip install RPi.GPIO
+# Install gpiozero
+pip install gpiozero
 
-# Or in Docker, ensure Dockerfile includes:
-RUN pip install RPi.GPIO
+# Or on Raspberry Pi OS
+sudo apt install python3-gpiozero
+
+# When using Docker, ensure the image installs the library
+RUN pip install gpiozero
 ```
 
 **Problem: "Permission denied" accessing GPIO**
