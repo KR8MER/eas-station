@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
+from app_utils.gpio import GPIOActivationType, GPIOBehaviorManager, GPIOController
+
 from .playout_queue import AudioPlayoutQueue, PlayoutItem
 
 
@@ -88,7 +90,7 @@ class AudioOutputService:
         queue: AudioPlayoutQueue,
         config: Dict[str, Any],
         logger: Optional[logging.Logger] = None,
-        gpio_controller: Optional[Any] = None,
+        gpio_controller: Optional[GPIOController] = None,
     ):
         """
         Initialize the audio output service.
@@ -97,12 +99,17 @@ class AudioOutputService:
             queue: AudioPlayoutQueue instance to manage
             config: EAS configuration dictionary
             logger: Logger instance
-            gpio_controller: Optional GPIORelayController for transmitter control
+            gpio_controller: Optional GPIOController for transmitter control
         """
         self.queue = queue
         self.config = config
         self.logger = logger or logging.getLogger(__name__)
         self.gpio_controller = gpio_controller
+        self.gpio_behavior_manager: Optional[GPIOBehaviorManager] = (
+            getattr(gpio_controller, "behavior_manager", None)
+            if gpio_controller is not None
+            else None
+        )
 
         self._running = False
         self._worker_thread: Optional[threading.Thread] = None
@@ -246,6 +253,7 @@ class AudioOutputService:
         success = False
         play_success = False
         error_msg: Optional[str] = None
+        alert_id_value = getattr(item, 'alert_id', None)
 
         try:
             # Log playing event
@@ -257,12 +265,33 @@ class AudioOutputService:
 
             # Activate GPIO relay if configured
             gpio_activated = False
+            manager_handled = False
+            behavior_manager = self.gpio_behavior_manager
             if self.gpio_controller:
                 try:
-                    self.gpio_controller.activate(self.logger)
-                    gpio_activated = True
+                    activation_reason = f"Queued alert playout ({item.event_code or 'unknown'})"
+
+                    if behavior_manager:
+                        manager_handled = behavior_manager.start_alert(
+                            alert_id=str(alert_id_value) if alert_id_value else None,
+                            event_code=item.event_code,
+                            reason=activation_reason,
+                        )
+                        gpio_activated = gpio_activated or manager_handled
+
+                    if not gpio_activated:
+                        activation_results = self.gpio_controller.activate_all(
+                            activation_type=GPIOActivationType.AUTOMATIC,
+                            alert_id=str(alert_id_value) if alert_id_value else None,
+                            reason=activation_reason,
+                        )
+                        gpio_activated = any(activation_results.values())
+                        if not gpio_activated:
+                            self.logger.warning('GPIO controller configured but no pins activated')
                 except Exception as exc:
                     self.logger.warning(f'GPIO activation failed: {exc}')
+                    manager_handled = False
+                    gpio_activated = False
 
             # Play main audio file
             if item.audio_path:
@@ -287,9 +316,15 @@ class AudioOutputService:
                 success = play_success
 
             # Deactivate GPIO relay
-            if gpio_activated:
+            if self.gpio_controller:
                 try:
-                    self.gpio_controller.deactivate(self.logger)
+                    if manager_handled and behavior_manager:
+                        behavior_manager.end_alert(
+                            alert_id=str(alert_id_value) if alert_id_value else None,
+                            event_code=item.event_code,
+                        )
+                    elif gpio_activated:
+                        self.gpio_controller.deactivate_all()
                 except Exception as exc:
                     self.logger.warning(f'GPIO deactivation failed: {exc}')
 

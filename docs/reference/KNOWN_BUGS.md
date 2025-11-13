@@ -519,47 +519,13 @@ def update_environment():
 
 ### CRITICAL Issues
 
-#### 1. GPIO page doesn't recognize `GPIO_PIN_17` format
-**File:** `webapp/routes/system_controls.py:42-99`
-**Affected Route:** `/admin/gpio` (GET)
-**Impact:** GPIO pins configured in environment don't appear on the page
+#### ✅ 1. GPIO page recognizes `GPIO_PIN_<number>` format
+**Status:** Fixed via `app_utils/gpio.py` loader and `webapp/routes/system_controls.py`
 
-**Description:**
-The GPIO configuration parser only recognizes specific environment variable formats. If you set `GPIO_PIN_17=17`, it will NOT be detected.
-
-**Supported Formats:**
-```bash
-# ✅ SUPPORTED - Primary EAS transmitter pin
-EAS_GPIO_PIN=17
-EAS_GPIO_ACTIVE_STATE=HIGH
-EAS_GPIO_HOLD_SECONDS=5
-EAS_GPIO_WATCHDOG_SECONDS=300
-
-# ✅ SUPPORTED - Additional pins (comma-separated)
-GPIO_ADDITIONAL_PINS="27:Emergency Relay:HIGH:3.0:600,22:LED Sign:HIGH:0.5:120"
-# Format: PIN:NAME:ACTIVE_STATE:HOLD_SECONDS:WATCHDOG_SECONDS
-```
-
-**Unsupported Formats:**
-```bash
-# ❌ NOT SUPPORTED
-GPIO_PIN_17=17
-GPIO_PIN_PIN=17
-GPIO_17=HIGH
-```
-
-**Code Location:**
-The parsing happens in `_load_gpio_configuration()` function at `webapp/routes/system_controls.py:42-99`.
-
-**User Impact:**
-- Users set `GPIO_PIN_17` in environment
-- GPIO page shows "No GPIO pins are currently configured"
-- Users are confused why their pin doesn't appear
-
-**Fix Required:**
-1. Update parser to recognize `GPIO_PIN_<number>=<config>` format
-2. Update documentation to clarify supported formats
-3. Add validation warning if unsupported GPIO_PIN_* variables are detected
+The GPIO configuration loader now normalizes entries from `EAS_GPIO_PIN`, `GPIO_ADDITIONAL_PINS`,
+and `GPIO_PIN_<number>` environment variables, so all supported formats appear in the control panel.
+Documentation has been updated to reflect the accepted formats and the persistent environment editor
+now exposes these fields directly under **Settings → Environment → GPIO Control**.
 
 ---
 
