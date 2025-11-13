@@ -548,6 +548,45 @@ def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: 
                 route_logger.info(f"Extracted narration: {narration.duration_seconds:.2f}s "
                                 f"at {narration.start_sample / sample_rate:.2f}s, "
                                 f"speech={narration.contains_speech}")
+        elif 'buffer' in same_result.segments and not detection_result.alert_tones:
+            # Fallback: If no narration detected and no tones, extract narration from buffer
+            # This helps when the audio doesn't have clear attention tones
+            buffer_seg = same_result.segments['buffer']
+            header_seg = same_result.segments.get('header')
+            eom_seg = same_result.segments.get('eom')
+            
+            # Calculate narration bounds: after both header AND eom, to end of buffer
+            # (since EOM often overlaps with or is before the end of header)
+            narration_start = buffer_seg.start_sample
+            if header_seg and eom_seg:
+                # Start after whichever ends later
+                narration_start = max(header_seg.end_sample, eom_seg.end_sample)
+            elif header_seg:
+                narration_start = header_seg.end_sample
+            elif eom_seg:
+                narration_start = eom_seg.end_sample
+                
+            narration_end = buffer_seg.end_sample
+            
+            # Only create narration if there's meaningful content
+            narration_duration = (narration_end - narration_start) / sample_rate
+            if narration_duration > 0.5:  # At least 0.5 seconds
+                route_logger.info(f"No specific narration detected; extracting {narration_duration:.2f}s from buffer as narration fallback")
+                
+                narration_wav = _extract_audio_segment_wav(
+                    audio_path,
+                    narration_start,
+                    narration_end,
+                    sample_rate
+                )
+                
+                segments['narration'] = SAMEAudioSegment(
+                    label='narration',
+                    start_sample=narration_start,
+                    end_sample=narration_end,
+                    sample_rate=sample_rate,
+                    wav_bytes=narration_wav
+                )
 
         # Add EOM segment (from original decode)
         if 'eom' in same_result.segments:
@@ -594,20 +633,34 @@ def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: 
         return decode_same_audio(audio_path), None
 
 
-def _build_composite_audio_segment(segments: Dict[str, SAMEAudioSegment], sample_rate: int) -> Optional[SAMEAudioSegment]:
+def _build_composite_audio_segment(segments: Dict[str, SAMEAudioSegment], sample_rate: int, audio_path: Optional[str] = None) -> Optional[SAMEAudioSegment]:
     """
-    Build a composite audio segment that combines all individual segments in order.
+    Build a composite audio segment that represents the complete EAS alert.
     
-    The composite includes: header -> attention_tone -> narration -> eom (in chronological order).
-    Buffer is not included as it's padding audio.
+    Strategy:
+    1. If we have individual segments (header, tone, narration, eom), combine them
+    2. Otherwise, use the buffer segment which contains the full audio
     
     Args:
         segments: Dictionary of detected segments
         sample_rate: Audio sample rate
+        audio_path: Optional path to original audio file for fallback extraction
         
     Returns:
         Composite SAMEAudioSegment or None if no segments available
     """
+    # Check if we have buffer segment - it contains the full alert audio
+    if 'buffer' in segments:
+        buffer_seg = segments['buffer']
+        return SAMEAudioSegment(
+            label='composite',
+            start_sample=buffer_seg.start_sample,
+            end_sample=buffer_seg.end_sample,
+            sample_rate=buffer_seg.sample_rate,
+            wav_bytes=buffer_seg.wav_bytes
+        )
+    
+    # Fallback: combine individual segments
     # Define the order of segments for the composite
     segment_order = ['header', 'attention_tone', 'narration', 'eom']
     
