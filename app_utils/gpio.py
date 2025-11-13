@@ -22,14 +22,24 @@ from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Protocol, Set
 
 try:  # pragma: no cover - GPIO hardware is optional and platform specific
-    from gpiozero import OutputDevice
+    from gpiozero import Device, OutputDevice
 except Exception:  # pragma: no cover - gracefully handle non-RPi environments
+    Device = None  # type: ignore[assignment]
     OutputDevice = None  # type: ignore[assignment]
+
+try:  # pragma: no cover - allow fallback to a mock pin factory when hardware is absent
+    from gpiozero.pins.mock import MockFactory
+except Exception:  # pragma: no cover - mock factory may be unavailable in minimal installs
+    MockFactory = None  # type: ignore[assignment]
 
 try:  # pragma: no cover - Pi 5 prefers lgpio backend
     import lgpio as LGPIO  # type: ignore
 except Exception:  # pragma: no cover - not all environments ship with lgpio
     LGPIO = None
+
+# NOTE: The legacy RPi.GPIO library is deprecated upstream and no longer
+# supported by this project. We rely on gpiozero's abstractions (with optional
+# lgpio support) and a mock factory for non-hardware environments.
 
 
 class GPIOBackend(Protocol):
@@ -51,33 +61,6 @@ class GPIOBackend(Protocol):
 
     def cleanup(self, pin: Optional[int] = None) -> None:
         ...
-
-
-class _RPiGPIOBackend:
-    """Adapter around the legacy RPi.GPIO module."""
-
-    def __init__(self) -> None:
-        if RPiGPIO is None:  # pragma: no cover - guard in case import fails later
-            raise RuntimeError("RPi.GPIO module unavailable")
-        self.BCM = RPiGPIO.BCM
-        self.OUT = RPiGPIO.OUT
-        self.HIGH = int(RPiGPIO.HIGH)
-        self.LOW = int(RPiGPIO.LOW)
-
-    def setmode(self, mode: object) -> None:
-        RPiGPIO.setmode(mode)
-
-    def setup(self, pin: int, mode: object, *, initial: int) -> None:
-        RPiGPIO.setup(pin, mode, initial=initial)
-
-    def output(self, pin: int, value: int) -> None:
-        RPiGPIO.output(pin, value)
-
-    def cleanup(self, pin: Optional[int] = None) -> None:
-        if pin is None:
-            RPiGPIO.cleanup()
-        else:
-            RPiGPIO.cleanup(pin)
 
 
 class _LGPIOBackend:
@@ -141,14 +124,58 @@ class _LGPIOBackend:
             self._chip = None
 
 
+_PIN_FACTORY_READY = False
+_PIN_FACTORY_ATTEMPTED = False
+
+
+def _ensure_pin_factory(logger=None) -> bool:
+    """Ensure gpiozero has a usable pin factory, falling back to MockFactory."""
+
+    global _PIN_FACTORY_READY, _PIN_FACTORY_ATTEMPTED
+
+    if _PIN_FACTORY_READY:
+        return True
+
+    if OutputDevice is None or Device is None:
+        return False
+
+    if not _PIN_FACTORY_ATTEMPTED:
+        _PIN_FACTORY_ATTEMPTED = True
+        try:
+            # Accessing ``Device.pin_factory`` forces gpiozero to initialize its
+            # preferred backend. When that fails (e.g., no GPIO hardware
+            # available) the property access raises an exception which we catch
+            # to install a mock fallback instead.
+            Device.pin_factory  # type: ignore[attr-defined]
+            _PIN_FACTORY_READY = True
+        except Exception as exc:  # pragma: no cover - depends on host environment
+            if MockFactory is not None:
+                try:
+                    Device.pin_factory = MockFactory()  # type: ignore[attr-defined]
+                    _PIN_FACTORY_READY = True
+                    if logger:
+                        logger.warning(
+                            "gpiozero hardware backends unavailable; using MockFactory fallback"
+                        )
+                except Exception as mock_exc:  # pragma: no cover - unexpected failure
+                    if logger:
+                        logger.error(
+                            "Failed to initialize gpiozero MockFactory fallback: %s",
+                            mock_exc,
+                        )
+            else:
+                if logger:
+                    logger.error(
+                        "gpiozero pin factory initialization failed and MockFactory "
+                        "is unavailable: %s",
+                        exc,
+                    )
+
+    return _PIN_FACTORY_READY
+
+
 def _create_gpio_backend() -> Optional[GPIOBackend]:
     """Return the best available GPIO backend for this platform."""
-
-    if RPiGPIO is not None:
-        try:
-            return _RPiGPIOBackend()
-        except Exception:
-            pass
 
     if LGPIO is not None:
         try:
@@ -313,7 +340,7 @@ class GPIOController:
         self._lock = threading.RLock()
         self._watchdog_threads: Dict[int, threading.Thread] = {}
         self._devices: Dict[int, Any] = {}
-        self._initialized = OutputDevice is not None
+        self._initialized = _ensure_pin_factory(logger)
 
         if self._initialized:
             if self.logger:
