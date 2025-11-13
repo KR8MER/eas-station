@@ -184,6 +184,36 @@
         gap: 0.5rem;
     }
 
+    /* GPIO Pin Builder Styles */
+    .gpio-pin-builder {
+        background: var(--bs-light);
+        border: 1px solid var(--bs-border-color);
+        border-radius: 0.375rem;
+        padding: 1rem;
+    }
+
+    .gpio-pin-row {
+        background: white;
+        border: 1px solid var(--bs-border-color);
+        transition: all 0.2s;
+    }
+
+    .gpio-pin-row:hover {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        border-color: var(--bs-primary);
+    }
+
+    .gpio-pin-row .form-label {
+        font-weight: 600;
+        color: var(--bs-secondary);
+        margin-bottom: 0.25rem;
+    }
+
+    .gpio-pin-row .form-control-sm,
+    .gpio-pin-row .form-select-sm {
+        font-size: 0.875rem;
+    }
+
     @media (max-width: 991px) {
         .category-nav {
             position: static;
@@ -489,6 +519,98 @@
         }
     }
 
+    function renderGPIOPinBuilder(variable, value, disabledAttr) {
+        // Parse existing value from colon-separated format
+        // Format: PIN:Name:State:Hold:Watchdog
+        let pins = [];
+        if (value) {
+            const lines = value.split('\n').filter(line => line.trim());
+            pins = lines.map(line => {
+                const parts = line.split(':').map(p => p.trim());
+                return {
+                    pin: parts[0] || '',
+                    name: parts[1] || '',
+                    state: parts[2] || 'HIGH',
+                    hold: parts[3] || '5',
+                    watchdog: parts[4] || '300'
+                };
+            });
+        }
+        
+        // If no pins, show one empty template
+        if (pins.length === 0) {
+            pins = [{ pin: '', name: '', state: 'HIGH', hold: '5', watchdog: '300' }];
+        }
+        
+        let html = `
+            <div id="gpio-pin-builder" class="gpio-pin-builder">
+                <input type="hidden" id="var-${variable.key}" name="${variable.key}" value="${escapeHtml(value || '')}">
+                <div id="gpio-pins-list">
+        `;
+        
+        pins.forEach((pin, index) => {
+            html += `
+                <div class="gpio-pin-row card mb-2" data-index="${index}">
+                    <div class="card-body">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-2">
+                                <label class="form-label small mb-1">BCM Pin #</label>
+                                <input type="number" class="form-control form-control-sm pin-number" 
+                                       placeholder="17" min="2" max="27" value="${pin.pin}" ${disabledAttr}
+                                       onchange="updateGPIOPinsValue()">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1">Pin Name</label>
+                                <input type="text" class="form-control form-control-sm pin-name" 
+                                       placeholder="e.g., Aux Relay" value="${escapeHtml(pin.name)}" ${disabledAttr}
+                                       onchange="updateGPIOPinsValue()">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small mb-1">Active State</label>
+                                <select class="form-select form-select-sm pin-state" ${disabledAttr} onchange="updateGPIOPinsValue()">
+                                    <option value="HIGH" ${pin.state === 'HIGH' ? 'selected' : ''}>HIGH</option>
+                                    <option value="LOW" ${pin.state === 'LOW' ? 'selected' : ''}>LOW</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small mb-1">Hold (sec)</label>
+                                <input type="number" class="form-control form-control-sm pin-hold" 
+                                       placeholder="5" min="1" max="300" value="${pin.hold}" ${disabledAttr}
+                                       onchange="updateGPIOPinsValue()">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small mb-1">Watchdog (sec)</label>
+                                <input type="number" class="form-control form-control-sm pin-watchdog" 
+                                       placeholder="300" min="5" max="3600" value="${pin.watchdog}" ${disabledAttr}
+                                       onchange="updateGPIOPinsValue()">
+                            </div>
+                            <div class="col-md-1">
+                                ${canEdit ? `
+                                <button type="button" class="btn btn-sm btn-outline-danger w-100" 
+                                        onclick="removeGPIOPin(${index})" title="Remove this pin">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `
+                </div>
+                ${canEdit ? `
+                <button type="button" class="btn btn-sm btn-success mt-2" onclick="addGPIOPin()">
+                    <i class="fas fa-plus me-1"></i> Add Another Pin
+                </button>
+                ` : ''}
+            </div>
+        `;
+        
+        return html;
+    }
+
     function renderVariable(variable) {
         const required = variable.required ? '<span class="variable-required">*</span>' : '';
         const sensitive = variable.sensitive ? '<span class="variable-sensitive"><i class="fas fa-lock"></i> Sensitive</span>' : '';
@@ -515,6 +637,9 @@
             inputHtml += `</select>`;
         } else if (variable.type === 'textarea') {
             inputHtml = `<textarea class="form-control" id="${inputId}" name="${variable.key}" rows="3" placeholder="${variable.placeholder || ''}" ${variable.required ? 'required' : ''} ${disabledAttr}>${value}</textarea>`;
+        } else if (variable.type === 'gpio_pin_builder') {
+            // Custom GPIO Pin Builder interface
+            inputHtml = renderGPIOPinBuilder(variable, value, disabledAttr);
         } else {
             const inputType = variable.type || 'text';
             const step = variable.step ? `step="${variable.step}"` : '';
@@ -755,5 +880,130 @@
 
     // Load settings on page load
     document.addEventListener('DOMContentLoaded', loadSettings);
+
+    // GPIO Pin Builder Functions
+    function updateGPIOPinsValue() {
+        const builder = document.getElementById('gpio-pin-builder');
+        if (!builder) return;
+        
+        const rows = builder.querySelectorAll('.gpio-pin-row');
+        const pins = [];
+        
+        rows.forEach(row => {
+            const pin = row.querySelector('.pin-number').value.trim();
+            const name = row.querySelector('.pin-name').value.trim();
+            const state = row.querySelector('.pin-state').value;
+            const hold = row.querySelector('.pin-hold').value || '5';
+            const watchdog = row.querySelector('.pin-watchdog').value || '300';
+            
+            // Only add if pin number is specified
+            if (pin) {
+                pins.push(`${pin}:${name}:${state}:${hold}:${watchdog}`);
+            }
+        });
+        
+        const hiddenInput = document.getElementById('var-GPIO_ADDITIONAL_PINS');
+        if (hiddenInput) {
+            hiddenInput.value = pins.join('\n');
+            // Trigger change event to mark as changed
+            hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }
+
+    function addGPIOPin() {
+        const list = document.getElementById('gpio-pins-list');
+        if (!list) return;
+        
+        const rows = list.querySelectorAll('.gpio-pin-row');
+        const newIndex = rows.length;
+        
+        const newRow = document.createElement('div');
+        newRow.className = 'gpio-pin-row card mb-2';
+        newRow.setAttribute('data-index', newIndex);
+        newRow.innerHTML = `
+            <div class="card-body">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-2">
+                        <label class="form-label small mb-1">BCM Pin #</label>
+                        <input type="number" class="form-control form-control-sm pin-number" 
+                               placeholder="17" min="2" max="27" value="" 
+                               onchange="updateGPIOPinsValue()">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">Pin Name</label>
+                        <input type="text" class="form-control form-control-sm pin-name" 
+                               placeholder="e.g., Aux Relay" value="" 
+                               onchange="updateGPIOPinsValue()">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small mb-1">Active State</label>
+                        <select class="form-select form-select-sm pin-state" onchange="updateGPIOPinsValue()">
+                            <option value="HIGH" selected>HIGH</option>
+                            <option value="LOW">LOW</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small mb-1">Hold (sec)</label>
+                        <input type="number" class="form-control form-control-sm pin-hold" 
+                               placeholder="5" min="1" max="300" value="5" 
+                               onchange="updateGPIOPinsValue()">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small mb-1">Watchdog (sec)</label>
+                        <input type="number" class="form-control form-control-sm pin-watchdog" 
+                               placeholder="300" min="5" max="3600" value="300" 
+                               onchange="updateGPIOPinsValue()">
+                    </div>
+                    <div class="col-md-1">
+                        <button type="button" class="btn btn-sm btn-outline-danger w-100" 
+                                onclick="removeGPIOPin(${newIndex})" title="Remove this pin">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        list.appendChild(newRow);
+        
+        // Update indices
+        updateRowIndices();
+    }
+
+    function removeGPIOPin(index) {
+        const list = document.getElementById('gpio-pins-list');
+        if (!list) return;
+        
+        const rows = list.querySelectorAll('.gpio-pin-row');
+        if (rows.length <= 1) {
+            // Don't remove the last row, just clear it
+            const row = rows[0];
+            row.querySelector('.pin-number').value = '';
+            row.querySelector('.pin-name').value = '';
+            row.querySelector('.pin-state').value = 'HIGH';
+            row.querySelector('.pin-hold').value = '5';
+            row.querySelector('.pin-watchdog').value = '300';
+        } else {
+            // Remove the specific row
+            rows[index].remove();
+            updateRowIndices();
+        }
+        
+        updateGPIOPinsValue();
+    }
+
+    function updateRowIndices() {
+        const list = document.getElementById('gpio-pins-list');
+        if (!list) return;
+        
+        const rows = list.querySelectorAll('.gpio-pin-row');
+        rows.forEach((row, index) => {
+            row.setAttribute('data-index', index);
+            const removeBtn = row.querySelector('button[onclick^="removeGPIOPin"]');
+            if (removeBtn) {
+                removeBtn.setAttribute('onclick', `removeGPIOPin(${index})`);
+            }
+        });
+    }
 </script>
 {% endblock %}

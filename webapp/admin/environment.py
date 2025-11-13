@@ -367,52 +367,50 @@ ENV_CATEGORIES = {
         'variables': [
             {
                 'key': 'EAS_GPIO_PIN',
-                'label': 'GPIO Pin',
+                'label': 'Primary GPIO Pin',
                 'type': 'number',
-                'description': 'GPIO pin number for relay control (leave empty to disable). Disabling this will gray out other GPIO settings.',
+                'description': 'Main GPIO pin for relay control (typically used for transmitter keying). Leave empty to disable GPIO completely.',
                 'placeholder': 'e.g., 17',
                 'min': 2,
                 'max': 27,
             },
             {
                 'key': 'EAS_GPIO_ACTIVE_STATE',
-                'label': 'Active State',
+                'label': 'Primary Pin Active State',
                 'type': 'select',
                 'options': ['HIGH', 'LOW'],
                 'default': 'HIGH',
-                'description': 'GPIO active state',
+                'description': 'Electrical state when the primary pin is activated (HIGH = 3.3V, LOW = 0V)',
                 'category': 'gpio_enabled',
             },
             {
                 'key': 'EAS_GPIO_HOLD_SECONDS',
-                'label': 'Hold Duration (seconds)',
+                'label': 'Primary Pin Hold Duration',
                 'type': 'number',
                 'default': '5',
-                'description': 'How long to activate GPIO relay',
+                'description': 'How long to keep the primary pin activated (in seconds)',
                 'min': 1,
                 'max': 300,
                 'category': 'gpio_enabled',
             },
             {
                 'key': 'EAS_GPIO_WATCHDOG_SECONDS',
-                'label': 'Watchdog Timeout (seconds)',
+                'label': 'Primary Pin Watchdog Timeout',
                 'type': 'number',
                 'default': '300',
-                'description': 'Maximum activation duration before automatic safety shutdown',
+                'description': 'Maximum time the primary pin can stay active before automatic safety shutdown (in seconds)',
                 'min': 5,
                 'max': 3600,
                 'category': 'gpio_enabled',
             },
             {
                 'key': 'GPIO_ADDITIONAL_PINS',
-                'label': 'Additional Pins',
-                'type': 'textarea',
+                'label': 'Additional GPIO Pins',
+                'type': 'gpio_pin_builder',
                 'description': (
-                    'One pin per line as PIN:Name:State:Hold:Watchdog. '
-                    'State is HIGH or LOW. Example: 22:Aux Relay:LOW:2:120'
+                    'Configure additional GPIO pins beyond the primary pin. '
+                    'Click "Add Pin" to configure each additional relay or output.'
                 ),
-                'placeholder': '22:Aux Relay:LOW:2:120',
-                'rows': 3,
                 'category': 'gpio_enabled',
             },
             {
@@ -947,6 +945,8 @@ def register_environment_routes(app, logger):
 
             # Read current .env
             env_vars = read_env_file()
+            
+            logger.info(f'Updating environment variables: {list(data["variables"].keys())}')
 
             # Update variables
             updates = data['variables']
@@ -957,9 +957,11 @@ def register_environment_routes(app, logger):
                     for var_config in cat_data['variables']:
                         if var_config['key'] == key:
                             found = True
+                            logger.debug(f'Found variable {key} in category configuration')
 
                             # Don't update if it's a masked sensitive value
                             if var_config.get('sensitive') and value == '••••••••':
+                                logger.debug(f'Skipping masked sensitive value for {key}')
                                 continue
 
                             # Validate required fields
@@ -971,10 +973,13 @@ def register_environment_routes(app, logger):
                         break
 
                 if not found:
+                    logger.error(f'Unknown variable attempted to be updated: {key}')
                     raise BadRequest(f'Unknown variable: {key}')
 
                 # Update value
+                old_value = env_vars.get(key, '')
                 env_vars[key] = str(value)
+                logger.debug(f'Updated {key}: {len(old_value)} chars -> {len(str(value))} chars')
 
             # Auto-populate zone codes from FIPS codes if zone codes are empty
             fips_codes_raw = env_vars.get("EAS_MANUAL_FIPS_CODES", "").strip()
@@ -995,21 +1000,24 @@ def register_environment_routes(app, logger):
                     logger.warning(f"Failed to auto-derive zone codes from FIPS: {zone_exc}")
 
             # Write to .env file
+            env_path = get_env_file_path()
+            logger.info(f'Writing environment variables to {env_path}')
             write_env_file(env_vars)
-
-            logger.info(f'Updated {len(updates)} environment variables')
+            logger.info(f'Successfully updated {len(updates)} environment variables and wrote to {env_path}')
 
             return jsonify({
                 'success': True,
                 'message': f'Updated {len(updates)} environment variable(s). Restart required for changes to take effect.',
                 'restart_required': True,
+                'saved_variables': list(updates.keys()),
             })
 
         except BadRequest as e:
+            logger.warning(f'Bad request updating environment variables: {e}')
             return jsonify({'error': str(e)}), 400
         except Exception as e:
-            logger.error(f'Error updating environment variables: {e}')
-            return jsonify({'error': 'Failed to update environment variables'}), 500
+            logger.error(f'Error updating environment variables: {e}', exc_info=True)
+            return jsonify({'error': f'Failed to update environment variables: {str(e)}'}), 500
 
     @app.route('/api/environment/validate')
     @require_permission('system.view_config')
