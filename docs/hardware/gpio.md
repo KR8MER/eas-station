@@ -100,6 +100,61 @@ The pin map is the recommended way to manage behavior profiles—manual edits to
 
 **Avoid using:** GPIO 0-1 (I2C), GPIO 14-15 (UART), GPIO 2-3 (pulled up)
 
+### Docker Configuration (Raspberry Pi)
+
+When running EAS Station in Docker on a Raspberry Pi, the container needs explicit access to the host's GPIO hardware. By default, Docker containers are isolated from hardware devices for security.
+
+**To enable GPIO access:**
+
+1. Edit your `docker-compose.yml` or `docker-compose.embedded-db.yml` file
+2. Locate the `app` service section (this is where the web application runs)
+3. In the `devices:` section, uncomment the GPIO device mapping line:
+
+```yaml
+devices:
+  - /dev/bus/usb:/dev/bus/usb
+  
+  # GPIO Device Passthrough (Raspberry Pi)
+  # Uncomment the following line to enable GPIO access on Raspberry Pi:
+  - /dev/gpiomem:/dev/gpiomem  # GPIO memory access for Raspberry Pi
+```
+
+4. Restart the Docker containers:
+
+```bash
+sudo docker compose down
+sudo docker compose up -d
+```
+
+**Important Notes:**
+
+- The `SYS_RAWIO` capability is already configured in the compose file and is required for GPIO access
+- Only the `app` service needs GPIO access; the poller services do not use GPIO
+- On Raspberry Pi 5, the system uses the `lgpio` backend automatically
+- On older models, the system falls back to `gpiozero` or sysfs backends
+- If GPIO access fails, check that `/dev/gpiomem` exists on your host system with `ls -la /dev/gpiomem`
+
+**Verifying GPIO Access:**
+
+After restarting, check the application logs. You should see:
+- `GPIO controller initialized using gpiozero OutputDevice` (success)
+- Or `GPIO controller initialized using LGPIO backend` (success on Pi 5)
+
+Instead of:
+- `WARNING: gpiozero hardware backends unavailable; using MockFactory fallback` (no access)
+
+**Alternative: Privileged Mode (Not Recommended)**
+
+If device mapping doesn't work, you can use privileged mode, but this reduces container security:
+
+```yaml
+app:
+  privileged: true
+  # ... rest of configuration
+```
+
+This is not recommended for production deployments. Always prefer specific device mapping.
+
 ## Wiring Guidelines
 
 ### Safety First
@@ -365,6 +420,8 @@ RUN pip install gpiozero
 **Problem: "Permission denied" accessing GPIO**
 
 **Solution:**
+
+For native installations:
 ```bash
 # Add user to gpio group
 sudo usermod -a -G gpio $USER
@@ -372,6 +429,20 @@ sudo usermod -a -G gpio $USER
 # Or run application as root (not recommended)
 sudo python app.py
 ```
+
+For Docker installations:
+```bash
+# 1. Ensure /dev/gpiomem is accessible on the host
+ls -la /dev/gpiomem
+
+# 2. Uncomment the GPIO device mapping in docker-compose.yml:
+#    - /dev/gpiomem:/dev/gpiomem
+
+# 3. Restart the containers
+sudo docker compose restart app
+```
+
+If the error persists in Docker, see the "Docker Configuration (Raspberry Pi)" section above.
 
 **Problem: Relay doesn't activate**
 
