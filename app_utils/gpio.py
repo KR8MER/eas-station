@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Protocol, Set
+from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Set
 
 try:  # pragma: no cover - GPIO hardware is optional and platform specific
     from gpiozero import Device, OutputDevice
@@ -196,6 +196,34 @@ class _SysfsGPIOBackend:
             self._active_pins.discard(number)
 
 
+class _NullGPIOBackend:
+    """Safe no-op backend for environments without GPIO access."""
+
+    def __init__(self) -> None:
+        self.BCM = "BCM"
+        self.OUT = "out"
+        self.HIGH = 1
+        self.LOW = 0
+        self._states: Dict[int, int] = {}
+
+    def setmode(self, mode: object) -> None:  # pragma: no cover - no hardware state
+        return
+
+    def setup(self, pin: int, mode: object, *, initial: int) -> None:
+        if mode != self.OUT:
+            raise ValueError("Null backend supports output mode only")
+        self._states[pin] = initial
+
+    def output(self, pin: int, value: int) -> None:
+        self._states[pin] = value
+
+    def cleanup(self, pin: Optional[int] = None) -> None:
+        if pin is None:
+            self._states.clear()
+        else:
+            self._states.pop(pin, None)
+
+
 _PIN_FACTORY_READY = False
 _PIN_FACTORY_ATTEMPTED = False
 
@@ -246,14 +274,26 @@ def _ensure_pin_factory(logger=None) -> bool:
     return _PIN_FACTORY_READY
 
 
-def _create_gpio_backend() -> Optional[GPIOBackend]:
+def _create_gpio_backend(exclude: Optional[Set[type]] = None) -> Optional[GPIOBackend]:
     """Return the best available GPIO backend for this platform."""
 
+    exclude_set = exclude if exclude is not None else set()
+
+    candidates: List[tuple[type, Callable[[], GPIOBackend]]] = []
     if LGPIO is not None:
+        candidates.append((_LGPIOBackend, _LGPIOBackend))
+    candidates.append((_SysfsGPIOBackend, _SysfsGPIOBackend))
+    candidates.append((_NullGPIOBackend, _NullGPIOBackend))
+
+    for backend_type, factory in candidates:
+        if backend_type in exclude_set:
+            continue
         try:
-            return _LGPIOBackend()
+            backend = factory()
         except Exception:
-            pass
+            exclude_set.add(backend_type)
+            continue
+        return backend
 
     try:
         return _SysfsGPIOBackend()
@@ -438,6 +478,7 @@ class GPIOController:
         self._watchdog_threads: Dict[int, threading.Thread] = {}
         self._devices: Dict[int, Any] = {}
         self._backend: Optional[GPIOBackend] = None
+        self._backend_failures: Set[type] = set()
         self._gpiozero_available = bool(OutputDevice is not None and _ensure_pin_factory(logger))
         self._initialized = self._gpiozero_available
 
@@ -454,10 +495,11 @@ class GPIOController:
         elif self.logger:
             self.logger.warning("gpiozero OutputDevice not available - GPIO control disabled")
 
-    def _current_backend_label(self) -> str:
-        if self._backend is None:
+    def _current_backend_label(self, backend: Optional[GPIOBackend] = None) -> str:
+        target = backend if backend is not None else self._backend
+        if target is None:
             return "gpiozero OutputDevice"
-        name = self._backend.__class__.__name__.lstrip("_")
+        name = target.__class__.__name__.lstrip("_")
         if name.lower().endswith("backend"):
             name = name[:-7]
         return f"{name or 'GPIO'} backend"
@@ -466,59 +508,81 @@ class GPIOController:
         if self._backend is not None:
             return True
 
-        backend = _create_gpio_backend()
-        if backend is None:
-            return False
+        while True:
+            backend = _create_gpio_backend(self._backend_failures)
+            if backend is None:
+                return False
 
-        try:
-            backend.setmode(backend.BCM)
-        except Exception as exc:
-            if self.logger:
-                self.logger.error(f"Failed to initialize fallback GPIO backend: {exc}")
-            return False
+            try:
+                backend.setmode(backend.BCM)
+            except Exception as exc:
+                if self.logger:
+                    self.logger.error(
+                        "Failed to initialize fallback GPIO backend %s: %s",
+                        self._current_backend_label(backend),
+                        exc,
+                    )
+                self._backend_failures.add(type(backend))
+                continue
 
-        self._backend = backend
-        return True
+            self._backend = backend
+            return True
 
     def _setup_backend_device(
         self, config: GPIOPinConfig, *, fallback_reason: Optional[str] = None
     ) -> Optional[_BackendPinDevice]:
-        if not self._ensure_backend():
-            if self.logger and fallback_reason:
-                self.logger.error(
-                    "GPIO fallback backend unavailable after gpiozero failure on pin %s: %s",
-                    config.pin,
-                    fallback_reason,
+        failure_messages: List[str] = []
+        combined_reason = fallback_reason or ""
+
+        while True:
+            if not self._ensure_backend():
+                if self.logger and (combined_reason or failure_messages):
+                    details = "; ".join(filter(None, [combined_reason, *failure_messages]))
+                    self.logger.error(
+                        "GPIO fallback backend unavailable after previous failures on pin %s: %s",
+                        config.pin,
+                        details,
+                    )
+                return None
+
+            assert self._backend is not None
+            backend = self._backend
+
+            try:
+                device = _BackendPinDevice(backend, config.pin, config.active_high)
+            except Exception as exc:
+                if self.logger:
+                    self.logger.error(
+                        "Failed to setup pin %s using %s: %s",
+                        config.pin,
+                        self._current_backend_label(backend),
+                        exc,
+                    )
+                self._backend_failures.add(type(backend))
+                self._backend = None
+                failure_messages.append(
+                    f"{self._current_backend_label(backend)} error: {exc}"
                 )
-            return None
+                if combined_reason:
+                    combined_reason = f"{combined_reason}; {exc}"
+                else:
+                    combined_reason = str(exc)
+                continue
 
-        assert self._backend is not None
+            device.off()
+            self._initialized = True
+            self._gpiozero_available = False
 
-        try:
-            device = _BackendPinDevice(self._backend, config.pin, config.active_high)
-        except Exception as exc:
-            if self.logger:
-                self.logger.error(
-                    "Failed to setup pin %s using %s: %s",
+            if self.logger and (fallback_reason or failure_messages):
+                details = "; ".join(filter(None, [fallback_reason, *failure_messages]))
+                self.logger.warning(
+                    "Falling back to %s for pin %s: %s",
+                    self._current_backend_label(backend),
                     config.pin,
-                    self._current_backend_label(),
-                    exc,
+                    details,
                 )
-            return None
 
-        device.off()
-        self._initialized = True
-        self._gpiozero_available = False
-
-        if self.logger and fallback_reason:
-            self.logger.warning(
-                "Falling back to %s for pin %s after gpiozero failure: %s",
-                self._current_backend_label(),
-                config.pin,
-                fallback_reason,
-            )
-
-        return device
+            return device
 
     def _get_or_create_device(self, config: GPIOPinConfig) -> Optional[Any]:
         device = self._devices.get(config.pin)
@@ -570,7 +634,7 @@ class GPIOController:
             self._pins[config.pin] = config
 
             device = self._get_or_create_device(config)
-            if device is None:
+            if device is None or isinstance(self._backend, _NullGPIOBackend):
                 # Record the configuration even when GPIO hardware isn't available so the
                 # application can still display configured pins in the UI.
                 self._states[config.pin] = GPIOState.ERROR
