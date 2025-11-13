@@ -398,9 +398,21 @@
             if (!response.ok) {
                 // Handle specific error cases
                 if (response.status === 401) {
-                    throw new Error('Authentication required. Please log in to save GPIO behaviors.');
+                    const errorMsg = 'Authentication required. You are not logged in or your session has expired.';
+                    console.error('Auth error:', errorMsg);
+                    showMessage('🔒 ' + errorMsg, 'danger');
+                    // Show a modal with login link after a short delay
+                    setTimeout(() => {
+                        if (confirm(errorMsg + '\n\nRedirect to login page?')) {
+                            window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+                        }
+                    }, 500);
+                    throw new Error(errorMsg);
                 } else if (response.status === 403) {
-                    throw new Error('Permission denied. You need "system.configure" permission to modify environment variables.');
+                    const errorMsg = 'Permission denied. You need "system.configure" permission to modify environment variables. Contact your administrator to grant you this permission.';
+                    console.error('Permission error:', errorMsg);
+                    showMessage('🚫 ' + errorMsg, 'danger');
+                    throw new Error(errorMsg);
                 } else if (data.error) {
                     throw new Error(data.error);
                 } else {

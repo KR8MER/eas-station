@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token }}">
     <title>{% block title %}EAS Station - Emergency Alert System{% endblock %}</title>
+    {% block nav_title %}{% endblock %}
 
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}">

@@ -1,0 +1,37 @@
+name: Template Consistency Check
+
+on:
+  pull_request:
+    paths:
+      - 'templates/**/*.html'
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'templates/**/*.html'
+
+jobs:
+  check-templates:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Run template block consistency test
+      run: |
+        cd tests
+        python test_template_blocks.py
+    
+    - name: Report results
+      if: failure()
+      run: |
+        echo "::error::Template block consistency check failed!"
+        echo "::error::Some templates use blocks that are not defined in base.html"
+        echo "::error::Run 'python tests/test_template_blocks.py' locally to see details"
