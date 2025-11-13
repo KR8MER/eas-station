@@ -35,6 +35,10 @@ logger = logging.getLogger(__name__)
 # Delay before restarting FFmpeg after a failure (seconds)
 ICECAST_RESTART_DELAY = 5.0
 
+# Metadata update retry configuration
+METADATA_UPDATE_MAX_RETRIES = 3  # Maximum number of retry attempts for metadata updates
+METADATA_UPDATE_RETRY_DELAY = 2.0  # Initial delay between retries in seconds (with exponential backoff)
+
 
 class StreamFormat(Enum):
     """Supported streaming formats."""
@@ -326,7 +330,7 @@ class IcecastStreamer:
         # Build up a buffer before starting to feed FFmpeg
         from collections import deque
         buffer = deque(maxlen=500)  # Up to 25 seconds of audio (500 * 50ms chunks) - increased from 200
-        prebuffer_target = 50  # Pre-fill with 2.5 seconds before starting - increased from 20
+        prebuffer_target = 100  # Pre-fill with 5 seconds before starting - increased from 50 to prevent buffer empty errors
         buffer_low_watermark = 100  # Warn if buffer drops below 5 seconds (20% of max)
 
         logger.info(f"Pre-buffering {prebuffer_target} chunks (~{prebuffer_target*50}ms) for smooth Icecast streaming")
@@ -922,36 +926,77 @@ class IcecastStreamer:
             headers = {'Authorization': f'Basic {encoded_credentials}'}
             logger.info("Using UTF-8 auth encoding (RFC 7617) for Unicode password")
 
-        try:
-            # Make the HTTP GET request
-            if auth_tuple:
-                response = requests.get(url, auth=auth_tuple, timeout=5.0)
-            else:
-                response = requests.get(url, headers=headers, timeout=5.0)
-        except requests_exceptions.RequestException as exc:
+        # Retry logic for handling race conditions with Icecast mount initialization
+        # If we get a 400 "Source does not exist" error, the mount may not be fully ready
+        max_retries = METADATA_UPDATE_MAX_RETRIES
+        retry_delay = METADATA_UPDATE_RETRY_DELAY
+        
+        for attempt in range(max_retries + 1):  # +1 because we count initial attempt as 0
+            try:
+                # Make the HTTP GET request
+                if auth_tuple:
+                    response = requests.get(url, auth=auth_tuple, timeout=5.0)
+                else:
+                    response = requests.get(url, headers=headers, timeout=5.0)
+            except requests_exceptions.RequestException as exc:
+                logger.warning(
+                    "Failed to update Icecast metadata for %s (attempt %d/%d): %s",
+                    self.config.mount,
+                    attempt + 1,
+                    max_retries + 1,
+                    exc,
+                )
+                self._last_error = str(exc)
+                
+                # Don't retry on connection errors, they're unlikely to resolve quickly
+                return None
+
+            if response.status_code == 200:
+                logger.info(
+                    "Updated Icecast metadata for %s: %s",
+                    self.config.mount,
+                    song_value,
+                )
+                return song_value
+            
+            # Handle 400 errors with retry logic (likely "Source does not exist" race condition)
+            if response.status_code == 400:
+                if attempt < max_retries:
+                    # Calculate exponential backoff delay
+                    current_delay = retry_delay * (2 ** attempt)
+                    logger.warning(
+                        "Icecast metadata update returned 400 for %s (attempt %d/%d): %s. "
+                        "Retrying in %.1f seconds...",
+                        self.config.mount,
+                        attempt + 1,
+                        max_retries + 1,
+                        response.text.strip()[:200],
+                        current_delay,
+                    )
+                    time.sleep(current_delay)
+                    continue  # Retry the request
+                else:
+                    # Final attempt failed
+                    logger.warning(
+                        "Icecast metadata update returned 400 for %s after %d attempts: %s",
+                        self.config.mount,
+                        max_retries + 1,
+                        response.text.strip()[:200],
+                    )
+                    self._last_error = f"metadata update failed ({response.status_code}) after {max_retries + 1} attempts"
+                    return None
+            
+            # For other non-200 status codes, log and return without retry
             logger.warning(
-                "Failed to update Icecast metadata for %s: %s",
+                "Icecast metadata update returned %s for %s: %s",
+                response.status_code,
                 self.config.mount,
-                exc,
+                response.text.strip()[:200],
             )
-            self._last_error = str(exc)
+            self._last_error = f"metadata update failed ({response.status_code})"
             return None
-
-        if response.status_code == 200:
-            logger.info(
-                "Updated Icecast metadata for %s: %s",
-                self.config.mount,
-                song_value,
-            )
-            return song_value
-
-        logger.warning(
-            "Icecast metadata update returned %s for %s: %s",
-            response.status_code,
-            self.config.mount,
-            response.text.strip()[:200],
-        )
-        self._last_error = f"metadata update failed ({response.status_code})"
+        
+        # Should not reach here, but just in case
         return None
 
     def update_metadata(self, title: str, artist: str = "EAS Station") -> bool:
