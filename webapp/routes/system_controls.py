@@ -16,7 +16,14 @@ from flask import (
 
 from app_core.extensions import db
 from app_core.models import GPIOActivationLog
-from app_utils.gpio import GPIOActivationType
+from app_utils.gpio import (
+    GPIOActivationType,
+    GPIOBehavior,
+    GPIO_BEHAVIOR_LABELS,
+    load_gpio_behavior_matrix_from_env,
+    load_gpio_pin_configs_from_env,
+)
+from app_utils.pi_pinout import PIN_ROWS
 from app_utils.time import utc_now
 
 
@@ -41,107 +48,70 @@ def register(app: Flask, logger) -> None:
 
     def _load_gpio_configuration(controller):
         """Load GPIO pin configurations from environment variables."""
-        import os
-        from app_utils.gpio import GPIOPinConfig
 
-        # Load EAS transmitter GPIO configuration
-        eas_gpio_pin = os.getenv("EAS_GPIO_PIN")
-        if eas_gpio_pin:
+        configs = load_gpio_pin_configs_from_env(route_logger)
+
+        for config in configs:
             try:
-                pin_number = int(eas_gpio_pin)
-                active_high = os.getenv("EAS_GPIO_ACTIVE_STATE", "HIGH").upper() != "LOW"
-                hold_seconds = float(os.getenv("EAS_GPIO_HOLD_SECONDS", "5") or 5)
-                watchdog_seconds = float(os.getenv("EAS_GPIO_WATCHDOG_SECONDS", "300") or 300)
-
-                config = GPIOPinConfig(
-                    pin=pin_number,
-                    name="EAS Transmitter PTT",
-                    active_high=active_high,
-                    hold_seconds=hold_seconds,
-                    watchdog_seconds=watchdog_seconds,
-                    enabled=True,
+                controller.add_pin(config)
+                route_logger.info(
+                    "Loaded GPIO configuration: pin %s (%s)", config.pin, config.name
+                )
+            except ValueError:
+                # Duplicate pins are already logged by the loader but guard against
+                # attempts to register the same pin twice.
+                route_logger.warning("GPIO pin %s already configured; skipping", config.pin)
+            except Exception as exc:  # pragma: no cover - hardware setup
+                route_logger.error(
+                    "Failed to register GPIO pin %s (%s): %s",
+                    config.pin,
+                    config.name,
+                    exc,
                 )
 
-                controller.add_pin(config)
-                route_logger.info(f"Loaded EAS GPIO configuration: pin {pin_number}")
-            except Exception as exc:
-                route_logger.error(f"Failed to load EAS GPIO configuration: {exc}")
+        behavior_manager = getattr(controller, "behavior_manager", None)
+        if behavior_manager:
+            behavior_manager.update_pin_configs(configs)
+            behavior_manager.update_behavior_matrix(
+                load_gpio_behavior_matrix_from_env(route_logger)
+            )
 
-        # Load additional GPIO pins from environment (comma-separated list)
-        # Format: PIN:NAME:ACTIVE_HIGH:HOLD_SECONDS:WATCHDOG_SECONDS
-        additional_pins = os.getenv("GPIO_ADDITIONAL_PINS", "").strip()
-        if additional_pins:
-            for pin_config in additional_pins.split(","):
-                try:
-                    parts = pin_config.strip().split(":")
-                    if len(parts) < 2:
-                        continue
+    def _build_pin_entry(pin_def, config_map, behavior_matrix):
+        entry = {
+            "physical": pin_def.physical,
+            "name": pin_def.name,
+            "type": pin_def.pin_type,
+            "bcm": pin_def.bcm,
+            "description": pin_def.description,
+            "is_gpio": pin_def.is_gpio,
+            "configured": False,
+            "active_high": None,
+            "behaviors": [],
+        }
 
-                    pin_number = int(parts[0])
-                    name = parts[1]
-                    active_high = parts[2].upper() != "LOW" if len(parts) > 2 else True
-                    hold_seconds = float(parts[3]) if len(parts) > 3 else 5.0
-                    watchdog_seconds = float(parts[4]) if len(parts) > 4 else 300.0
+        if pin_def.is_gpio and pin_def.bcm is not None:
+            config = config_map.get(pin_def.bcm)
+            entry["configured"] = config is not None
+            entry["active_high"] = config.active_high if config else None
+            behaviors = behavior_matrix.get(pin_def.bcm, set())
+            entry["behaviors"] = [behavior.value for behavior in sorted(behaviors, key=lambda b: b.value)]
 
-                    config = GPIOPinConfig(
-                        pin=pin_number,
-                        name=name,
-                        active_high=active_high,
-                        hold_seconds=hold_seconds,
-                        watchdog_seconds=watchdog_seconds,
-                        enabled=True,
-                    )
+        return entry
 
-                    controller.add_pin(config)
-                    route_logger.info(f"Loaded additional GPIO pin: {pin_number} ({name})")
-                except Exception as exc:
-                    route_logger.error(f"Failed to parse GPIO config '{pin_config}': {exc}")
+    def _build_pin_rows():
+        configs = load_gpio_pin_configs_from_env(route_logger)
+        behavior_matrix = load_gpio_behavior_matrix_from_env(route_logger)
+        config_map = {cfg.pin: cfg for cfg in configs}
 
-        # Load individual GPIO_PIN_<number> environment variables
-        # Format: GPIO_PIN_17=HIGH:5:300:My Pin Name
-        # or just: GPIO_PIN_17=17 (pin number only)
-        import re
-        gpio_pin_pattern = re.compile(r'^GPIO_PIN_(\d+)$')
-        for env_key, env_value in os.environ.items():
-            match = gpio_pin_pattern.match(env_key)
-            if match:
-                try:
-                    pin_number = int(match.group(1))
-                    value = env_value.strip()
-
-                    # Parse value - could be just pin number or colon-separated config
-                    # Format: [ACTIVE_STATE]:[HOLD_SECONDS]:[WATCHDOG_SECONDS]:[NAME]
-                    if ':' in value:
-                        parts = value.split(':')
-                        active_high = parts[0].upper() != "LOW" if parts[0] else True
-                        hold_seconds = float(parts[1]) if len(parts) > 1 and parts[1] else 5.0
-                        watchdog_seconds = float(parts[2]) if len(parts) > 2 and parts[2] else 300.0
-                        name = parts[3] if len(parts) > 3 and parts[3] else f"GPIO Pin {pin_number}"
-                    else:
-                        # Simple format - just validate it's a number or HIGH/LOW
-                        if value.upper() in ('HIGH', 'LOW'):
-                            active_high = value.upper() != "LOW"
-                        else:
-                            # Assume it's the pin number confirmation
-                            int(value)  # Validate it's a number
-                            active_high = True
-                        name = f"GPIO Pin {pin_number}"
-                        hold_seconds = 5.0
-                        watchdog_seconds = 300.0
-
-                    config = GPIOPinConfig(
-                        pin=pin_number,
-                        name=name,
-                        active_high=active_high,
-                        hold_seconds=hold_seconds,
-                        watchdog_seconds=watchdog_seconds,
-                        enabled=True,
-                    )
-
-                    controller.add_pin(config)
-                    route_logger.info(f"Loaded GPIO pin from {env_key}: pin {pin_number} ({name})")
-                except Exception as exc:
-                    route_logger.error(f"Failed to parse {env_key}={env_value}: {exc}")
+        rows = []
+        for left_pin, right_pin in PIN_ROWS:
+            rows.append(
+                {
+                    "left": _build_pin_entry(left_pin, config_map, behavior_matrix),
+                    "right": _build_pin_entry(right_pin, config_map, behavior_matrix),
+                }
+            )
+        return rows
 
     def _get_current_user() -> str:
         """Get current username from session."""
@@ -426,6 +396,54 @@ def register(app: Flask, logger) -> None:
                 render_template(
                     "error.html",
                     error_message=f"Failed to load GPIO control panel: {exc}",
+                ),
+                500,
+            )
+
+    @app.route("/admin/gpio/pin-map")
+    def gpio_pin_map():
+        """Render the interactive Raspberry Pi pin map."""
+
+        try:
+            pin_rows = _build_pin_rows()
+            behavior_order = [
+                GPIOBehavior.DURATION_OF_ALERT,
+                GPIOBehavior.PLAYOUT,
+                GPIOBehavior.FLASH,
+                GPIOBehavior.FIVE_SECONDS,
+                GPIOBehavior.INCOMING_ALERT,
+                GPIOBehavior.FORWARDING_ALERT,
+            ]
+            behavior_descriptions = {
+                GPIOBehavior.DURATION_OF_ALERT.value: "Hold the relay active until the alert finishes.",
+                GPIOBehavior.PLAYOUT.value: "Activate while tones and audio playout are running.",
+                GPIOBehavior.FLASH.value: "Blink the pin rapidly at the start of the alert to drive strobes.",
+                GPIOBehavior.FIVE_SECONDS.value: "Pulse the pin for five seconds when playout begins.",
+                GPIOBehavior.INCOMING_ALERT.value: "Pulse when a new alert is ingested or queued.",
+                GPIOBehavior.FORWARDING_ALERT.value: "Pulse when an alert is forwarded from monitoring inputs.",
+            }
+            behavior_options = [
+                {
+                    "value": behavior.value,
+                    "label": GPIO_BEHAVIOR_LABELS.get(
+                        behavior, behavior.value.replace("_", " ").title()
+                    ),
+                    "description": behavior_descriptions.get(behavior.value, ""),
+                }
+                for behavior in behavior_order
+            ]
+
+            return render_template(
+                "gpio_pin_map.html",
+                pin_rows=pin_rows,
+                behavior_options=behavior_options,
+            )
+        except Exception as exc:  # pragma: no cover - rendering safety
+            route_logger.error(f"Failed to render GPIO pin map: {exc}")
+            return (
+                render_template(
+                    "error.html",
+                    error_message=f"Failed to load GPIO pin map: {exc}",
                 ),
                 500,
             )

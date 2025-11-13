@@ -189,13 +189,18 @@ Relay control with activation logging, statistics, and audit trails.
 ### Access the UI
 - **Control Panel**: **Operations → GPIO Control** (`/gpio_control`)
 - **Statistics**: **Admin → GPIO Statistics** (`/admin/gpio/statistics`)
+- **Pin Map**: **System → GPIO Pin Map** (`/admin/gpio/pin-map`)
 
 ### Configuration
-Set via environment variables:
+Configure via environment settings (Settings → Environment → GPIO Control) or
+set the following environment variables:
 ```bash
-EAS_GPIO_PIN=17                           # Primary GPIO pin
-GPIO_ADDITIONAL_PINS=18,27,22             # Additional pins
-GPIO_WATCHDOG_TIMEOUT=300                 # Max activation time (seconds)
+EAS_GPIO_PIN=17                           # Primary GPIO pin (BCM numbering)
+EAS_GPIO_ACTIVE_STATE=HIGH                # HIGH or LOW when the relay is active
+EAS_GPIO_HOLD_SECONDS=5                   # Minimum time before release
+EAS_GPIO_WATCHDOG_SECONDS=300             # Safety timeout before auto-release
+GPIO_ADDITIONAL_PINS="22:Aux Relay:LOW:2:120"  # Extra pins (one or many)
+GPIO_PIN_BEHAVIOR_MATRIX="{\"18\": [\"duration_of_alert\", \"playout\"]}"
 ```
 
 ### API Endpoints

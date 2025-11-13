@@ -6,6 +6,11 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 ### Added
+- Added interactive GPIO Pin Map page (System → GPIO Pin Map) to visualize the 40-pin header and
+  assign alert behaviors per BCM pin with persistence to `GPIO_PIN_BEHAVIOR_MATRIX`.
+- Added multi-pin GPIO configuration loader with persistent environment editor support, ensuring
+  Raspberry Pi deployments can drive multiple relays with active-high/low settings and automatic
+  watchdog enforcement during alert playout.
 - Added IPAWS poll debug export endpoints for Excel and PDF with UI buttons on `/debug/ipaws` for rapid sharing of poll runs.
 - Added comprehensive analytics and compliance enhancements with trend analysis and anomaly detection
   - Implemented `app_core/analytics/` module with metrics aggregation, trend analysis, and anomaly detection
@@ -48,6 +53,8 @@ tracks releases under the 2.x series.
   - SVG filters for depth, glow effects, and contemporary design polish
 
 ### Fixed
+- Replaced the deprecated `RPi.GPIO` backend with `gpiozero` output devices and ensured typing imports
+  are available so Raspberry Pi deployments boot cleanly on Pi 5 hardware.
 - Ensured Docker Compose publishes nginx ports on both IPv4 and IPv6 addresses so external scanners can reach the HTTPS endpoint over IPv6.
 - Reduced nginx static asset cache lifetime from 24 hours to five minutes so freshly deployed frontend changes appear without manual cache purges.
 - Prevented alert verification page timeouts by offloading audio decoding to a background worker and persisting progress/results for UI polling.
