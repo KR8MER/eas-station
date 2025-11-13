@@ -48,6 +48,25 @@ def _markdown_to_html(content: str) -> str:
 
     content = re.sub(mermaid_pattern, save_mermaid, content, flags=re.DOTALL)
 
+    # Extract images and links before escaping to preserve them from emphasis parsing
+    images_and_links = {}
+    
+    # Extract images first (they have ! before [)
+    def save_image(match):
+        placeholder = f'%%%IMAGE{len(images_and_links)}%%%'
+        images_and_links[placeholder] = f'![{match.group(1)}]({match.group(2)})'
+        return placeholder
+    
+    content = re.sub(r'!\[([^\]]+)\]\(([^)]+)\)', save_image, content)
+    
+    # Extract links
+    def save_link(match):
+        placeholder = f'%%%LINK{len(images_and_links)}%%%'
+        images_and_links[placeholder] = f'[{match.group(1)}]({match.group(2)})'
+        return placeholder
+    
+    content = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', save_link, content)
+
     # Escape HTML first
     html = escape(content)
 
@@ -58,7 +77,7 @@ def _markdown_to_html(content: str) -> str:
     html = re.sub(r'^#### (.+)$', r'<h4>\1</h4>', str(html), flags=re.MULTILINE)
     html = re.sub(r'^##### (.+)$', r'<h5>\1</h5>', str(html), flags=re.MULTILINE)
 
-    # Convert bold and italic
+    # Convert bold and italic (now safe from link URLs)
     html = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', str(html))
     html = re.sub(r'\*(.+?)\*', r'<em>\1</em>', str(html))
     html = re.sub(r'__(.+?)__', r'<strong>\1</strong>', str(html))
@@ -75,8 +94,23 @@ def _markdown_to_html(content: str) -> str:
     # Convert inline code
     html = re.sub(r'`([^`]+)`', r'<code>\1</code>', str(html))
 
-    # Convert links
-    html = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', str(html))
+    # Restore and convert images and links
+    for placeholder, markdown in images_and_links.items():
+        escaped_placeholder = escape(placeholder)
+        if markdown.startswith('!'):
+            # It's an image: ![alt](url)
+            match = re.match(r'!\[([^\]]+)\]\(([^)]+)\)', markdown)
+            if match:
+                alt_text = escape(match.group(1))
+                url = escape(match.group(2))
+                html = str(html).replace(str(escaped_placeholder), f'<img alt="{alt_text}" src="{url}" />')
+        else:
+            # It's a link: [text](url)
+            match = re.match(r'\[([^\]]+)\]\(([^)]+)\)', markdown)
+            if match:
+                link_text = match.group(1)  # Already escaped during escape(content)
+                url = escape(match.group(2))
+                html = str(html).replace(str(escaped_placeholder), f'<a href="{url}">{link_text}</a>')
 
     # Convert unordered lists
     lines = str(html).split('\n')
