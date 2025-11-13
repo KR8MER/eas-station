@@ -73,7 +73,15 @@
             </p>
         </div>
         <div class="col-12 col-lg-2 text-lg-end mt-3 mt-lg-0">
-            <button class="btn btn-outline-secondary" id="reloadPinMap">
+            <div class="btn-group mb-2" role="group">
+                <a class="btn btn-outline-primary" href="{{ url_for('gpio_control_panel') }}">
+                    <i class="fas fa-microchip"></i> Control
+                </a>
+                <a class="btn btn-outline-secondary" href="/admin/gpio/statistics">
+                    <i class="fas fa-chart-pie"></i> Stats
+                </a>
+            </div>
+            <button class="btn btn-outline-secondary d-block w-100" id="reloadPinMap">
                 <i class="fas fa-rotate"></i> Reload
             </button>
         </div>
