@@ -246,9 +246,14 @@ def _ensure_pin_factory(logger=None) -> bool:
             # preferred backend. When that fails (e.g., no GPIO hardware
             # available) the property access raises an exception which we catch
             # to install a mock fallback instead.
-            Device.pin_factory  # type: ignore[attr-defined]
-            _PIN_FACTORY_READY = True
+            factory = Device.pin_factory  # type: ignore[attr-defined]
         except Exception as exc:  # pragma: no cover - depends on host environment
+            factory = None
+            fallback_exc = exc
+        else:
+            fallback_exc = None
+
+        if factory is None:
             if MockFactory is not None:
                 try:
                     Device.pin_factory = MockFactory()  # type: ignore[attr-defined]
@@ -265,11 +270,16 @@ def _ensure_pin_factory(logger=None) -> bool:
                         )
             else:
                 if logger:
+                    reason = fallback_exc or RuntimeError(
+                        "gpiozero pin factory returned None"
+                    )
                     logger.error(
                         "gpiozero pin factory initialization failed and MockFactory "
                         "is unavailable: %s",
-                        exc,
+                        reason,
                     )
+        else:
+            _PIN_FACTORY_READY = True
 
     return _PIN_FACTORY_READY
 

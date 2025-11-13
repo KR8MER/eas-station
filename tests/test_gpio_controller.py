@@ -30,7 +30,7 @@ def test_add_pin_records_configuration_when_gpio_unavailable():
 
     assert 17 in states
     assert states[17]["name"] == "Test Pin"
-    assert states[17]["state"] == GPIOState.ERROR.value
+    assert states[17]["state"] == GPIOState.INACTIVE.value
 
 
 def test_load_gpio_pin_configs_from_env(monkeypatch):
