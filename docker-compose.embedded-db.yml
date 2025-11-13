@@ -105,11 +105,16 @@ services:
       - "host.docker.internal:host-gateway"
     devices:
       - /dev/bus/usb:/dev/bus/usb
+
+      # GPIO Device Passthrough (Raspberry Pi)
+      # GPIO access enabled by default - fails gracefully if hardware not available
+      - /dev/gpiomem:/dev/gpiomem  # GPIO memory access for Raspberry Pi
+
       # Uncomment the following lines if you have NVMe drives and want SMART monitoring:
       # - /dev/nvme0:/dev/nvme0      # NVMe controller for SMART monitoring
       # - /dev/nvme0n1:/dev/nvme0n1  # NVMe namespace (adjust nvme0n1 to your device)
     cap_add:
-      - SYS_RAWIO  # Required for SMART monitoring
+      - SYS_RAWIO  # Required for SDR hardware access, SMART monitoring, and GPIO access
     security_opt:
       - no-new-privileges:true
 
