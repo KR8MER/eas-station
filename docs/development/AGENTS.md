@@ -27,7 +27,7 @@ When discussing or investigating bugs:
 ## 🧭 Documentation & UX Standards
 
 - **Link Accuracy Matters** – Reference primary sources (e.g., FCC consent decrees via `docs.fcc.gov`) instead of news summaries. Broken or redirected links must be updated immediately.
-- **Theory of Operation Is Canonical** – Whenever you touch ingestion, SAME generation, or verification logic, review and update [`docs/architecture/THEORY_OF_OPERATION.md`](../architecture/THEORY_OF_OPERATION.md) so diagrams, timelines, and checklists match the code.
+- **Theory of Operation Is Canonical** – Whenever you touch ingestion, SAME generation, or verification logic, review and update [`docs/architecture/THEORY_OF_OPERATION.md`](../architecture/THEORY_OF_OPERATION) so diagrams, timelines, and checklists match the code.
 - **Surface Docs In-App** – Front-end templates (`templates/`) should link to the corresponding Markdown resources in `docs/`. Keep `/about`, `/help`, `/terms`, and `/privacy` synchronized with repository guidance.
 - **Documentation Updates Required** – When adding new features or changing workflows, update:
   - `templates/help.html` – User-facing help documentation
@@ -339,9 +339,9 @@ Before editing any template file:
 1. **Search for usage**: `grep -r "include.*filename" templates/`
 2. **Check extends**: `grep -r "extends.*filename" templates/`
 3. **Verify in Python**: `grep -r "render_template.*filename" .`
-4. **Consult documentation**: See [docs/frontend/TEMPLATE_STRUCTURE.md](../frontend/TEMPLATE_STRUCTURE.md)
+4. **Consult documentation**: See [docs/frontend/TEMPLATE_STRUCTURE.md](../frontend/TEMPLATE_STRUCTURE)
 
-**Complete template architecture documentation**: [docs/frontend/TEMPLATE_STRUCTURE.md](../frontend/TEMPLATE_STRUCTURE.md)
+**Complete template architecture documentation**: [docs/frontend/TEMPLATE_STRUCTURE.md](../frontend/TEMPLATE_STRUCTURE)
 
 ---
 
@@ -954,21 +954,21 @@ For quick navigation and understanding of the codebase structure, refer to the c
 ### How to Use Function Tree for Development
 
 **When adding a new feature:**
-1. Search [docs/reference/FUNCTION_TREE_INDEX.md](../reference/FUNCTION_TREE_INDEX.md) for similar features
+1. Search [docs/reference/FUNCTION_TREE_INDEX.md](../reference/FUNCTION_TREE_INDEX) for similar features
 2. Identify the module pattern (e.g., routes in `webapp/`, models in `app_core/`)
 3. Follow the established patterns from similar functions
-4. Update [docs/reference/FUNCTION_TREE.md](../reference/FUNCTION_TREE.md) if you add new significant functions or modules
+4. Update [docs/reference/FUNCTION_TREE.md](../reference/FUNCTION_TREE) if you add new significant functions or modules
 
 **When fixing a bug:**
-1. Search [docs/reference/FUNCTION_TREE.md](../reference/FUNCTION_TREE.md) for the function/class mentioned in the bug report
+1. Search [docs/reference/FUNCTION_TREE.md](../reference/FUNCTION_TREE) for the function/class mentioned in the bug report
 2. Note the file path and line number
 3. Check related functions in the same module
 4. Look for similar patterns in other modules for consistency
 
 **When exploring unfamiliar code:**
 1. Start with FUNCTION_TREE_SUMMARY.txt to understand subsystem coverage
-2. Use [docs/reference/FUNCTION_TREE_INDEX.md](../reference/FUNCTION_TREE_INDEX.md) to find the subsystem you're interested in
-3. Dive into [docs/reference/FUNCTION_TREE.md](../reference/FUNCTION_TREE.md) for detailed function signatures and locations
+2. Use [docs/reference/FUNCTION_TREE_INDEX.md](../reference/FUNCTION_TREE_INDEX) to find the subsystem you're interested in
+3. Dive into [docs/reference/FUNCTION_TREE.md](../reference/FUNCTION_TREE) for detailed function signatures and locations
 
 ### Known Bugs Documentation
 
@@ -981,9 +981,9 @@ For quick navigation and understanding of the codebase structure, refer to the c
 - Docker/Portainer deployment issues
 
 **Before starting any work:**
-1. Check [docs/reference/KNOWN_BUGS.md](../reference/KNOWN_BUGS.md) to see if your issue is already documented
-2. If fixing a bug, remove it from [docs/reference/KNOWN_BUGS.md](../reference/KNOWN_BUGS.md) in your commit
-3. If discovering a new bug, add it to [docs/reference/KNOWN_BUGS.md](../reference/KNOWN_BUGS.md) with detailed analysis
+1. Check [docs/reference/KNOWN_BUGS.md](../reference/KNOWN_BUGS) to see if your issue is already documented
+2. If fixing a bug, remove it from [docs/reference/KNOWN_BUGS.md](../reference/KNOWN_BUGS) in your commit
+3. If discovering a new bug, add it to [docs/reference/KNOWN_BUGS.md](../reference/KNOWN_BUGS) with detailed analysis
 
 ---
 

@@ -138,8 +138,8 @@ Once your SDR is detected:
 4. Enable the receiver and watch for the "Locked" status
 
 For detailed configuration instructions, see:
-- [Full SDR Setup Guide](sdr_setup_guide.md)
-- [Radio USB Passthrough Guide](radio_usb_passthrough.md)
+- [Full SDR Setup Guide](sdr_setup_guide)
+- [Radio USB Passthrough Guide](radio_usb_passthrough)
 
 ## Technical Details
 
@@ -182,8 +182,8 @@ This provides:
 ## Support
 
 If you encounter issues:
-1. Check the [SDR Setup Guide](sdr_setup_guide.md)
-2. Review the [Troubleshooting section](sdr_setup_guide.md#troubleshooting)
+1. Check the [SDR Setup Guide](sdr_setup_guide)
+2. Review the [Troubleshooting section](sdr_setup_guide#troubleshooting)
 3. Open an issue at https://github.com/KR8MER/eas-station/issues
 
 Include:

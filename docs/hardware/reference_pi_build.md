@@ -598,10 +598,10 @@ Yellow lightning bolt icon or throttling logs indicate insufficient power:
 
 - [Official Raspberry Pi Documentation](https://www.raspberrypi.com/documentation/)
 - [GPIO Pinout Reference](https://pinout.xyz/)
-- [RTL-SDR Quick Start](../guides/SDR_QUICKSTART.md)
-- [Audio Hardware Setup](../deployment/audio_hardware.md)
-- [GPIO Integration Guide](gpio.md)
-- [Deployment Checklist](../deployment/post_install.md)
+- [RTL-SDR Quick Start](../guides/SDR_QUICKSTART)
+- [Audio Hardware Setup](../deployment/audio_hardware)
+- [GPIO Integration Guide](gpio)
+- [Deployment Checklist](../deployment/post_install)
 
 ## Support and Community
 

@@ -29,8 +29,8 @@ This directory contains historical development artifacts, phase tracking documen
 
 For current project status and roadmap information, please refer to:
 - Main repository [`README.md`](https://github.com/KR8MER/eas-station/blob/main/README.md)
-- Documentation index [`docs/README.md`](../../README.md)
-- Roadmap documents in [`docs/roadmap/master_todo.md`](../../roadmap/master_todo.md)
+- Documentation index [`docs/README.md`](../../README)
+- Roadmap documents in [`docs/roadmap/master_todo.md`](../../roadmap/master_todo)
 
 ## Note
 

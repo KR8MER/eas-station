@@ -186,7 +186,7 @@ docker-compose exec app python -c "from app_utils.tts import synthesize_text; sy
   docker-compose exec app arecord -l
   ```
 
-**Documentation:** See [Audio Hardware Setup](audio_hardware.md)
+**Documentation:** See [Audio Hardware Setup](audio_hardware)
 
 ### SDR Receivers (Optional)
 
@@ -213,7 +213,7 @@ docker-compose exec app python -c "from app_utils.tts import synthesize_text; sy
 
 **⚠️ SAFETY:** Test GPIO with non-critical loads first. Never test with live transmitters until fully validated.
 
-**Documentation:** See [GPIO Integration Guide](../hardware/gpio.md)
+**Documentation:** See [GPIO Integration Guide](../hardware/gpio)
 
 ### LED Sign (Optional)
 
@@ -342,7 +342,7 @@ Place test EAS audio file in `test_audio/` and configure file source in `.env`
   sudo journalctl -p err -b
   ```
 
-**Documentation:** See [Security Migration Guide](../MIGRATION_SECURITY.md)
+**Documentation:** See [Security Migration Guide](../MIGRATION_SECURITY)
 
 ---
 
@@ -431,7 +431,7 @@ Place test EAS audio file in `test_audio/` and configure file source in `.env`
 - [ ] Backup integrity verified
 - [ ] Off-site backup copy maintained
 
-**Documentation:** See [Backup Strategy Runbook](../runbooks/backup_strategy.md)
+**Documentation:** See [Backup Strategy Runbook](../runbooks/backup_strategy)
 
 ---
 
@@ -635,10 +635,10 @@ docker-compose logs -f --tail=100
 
 If issues arise during post-install:
 
-- **Audio Issues:** [Audio Hardware Setup](audio_hardware.md)
-- **GPIO Issues:** [GPIO Integration Guide](../hardware/gpio.md)
-- **Security Issues:** [Security Migration Guide](../MIGRATION_SECURITY.md)
-- **Backup Issues:** [Backup Strategy Runbook](../runbooks/backup_strategy.md)
+- **Audio Issues:** [Audio Hardware Setup](audio_hardware)
+- **GPIO Issues:** [GPIO Integration Guide](../hardware/gpio)
+- **Security Issues:** [Security Migration Guide](../MIGRATION_SECURITY)
+- **Backup Issues:** [Backup Strategy Runbook](../runbooks/backup_strategy)
 - **General Issues:** [GitHub Issues](https://github.com/KR8MER/eas-station/issues)
 
 ## Support

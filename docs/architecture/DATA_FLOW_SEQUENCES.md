@@ -6,7 +6,7 @@ This document provides detailed sequence diagrams showing how data flows through
 
 **Purpose:** Visualize complete data processing paths through the system
 **Audience:** Developers, system architects, and operators understanding data flows
-**Related:** [System Architecture](SYSTEM_ARCHITECTURE.md), [Theory of Operation](THEORY_OF_OPERATION.md)
+**Related:** [System Architecture](SYSTEM_ARCHITECTURE), [Theory of Operation](THEORY_OF_OPERATION)
 
 ---
 
@@ -731,9 +731,9 @@ Each diagram shows:
 - The system maintains comprehensive audit trails at each stage
 
 **Related Documentation:**
-- [System Architecture](SYSTEM_ARCHITECTURE.md) - Component diagrams and relationships
-- [Theory of Operation](THEORY_OF_OPERATION.md) - Conceptual overview
-- [DIAGRAMS Index](../DIAGRAMS.md) - All available diagrams
+- [System Architecture](SYSTEM_ARCHITECTURE) - Component diagrams and relationships
+- [Theory of Operation](THEORY_OF_OPERATION) - Conceptual overview
+- [DIAGRAMS Index](../DIAGRAMS) - All available diagrams
 
 ---
 

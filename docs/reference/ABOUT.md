@@ -16,11 +16,11 @@ EAS Station’s reference build centers on a Raspberry Pi 5 (4 GB RAM baseli
 - **Development status:** The project remains experimental and has only been cross-checked against community tools like [multimon-ng](https://github.com/EliasOenal/multimon-ng) for decoding parity. All other implementations, workflows, and documentation are original and subject to change.
 - **Certification pending:** The team is actively building toward hardware parity, but the software is not yet an approved replacement for commercial Emergency Alert System encoders or other FCC-authorized equipment.
 - **Lab use only (for now):** Operate EAS Station strictly in test environments and never rely on it for live public warning, life safety, or mission-critical decisions until the roadmap is complete and certification paths are pursued.
-- **Review legal docs:** Before inviting collaborators or storing data, read the repository [Terms of Use](../policies/TERMS_OF_USE.md) and [Privacy Policy](../policies/PRIVACY_POLICY.md).
+- **Review legal docs:** Before inviting collaborators or storing data, read the repository [Terms of Use](../policies/TERMS_OF_USE) and [Privacy Policy](../policies/PRIVACY_POLICY).
 
 ## Mission and Scope
 - **Primary Goal:** Provide emergency communications teams with automated CAP-to-EAS workflow, from alert ingestion through broadcast verification, with complete compliance documentation.
-- **Drop-In Replacement Roadmap:** Implement the nine requirement areas in [`docs/roadmap/master_todo.md`](../roadmap/master_todo.md)—baseband capture, deterministic playout, hardware control, security, resilience, turnkey deployment, compliance analytics, unified documentation, and certification readiness—so the platform can mirror commercial decoder capabilities on commodity hardware.
+- **Drop-In Replacement Roadmap:** Implement the nine requirement areas in [`docs/roadmap/master_todo.md`](../roadmap/master_todo)—baseband capture, deterministic playout, hardware control, security, resilience, turnkey deployment, compliance analytics, unified documentation, and certification readiness—so the platform can mirror commercial decoder capabilities on commodity hardware.
 - **Deployment Model:** Container-first architecture designed for on-premise or field deployments with external PostgreSQL/PostGIS database service.
 - **Operational Focus:** Multi-source alert aggregation, automatic SAME broadcast generation, SDR-based verification, spatial boundary awareness, and audit trail management.
 
@@ -76,17 +76,17 @@ EAS Station relies on publicly available geographic data to enable spatial filte
 - **NOAA National Weather Service** - Weather forecast zone boundaries and definitions
   - Public Domain federal data
 
-For complete attribution details, see [`dependency_attribution.md`](dependency_attribution.md).
+For complete attribution details, see [`dependency_attribution.md`](dependency_attribution).
 
 ## Governance and Support
 - **Issue Tracking:** Use GitHub issues for bug reports and feature requests.
 - **Documentation Updates:** User-facing changes must update the README, HELP, and CHANGELOG entries.
 - **Environment Variables:** Any new variables must be mirrored in `.env.example` per contributor guidelines.
-- **Release Accounting:** Each deployment must surface the repository `VERSION` manifest in the UI, log its commit hash, and append the relevant entry to [`CHANGELOG.md`](CHANGELOG.md) so the operational history is auditable.
+- **Release Accounting:** Each deployment must surface the repository `VERSION` manifest in the UI, log its commit hash, and append the relevant entry to [`CHANGELOG.md`](CHANGELOG) so the operational history is auditable.
 - **Automation Guardrails:** The repository `VERSION` file, shared version resolver, and release metadata test will fail builds when the reported version and changelog drift—keep them aligned before requesting review.
 - **Upgrade & Backup Tooling:** Use `python tools/create_backup.py` for pre-flight snapshots and `python tools/inplace_upgrade.py` to roll forward without wiping containers or volumes. The Admin console exposes one-click buttons for both tasks under System Operations, calling the same helpers and recording their status for operators.
 
 ## Maintainer Profile
 Timothy Kramer (KR8MER) serves as the project's maintainer. Licensed as an amateur radio operator since 2004 and upgraded to General Class in 2025, Kramer brings 17 years of public-safety service as a deputy sheriff and deep familiarity with Motorola mission-critical communications. He now works as a full-time electrical panel electrician while supporting Skywarn operations and a laboratory of professional-grade radios, SDR capture nodes, digital paging systems, and networking equipment. EAS Station reflects his goal of pairing disciplined engineering practices with experimental emergency communications research.
 
-For setup instructions, operational tips, and troubleshooting guidance, refer to the dedicated [HELP documentation](../guides/HELP.md).
+For setup instructions, operational tips, and troubleshooting guidance, refer to the dedicated [HELP documentation](../guides/HELP).

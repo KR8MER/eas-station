@@ -79,7 +79,7 @@ This page provides an index of all professional diagrams and flowcharts availabl
 
 **File:** [`assets/diagrams/sdr-setup-flow.svg`](assets/diagrams/sdr-setup-flow.svg)
 
-**Related Documentation:** [SDR Setup Guide](guides/sdr_setup_guide.md)
+**Related Documentation:** [SDR Setup Guide](guides/sdr_setup_guide)
 
 ---
 
@@ -105,7 +105,7 @@ This page provides an index of all professional diagrams and flowcharts availabl
 
 **File:** [`assets/diagrams/audio-source-routing.svg`](assets/diagrams/audio-source-routing.svg)
 
-**Related Documentation:** [Audio Documentation](audio.md)
+**Related Documentation:** [Audio Documentation](audio)
 
 ---
 
@@ -167,7 +167,7 @@ In addition to the professional SVG diagrams above, the following documentation 
 
 ### Data Flow Sequences (Mermaid) ⭐ NEW
 
-**File:** [docs/architecture/DATA_FLOW_SEQUENCES.md](architecture/DATA_FLOW_SEQUENCES.md)
+**File:** [docs/architecture/DATA_FLOW_SEQUENCES.md](architecture/DATA_FLOW_SEQUENCES)
 
 **Contains:**
 - **Alert Processing Data Flow** - Complete CAP alert path from fetch to storage
@@ -191,7 +191,7 @@ In addition to the professional SVG diagrams above, the following documentation 
 
 ### System Architecture (Mermaid)
 
-**File:** [docs/architecture/SYSTEM_ARCHITECTURE.md](architecture/SYSTEM_ARCHITECTURE.md)
+**File:** [docs/architecture/SYSTEM_ARCHITECTURE.md](architecture/SYSTEM_ARCHITECTURE)
 
 **Contains:**
 - High-level architecture graph
@@ -216,7 +216,7 @@ In addition to the professional SVG diagrams above, the following documentation 
 
 ### Theory of Operation (Mermaid)
 
-**File:** [docs/architecture/THEORY_OF_OPERATION.md](architecture/THEORY_OF_OPERATION.md)
+**File:** [docs/architecture/THEORY_OF_OPERATION.md](architecture/THEORY_OF_OPERATION)
 
 **Contains:**
 - High-level flow diagram
@@ -282,10 +282,10 @@ When adding new diagrams:
 
 ## 🔗 Related Documentation
 
-- **[System Architecture](architecture/SYSTEM_ARCHITECTURE.md)** - Complete technical architecture with Mermaid diagrams
-- **[Theory of Operation](architecture/THEORY_OF_OPERATION.md)** - Conceptual overview and operational theory
-- **[SDR Setup Guide](guides/sdr_setup_guide.md)** - Radio receiver configuration
-- **[Audio Documentation](audio.md)** - Audio system details
+- **[System Architecture](architecture/SYSTEM_ARCHITECTURE)** - Complete technical architecture with Mermaid diagrams
+- **[Theory of Operation](architecture/THEORY_OF_OPERATION)** - Conceptual overview and operational theory
+- **[SDR Setup Guide](guides/sdr_setup_guide)** - Radio receiver configuration
+- **[Audio Documentation](audio)** - Audio system details
 - **[README](https://github.com/KR8MER/eas-station/blob/main/README.md)** - Project overview and quick start
 
 ---

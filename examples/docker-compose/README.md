@@ -352,9 +352,9 @@ docker-compose up -d
 
 ## Additional Resources
 
-- [Audio Hardware Setup Guide](../../docs/deployment/audio_hardware.md)
-- [Reference Pi Build](../../docs/hardware/reference_pi_build.md)
-- [Post-Install Checklist](../../docs/deployment/post_install.md)
+- [Audio Hardware Setup Guide](../../docs/deployment/audio_hardware)
+- [Reference Pi Build](../../docs/hardware/reference_pi_build)
+- [Post-Install Checklist](../../docs/deployment/post_install)
 - [Docker Compose Documentation](https://docs.docker.com/compose/)
 - [ALSA Configuration](https://www.alsa-project.org/wiki/Asoundrc)
 

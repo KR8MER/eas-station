@@ -1,6 +1,6 @@
 # Portainer Deployment Guides
 
-Quick references for installing and maintaining EAS Station through Portainer. These documents complement the main [Portainer Deployment Guide](../../guides/PORTAINER_DEPLOYMENT.md) by providing focused workflows and deep dives.
+Quick references for installing and maintaining EAS Station through Portainer. These documents complement the main [Portainer Deployment Guide](../../guides/PORTAINER_DEPLOYMENT) by providing focused workflows and deep dives.
 
 ## Documents
 

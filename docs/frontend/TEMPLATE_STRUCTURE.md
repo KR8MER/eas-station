@@ -444,9 +444,9 @@ grep -r "@app.route" webapp/ | grep -A 5 "mytemplate"
 
 ## 📚 Related Documentation
 
-- [AGENTS.md](../development/AGENTS.md) - Development guidelines
-- [FUNCTION_TREE.md](../reference/FUNCTION_TREE.md) - Code structure reference
-- [Frontend UI Standards](../development/AGENTS.md#-frontend-guidelines) - UI/UX guidelines
+- [AGENTS.md](../development/AGENTS) - Development guidelines
+- [FUNCTION_TREE.md](../reference/FUNCTION_TREE) - Code structure reference
+- [Frontend UI Standards](../development/AGENTS#-frontend-guidelines) - UI/UX guidelines
 
 ---
 

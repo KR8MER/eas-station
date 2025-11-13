@@ -402,7 +402,7 @@ python3 tools/restore_backup.py --backup-dir /path/to/backup
 
 ## Further Reading
 
-- [Backup Strategy Documentation](../docs/runbooks/backup_strategy.md)
-- [Outage Response Runbook](../docs/runbooks/outage_response.md)
+- [Backup Strategy Documentation](../docs/runbooks/backup_strategy)
+- [Outage Response Runbook](../docs/runbooks/outage_response)
 - [PostgreSQL Replication](https://www.postgresql.org/docs/current/high-availability.html)
 - [Docker Swarm for HA](https://docs.docker.com/engine/swarm/)

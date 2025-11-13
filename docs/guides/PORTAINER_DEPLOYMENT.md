@@ -1270,7 +1270,7 @@ If you encounter issues not covered here:
 
 2. **Review main documentation:**
    - [README.md](https://github.com/KR8MER/eas-station/blob/main/README.md)
-   - [HELP.md](HELP.md)
+   - [HELP.md](HELP)
 
 3. **Check system health:**
    - Access: `http://your-server:5000/system_health`

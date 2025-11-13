@@ -32,7 +32,7 @@ _Last updated: January 30, 2025_
 ## 6. Licensing & Contributions
 - The EAS Station source code is released under the [MIT License](../../LICENSE). Copyright remains with Timothy Kramer (KR8MER).
 - By submitting code, documentation, or other content, contributors agree that their work is provided under the MIT License.
-- All commits must include a Developer Certificate of Origin (DCO) sign-off line (`Signed-off-by`) affirming that the contributor has the right to submit the work under the project license. Instructions are provided in [CONTRIBUTING.md](../process/CONTRIBUTING.md).
+- All commits must include a Developer Certificate of Origin (DCO) sign-off line (`Signed-off-by`) affirming that the contributor has the right to submit the work under the project license. Instructions are provided in [CONTRIBUTING.md](../process/CONTRIBUTING).
 
 ## 7. Updates
 - These terms may change as the project evolves.

@@ -296,10 +296,10 @@ This document tracks the progress of the comprehensive 6-week UI/UX modernizatio
 ## Resources
 
 ### Documentation
-- [UI Modernization Plan](UI_LAYOUT_ROADMAP.md)
-- [UI Improvements Summary](UI_CHANGES_SUMMARY.md)
-- [Navigation Redesign](UI_LAYOUT_ROADMAP.md#13-reorganize-navigation-structure)
-- [Phase 1 & 2 Complete](PHASE_1_2_COMPLETE.md)
+- [UI Modernization Plan](UI_LAYOUT_ROADMAP)
+- [UI Improvements Summary](UI_CHANGES_SUMMARY)
+- [Navigation Redesign](UI_LAYOUT_ROADMAP#13-reorganize-navigation-structure)
+- [Phase 1 & 2 Complete](PHASE_1_2_COMPLETE)
 
 ### Code
 - Design System CSS: `static/css/design-system.css`

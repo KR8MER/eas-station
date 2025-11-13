@@ -479,9 +479,9 @@ print(f"Reconnections: {stats['reconnect_count']}")
 
 ## Related Documentation
 
-- [Audio Monitoring](../audio/AUDIO_MONITORING.md)
-- [iHeartMedia Streams](./IHEARTMEDIA_STREAMS.md)
-- [Professional Audio Subsystem](../PROFESSIONAL_AUDIO_SUBSYSTEM.md)
+- [Audio Monitoring](../audio/AUDIO_MONITORING)
+- [iHeartMedia Streams](./IHEARTMEDIA_STREAMS)
+- [Professional Audio Subsystem](../PROFESSIONAL_AUDIO_SUBSYSTEM)
 
 ---
 

@@ -8,7 +8,7 @@ This document translates the **Digital Alert Systems DASDEC3 Version 5.1 Softwar
 
 - **Commodity Hardware Advantage:** Where a DASDEC3 bundle starts around **$5,000 USD** (single station) and climbs past **$7,000 USD** with multi-station and redundancy options, the documented Raspberry Pi 5 reference build (Pi 5, relays, balanced audio HAT, dual SDRs, NVMe, UPS) remains **under $600 USD** while delivering equivalent automation.
 - **Software Parity:** Alert ingestion, SAME generation, GPIO control, LED signage, and SDR verification are already at parity or ahead because EAS Station can iterate rapidly in software. Remaining work clusters around redundant audio paths, multi-station clustering, and formal FCC test suites.
-- **Roadmap Alignment:** Each gap below maps to the canonical [`docs/roadmap/master_todo.md`](master_todo.md) items. Use this file as the bridge between vendor-grade checklists and open-source milestones.
+- **Roadmap Alignment:** Each gap below maps to the canonical [`docs/roadmap/master_todo.md`](master_todo) items. Use this file as the bridge between vendor-grade checklists and open-source milestones.
 
 ### Primary Reference Documents
 
@@ -75,7 +75,7 @@ Before updating this gap analysis:
 
 - Review section headings and feature descriptions in the vendor PDFs/DOCX listed above so terminology mirrors the DASDEC3 documentation.
 - Confirm any hardware guidance remains achievable with the Raspberry Pi reference build documented in [`README.md`](https://github.com/KR8MER/eas-station/blob/main/README.md).
-- Cross-check roadmap tickets in [`master_todo.md`](master_todo.md) and [`eas_todo.md`](eas_todo.md) so new features are traced to manual capabilities.
+- Cross-check roadmap tickets in [`master_todo.md`](master_todo) and [`eas_todo.md`](eas_todo) so new features are traced to manual capabilities.
 - Update `/about` and `/help` templates if new operator guidance or warnings are introduced here.
 
 Maintain this comparison as roadmap items ship so the documentation accurately reflects parity with DASDEC3 offerings.
