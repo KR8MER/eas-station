@@ -24,7 +24,7 @@ import traceback
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Optional, Tuple
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import numpy as np
 import requests
@@ -333,12 +333,15 @@ class IcecastStreamer:
         prebuffer_target = 150  # Pre-fill with 7.5 seconds before starting - increased from 100 to prevent buffer empty errors
         buffer_low_watermark = 150  # Warn if buffer drops below 7.5 seconds (25% of max) - increased from 100
 
-        logger.info(f"Pre-buffering {prebuffer_target} chunks (~{prebuffer_target*50}ms) for smooth Icecast streaming")
+        logger.info(
+            f"Pre-buffering {prebuffer_target} chunks (~{prebuffer_target*50}ms) "
+            f"for smooth Icecast streaming on mount {self.config.mount}"
+        )
 
         # Diagnostic: Check audio source type and status
         source_type = type(self.audio_source).__name__
         source_status = getattr(self.audio_source, 'status', 'unknown')
-        logger.info(f"Audio source: {source_type}, Status: {source_status}")
+        logger.info(f"Audio source for {self.config.mount}: {source_type}, Status: {source_status}")
 
         prebuffer_timeout = time.time() + 15.0  # 15 seconds max to prebuffer
         prebuffer_attempts = 0
@@ -352,12 +355,16 @@ class IcecastStreamer:
 
         if len(buffer) < prebuffer_target:
             logger.error(
-                f"Pre-buffer timeout: only filled {len(buffer)}/{prebuffer_target} chunks "
+                f"Pre-buffer timeout for mount {self.config.mount}: "
+                f"only filled {len(buffer)}/{prebuffer_target} chunks "
                 f"(~{len(buffer)*50}ms of audio) after {prebuffer_attempts} attempts. "
                 f"Audio source {source_type} may not be providing data. Check source status!"
             )
         else:
-            logger.info(f"Pre-buffer complete: {len(buffer)} chunks (~{len(buffer)*50}ms of audio)")
+            logger.info(
+                f"Pre-buffer complete for mount {self.config.mount}: "
+                f"{len(buffer)} chunks (~{len(buffer)*50}ms of audio)"
+            )
 
         while not self._stop_event.is_set():
             if not self._ffmpeg_process or self._ffmpeg_process.poll() is not None:
@@ -380,13 +387,13 @@ class IcecastStreamer:
                     self._consecutive_empty_reads += 1
                     if self._consecutive_empty_reads == 100:  # After 10 seconds of no data (100 * 0.1s timeout)
                         logger.error(
-                            f"Audio source has not provided data for 10+ seconds. "
+                            f"Audio source for mount {self.config.mount} has not provided data for 10+ seconds. "
                             f"Buffer: {len(buffer)}/{buffer.maxlen} chunks. "
                             "Check if audio source is running and configured correctly."
                         )
                     elif self._consecutive_empty_reads == 500:  # After 50 seconds
                         logger.critical(
-                            f"Audio source completely starved for 50+ seconds! "
+                            f"Audio source for mount {self.config.mount} completely starved for 50+ seconds! "
                             f"This indicates a serious issue with the audio source. "
                             f"Buffer exhausted. Check logs for audio source errors."
                         )
@@ -406,7 +413,8 @@ class IcecastStreamer:
                         now_warn = time.time()
                         if now_warn - self._last_buffer_warning > 30.0:  # Max one warning per 30s
                             logger.warning(
-                                f"Icecast buffer running low: {buffer_level}/{buffer.maxlen} chunks "
+                                f"Icecast buffer running low for mount {self.config.mount}: "
+                                f"{buffer_level}/{buffer.maxlen} chunks "
                                 f"({buffer_level*50}ms / {buffer.maxlen*50}ms). "
                                 "Audio source may be blocking or too slow."
                             )
@@ -416,7 +424,10 @@ class IcecastStreamer:
                     # Throttle error logging to avoid spam (max 1 per 30 seconds)
                     now_error = time.time()
                     if now_error - self._last_buffer_warning > 30.0:  # Increased from 10s to 30s
-                        logger.error("Icecast buffer completely empty! Audio source starved.")
+                        logger.error(
+                            f"Icecast buffer completely empty for mount {self.config.mount}! "
+                            "Audio source starved."
+                        )
                         self._last_buffer_warning = now_error
                     time.sleep(0.05)  # Increased from 0.01s to 0.05s to reduce CPU usage
 
@@ -645,8 +656,18 @@ class IcecastStreamer:
             # Remove standalone key=value patterns (no quotes)
             text = re.sub(r'\s+\w+=\S+', '', text)
 
+            # Decode URL-encoded characters (e.g., %20 -> space)
+            # This handles metadata from sources like iHeartMedia that include URL encoding
+            try:
+                text = unquote(text)
+            except Exception:
+                # If unquote fails for any reason, keep the original text
+                pass
+            
             # Collapse extraneous whitespace (including newlines)
+            # This must happen AFTER URL decoding to handle decoded spaces properly
             text = ' '.join(text.split())
+            
             return text or None
 
         now_playing = metadata.get('now_playing')
