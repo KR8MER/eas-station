@@ -19,10 +19,15 @@
 
 {% block content %}
 <div class="container-fluid mt-4">
-    <div class="row mb-4">
-        <div class="col-12">
+    <div class="row mb-4 align-items-center">
+        <div class="col-12 col-lg-8">
             <h2><i class="fas fa-microchip"></i> GPIO Control Panel</h2>
-            <p class="text-muted">Manage GPIO relays and peripherals with audit logging</p>
+            <p class="text-muted mb-0">Manage GPIO relays and peripherals with audit logging</p>
+        </div>
+        <div class="col-12 col-lg-4 text-lg-end mt-3 mt-lg-0">
+            <a class="btn btn-outline-primary" href="{{ url_for('gpio_pin_map') }}">
+                <i class="fas fa-map"></i> Open GPIO Pin Map
+            </a>
         </div>
     </div>
 
