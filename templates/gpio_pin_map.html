@@ -7,11 +7,16 @@
     .pin-card {
         border-left: 4px solid #0d6efd;
         height: 100%;
+        transition: all 0.3s ease;
     }
     .pin-card.power { border-left-color: #ffc107; }
     .pin-card.ground { border-left-color: #6c757d; }
     .pin-card.gpio.configured { border-left-color: #28a745; }
     .pin-card.gpio:not(.configured) { border-left-color: #0d6efd; }
+    .pin-card.gpio.has-behavior { 
+        border-left-color: #198754;
+        box-shadow: 0 0 0 2px rgba(25, 135, 84, 0.15);
+    }
     .behavior-grid {
         display: grid;
         gap: 0.75rem;
@@ -27,6 +32,31 @@
     }
     .behavior-label small {
         color: var(--bs-secondary-color);
+    }
+    .form-check-input:checked + .form-check-label {
+        font-weight: 600;
+        color: #198754;
+    }
+    .unsaved-changes {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1050;
+        display: none;
+    }
+    .unsaved-changes.show {
+        display: block;
+        animation: slideInRight 0.3s ease;
+    }
+    @keyframes slideInRight {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
     }
 </style>
 {% endblock %}
@@ -51,9 +81,23 @@
     <div id="pinMapAlert" class="alert d-none" role="alert"></div>
 
     <div class="alert alert-info" role="alert">
-        <i class="fas fa-info-circle"></i>
-        Changes are written to <code>GPIO_PIN_BEHAVIOR_MATRIX</code> in the environment configuration. A service restart is
-        required for alert playback to use updated mappings.
+        <div class="d-flex align-items-start">
+            <i class="fas fa-info-circle me-2 mt-1"></i>
+            <div>
+                <strong>How to configure GPIO behaviors:</strong>
+                <ol class="mb-0 mt-2">
+                    <li>Select a behavior for each GPIO pin you want to use (or leave as "None" to disable)</li>
+                    <li>Click <strong>"Save Behaviors"</strong> to write changes to your environment configuration</li>
+                    <li>Restart the service for changes to take effect: <code>docker compose restart</code></li>
+                </ol>
+                <p class="mb-0 mt-2">
+                    <small class="text-muted">
+                        <i class="fas fa-lightbulb"></i> Tip: Configure pins in <strong>Settings → Environment → GPIO</strong> 
+                        before assigning behaviors here.
+                    </small>
+                </p>
+            </div>
+        </div>
     </div>
 
     {% for row in pin_rows %}
@@ -160,6 +204,7 @@
     const saveButton = document.getElementById('savePinMap');
     const clearButton = document.getElementById('clearPinMap');
     const reloadButton = document.getElementById('reloadPinMap');
+    let hasUnsavedChanges = false;
 
     function showMessage(message, variant) {
         if (!alertBox) { return; }
@@ -171,6 +216,37 @@
     function hideMessage() {
         if (!alertBox) { return; }
         alertBox.classList.add('d-none');
+    }
+    
+    function markUnsavedChanges() {
+        hasUnsavedChanges = true;
+        if (saveButton) {
+            saveButton.classList.add('btn-warning');
+            saveButton.classList.remove('btn-primary');
+        }
+    }
+    
+    function clearUnsavedChanges() {
+        hasUnsavedChanges = false;
+        if (saveButton) {
+            saveButton.classList.remove('btn-warning');
+            saveButton.classList.add('btn-primary');
+        }
+    }
+    
+    function updateCardHighlights() {
+        // Highlight cards that have a behavior selected
+        document.querySelectorAll('.pin-card.gpio').forEach(card => {
+            const bcm = card.dataset.bcm;
+            if (!bcm) return;
+            
+            const selected = card.querySelector(`input[name="pin${bcm}-behavior"]:checked`);
+            if (selected && selected.dataset.behavior) {
+                card.classList.add('has-behavior');
+            } else {
+                card.classList.remove('has-behavior');
+            }
+        });
     }
 
     function buildBehaviorMatrix() {
@@ -200,11 +276,15 @@
         saveButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving';
 
         const matrix = buildBehaviorMatrix();
+        console.log('Behavior matrix to save:', matrix);
+        
         const payload = {
             variables: {
                 GPIO_PIN_BEHAVIOR_MATRIX: Object.keys(matrix).length ? JSON.stringify(matrix) : ''
             }
         };
+        
+        console.log('Payload:', payload);
 
         try {
             const response = await fetch('/api/environment/variables', {
@@ -214,14 +294,19 @@
                 },
                 body: JSON.stringify(payload)
             });
+            
+            console.log('Response status:', response.status);
             const data = await response.json();
+            console.log('Response data:', data);
+            
             if (!response.ok || data.error) {
                 throw new Error(data.error || data.message || 'Unknown error');
             }
-            showMessage('Saved pin behavior map. Restart services to apply changes.', 'success');
+            showMessage('✓ Saved pin behavior map successfully! Changes will take effect after restarting the service.', 'success');
+            clearUnsavedChanges();
         } catch (error) {
             console.error('Failed to save pin map', error);
-            showMessage(`Failed to save behavior map: ${error.message}`, 'danger');
+            showMessage(`✗ Failed to save behavior map: ${error.message}`, 'danger');
         } finally {
             saveButton.disabled = false;
             saveButton.innerHTML = '<i class="fas fa-save"></i> Save Behaviors';
@@ -235,8 +320,18 @@
                 radio.checked = true;
             }
         });
+        updateCardHighlights();
+        markUnsavedChanges();
         showMessage('Cleared selections. Remember to save to persist the changes.', 'warning');
     }
+    
+    // Listen for behavior changes
+    document.querySelectorAll('.behavior-radio').forEach((radio) => {
+        radio.addEventListener('change', () => {
+            updateCardHighlights();
+            markUnsavedChanges();
+        });
+    });
 
     if (saveButton) {
         saveButton.addEventListener('click', saveMatrix);
@@ -247,6 +342,17 @@
     if (reloadButton) {
         reloadButton.addEventListener('click', () => window.location.reload());
     }
+    
+    // Initialize card highlights on load
+    updateCardHighlights();
+    
+    // Warn about unsaved changes
+    window.addEventListener('beforeunload', (e) => {
+        if (hasUnsavedChanges) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
 })();
 </script>
 {% endblock %}

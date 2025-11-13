@@ -14,6 +14,48 @@
     .timeline-item.success::before { background: #28a745; }
     .timeline-item.error::before { background: #dc3545; }
     .timeline-item.warning::before { background: #ffc107; }
+    
+    /* LED Status Indicator */
+    .status-led {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        margin-right: 8px;
+        position: relative;
+        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1) inset;
+    }
+    .status-led.active {
+        background: #28a745;
+        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1) inset, 0 0 10px #28a745, 0 0 20px rgba(40, 167, 69, 0.5);
+        animation: pulse-green 2s infinite;
+    }
+    .status-led.inactive {
+        background: #6c757d;
+    }
+    .status-led.error {
+        background: #dc3545;
+        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1) inset, 0 0 10px #dc3545;
+    }
+    @keyframes pulse-green {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+    }
+    
+    /* Auto-refresh indicator */
+    .auto-refresh-indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #28a745;
+        margin-right: 6px;
+        animation: blink 2s infinite;
+    }
+    @keyframes blink {
+        0%, 50%, 100% { opacity: 1; }
+        25%, 75% { opacity: 0.3; }
+    }
 </style>
 {% endblock %}
 
@@ -48,8 +90,12 @@
                 <div class="card gpio-card {{ 'active' if pin_info.is_active else 'inactive' }} h-100">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-2">
-                            <h5 class="card-title mb-0">{{ pin_info.name }}</h5>
-                            <span class="badge bg-{{ 'success' if pin_info.is_active else 'secondary' }}">
+                            <div class="d-flex align-items-center">
+                                <span class="status-led {{ 'active' if pin_info.is_active else 'inactive' if pin_info.state == 'inactive' else 'error' }}" 
+                                      title="{{ 'Active' if pin_info.is_active else pin_info.state.title() }}"></span>
+                                <h5 class="card-title mb-0">{{ pin_info.name }}</h5>
+                            </div>
+                            <span class="badge bg-{{ 'success' if pin_info.is_active else 'secondary' if pin_info.state == 'inactive' else 'danger' }}">
                                 {{ pin_info.state.upper() }}
                             </span>
                         </div>
@@ -166,9 +212,15 @@
 
     <!-- Auto-refresh toggle -->
     <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1000;">
-        <button class="btn btn-primary" id="refresh-btn">
-            <i class="fas fa-sync-alt"></i> Refresh
-        </button>
+        <div class="d-flex flex-column gap-2">
+            <button class="btn btn-sm btn-outline-primary" id="auto-refresh-toggle">
+                <span class="auto-refresh-indicator" id="refresh-indicator" style="display: none;"></span>
+                <i class="fas fa-sync-alt"></i> Auto-refresh: <span id="auto-refresh-status">OFF</span>
+            </button>
+            <button class="btn btn-primary" id="refresh-btn">
+                <i class="fas fa-sync-alt"></i> Refresh Now
+            </button>
+        </div>
     </div>
 </div>
 
@@ -211,6 +263,128 @@
 {% block extra_js %}
 <script>
 let currentPin = null;
+let autoRefreshEnabled = false;
+let autoRefreshInterval = null;
+
+// Auto-refresh functionality
+function toggleAutoRefresh() {
+    autoRefreshEnabled = !autoRefreshEnabled;
+    const statusSpan = document.getElementById('auto-refresh-status');
+    const indicator = document.getElementById('refresh-indicator');
+    
+    if (autoRefreshEnabled) {
+        statusSpan.textContent = 'ON';
+        indicator.style.display = 'inline-block';
+        startAutoRefresh();
+    } else {
+        statusSpan.textContent = 'OFF';
+        indicator.style.display = 'none';
+        stopAutoRefresh();
+    }
+    
+    // Save preference to localStorage
+    localStorage.setItem('gpioAutoRefresh', autoRefreshEnabled);
+}
+
+function startAutoRefresh() {
+    if (autoRefreshInterval) return;
+    
+    // Refresh every 3 seconds
+    autoRefreshInterval = setInterval(async () => {
+        try {
+            const response = await fetch('/api/gpio/status');
+            const data = await response.json();
+            
+            if (data.success && data.pins) {
+                // Update pin states without full page reload
+                updatePinStates(data.pins);
+            }
+        } catch (error) {
+            console.error('Auto-refresh failed:', error);
+        }
+    }, 3000);
+}
+
+function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+}
+
+function updatePinStates(pins) {
+    pins.forEach(pin => {
+        // Find the card for this pin
+        const cards = document.querySelectorAll('.gpio-card');
+        cards.forEach(card => {
+            const pinButtons = card.querySelectorAll('[data-pin]');
+            if (pinButtons.length === 0) return;
+            
+            const cardPin = parseInt(pinButtons[0].dataset.pin);
+            if (cardPin !== pin.pin) return;
+            
+            // Update LED indicator
+            const led = card.querySelector('.status-led');
+            if (led) {
+                led.className = 'status-led';
+                if (pin.is_active) {
+                    led.classList.add('active');
+                    led.title = 'Active';
+                } else if (pin.state === 'inactive') {
+                    led.classList.add('inactive');
+                    led.title = 'Inactive';
+                } else {
+                    led.classList.add('error');
+                    led.title = pin.state;
+                }
+            }
+            
+            // Update badge
+            const badge = card.querySelector('.badge');
+            if (badge) {
+                badge.className = 'badge';
+                badge.classList.add(pin.is_active ? 'bg-success' : (pin.state === 'inactive' ? 'bg-secondary' : 'bg-danger'));
+                badge.textContent = pin.state.toUpperCase();
+            }
+            
+            // Update card border
+            card.className = 'card gpio-card h-100';
+            if (pin.is_active) {
+                card.classList.add('active');
+            } else if (pin.state === 'inactive') {
+                card.classList.add('inactive');
+            } else {
+                card.classList.add('error');
+            }
+            
+            // Update active time if shown
+            if (pin.is_active && pin.active_seconds !== undefined) {
+                const activeTimeElement = card.querySelector('.text-muted');
+                if (activeTimeElement) {
+                    const innerHTML = activeTimeElement.innerHTML;
+                    const match = innerHTML.match(/<strong>Active for:<\/strong> [\d.]+s/);
+                    if (match) {
+                        activeTimeElement.innerHTML = innerHTML.replace(
+                            /<strong>Active for:<\/strong> [\d.]+s/,
+                            `<strong>Active for:</strong> ${pin.active_seconds.toFixed(1)}s`
+                        );
+                    }
+                }
+            }
+        });
+    });
+}
+
+// Load saved preference
+document.addEventListener('DOMContentLoaded', () => {
+    const savedPreference = localStorage.getItem('gpioAutoRefresh');
+    if (savedPreference === 'true') {
+        toggleAutoRefresh();
+    }
+});
+
+// Auto-refresh toggle button
+document.getElementById('auto-refresh-toggle').addEventListener('click', toggleAutoRefresh);
 
 // Activate pin button click
 document.querySelectorAll('.activate-pin').forEach(btn => {
