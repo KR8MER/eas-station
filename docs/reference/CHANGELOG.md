@@ -53,6 +53,8 @@ tracks releases under the 2.x series.
   - SVG filters for depth, glow effects, and contemporary design polish
 
 ### Fixed
+- Surface actionable diagnostics when GPIO hardware is inaccessible, highlighting missing
+  /dev/gpiomem access and read-only sysfs mounts so deployments can correct permissions.
 - Replaced the deprecated `RPi.GPIO` backend with `gpiozero` output devices and ensured typing imports
   are available so Raspberry Pi deployments boot cleanly on Pi 5 hardware.
 - Ensured Docker Compose publishes nginx ports on both IPv4 and IPv6 addresses so external scanners can reach the HTTPS endpoint over IPv6.
