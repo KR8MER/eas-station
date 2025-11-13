@@ -246,9 +246,14 @@ def _ensure_pin_factory(logger=None) -> bool:
             # preferred backend. When that fails (e.g., no GPIO hardware
             # available) the property access raises an exception which we catch
             # to install a mock fallback instead.
-            Device.pin_factory  # type: ignore[attr-defined]
-            _PIN_FACTORY_READY = True
+            factory = Device.pin_factory  # type: ignore[attr-defined]
         except Exception as exc:  # pragma: no cover - depends on host environment
+            factory = None
+            fallback_exc = exc
+        else:
+            fallback_exc = None
+
+        if factory is None:
             if MockFactory is not None:
                 try:
                     Device.pin_factory = MockFactory()  # type: ignore[attr-defined]
@@ -265,11 +270,16 @@ def _ensure_pin_factory(logger=None) -> bool:
                         )
             else:
                 if logger:
+                    reason = fallback_exc or RuntimeError(
+                        "gpiozero pin factory returned None"
+                    )
                     logger.error(
                         "gpiozero pin factory initialization failed and MockFactory "
                         "is unavailable: %s",
-                        exc,
+                        reason,
                     )
+        else:
+            _PIN_FACTORY_READY = True
 
     return _PIN_FACTORY_READY
 
@@ -634,21 +644,33 @@ class GPIOController:
             self._pins[config.pin] = config
 
             device = self._get_or_create_device(config)
-            if device is None or isinstance(self._backend, _NullGPIOBackend):
-                # Record the configuration even when GPIO hardware isn't available so the
-                # application can still display configured pins in the UI.
-                self._states[config.pin] = GPIOState.ERROR
-                if self.logger:
-                    self.logger.warning(
-                        f"Configured pin {config.pin} but GPIO hardware is not available"
-                    )
-                return
-
-            self._states[config.pin] = GPIOState.INACTIVE
+        if device is None:
+            # Record the configuration even when GPIO hardware isn't available so the
+            # application can still display configured pins in the UI.
+            self._states[config.pin] = GPIOState.ERROR
             if self.logger:
+                self.logger.warning(
+                    f"Configured pin {config.pin} but GPIO hardware is not available"
+                )
+            return
+
+        self._states[config.pin] = GPIOState.INACTIVE
+        if self.logger:
+            active_label = "high" if config.active_high else "low"
+            if isinstance(self._backend, _NullGPIOBackend):
+                self.logger.info(
+                    "Configured GPIO pin %s (%s) using simulated GPIO backend: "
+                    "active_%s, hold=%ss, watchdog=%ss",
+                    config.pin,
+                    config.name,
+                    active_label,
+                    config.hold_seconds,
+                    config.watchdog_seconds,
+                )
+            else:
                 self.logger.info(
                     f"Configured GPIO pin {config.pin} ({config.name}) using {self._current_backend_label()}: "
-                    f"active_{'high' if config.active_high else 'low'}, "
+                    f"active_{active_label}, "
                     f"hold={config.hold_seconds}s, watchdog={config.watchdog_seconds}s"
                 )
 

@@ -8,6 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import app_utils.gpio as gpio
+
 from app_utils.gpio import (
     GPIOBehavior,
     GPIOBehaviorManager,
@@ -30,7 +32,24 @@ def test_add_pin_records_configuration_when_gpio_unavailable():
 
     assert 17 in states
     assert states[17]["name"] == "Test Pin"
-    assert states[17]["state"] == GPIOState.ERROR.value
+    assert states[17]["state"] == GPIOState.INACTIVE.value
+
+
+def test_add_pin_uses_null_backend_when_hardware_unavailable(monkeypatch):
+    """Null GPIO backend should be treated as a simulated but healthy pin."""
+
+    controller = GPIOController()
+    controller._gpiozero_available = False
+
+    monkeypatch.setattr(
+        gpio,
+        "_create_gpio_backend",
+        lambda exclude=None: gpio._NullGPIOBackend(),
+    )
+
+    controller.add_pin(GPIOPinConfig(pin=18, name="Simulated Pin"))
+
+    assert controller.get_state(18) == GPIOState.INACTIVE
 
 
 def test_load_gpio_pin_configs_from_env(monkeypatch):
