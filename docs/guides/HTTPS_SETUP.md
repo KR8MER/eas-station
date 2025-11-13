@@ -450,10 +450,10 @@ ssl_ciphers 'HIGH:!aNULL:!MD5';  # Different cipher suite
 
 ## Related Documentation
 
-- [SYSTEM_DEPENDENCIES.md](../reference/SYSTEM_DEPENDENCIES.md) - Infrastructure components
-- [dependency_attribution.md](../reference/dependency_attribution.md) - nginx and certbot attribution
-- [PORTAINER_DEPLOYMENT.md](./PORTAINER_DEPLOYMENT.md) - Deployment via Portainer
-- [SECURITY.md](../SECURITY.md) - General security guidelines
+- [SYSTEM_DEPENDENCIES.md](../reference/SYSTEM_DEPENDENCIES) - Infrastructure components
+- [dependency_attribution.md](../reference/dependency_attribution) - nginx and certbot attribution
+- [PORTAINER_DEPLOYMENT.md](./PORTAINER_DEPLOYMENT) - Deployment via Portainer
+- [SECURITY.md](../SECURITY) - General security guidelines
 
 ---
 

@@ -76,7 +76,7 @@ EAS Station’s quest to deliver a software-first encoder/decoder is tightly cou
 
 The reference stack—Pi 5 (8 GB), balanced audio HAT, dual SDR receivers, NVMe storage, GPIO relay bank, and UPS-backed power—totals **~$585 USD** in 2025. Equivalent DASDEC3 racks list for **$5,000–$7,000 USD**, illustrating the leverage gained by investing in software quality rather than proprietary hardware.
 
-For roadmap parity tracking against the Digital Alert Systems DASDEC3 manual, consult [`docs/roadmap/DASDEC3_COMPARISON.md`](../roadmap/DASDEC3_COMPARISON.md).
+For roadmap parity tracking against the Digital Alert Systems DASDEC3 manual, consult [`docs/roadmap/DASDEC3_COMPARISON.md`](../roadmap/DASDEC3_COMPARISON).
 
 ## Operational Checklist
 

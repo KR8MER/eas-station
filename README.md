@@ -19,9 +19,9 @@ EAS Station is a software-defined drop-in replacement for commercial EAS encoder
 ## 📋 State EAS Plan Documentation
 
 **Ohio Emergency Alert System Plan** (FCC-approved March 2019) is now documented:
-- **[📖 Ohio EAS Documentation](docs/OHIO_EAS_README.md)** - Complete plan, station listings, test procedures
-- **[📊 Event Code Analysis](docs/EAS_EVENT_CODES_COMPLETE.md)** - All 78+ FCC event codes with implementation status
-- **[⚠️ Critical Alert](docs/EAS_CRITICAL_ALERT.md)** - 6 missing critical codes identified (SQW, ISW, WCW, LSW, LFW, EQE)
+- **[📖 Ohio EAS Documentation](docs/OHIO_EAS_README)** - Complete plan, station listings, test procedures
+- **[📊 Event Code Analysis](docs/EAS_EVENT_CODES_COMPLETE)** - All 78+ FCC event codes with implementation status
+- **[⚠️ Critical Alert](docs/EAS_CRITICAL_ALERT)** - 6 missing critical codes identified (SQW, ISW, WCW, LSW, LFW, EQE)
 
 **Event Code Update (Nov 2025)**: Added 6 critical missing codes to codebase:
 - **SQW** (Snow Squall Warning) - Sudden whiteout conditions on highways
@@ -81,38 +81,38 @@ Then open **https://localhost** in your browser (HTTPS enabled by default).
 <td width="50%">
 
 ### For Users
-- **[📖 Getting Started](docs/INDEX.md)**
+- **[📖 Getting Started](docs/INDEX)**
   Installation, configuration, first alert
 
-- **[🛠️ Setup Instructions](docs/guides/SETUP_INSTRUCTIONS.md)**
+- **[🛠️ Setup Instructions](docs/guides/SETUP_INSTRUCTIONS)**
   First-run wizard walkthrough and environment validation tips
 
-- **[📘 User Guide](docs/guides/HELP.md)**
+- **[📘 User Guide](docs/guides/HELP)**
   Daily operations, alert management, hardware
 
-- **[📡 SDR Setup Guide](docs/SDR_SETUP.md)**
+- **[📡 SDR Setup Guide](docs/SDR_SETUP)**
   USB device passthrough, troubleshooting, udev rules
 
-- **[🔧 Admin Guide](docs/guides/PORTAINER_DEPLOYMENT.md)**
+- **[🔧 Admin Guide](docs/guides/PORTAINER_DEPLOYMENT)**
   Deployment, database, maintenance
 
-- **[🔒 HTTPS Setup](docs/guides/HTTPS_SETUP.md)**
+- **[🔒 HTTPS Setup](docs/guides/HTTPS_SETUP)**
   SSL/TLS configuration, Let's Encrypt certificates, nginx reverse proxy
 
-- **[🎧 Audio Monitoring](docs/audio/AUDIO_MONITORING.md)**
+- **[🎧 Audio Monitoring](docs/audio/AUDIO_MONITORING)**
   Live stream viewer, level metering, troubleshooting steps
 
 </td>
 <td width="50%">
 
 ### For Developers
-- **[💻 Developer Guide](docs/development/AGENTS.md)**
+- **[💻 Developer Guide](docs/development/AGENTS)**
   Architecture, contribution guidelines, testing
 
-- **[🎨 Frontend Docs](docs/frontend/FRONTEND_INDEX.md)**
+- **[🎨 Frontend Docs](docs/frontend/FRONTEND_INDEX)**
   UI components, theming, JavaScript API
 
-- **[📡 API Reference](docs/frontend/JAVASCRIPT_API.md)**
+- **[📡 API Reference](docs/frontend/JAVASCRIPT_API)**
   REST API and JavaScript API documentation
 
 </td>
@@ -135,9 +135,9 @@ mkdocs serve
 
 EAS Station exposes a comprehensive REST API for automation and integrations:
 
-- [Endpoint reference](docs/frontend/JAVASCRIPT_API.md) – Complete request/response catalog and authentication model
-- [Architecture overview](docs/architecture/SYSTEM_ARCHITECTURE.md) – How the API interacts with pollers, database, and broadcast services
-- [SDK examples](docs/frontend/FRONTEND_INDEX.md#javascript-api-usage) – Using the JavaScript client to control GPIO and audio devices
+- [Endpoint reference](docs/frontend/JAVASCRIPT_API) – Complete request/response catalog and authentication model
+- [Architecture overview](docs/architecture/SYSTEM_ARCHITECTURE) – How the API interacts with pollers, database, and broadcast services
+- [SDK examples](docs/frontend/FRONTEND_INDEX#javascript-api-usage) – Using the JavaScript client to control GPIO and audio devices
 
 > Tip: All API routes are namespaced under `/api/`. Use the `X-API-Key` header generated from the Configuration → API Keys page.
 
@@ -242,7 +242,7 @@ graph TB
 
 > 📘 **Docker users**: All system packages are pre-installed in the container.
 >
-> 📘 **Source installation**: See [SYSTEM_DEPENDENCIES.md](docs/reference/SYSTEM_DEPENDENCIES.md) for complete installation guide.
+> 📘 **Source installation**: See [SYSTEM_DEPENDENCIES.md](docs/reference/SYSTEM_DEPENDENCIES) for complete installation guide.
 
 ## 🛠️ Configuration
 
@@ -265,7 +265,7 @@ EAS_ORIGINATOR=WXR
 EAS_STATION_ID=YOURCALL
 ```
 
-See [Configuration Guide](docs/guides/HELP.md) for complete reference.
+See [Configuration Guide](docs/guides/HELP) for complete reference.
 
 ## 📊 System Diagrams
 
@@ -310,7 +310,7 @@ Professional flowcharts and block diagrams illustrating system architecture and 
 </tr>
 </table>
 
-📖 **[View all architectural diagrams →](docs/architecture/SYSTEM_ARCHITECTURE.md)**
+📖 **[View all architectural diagrams →](docs/architecture/SYSTEM_ARCHITECTURE)**
 
 ## 📊 Screenshots
 
@@ -331,9 +331,9 @@ Professional flowcharts and block diagrams illustrating system architecture and 
 
 We welcome contributions! Please see:
 
-- [Contributing Guide](docs/process/CONTRIBUTING.md)
-- [Code Standards](docs/development/AGENTS.md)
-- [Development Setup](docs/development/AGENTS.md)
+- [Contributing Guide](docs/process/CONTRIBUTING)
+- [Code Standards](docs/development/AGENTS)
+- [Development Setup](docs/development/AGENTS)
 
 ### Development
 
@@ -357,7 +357,7 @@ python app.py
 
 ## 🆘 Support
 
-- 📖 **Documentation**: [Complete Docs](docs/INDEX.md)
+- 📖 **Documentation**: [Complete Docs](docs/INDEX)
 - 💬 **Discussions**: [GitHub Discussions](https://github.com/KR8MER/eas-station/discussions)
 - 🐛 **Issues**: [GitHub Issues](https://github.com/KR8MER/eas-station/issues)
 - 📡 **Community**: Join our amateur radio forums
@@ -372,7 +372,7 @@ python app.py
 
     Always work in shielded test environments. Never connect to production broadcast chains.
 
-See [Terms of Use](docs/policies/TERMS_OF_USE.md) and [FCC Compliance](docs/reference/ABOUT.md) for details.
+See [Terms of Use](docs/policies/TERMS_OF_USE) and [FCC Compliance](docs/reference/ABOUT) for details.
 
 ## 📈 Roadmap
 
@@ -383,7 +383,7 @@ Current development focuses on:
 - ⏳ **Certification**: FCC Part 11 compliance documentation
 - ⏳ **Advanced Features**: Cloud sync, mobile app, multi-site coordination
 
-See [Roadmap](docs/roadmap/master_todo.md) for complete details.
+See [Roadmap](docs/roadmap/master_todo) for complete details.
 
 ## 📜 License
 
@@ -415,7 +415,7 @@ See [LICENSE](LICENSE) file for full text.
 
 | Resource | Link |
 |----------|------|
-| **Documentation** | [docs/](docs/INDEX.md) |
+| **Documentation** | [docs/](docs/INDEX) |
 | **NOAA CAP API** | https://www.weather.gov/documentation/services-web-api |
 | **IPAWS** | https://www.fema.gov/emergency-managers/practitioners/integrated-public-alert-warning-system |
 | **FCC Part 11** | https://www.ecfr.gov/current/title-47/chapter-I/subchapter-A/part-11 |

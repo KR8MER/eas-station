@@ -360,7 +360,7 @@ docker-compose restart webapp
 Until these decorators are added, the Demo role's restrictions are **partially effective** - the UI will hide buttons, but direct API calls could bypass restrictions.
 
 ### Recommended Actions
-1. Add permission decorators to all routes (see [IMPLEMENTATION_CHECKLIST.md](guides/IMPLEMENTATION_CHECKLIST.md))
+1. Add permission decorators to all routes (see [IMPLEMENTATION_CHECKLIST.md](guides/IMPLEMENTATION_CHECKLIST))
 2. Test each role thoroughly
 3. Audit API endpoints for missing protection
 4. Review logs for unauthorized access attempts
@@ -369,9 +369,9 @@ Until these decorators are added, the Demo role's restrictions are **partially e
 
 ## Related Documentation
 
-- [SECURITY_ANALYSIS_EXECUTIVE_SUMMARY.md](security/SECURITY_ANALYSIS_EXECUTIVE_SUMMARY.md) - Security audit findings
-- [IMPLEMENTATION_CHECKLIST.md](guides/IMPLEMENTATION_CHECKLIST.md) - How to add missing decorators
-- [PROTECTED_ROUTES_SUMMARY.md](reference/PROTECTED_ROUTES_SUMMARY.md) - Current route protection status
+- [SECURITY_ANALYSIS_EXECUTIVE_SUMMARY.md](security/SECURITY_ANALYSIS_EXECUTIVE_SUMMARY) - Security audit findings
+- [IMPLEMENTATION_CHECKLIST.md](guides/IMPLEMENTATION_CHECKLIST) - How to add missing decorators
+- [PROTECTED_ROUTES_SUMMARY.md](reference/PROTECTED_ROUTES_SUMMARY) - Current route protection status
 - `app_core/auth/roles.py` - Role definitions and permissions
 - `docs/development/AUTH_PERMISSION_TREE.md` - Technical permission mapping
 

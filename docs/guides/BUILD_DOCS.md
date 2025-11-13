@@ -210,7 +210,7 @@ Error: Navigation file 'page.md' not found
 - Create missing file or remove from `nav:` in `mkdocs.yml`
 
 **Broken links:**
-- Use relative links: `[Link](../other.md)`
+- Use relative links: `[Link](../other)`
 - Check file paths are correct
 
 ### Serve Issues

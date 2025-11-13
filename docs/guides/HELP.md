@@ -8,10 +8,10 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 - Operate the stack in isolated development or staging networks disconnected from broadcast transmitter controls.
 - Do not ingest live IPAWS credentials, dispatch feeds, or mission-critical telemetry into this environment.
 - Validate any workflows on certified FCC equipment before using them in real-world alerting scenarios.
-- Review the repository [Terms of Use](../policies/TERMS_OF_USE.md) and [Privacy Policy](../policies/PRIVACY_POLICY.md) with your operators prior to onboarding.
+- Review the repository [Terms of Use](../policies/TERMS_OF_USE) and [Privacy Policy](../policies/PRIVACY_POLICY) with your operators prior to onboarding.
 
 ## Getting Started
-1. **Review the About document:** The [About page](../reference/ABOUT.md) covers system goals, core services, and the complete software stack.
+1. **Review the About document:** The [About page](../reference/ABOUT) covers system goals, core services, and the complete software stack.
 2. **Provision infrastructure:** Deploy Docker Engine 24+ with Docker Compose V2 and ensure a dedicated PostgreSQL 15 + PostGIS database container is available before starting the app stack.
 3. **Configure environment variables:** Copy `.env.example` to `.env`, set secure secrets, and update database connection details. Optional Azure AI speech settings can remain blank until credentials are available.
 4. **Launch the stack:**
@@ -88,7 +88,7 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 
 ## Getting Help
 - **Documentation:** Consult the [README](https://github.com/KR8MER/eas-station/blob/main/README.md) for architecture, deployment, and configuration details.
-- **Change Tracking:** Review the [CHANGELOG](../reference/CHANGELOG.md) for the latest updates and breaking changes.
+- **Change Tracking:** Review the [CHANGELOG](../reference/CHANGELOG) for the latest updates and breaking changes.
 - **Issue Reporting:** Open a GitHub issue with logs, configuration details (without secrets), and replication steps.
 
-For deeper context on the technology stack and governance, return to the [About page](../reference/ABOUT.md).
+For deeper context on the technology stack and governance, return to the [About page](../reference/ABOUT).

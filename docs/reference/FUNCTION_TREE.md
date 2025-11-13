@@ -1137,7 +1137,7 @@ See `CHANGELOG` and `VERSION` files for detailed history.
 
 - **README.md** - Project overview and setup
 - **docs/archive/2025/SECURITY_FIXES.md** - Historical security updates
-- **[KNOWN_BUGS.md](KNOWN_BUGS.md)** - Known issues and workarounds
+- **[KNOWN_BUGS.md](KNOWN_BUGS)** - Known issues and workarounds
 - **docs/** - Complete documentation directory
 
 ---

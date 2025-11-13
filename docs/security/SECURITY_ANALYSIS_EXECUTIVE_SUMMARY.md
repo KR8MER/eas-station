@@ -168,17 +168,17 @@ The following analysis documents have been created:
    - All 224 routes categorized by permission
    - Security impact assessment
 
-2. **[PROTECTED_ROUTES_SUMMARY.md](../reference/PROTECTED_ROUTES_SUMMARY.md)**
+2. **[PROTECTED_ROUTES_SUMMARY.md](../reference/PROTECTED_ROUTES_SUMMARY)**
    - Quick reference for protected routes
    - Permission definitions
    - Demo role specification
 
-3. **[DEMO_ROLE_IMPLEMENTATION_GUIDE.md](../guides/DEMO_ROLE_IMPLEMENTATION_GUIDE.md)**
+3. **[DEMO_ROLE_IMPLEMENTATION_GUIDE.md](../guides/DEMO_ROLE_IMPLEMENTATION_GUIDE)**
    - Demo role security configuration
    - Recommended permissions
    - Testing procedures
 
-4. **[IMPLEMENTATION_CHECKLIST.md](../guides/IMPLEMENTATION_CHECKLIST.md)**
+4. **[IMPLEMENTATION_CHECKLIST.md](../guides/IMPLEMENTATION_CHECKLIST)**
    - Phase-by-phase implementation plan
    - Specific line numbers for all changes
    - Testing checklist
@@ -262,4 +262,4 @@ The application has a robust permission framework in place (`app_core/auth/roles
 ---
 
 **For detailed analysis, see**: ROUTE_SECURITY_ANALYSIS.txt
-**For implementation steps, see**: [IMPLEMENTATION_CHECKLIST.md](../guides/IMPLEMENTATION_CHECKLIST.md)
+**For implementation steps, see**: [IMPLEMENTATION_CHECKLIST.md](../guides/IMPLEMENTATION_CHECKLIST)

@@ -7,49 +7,49 @@ Welcome to the comprehensive frontend documentation for **EAS Station**. This se
 ### For New Users
 | Document | Description | Audience |
 |----------|-------------|----------|
-| [🎨 User Interface Guide](USER_INTERFACE_GUIDE.md) | Complete UI overview and design system | Everyone |
-| [🧩 Component Library](COMPONENT_LIBRARY.md) | All UI components with examples | Designers & Developers |
-| [📱 Responsive Design](RESPONSIVE_DESIGN.md) | Mobile-first design principles | Developers |
+| [🎨 User Interface Guide](USER_INTERFACE_GUIDE) | Complete UI overview and design system | Everyone |
+| [🧩 Component Library](COMPONENT_LIBRARY) | All UI components with examples | Designers & Developers |
+| [📱 Responsive Design](RESPONSIVE_DESIGN) | Mobile-first design principles | Developers |
 
 ### For Developers
 | Document | Description | Audience |
 |----------|-------------|----------|
-| [🚀 JavaScript API](JAVASCRIPT_API.md) | Complete API reference | Frontend Developers |
-| [🎨 Theming & Customization](THEMING_CUSTOMIZATION.md) | Theme system and branding | Custom Dev Teams |
+| [🚀 JavaScript API](JAVASCRIPT_API) | Complete API reference | Frontend Developers |
+| [🎨 Theming & Customization](THEMING_CUSTOMIZATION) | Theme system and branding | Custom Dev Teams |
 
 ---
 
 ## 📖 Documentation Structure
 
 ### 🎨 Design & UI
-- **[User Interface Guide](USER_INTERFACE_GUIDE.md)**
+- **[User Interface Guide](USER_INTERFACE_GUIDE)**
   - Design system overview
   - Component architecture
   - Navigation and layout
   - Accessibility guidelines
 
-- **[Component Library](COMPONENT_LIBRARY.md)**
+- **[Component Library](COMPONENT_LIBRARY)**
   - Complete component reference
   - Usage examples and best practices
   - Responsive behavior
   - Customization options
 
 ### 📱 Responsive Design
-- **[Responsive Design Guide](RESPONSIVE_DESIGN.md)**
+- **[Responsive Design Guide](RESPONSIVE_DESIGN)**
   - Mobile-first approach
   - Breakpoint system
   - Touch optimization
   - Performance considerations
 
 ### 🎨 Customization
-- **[Theming & Customization](THEMING_CUSTOMIZATION.md)**
+- **[Theming & Customization](THEMING_CUSTOMIZATION)**
   - CSS custom properties system
   - Theme creation and management
   - Brand color customization
   - Animation and effects
 
 ### 🚀 Development
-- **[JavaScript API Reference](JAVASCRIPT_API.md)**
+- **[JavaScript API Reference](JAVASCRIPT_API)**
   - Core API documentation
   - Component JavaScript modules
   - Event system
@@ -281,13 +281,13 @@ EASTheme.setTheme('dark');
 ## 📚 Learning Path
 
 ### Beginner Path (Week 1-2)
-1. [User Interface Guide](USER_INTERFACE_GUIDE.md) - Design system basics
-2. [Component Library](COMPONENT_LIBRARY.md) - Available components
-3. [Responsive Design](RESPONSIVE_DESIGN.md) - Mobile principles
+1. [User Interface Guide](USER_INTERFACE_GUIDE) - Design system basics
+2. [Component Library](COMPONENT_LIBRARY) - Available components
+3. [Responsive Design](RESPONSIVE_DESIGN) - Mobile principles
 
 ### Intermediate Path (Week 3-4)
-1. [JavaScript API](JAVASCRIPT_API.md) - Frontend development
-2. [Theming System](THEMING_CUSTOMIZATION.md) - Customization
+1. [JavaScript API](JAVASCRIPT_API) - Frontend development
+2. [Theming System](THEMING_CUSTOMIZATION) - Customization
 3. Component customization exercises
 
 ### Advanced Path (Week 5-6)
@@ -315,4 +315,4 @@ EASTheme.setTheme('dark');
 **Version**: 2.0  
 **Maintainers**: EAS Station Development Team
 
-For the most up-to-date information, visit the [GitHub Repository](https://github.com/KR8MER/eas-station) or check the [CHANGELOG](../reference/CHANGELOG.md).
+For the most up-to-date information, visit the [GitHub Repository](https://github.com/KR8MER/eas-station) or check the [CHANGELOG](../reference/CHANGELOG).

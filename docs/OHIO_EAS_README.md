@@ -19,7 +19,7 @@ This documentation provides comprehensive information about Ohio's Emergency Ale
 - **LFW** - Lakeshore Flood Warning
 - **EQE** - Earthquake Early Warning
 
-➡️ **[Read Critical Alert](./EAS_CRITICAL_ALERT.md)** ⚠️
+➡️ **[Read Critical Alert](./EAS_CRITICAL_ALERT)** ⚠️
 
 ---
 
@@ -30,9 +30,9 @@ This documentation provides comprehensive information about Ohio's Emergency Ale
 | Document | Description | Status |
 |----------|-------------|--------|
 | **[Ohio EAS Plan PDF](./Ohio-EAS-Plan-approved-by-FCC-03-18-19.pdf)** | Official State Plan (December 2018) | ✅ Current (needs update) |
-| **[Ohio EAS Documentation](./OHIO_EAS_DOCUMENTATION.md)** | Comprehensive markdown documentation | ✅ Complete |
-| **[Complete Event Code Reference](./EAS_EVENT_CODES_COMPLETE.md)** | All FCC event codes with Ohio status | ✅ Complete |
-| **[Critical Missing Codes Alert](./EAS_CRITICAL_ALERT.md)** | Action required notice | ⚠️ URGENT |
+| **[Ohio EAS Documentation](./OHIO_EAS_DOCUMENTATION)** | Comprehensive markdown documentation | ✅ Complete |
+| **[Complete Event Code Reference](./EAS_EVENT_CODES_COMPLETE)** | All FCC event codes with Ohio status | ✅ Complete |
+| **[Critical Missing Codes Alert](./EAS_CRITICAL_ALERT)** | Action required notice | ⚠️ URGENT |
 
 ---
 
@@ -106,7 +106,7 @@ The Ohio Emergency Alert System provides procedures for federal, state, and loca
 5. **LFW** - Lakeshore Flood Warning ⚠️
 6. **EQE** - Earthquake Early Warning ⚠️
 
-➡️ **[Complete Event Code List](./EAS_EVENT_CODES_COMPLETE.md)**
+➡️ **[Complete Event Code List](./EAS_EVENT_CODES_COMPLETE)**
 
 ---
 
@@ -132,7 +132,7 @@ The Ohio Emergency Alert System provides procedures for federal, state, and loca
 - LP-1 and LP-2 station monitoring
 - Automatic relay (if unattended)
 
-➡️ **[Equipment Configuration Guide](./EAS_EVENT_CODES_COMPLETE.md#encoder-decoder-configuration)**
+➡️ **[Equipment Configuration Guide](./EAS_EVENT_CODES_COMPLETE#encoder-decoder-configuration)**
 
 ---
 
@@ -191,7 +191,7 @@ The Ohio Emergency Alert System provides procedures for federal, state, and loca
 11. **West Central** - Dayton region
 12. **Youngstown** - Northeast region
 
-➡️ **[Operational Area Maps & Station Lists](./OHIO_EAS_DOCUMENTATION.md#operational-areas)**
+➡️ **[Operational Area Maps & Station Lists](./OHIO_EAS_DOCUMENTATION#operational-areas)**
 
 ---
 
@@ -221,7 +221,7 @@ The Ohio Emergency Alert System provides procedures for federal, state, and loca
 - Direct encoder connection or IPAWS
 - Coordinate multi-county through Ohio EMA
 
-➡️ **[Complete Notification Procedures](./OHIO_EAS_DOCUMENTATION.md#notification-procedures)**
+➡️ **[Complete Notification Procedures](./OHIO_EAS_DOCUMENTATION#notification-procedures)**
 
 ---
 
@@ -249,7 +249,7 @@ Email: jmcgee@octa.org
 **Ohio EMA (24/7):** 614-889-7150
 **National Weather Service (Wilmington):** 937-383-0428
 
-➡️ **[All LECC Chairs & Vice-Chairs](./OHIO_EAS_DOCUMENTATION.md#committee-contacts)**
+➡️ **[All LECC Chairs & Vice-Chairs](./OHIO_EAS_DOCUMENTATION#committee-contacts)**
 
 ---
 
@@ -277,7 +277,7 @@ Email: jmcgee@octa.org
 
 **Maximum Message Duration:** 2 minutes (including open, body, close)
 
-➡️ **[Complete Technical Specifications](./OHIO_EAS_DOCUMENTATION.md#eas-message-format)**
+➡️ **[Complete Technical Specifications](./OHIO_EAS_DOCUMENTATION#eas-message-format)**
 
 ---
 
@@ -299,7 +299,7 @@ Email: jmcgee@octa.org
 - **30 Days:** Install and test
 - **Before Winter 2025:** Complete winter code implementation
 
-➡️ **[Implementation Instructions](./EAS_CRITICAL_ALERT.md#implementation-instructions)**
+➡️ **[Implementation Instructions](./EAS_CRITICAL_ALERT#implementation-instructions)**
 
 ---
 
@@ -368,13 +368,13 @@ Email: jmcgee@octa.org
 ## ❓ Frequently Asked Questions
 
 **Q: Where do I find my station's monitoring assignments?**
-A: Check your operational area section in the [full documentation](./OHIO_EAS_DOCUMENTATION.md) or Attachment III of the official plan.
+A: Check your operational area section in the [full documentation](./OHIO_EAS_DOCUMENTATION) or Attachment III of the official plan.
 
 **Q: How do I add missing event codes?**
-A: Follow the [implementation instructions](./EAS_CRITICAL_ALERT.md#implementation-instructions) and contact your equipment manufacturer.
+A: Follow the [implementation instructions](./EAS_CRITICAL_ALERT#implementation-instructions) and contact your equipment manufacturer.
 
 **Q: Who do I contact with questions?**
-A: Contact your [operational area LECC chair](./OHIO_EAS_DOCUMENTATION.md#committee-contacts) or the state SECC chair.
+A: Contact your [operational area LECC chair](./OHIO_EAS_DOCUMENTATION#committee-contacts) or the state SECC chair.
 
 **Q: When is the next RMT test?**
 A: Second Wednesday of each month (see [test schedule](#testing)) - check calendar for specific dates.
