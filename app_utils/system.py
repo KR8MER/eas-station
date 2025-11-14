@@ -392,10 +392,31 @@ def get_distro_logo_url(distro_id: Optional[str]) -> Optional[str]:
     return None
 
 
+def _escape_shields_io_text(text: str) -> str:
+    """Escape text for use in shields.io badge URLs.
+    
+    Shields.io uses specific escape sequences:
+    - Dashes (-) must be doubled (--) as they're used as separators
+    - Underscores (_) must be doubled (__) as they're used for spaces
+    - Spaces can remain as-is or be replaced with underscores
+    
+    Args:
+        text: The text to escape for shields.io
+        
+    Returns:
+        Escaped text safe for use in shields.io badge URLs
+    """
+    # Replace underscores first (before dashes) to avoid double-escaping
+    escaped = text.replace('_', '__')
+    # Replace dashes with double dashes (shields.io separator escape)
+    escaped = escaped.replace('-', '--')
+    # Spaces are fine in shields.io, but we can optionally replace with underscores
+    # For now, keep spaces as they're more readable
+    return escaped
+
+
 def get_shields_io_badges(health_data: Dict[str, Any]) -> Dict[str, str]:
     """Generate shields.io badge URLs for system metrics."""
-    
-    from urllib.parse import quote
     
     badges = {}
     system = health_data.get("system", {})
@@ -409,15 +430,15 @@ def get_shields_io_badges(health_data: Dict[str, Any]) -> Dict[str, str]:
         os_label = f"{os_name} {os_version}"
     else:
         os_label = os_name
-    badges["os"] = f"https://img.shields.io/badge/OS-{quote(os_label)}-blue?style=flat-square&logo=linux"
+    badges["os"] = f"https://img.shields.io/badge/OS-{_escape_shields_io_text(os_label)}-blue?style=flat-square&logo=linux"
     
     # Kernel Badge
     kernel = system.get("kernel_release") or system.get("release") or "Unknown"
-    badges["kernel"] = f"https://img.shields.io/badge/Kernel-{quote(kernel)}-lightgrey?style=flat-square"
+    badges["kernel"] = f"https://img.shields.io/badge/Kernel-{_escape_shields_io_text(kernel)}-lightgrey?style=flat-square"
     
     # Architecture Badge
     arch = system.get("machine") or "Unknown"
-    badges["architecture"] = f"https://img.shields.io/badge/Arch-{quote(arch)}-informational?style=flat-square"
+    badges["architecture"] = f"https://img.shields.io/badge/Arch-{_escape_shields_io_text(arch)}-informational?style=flat-square"
     
     # Uptime Badge (format for badge)
     uptime_seconds = system.get("uptime_seconds", 0)
@@ -427,7 +448,7 @@ def get_shields_io_badges(health_data: Dict[str, Any]) -> Dict[str, str]:
         uptime_label = f"{days}d {hours}h"
     else:
         uptime_label = f"{hours}h"
-    badges["uptime"] = f"https://img.shields.io/badge/Uptime-{quote(uptime_label)}-success?style=flat-square"
+    badges["uptime"] = f"https://img.shields.io/badge/Uptime-{_escape_shields_io_text(uptime_label)}-success?style=flat-square"
     
     # CPU Usage Badge
     cpu_usage = cpu.get("cpu_usage_percent", 0)
