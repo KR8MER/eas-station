@@ -336,7 +336,7 @@
                             <li><h6 class="dropdown-header">{{ current_user.username }}</h6></li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
-                                <a class="dropdown-item" href="{{ url_for('logout') }}">
+                                <a class="dropdown-item" href="{{ url_for('auth.logout') }}">
                                     <i class="fas fa-sign-out-alt"></i> Sign Out
                                 </a>
                             </li>
@@ -344,7 +344,7 @@
                     </li>
                     {% else %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('login') }}">
+                        <a class="nav-link" href="{{ url_for('auth.login') }}">
                             <i class="fas fa-sign-in-alt"></i>
                             <span>Sign In</span>
                         </a>
