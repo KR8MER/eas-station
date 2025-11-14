@@ -4,8 +4,10 @@
 import os
 import sys
 
-# Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add project root to path (navigate up from scripts/diagnostics/ to repository root)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(script_dir))
+sys.path.insert(0, project_root)
 
 def main():
     """Check SDR receiver and RadioManager status."""

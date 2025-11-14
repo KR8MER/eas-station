@@ -44,8 +44,8 @@ sudo systemctl restart eas-station  # or whatever your service is called
 After restarting, run this to verify everything is working:
 
 ```bash
-cd /home/user/eas-station
-python3 check_sdr_status.py
+cd /path/to/eas-station
+python3 scripts/diagnostics/check_sdr_status.py
 ```
 
 Expected output when working:
@@ -219,7 +219,7 @@ If the waterfall still doesn't appear after following all steps:
 
 1. Run the diagnostic script and save output:
    ```bash
-   python3 check_sdr_status.py > sdr_diagnostic.txt
+   python3 scripts/diagnostics/check_sdr_status.py > sdr_diagnostic.txt
    ```
 
 2. Check application logs for errors during startup

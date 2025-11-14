@@ -106,7 +106,7 @@ elif self.config.channel is not None:
 ### 5. Run Diagnostic Script
 ```bash
 # Check SDR status and audio pipeline
-python check_sdr_status.py
+python scripts/diagnostics/check_sdr_status.py
 
 # Run comprehensive diagnostics
 python scripts/sdr_diagnostics.py
@@ -150,7 +150,7 @@ Mount point: `/<source-name>` (e.g., `/sdr-wx42`)
 
 1. Check receiver status:
 ```bash
-python check_sdr_status.py
+python scripts/diagnostics/check_sdr_status.py
 ```
 
 2. Check if demodulator is created:

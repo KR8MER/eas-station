@@ -165,7 +165,7 @@ http://YOUR_SERVER_IP/system_health
 ```bash
 # SSH into your server
 cd /path/to/repo
-bash troubleshoot_connection.sh
+bash scripts/diagnostics/troubleshoot_connection.sh
 ```
 
 ---
