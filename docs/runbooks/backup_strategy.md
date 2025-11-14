@@ -14,6 +14,7 @@
 2. [Backup Components](#backup-components)
 3. [Backup Procedures](#backup-procedures)
 4. [Recovery Procedures](#recovery-procedures)
+   - [Post-Restore Validation](#post-restore-validation)
 5. [Retention Policy](#retention-policy)
 6. [Testing](#testing)
 7. [Troubleshooting](#troubleshooting)
@@ -56,6 +57,7 @@ EAS Station implements a comprehensive **3-2-1 backup strategy**:
 |------|---------|----------|
 | `create_backup.py` | Create backups via CLI | `tools/create_backup.py` |
 | `restore_backup.py` | Restore backups via CLI | `tools/restore_backup.py` |
+| `validate_restore.py` | Validate system after restore | `tools/validate_restore.py` |
 | `backup_scheduler.py` | Automate backups (cron/systemd) | `tools/backup_scheduler.py` |
 | `rotate_backups.py` | Apply retention policy | `tools/rotate_backups.py` |
 
@@ -330,9 +332,14 @@ python3 tools/restore_backup.py \
 # 6. Start services
 docker compose up -d
 
-# 7. Verify
+# 7. Verify restoration
 curl http://localhost/health
+
+# 8. Run automated post-restore validation
+python3 tools/validate_restore.py
 ```
+
+**Post-Restore Validation:** After any restore operation, it's recommended to run the automated validation script to verify system health. See [Post-Restore Validation](#post-restore-validation) below.
 
 ### Configuration-Only Restore
 
@@ -382,6 +389,145 @@ ls -lht /var/backups/eas-station/
 # Restore from specific timestamp
 python3 tools/restore_backup.py \
     --backup-dir /var/backups/eas-station/backup-20250111-020000-scheduled
+```
+
+### Post-Restore Validation
+
+**Purpose:** Automated verification of system health after restore operations.
+
+**Tool:** `tools/validate_restore.py` - Comprehensive validation script that checks:
+- Web service availability
+- Health endpoint status
+- Database connectivity and migrations
+- External dependencies
+- Configuration file integrity
+- GPIO availability (if configured)
+- Audio device access (if configured)
+- API endpoint accessibility
+
+#### Web Interface Validation
+
+After a restore completes:
+
+1. **Check System Health Dashboard** (at top of any page)
+   - Database should show as "connected"
+   - All critical indicators should be green
+
+2. **Visit Health Dependencies** at `/health/dependencies`
+   - All services should report healthy status
+   - Review any warnings or failures
+
+3. **Manual Functional Tests:**
+   - Log in (credentials should match the restored backup)
+   - View alerts at `/alerts`
+   - Check configuration at `/admin/settings`
+   - Verify recent data appears correctly
+
+#### Command Line Validation
+
+Run the automated validation script immediately after restore:
+
+```bash
+# Basic validation (checks localhost:8080)
+python3 tools/validate_restore.py
+
+# Wait for services to fully start
+python3 tools/validate_restore.py --wait 30
+
+# Validate remote/custom host
+python3 tools/validate_restore.py --host production.example.com --port 443
+
+# From within Docker container
+docker compose exec app python3 /app/tools/validate_restore.py
+```
+
+**Expected Output:**
+```
+======================================================================
+EAS Station Post-Restore Validation
+======================================================================
+Target: http://localhost:8080
+
+Checking Web Service... ✓
+Checking Health Endpoint... ✓
+Checking Database Connection... ✓
+Checking Database Migrations... ✓
+Checking Dependencies... ✓
+Checking Configuration... ✓
+Checking API Access... ✓
+Checking GPIO Availability... ✓
+Checking Audio Devices... ✓
+
+======================================================================
+Validation Results
+======================================================================
+
+✓ PASS: Web Service - Web service is responding at http://localhost:8080
+✓ PASS: Health Endpoint - System reports healthy status
+✓ PASS: Database Connection - Database is connected and accessible
+✓ PASS: Database Migrations - All database migrations are applied
+✓ PASS: Dependencies - All 4 dependencies are healthy
+✓ PASS: Configuration - Configuration file found at /app-config/.env with all critical keys
+✓ PASS: API Access - All 2 API endpoints are accessible
+✓ PASS: GPIO Availability - GPIO hardware is available
+✓ PASS: Audio Devices - Audio configuration endpoint accessible
+
+======================================================================
+Total: 9 checks | Passed: 9 | Failed: 0
+======================================================================
+
+✓ All validation checks PASSED
+
+Next Steps:
+1. Access the web UI and verify functionality
+2. Check recent logs for any warnings:
+   docker compose logs --since 10m | grep -i warning
+3. Review system health in the admin dashboard
+```
+
+**If Validation Fails:**
+
+The script will exit with code 1 and show failed checks. Common issues:
+
+- **Database Connection Failed**: Check PostgreSQL is running: `docker compose ps alerts-db`
+- **Pending Migrations**: Run migrations: `docker compose exec app python -m alembic upgrade head`
+- **Dependencies Failed**: Check dependent services: `docker compose ps`
+- **Configuration Missing**: Verify .env file was restored: `ls -la .env`
+
+**Exit Codes:**
+- `0`: All validations passed
+- `1`: One or more validations failed
+- `2`: Configuration or runtime error
+
+**Automation Integration:**
+
+Include validation in automated restore workflows:
+
+```bash
+#!/bin/bash
+# automated_restore.sh
+
+# Restore backup
+python3 tools/restore_backup.py --backup-dir "$BACKUP_DIR" || exit 1
+
+# Restart services
+docker compose up -d
+
+# Wait for startup
+sleep 30
+
+# Validate restore
+python3 tools/validate_restore.py --wait 30
+VALIDATION_RESULT=$?
+
+if [ $VALIDATION_RESULT -eq 0 ]; then
+    echo "✓ Restore validation successful"
+    exit 0
+else
+    echo "✗ Restore validation failed - check logs"
+    docker compose logs --tail=50
+    exit 1
+fi
 ```
 
 ---
