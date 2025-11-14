@@ -1088,8 +1088,16 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
             "serial": device.get("serial"),
             "transport": device.get("transport"),
             "is_rotational": device.get("is_rotational"),
+            "firmware_version": None,
+            "nvme_version_string": None,
+            "nvme_controller_id": None,
+            "nvme_number_of_namespaces": None,
+            "total_capacity_bytes": None,
+            "unallocated_capacity_bytes": None,
+            "ieee_oui_identifier": None,
             "overall_status": "unknown",
             "temperature_celsius": None,
+            "temperature_sensors_celsius": [],
             "power_on_hours": None,
             "power_cycle_count": None,
             "reallocated_sector_count": None,
@@ -1105,6 +1113,11 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
             "host_reads_bytes": None,
             "percentage_used": None,
             "unsafe_shutdowns": None,
+            "available_spare": None,
+            "available_spare_threshold": None,
+            "warning_temp_time_minutes": None,
+            "critical_temp_time_minutes": None,
+            "num_error_log_entries": None,
             "exit_status": None,
             "error": None,
         }
@@ -1195,6 +1208,52 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
             result["devices"].append(device_result)
             continue
 
+        device_result["model"] = (
+            device_result.get("model")
+            or report.get("model_name")
+            or report.get("model_family")
+            or report.get("device_model")
+        )
+        device_result["serial"] = device_result.get("serial") or report.get("serial_number")
+
+        firmware_version = report.get("firmware_version") or report.get("firmware")
+        if firmware_version:
+            device_result["firmware_version"] = str(firmware_version)
+
+        total_capacity = report.get("nvme_total_capacity")
+        if total_capacity is None:
+            user_capacity = report.get("user_capacity")
+            if isinstance(user_capacity, dict):
+                total_capacity = _coerce_int(user_capacity.get("bytes"))
+        if total_capacity is not None:
+            coerced_capacity = _coerce_int(total_capacity)
+            if coerced_capacity is not None:
+                device_result["total_capacity_bytes"] = coerced_capacity
+
+        unallocated_capacity = report.get("nvme_unallocated_capacity")
+        if unallocated_capacity is not None:
+            coerced_unallocated = _coerce_int(unallocated_capacity)
+            if coerced_unallocated is not None:
+                device_result["unallocated_capacity_bytes"] = coerced_unallocated
+
+        controller_id = _coerce_int(report.get("nvme_controller_id"))
+        if controller_id is not None:
+            device_result["nvme_controller_id"] = controller_id
+
+        namespaces = _coerce_int(report.get("nvme_number_of_namespaces"))
+        if namespaces is not None:
+            device_result["nvme_number_of_namespaces"] = namespaces
+
+        nvme_version = report.get("nvme_version")
+        if isinstance(nvme_version, dict):
+            version_string = nvme_version.get("string") or nvme_version.get("value")
+            if version_string:
+                device_result["nvme_version_string"] = str(version_string)
+
+        ieee_identifier = _coerce_int(report.get("nvme_ieee_oui_identifier"))
+        if ieee_identifier is not None:
+            device_result["ieee_oui_identifier"] = f"{ieee_identifier:06X}"
+
         smart_status = report.get("smart_status") or {}
         passed = smart_status.get("passed")
         if passed is True:
@@ -1222,6 +1281,41 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
             device_result[key] = value
 
         _populate_nvme_metrics(device_result, report)
+
+        nvme_info = report.get("nvme_smart_health_information_log")
+        if isinstance(nvme_info, dict):
+            available_spare = _coerce_int(nvme_info.get("available_spare"))
+            if available_spare is not None:
+                device_result["available_spare"] = available_spare
+
+            spare_threshold = _coerce_int(nvme_info.get("available_spare_threshold"))
+            if spare_threshold is not None:
+                device_result["available_spare_threshold"] = spare_threshold
+
+            warning_time = _coerce_int(nvme_info.get("warning_temp_time"))
+            if warning_time is not None:
+                device_result["warning_temp_time_minutes"] = warning_time
+
+            critical_time = _coerce_int(nvme_info.get("critical_comp_time"))
+            if critical_time is not None:
+                device_result["critical_temp_time_minutes"] = critical_time
+
+            error_logs = _coerce_int(nvme_info.get("num_err_log_entries"))
+            if error_logs is not None:
+                device_result["num_error_log_entries"] = error_logs
+
+            sensors = nvme_info.get("temperature_sensors")
+            if isinstance(sensors, list):
+                readings: List[float] = []
+                for entry in sensors:
+                    if isinstance(entry, (int, float)):
+                        value = float(entry)
+                        if value > 200:
+                            value -= 273.15
+                        if _is_valid_temperature(value):
+                            readings.append(round(value, 1))
+                if readings:
+                    device_result["temperature_sensors_celsius"] = readings
 
         # Only store stderr as error if it indicates a real problem
         if stderr_output and completed.returncode != 0:

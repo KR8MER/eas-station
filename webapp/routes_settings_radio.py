@@ -193,6 +193,41 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
         serial = payload.get("serial")
         data["serial"] = str(serial).strip() if serial not in (None, "") else None
 
+    if not partial or "modulation_type" in payload:
+        modulation_raw = payload.get("modulation_type", "IQ")
+        if modulation_raw in (None, ""):
+            if not partial:
+                data["modulation_type"] = "IQ"
+        else:
+            modulation = str(modulation_raw).strip().upper()
+            allowed_modulations = {"IQ", "FM", "AM", "NFM", "WFM"}
+            if modulation not in allowed_modulations:
+                return None, "Invalid modulation type."
+            data["modulation_type"] = modulation
+
+    if not partial or "audio_output" in payload:
+        data["audio_output"] = _coerce_bool(payload.get("audio_output"), False)
+
+    if not partial or "stereo_enabled" in payload:
+        data["stereo_enabled"] = _coerce_bool(payload.get("stereo_enabled"), True)
+
+    if not partial or "deemphasis_us" in payload:
+        deemphasis_val = payload.get("deemphasis_us", 75.0)
+        if deemphasis_val in (None, "", []):
+            if not partial:
+                data["deemphasis_us"] = 75.0
+        else:
+            try:
+                deemphasis = float(deemphasis_val)
+                if deemphasis <= 0:
+                    raise ValueError
+                data["deemphasis_us"] = deemphasis
+            except Exception:
+                return None, "De-emphasis must be a positive number of microseconds."
+
+    if not partial or "enable_rbds" in payload:
+        data["enable_rbds"] = _coerce_bool(payload.get("enable_rbds"), False)
+
     if "auto_start" in payload or not partial:
         data["auto_start"] = _coerce_bool(payload.get("auto_start"), True)
 
