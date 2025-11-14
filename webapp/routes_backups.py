@@ -342,5 +342,77 @@ def register(app: Flask, logger) -> None:
             "missing_files": missing_files,
         })
 
+    @app.route("/api/backups/validate-system", methods=["POST"])
+    @require_auth
+    @require_role("Admin", "Operator")
+    def api_validate_system():
+        """API endpoint to validate system health after restore.
+        
+        This runs the post-restore validation script to check:
+        - Web service availability
+        - Health endpoint status
+        - Database connectivity and migrations
+        - External dependencies
+        - Configuration integrity
+        - GPIO/audio device availability
+        - API endpoint accessibility
+        """
+        data = request.get_json() or {}
+        wait_seconds = data.get("wait", 0)
+        
+        route_logger.info("Running post-restore system validation")
+        
+        # Build validation command
+        args = []
+        if wait_seconds > 0:
+            args.extend(["--wait", str(wait_seconds)])
+        
+        # Run validation with localhost since we're in the same container/network
+        args.extend(["--host", "localhost", "--port", "8080"])
+        
+        success, stdout, stderr = run_script("validate_restore.py", args)
+        
+        # Parse the output to extract validation results
+        validation_results = {
+            "passed": [],
+            "failed": [],
+            "total": 0,
+        }
+        
+        # Simple parsing of the output
+        for line in stdout.split("\n"):
+            if "✓ PASS:" in line:
+                check_name = line.split(":", 1)[1].split("-")[0].strip()
+                validation_results["passed"].append(check_name)
+                validation_results["total"] += 1
+            elif "✗ FAIL:" in line:
+                check_name = line.split(":", 1)[1].split("-")[0].strip()
+                message = line.split("-", 1)[1].strip() if "-" in line.split(":", 1)[1] else "Failed"
+                validation_results["failed"].append({
+                    "check": check_name,
+                    "message": message
+                })
+                validation_results["total"] += 1
+        
+        if success:
+            route_logger.info(f"System validation passed: {len(validation_results['passed'])}/{validation_results['total']} checks")
+            return jsonify({
+                "success": True,
+                "all_passed": len(validation_results["failed"]) == 0,
+                "message": "System validation completed",
+                "results": validation_results,
+                "output": stdout,
+            })
+        else:
+            route_logger.warning(f"System validation failed: {len(validation_results['failed'])} failed checks")
+            return jsonify({
+                "success": True,  # API call succeeded even if validation found issues
+                "all_passed": False,
+                "message": "System validation found issues",
+                "results": validation_results,
+                "output": stdout,
+                "error": stderr,
+            })
+
 
 __all__ = ["register"]

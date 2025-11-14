@@ -124,6 +124,53 @@
         </div>
     </div>
 
+    <!-- System Validation Section -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-check-circle"></i> System Health Validation</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">
+                        Run comprehensive system validation to verify health after restore operations.
+                        This checks database connectivity, dependencies, configuration, and service availability.
+                    </p>
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="validation-wait" checked>
+                                <label class="form-check-label" for="validation-wait">
+                                    Wait 30 seconds for services to stabilize before validation
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <button type="button" class="btn btn-success btn-lg w-100" onclick="runSystemValidation()">
+                                <i class="fas fa-heartbeat"></i> Validate System Now
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Validation Progress Display -->
+                    <div id="validation-progress" class="mt-3" style="display: none;">
+                        <div class="alert alert-info">
+                            <div class="d-flex align-items-center">
+                                <div class="spinner-border spinner-border-sm me-2" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <span id="validation-progress-text">Running system validation...</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Validation Results Display -->
+                    <div id="validation-result" class="mt-3" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Backup List -->
     <div class="row">
         <div class="col">
@@ -444,10 +491,13 @@ async function executeRestore() {
             resultDiv.innerHTML = `
                 <div class="alert alert-success">
                     <h6><i class="fas fa-check-circle"></i> Restore Completed!</h6>
-                    <p>The backup has been restored successfully. You may need to restart services.</p>
+                    <p>The backup has been restored successfully.</p>
+                    <button type="button" class="btn btn-success btn-sm mt-2" onclick="closeRestoreModalAndValidate()">
+                        <i class="fas fa-heartbeat"></i> Run System Validation
+                    </button>
                 </div>
             `;
-            setTimeout(() => window.location.reload(), 3000);
+            // Don't auto-reload, let user choose to validate or manually reload
         } else {
             resultDiv.innerHTML = `
                 <div class="alert alert-danger">
@@ -471,6 +521,25 @@ async function executeRestore() {
         progressDiv.style.display = 'none';
         resultDiv.style.display = 'block';
     }
+}
+
+function closeRestoreModalAndValidate() {
+    // Close the restore modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('restoreModal'));
+    if (modal) {
+        modal.hide();
+    }
+    
+    // Scroll to validation section
+    const validationSection = document.querySelector('.card .bg-success');
+    if (validationSection) {
+        validationSection.scrollIntoView({ behavior: 'smooth' });
+    }
+    
+    // Trigger validation after a brief delay
+    setTimeout(() => {
+        runSystemValidation();
+    }, 500);
 }
 
 // Validate Backup
@@ -521,6 +590,143 @@ async function deleteBackup(backupName) {
     } catch (error) {
         alert(`Error deleting backup: ${error.message}`);
     }
+}
+
+// System Validation
+async function runSystemValidation() {
+    const progressDiv = document.getElementById('validation-progress');
+    const progressText = document.getElementById('validation-progress-text');
+    const resultDiv = document.getElementById('validation-result');
+    const waitCheckbox = document.getElementById('validation-wait');
+
+    // Show progress
+    progressDiv.style.display = 'block';
+    resultDiv.style.display = 'none';
+    progressText.textContent = 'Running system validation...';
+
+    try {
+        const wait = waitCheckbox.checked ? 30 : 0;
+        
+        if (wait > 0) {
+            progressText.textContent = `Waiting ${wait} seconds for services to stabilize...`;
+            await new Promise(resolve => setTimeout(resolve, 3000)); // Show message briefly
+        }
+
+        progressText.textContent = 'Checking web service, database, dependencies...';
+
+        const response = await fetch('/api/backups/validate-system', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                wait: wait
+            })
+        });
+
+        const data = await response.json();
+
+        // Hide progress
+        progressDiv.style.display = 'none';
+
+        // Build results display
+        let html = '';
+        
+        if (data.all_passed) {
+            html = `
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-check-circle"></i> All Validation Checks Passed</h5>
+                    <p class="mb-2">System is healthy and operating normally.</p>
+                    <p class="mb-0"><strong>${data.results.total} checks completed successfully</strong></p>
+                </div>
+            `;
+            
+            // Show passed checks
+            if (data.results.passed && data.results.passed.length > 0) {
+                html += '<div class="card mt-3"><div class="card-header bg-light"><h6 class="mb-0">Passed Checks</h6></div><div class="card-body"><ul class="mb-0">';
+                data.results.passed.forEach(check => {
+                    html += `<li class="text-success"><i class="fas fa-check"></i> ${check}</li>`;
+                });
+                html += '</ul></div></div>';
+            }
+        } else {
+            html = `
+                <div class="alert alert-warning">
+                    <h5><i class="fas fa-exclamation-triangle"></i> System Validation Issues Found</h5>
+                    <p class="mb-2">Some validation checks did not pass. Review the details below.</p>
+                    <p class="mb-0"><strong>${data.results.failed.length} of ${data.results.total} checks failed</strong></p>
+                </div>
+            `;
+            
+            // Show failed checks
+            if (data.results.failed && data.results.failed.length > 0) {
+                html += '<div class="card mt-3 border-warning"><div class="card-header bg-warning text-dark"><h6 class="mb-0">Failed Checks</h6></div><div class="card-body"><ul class="mb-0">';
+                data.results.failed.forEach(item => {
+                    html += `<li class="text-danger"><i class="fas fa-times"></i> <strong>${item.check}</strong>: ${item.message}</li>`;
+                });
+                html += '</ul></div></div>';
+            }
+            
+            // Show passed checks
+            if (data.results.passed && data.results.passed.length > 0) {
+                html += '<div class="card mt-3"><div class="card-header bg-light"><h6 class="mb-0">Passed Checks</h6></div><div class="card-body"><ul class="mb-0">';
+                data.results.passed.forEach(check => {
+                    html += `<li class="text-success"><i class="fas fa-check"></i> ${check}</li>`;
+                });
+                html += '</ul></div></div>';
+            }
+            
+            // Show recommendations
+            html += `
+                <div class="card mt-3">
+                    <div class="card-header bg-info text-white">
+                        <h6 class="mb-0">Recommended Actions</h6>
+                    </div>
+                    <div class="card-body">
+                        <ul class="mb-0">
+                            <li>Check application logs: <code>docker compose logs --tail=100 app</code></li>
+                            <li>Verify database status: <code>docker compose exec app python -m alembic current</code></li>
+                            <li>Review system health at <a href="/health/dependencies" target="_blank">/health/dependencies</a></li>
+                            <li>Restart services if needed: <code>docker compose restart</code></li>
+                        </ul>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Show detailed output in collapsible section
+        if (data.output) {
+            html += `
+                <div class="mt-3">
+                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#validation-output">
+                        <i class="fas fa-terminal"></i> Show Detailed Output
+                    </button>
+                    <div class="collapse mt-2" id="validation-output">
+                        <pre class="bg-light p-3 rounded" style="max-height: 400px; overflow-y: auto; font-size: 0.85rem;">${escapeHtml(data.output)}</pre>
+                    </div>
+                </div>
+            `;
+        }
+
+        resultDiv.innerHTML = html;
+        resultDiv.style.display = 'block';
+
+    } catch (error) {
+        progressDiv.style.display = 'none';
+        resultDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-times-circle"></i> Validation Error</h5>
+                <p>Failed to run system validation: ${escapeHtml(error.message)}</p>
+            </div>
+        `;
+        resultDiv.style.display = 'block';
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 </script>
 {% endblock %}
