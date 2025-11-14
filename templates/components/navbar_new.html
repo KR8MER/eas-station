@@ -348,12 +348,25 @@
                     </li>
                     {% endif %}
 
-                    <!-- Theme Toggle -->
+                    <!-- Theme Selector -->
+                    <li class="nav-item theme-toggle-nav-item">
+                        <button class="theme-toggle-button"
+                                type="button"
+                                onclick="showThemeSelector()"
+                                aria-label="Choose theme"
+                                title="Choose theme">
+                            <i class="fas fa-palette" aria-hidden="true"></i>
+                            <span class="visually-hidden">Choose theme</span>
+                        </button>
+                    </li>
+
+                    <!-- Quick Theme Toggle -->
                     <li class="nav-item theme-toggle-nav-item">
                         <button class="theme-toggle-button"
                                 type="button"
                                 onclick="toggleTheme()"
-                                aria-label="Toggle dark or light mode">
+                                aria-label="Toggle dark or light mode"
+                                title="Toggle dark/light mode">
                             <i id="theme-icon" class="fas fa-moon" aria-hidden="true"></i>
                             <span class="visually-hidden">Toggle theme</span>
                         </button>
