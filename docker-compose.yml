@@ -100,10 +100,10 @@ services:
       #   docker-compose -f docker-compose.yml -f docker-compose.pi.yml up -d
       # See docker-compose.pi.yml for Raspberry Pi GPIO configuration.
 
-      # Block Device Passthrough for SMART Monitoring
-      # Pass through all block devices for comprehensive SMART health monitoring
-      # This is safe and provides read-only SMART data access
-      - /dev:/dev:ro  # Read-only access to all devices for SMART monitoring
+      # SMART Monitoring Note:
+      # SMART monitoring is enabled via the SYS_RAWIO capability (see cap_add below).
+      # Block devices are accessible through Docker's standard device node creation.
+      # Mounting /dev directly is not needed and causes permission issues with /dev/pts.
     privileged: false  # Not needed - SYS_RAWIO is sufficient for SMART access
     cap_add:
       - SYS_RAWIO  # Required for SDR hardware access, SMART monitoring, and GPIO access
@@ -145,9 +145,10 @@ services:
       # For specific device passthrough, see docs/SDR_SETUP.md
       - /dev/bus/usb:/dev/bus/usb
 
-      # Block Device Passthrough for SMART Monitoring
-      # Pass through all block devices for comprehensive SMART health monitoring
-      - /dev:/dev:ro  # Read-only access to all devices for SMART monitoring
+      # SMART Monitoring Note:
+      # SMART monitoring is enabled via the SYS_RAWIO capability (see cap_add below).
+      # Block devices are accessible through Docker's standard device node creation.
+      # Mounting /dev directly is not needed and causes permission issues with /dev/pts.
     privileged: false  # Not needed - SYS_RAWIO is sufficient for SMART access
     cap_add:
       - SYS_RAWIO  # Required for SDR hardware access and SMART monitoring
@@ -197,9 +198,10 @@ services:
       # For specific device passthrough, see docs/SDR_SETUP.md
       - /dev/bus/usb:/dev/bus/usb
 
-      # Block Device Passthrough for SMART Monitoring
-      # Pass through all block devices for comprehensive SMART health monitoring
-      - /dev:/dev:ro  # Read-only access to all devices for SMART monitoring
+      # SMART Monitoring Note:
+      # SMART monitoring is enabled via the SYS_RAWIO capability (see cap_add below).
+      # Block devices are accessible through Docker's standard device node creation.
+      # Mounting /dev directly is not needed and causes permission issues with /dev/pts.
     privileged: false  # Not needed - SYS_RAWIO is sufficient for SMART access
     cap_add:
       - SYS_RAWIO  # Required for SDR hardware access and SMART monitoring
