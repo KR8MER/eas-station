@@ -680,6 +680,34 @@ def inject_global_vars():
 
 
 # =============================================================================
+# JINJA2 FILTERS
+# =============================================================================
+
+@app.template_filter('shields_escape')
+def shields_escape_filter(text):
+    """Escape text for use in shields.io badge URLs.
+    
+    Shields.io uses dashes as separators in badge URLs, so:
+    - Dashes (-) must be doubled (--)
+    - Underscores (_) must be doubled (__) as they represent spaces
+    - Spaces remain as-is (shields.io handles them)
+    
+    Args:
+        text: The text to escape for shields.io
+        
+    Returns:
+        Escaped text safe for use in shields.io badge URLs
+    """
+    if not text:
+        return text
+    # Replace underscores first to avoid double-escaping
+    escaped = str(text).replace('_', '__')
+    # Replace dashes with double dashes
+    escaped = escaped.replace('-', '--')
+    return escaped
+
+
+# =============================================================================
 # REQUEST HOOKS
 # =============================================================================
 

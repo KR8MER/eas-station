@@ -147,7 +147,7 @@
                 {% set commit_label = 'dev build' %}
             {% endif %}
             {% set commit_badge_text = commit_label | upper %}
-            {% set commit_badge_encoded = commit_badge_text | urlencode %}
+            {% set commit_badge_encoded = commit_badge_text | shields_escape %}
             <div class="tech-stack-badges d-flex flex-wrap justify-content-center align-items-center gap-2 my-3">
                 <img src="https://img.shields.io/badge/Git%20Commit-{{ commit_badge_encoded }}-181717?style=flat-square&logo=github&logoColor=white" alt="Git commit {{ commit_badge_text }}" height="20">
                 <img src="https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11" height="20">
