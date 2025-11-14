@@ -4,57 +4,184 @@
 
 {% block extra_css %}
 <style>
-        .health-card { border-left: 4px solid #007bff; }
-        .health-card.warning { border-left-color: #ffc107; }
-        .health-card.danger { border-left-color: #dc3545; }
-        .health-card.success { border-left-color: #28a745; }
-        .metric-row { margin-bottom: 1rem; }
-        .metric-label { font-weight: 600; color: #495057; }
-        .metric-value { font-family: 'Courier New', monospace; }
-        .progress-sm { height: 8px; }
-        .refresh-btn { position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
-        .section-icon { color: #007bff; margin-right: 8px; }
-        .status-badge { font-size: 0.8em; }
-        .system-overview { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
-        .system-overview .card-body { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); }
-        .stack-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem 1rem; }
-        .stack-summary .metric-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: #6c757d; }
-        .stack-summary .metric-value { display: block; font-size: 1.1rem; font-weight: 600; }
-        .container-table { font-size: 0.85rem; }
-        .container-table th { text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; color: #6c757d; }
-        .container-table td, .container-table th { vertical-align: middle; }
-        .container-image { font-family: 'Courier New', monospace; font-size: 0.75rem; }
-        .container-meta { font-size: 0.75rem; color: #6c757d; }
-        .hardware-badge { display: inline-block; padding: 0.25rem 0.5rem; margin: 0 0.25rem 0.25rem 0; background-color: #f8f9fa; border-radius: 999px; border: 1px solid #dee2e6; font-size: 0.75rem; color: #495057; }
-        .hardware-meta { font-size: 0.8rem; color: #6c757d; }
-        .device-inventory-table { font-size: 0.85rem; }
-        .device-inventory-table td, .device-inventory-table th { vertical-align: top; }
-        .smart-status-badge { font-size: 0.8rem; }
-        .usb-device-table { font-size: 0.85rem; }
-        .usb-device-table td, .usb-device-table th { vertical-align: middle; }
-        .network-traffic-table { font-size: 0.8rem; }
-        .network-traffic-table td, .network-traffic-table th { vertical-align: middle; }
+        /* System Health Page Styles - Consistent with Admin Theme */
+        .health-card { 
+            border-left: 4px solid var(--primary-color);
+            background: var(--surface-color);
+            border-radius: var(--radius-lg);
+            box-shadow: 0 2px 10px var(--shadow-color);
+            transition: all var(--transition-medium);
+        }
+        .health-card:hover {
+            box-shadow: 0 4px 20px var(--shadow-color);
+            transform: translateY(-2px);
+        }
+        .health-card.warning { 
+            border-left-color: var(--warning-color);
+        }
+        .health-card.danger { 
+            border-left-color: var(--danger-color);
+        }
+        .health-card.success { 
+            border-left-color: var(--success-color);
+        }
+        .metric-row { 
+            margin-bottom: 1rem;
+        }
+        .metric-label { 
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        .metric-value { 
+            font-family: 'Courier New', monospace;
+            color: var(--text-color);
+        }
+        .progress-sm { 
+            height: 8px;
+            background-color: var(--border-color);
+            border-radius: var(--radius-sm);
+        }
+        .refresh-btn { 
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            border-radius: 50px;
+            box-shadow: 0 4px 12px var(--shadow-color);
+        }
+        .section-icon { 
+            color: var(--primary-color);
+            margin-right: 8px;
+        }
+        .status-badge { 
+            font-size: 0.8em;
+        }
+        .system-overview { 
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            color: white;
+            border-radius: var(--radius-lg);
+            box-shadow: 0 4px 20px var(--shadow-color);
+            margin-bottom: 1.5rem;
+        }
+        .system-overview .card-body { 
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            border-radius: var(--radius-lg);
+        }
+        .stack-summary { 
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.5rem 1rem;
+        }
+        .stack-summary .metric-label { 
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-muted);
+        }
+        .stack-summary .metric-value { 
+            display: block;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        .container-table,
+        .device-inventory-table,
+        .usb-device-table,
+        .network-traffic-table { 
+            font-size: 0.85rem;
+        }
+        .container-table th,
+        .device-inventory-table th,
+        .usb-device-table th,
+        .network-traffic-table th { 
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            background-color: var(--bg-color);
+        }
+        .container-table td,
+        .container-table th,
+        .device-inventory-table td,
+        .device-inventory-table th,
+        .usb-device-table td,
+        .usb-device-table th,
+        .network-traffic-table td,
+        .network-traffic-table th { 
+            vertical-align: middle;
+            color: var(--text-color);
+        }
+        .container-image { 
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+        .container-meta,
+        .hardware-meta { 
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        .hardware-badge { 
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            margin: 0 0.25rem 0.25rem 0;
+            background-color: var(--bg-color);
+            border-radius: 999px;
+            border: 1px solid var(--border-color);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+        .smart-status-badge { 
+            font-size: 0.8rem;
+        }
+        .table {
+            color: var(--text-color);
+        }
+        .table-hover tbody tr:hover {
+            background-color: var(--bg-color);
+        }
+        .alert {
+            border-radius: var(--radius-md);
+        }
     </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4">
-        <div class="alert alert-danger d-none" id="refresh-error" role="alert"></div>
-        <!-- System Overview -->
+<div class="container-fluid mt-3">
+    <!-- Page Header -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="card system-overview">
+                <div class="card-body">
+                    <h2 class="mb-0">
+                        <i class="fas fa-heartbeat me-2"></i> System Health Monitor
+                    </h2>
+                    <p class="mb-0 mt-2 opacity-75">
+                        Comprehensive monitoring of system resources, hardware, and container health
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="alert alert-danger d-none" id="refresh-error" role="alert"></div>
+    <!-- System Stats Cards -->
         <div class="row mb-4">
             <div class="col-12">
-                <div class="card system-overview">
+                <div class="card">
+                    <div class="card-header bg-transparent">
+                        <h5 class="mb-0"><i class="fas fa-server section-icon"></i> System Information</h5>
+                    </div>
                     <div class="card-body">
-                        <h4><i class="fas fa-server section-icon text-white"></i> System Overview</h4>
-                        <div class="row mt-3">
+                        <div class="row">
                             <div class="col-md-3">
                                 <div class="metric-row">
-                                    <div class="metric-label text-white-50">Hostname</div>
-                                    <div class="metric-value text-white" id="hostname-value">{{ system.hostname or 'Unknown' }}</div>
+                                    <div class="metric-label">Hostname</div>
+                                    <div class="metric-value" id="hostname-value">{{ system.hostname or 'Unknown' }}</div>
                                 </div>
                                 <div class="metric-row">
-                                    <div class="metric-label text-white-50">Distribution</div>
-                                    <div class="metric-value text-white" id="distribution-value">
+                                    <div class="metric-label">Distribution</div>
+                                    <div class="metric-value" id="distribution-value">
                                         {% if system.os_pretty_name %}
                                             {{ system.os_pretty_name }}
                                         {% elif system.distribution %}
@@ -67,8 +194,8 @@
                             </div>
                             <div class="col-md-3">
                                 <div class="metric-row">
-                                    <div class="metric-label text-white-50">Kernel</div>
-                                    <div class="metric-value text-white" id="kernel-value">
+                                    <div class="metric-label">Kernel</div>
+                                    <div class="metric-value" id="kernel-value">
                                         {% if system.kernel_release %}
                                             {{ system.kernel_release }}{% if system.kernel_version and system.kernel_version != system.kernel_release %} ({{ system.kernel_version }}){% endif %}
                                         {% elif system.release %}
@@ -79,18 +206,18 @@
                                     </div>
                                 </div>
                                 <div class="metric-row">
-                                    <div class="metric-label text-white-50">Architecture</div>
-                                    <div class="metric-value text-white" id="architecture-value">{{ system.machine or 'Unknown' }}</div>
+                                    <div class="metric-label">Architecture</div>
+                                    <div class="metric-value" id="architecture-value">{{ system.machine or 'Unknown' }}</div>
                                 </div>
                             </div>
                             <div class="col-md-3">
                                 <div class="metric-row">
-                                    <div class="metric-label text-white-50">Uptime</div>
-                                    <div class="metric-value text-white" id="uptime-value">{{ format_uptime(system.uptime_seconds or 0) }}</div>
+                                    <div class="metric-label">Uptime</div>
+                                    <div class="metric-value" id="uptime-value">{{ format_uptime(system.uptime_seconds or 0) }}</div>
                                 </div>
                                 <div class="metric-row">
-                                    <div class="metric-label text-white-50">Load Average</div>
-                                    <div class="metric-value text-white" id="load-average-value">
+                                    <div class="metric-label">Load Average</div>
+                                    <div class="metric-value" id="load-average-value">
                                         {% if load_averages %}
                                             {{ ', '.join(load_averages|map('string')) }}
                                         {% else %}
@@ -99,14 +226,14 @@
                                     </div>
                                 </div>
                                 <div class="metric-row">
-                                    <div class="metric-label text-white-50">Processes</div>
-                                    <div class="metric-value text-white" id="processes-summary">{{ processes.total_processes or 0 }} total ({{ processes.running_processes or 0 }} running)</div>
+                                    <div class="metric-label">Processes</div>
+                                    <div class="metric-value" id="processes-summary">{{ processes.total_processes or 0 }} total ({{ processes.running_processes or 0 }} running)</div>
                                 </div>
                             </div>
-                            <div class="col-md-3 text-end">
+                            <div class="col-md-3">
                                 <div class="metric-row">
-                                    <div class="metric-label text-white-50">Virtualization</div>
-                                    <div class="metric-value text-white" id="virtualization-value">
+                                    <div class="metric-label">Virtualization</div>
+                                    <div class="metric-value" id="virtualization-value">
                                         {% if system.virtualization %}
                                             {{ system.virtualization }}
                                         {% else %}
@@ -115,12 +242,14 @@
                                     </div>
                                 </div>
                                 <div class="metric-row">
-                                    <div class="metric-label text-white-50">Last Updated</div>
-                                    <div class="metric-value text-white" id="current-time"></div>
+                                    <div class="metric-label">Last Updated</div>
+                                    <div class="metric-value" id="current-time"></div>
                                 </div>
-                                <button class="btn btn-light btn-sm mt-2 refresh-trigger" type="button">
-                                    <i class="fas fa-sync-alt"></i> Refresh Now
-                                </button>
+                                <div class="mt-2">
+                                    <button class="btn btn-primary btn-sm refresh-trigger" type="button">
+                                        <i class="fas fa-sync-alt"></i> Refresh Data
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
