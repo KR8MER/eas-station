@@ -70,76 +70,76 @@
 /* Dark Theme - Enhanced for Better Readability */
 [data-theme="dark"] {
     /* Primary Brand Colors - Brighter and more vibrant */
-    --primary-color: #5580d8;
-    --primary-soft: #4070c8;
-    --secondary-color: #b888d8;
+    --primary-color: #6b96ff;
+    --primary-soft: #5580d8;
+    --secondary-color: #c99dff;
     --secondary-soft: #d0a0f0;
-    --accent-color: #90abf0;
+    --accent-color: #a0c0ff;
     
     /* Status Colors - Enhanced contrast */
-    --success-color: #50e0c0;
-    --danger-color: #ff8898;
-    --warning-color: #ffd88f;
-    --info-color: #90b8ff;
-    --critical-color: #ff90b8;
+    --success-color: #5fffd0;
+    --danger-color: #ffa0b0;
+    --warning-color: #ffe0a0;
+    --info-color: #a0c8ff;
+    --critical-color: #ffa0c8;
     
-    /* Background Colors - Improved contrast */
-    --light-color: #2d3548;
-    --dark-color: #0d1420;
-    --bg-color: #12182a;
-    --surface-color: #1e2538;
-    --bg-card: #1e2538;
-    --bg-primary: #0d1420;
+    /* Background Colors - Lighter for better contrast */
+    --light-color: #3a4560;
+    --dark-color: #1a2030;
+    --bg-color: #1e2838;
+    --surface-color: #2a3548;
+    --bg-card: #2a3548;
+    --bg-primary: #1a2030;
     
-    /* Text Colors - Enhanced readability */
-    --text-color: #f8f9fc;
-    --text-secondary: #b8c2d8;
-    --text-muted: #8895b0;
+    /* Text Colors - Maximum readability with high contrast */
+    --text-color: #ffffff;
+    --text-secondary: #d0d8f0;
+    --text-muted: #a0b0d0;
     
     /* Borders & Shadows */
-    --border-color: #343d54;
+    --border-color: #404d68;
     --shadow-color: rgba(0, 0, 0, 0.5);
     --shadow: rgba(0, 0, 0, 0.5);
     
     /* Semantic Aliases */
-    --accent-primary: #90abf0;
+    --accent-primary: #a0c0ff;
     --accent-secondary: #d0a0f0;
-    --info: #90b8ff;
-    --success: #50e0c0;
-    --warning: #ffd88f;
-    --danger: #ff8898;
+    --info: #a0c8ff;
+    --success: #5fffd0;
+    --warning: #ffe0a0;
+    --danger: #ffa0b0;
 }
 
 /* Coffee Theme - Warm coffee-inspired dark theme */
 [data-theme="coffee"] {
-    --primary-color: #8b6f47;
-    --primary-soft: #a0855a;
-    --secondary-color: #6f4e37;
-    --secondary-soft: #8b6f47;
-    --accent-color: #c4a57b;
-    --success-color: #7cb342;
-    --danger-color: #e57373;
-    --warning-color: #ffb74d;
-    --info-color: #64b5f6;
-    --critical-color: #ef5350;
-    --light-color: #3e2723;
-    --dark-color: #1a0f0a;
-    --bg-color: #1e1410;
-    --surface-color: #2d2016;
-    --bg-card: #2d2016;
-    --bg-primary: #1a0f0a;
-    --text-color: #f5e6d3;
-    --text-secondary: #d4c4b0;
-    --text-muted: #a08968;
-    --border-color: #4a3628;
+    --primary-color: #d4a574;
+    --primary-soft: #c4a57b;
+    --secondary-color: #b89968;
+    --secondary-soft: #c4a57b;
+    --accent-color: #e0c090;
+    --success-color: #90d070;
+    --danger-color: #ff9090;
+    --warning-color: #ffd070;
+    --info-color: #80c8ff;
+    --critical-color: #ff7070;
+    --light-color: #4a3628;
+    --dark-color: #2a1a10;
+    --bg-color: #2a2018;
+    --surface-color: #3a2d20;
+    --bg-card: #3a2d20;
+    --bg-primary: #2a1a10;
+    --text-color: #fff8f0;
+    --text-secondary: #f0e0c8;
+    --text-muted: #c8b090;
+    --border-color: #5a4838;
     --shadow-color: rgba(0, 0, 0, 0.6);
     --shadow: rgba(0, 0, 0, 0.6);
-    --accent-primary: #c4a57b;
-    --accent-secondary: #8b6f47;
-    --info: #64b5f6;
-    --success: #7cb342;
-    --warning: #ffb74d;
-    --danger: #e57373;
+    --accent-primary: #e0c090;
+    --accent-secondary: #c4a57b;
+    --info: #80c8ff;
+    --success: #90d070;
+    --warning: #ffd070;
+    --danger: #ff9090;
 }
 
 /* Spring Theme - Fresh spring-inspired light theme */

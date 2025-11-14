@@ -186,6 +186,13 @@
     display: block;
 }
 
+/* Add light background to logo in dark themes for better visibility */
+[data-theme-mode="dark"] .brand-logo {
+    background-color: rgba(255, 255, 255, 0.95);
+    padding: 8px 12px;
+    border-radius: 8px;
+}
+
 /* Hide brand text on mobile devices */
 @media (max-width: 767.98px) {
     .brand-text {
