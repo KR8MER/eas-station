@@ -10,10 +10,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # (comma-separated list such as "rtlsdr" or "rtlsdr,airspy").
 ARG SOAPYSDR_DRIVERS="rtlsdr,airspy"
 
-# Capture git commit hash at build time
-ARG GIT_COMMIT=unknown
-ENV GIT_COMMIT=${GIT_COMMIT}
-
 # Install system dependencies required for psycopg2, GeoAlchemy, and SoapySDR
 RUN --mount=type=cache,target=/var/lib/apt \
     --mount=type=cache,target=/var/cache/apt \
