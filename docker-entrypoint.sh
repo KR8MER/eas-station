@@ -79,6 +79,10 @@ FLASK_RUN_HOST=${FLASK_RUN_HOST:-0.0.0.0}
 FLASK_RUN_PORT=${FLASK_RUN_PORT:-5000}
 FLASK_ENV=${FLASK_ENV:-production}
 
+# Git commit hash (captured at build time)
+# Only set if explicitly provided, otherwise runtime auto-detects from .git
+$([ -n "${GIT_COMMIT:-}" ] && echo "GIT_COMMIT=${GIT_COMMIT}" || echo "# GIT_COMMIT not set - will auto-detect from .git metadata at runtime")
+
 # =============================================================================
 # DATABASE (PostgreSQL + PostGIS)
 # =============================================================================

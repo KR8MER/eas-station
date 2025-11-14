@@ -581,6 +581,127 @@ curl http://localhost:5000/health
 - **Document new variables** - Add to both `.env.example` and README
 - **Provide sensible defaults** - Make local development easy
 
+### Persistent Environment System
+
+**CRITICAL CONCEPT**: EAS Station uses a **persistent volume for configuration** that survives container rebuilds, Git pull & redeploy operations, and version upgrades.
+
+#### How It Works
+
+1. **Persistent Volume**: Docker volume `app-config` is mounted at `/app-config/` inside the container
+2. **Persistent Config File**: Configuration is stored in `/app-config/.env` (not `/app/.env`)
+3. **Setup Wizard**: First-time deployments run the Setup Wizard at `http://localhost/setup` which creates and populates `/app-config/.env`
+4. **Web UI Management**: Users configure settings via the Settings → Environment page, which updates `/app-config/.env`
+5. **Container Startup**: `docker-entrypoint.sh` checks for `/app-config/.env` and loads it into the application environment
+
+#### Why This Matters
+
+**Without persistent environment:**
+- ❌ Portainer "Pull and redeploy" would wipe all configuration
+- ❌ Users would need to reconfigure after every Git update
+- ❌ Version upgrades would reset all settings to defaults
+- ❌ Manual editing of Docker Compose files required for config changes
+
+**With persistent environment:**
+- ✅ Configuration survives "Pull and redeploy" operations
+- ✅ Git updates don't affect user configuration
+- ✅ Settings persist across version upgrades
+- ✅ Users configure via web UI (Settings → Environment)
+- ✅ Setup Wizard only runs once on first deployment
+
+#### Entrypoint Initialization Logic
+
+The `docker-entrypoint.sh` script handles initialization:
+
+```bash
+# If CONFIG_PATH is set (default: /app-config/.env)
+if [ -n "$CONFIG_PATH" ]; then
+    # Create persistent config directory if needed
+    mkdir -p "$(dirname "$CONFIG_PATH")"
+    
+    # If file doesn't exist or is empty, initialize it
+    if [ ! -f "$CONFIG_PATH" ] || [ file is empty ]; then
+        # Transfer environment variables from stack.env to persistent file
+        # This happens ONCE on first deploy
+        echo "SECRET_KEY=${SECRET_KEY:-}" >> "$CONFIG_PATH"
+        echo "POSTGRES_HOST=${POSTGRES_HOST:-alerts-db}" >> "$CONFIG_PATH"
+        # ... all other variables ...
+    fi
+    
+    # Load the persistent config into environment
+    export $(cat "$CONFIG_PATH" | grep -v '^#' | xargs)
+fi
+```
+
+#### Configuration Flow
+
+**First Deployment (Portainer Git Deploy):**
+1. Stack deployed with `stack.env` environment variables
+2. Container starts, `docker-entrypoint.sh` runs
+3. Creates `/app-config/.env` and copies values from `stack.env`
+4. User visits `http://localhost/setup` to complete configuration
+5. Setup Wizard writes final config to `/app-config/.env`
+
+**Subsequent Deployments (Pull & Redeploy):**
+1. Portainer pulls latest code from Git
+2. Rebuilds containers with updated code
+3. `docker-entrypoint.sh` finds existing `/app-config/.env`
+4. Loads configuration from persistent file
+5. **User configuration is preserved automatically**
+
+**Runtime Configuration Changes:**
+1. User navigates to Settings → Environment
+2. Changes a setting (e.g., poll interval from 180 to 300 seconds)
+3. Backend updates `/app-config/.env` file
+4. Restart container to apply: `docker compose restart app`
+
+#### Variable Precedence
+
+**Priority order (highest to lowest):**
+1. Environment variables set in `docker-compose.yml` `environment:` section
+2. Variables loaded from `/app-config/.env` (persistent config)
+3. Variables from `stack.env` file (only used on first deploy)
+4. Hardcoded defaults in Python code
+
+**Example: DATABASE_HOST**
+```yaml
+# docker-compose.yml environment section
+environment:
+  POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}  # From stack.env on first deploy
+
+# First deploy: POSTGRES_HOST=host.docker.internal is written to /app-config/.env
+
+# Pull & redeploy: /app-config/.env still has POSTGRES_HOST=host.docker.internal
+# Configuration is preserved!
+
+# User changes it via web UI to external-db.example.com
+# /app-config/.env now has: POSTGRES_HOST=external-db.example.com
+# Restart applies the change
+```
+
+#### Auto-Detected vs User-Configured Variables
+
+Some variables are **auto-detected at runtime** and should NOT be written to the persistent config if not explicitly set:
+
+**Auto-Detected Variables:**
+- `GIT_COMMIT` - Auto-detected from `.git/HEAD` and `.git/refs/` at runtime
+- `HOSTNAME` - Auto-detected by system
+- Build-time values that shouldn't be frozen in config
+
+**User-Configured Variables:**
+- `SECRET_KEY` - Must be generated and persisted
+- `POSTGRES_HOST` - User's database server
+- `EAS_BROADCAST_ENABLED` - User's feature preferences
+- All settings in Settings → Environment page
+
+**Implementation Pattern in docker-entrypoint.sh:**
+```bash
+# ✅ CORRECT - Only write if explicitly set
+$([ -n "${GIT_COMMIT:-}" ] && echo "GIT_COMMIT=${GIT_COMMIT}" || echo "# GIT_COMMIT not set - will auto-detect")
+
+# ❌ WRONG - Writes "unknown" and prevents auto-detection
+GIT_COMMIT=${GIT_COMMIT:-unknown}
+```
+
 ### Adding New Environment Variables
 
 When adding a new environment variable to the system, you MUST update these files:
