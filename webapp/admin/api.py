@@ -53,6 +53,9 @@ def _get_cpu_usage_percent() -> float:
 def register_api_routes(app, logger):
     """Attach JSON API endpoints used by the admin UI."""
     
+    # Store logger for use by routes
+    api_bp.logger = logger
+    
     # Register the blueprint with the app
     app.register_blueprint(api_bp)
     logger.info("API routes registered")
@@ -91,7 +94,7 @@ def get_alert_geometry(alert_id):
             if county_geom and county_geom.geometry:
                 county_boundary = json.loads(county_geom.geometry)
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.warning("Could not get county boundary: %s", exc)
+            api_bp.logger.warning("Could not get county boundary: %s", exc)
 
         geometry = None
         is_county_wide = False
@@ -172,7 +175,7 @@ def get_alert_geometry(alert_id):
         return jsonify(response_data)
 
     except Exception as exc:  # pragma: no cover - defensive logging
-        logger.error("Error getting alert geometry: %s", exc, exc_info=True)
+        api_bp.logger.error("Error getting alert geometry: %s", exc, exc_info=True)
         return jsonify({'error': 'Failed to retrieve alert geometry'}), 500
 
 @api_bp.route('/alerts/<int:alert_id>')
@@ -317,7 +320,7 @@ def alert_detail(alert_id):
                     }
                 )
         except Exception as audio_error:  # pragma: no cover - defensive logging
-            logger.warning(
+            api_bp.logger.warning(
                 'Unable to load audio archive for alert %s: %s',
                 alert.identifier,
                 audio_error,
@@ -336,7 +339,7 @@ def alert_detail(alert_id):
         )
 
     except Exception as exc:
-        logger.error('Error in alert_detail route: %s', exc, exc_info=True)
+        api_bp.logger.error('Error in alert_detail route: %s', exc, exc_info=True)
         flash('Error loading alert details. Please try again.', 'error')
         return redirect(url_for('index'))
 
@@ -435,7 +438,7 @@ def alert_detail_pdf(alert_id):
         return response
 
     except Exception as exc:
-        logger.error('Error generating alert PDF: %s', exc, exc_info=True)
+        api_bp.logger.error('Error generating alert PDF: %s', exc, exc_info=True)
         flash('Error generating PDF. Please try again.', 'error')
         return redirect(url_for('alert_detail', alert_id=alert_id))
 
@@ -447,10 +450,10 @@ def get_alerts():
 
         if include_expired:
             alerts_query = CAPAlert.query
-            logger.info("Including expired alerts in API response")
+            api_bp.logger.info("Including expired alerts in API response")
         else:
             alerts_query = get_active_alerts_query()
-            logger.info("Including only active alerts in API response")
+            api_bp.logger.info("Including only active alerts in API response")
 
         alerts = alerts_query.with_entities(
             CAPAlert.id,
@@ -474,7 +477,7 @@ def get_alerts():
             if county_geom and county_geom.geometry:
                 county_boundary = json.loads(county_geom.geometry)
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.warning("Could not get county boundary: %s", exc)
+            api_bp.logger.warning("Could not get county boundary: %s", exc)
 
         features = []
         for alert in alerts:
@@ -533,7 +536,7 @@ def get_alerts():
                     }
                 )
 
-        logger.info('Returning %s alerts (include_expired=%s)', len(features), include_expired)
+        api_bp.logger.info('Returning %s alerts (include_expired=%s)', len(features), include_expired)
 
         return jsonify(
             {
@@ -548,7 +551,7 @@ def get_alerts():
         )
 
     except Exception as exc:
-        logger.error('Error getting alerts: %s', exc, exc_info=True)
+        api_bp.logger.error('Error getting alerts: %s', exc, exc_info=True)
         return jsonify({'error': 'Failed to retrieve alerts'}), 500
 
 @api_bp.route('/api/alerts/historical')
@@ -599,7 +602,7 @@ def get_historical_alerts():
             if county_geom and county_geom.geometry:
                 county_boundary = json.loads(county_geom.geometry)
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.warning("Could not get county boundary: %s", exc)
+            api_bp.logger.warning("Could not get county boundary: %s", exc)
 
         features = []
         for alert in alerts:
@@ -655,7 +658,7 @@ def get_historical_alerts():
         return jsonify({'type': 'FeatureCollection', 'features': features})
 
     except Exception as exc:
-        logger.error('Error getting historical alerts: %s', exc, exc_info=True)
+        api_bp.logger.error('Error getting historical alerts: %s', exc, exc_info=True)
         return jsonify({'error': 'Failed to retrieve historical alerts'}), 500
 
 @api_bp.route('/api/boundaries')
@@ -710,7 +713,7 @@ def get_boundaries():
 
         return jsonify({'type': 'FeatureCollection', 'features': features})
     except Exception as exc:
-        logger.error('Error fetching boundaries: %s', exc, exc_info=True)
+        api_bp.logger.error('Error fetching boundaries: %s', exc, exc_info=True)
         return jsonify({'error': 'Failed to retrieve boundaries'}), 500
 
 @api_bp.route('/api/system_status')
@@ -872,7 +875,7 @@ def api_system_status():
             }
         )
     except Exception as exc:
-        logger.error('Error getting system status: %s', exc, exc_info=True)
+        api_bp.logger.error('Error getting system status: %s', exc, exc_info=True)
         return jsonify({'error': 'Failed to get system status'}), 500
 
 @api_bp.route('/api/system_health')
@@ -882,7 +885,7 @@ def api_system_health():
         health_data = get_system_health()
         return jsonify(health_data)
     except Exception as exc:
-        logger.error('Error getting system health via API: %s', exc, exc_info=True)
+        api_bp.logger.error('Error getting system health via API: %s', exc, exc_info=True)
         return jsonify({'error': 'Failed to get system health'}), 500
 
 

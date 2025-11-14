@@ -36,6 +36,9 @@ dashboard_bp = Blueprint("dashboard", __name__)
 def register_dashboard_routes(app, logger, eas_config):
     """Register routes."""
     
+    # Store eas_config for use by routes
+    dashboard_bp.eas_config = eas_config
+    
     # Register the blueprint with the app
     app.register_blueprint(dashboard_bp)
     logger.info("Dashboard routes registered")
@@ -149,11 +152,11 @@ def admin():
             eas_recent_messages=recent_eas_messages,
             eas_web_subdir=current_app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages'),
             eas_event_codes=eas_event_options,
-            eas_originator=eas_config.get('originator', 'WXR'),
-            eas_station_id=eas_config.get('station_id', 'EASNODES'),
-            eas_attention_seconds=eas_config.get('attention_tone_seconds', 8),
-            eas_sample_rate=eas_config.get('sample_rate', 16000),
-            eas_tts_provider=(eas_config.get('tts_provider') or '').strip().lower(),
+            eas_originator=dashboard_bp.eas_config.get('originator', 'WXR'),
+            eas_station_id=dashboard_bp.eas_config.get('station_id', 'EASNODES'),
+            eas_attention_seconds=dashboard_bp.eas_config.get('attention_tone_seconds', 8),
+            eas_sample_rate=dashboard_bp.eas_config.get('sample_rate', 16000),
+            eas_tts_provider=(dashboard_bp.eas_config.get('tts_provider') or '').strip().lower(),
             eas_fips_states=eas_state_tree,
             eas_fips_lookup=eas_lookup,
             eas_originator_descriptions=ORIGINATOR_DESCRIPTIONS,
