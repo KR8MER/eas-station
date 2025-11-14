@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional, Tuple
@@ -9,6 +10,7 @@ from typing import Optional, Tuple
 
 _ROOT = Path(__file__).resolve().parents[1]
 _VERSION_PATH = _ROOT / "VERSION"
+_GIT_DIR = _ROOT / ".git"
 
 
 def _get_version_file_state() -> Tuple[Optional[float], bool]:
@@ -60,4 +62,74 @@ def get_current_version() -> str:
     return _resolve_version(version_state)
 
 
-__all__ = ["get_current_version"]
+def _read_env_commit() -> Optional[str]:
+    """Return the commit hash provided via environment variables, if any."""
+
+    for env_var in ("GIT_COMMIT", "SOURCE_VERSION", "HEROKU_SLUG_COMMIT"):
+        commit = os.getenv(env_var)
+        if commit:
+            return commit.strip() or None
+    return None
+
+
+def _read_git_head() -> Optional[str]:
+    """Resolve the current commit hash from the local ``.git`` metadata."""
+
+    head_path = _GIT_DIR / "HEAD"
+    try:
+        head_content = head_path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return None
+
+    if not head_content:
+        return None
+
+    if head_content.startswith("ref:"):
+        ref = head_content.split(" ", 1)[1]
+        ref_path = _GIT_DIR / ref
+        try:
+            return ref_path.read_text(encoding="utf-8").strip() or None
+        except FileNotFoundError:
+            packed_refs_path = _GIT_DIR / "packed-refs"
+            try:
+                for line in packed_refs_path.read_text(encoding="utf-8").splitlines():
+                    if not line or line.startswith(("#", "^")):
+                        continue
+                    parts = line.split(" ", 1)
+                    if len(parts) != 2:
+                        continue
+                    commit_hash, packed_ref = parts
+                    if packed_ref.strip() == ref:
+                        return commit_hash.strip() or None
+            except FileNotFoundError:
+                return None
+            return None
+
+    return head_content
+
+
+@lru_cache(maxsize=1)
+def _resolve_git_commit() -> Optional[str]:
+    """Resolve the active git commit hash from the environment or repository."""
+
+    commit = _read_env_commit()
+    if commit:
+        return commit
+
+    return _read_git_head()
+
+
+def get_current_commit(short_length: int = 6) -> str:
+    """Return the short git commit hash for the running application."""
+
+    commit = _resolve_git_commit()
+    if not commit:
+        return "unknown"
+
+    if short_length <= 0:
+        return commit
+
+    return commit[:short_length]
+
+
+__all__ = ["get_current_version", "get_current_commit"]
