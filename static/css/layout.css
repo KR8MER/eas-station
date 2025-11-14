@@ -181,11 +181,18 @@
 }
 
 .brand-logo {
-    width: 42px;
-    height: 42px;
+    width: 64px;
+    height: 64px;
     display: block;
     border-radius: var(--radius-lg);
     box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
+}
+
+/* Hide brand text on mobile devices */
+@media (max-width: 767.98px) {
+    .brand-text {
+        display: none;
+    }
 }
 
 /* ============================================
