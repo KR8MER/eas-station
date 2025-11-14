@@ -1,7 +1,7 @@
 """Admin dashboard and user management routes."""
-from flask import Blueprint
-
 from __future__ import annotations
+
+from flask import Blueprint
 
 import re
 from typing import Dict, List
