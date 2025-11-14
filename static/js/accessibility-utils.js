@@ -20,8 +20,6 @@ class AccessibilityUtils {
         this.setupFocusManagement();
         // Setup ARIA live regions
         this.setupLiveRegions();
-        // Setup skip links
-        this.setupSkipLinks();
         // Setup enhanced form validation
         this.setupFormAccessibility();
         // Setup screen reader announcements
@@ -102,28 +100,6 @@ class AccessibilityUtils {
     removeFocusTrap(container) {
         // Remove event listeners (simplified - in production, use proper cleanup)
         container.focusTrapActive = false;
-    }
-
-    // Skip Links
-    setupSkipLinks() {
-        const skipLinks = document.createElement('div');
-        skipLinks.innerHTML = `
-            <a href="#main-content" class="skip-link">Skip to main content</a>
-            <a href="#navigation" class="skip-link">Skip to navigation</a>
-        `;
-        document.body.insertBefore(skipLinks, document.body.firstChild);
-
-        // Add main content id if not present
-        const main = document.querySelector('main') || document.querySelector('[role="main"]');
-        if (main && !main.id) {
-            main.id = 'main-content';
-        }
-
-        // Add navigation id if not present
-        const nav = document.querySelector('nav') || document.querySelector('[role="navigation"]');
-        if (nav && !nav.id) {
-            nav.id = 'navigation';
-        }
     }
 
     // ARIA Live Regions

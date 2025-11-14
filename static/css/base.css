@@ -542,6 +542,20 @@ body {
     transition: background-color var(--transition-medium), color var(--transition-medium);
 }
 
+[data-theme-mode="dark"] body {
+    color: var(--text-color, var(--color-text-primary, #f5f8ff));
+    background-color: var(--bg-color, #141b29);
+}
+
+[data-theme-mode="dark"] a {
+    color: var(--accent-color, var(--color-info, #60a5fa));
+}
+
+[data-theme-mode="dark"] a:hover,
+[data-theme-mode="dark"] a:focus {
+    color: var(--color-text-primary, #ffffff);
+}
+
 main {
     padding: 1.5rem 1.5rem 2.5rem;
 }

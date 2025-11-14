@@ -271,8 +271,8 @@
         transform: none;
     }
 
-    [data-theme="dark"] .theme-toggle-button:hover,
-    [data-theme="dark"] .theme-toggle-button:focus {
+    [data-theme-mode="dark"] .theme-toggle-button:hover,
+    [data-theme-mode="dark"] .theme-toggle-button:focus {
         background-color: rgba(255, 255, 255, 0.08);
         color: #ffffff;
     }

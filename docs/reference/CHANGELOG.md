@@ -53,6 +53,10 @@ tracks releases under the 2.x series.
   - SVG filters for depth, glow effects, and contemporary design polish
 
 ### Fixed
+- Force dark-mode typography and link treatments to use the light contrast palette when `data-theme-mode="dark"` is active so
+  copy remains readable across every dark theme variation.
+- Remove the auto-injected skip navigation anchors so the navbar's leading section only presents the wordmark and health status
+  indicator.
 - Improved readability of dark UI themes by brightening background surfaces, borders, and text contrast variables shared across the design system.
 - Surface actionable diagnostics when GPIO hardware is inaccessible, highlighting missing
   /dev/gpiomem access and read-only sysfs mounts so deployments can correct permissions.

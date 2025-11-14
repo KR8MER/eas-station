@@ -150,10 +150,10 @@
 }
 
 /* ============================================
-   DARK THEME
+   DARK THEME (APPLIES TO ALL DARK MODES)
    ============================================ */
 
-[data-theme="dark"] {
+[data-theme-mode="dark"] {
     /* Primary Colors (Lightened for dark backgrounds) */
     --color-primary-50: #1a43ad;
     --color-primary-100: #2756ba;
