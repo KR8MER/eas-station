@@ -1111,10 +1111,19 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
 
         # Detect device type and add appropriate flags for smartctl
         device_type_flag = _detect_device_type(device, path, logger)
-        command = [smartctl_path, "--json=o", "-H", "-A", "-n", "standby,now"]
+        command = [smartctl_path, "--json=o", "-H", "-A"]
+        
+        # The -n standby flag is for ATA/SATA devices to skip devices in standby mode.
+        # NVMe devices don't support standby mode in the same way, so skip this flag for them.
+        if device_type_flag != "nvme":
+            command.extend(["-n", "standby,now"])
+        
         if device_type_flag:
             command.extend(["-d", device_type_flag])
         command.append(path)
+        
+        if logger:
+            logger.debug("Querying SMART data for %s with command: %s", path, " ".join(command))
 
         try:
             completed = subprocess.run(
