@@ -1121,7 +1121,7 @@ def manual_eas_audio(event_id: int, component: str):
 def manual_eas_print(event_id: int):
     creating_first_user = AdminUser.query.count() == 0
     if g.current_user is None and not creating_first_user:
-        return redirect(url_for('login'))
+        return redirect(url_for('auth.login'))
 
     event = ManualEASActivation.query.get_or_404(event_id)
     components_payload = event.components_payload or {}

@@ -34,7 +34,7 @@ def register_auth_routes(app, logger):
 def login():
     next_param = request.args.get('next') if request.method == 'GET' else request.form.get('next')
     if g.current_user:
-        target = next_param if _is_safe_redirect_target(next_param) else url_for('admin')
+        target = next_param if _is_safe_redirect_target(next_param) else url_for('dashboard.admin')
         return redirect(target)
 
     error = None
@@ -82,7 +82,7 @@ def login():
 
                 AuditLogger.log_login_success(user.id, user.username)
 
-                target = next_param if _is_safe_redirect_target(next_param) else url_for('admin')
+                target = next_param if _is_safe_redirect_target(next_param) else url_for('dashboard.admin')
                 return redirect(target)
 
             db.session.add(SystemLog(
@@ -104,7 +104,7 @@ def login():
     return render_template(
         'login.html',
         error=error,
-        next=next_param or url_for('admin'),
+        next=next_param or url_for('dashboard.admin'),
         show_setup=show_setup,
     )
 
@@ -129,7 +129,7 @@ def logout():
     session.clear()
     session[csrf_key] = secrets.token_urlsafe(32)
     flash('You have been signed out.')
-    return redirect(url_for('login'))
+    return redirect(url_for('auth.login'))
 
 @auth_bp.route('/mfa/verify', methods=['GET', 'POST'])
 def mfa_verify():
@@ -140,12 +140,12 @@ def mfa_verify():
     pending_user_id = MFASession.get_pending(session)
     if not pending_user_id:
         flash('Session expired. Please log in again.')
-        return redirect(url_for('login'))
+        return redirect(url_for('auth.login'))
 
     user = AdminUser.query.get(pending_user_id)
     if not user or not user.is_active or not user.mfa_enabled:
         MFASession.clear_pending(session)
-        return redirect(url_for('login'))
+        return redirect(url_for('auth.login'))
 
     error = None
     if request.method == 'POST':
@@ -178,7 +178,7 @@ def mfa_verify():
                 AuditLogger.log_login_success(user.id, user.username)
                 AuditLogger.log_mfa_verify_success(user.id, user.username, method)
 
-                target = next_param if _is_safe_redirect_target(next_param) else url_for('admin')
+                target = next_param if _is_safe_redirect_target(next_param) else url_for('dashboard.admin')
                 return redirect(target)
             else:
                 AuditLogger.log_mfa_verify_failure(user.id, user.username)
@@ -187,7 +187,7 @@ def mfa_verify():
     return render_template(
         'mfa_verify.html',
         error=error,
-        next=next_param or url_for('admin'),
+        next=next_param or url_for('dashboard.admin'),
         username=user.username
     )
 
