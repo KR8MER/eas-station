@@ -5,7 +5,14 @@ __pycache__/
 *.db
 *.sqlite3
 venv/
-.git
+# Ship minimal git metadata so runtime version detection can resolve
+# the active commit hash without copying the entire object database.
+.git/
+!.git/HEAD
+!.git/refs/
+!.git/refs/heads/
+!.git/refs/heads/*
+!.git/packed-refs
 logs/
 *.log
 .env
