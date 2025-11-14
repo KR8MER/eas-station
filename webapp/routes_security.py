@@ -574,7 +574,7 @@ def security_settings():
     from flask import g, render_template, redirect, url_for
 
     if not g.current_user:
-        return redirect(url_for('login'))
+        return redirect(url_for('auth.login'))
 
     return render_template(
         'security_settings.html',
