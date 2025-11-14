@@ -16,3 +16,12 @@ static/eas_messages/
 # MkDocs documentation build
 site/
 .cache/
+
+# Pytest
+.pytest_cache/
+tests/logs/*.log
+tests/test_data/*
+!tests/test_data/README.md
+!tests/logs/README.md
+htmlcov/
+.coverage
