@@ -67,6 +67,9 @@ All documentation organized by topic:
 - **`docs/guides/`** - User guides and tutorials
 - **`docs/deployment/`** - Deployment instructions
 - **`docs/development/`** - Developer documentation
+  - **`docs/development/archive/`** - Historical development documentation (GPIO fixes, improvements, etc.)
+- **`docs/reference/`** - Reference documentation (function trees, feature matrix, etc.)
+- **`docs/security/`** - Security analysis and documentation
 
 ### `app_core/` - Core Application Code
 Backend application logic and models
