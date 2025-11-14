@@ -248,7 +248,8 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
         )
         temperature_info = _collect_temperature_readings(logger, smart_info)
 
-        return {
+        # Build the health data structure
+        health_data = {
             "timestamp": utc_now().isoformat(),
             "local_timestamp": local_now().isoformat(),
             "system": {
@@ -275,6 +276,12 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
             "hardware": hardware_info,
             "smart": smart_info,
         }
+        
+        # Add shields.io badges and distro logo
+        health_data["shields_badges"] = get_shields_io_badges(health_data)
+        health_data["distro_logo_url"] = get_distro_logo_url(os_details.get("distribution_id"))
+        
+        return health_data
 
     except Exception as exc:  # pragma: no cover - defensive logging only
         logger.error("Error getting system health: %s", exc)
@@ -350,6 +357,94 @@ def _collect_container_statuses(logger) -> Dict[str, Any]:
 
     result["compose_project"] = compose_project
     return result
+
+
+def get_distro_logo_url(distro_id: Optional[str]) -> Optional[str]:
+    """Return logo URL for common Linux distributions."""
+    
+    # Map distribution IDs to their logo URLs
+    distro_logos = {
+        "ubuntu": "https://assets.ubuntu.com/v1/29985a98-ubuntu-logo32.png",
+        "debian": "https://www.debian.org/logos/openlogo-nd-50.png",
+        "fedora": "https://fedoraproject.org/assets/images/fedora-coreos-logo.png",
+        "centos": "https://www.centos.org/assets/img/logo-centos-white.png",
+        "rhel": "https://www.redhat.com/cms/managed-files/Logo-Red_Hat-A-Reverse-RGB.png",
+        "arch": "https://archlinux.org/static/logos/archlinux-logo-dark-90dpi.ebdee92a15b3.png",
+        "alpine": "https://alpinelinux.org/alpinelinux-logo.svg",
+        "opensuse": "https://en.opensuse.org/images/c/cd/Button-filled-colour.png",
+        "raspbian": "https://www.raspberrypi.com/app/uploads/2022/02/COLOUR-Raspberry-Pi-Symbol-Registered.png",
+    }
+    
+    if not distro_id:
+        return None
+        
+    distro_id_lower = distro_id.lower()
+    
+    # Check for exact match first
+    if distro_id_lower in distro_logos:
+        return distro_logos[distro_id_lower]
+    
+    # Check for partial matches
+    for key, url in distro_logos.items():
+        if key in distro_id_lower or distro_id_lower in key:
+            return url
+    
+    return None
+
+
+def get_shields_io_badges(health_data: Dict[str, Any]) -> Dict[str, str]:
+    """Generate shields.io badge URLs for system metrics."""
+    
+    from urllib.parse import quote
+    
+    badges = {}
+    system = health_data.get("system", {})
+    cpu = health_data.get("cpu", {})
+    memory = health_data.get("memory", {})
+    
+    # OS Badge
+    os_name = system.get("distribution") or system.get("system") or "Unknown"
+    os_version = system.get("distribution_version") or system.get("release") or ""
+    if os_version:
+        os_label = f"{os_name} {os_version}"
+    else:
+        os_label = os_name
+    badges["os"] = f"https://img.shields.io/badge/OS-{quote(os_label)}-blue?style=flat-square&logo=linux"
+    
+    # Kernel Badge
+    kernel = system.get("kernel_release") or system.get("release") or "Unknown"
+    badges["kernel"] = f"https://img.shields.io/badge/Kernel-{quote(kernel)}-lightgrey?style=flat-square"
+    
+    # Architecture Badge
+    arch = system.get("machine") or "Unknown"
+    badges["architecture"] = f"https://img.shields.io/badge/Arch-{quote(arch)}-informational?style=flat-square"
+    
+    # Uptime Badge (format for badge)
+    uptime_seconds = system.get("uptime_seconds", 0)
+    days = int(uptime_seconds // 86400)
+    hours = int((uptime_seconds % 86400) // 3600)
+    if days > 0:
+        uptime_label = f"{days}d {hours}h"
+    else:
+        uptime_label = f"{hours}h"
+    badges["uptime"] = f"https://img.shields.io/badge/Uptime-{quote(uptime_label)}-success?style=flat-square"
+    
+    # CPU Usage Badge
+    cpu_usage = cpu.get("cpu_usage_percent", 0)
+    cpu_color = "critical" if cpu_usage > 80 else "yellow" if cpu_usage > 50 else "success"
+    badges["cpu"] = f"https://img.shields.io/badge/CPU-{cpu_usage:.0f}%25-{cpu_color}?style=flat-square&logo=intel"
+    
+    # Memory Usage Badge
+    mem_usage = memory.get("percentage", 0)
+    mem_color = "critical" if mem_usage > 90 else "yellow" if mem_usage > 75 else "success"
+    badges["memory"] = f"https://img.shields.io/badge/Memory-{mem_usage:.0f}%25-{mem_color}?style=flat-square&logo=memory"
+    
+    # CPU Cores Badge
+    physical_cores = cpu.get("physical_cores", 0)
+    total_cores = cpu.get("total_cores", 0)
+    badges["cores"] = f"https://img.shields.io/badge/Cores-{physical_cores}p/{total_cores}t-informational?style=flat-square"
+    
+    return badges
 
 
 def _collect_operating_system_details() -> Dict[str, Any]:
