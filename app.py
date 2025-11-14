@@ -40,6 +40,7 @@ from app_utils import (
     set_location_timezone,
     utc_now,
 )
+from app_utils.assets import get_shield_logo_data
 from app_utils.eas import (
     P_DIGIT_MEANINGS,
     EASAudioGenerator,
@@ -285,7 +286,7 @@ if secret_key in _placeholder_secrets or len(secret_key) < 32:
 app.secret_key = secret_key
 
 # Application versioning (exposed via templates for quick deployment verification)
-from app_utils.versioning import get_current_version
+from app_utils.versioning import get_current_commit, get_current_version
 
 
 app.config['SYSTEM_VERSION'] = get_current_version()
@@ -660,6 +661,11 @@ def inject_global_vars():
         'led_available': LED_AVAILABLE,
         'system_version': app.config.get('SYSTEM_VERSION', get_current_version()),
         'static_asset_version': app.config.get('STATIC_ASSET_VERSION', get_current_version()),
+        'git_commit': get_current_commit(6),
+        'shield_logos': {
+            slug: get_shield_logo_data(slug)
+            for slug in ('icecast', 'soapysdr')
+        },
         'location_settings': location_settings,
         'boundary_type_config': BOUNDARY_TYPE_CONFIG,
         'boundary_group_labels': BOUNDARY_GROUP_LABELS,
