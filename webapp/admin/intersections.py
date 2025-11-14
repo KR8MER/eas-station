@@ -1,7 +1,7 @@
 """Administrative endpoints for managing alert-boundary intersections."""
-from flask import Blueprint
-
 from __future__ import annotations
+
+from flask import Blueprint
 
 from typing import Dict
 

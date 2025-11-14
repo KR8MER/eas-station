@@ -1,7 +1,7 @@
 """Authentication helpers for the admin interface."""
-from flask import Blueprint
-
 from __future__ import annotations
+
+from flask import Blueprint
 
 import secrets
 from typing import Optional
