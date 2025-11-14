@@ -19,7 +19,7 @@ Start here:
 
 ### For Security Auditors
 Start here:
-1. **ROUTE_SECURITY_ANALYSIS.txt** - Complete detailed analysis
+1. **[ROUTE_SECURITY_ANALYSIS.txt](ROUTE_SECURITY_ANALYSIS.txt)** - Complete detailed analysis
 2. **[DEMO_ROLE_IMPLEMENTATION_GUIDE.md](../guides/DEMO_ROLE_IMPLEMENTATION_GUIDE)** - Safe demo configuration
 
 ---
@@ -45,7 +45,7 @@ Start here:
 
 ---
 
-### 2. ROUTE_SECURITY_ANALYSIS.txt
+### 2. [ROUTE_SECURITY_ANALYSIS.txt](ROUTE_SECURITY_ANALYSIS.txt)
 **Purpose**: Comprehensive technical analysis of all routes
 **Audience**: Security researchers, Technical leads, Architects
 **Read Time**: 30-60 minutes
@@ -253,7 +253,7 @@ Add permission decorators to enforce restrictions:
 4. Test: Test cases in [IMPLEMENTATION_CHECKLIST.md](../guides/IMPLEMENTATION_CHECKLIST)
 
 ### Scenario 3: "I need to audit this"
-1. Read: ROUTE_SECURITY_ANALYSIS.txt (complete)
+1. Read: [ROUTE_SECURITY_ANALYSIS.txt](ROUTE_SECURITY_ANALYSIS.txt) (complete)
 2. Review: [IMPLEMENTATION_CHECKLIST.md](../guides/IMPLEMENTATION_CHECKLIST) (verification)
 3. Test: All test cases in [IMPLEMENTATION_CHECKLIST.md](../guides/IMPLEMENTATION_CHECKLIST)
 
@@ -273,7 +273,7 @@ Add permission decorators to enforce restrictions:
 
 ```
 Generated: 2024-11-09
-Location: /home/user/eas-station/
+Location: /docs/
 
 SECURITY_ANALYSIS_EXECUTIVE_SUMMARY.md
 ├─ For: Executives, Managers
@@ -324,7 +324,7 @@ SECURITY_ANALYSIS_INDEX.md (this file)
 - Specific implementation details: [IMPLEMENTATION_CHECKLIST.md](../guides/IMPLEMENTATION_CHECKLIST)
 - Route reference: [PROTECTED_ROUTES_SUMMARY.md](../reference/PROTECTED_ROUTES_SUMMARY)
 - Demo configuration: [DEMO_ROLE_IMPLEMENTATION_GUIDE.md](../guides/DEMO_ROLE_IMPLEMENTATION_GUIDE)
-- Complete analysis: ROUTE_SECURITY_ANALYSIS.txt
+- Complete analysis: [ROUTE_SECURITY_ANALYSIS.txt](ROUTE_SECURITY_ANALYSIS.txt)
 
 **Status**: Analysis Complete ✓
 **Last Updated**: 2024-11-09

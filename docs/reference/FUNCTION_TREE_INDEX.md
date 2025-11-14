@@ -2,7 +2,7 @@
 
 **Generated:** 2025-11-06  
 **Main Document:** [`FUNCTION_TREE.md`](FUNCTION_TREE) (1,211 lines)  
-**Summary:** [`FUNCTION_TREE_SUMMARY.txt`](/FUNCTION_TREE_SUMMARY.txt) (147 lines)
+**Summary:** [`FUNCTION_TREE_SUMMARY.txt`](FUNCTION_TREE_SUMMARY.txt) (147 lines)
 
 ---
 
@@ -296,7 +296,7 @@ scripts/
 - Onboarding to the project
 - Debugging issues (find related functions)
 
-**Use FUNCTION_TREE_SUMMARY.txt when:**
+**Use [FUNCTION_TREE_SUMMARY.txt](FUNCTION_TREE_SUMMARY.txt) when:**
 - Getting a quick overview
 - Checking what was documented
 - Understanding document structure
@@ -325,7 +325,7 @@ scripts/
 | Document | Purpose |
 |----------|---------|
 | FUNCTION_TREE.md | Complete function reference (this one) |
-| FUNCTION_TREE_SUMMARY.txt | Overview & statistics |
+| [FUNCTION_TREE_SUMMARY.txt](FUNCTION_TREE_SUMMARY.txt) | Overview & statistics |
 | README.md | Project setup & overview |
 | docs/archive/2025/SECURITY_FIXES.md | Historical security updates |
 | [KNOWN_BUGS.md](KNOWN_BUGS) | Known issues |
@@ -339,13 +339,13 @@ scripts/
 ### For New Developers:
 1. Read README.md (general overview)
 2. Skim this index (quick navigation)
-3. Review FUNCTION_TREE_SUMMARY.txt (statistics)
+3. Review [FUNCTION_TREE_SUMMARY.txt](FUNCTION_TREE_SUMMARY.txt) (statistics)
 4. Open [FUNCTION_TREE.md](FUNCTION_TREE) in editor (bookmark it!)
 5. Find your module of interest using table of contents
 
 ### For Quick Questions:
 1. Use Ctrl+F to search [FUNCTION_TREE.md](FUNCTION_TREE)
-2. Check FUNCTION_TREE_SUMMARY.txt for statistics
+2. Check [FUNCTION_TREE_SUMMARY.txt](FUNCTION_TREE_SUMMARY.txt) for statistics
 3. Review related section in full document
 
 ### For Code Navigation:

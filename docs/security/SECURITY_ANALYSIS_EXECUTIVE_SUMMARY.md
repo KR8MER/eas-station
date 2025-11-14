@@ -163,7 +163,7 @@ CANNOT DO (Write Operations):
 
 The following analysis documents have been created:
 
-1. **ROUTE_SECURITY_ANALYSIS.txt** (490 lines)
+1. **[ROUTE_SECURITY_ANALYSIS.txt](ROUTE_SECURITY_ANALYSIS.txt)** (490 lines)
    - Complete route-by-route analysis
    - All 224 routes categorized by permission
    - Security impact assessment
@@ -261,5 +261,5 @@ The application has a robust permission framework in place (`app_core/auth/roles
 
 ---
 
-**For detailed analysis, see**: ROUTE_SECURITY_ANALYSIS.txt
+**For detailed analysis, see**: [ROUTE_SECURITY_ANALYSIS.txt](ROUTE_SECURITY_ANALYSIS.txt)
 **For implementation steps, see**: [IMPLEMENTATION_CHECKLIST.md](../guides/IMPLEMENTATION_CHECKLIST)

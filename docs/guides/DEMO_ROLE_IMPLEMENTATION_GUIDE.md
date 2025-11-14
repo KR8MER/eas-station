@@ -68,4 +68,4 @@
 - **Routes WITHOUT Protection**: 202 (90.2%)
 - **Critical Unprotected Routes**: 20+
 
-See `ROUTE_SECURITY_ANALYSIS.txt` for full details.
+See [`ROUTE_SECURITY_ANALYSIS.txt`](../security/ROUTE_SECURITY_ANALYSIS.txt) for full details.

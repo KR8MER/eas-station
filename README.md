@@ -360,9 +360,12 @@ python app.py
 ## 🆘 Support
 
 - 📖 **Documentation**: [Complete Docs](docs/INDEX)
+- 🔧 **Diagnostic Tools**: [Troubleshooting Scripts](scripts/diagnostics/)
 - 💬 **Discussions**: [GitHub Discussions](https://github.com/KR8MER/eas-station/discussions)
 - 🐛 **Issues**: [GitHub Issues](https://github.com/KR8MER/eas-station/issues)
 - 📡 **Community**: Join our amateur radio forums
+
+> **Quick Diagnostics**: Run `bash scripts/diagnostics/troubleshoot_connection.sh` to diagnose connection issues, or see [scripts/diagnostics/README.md](scripts/diagnostics/README.md) for all available tools.
 
 ## ⚖️ Legal & Compliance
 

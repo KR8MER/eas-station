@@ -14,6 +14,7 @@ This document provides coding standards and guidelines for AI agents (including 
 6. **Check Bug Screenshots**: When discussing bugs, always check the `/bugs` directory first for screenshots
 7. **Follow Versioning**: Bug fixes increment by 0.0.+1, feature upgrades increment by 0.+1.0
 8. **File Naming Convention**: When superseding files, rename the old one with `_old` suffix, NEVER use `_new` suffix for replacement files
+9. **Repository Organization**: Every file must live in an appropriate directory unless necessary to be in the root (e.g., `requirements.txt`, `Dockerfile`, `README.md`, `LICENSE`, etc.). Documentation, summaries, and development artifacts belong in the `docs/` directory structure.
 
 ## 🐛 Bug Tracking & Screenshots
 
@@ -1119,7 +1120,7 @@ For quick navigation and understanding of the codebase structure, refer to the c
   - Search tips and common patterns
   - **Use this to:** Quickly find where to add new features or fix bugs
 
-- **`/FUNCTION_TREE_SUMMARY.txt`** (Overview)
+- **`docs/reference/FUNCTION_TREE_SUMMARY.txt`** (Overview)
   - Overview of documentation contents
   - Key statistics and metrics
   - Maintenance guidelines
@@ -1140,7 +1141,7 @@ For quick navigation and understanding of the codebase structure, refer to the c
 4. Look for similar patterns in other modules for consistency
 
 **When exploring unfamiliar code:**
-1. Start with FUNCTION_TREE_SUMMARY.txt to understand subsystem coverage
+1. Start with [docs/reference/FUNCTION_TREE_SUMMARY.txt](../reference/FUNCTION_TREE_SUMMARY.txt) to understand subsystem coverage
 2. Use [docs/reference/FUNCTION_TREE_INDEX.md](../reference/FUNCTION_TREE_INDEX) to find the subsystem you're interested in
 3. Dive into [docs/reference/FUNCTION_TREE.md](../reference/FUNCTION_TREE) for detailed function signatures and locations
 
