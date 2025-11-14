@@ -74,6 +74,24 @@
             mode: 'light',
             description: 'Bright yellow theme',
             builtin: true
+        },
+        'aurora': {
+            name: 'Aurora',
+            mode: 'dark',
+            description: 'Polar lights theme with teal and violet glows',
+            builtin: true
+        },
+        'nebula': {
+            name: 'Nebula',
+            mode: 'dark',
+            description: 'Deep space magenta and cyan dark theme',
+            builtin: true
+        },
+        'sunset': {
+            name: 'Sunset',
+            mode: 'light',
+            description: 'Golden hour gradient with warm oranges',
+            builtin: true
         }
     };
 
