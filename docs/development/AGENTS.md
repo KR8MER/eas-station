@@ -13,6 +13,7 @@ This document provides coding standards and guidelines for AI agents (including 
 5. **Document Changes**: Update relevant documentation when adding features
 6. **Check Bug Screenshots**: When discussing bugs, always check the `/bugs` directory first for screenshots
 7. **Follow Versioning**: Bug fixes increment by 0.0.+1, feature upgrades increment by 0.+1.0
+8. **File Naming Convention**: When superseding files, rename the old one with `_old` suffix, NEVER use `_new` suffix for replacement files
 
 ## 🐛 Bug Tracking & Screenshots
 
@@ -117,8 +118,12 @@ When implementing ANY new feature:
 
 - **Prefer small, focused modules** – Aim to keep Python modules under ~400 lines and HTML templates under ~300 lines.
 - **Refactor before things get unwieldy** – When adding more than one new class or multiple functions to a module already above 350 lines, create or use a sibling module/package instead of expanding the existing file.
-- **Extract repeated markup** – Move duplicated template fragments into `templates/partials/` and use Flask blueprints or helper modules to share behavior.
+- **Extract repeated markup** – Move duplicated template fragments into `templates/components/` and use Flask blueprints or helper modules to share behavior.
 - **Stay consistent with existing structure** – Place new Python packages within `app_core/` or `app_utils/` as appropriate, and keep front-end assets organized under `static/` and `templates/` using the same layout patterns as current files.
+- **File Naming Convention** – When a file supersedes a previous one:
+  - **CORRECT**: Rename old file to `filename_old.ext`, new file becomes `filename.ext`
+  - **WRONG**: Never use `filename_new.ext` as the replacement - this creates confusion
+  - Example: `navbar.html` (active) supersedes `navbar_old.html` (deprecated)
 - **Pre-commit self-check** – Confirm any touched file still meets these size expectations or has been split appropriately before finalizing changes.
 
 ---
@@ -246,15 +251,22 @@ if alert.geom and boundary.geom:
 ### Template Standards
 
 - **Extend base.html** - All templates should use `{% extends "base.html" %}`
-- **Use theme variables** - Reference CSS variables: `var(--primary-color)`, `var(--text-color)`
-- **Support dark mode** - Test in both light and dark themes
-- **Be responsive** - Use Bootstrap grid classes for mobile support
+- **Use theme variables** - Reference CSS variables: `var(--primary-color)`, `var(--text-color)`, `var(--bg-color)`
+- **Support all themes** - EAS Station has multiple built-in themes (Cosmo, Dark, Coffee, Spring, and color-based themes)
+- **Test in multiple themes** - Always test in both light (Cosmo) and dark themes at minimum
+- **Be responsive** - Use Bootstrap 5 grid classes for mobile support
+- **Theme Variable Categories**:
+  - **Colors**: `--primary-color`, `--secondary-color`, `--accent-color`
+  - **Status**: `--success-color`, `--danger-color`, `--warning-color`, `--info-color`
+  - **Text**: `--text-color`, `--text-secondary`, `--text-muted`
+  - **Backgrounds**: `--bg-color`, `--surface-color`, `--bg-card`
+  - **Borders**: `--border-color`, `--shadow-color`
 
 **Example:**
 ```html
 {% extends "base.html" %}
 
-{% block title %}My Feature - NOAA CAP{% endblock %}
+{% block title %}My Feature - EAS Station{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -264,10 +276,8 @@ if alert.geom and boundary.geom:
         border: 1px solid var(--border-color);
     }
 
-    /* Dark mode support */
-    [data-theme="dark"] .my-custom-class {
-        /* Optional dark mode overrides */
-    }
+    /* All themes automatically inherit CSS variables */
+    /* No need for theme-specific overrides unless absolutely necessary */
 </style>
 {% endblock %}
 
@@ -281,9 +291,20 @@ if alert.geom and boundary.geom:
 
 ### JavaScript Patterns
 
-- **Use existing global functions** - `showToast()`, `toggleTheme()`, `exportToExcel()`
-- **Avoid jQuery** - Use vanilla JavaScript
-- **Handle errors gracefully** - Show user-friendly messages
+- **Use existing global functions** - `showToast()`, `toggleTheme()`, `setTheme()`, `showThemeSelector()`, `exportToExcel()`
+- **Avoid jQuery** - Use vanilla JavaScript and modern ES6+ features
+- **Handle errors gracefully** - Show user-friendly messages using toast notifications
+- **Theme System Functions**:
+  - `setTheme(themeName)` - Switch to a specific theme
+  - `toggleTheme()` - Toggle between light and dark modes
+  - `getCurrentTheme()` - Get current active theme name
+  - `getCurrentThemeMode()` - Get current theme mode ('light' or 'dark')
+  - `getAvailableThemes()` - Get list of all available themes
+  - `showThemeSelector()` - Display theme selection modal with import/export
+  - `exportTheme(themeName)` - Export theme as JSON
+  - `downloadTheme(themeName)` - Download theme file
+  - `importTheme(jsonString)` - Import custom theme from JSON
+  - `deleteTheme(themeName)` - Remove custom theme (built-in themes cannot be deleted)
 
 ### Template Structure & Page Elements
 
@@ -294,27 +315,28 @@ if alert.geom and boundary.geom:
 | Element | Active File | Lines | Status |
 |---------|------------|-------|--------|
 | **Base Template** | `templates/base.html` | 163 | ✅ All pages extend this |
-| **Navbar** | `templates/components/navbar_new.html` | 404 | ✅ Included in base.html |
+| **Navbar** | `templates/components/navbar.html` | 420+ | ✅ Included in base.html (renamed from navbar_new.html) |
 | **Footer** | Inline in `templates/base.html` | 103-144 | ✅ Inline in base template |
 | **System Banner** | Inline in `templates/base.html` | 72-81 | ✅ Inline in base template |
 | **Flash Messages** | Inline in `templates/base.html` | 84-95 | ✅ Inline in base template |
 
-#### Orphaned Files (DO NOT EDIT)
+#### Deprecated Files (DO NOT EDIT)
 
 | File | Status | Action Required |
 |------|--------|----------------|
-| `templates/base_new.html` | ❌ Not used anywhere | DELETE |
-| `templates/components/navbar.html` | ❌ Has RBAC features but unused | Evaluate then DELETE |
-| `components/navbar.html` | ❌ Wrong directory | DELETE |
+| `templates/base_new.html` | ❌ Not used anywhere | Can be deleted |
+| `templates/components/navbar_old.html` | ❌ Superseded by navbar.html | Keep as reference, do not edit |
+| `components/navbar.html` | ❌ Wrong directory | Should be deleted |
 | `components/footer.html` | ❌ Was deleted (not included) | Already removed |
-| `components/page_header.html` | ⚠️ Macro component, wrong location | MOVE to templates/components/ if used |
+| `components/page_header.html` | ⚠️ Macro component, wrong location | Move to templates/components/ if used |
 
 #### When Making Changes to Page Elements
 
 **Changing the Navbar:**
-- ✅ Edit: `templates/components/navbar_new.html`
-- ❌ Don't edit: `templates/components/navbar.html` (orphaned)
+- ✅ Edit: `templates/components/navbar.html`
+- ❌ Don't edit: `templates/components/navbar_old.html` (deprecated)
 - ❌ Don't edit: `components/navbar.html` (wrong location)
+- **Features**: Bootstrap 5 navbar, dropdowns, health indicator, theme selector (palette icon), quick theme toggle
 
 **Changing the Footer:**
 - ✅ Edit: `templates/base.html` (lines 103-144)
@@ -329,7 +351,7 @@ if alert.geom and boundary.geom:
 **Creating New Pages:**
 - ✅ Always extend `base.html`
 - ✅ Use `{% block content %}` for page content
-- ✅ Add navigation link to `templates/components/navbar_new.html`
+- ✅ Add navigation link to `templates/components/navbar.html`
 - ❌ Never extend `base_new.html` (orphaned)
 
 #### Quick Verification
@@ -342,6 +364,158 @@ Before editing any template file:
 4. **Consult documentation**: See [docs/frontend/TEMPLATE_STRUCTURE.md](../frontend/TEMPLATE_STRUCTURE)
 
 **Complete template architecture documentation**: [docs/frontend/TEMPLATE_STRUCTURE.md](../frontend/TEMPLATE_STRUCTURE)
+
+---
+
+## 🎨 Theme System Architecture
+
+### Overview
+
+EAS Station features a comprehensive theme system with 11 built-in themes and support for custom theme import/export.
+
+### Built-in Themes
+
+| Theme | Mode | Description | Primary Use Case |
+|-------|------|-------------|------------------|
+| **Cosmo** | Light | Default vibrant blue/purple theme | General use, professional |
+| **Dark** | Dark | Enhanced dark mode with high contrast | Night use, reduced eye strain |
+| **Coffee** | Dark | Warm coffee-inspired browns | Cozy, warm aesthetic |
+| **Spring** | Light | Fresh green nature-inspired | Bright, energetic feel |
+| **Red** | Light | Bold red accent theme | Alert-focused, high energy |
+| **Green** | Light | Nature-inspired green | Calm, environmental |
+| **Blue** | Light | Ocean blue theme | Professional, trustworthy |
+| **Purple** | Light | Royal purple theme | Creative, elegant |
+| **Pink** | Light | Soft pink theme | Friendly, approachable |
+| **Orange** | Light | Energetic orange theme | Warm, enthusiastic |
+| **Yellow** | Light | Bright yellow theme | Cheerful, optimistic |
+
+### Theme System Files
+
+**Core Files:**
+- `static/js/core/theme.js` - Theme management, switching, import/export
+- `static/css/base.css` - All theme color definitions (CSS variables)
+- `templates/base.html` - Theme initialization (`data-theme="cosmo"`)
+- `templates/components/navbar.html` - Theme selector UI (palette icon + quick toggle)
+
+### CSS Variable Structure
+
+Every theme defines these CSS variables:
+
+**Colors:**
+- `--primary-color`, `--primary-soft` - Main brand colors
+- `--secondary-color`, `--secondary-soft` - Secondary brand colors
+- `--accent-color` - Accent/highlight color
+
+**Status:**
+- `--success-color` - Success states (green)
+- `--danger-color` - Error/danger states (red)
+- `--warning-color` - Warning states (yellow/orange)
+- `--info-color` - Information states (blue)
+- `--critical-color` - Critical alerts (bright red/pink)
+
+**Backgrounds:**
+- `--bg-color` - Page background
+- `--surface-color` - Card/panel background
+- `--bg-card` - Card background (same as surface)
+- `--light-color` - Light background shade
+- `--dark-color` - Dark background shade
+
+**Text:**
+- `--text-color` - Primary text
+- `--text-secondary` - Secondary/muted text
+- `--text-muted` - Very subtle text
+
+**UI Elements:**
+- `--border-color` - Border colors
+- `--shadow-color` - Box shadow colors
+- `--radius-sm/md/lg` - Border radius values
+- `--spacing-xs/sm/md/lg/xl` - Spacing scale
+
+### Adding a New Theme
+
+1. **Add theme definition to `static/js/core/theme.js`:**
+```javascript
+const THEMES = {
+    // ...existing themes...
+    'mytheme': {
+        name: 'My Theme',
+        mode: 'light',  // or 'dark'
+        description: 'Description of my theme',
+        builtin: true
+    }
+};
+```
+
+2. **Add CSS variables to `static/css/base.css`:**
+```css
+[data-theme="mytheme"] {
+    --primary-color: #your-color;
+    --secondary-color: #your-color;
+    /* ...all other variables... */
+}
+```
+
+3. **Test in multiple UI contexts:**
+   - Cards and panels
+   - Buttons and forms
+   - Navigation bar gradient
+   - Status indicators
+   - Text readability (all three levels)
+
+### Theme Import/Export
+
+Users can create custom themes and share them:
+
+**Export:**
+```javascript
+window.downloadTheme('cosmo');  // Downloads theme-cosmo.json
+```
+
+**Import:**
+- Users click theme selector (palette icon in navbar)
+- Upload JSON file in modal
+- Custom theme appears in selector
+- Stored in localStorage
+
+**Custom Theme JSON Structure:**
+```json
+{
+  "name": "mytheme",
+  "displayName": "My Theme",
+  "mode": "light",
+  "description": "My custom theme",
+  "version": "1.0",
+  "exported": "2025-01-14T13:00:00.000Z"
+}
+```
+
+### Theme Persistence
+
+- Current theme stored in `localStorage.setItem('theme', themeName)`
+- Custom themes stored in `localStorage.setItem('customThemes', jsonString)`
+- Automatically loaded on page load
+- Survives browser sessions
+
+### Navbar Theme Controls
+
+**Two buttons in navbar:**
+1. **Palette Icon** (`<i class="fas fa-palette">`) - Opens theme selector modal
+   - Grid of all themes with previews
+   - Import/Export functionality
+   - Delete custom themes
+   
+2. **Sun/Moon Icon** (`<i class="fas fa-sun/moon">`) - Quick toggle
+   - Toggles between light and dark modes
+   - Switches between Cosmo (light) and Dark (dark)
+
+### Dark Mode Best Practices
+
+When designing for dark mode themes:
+- **Higher contrast**: Text should be brighter (#f8f9fc not #f5f6fa)
+- **Softer shadows**: Use `rgba(0,0,0,0.5)` instead of `rgba(0,0,0,0.4)`
+- **Vibrant accents**: Status colors should be 15-20% brighter than light mode
+- **Deeper backgrounds**: Multiple levels (#12182a, #1e2538, #2d3548)
+- **Muted borders**: Borders should be subtle but visible (#343d54)
 
 ---
 
@@ -1046,3 +1220,4 @@ Before committing code, verify:
 ## 🤖 Agent Activity Log
 
 - 2024-11-12: Repository automation agent reviewed these guidelines before making any changes. All updates in this session comply with the established standards.
+- 2025-01-14: Updated AGENTS.md with comprehensive theme system documentation, file naming conventions (_old suffix rule), template structure updates (navbar.html active, navbar_old.html deprecated), and JavaScript theme API functions. Added detailed theme architecture section covering all 11 built-in themes, CSS variable structure, import/export functionality, and dark mode best practices.

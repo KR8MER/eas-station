@@ -11,8 +11,8 @@ This document explains the EAS Station template architecture, where page element
 ├── base.html                 # ✅ ACTIVE - Main base template
 ├── base_new.html             # ❌ ORPHANED - Not used anywhere
 ├── components/               # Reusable components
-│   ├── navbar_new.html       # ✅ ACTIVE - Current navbar
-│   ├── navbar.html           # ❌ ORPHANED - Has RBAC features but unused
+│   ├── navbar.html           # ✅ ACTIVE - Current navbar (modern design with theme support)
+│   ├── navbar_old.html       # ❌ DEPRECATED - Old navbar with RBAC features (superseded)
 │   ├── confidence_scale.html # ✅ ACTIVE - Macro component
 │   └── form-example.html     # ❌ ORPHANED - Example file
 ├── admin/                    # Admin interface templates
@@ -25,7 +25,6 @@ This document explains the EAS Station template architecture, where page element
 
 /components/                   # ⚠️ WRONG LOCATION - Should be in templates/
 ├── footer.html               # ❌ DELETED - Was orphaned, not included anywhere
-├── navbar.html               # ❌ ORPHANED - Duplicate in wrong directory
 └── page_header.html          # ⚠️ CHECK - Macro component, wrong location
 ```
 
@@ -49,7 +48,7 @@ This document explains the EAS Station template architecture, where page element
     <!-- Toast Container (line 66) -->
 
     <!-- Navbar Component (line 69) -->
-    {% include 'components/navbar_new.html' %}
+    {% include 'components/navbar.html' %}
 
     <!-- System Status Banner (lines 72-81, inline) -->
 
@@ -80,7 +79,7 @@ This document explains the EAS Station template architecture, where page element
 
 | Element | Location | Type | Details |
 |---------|----------|------|---------|
-| **Navbar** | `templates/components/navbar_new.html` | Component (included) | 404 lines, Bootstrap 5 navbar with dropdowns, health indicator, theme toggle |
+| **Navbar** | `templates/components/navbar.html` | Component (included) | 420+ lines, Bootstrap 5 navbar with dropdowns, health indicator, theme selector |
 | **Footer** | `templates/base.html` lines 103-144 | Inline in base | Copyright, version, tech badges, legal links, disclaimer |
 | **System Status Banner** | `templates/base.html` lines 72-81 | Inline in base | Conditional alert banner |
 | **Flash Messages** | `templates/base.html` lines 84-95 | Inline in base | Bootstrap alerts for user feedback |
