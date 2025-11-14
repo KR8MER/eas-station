@@ -181,8 +181,8 @@
 }
 
 .brand-logo {
-    width: 64px;
-    height: 64px;
+    height: 80px;
+    width: auto;
     display: block;
     border-radius: var(--radius-lg);
     box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
