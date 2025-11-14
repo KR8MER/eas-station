@@ -7,12 +7,15 @@ import re
 from typing import Any, Dict, List
 from pathlib import Path
 
-from flask import jsonify, render_template, request
+from flask import Blueprint, jsonify, render_template, request
 from werkzeug.exceptions import BadRequest
 
 from app_core.location import get_location_settings, _derive_county_zone_codes_from_fips
 from app_core.auth.roles import require_permission
 
+
+# Create Blueprint for environment routes
+environment_bp = Blueprint('environment', __name__)
 
 # Environment variable categories and their configurations
 ENV_CATEGORIES = {
@@ -864,288 +867,295 @@ def write_env_file(env_vars: Dict[str, str]) -> None:
 
 
 def register_environment_routes(app, logger):
-    """Register environment settings management routes."""
+    """Register environment settings routes."""
+    
+    # Register the blueprint with the app
+    app.register_blueprint(environment_bp)
+    logger.info("Environment routes registered")
 
-    @app.route('/api/environment/categories')
-    @require_permission('system.view_config')
-    def get_environment_categories():
-        """Get list of environment variable categories."""
-        categories = []
-        for cat_id, cat_data in ENV_CATEGORIES.items():
-            categories.append({
-                'id': cat_id,
-                'name': cat_data['name'],
-                'icon': cat_data['icon'],
-                'description': cat_data['description'],
-                'variable_count': len(cat_data['variables']),
-            })
-        return jsonify(categories)
 
-    @app.route('/api/environment/variables')
-    @require_permission('system.view_config')
-    def get_environment_variables():
-        """Get all environment variables with current values."""
-        # Read current values from .env or environment
-        current_values = read_env_file()
+# Route definitions
 
-        # Check if .env file exists
-        env_path = get_env_file_path()
-        env_file_exists = env_path.exists()
+@environment_bp.route('/api/environment/categories')
+@require_permission('system.view_config')
+def get_environment_categories():
+    """Get list of environment variable categories."""
+    categories = []
+    for cat_id, cat_data in ENV_CATEGORIES.items():
+        categories.append({
+            'id': cat_id,
+            'name': cat_data['name'],
+            'icon': cat_data['icon'],
+            'description': cat_data['description'],
+            'variable_count': len(cat_data['variables']),
+        })
+    return jsonify(categories)
 
-        # Build response with categories and variables
-        response = {}
-        for cat_id, cat_data in ENV_CATEGORIES.items():
-            variables = []
-            for var_config in cat_data['variables']:
-                var_data = dict(var_config)
-                key = var_config['key']
+@environment_bp.route('/api/environment/variables')
+@require_permission('system.view_config')
+def get_environment_variables():
+    """Get all environment variables with current values."""
+    # Read current values from .env or environment
+    current_values = read_env_file()
 
-                # Get current value - respect explicit empty values in .env
-                if key in current_values:
-                    # Key exists in .env file (even if empty)
-                    current_value = current_values[key]
-                else:
-                    # Key not in .env, try environment variable then default
-                    current_value = os.environ.get(key, var_config.get('default', ''))
+    # Check if .env file exists
+    env_path = get_env_file_path()
+    env_file_exists = env_path.exists()
 
-                # Mask sensitive values
-                if var_config.get('sensitive') and current_value:
-                    var_data['value'] = '••••••••'
-                    var_data['has_value'] = True
-                else:
-                    var_data['value'] = current_value
-                    # has_value is True if key exists in .env or has non-empty value
-                    var_data['has_value'] = (key in current_values) or bool(current_value)
+    # Build response with categories and variables
+    response = {}
+    for cat_id, cat_data in ENV_CATEGORIES.items():
+        variables = []
+        for var_config in cat_data['variables']:
+            var_data = dict(var_config)
+            key = var_config['key']
 
-                variables.append(var_data)
+            # Get current value - respect explicit empty values in .env
+            if key in current_values:
+                # Key exists in .env file (even if empty)
+                current_value = current_values[key]
+            else:
+                # Key not in .env, try environment variable then default
+                current_value = os.environ.get(key, var_config.get('default', ''))
 
-            response[cat_id] = {
-                'name': cat_data['name'],
-                'icon': cat_data['icon'],
-                'description': cat_data['description'],
-                'variables': variables,
-            }
+            # Mask sensitive values
+            if var_config.get('sensitive') and current_value:
+                var_data['value'] = '••••••••'
+                var_data['has_value'] = True
+            else:
+                var_data['value'] = current_value
+                # has_value is True if key exists in .env or has non-empty value
+                var_data['has_value'] = (key in current_values) or bool(current_value)
 
-        # Add metadata about .env file status
-        response['_meta'] = {
-            'env_file_exists': env_file_exists,
-            'env_file_path': str(env_path),
-            'reading_from': 'env_file' if env_file_exists else 'environment',
+            variables.append(var_data)
+
+        response[cat_id] = {
+            'name': cat_data['name'],
+            'icon': cat_data['icon'],
+            'description': cat_data['description'],
+            'variables': variables,
         }
 
-        return jsonify(response)
+    # Add metadata about .env file status
+    response['_meta'] = {
+        'env_file_exists': env_file_exists,
+        'env_file_path': str(env_path),
+        'reading_from': 'env_file' if env_file_exists else 'environment',
+    }
 
-    @app.route('/api/environment/variables', methods=['PUT'])
-    @require_permission('system.configure')
-    def update_environment_variables():
-        """Update environment variables."""
-        try:
-            data = request.get_json()
-            if not data or 'variables' not in data:
-                raise BadRequest('Missing variables in request')
+    return jsonify(response)
 
-            # Read current .env
-            env_vars = read_env_file()
-            
-            logger.info(f'Updating environment variables: {list(data["variables"].keys())}')
+@environment_bp.route('/api/environment/variables', methods=['PUT'])
+@require_permission('system.configure')
+def update_environment_variables():
+    """Update environment variables."""
+    try:
+        data = request.get_json()
+        if not data or 'variables' not in data:
+            raise BadRequest('Missing variables in request')
 
-            # Update variables
-            updates = data['variables']
-            for key, value in updates.items():
-                # Validate key exists in our configuration
-                found = False
-                for cat_data in ENV_CATEGORIES.values():
-                    for var_config in cat_data['variables']:
-                        if var_config['key'] == key:
-                            found = True
-                            logger.debug(f'Found variable {key} in category configuration')
-
-                            # Don't update if it's a masked sensitive value
-                            if var_config.get('sensitive') and value == '••••••••':
-                                logger.debug(f'Skipping masked sensitive value for {key}')
-                                continue
-
-                            # Validate required fields
-                            if var_config.get('required') and not value:
-                                raise BadRequest(f'{key} is required')
-
-                            break
-                    if found:
-                        break
-
-                if not found:
-                    logger.error(f'Unknown variable attempted to be updated: {key}')
-                    raise BadRequest(f'Unknown variable: {key}')
-
-                # Update value
-                old_value = env_vars.get(key, '')
-                env_vars[key] = str(value)
-                logger.debug(f'Updated {key}: {len(old_value)} chars -> {len(str(value))} chars')
-
-            # Auto-populate zone codes from FIPS codes if zone codes are empty
-            fips_codes_raw = env_vars.get("EAS_MANUAL_FIPS_CODES", "").strip()
-            zone_codes_raw = env_vars.get("DEFAULT_ZONE_CODES", "").strip()
-
-            if fips_codes_raw and not zone_codes_raw:
-                try:
-                    # Parse FIPS codes (comma-separated)
-                    fips_list = [code.strip() for code in fips_codes_raw.split(",") if code.strip()]
-
-                    # Derive zone codes from FIPS
-                    derived_zones = _derive_county_zone_codes_from_fips(fips_list)
-
-                    if derived_zones:
-                        env_vars["DEFAULT_ZONE_CODES"] = ",".join(derived_zones)
-                        logger.info(f"Auto-derived {len(derived_zones)} zone codes from {len(fips_list)} FIPS codes")
-                except Exception as zone_exc:
-                    logger.warning(f"Failed to auto-derive zone codes from FIPS: {zone_exc}")
-
-            # Write to .env file
-            env_path = get_env_file_path()
-            logger.info(f'Writing environment variables to {env_path}')
-            write_env_file(env_vars)
-            logger.info(f'Successfully updated {len(updates)} environment variables and wrote to {env_path}')
-
-            return jsonify({
-                'success': True,
-                'message': f'Updated {len(updates)} environment variable(s). Restart required for changes to take effect.',
-                'restart_required': True,
-                'saved_variables': list(updates.keys()),
-            })
-
-        except BadRequest as e:
-            logger.warning(f'Bad request updating environment variables: {e}')
-            return jsonify({'error': str(e)}), 400
-        except Exception as e:
-            logger.error(f'Error updating environment variables: {e}', exc_info=True)
-            return jsonify({'error': f'Failed to update environment variables: {str(e)}'}), 500
-
-    @app.route('/api/environment/validate')
-    @require_permission('system.view_config')
-    def validate_environment():
-        """Validate current environment configuration."""
+        # Read current .env
         env_vars = read_env_file()
-        issues = []
-        warnings = []
+        
+        logger.info(f'Updating environment variables: {list(data["variables"].keys())}')
 
-        # Check if .env file exists
+        # Update variables
+        updates = data['variables']
+        for key, value in updates.items():
+            # Validate key exists in our configuration
+            found = False
+            for cat_data in ENV_CATEGORIES.values():
+                for var_config in cat_data['variables']:
+                    if var_config['key'] == key:
+                        found = True
+                        logger.debug(f'Found variable {key} in category configuration')
+
+                        # Don't update if it's a masked sensitive value
+                        if var_config.get('sensitive') and value == '••••••••':
+                            logger.debug(f'Skipping masked sensitive value for {key}')
+                            continue
+
+                        # Validate required fields
+                        if var_config.get('required') and not value:
+                            raise BadRequest(f'{key} is required')
+
+                        break
+                if found:
+                    break
+
+            if not found:
+                logger.error(f'Unknown variable attempted to be updated: {key}')
+                raise BadRequest(f'Unknown variable: {key}')
+
+            # Update value
+            old_value = env_vars.get(key, '')
+            env_vars[key] = str(value)
+            logger.debug(f'Updated {key}: {len(old_value)} chars -> {len(str(value))} chars')
+
+        # Auto-populate zone codes from FIPS codes if zone codes are empty
+        fips_codes_raw = env_vars.get("EAS_MANUAL_FIPS_CODES", "").strip()
+        zone_codes_raw = env_vars.get("DEFAULT_ZONE_CODES", "").strip()
+
+        if fips_codes_raw and not zone_codes_raw:
+            try:
+                # Parse FIPS codes (comma-separated)
+                fips_list = [code.strip() for code in fips_codes_raw.split(",") if code.strip()]
+
+                # Derive zone codes from FIPS
+                derived_zones = _derive_county_zone_codes_from_fips(fips_list)
+
+                if derived_zones:
+                    env_vars["DEFAULT_ZONE_CODES"] = ",".join(derived_zones)
+                    logger.info(f"Auto-derived {len(derived_zones)} zone codes from {len(fips_list)} FIPS codes")
+            except Exception as zone_exc:
+                logger.warning(f"Failed to auto-derive zone codes from FIPS: {zone_exc}")
+
+        # Write to .env file
         env_path = get_env_file_path()
-        if not env_path.exists():
-            warnings.append({
-                'severity': 'warning',
-                'variable': '.env file',
-                'message': f'.env file does not exist at {env_path}. Reading from environment variables. Create .env file to persist changes.',
-            })
-
-        # Check required variables
-        for cat_data in ENV_CATEGORIES.values():
-            for var_config in cat_data['variables']:
-                key = var_config['key']
-
-                # Get value - respect explicit empty values in .env
-                if key in env_vars:
-                    value = env_vars[key]
-                else:
-                    # Key not in .env, check environment variable
-                    value = os.environ.get(key, '')
-
-                # Required field validation
-                if var_config.get('required') and not value:
-                    issues.append({
-                        'severity': 'error',
-                        'variable': key,
-                        'message': f'{var_config["label"]} is required but not set',
-                    })
-
-                # Check for default/insecure values
-                if key == 'SECRET_KEY' and value in ['', 'dev-key-change-in-production', 'replace-with-a-long-random-string']:
-                    issues.append({
-                        'severity': 'error',
-                        'variable': key,
-                        'message': 'SECRET_KEY must be changed from default value',
-                    })
-
-                if key == 'POSTGRES_PASSWORD' and value in ['', 'change-me', 'postgres']:
-                    warnings.append({
-                        'severity': 'warning',
-                        'variable': key,
-                        'message': 'Database password should be changed from default',
-                    })
-
-        # Check for deprecated variables
-        deprecated_vars = [
-            'PATH', 'LANG', 'GPG_KEY', 'PYTHON_VERSION', 'PYTHON_SHA256',
-            'PYTHONDONTWRITEBYTECODE', 'PYTHONUNBUFFERED', 'SKIP_DB_INIT',
-            'EAS_OUTPUT_WEB_SUBDIR',
-        ]
-
-        for var in deprecated_vars:
-            if var in env_vars:
-                warnings.append({
-                    'severity': 'info',
-                    'variable': var,
-                    'message': f'{var} is deprecated and can be removed',
-                })
+        logger.info(f'Writing environment variables to {env_path}')
+        write_env_file(env_vars)
+        logger.info(f'Successfully updated {len(updates)} environment variables and wrote to {env_path}')
 
         return jsonify({
-            'valid': len(issues) == 0,
-            'issues': issues,
-            'warnings': warnings,
+            'success': True,
+            'message': f'Updated {len(updates)} environment variable(s). Restart required for changes to take effect.',
+            'restart_required': True,
+            'saved_variables': list(updates.keys()),
         })
 
-    @app.route('/settings/environment')
-    @require_permission('system.view_config')
-    def environment_settings():
-        """Render environment settings management page."""
-        from app_core.auth.roles import has_permission
+    except BadRequest as e:
+        logger.warning(f'Bad request updating environment variables: {e}')
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f'Error updating environment variables: {e}', exc_info=True)
+        return jsonify({'error': f'Failed to update environment variables: {str(e)}'}), 500
 
-        try:
-            location_settings = get_location_settings()
-            can_configure = has_permission('system.configure')
-            return render_template(
-                'settings/environment.html',
-                location_settings=location_settings,
-                can_configure=can_configure,
-            )
-        except Exception as exc:
-            logger.error(f'Error rendering environment settings: {exc}')
-            return render_template(
-                'settings/environment.html',
-                location_settings=None,
-                can_configure=False,
-            )
+@environment_bp.route('/api/environment/validate')
+@require_permission('system.view_config')
+def validate_environment():
+    """Validate current environment configuration."""
+    env_vars = read_env_file()
+    issues = []
+    warnings = []
 
-    @app.route('/admin/environment/download-env')
-    @require_permission('system.view_config')
-    def admin_download_env():
-        """Download the current .env file as a backup."""
-        from flask import send_file
-        from datetime import datetime
+    # Check if .env file exists
+    env_path = get_env_file_path()
+    if not env_path.exists():
+        warnings.append({
+            'severity': 'warning',
+            'variable': '.env file',
+            'message': f'.env file does not exist at {env_path}. Reading from environment variables. Create .env file to persist changes.',
+        })
 
-        env_path = get_env_file_path()
+    # Check required variables
+    for cat_data in ENV_CATEGORIES.values():
+        for var_config in cat_data['variables']:
+            key = var_config['key']
 
-        if not env_path.exists():
-            flash("No .env file exists to download.")
-            return redirect(url_for("environment_settings"))
+            # Get value - respect explicit empty values in .env
+            if key in env_vars:
+                value = env_vars[key]
+            else:
+                # Key not in .env, check environment variable
+                value = os.environ.get(key, '')
 
-        # Create a timestamped filename for the download
-        timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
-        download_name = f"eas-station-backup-{timestamp}.env"
+            # Required field validation
+            if var_config.get('required') and not value:
+                issues.append({
+                    'severity': 'error',
+                    'variable': key,
+                    'message': f'{var_config["label"]} is required but not set',
+                })
 
-        return send_file(
-            env_path,
-            as_attachment=True,
-            download_name=download_name,
-            mimetype='text/plain'
+            # Check for default/insecure values
+            if key == 'SECRET_KEY' and value in ['', 'dev-key-change-in-production', 'replace-with-a-long-random-string']:
+                issues.append({
+                    'severity': 'error',
+                    'variable': key,
+                    'message': 'SECRET_KEY must be changed from default value',
+                })
+
+            if key == 'POSTGRES_PASSWORD' and value in ['', 'change-me', 'postgres']:
+                warnings.append({
+                    'severity': 'warning',
+                    'variable': key,
+                    'message': 'Database password should be changed from default',
+                })
+
+    # Check for deprecated variables
+    deprecated_vars = [
+        'PATH', 'LANG', 'GPG_KEY', 'PYTHON_VERSION', 'PYTHON_SHA256',
+        'PYTHONDONTWRITEBYTECODE', 'PYTHONUNBUFFERED', 'SKIP_DB_INIT',
+        'EAS_OUTPUT_WEB_SUBDIR',
+    ]
+
+    for var in deprecated_vars:
+        if var in env_vars:
+            warnings.append({
+                'severity': 'info',
+                'variable': var,
+                'message': f'{var} is deprecated and can be removed',
+            })
+
+    return jsonify({
+        'valid': len(issues) == 0,
+        'issues': issues,
+        'warnings': warnings,
+    })
+
+@environment_bp.route('/settings/environment')
+@require_permission('system.view_config')
+def environment_settings():
+    """Render environment settings management page."""
+    from app_core.auth.roles import has_permission
+
+    try:
+        location_settings = get_location_settings()
+        can_configure = has_permission('system.configure')
+        return render_template(
+            'settings/environment.html',
+            location_settings=location_settings,
+            can_configure=can_configure,
+        )
+    except Exception as exc:
+        logger.error(f'Error rendering environment settings: {exc}')
+        return render_template(
+            'settings/environment.html',
+            location_settings=None,
+            can_configure=False,
         )
 
-    @app.route('/api/environment/generate-secret', methods=['POST'])
-    @require_permission('system.configure')
-    def generate_secret_key_api():
-        """Generate a new secret key."""
-        import secrets
-        secret_key = secrets.token_hex(32)  # 64-character hex string
-        return jsonify({'secret_key': secret_key})
+@environment_bp.route('/admin/environment/download-env')
+@require_permission('system.view_config')
+def admin_download_env():
+    """Download the current .env file as a backup."""
+    from flask import send_file
+    from datetime import datetime
+
+    env_path = get_env_file_path()
+
+    if not env_path.exists():
+        flash("No .env file exists to download.")
+        return redirect(url_for("environment_settings"))
+
+    # Create a timestamped filename for the download
+    timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    download_name = f"eas-station-backup-{timestamp}.env"
+
+    return send_file(
+        env_path,
+        as_attachment=True,
+        download_name=download_name,
+        mimetype='text/plain'
+    )
+
+@environment_bp.route('/api/environment/generate-secret', methods=['POST'])
+@require_permission('system.configure')
+def generate_secret_key_api():
+    """Generate a new secret key."""
+    import secrets
+    secret_key = secrets.token_hex(32)  # 64-character hex string
+    return jsonify({'secret_key': secret_key})
 
 
 __all__ = ['register_environment_routes', 'ENV_CATEGORIES']
