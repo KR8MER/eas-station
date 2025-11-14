@@ -527,6 +527,52 @@
 }
 
 /* ============================================
+   BOOTSTRAP VARIABLE BRIDGE
+   ============================================ */
+
+:root {
+    --bs-body-font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    --bs-body-font-size: 1rem;
+    --bs-body-font-weight: 400;
+    --bs-body-line-height: 1.6;
+    --bs-body-color: var(--text-color);
+    --bs-body-bg: var(--bg-color);
+    --bs-heading-color: var(--text-color);
+    --bs-secondary-color: var(--text-secondary);
+    --bs-secondary-bg: var(--surface-color);
+    --bs-border-color: var(--border-color);
+    --bs-link-color: var(--primary-color);
+    --bs-link-hover-color: var(--accent-color);
+    --bs-card-bg: var(--surface-color);
+    --bs-card-color: var(--text-color);
+    --bs-card-border-color: var(--border-color);
+    --bs-card-cap-bg: var(--surface-color);
+    --bs-card-cap-color: var(--text-secondary);
+    --bs-dropdown-bg: var(--surface-color);
+    --bs-dropdown-color: var(--text-color);
+    --bs-dropdown-border-color: var(--border-color);
+    --bs-dropdown-link-color: var(--text-color);
+    --bs-dropdown-link-hover-color: var(--accent-color);
+    --bs-modal-bg: var(--surface-color);
+    --bs-modal-color: var(--text-color);
+    --bs-modal-border-color: var(--border-color);
+    --bs-popover-bg: var(--surface-color);
+    --bs-popover-border-color: var(--border-color);
+    --bs-list-group-bg: var(--surface-color);
+    --bs-list-group-color: var(--text-color);
+    --bs-table-bg: var(--surface-color);
+    --bs-table-color: var(--text-color);
+    --bs-table-border-color: var(--border-color);
+    --bs-form-control-bg: var(--surface-color);
+    --bs-form-control-color: var(--text-color);
+    --bs-form-control-border-color: var(--border-color);
+    --bs-form-control-placeholder-color: var(--text-muted);
+    --bs-form-select-bg: var(--surface-color);
+    --bs-form-select-color: var(--text-color);
+    --bs-form-select-border-color: var(--border-color);
+}
+
+/* ============================================
    BASE TYPOGRAPHY & LAYOUT
    ============================================ */
 
@@ -583,7 +629,27 @@ a:focus {
     background-color: var(--surface-color);
     border: 1px solid var(--border-color);
     box-shadow: 0 0.125rem 0.25rem var(--shadow-color);
+    color: var(--text-color);
     transition: background-color var(--transition-medium), color var(--transition-medium);
+}
+
+.card .card-title,
+.card .card-text {
+    color: inherit;
+}
+
+/* ============================================
+   FORMS
+   ============================================ */
+
+.form-label,
+.form-check-label {
+    color: var(--text-secondary);
+}
+
+.form-text,
+.form-check-label .text-muted {
+    color: var(--text-muted);
 }
 
 /* ============================================
