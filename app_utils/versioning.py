@@ -13,6 +13,30 @@ _VERSION_PATH = _ROOT / "VERSION"
 _GIT_DIR = _ROOT / ".git"
 
 
+@lru_cache(maxsize=1)
+def _resolve_git_directory() -> Optional[Path]:
+    """Return the filesystem path to the active git metadata directory."""
+
+    if _GIT_DIR.is_dir():
+        return _GIT_DIR
+
+    if _GIT_DIR.is_file():
+        try:
+            gitdir_record = _GIT_DIR.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            return None
+
+        if gitdir_record.startswith("gitdir:"):
+            git_dir_path = gitdir_record.split(":", 1)[1].strip()
+            candidate = Path(git_dir_path)
+            if not candidate.is_absolute():
+                candidate = (_GIT_DIR.parent / candidate).resolve()
+            if candidate.exists():
+                return candidate
+
+    return None
+
+
 def _get_version_file_state() -> Tuple[Optional[float], bool]:
     """Return the VERSION file modification time and existence flag.
 
@@ -75,7 +99,11 @@ def _read_env_commit() -> Optional[str]:
 def _read_git_head() -> Optional[str]:
     """Resolve the current commit hash from the local ``.git`` metadata."""
 
-    head_path = _GIT_DIR / "HEAD"
+    git_dir = _resolve_git_directory()
+    if git_dir is None:
+        return None
+
+    head_path = git_dir / "HEAD"
     try:
         head_content = head_path.read_text(encoding="utf-8").strip()
     except FileNotFoundError:
@@ -86,11 +114,11 @@ def _read_git_head() -> Optional[str]:
 
     if head_content.startswith("ref:"):
         ref = head_content.split(" ", 1)[1]
-        ref_path = _GIT_DIR / ref
+        ref_path = git_dir / ref
         try:
             return ref_path.read_text(encoding="utf-8").strip() or None
         except FileNotFoundError:
-            packed_refs_path = _GIT_DIR / "packed-refs"
+            packed_refs_path = git_dir / "packed-refs"
             try:
                 for line in packed_refs_path.read_text(encoding="utf-8").splitlines():
                     if not line or line.startswith(("#", "^")):
