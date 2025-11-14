@@ -59,7 +59,7 @@ def login():
                     MFASession.set_pending(session, user.id)
 
                     # Redirect to MFA verification page
-                    return redirect(url_for('mfa_verify', next=next_param))
+                    return redirect(url_for('auth.mfa_verify', next=next_param))
 
                 # No MFA - complete login
                 session.clear()
