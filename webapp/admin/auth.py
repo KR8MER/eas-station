@@ -7,7 +7,7 @@ import secrets
 from typing import Optional
 from urllib.parse import urljoin, urlparse
 
-from flask import flash, g, redirect, render_template, request, session, url_for
+from flask import current_app, flash, g, redirect, render_template, request, session, url_for
 from sqlalchemy import func
 
 from app_core.extensions import db
@@ -26,6 +26,21 @@ def register_auth_routes(app, logger):
     # Register the blueprint with the app
     app.register_blueprint(auth_bp)
     logger.info("Auth routes registered")
+
+
+# Helper functions
+
+def _is_safe_redirect_target(target: Optional[str]) -> bool:
+    """Check if a redirect target is safe (prevents open redirects)."""
+    if not target:
+        return False
+    
+    # Parse the URL
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(urljoin(request.host_url, target))
+    
+    # Check that the scheme and netloc match
+    return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
 
 
 # Route definitions
@@ -49,7 +64,7 @@ def login():
                 func.lower(AdminUser.username) == username.lower()
             ).first()
             if user and user.is_active and user.check_password(password):
-                csrf_key = app.config.get('CSRF_SESSION_KEY', '_csrf_token')
+                csrf_key = current_app.config.get('CSRF_SESSION_KEY', '_csrf_token')
 
                 # Check if MFA is enabled for this user
                 if user.mfa_enabled:
@@ -125,7 +140,7 @@ def logout():
 
         AuditLogger.log_logout(user.id, user.username)
 
-    csrf_key = app.config.get('CSRF_SESSION_KEY', '_csrf_token')
+    csrf_key = current_app.config.get('CSRF_SESSION_KEY', '_csrf_token')
     session.clear()
     session[csrf_key] = secrets.token_urlsafe(32)
     flash('You have been signed out.')
