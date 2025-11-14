@@ -103,21 +103,31 @@
     <!-- Footer -->
     <footer class="footer">
         <div class="container-fluid">
-            <div class="footer-content d-flex flex-column flex-lg-row align-items-center justify-content-between text-center text-lg-start">
-                <div class="footer-meta">
-                    <div class="footer-brand">
-                        <i class="fas fa-broadcast-tower me-2"></i>© 2025 Timothy Kramer (KR8MER)
+            <div class="footer-content">
+                <div class="row align-items-center gy-3 text-center text-lg-start">
+                    <div class="col-12 col-lg-4">
+                        <div class="footer-meta">
+                            <div class="footer-brand">
+                                <i class="fas fa-broadcast-tower me-2"></i>© 2025 Timothy Kramer (KR8MER)
+                            </div>
+                            <div class="footer-subtext">
+                                <i class="fas fa-shield-alt me-2"></i>EAS Station · Emergency Alert System Research Platform
+                            </div>
+                        </div>
                     </div>
-                    <div class="footer-subtext">
-                        <i class="fas fa-shield-alt me-2"></i>EAS Station · Emergency Alert System Research Platform
+                    <div class="col-12 col-lg-4">
+                        <div class="footer-clock d-flex justify-content-center">
+                            <div class="d-inline-flex align-items-center justify-content-center gap-2">
+                                <i class="fas fa-clock"></i>
+                                <span id="current-time">Loading...</span>
+                            </div>
+                        </div>
                     </div>
-                </div>
-                <div class="footer-clock d-flex align-items-center justify-content-center">
-                    <i class="fas fa-clock me-2"></i>
-                    <span id="current-time">Loading...</span>
-                </div>
-                <div class="footer-version text-uppercase fw-semibold">
-                    Version {{ system_version }}
+                    <div class="col-12 col-lg-4">
+                        <div class="footer-version text-uppercase fw-semibold text-center text-lg-end">
+                            Version {{ system_version }}
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="footer-links">
@@ -129,17 +139,27 @@
             </div>
 
             <!-- Tech Stack Badges -->
+            {% set icecast_logo = shield_logos.get('icecast') %}
+            {% set soapysdr_logo = shield_logos.get('soapysdr') %}
             <div class="tech-stack-badges d-flex flex-wrap justify-content-center align-items-center gap-2 my-3">
+                <img src="https://img.shields.io/badge/Git%20Commit-{{ git_commit | upper }}-181717?style=flat-square&logo=github&logoColor=white" alt="Git commit {{ git_commit | upper }}" height="20">
                 <img src="https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11" height="20">
                 <img src="https://img.shields.io/badge/Flask-3.0-000000?style=flat-square&logo=flask&logoColor=white" alt="Flask 3.0" height="20">
-                <img src="https://img.shields.io/badge/PostgreSQL-17-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL 17" height="20">
-                <img src="https://img.shields.io/badge/Docker-Enabled-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" height="20">
-                <img src="https://img.shields.io/badge/Bootstrap-5-7952B3?style=flat-square&logo=bootstrap&logoColor=white" alt="Bootstrap 5" height="20">
+                <img src="https://img.shields.io/badge/SQLAlchemy-2.0-CA2C39?style=flat-square&logo=sqlalchemy&logoColor=white" alt="SQLAlchemy 2.0" height="20">
+                <img src="https://img.shields.io/badge/PostgreSQL%20%2B%20PostGIS-17%20%2F%203.4-0093D0?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL 17 with PostGIS 3.4" height="20">
+                <img src="https://img.shields.io/badge/Gunicorn-23.0-499848?style=flat-square&logo=gunicorn&logoColor=white" alt="Gunicorn 23.0" height="20">
+                <img src="https://img.shields.io/badge/Nginx-1.26-009639?style=flat-square&logo=nginx&logoColor=white" alt="Nginx 1.26" height="20">
+                <img src="https://img.shields.io/badge/Icecast-2.4.4-1F3B73?style=flat-square{% if icecast_logo %}&logo={{ icecast_logo | urlencode }}{% endif %}" alt="Icecast 2.4.4" height="20">
+                <img src="https://img.shields.io/badge/Docker%20Compose-v2-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker Compose v2" height="20">
+                <img src="https://img.shields.io/badge/Bootstrap-5.3-7952B3?style=flat-square&logo=bootstrap&logoColor=white" alt="Bootstrap 5.3" height="20">
+                <img src="https://img.shields.io/badge/Font%20Awesome-6.4-528DD7?style=flat-square&logo=fontawesome&logoColor=white" alt="Font Awesome 6.4" height="20">
+                <img src="https://img.shields.io/badge/Leaflet-1.9.4-199900?style=flat-square&logo=leaflet&logoColor=white" alt="Leaflet 1.9.4" height="20">
+                <img src="https://img.shields.io/badge/SoapySDR-enabled-FF6600?style=flat-square{% if soapysdr_logo %}&logo={{ soapysdr_logo | urlencode }}{% endif %}" alt="SoapySDR enabled" height="20">
             </div>
 
             <p class="footer-disclaimer mb-0">
-                Experimental development project cross-checked with tools like multimon-ng. Not FCC-certified equipment, not for
-                production deployments, and never for life-or-death decision making.
+                <strong>For research and training use only.</strong> Experimental development platform without FCC certification,
+                not for production deployments, and absolutely never for life-safety or emergency response decisions.
             </p>
         </div>
     </footer>
