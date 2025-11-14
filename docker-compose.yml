@@ -45,6 +45,7 @@ services:
       dockerfile: Dockerfile
       args:
         SOAPYSDR_DRIVERS: ${SOAPYSDR_DRIVERS:-rtlsdr,airspy}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
     image: eas-station:latest
     expose:
       - "5000"  # Internal only, accessed via nginx reverse proxy

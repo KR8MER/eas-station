@@ -56,6 +56,7 @@ services:
       dockerfile: Dockerfile
       args:
         SOAPYSDR_DRIVERS: ${SOAPYSDR_DRIVERS:-rtlsdr,airspy}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
     image: eas-station:latest
     depends_on:
       alerts-db:

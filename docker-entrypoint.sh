@@ -79,6 +79,9 @@ FLASK_RUN_HOST=${FLASK_RUN_HOST:-0.0.0.0}
 FLASK_RUN_PORT=${FLASK_RUN_PORT:-5000}
 FLASK_ENV=${FLASK_ENV:-production}
 
+# Git commit hash (captured at build time)
+GIT_COMMIT=${GIT_COMMIT:-unknown}
+
 # =============================================================================
 # DATABASE (PostgreSQL + PostGIS)
 # =============================================================================
