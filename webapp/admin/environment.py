@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from typing import Any, Dict, List
@@ -12,6 +13,8 @@ from werkzeug.exceptions import BadRequest
 
 from app_core.location import get_location_settings, _derive_county_zone_codes_from_fips
 from app_core.auth.roles import require_permission
+
+logger = logging.getLogger(__name__)
 
 
 # Create Blueprint for environment routes
