@@ -1,4 +1,5 @@
 """Authentication helpers for the admin interface."""
+from flask import Blueprint
 
 from __future__ import annotations
 
@@ -16,180 +17,179 @@ from app_core.auth.mfa import MFASession, verify_user_mfa
 from app_core.auth.audit import AuditLogger, AuditAction
 
 
+# Create Blueprint for auth routes
+auth_bp = Blueprint("auth", __name__)
+
 def register_auth_routes(app, logger):
-    """Register login and logout handlers."""
+    """Register routes."""
+    
+    # Register the blueprint with the app
+    app.register_blueprint(auth_bp)
+    logger.info("Auth routes registered")
 
-    def _is_safe_redirect_target(target: Optional[str]) -> bool:
-        if not target:
-            return False
-        # Parse the target URL to extract the path
-        test_url = urlparse(urljoin(request.host_url, target))
-        # Don't redirect to login page itself to prevent redirect loops
-        if test_url.path.rstrip('/') == '/login':
-            return False
-        ref_url = urlparse(request.host_url)
-        return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
 
-    @app.route('/login', methods=['GET', 'POST'])
-    def login():
-        next_param = request.args.get('next') if request.method == 'GET' else request.form.get('next')
-        if g.current_user:
-            target = next_param if _is_safe_redirect_target(next_param) else url_for('admin')
-            return redirect(target)
+# Route definitions
 
-        error = None
-        if request.method == 'POST':
-            username = (request.form.get('username') or '').strip()
-            password = request.form.get('password') or ''
+@auth_bp.route('/login', methods=['GET', 'POST'])
+def login():
+    next_param = request.args.get('next') if request.method == 'GET' else request.form.get('next')
+    if g.current_user:
+        target = next_param if _is_safe_redirect_target(next_param) else url_for('admin')
+        return redirect(target)
 
-            if not username or not password:
-                error = 'Username and password are required.'
-            else:
-                user = AdminUser.query.filter(
-                    func.lower(AdminUser.username) == username.lower()
-                ).first()
-                if user and user.is_active and user.check_password(password):
-                    csrf_key = app.config.get('CSRF_SESSION_KEY', '_csrf_token')
+    error = None
+    if request.method == 'POST':
+        username = (request.form.get('username') or '').strip()
+        password = request.form.get('password') or ''
 
-                    # Check if MFA is enabled for this user
-                    if user.mfa_enabled:
-                        # Partial authentication - set pending MFA state
-                        session.clear()
-                        session[csrf_key] = secrets.token_urlsafe(32)
-                        MFASession.set_pending(session, user.id)
+        if not username or not password:
+            error = 'Username and password are required.'
+        else:
+            user = AdminUser.query.filter(
+                func.lower(AdminUser.username) == username.lower()
+            ).first()
+            if user and user.is_active and user.check_password(password):
+                csrf_key = app.config.get('CSRF_SESSION_KEY', '_csrf_token')
 
-                        # Redirect to MFA verification page
-                        return redirect(url_for('mfa_verify', next=next_param))
-
-                    # No MFA - complete login
+                # Check if MFA is enabled for this user
+                if user.mfa_enabled:
+                    # Partial authentication - set pending MFA state
                     session.clear()
                     session[csrf_key] = secrets.token_urlsafe(32)
-                    session['user_id'] = user.id
-                    session.permanent = True
-                    user.last_login_at = utc_now()
-                    log_entry = SystemLog(
-                        level='INFO',
-                        message='Administrator logged in',
-                        module='auth',
-                        details={
-                            'username': user.username,
-                            'remote_addr': request.remote_addr,
-                        },
-                    )
-                    db.session.add(user)
-                    db.session.add(log_entry)
-                    db.session.commit()
+                    MFASession.set_pending(session, user.id)
 
-                    AuditLogger.log_login_success(user.id, user.username)
+                    # Redirect to MFA verification page
+                    return redirect(url_for('mfa_verify', next=next_param))
 
-                    target = next_param if _is_safe_redirect_target(next_param) else url_for('admin')
-                    return redirect(target)
-
-                db.session.add(SystemLog(
-                    level='WARNING',
-                    message='Failed administrator login attempt',
+                # No MFA - complete login
+                session.clear()
+                session[csrf_key] = secrets.token_urlsafe(32)
+                session['user_id'] = user.id
+                session.permanent = True
+                user.last_login_at = utc_now()
+                log_entry = SystemLog(
+                    level='INFO',
+                    message='Administrator logged in',
                     module='auth',
                     details={
-                        'username': username,
+                        'username': user.username,
                         'remote_addr': request.remote_addr,
                     },
-                ))
+                )
+                db.session.add(user)
+                db.session.add(log_entry)
                 db.session.commit()
 
-                AuditLogger.log_login_failure(username, 'invalid_credentials')
-                error = 'Invalid username or password.'
+                AuditLogger.log_login_success(user.id, user.username)
 
-        show_setup = AdminUser.query.count() == 0
+                target = next_param if _is_safe_redirect_target(next_param) else url_for('admin')
+                return redirect(target)
 
-        return render_template(
-            'login.html',
-            error=error,
-            next=next_param or url_for('admin'),
-            show_setup=show_setup,
-        )
-
-    @app.route('/logout')
-    def logout():
-        user = g.current_user
-        if user:
             db.session.add(SystemLog(
-                level='INFO',
-                message='Administrator logged out',
+                level='WARNING',
+                message='Failed administrator login attempt',
                 module='auth',
                 details={
-                    'username': user.username,
+                    'username': username,
                     'remote_addr': request.remote_addr,
                 },
             ))
             db.session.commit()
 
-            AuditLogger.log_logout(user.id, user.username)
+            AuditLogger.log_login_failure(username, 'invalid_credentials')
+            error = 'Invalid username or password.'
 
-        csrf_key = app.config.get('CSRF_SESSION_KEY', '_csrf_token')
-        session.clear()
-        session[csrf_key] = secrets.token_urlsafe(32)
-        flash('You have been signed out.')
+    show_setup = AdminUser.query.count() == 0
+
+    return render_template(
+        'login.html',
+        error=error,
+        next=next_param or url_for('admin'),
+        show_setup=show_setup,
+    )
+
+@auth_bp.route('/logout')
+def logout():
+    user = g.current_user
+    if user:
+        db.session.add(SystemLog(
+            level='INFO',
+            message='Administrator logged out',
+            module='auth',
+            details={
+                'username': user.username,
+                'remote_addr': request.remote_addr,
+            },
+        ))
+        db.session.commit()
+
+        AuditLogger.log_logout(user.id, user.username)
+
+    csrf_key = app.config.get('CSRF_SESSION_KEY', '_csrf_token')
+    session.clear()
+    session[csrf_key] = secrets.token_urlsafe(32)
+    flash('You have been signed out.')
+    return redirect(url_for('login'))
+
+@auth_bp.route('/mfa/verify', methods=['GET', 'POST'])
+def mfa_verify():
+    """MFA verification page after password authentication."""
+    next_param = request.args.get('next') if request.method == 'GET' else request.form.get('next')
+
+    # Check if user is pending MFA verification
+    pending_user_id = MFASession.get_pending(session)
+    if not pending_user_id:
+        flash('Session expired. Please log in again.')
         return redirect(url_for('login'))
 
-    @app.route('/mfa/verify', methods=['GET', 'POST'])
-    def mfa_verify():
-        """MFA verification page after password authentication."""
-        next_param = request.args.get('next') if request.method == 'GET' else request.form.get('next')
+    user = AdminUser.query.get(pending_user_id)
+    if not user or not user.is_active or not user.mfa_enabled:
+        MFASession.clear_pending(session)
+        return redirect(url_for('login'))
 
-        # Check if user is pending MFA verification
-        pending_user_id = MFASession.get_pending(session)
-        if not pending_user_id:
-            flash('Session expired. Please log in again.')
-            return redirect(url_for('login'))
+    error = None
+    if request.method == 'POST':
+        code = (request.form.get('code') or '').strip()
 
-        user = AdminUser.query.get(pending_user_id)
-        if not user or not user.is_active or not user.mfa_enabled:
-            MFASession.clear_pending(session)
-            return redirect(url_for('login'))
+        if not code:
+            error = 'Verification code is required.'
+        else:
+            # Verify MFA code (TOTP or backup code)
+            if verify_user_mfa(user, code):
+                # MFA successful - complete login
+                MFASession.complete(session, user.id)
+                user.last_login_at = utc_now()
 
-        error = None
-        if request.method == 'POST':
-            code = (request.form.get('code') or '').strip()
+                log_entry = SystemLog(
+                    level='INFO',
+                    message='Administrator logged in (with MFA)',
+                    module='auth',
+                    details={
+                        'username': user.username,
+                        'remote_addr': request.remote_addr,
+                    },
+                )
+                db.session.add(user)
+                db.session.add(log_entry)
+                db.session.commit()
 
-            if not code:
-                error = 'Verification code is required.'
+                # Determine if backup code was used
+                method = 'backup_code' if len(code) > 6 else 'totp'
+                AuditLogger.log_login_success(user.id, user.username)
+                AuditLogger.log_mfa_verify_success(user.id, user.username, method)
+
+                target = next_param if _is_safe_redirect_target(next_param) else url_for('admin')
+                return redirect(target)
             else:
-                # Verify MFA code (TOTP or backup code)
-                if verify_user_mfa(user, code):
-                    # MFA successful - complete login
-                    MFASession.complete(session, user.id)
-                    user.last_login_at = utc_now()
+                AuditLogger.log_mfa_verify_failure(user.id, user.username)
+                error = 'Invalid verification code.'
 
-                    log_entry = SystemLog(
-                        level='INFO',
-                        message='Administrator logged in (with MFA)',
-                        module='auth',
-                        details={
-                            'username': user.username,
-                            'remote_addr': request.remote_addr,
-                        },
-                    )
-                    db.session.add(user)
-                    db.session.add(log_entry)
-                    db.session.commit()
-
-                    # Determine if backup code was used
-                    method = 'backup_code' if len(code) > 6 else 'totp'
-                    AuditLogger.log_login_success(user.id, user.username)
-                    AuditLogger.log_mfa_verify_success(user.id, user.username, method)
-
-                    target = next_param if _is_safe_redirect_target(next_param) else url_for('admin')
-                    return redirect(target)
-                else:
-                    AuditLogger.log_mfa_verify_failure(user.id, user.username)
-                    error = 'Invalid verification code.'
-
-        return render_template(
-            'mfa_verify.html',
-            error=error,
-            next=next_param or url_for('admin'),
-            username=user.username
-        )
+    return render_template(
+        'mfa_verify.html',
+        error=error,
+        next=next_param or url_for('admin'),
+        username=user.username
+    )
 
 
 __all__ = ['register_auth_routes']
