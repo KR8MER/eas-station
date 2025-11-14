@@ -143,6 +143,29 @@
         .alert {
             border-radius: var(--radius-md);
         }
+        .badge-showcase { 
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            align-items: center;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: var(--radius-md);
+            margin-top: 1rem;
+        }
+        .badge-showcase img {
+            height: 20px;
+            transition: transform 0.2s;
+        }
+        .badge-showcase img:hover {
+            transform: scale(1.05);
+        }
+        .distro-logo {
+            height: 48px;
+            width: auto;
+            margin-right: 1rem;
+            filter: brightness(1.1);
+        }
     </style>
 {% endblock %}
 
@@ -153,12 +176,44 @@
         <div class="col-12">
             <div class="card system-overview">
                 <div class="card-body">
-                    <h2 class="mb-0">
-                        <i class="fas fa-heartbeat me-2"></i> System Health Monitor
-                    </h2>
-                    <p class="mb-0 mt-2 opacity-75">
-                        Comprehensive monitoring of system resources, hardware, and container health
-                    </p>
+                    <div class="d-flex align-items-center mb-3">
+                        {% if distro_logo_url %}
+                        <img src="{{ distro_logo_url }}" alt="Distribution Logo" class="distro-logo" onerror="this.style.display='none'">
+                        {% endif %}
+                        <div>
+                            <h2 class="mb-0">
+                                <i class="fas fa-heartbeat me-2"></i> System Health Monitor
+                            </h2>
+                            <p class="mb-0 mt-2 opacity-75">
+                                Comprehensive monitoring of system resources, hardware, and container health
+                            </p>
+                        </div>
+                    </div>
+                    {% if shields_badges %}
+                    <div class="badge-showcase">
+                        {% if shields_badges.os %}
+                        <img src="{{ shields_badges.os }}" alt="OS Badge">
+                        {% endif %}
+                        {% if shields_badges.kernel %}
+                        <img src="{{ shields_badges.kernel }}" alt="Kernel Badge">
+                        {% endif %}
+                        {% if shields_badges.architecture %}
+                        <img src="{{ shields_badges.architecture }}" alt="Architecture Badge">
+                        {% endif %}
+                        {% if shields_badges.cores %}
+                        <img src="{{ shields_badges.cores }}" alt="CPU Cores Badge">
+                        {% endif %}
+                        {% if shields_badges.cpu %}
+                        <img src="{{ shields_badges.cpu }}" alt="CPU Usage Badge" id="cpu-badge">
+                        {% endif %}
+                        {% if shields_badges.memory %}
+                        <img src="{{ shields_badges.memory }}" alt="Memory Usage Badge" id="memory-badge">
+                        {% endif %}
+                        {% if shields_badges.uptime %}
+                        <img src="{{ shields_badges.uptime }}" alt="Uptime Badge" id="uptime-badge">
+                        {% endif %}
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -1449,6 +1504,31 @@
 
             const virtualization = system.virtualization ? String(system.virtualization) : 'Bare metal';
             setElementText('virtualization-value', virtualization);
+            
+            // Update dynamic badges if available
+            if (data.shields_badges) {
+                updateBadges(data.shields_badges, data.cpu, data.memory);
+            }
+        }
+        
+        function updateBadges(badges, cpu, memory) {
+            // Update CPU badge
+            const cpuBadge = document.getElementById('cpu-badge');
+            if (cpuBadge && badges.cpu) {
+                cpuBadge.src = badges.cpu;
+            }
+            
+            // Update memory badge
+            const memoryBadge = document.getElementById('memory-badge');
+            if (memoryBadge && badges.memory) {
+                memoryBadge.src = badges.memory;
+            }
+            
+            // Update uptime badge
+            const uptimeBadge = document.getElementById('uptime-badge');
+            if (uptimeBadge && badges.uptime) {
+                uptimeBadge.src = badges.uptime;
+            }
         }
 
         function renderCpuCard(cpu) {
