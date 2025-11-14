@@ -1,30 +1,67 @@
 /**
  * EAS Station - Theme Management Module
- * Handles light/dark theme toggling and persistence
+ * Handles theme switching and persistence with support for multiple themes
  */
 
 (function() {
     'use strict';
 
+    // Available themes
+    const THEMES = {
+        'cosmo': {
+            name: 'Cosmo',
+            mode: 'light',
+            description: 'Default light theme with vibrant colors'
+        },
+        'dark': {
+            name: 'Dark',
+            mode: 'dark',
+            description: 'Enhanced dark theme with improved readability'
+        }
+    };
+
+    const DEFAULT_THEME = 'cosmo';
+
     /**
-     * Toggle between light and dark theme
+     * Toggle between light and dark theme modes
      */
     function toggleTheme() {
-        const currentTheme = document.documentElement.getAttribute('data-theme');
-        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        const currentTheme = getCurrentTheme();
+        const currentMode = THEMES[currentTheme]?.mode || 'light';
+        
+        // Find the next theme with opposite mode
+        let newTheme = currentMode === 'dark' ? DEFAULT_THEME : 'dark';
 
-        document.documentElement.setAttribute('data-theme', newTheme);
-        localStorage.setItem('theme', newTheme);
+        setTheme(newTheme);
+    }
+
+    /**
+     * Set a specific theme
+     */
+    function setTheme(themeName) {
+        if (!THEMES[themeName]) {
+            console.warn(`Theme "${themeName}" not found, using default`);
+            themeName = DEFAULT_THEME;
+        }
+
+        const theme = THEMES[themeName];
+        document.documentElement.setAttribute('data-theme', themeName);
+        document.documentElement.setAttribute('data-theme-mode', theme.mode);
+        localStorage.setItem('theme', themeName);
 
         // Update icon
         const icon = document.getElementById('theme-icon');
         if (icon) {
-            icon.className = newTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+            icon.className = theme.mode === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
         }
 
         // Dispatch custom event for other modules to listen to
         window.dispatchEvent(new CustomEvent('theme-changed', {
-            detail: { theme: newTheme }
+            detail: { 
+                theme: themeName,
+                mode: theme.mode,
+                themeName: theme.name
+            }
         }));
     }
 
@@ -32,14 +69,8 @@
      * Load saved theme from localStorage
      */
     function loadTheme() {
-        const savedTheme = localStorage.getItem('theme') || 'light';
-        document.documentElement.setAttribute('data-theme', savedTheme);
-
-        const icon = document.getElementById('theme-icon');
-        if (icon) {
-            icon.className = savedTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
-        }
-
+        const savedTheme = localStorage.getItem('theme') || DEFAULT_THEME;
+        setTheme(savedTheme);
         return savedTheme;
     }
 
@@ -47,7 +78,22 @@
      * Get current theme
      */
     function getCurrentTheme() {
-        return document.documentElement.getAttribute('data-theme') || 'light';
+        return document.documentElement.getAttribute('data-theme') || DEFAULT_THEME;
+    }
+
+    /**
+     * Get current theme mode (light or dark)
+     */
+    function getCurrentThemeMode() {
+        const theme = getCurrentTheme();
+        return THEMES[theme]?.mode || 'light';
+    }
+
+    /**
+     * Get all available themes
+     */
+    function getAvailableThemes() {
+        return THEMES;
     }
 
     // Initialize theme on module load
@@ -59,6 +105,9 @@
 
     // Export functions to window
     window.toggleTheme = toggleTheme;
+    window.setTheme = setTheme;
     window.loadTheme = loadTheme;
     window.getCurrentTheme = getCurrentTheme;
+    window.getCurrentThemeMode = getCurrentThemeMode;
+    window.getAvailableThemes = getAvailableThemes;
 })();
