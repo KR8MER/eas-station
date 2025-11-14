@@ -24,6 +24,9 @@ EAS Station’s reference build centers on a Raspberry Pi 5 (4 GB RAM baseli
 - **Deployment Model:** Container-first architecture designed for on-premise or field deployments with external PostgreSQL/PostGIS database service.
 - **Operational Focus:** Multi-source alert aggregation, automatic SAME broadcast generation, SDR-based verification, spatial boundary awareness, and audit trail management.
 
+## Current Development Status
+See the **[Master Roadmap](../roadmap/master_todo)** for detailed progress on all nine requirement areas, including completed features like audio ingest, security controls, and analytics.
+
 ## Core Services
 
 ![Diagram showing the ingestion and control services flowing into the processing core, which then feeds verification and output capabilities.](../assets/diagrams/core-services-overview.svg)

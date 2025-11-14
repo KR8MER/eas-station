@@ -98,11 +98,11 @@ If you're new to EAS Station, start here:
 | Document | Description |
 |----------|-------------|
 | [📖 About EAS Station](reference/ABOUT) | Project background and goals |
-| [📄 Changelog](/docs/reference/CHANGELOG) | Version history and changes |
-| [🧭 Feature Matrix](/docs/reference/FEATURE_MATRIX) | Documentation coverage by feature |
-| [🎵 Audio System Changelog (2025-11-07)](/docs/CHANGELOG_2025-11-07) | **NEW:** Professional audio subsystem build log |
-| [📊 Documentation Audit](/docs/documentation_audit) | Documentation status and maintenance tracking |
-| [🗃️ Documentation Archive](/docs/archive/README) | Historical bug reports & security analyses |
+| [📄 Changelog](reference/CHANGELOG) | Version history and changes |
+| [🧭 Feature Matrix](reference/FEATURE_MATRIX) | Documentation coverage by feature |
+| [🎵 Audio System Changelog (2025-11-07)](CHANGELOG_2025-11-07) | **NEW:** Professional audio subsystem build log |
+| [📊 Documentation Audit](documentation_audit) | Documentation status and maintenance tracking |
+| [🗃️ Documentation Archive](archive/README) | Historical bug reports & security analyses |
 | [🔐 Security Policy](development/AGENTS) | Security considerations |
 | [📜 License](https://github.com/KR8MER/eas-station/blob/main/LICENSE) | MIT License terms |
 
@@ -112,11 +112,11 @@ If you're new to EAS Station, start here:
 | Document | Description |
 |----------|-------------|
 | [🐳 Docker Deployment](https://github.com/KR8MER/eas-station/blob/main/README.md#-quick-start) | Container setup and management |
-| [🚀 Portainer Quick Start](/docs/deployment/portainer/PORTAINER_QUICK_START) | Five-minute stack deployment |
-| [🗄️ Portainer Database Setup](/docs/deployment/portainer/PORTAINER_DATABASE_SETUP) | External database configuration |
-| [🌐 Portainer Network Setup](/docs/deployment/portainer/PORTAINER_NETWORK_SETUP) | Reverse proxy and DNS guidance |
-| [🔄 One-Button Upgrade](/docs/guides/one_button_upgrade) | Automated update process |
-| [🧰 Post Install Checklist](/docs/deployment/post_install) | Finalize services and accounts |
+| [🚀 Portainer Quick Start](deployment/portainer/PORTAINER_QUICK_START) | Five-minute stack deployment |
+| [🗄️ Portainer Database Setup](deployment/portainer/PORTAINER_DATABASE_SETUP) | External database configuration |
+| [🌐 Portainer Network Setup](deployment/portainer/PORTAINER_NETWORK_SETUP) | Reverse proxy and DNS guidance |
+| [🔄 One-Button Upgrade](guides/one_button_upgrade) | Automated update process |
+| [🧰 Post Install Checklist](deployment/post_install) | Finalize services and accounts |
 | [📊 Performance Tuning](audio#performance-optimization) | Optimization guidelines |
 | [🔍 Monitoring & Logging](guides/HELP#troubleshooting) | System observability |
 
@@ -124,8 +124,8 @@ If you're new to EAS Station, start here:
 | Document | Description |
 |----------|-------------|
 | [📡 FCC Part 11 Compliance](reference/CFR-2010-title47-vol1-sec11-31.xml) | Regulatory requirements |
-| [🌐 CAP Protocol Guide](/docs/guides/ipaws_feed_integration) | Common Alert Protocol implementation |
-| [📻 SAME Encoding Standards](/docs/architecture/THEORY_OF_OPERATION) | Standard Alert Messaging Protocol |
+| [🌐 CAP Protocol Guide](guides/ipaws_feed_integration) | Common Alert Protocol implementation |
+| [📻 SAME Encoding Standards](architecture/THEORY_OF_OPERATION) | Standard Alert Messaging Protocol |
 | [🗺️ Geographic Standards](guides/HELP#managing-boundaries-and-alerts) | Location-based filtering rules |
 
 ## 📁 File Organization
@@ -146,9 +146,9 @@ docs/
 
 ### By User Type
 - **🎯 New Users**: Start with [Quick Start](https://github.com/KR8MER/eas-station/blob/main/README.md#-quick-start)
-- **👨‍💻 Operators**: See [Help & Operations Guide](/docs/guides/HELP)
+- **👨‍💻 Operators**: See [Help & Operations Guide](guides/HELP)
 - **🔧 System Admins**: Check [Deployment Guides](https://github.com/KR8MER/eas-station/blob/main/README.md#-quick-start)
-- **💻 Developers**: Review [Development Setup](/docs/development/AGENTS)
+- **💻 Developers**: Review [Development Setup](development/AGENTS)
 
 ### By Task
 - **🚀 Installation**: [Installation Guides](#quick-start)
@@ -191,11 +191,11 @@ docs/
 - **Use Ctrl+F / Cmd+F** on this page to search for any keyword
 - **Start with [Main README](https://github.com/KR8MER/eas-station/blob/main/README.md)** for visual navigation
 - **Bookmark frequently used guides** from the web interface
-- **Check [CHANGELOG](/docs/reference/CHANGELOG)** for recent changes
-- **Read [Development Guide](/docs/development/AGENTS)** before contributing code
+- **Check [CHANGELOG](reference/CHANGELOG)** for recent changes
+- **Read [Development Guide](development/AGENTS)** before contributing code
 
 ---
 
 **Last Updated**: 2025-11-08
 **Version**: 2.1
-**For questions or contributions, see the [Contributing Guide](/docs/process/CONTRIBUTING)**
+**For questions or contributions, see the [Contributing Guide](process/CONTRIBUTING)**
