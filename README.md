@@ -119,6 +119,8 @@ Then open **https://localhost** in your browser (HTTPS enabled by default).
 </tr>
 </table>
 
+For complete documentation coverage, see **[Documentation Index](docs/INDEX)** with searchable topics.
+
 ### Browse Full Documentation
 
 📖 **[View Complete Documentation Site](https://kr8mer.github.io/eas-station/)** (Coming Soon)

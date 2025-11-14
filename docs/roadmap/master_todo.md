@@ -121,6 +121,11 @@ Each roadmap item below references the requirement(s) it unlocks so contributors
 
 ---
 
+## Using Completed Features
+For operational guidance on using completed roadmap items:
+- **[Help & Operations Guide](../guides/HELP)** - Daily operations and workflows
+- **[Setup Instructions](../guides/SETUP_INSTRUCTIONS)** - Initial configuration
+
 ## Getting Started Checklist
 Use this quick triage list when kicking off a new contribution:
 1. Pick a roadmap item above and review the referenced modules/templates.
