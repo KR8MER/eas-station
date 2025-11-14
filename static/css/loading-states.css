@@ -311,21 +311,21 @@
 }
 
 /* Dark Mode Support */
-[data-theme="dark"] .skeleton {
+[data-theme-mode="dark"] .skeleton {
     background: linear-gradient(90deg, #2d3748 25%, #4a5568 50%, #2d3748 75%);
     background-size: 200% 100%;
     animation: loading-dark 1.5s infinite;
 }
 
-[data-theme="dark"] .skeleton-table-row {
+[data-theme-mode="dark"] .skeleton-table-row {
     border-bottom-color: #4a5568;
 }
 
-[data-theme="dark"] .skeleton-metric {
+[data-theme-mode="dark"] .skeleton-metric {
     border-color: #4a5568;
 }
 
-[data-theme="dark"] .spinner-overlay {
+[data-theme-mode="dark"] .spinner-overlay {
     background-color: rgba(0, 0, 0, 0.8);
 }
 

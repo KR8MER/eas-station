@@ -65,6 +65,13 @@
     /* Transitions */
     --transition-fast: 0.2s ease-in-out;
     --transition-medium: 0.3s ease-in-out;
+
+    /* Logo Treatment */
+    --logo-backdrop: rgba(255, 255, 255, 0.96);
+    --logo-border-color: rgba(32, 72, 133, 0.22);
+    --logo-shadow: 0 12px 28px rgba(20, 33, 55, 0.35);
+    --logo-padding: 0.4rem 0.9rem;
+    --logo-radius: 14px;
 }
 
 /* Dark Theme - Enhanced for Better Readability */
@@ -72,74 +79,84 @@
     /* Primary Brand Colors - Brighter and more vibrant */
     --primary-color: #6b96ff;
     --primary-soft: #5580d8;
-    --secondary-color: #c99dff;
-    --secondary-soft: #d0a0f0;
-    --accent-color: #a0c0ff;
-    
+    --secondary-color: #c9a8ff;
+    --secondary-soft: #d5b5ff;
+    --accent-color: #a8c6ff;
+
     /* Status Colors - Enhanced contrast */
-    --success-color: #5fffd0;
-    --danger-color: #ffa0b0;
-    --warning-color: #ffe0a0;
-    --info-color: #a0c8ff;
-    --critical-color: #ffa0c8;
-    
-    /* Background Colors - Lighter for better contrast */
-    --light-color: #3a4560;
-    --dark-color: #1a2030;
-    --bg-color: #1e2838;
-    --surface-color: #2a3548;
-    --bg-card: #2a3548;
-    --bg-primary: #1a2030;
-    
+    --success-color: #67ffd6;
+    --danger-color: #ffafbf;
+    --warning-color: #ffe3ad;
+    --info-color: #adcfff;
+    --critical-color: #ffb0d4;
+
+    /* Background Colors - Lifted for better contrast */
+    --light-color: #455169;
+    --dark-color: #161d2b;
+    --bg-color: #1b2434;
+    --surface-color: #243046;
+    --bg-card: #243046;
+    --bg-primary: #161d2b;
+
     /* Text Colors - Maximum readability with high contrast */
     --text-color: #ffffff;
-    --text-secondary: #d0d8f0;
-    --text-muted: #a0b0d0;
-    
+    --text-secondary: #dbe4f8;
+    --text-muted: #acbad8;
+
     /* Borders & Shadows */
-    --border-color: #404d68;
-    --shadow-color: rgba(0, 0, 0, 0.5);
-    --shadow: rgba(0, 0, 0, 0.5);
-    
+    --border-color: #40516c;
+    --shadow-color: rgba(8, 11, 19, 0.55);
+    --shadow: rgba(8, 11, 19, 0.55);
+
     /* Semantic Aliases */
-    --accent-primary: #a0c0ff;
-    --accent-secondary: #d0a0f0;
-    --info: #a0c8ff;
-    --success: #5fffd0;
-    --warning: #ffe0a0;
-    --danger: #ffa0b0;
+    --accent-primary: #a8c6ff;
+    --accent-secondary: #d5b5ff;
+    --info: #adcfff;
+    --success: #67ffd6;
+    --warning: #ffe3ad;
+    --danger: #ffafbf;
+
+    /* Branding */
+    --logo-backdrop: rgba(255, 255, 255, 0.95);
+    --logo-border-color: rgba(173, 207, 255, 0.45);
+    --logo-shadow: 0 14px 32px rgba(5, 9, 16, 0.55);
 }
 
 /* Coffee Theme - Warm coffee-inspired dark theme */
 [data-theme="coffee"] {
-    --primary-color: #d4a574;
-    --primary-soft: #c4a57b;
-    --secondary-color: #b89968;
-    --secondary-soft: #c4a57b;
-    --accent-color: #e0c090;
-    --success-color: #90d070;
-    --danger-color: #ff9090;
-    --warning-color: #ffd070;
-    --info-color: #80c8ff;
-    --critical-color: #ff7070;
-    --light-color: #4a3628;
-    --dark-color: #2a1a10;
-    --bg-color: #2a2018;
-    --surface-color: #3a2d20;
-    --bg-card: #3a2d20;
-    --bg-primary: #2a1a10;
-    --text-color: #fff8f0;
-    --text-secondary: #f0e0c8;
-    --text-muted: #c8b090;
-    --border-color: #5a4838;
-    --shadow-color: rgba(0, 0, 0, 0.6);
-    --shadow: rgba(0, 0, 0, 0.6);
-    --accent-primary: #e0c090;
-    --accent-secondary: #c4a57b;
-    --info: #80c8ff;
-    --success: #90d070;
-    --warning: #ffd070;
-    --danger: #ff9090;
+    --primary-color: #e2b37f;
+    --primary-soft: #d5a674;
+    --secondary-color: #c7a06e;
+    --secondary-soft: #d1aa78;
+    --accent-color: #edc999;
+    --success-color: #9cda7a;
+    --danger-color: #ff9da0;
+    --warning-color: #ffd886;
+    --info-color: #8bd1ff;
+    --critical-color: #ff7f7f;
+    --light-color: #5b4333;
+    --dark-color: #281c12;
+    --bg-color: #32261c;
+    --surface-color: #403024;
+    --bg-card: #403024;
+    --bg-primary: #281c12;
+    --text-color: #fff9f2;
+    --text-secondary: #f4e6d0;
+    --text-muted: #d9c2a5;
+    --border-color: #6a5240;
+    --shadow-color: rgba(10, 7, 4, 0.6);
+    --shadow: rgba(10, 7, 4, 0.6);
+    --accent-primary: #edc999;
+    --accent-secondary: #d1aa78;
+    --info: #8bd1ff;
+    --success: #9cda7a;
+    --warning: #ffd886;
+    --danger: #ff9da0;
+
+    /* Branding */
+    --logo-backdrop: rgba(255, 245, 232, 0.94);
+    --logo-border-color: rgba(210, 170, 120, 0.4);
+    --logo-shadow: 0 12px 30px rgba(23, 15, 8, 0.55);
 }
 
 /* Spring Theme - Fresh spring-inspired light theme */
@@ -398,6 +415,117 @@
     --danger: #ef5350;
 }
 
+/* Aurora Theme - Polar lights inspired dark theme */
+[data-theme="aurora"] {
+    --primary-color: #32c7c2;
+    --primary-soft: #3bd5cf;
+    --secondary-color: #8a5ddc;
+    --secondary-soft: #9f75f0;
+    --accent-color: #6ff0ff;
+    --success-color: #6df7c5;
+    --danger-color: #ff8fa2;
+    --warning-color: #ffd27a;
+    --info-color: #7bbdff;
+    --critical-color: #ff7fa1;
+    --light-color: #3a4f65;
+    --dark-color: #0a1726;
+    --bg-color: #0f1c2d;
+    --surface-color: #182537;
+    --bg-card: #182537;
+    --bg-primary: #0a1726;
+    --text-color: #f4f8ff;
+    --text-secondary: #c5ddff;
+    --text-muted: #8ea6c7;
+    --border-color: #264768;
+    --shadow-color: rgba(6, 17, 31, 0.55);
+    --shadow: rgba(6, 17, 31, 0.55);
+    --accent-primary: #6ff0ff;
+    --accent-secondary: #9f75f0;
+    --info: #7bbdff;
+    --success: #6df7c5;
+    --warning: #ffd27a;
+    --danger: #ff8fa2;
+
+    /* Branding */
+    --logo-backdrop: rgba(255, 255, 255, 0.92);
+    --logo-border-color: rgba(123, 189, 255, 0.48);
+    --logo-shadow: 0 16px 36px rgba(5, 14, 29, 0.6);
+}
+
+/* Nebula Theme - Deep space magenta & cyan dark theme */
+[data-theme="nebula"] {
+    --primary-color: #ff6ac1;
+    --primary-soft: #ff82cb;
+    --secondary-color: #5e7bff;
+    --secondary-soft: #7a95ff;
+    --accent-color: #8ef0ff;
+    --success-color: #71f9b8;
+    --danger-color: #ff7f9d;
+    --warning-color: #ffd47a;
+    --info-color: #7ab7ff;
+    --critical-color: #ff5d9d;
+    --light-color: #46385a;
+    --dark-color: #140621;
+    --bg-color: #19082b;
+    --surface-color: #221036;
+    --bg-card: #221036;
+    --bg-primary: #140621;
+    --text-color: #fdf7ff;
+    --text-secondary: #d7c6ff;
+    --text-muted: #a990d6;
+    --border-color: #3b2b55;
+    --shadow-color: rgba(12, 3, 23, 0.6);
+    --shadow: rgba(12, 3, 23, 0.6);
+    --accent-primary: #8ef0ff;
+    --accent-secondary: #7a95ff;
+    --info: #7ab7ff;
+    --success: #71f9b8;
+    --warning: #ffd47a;
+    --danger: #ff7f9d;
+
+    /* Branding */
+    --logo-backdrop: rgba(255, 255, 255, 0.9);
+    --logo-border-color: rgba(122, 149, 255, 0.55);
+    --logo-shadow: 0 18px 40px rgba(10, 2, 22, 0.6);
+}
+
+/* Sunset Theme - Golden hour inspired light theme */
+[data-theme="sunset"] {
+    --primary-color: #ff7849;
+    --primary-soft: #ff8a5f;
+    --secondary-color: #ffb347;
+    --secondary-soft: #ffc76b;
+    --accent-color: #ff9e5a;
+    --success-color: #6fd7a3;
+    --danger-color: #ff6b7f;
+    --warning-color: #ffd166;
+    --info-color: #6ec8ff;
+    --critical-color: #ff4f6f;
+    --light-color: #fff1e6;
+    --dark-color: #7a341a;
+    --bg-color: #fff5eb;
+    --surface-color: #ffffff;
+    --bg-card: #ffffff;
+    --bg-primary: #7a341a;
+    --text-color: #7a341a;
+    --text-secondary: #d47447;
+    --text-muted: #ffab76;
+    --border-color: #ffd9c2;
+    --shadow-color: rgba(255, 120, 73, 0.18);
+    --shadow: rgba(255, 120, 73, 0.18);
+    --accent-primary: #ff9e5a;
+    --accent-secondary: #ffc76b;
+    --info: #6ec8ff;
+    --success: #6fd7a3;
+    --warning: #ffd166;
+    --danger: #ff6b7f;
+
+    /* Branding */
+    --logo-backdrop: rgba(255, 255, 255, 0.96);
+    --logo-border-color: rgba(255, 153, 102, 0.38);
+    --logo-shadow: 0 12px 26px rgba(122, 52, 26, 0.28);
+}
+
 /* ============================================
    BASE TYPOGRAPHY & LAYOUT
    ============================================ */
@@ -412,6 +540,20 @@ body {
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     transition: background-color var(--transition-medium), color var(--transition-medium);
+}
+
+[data-theme-mode="dark"] body {
+    color: var(--text-color, var(--color-text-primary, #f5f8ff));
+    background-color: var(--bg-color, #141b29);
+}
+
+[data-theme-mode="dark"] a {
+    color: var(--accent-color, var(--color-info, #60a5fa));
+}
+
+[data-theme-mode="dark"] a:hover,
+[data-theme-mode="dark"] a:focus {
+    color: var(--color-text-primary, #ffffff);
 }
 
 main {

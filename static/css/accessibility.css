@@ -33,24 +33,6 @@ select:focus,
     }
 }
 
-/* Skip Links */
-.skip-link {
-    position: absolute;
-    top: -40px;
-    left: 6px;
-    background: #0056b3;
-    color: white;
-    padding: 8px;
-    text-decoration: none;
-    border-radius: 4px;
-    z-index: 10000;
-    transition: top 0.3s;
-}
-
-.skip-link:focus {
-    top: 6px;
-}
-
 /* ARIA Labels for Screen Readers */
 .sr-only {
     position: absolute;
@@ -434,20 +416,20 @@ select:focus,
 }
 
 /* Dark mode accessibility */
-[data-theme="dark"] .focus-visible {
+[data-theme-mode="dark"] .focus-visible {
     outline-color: #60a5fa;
 }
 
-[data-theme="dark"] *:focus {
+[data-theme-mode="dark"] *:focus {
     outline-color: #60a5fa;
 }
 
-[data-theme="dark"] .btn:focus {
+[data-theme-mode="dark"] .btn:focus {
     outline-color: #60a5fa;
 }
 
-[data-theme="dark"] .form-control:focus,
-[data-theme="dark"] .form-select:focus {
+[data-theme-mode="dark"] .form-control:focus,
+[data-theme-mode="dark"] .form-select:focus {
     outline-color: #60a5fa;
 }
 

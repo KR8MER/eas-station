@@ -53,6 +53,11 @@ tracks releases under the 2.x series.
   - SVG filters for depth, glow effects, and contemporary design polish
 
 ### Fixed
+- Force dark-mode typography and link treatments to use the light contrast palette when `data-theme-mode="dark"` is active so
+  copy remains readable across every dark theme variation.
+- Remove the auto-injected skip navigation anchors so the navbar's leading section only presents the wordmark and health status
+  indicator.
+- Improved readability of dark UI themes by brightening background surfaces, borders, and text contrast variables shared across the design system.
 - Surface actionable diagnostics when GPIO hardware is inaccessible, highlighting missing
   /dev/gpiomem access and read-only sysfs mounts so deployments can correct permissions.
 - Replaced the deprecated `RPi.GPIO` backend with `gpiozero` output devices and ensured typing imports
@@ -63,6 +68,7 @@ tracks releases under the 2.x series.
 - Added Raspberry Pi 5-compatible `lgpio` fallback for GPIO control so BCM pins configured as active-high no longer enter an error state when `RPi.GPIO` is unavailable.
 
 ### Changed
+- Refined the theming system with higher-contrast logo treatments and added Aurora, Nebula, and Sunset presets to expand the built-in palette while keeping the wordmark legible across gradients.
 - **Consolidated stream support in Audio Sources system** - Removed stream support from RadioReceiver model and UI, centralizing all HTTP/M3U stream configuration through the Audio Sources page where StreamSourceAdapter already provided full functionality
   - Removed `source_type` and `stream_url` fields from RadioReceiver database model
   - RadioReceiver now exclusively handles SDR hardware (RTL-SDR, Airspy)

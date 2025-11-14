@@ -150,10 +150,10 @@
 }
 
 /* ============================================
-   DARK THEME
+   DARK THEME (APPLIES TO ALL DARK MODES)
    ============================================ */
 
-[data-theme="dark"] {
+[data-theme-mode="dark"] {
     /* Primary Colors (Lightened for dark backgrounds) */
     --color-primary-50: #1a43ad;
     --color-primary-100: #2756ba;
@@ -196,18 +196,18 @@
     --color-info-dark: #dbeafe;
     
     /* Semantic Colors */
-    --color-background: #0f1419;
-    --color-surface: #1a1f26;
-    --color-surface-elevated: #242a33;
-    
-    --color-text-primary: #f8f9fa;
-    --color-text-secondary: #ced4da;
-    --color-text-muted: #868e96;
+    --color-background: #141b29;
+    --color-surface: #1f2736;
+    --color-surface-elevated: #283142;
+
+    --color-text-primary: #f5f8ff;
+    --color-text-secondary: #d5deed;
+    --color-text-muted: #a8b4cc;
     --color-text-inverse: #212529;
     
-    --color-border: #3a3f47;
-    --color-border-light: #2d3238;
-    --color-border-dark: #4a5058;
+    --color-border: #38465a;
+    --color-border-light: #2a3547;
+    --color-border-dark: #46556b;
     
     /* Shadows (Darker for dark mode) */
     --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.3);

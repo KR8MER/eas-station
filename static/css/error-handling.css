@@ -438,33 +438,33 @@
 }
 
 /* Dark Mode Support */
-[data-theme="dark"] .error-container,
-[data-theme="dark"] .warning-container,
-[data-theme="dark"] .success-container,
-[data-theme="dark"] .info-container {
+[data-theme-mode="dark"] .error-container,
+[data-theme-mode="dark"] .warning-container,
+[data-theme-mode="dark"] .success-container,
+[data-theme-mode="dark"] .info-container {
     color: #e2e8f0;
 }
 
-[data-theme="dark"] .inline-error {
+[data-theme-mode="dark"] .inline-error {
     color: #feb2b2;
 }
 
-[data-theme="dark"] .status-indicator.status-error {
+[data-theme-mode="dark"] .status-indicator.status-error {
     background-color: #742a2a;
     color: #feb2b2;
 }
 
-[data-theme="dark"] .status-indicator.status-warning {
+[data-theme-mode="dark"] .status-indicator.status-warning {
     background-color: #744210;
     color: #f6e05e;
 }
 
-[data-theme="dark"] .status-indicator.status-success {
+[data-theme-mode="dark"] .status-indicator.status-success {
     background-color: #22543d;
     color: #9ae6b4;
 }
 
-[data-theme="dark"] .status-indicator.status-info {
+[data-theme-mode="dark"] .status-indicator.status-info {
     background-color: #2a4365;
     color: #90cdf4;
 }
