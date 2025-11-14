@@ -998,7 +998,7 @@
                                 <button type="button" class="btn btn-outline-info" onclick="toggleRawData()">
                                     <i class="fas fa-code"></i> <span id="raw-data-btn-text">View Raw CAP Data</span>
                                 </button>
-                                <a href="{{ url_for('alert_detail_pdf', alert_id=alert.id) }}" target="_blank" class="btn btn-outline-secondary">
+                                <a href="{{ url_for('api.alert_detail_pdf', alert_id=alert.id) }}" target="_blank" class="btn btn-outline-secondary">
                                     <i class="fas fa-file-pdf"></i> Export PDF
                                 </a>
                                 <button type="button" class="btn btn-outline-success" onclick="findSimilarAlerts()">
