@@ -54,6 +54,7 @@ If you're new to EAS Station, start here:
 | [🔗 Audio System Access Guide](AUDIO_SYSTEM_ACCESS_GUIDE) | **NEW:** Quick reference for audio features |
 | [🎧 Audio Monitoring Dashboard](audio/AUDIO_MONITORING) | Live stream viewer and troubleshooting |
 | [💡 LED Sign Integration](guides/HELP#led-sign-not-responding) | Alpha Protocol signage |
+| [🔌 Serial Bridge Setup](guides/SERIAL_ETHERNET_BRIDGE_SETUP) | Configure Lantronix and Linovision adapters |
 | [📻 Radio Management](guides/radio_usb_passthrough) | USB radio devices |
 
 ### Web Interface & Frontend
