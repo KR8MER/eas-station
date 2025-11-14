@@ -1,7 +1,8 @@
-"""Admin dashboard and user management routes."""
 from __future__ import annotations
 
-from flask import Blueprint
+"""Admin dashboard and user management routes."""
+
+from flask import Blueprint, current_app
 
 import re
 from typing import Dict, List
@@ -50,7 +51,7 @@ def admin():
         try:
             return operation()
         except SQLAlchemyError as exc:  # pragma: no cover - defensive
-            logger.warning('Failed to %s: %s', description, exc)
+            current_app.logger.warning('Failed to %s: %s', description, exc)
             try:
                 db.session.rollback()
             except SQLAlchemyError:  # pragma: no cover - defensive fallback
@@ -99,7 +100,7 @@ def admin():
             location_settings_view.setdefault('same_codes', manual_same_defaults)
         location_settings_view.setdefault('fips_codes', fips_defaults)
 
-        eas_enabled = app.config.get('EAS_BROADCAST_ENABLED', False)
+        eas_enabled = current_app.config.get('EAS_BROADCAST_ENABLED', False)
         total_eas_messages = 0
         recent_eas_messages: List[EASMessage] = []
         if eas_enabled:
@@ -146,7 +147,7 @@ def admin():
             eas_enabled=eas_enabled,
             eas_total_messages=total_eas_messages,
             eas_recent_messages=recent_eas_messages,
-            eas_web_subdir=app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages'),
+            eas_web_subdir=current_app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages'),
             eas_event_codes=eas_event_options,
             eas_originator=eas_config.get('originator', 'WXR'),
             eas_station_id=eas_config.get('station_id', 'EASNODES'),
@@ -168,7 +169,7 @@ def admin():
             db.session.rollback()
         except Exception:  # pragma: no cover - defensive fallback
             pass
-        logger.error('Error rendering admin template: %s', exc)
+        current_app.logger.error('Error rendering admin template: %s', exc)
         return "<h1>Admin Interface</h1><p>Admin panel loading...</p><p><a href='/'>← Back to Main</a></p>"
     
 
