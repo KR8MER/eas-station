@@ -934,7 +934,12 @@ def _simplify_block_devices(entries: List[Dict[str, Any]]) -> Tuple[List[Dict[st
 def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Collect S.M.A.R.T. health summaries for detected block devices."""
 
-    result: Dict[str, Any] = {"available": False, "devices": [], "error": None}
+    result: Dict[str, Any] = {
+        "available": False, 
+        "devices": [], 
+        "error": None,
+        "install_guide": None
+    }
 
     smartctl_path = shutil.which("smartctl")
     if not smartctl_path:
@@ -948,6 +953,9 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
                 break
     if not smartctl_path:
         result["error"] = "smartctl utility not installed"
+        result["install_guide"] = "Install smartmontools: apt install smartmontools (Debian/Ubuntu) or yum install smartmontools (RHEL/CentOS)"
+        if logger:
+            logger.info("SMART monitoring unavailable: smartctl not found. Install smartmontools package.")
         return result
 
     result["available"] = True
@@ -1000,8 +1008,20 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
                 check=False,
                 timeout=15,
             )
+        except subprocess.TimeoutExpired:  # pragma: no cover - depends on hardware
+            device_result["error"] = "smartctl query timed out (device may be sleeping or unresponsive)"
+            if logger:
+                logger.warning("smartctl timeout for %s", path)
+            result["devices"].append(device_result)
+            continue
+        except PermissionError:  # pragma: no cover - depends on user permissions
+            device_result["error"] = "Permission denied (may require root/sudo privileges)"
+            if logger:
+                logger.warning("smartctl permission denied for %s", path)
+            result["devices"].append(device_result)
+            continue
         except Exception as exc:  # pragma: no cover - depends on host configuration
-            device_result["error"] = str(exc)
+            device_result["error"] = f"smartctl execution failed: {str(exc)}"
             if logger:
                 logger.warning("smartctl failed for %s: %s", path, exc)
             result["devices"].append(device_result)
@@ -1016,12 +1036,28 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
         if stderr_output and logger:
             logger.debug("smartctl stderr for %s: %s", path, stderr_output)
         
-        if not raw_output:
-            # Provide more detailed error message
-            error_msg = stderr_output if stderr_output else f"No output from smartctl (exit code: {completed.returncode})"
+        # smartctl exit codes: bit 0 = command line error, bit 1 = device open failed, 
+        # bit 2 = SMART command failed, bits 3-7 indicate disk problems
+        if completed.returncode != 0 and not raw_output:
+            # Provide more detailed error message based on exit code
+            if completed.returncode & 1:
+                error_msg = "Invalid command line arguments"
+            elif completed.returncode & 2:
+                error_msg = "Device open failed (device may be unavailable or requires elevated privileges)"
+            elif completed.returncode & 4:
+                error_msg = "SMART command failed (device may not support SMART)"
+            else:
+                error_msg = stderr_output if stderr_output else f"smartctl exited with code {completed.returncode}"
             device_result["error"] = error_msg
             if logger:
-                logger.warning("No smartctl output for %s: %s", path, error_msg)
+                logger.info("SMART not available for %s: %s", path, error_msg)
+            result["devices"].append(device_result)
+            continue
+        
+        if not raw_output:
+            device_result["error"] = "No data returned from smartctl"
+            if logger:
+                logger.debug("No smartctl output for %s", path)
             result["devices"].append(device_result)
             continue
 
@@ -1068,8 +1104,10 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
 
         result["devices"].append(device_result)
 
-    if not result["devices"]:
-        result["error"] = result.get("error") or "No eligible block devices detected"
+    if not result["devices"] and result["available"]:
+        result["error"] = "No SMART-capable block devices found"
+        if logger:
+            logger.info("SMART monitoring available but no eligible devices found")
 
     return result
 
