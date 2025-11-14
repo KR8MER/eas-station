@@ -57,7 +57,7 @@ tracks releases under the 2.x series.
   copy remains readable across every dark theme variation.
 - Remove the auto-injected skip navigation anchors so the navbar's leading section only presents the wordmark and health status
   indicator.
-- Improved readability of dark UI themes by brightening background surfaces, borders, and text contrast variables shared across the design system.
+- Improved readability of dark UI themes by brightening background surfaces, borders, and text contrast variables shared across the design system, and by mapping the design system colors to each theme's palette so custom dark presets retain their intended contrast.
 - Surface actionable diagnostics when GPIO hardware is inaccessible, highlighting missing
   /dev/gpiomem access and read-only sysfs mounts so deployments can correct permissions.
 - Replaced the deprecated `RPi.GPIO` backend with `gpiozero` output devices and ensured typing imports
