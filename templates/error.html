@@ -15,6 +15,15 @@
     .error-content {
         max-width: 600px;
         text-align: center;
+        background-color: #fff;
+        padding: 2rem;
+        border-radius: 0.5rem;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    }
+
+    [data-theme-mode="dark"] .error-content {
+        background-color: rgba(255, 255, 255, 0.05);
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.3);
     }
 
     .error-icon {
@@ -38,6 +47,10 @@
         font-size: 1.1rem;
         color: var(--bs-secondary);
         margin-bottom: 1.5rem;
+    }
+
+    [data-theme-mode="dark"] .error-message {
+        color: rgba(255, 255, 255, 0.7);
     }
 
     .error-details {

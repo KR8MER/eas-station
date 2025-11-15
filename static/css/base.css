@@ -783,3 +783,57 @@ a:focus {
         height: 40px;
     }
 }
+
+/* ============================================
+   BOOTSTRAP THEME OVERRIDES FOR DARK MODE
+   Fix white cards on dark themes
+   ============================================ */
+
+/* Override Bootstrap's hardcoded background colors to use theme variables */
+[data-theme-mode="dark"] .bg-white,
+[data-theme-mode="dark"] .card,
+[data-theme-mode="dark"] .bg-light {
+    background-color: var(--surface-color) !important;
+    color: var(--text-color) !important;
+}
+
+[data-theme-mode="dark"] .card-header.bg-light,
+[data-theme-mode="dark"] .card-footer.bg-light {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+    color: var(--text-color) !important;
+    border-color: var(--border-color) !important;
+}
+
+[data-theme-mode="dark"] .card-header.bg-dark {
+    background-color: rgba(0, 0, 0, 0.2) !important;
+    color: var(--text-color) !important;
+}
+
+/* Ensure text colors are appropriate for dark mode */
+[data-theme-mode="dark"] .text-dark {
+    color: var(--text-color) !important;
+}
+
+[data-theme-mode="dark"] .text-muted {
+    color: var(--text-muted) !important;
+}
+
+/* Fix table backgrounds in dark mode */
+[data-theme-mode="dark"] .table {
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+[data-theme-mode="dark"] .table thead th {
+    background-color: rgba(255, 255, 255, 0.03);
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+[data-theme-mode="dark"] .table tbody tr {
+    border-color: var(--border-color);
+}
+
+[data-theme-mode="dark"] .table tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
