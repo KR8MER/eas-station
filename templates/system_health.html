@@ -979,23 +979,60 @@
                                             </div>
                                             <span class="badge bg-{{ badge_class }} smart-status-badge">{{ status_label }}</span>
                                         </div>
-                                        <div class="hardware-meta">
-                                            Temp: {% if device.temperature_celsius is not none %}{{ "%.0f"|format(device.temperature_celsius) }}°C{% else %}N/A{% endif %}
-                                            {% if device.power_on_hours is not none %} • Power On: {{ device.power_on_hours }}h{% endif %}
-                                        </div>
-                                        <div class="hardware-meta">
-                                            {% if device.reallocated_sector_count is not none %}Realloc: {{ device.reallocated_sector_count }}{% else %}Realloc: N/A{% endif %}
-                                            {% if device.media_errors is not none %} • Media Errors: {{ device.media_errors }}{% endif %}
-                                            {% if device.critical_warnings is not none %} • Warnings: {{ device.critical_warnings }}{% endif %}
-                                        </div>
+                                        {% set identity_parts = [] %}
+                                        {% if device.firmware_version %}{% set identity_parts = identity_parts + ['FW ' ~ device.firmware_version] %}{% endif %}
+                                        {% if device.nvme_version_string %}{% set identity_parts = identity_parts + ['NVMe ' ~ device.nvme_version_string] %}{% endif %}
+                                        {% if device.nvme_controller_id is not none %}{% set identity_parts = identity_parts + ['Controller ' ~ device.nvme_controller_id] %}{% endif %}
+                                        {% if device.nvme_number_of_namespaces is not none %}
+                                            {% set ns_label = device.nvme_number_of_namespaces ~ ' namespace' %}
+                                            {% if device.nvme_number_of_namespaces|int != 1 %}{% set ns_label = ns_label ~ 's' %}{% endif %}
+                                            {% set identity_parts = identity_parts + [ns_label] %}
+                                        {% endif %}
+                                        {% if device.ieee_oui_identifier %}{% set identity_parts = identity_parts + ['OUI ' ~ device.ieee_oui_identifier] %}{% endif %}
+                                        {% if identity_parts %}<div class="hardware-meta">{{ identity_parts|join(' • ') }}</div>{% endif %}
+
+                                        {% set capacity_parts = [] %}
+                                        {% if device.total_capacity_bytes %}{% set capacity_parts = capacity_parts + ['Capacity: ' ~ format_bytes(device.total_capacity_bytes)] %}{% endif %}
+                                        {% if device.unallocated_capacity_bytes %}{% set capacity_parts = capacity_parts + ['Unallocated: ' ~ format_bytes(device.unallocated_capacity_bytes)] %}{% endif %}
+                                        {% if capacity_parts %}<div class="hardware-meta">{{ capacity_parts|join(' • ') }}</div>{% endif %}
+
+                                        {% set temperature_label = 'Temp: ' ~ ("%.0f"|format(device.temperature_celsius) ~ '°C' if device.temperature_celsius is not none else 'N/A') %}
+                                        {% set sensor_line = '' %}
+                                        {% if device.temperature_sensors_celsius %}
+                                            {% set sensor_values = [] %}
+                                            {% for reading in device.temperature_sensors_celsius %}
+                                            {% set sensor_values = sensor_values + ['%.0f'|format(reading) ~ '°C'] %}
+                                            {% endfor %}
+                                            {% if sensor_values %}{% set sensor_line = 'Sensors: ' ~ sensor_values|join(', ') %}{% endif %}
+                                        {% endif %}
+                                        {% set temp_parts = [temperature_label] %}
+                                        {% if sensor_line %}{% set temp_parts = temp_parts + [sensor_line] %}{% endif %}
+                                        <div class="hardware-meta">{{ temp_parts|join(' • ') }}</div>
+
+                                        {% set power_parts = [] %}
+                                        {% if device.power_on_hours is not none %}{% set power_parts = power_parts + ['Power On: ' ~ device.power_on_hours ~ 'h'] %}{% endif %}
+                                        {% if device.power_cycle_count is not none %}{% set power_parts = power_parts + ['Cycles: ' ~ device.power_cycle_count] %}{% endif %}
+                                        {% if device.unsafe_shutdowns is not none %}{% set power_parts = power_parts + ['Unsafe: ' ~ device.unsafe_shutdowns] %}{% endif %}
+                                        {% if device.warning_temp_time_minutes is not none and device.warning_temp_time_minutes > 0 %}{% set power_parts = power_parts + ['Warn Temp: ' ~ device.warning_temp_time_minutes ~ ' min'] %}{% endif %}
+                                        {% if device.critical_temp_time_minutes is not none and device.critical_temp_time_minutes > 0 %}{% set power_parts = power_parts + ['Critical Temp: ' ~ device.critical_temp_time_minutes ~ ' min'] %}{% endif %}
+                                        {% if power_parts %}<div class="hardware-meta">{{ power_parts|join(' • ') }}</div>{% endif %}
+
+                                        {% set health_parts = [] %}
+                                        {% if device.reallocated_sector_count is not none %}{% set health_parts = health_parts + ['Realloc: ' ~ device.reallocated_sector_count] %}{% else %}{% set health_parts = health_parts + ['Realloc: N/A'] %}{% endif %}
+                                        {% if device.media_errors is not none %}{% set health_parts = health_parts + ['Media Errors: ' ~ device.media_errors] %}{% endif %}
+                                        {% if device.critical_warnings is not none %}{% set health_parts = health_parts + ['Warnings: ' ~ device.critical_warnings] %}{% endif %}
+                                        {% if device.available_spare is not none %}{% set health_parts = health_parts + ['Spare: ' ~ '%.0f'|format(device.available_spare) ~ '%'] %}{% endif %}
+                                        {% if device.available_spare_threshold is not none %}{% set health_parts = health_parts + ['Threshold: ' ~ '%.0f'|format(device.available_spare_threshold) ~ '%'] %}{% endif %}
+                                        {% if device.percentage_used is not none %}{% set health_parts = health_parts + ['Wear: ' ~ '%.1f'|format(device.percentage_used) ~ '%'] %}{% endif %}
+                                        {% if device.num_error_log_entries is not none %}{% set health_parts = health_parts + ['Error Log: ' ~ device.num_error_log_entries] %}{% endif %}
+                                        {% if health_parts %}<div class="hardware-meta">{{ health_parts|join(' • ') }}</div>{% endif %}
+
                                         {% set nvme_ns = namespace(lines=[]) %}
                                         {% set nvme_written = device.get('data_units_written_bytes') %}
                                         {% set nvme_read = device.get('data_units_read_bytes') %}
                                         {% set nvme_host_reads = device.get('host_read_commands') %}
                                         {% set nvme_host_writes = device.get('host_write_commands') %}
                                         {% set nvme_busy = device.get('controller_busy_time_minutes') %}
-                                        {% set nvme_unsafe = device.get('unsafe_shutdowns') %}
-                                        {% set nvme_wear = device.get('percentage_used') %}
                                         {% if nvme_written is not none %}
                                             {% set nvme_ns.lines = nvme_ns.lines + ['Written: ' ~ format_bytes(nvme_written)] %}
                                         {% endif %}
@@ -1008,14 +1045,8 @@
                                         {% if nvme_host_writes is not none %}
                                             {% set nvme_ns.lines = nvme_ns.lines + ['Writes: ' ~ '{:,}'.format(nvme_host_writes) ~ ' cmds'] %}
                                         {% endif %}
-                                        {% if nvme_wear is not none %}
-                                            {% set nvme_ns.lines = nvme_ns.lines + ['Wear: ' ~ '%.1f'|format(nvme_wear) ~ '%'] %}
-                                        {% endif %}
                                         {% if nvme_busy is not none %}
                                             {% set nvme_ns.lines = nvme_ns.lines + ['Busy: ' ~ '{:,}'.format(nvme_busy) ~ ' min'] %}
-                                        {% endif %}
-                                        {% if nvme_unsafe is not none %}
-                                            {% set nvme_ns.lines = nvme_ns.lines + ['Unsafe: ' ~ '{:,}'.format(nvme_unsafe)] %}
                                         {% endif %}
                                         {% if nvme_ns.lines %}
                                             <div class="hardware-meta">NVMe: {{ nvme_ns.lines|join(' • ') }}</div>
@@ -2008,14 +2039,107 @@
                     statusLabel = 'Failed';
                 }
 
+                const identityParts = [];
+                if (data.firmware_version) {
+                    identityParts.push(`FW ${escapeHtml(String(data.firmware_version))}`);
+                }
+                if (data.nvme_version_string) {
+                    identityParts.push(`NVMe ${escapeHtml(String(data.nvme_version_string))}`);
+                }
+                if (data.nvme_controller_id !== undefined && data.nvme_controller_id !== null) {
+                    identityParts.push(`Controller ${escapeHtml(String(data.nvme_controller_id))}`);
+                }
+                if (data.nvme_number_of_namespaces !== undefined && data.nvme_number_of_namespaces !== null) {
+                    const namespaces = toNumber(data.nvme_number_of_namespaces, Number(data.nvme_number_of_namespaces));
+                    const nsLabel = `${formatNumber(namespaces) || escapeHtml(String(data.nvme_number_of_namespaces))} namespace${namespaces === 1 ? '' : 's'}`;
+                    identityParts.push(nsLabel);
+                }
+                if (data.ieee_oui_identifier) {
+                    identityParts.push(`OUI ${escapeHtml(String(data.ieee_oui_identifier))}`);
+                }
+                const identityMeta = identityParts.length
+                    ? `<div class="hardware-meta">${identityParts.join(' • ')}</div>`
+                    : '';
+
+                const capacityParts = [];
+                if (data.total_capacity_bytes != null) {
+                    capacityParts.push(`Capacity: ${formatBytes(data.total_capacity_bytes)}`);
+                }
+                if (data.unallocated_capacity_bytes) {
+                    capacityParts.push(`Unallocated: ${formatBytes(data.unallocated_capacity_bytes)}`);
+                }
+                const capacityMeta = capacityParts.length
+                    ? `<div class="hardware-meta">${capacityParts.join(' • ')}</div>`
+                    : '';
+
                 const temperature = data.temperature_celsius != null
                     ? `${toNumber(data.temperature_celsius, 0).toFixed(0)}°C`
                     : 'N/A';
-                const powerOnHours = data.power_on_hours != null ? `${escapeHtml(String(data.power_on_hours))}h` : '';
-                const reallocated = data.reallocated_sector_count != null ? escapeHtml(String(data.reallocated_sector_count)) : 'N/A';
-                const mediaErrors = data.media_errors != null ? ` • Media Errors: ${escapeHtml(String(data.media_errors))}` : '';
-                const warnings = data.critical_warnings != null ? ` • Warnings: ${escapeHtml(String(data.critical_warnings))}` : '';
-                const note = data.error ? `<div class="hardware-meta text-muted">Note: ${escapeHtml(String(data.error))}</div>` : '';
+                const sensorValues = Array.isArray(data.temperature_sensors_celsius)
+                    ? data.temperature_sensors_celsius
+                        .map((value) => {
+                            const numeric = toNumber(value, NaN);
+                            return Number.isFinite(numeric) ? `${numeric.toFixed(0)}°C` : null;
+                        })
+                        .filter(Boolean)
+                    : [];
+                const sensorMeta = sensorValues.length ? ` • Sensors: ${sensorValues.join(', ')}` : '';
+                const temperatureMeta = `<div class="hardware-meta">Temp: ${temperature}${sensorMeta}</div>`;
+
+                const powerParts = [];
+                if (data.power_on_hours != null) {
+                    const formatted = formatNumber(data.power_on_hours) || escapeHtml(String(data.power_on_hours));
+                    powerParts.push(`Power On: ${formatted}h`);
+                }
+                if (data.power_cycle_count != null) {
+                    const formatted = formatNumber(data.power_cycle_count) || escapeHtml(String(data.power_cycle_count));
+                    powerParts.push(`Cycles: ${formatted}`);
+                }
+                if (data.unsafe_shutdowns != null) {
+                    const formatted = formatNumber(data.unsafe_shutdowns) || escapeHtml(String(data.unsafe_shutdowns));
+                    powerParts.push(`Unsafe: ${formatted}`);
+                }
+                if (data.warning_temp_time_minutes && toNumber(data.warning_temp_time_minutes, 0) > 0) {
+                    powerParts.push(`Warn Temp: ${formatNumber(data.warning_temp_time_minutes) || escapeHtml(String(data.warning_temp_time_minutes))} min`);
+                }
+                if (data.critical_temp_time_minutes && toNumber(data.critical_temp_time_minutes, 0) > 0) {
+                    powerParts.push(`Critical Temp: ${formatNumber(data.critical_temp_time_minutes) || escapeHtml(String(data.critical_temp_time_minutes))} min`);
+                }
+                const powerMeta = powerParts.length
+                    ? `<div class="hardware-meta">${powerParts.join(' • ')}</div>`
+                    : '';
+
+                const healthParts = [];
+                const reallocated = data.reallocated_sector_count != null
+                    ? escapeHtml(String(data.reallocated_sector_count))
+                    : 'N/A';
+                healthParts.push(`Realloc: ${reallocated}`);
+                if (data.media_errors != null) {
+                    healthParts.push(`Media Errors: ${escapeHtml(String(data.media_errors))}`);
+                }
+                if (data.critical_warnings != null) {
+                    healthParts.push(`Warnings: ${escapeHtml(String(data.critical_warnings))}`);
+                }
+                if (data.available_spare != null) {
+                    healthParts.push(`Spare: ${toNumber(data.available_spare, 0).toFixed(0)}%`);
+                }
+                if (data.available_spare_threshold != null) {
+                    healthParts.push(`Threshold: ${toNumber(data.available_spare_threshold, 0).toFixed(0)}%`);
+                }
+                if (data.percentage_used != null) {
+                    healthParts.push(`Wear: ${formatPercent(data.percentage_used)}%`);
+                }
+                if (data.num_error_log_entries != null) {
+                    const formatted = formatNumber(data.num_error_log_entries) || escapeHtml(String(data.num_error_log_entries));
+                    healthParts.push(`Error Log: ${formatted}`);
+                }
+                const healthMeta = healthParts.length
+                    ? `<div class="hardware-meta">${healthParts.join(' • ')}</div>`
+                    : '';
+
+                const note = data.error
+                    ? `<div class="hardware-meta text-warning"><i class="fas fa-exclamation-triangle"></i> ${escapeHtml(String(data.error))}</div>`
+                    : '';
 
                 const nvmeDetails = [];
                 if (data.data_units_written_bytes != null) {
@@ -2032,16 +2156,9 @@
                     const formatted = formatNumber(data.host_write_commands) || escapeHtml(String(data.host_write_commands));
                     nvmeDetails.push(`Writes: ${formatted} cmds`);
                 }
-                if (data.percentage_used != null) {
-                    nvmeDetails.push(`Wear: ${formatPercent(data.percentage_used)}%`);
-                }
                 if (data.controller_busy_time_minutes != null) {
                     const formatted = formatNumber(data.controller_busy_time_minutes) || escapeHtml(String(data.controller_busy_time_minutes));
                     nvmeDetails.push(`Busy: ${formatted} min`);
-                }
-                if (data.unsafe_shutdowns != null) {
-                    const formatted = formatNumber(data.unsafe_shutdowns) || escapeHtml(String(data.unsafe_shutdowns));
-                    nvmeDetails.push(`Unsafe: ${formatted}`);
                 }
                 const nvmeMeta = nvmeDetails.length
                     ? `<div class="hardware-meta">NVMe: ${nvmeDetails.join(' • ')}</div>`
@@ -2057,12 +2174,11 @@
                             </div>
                             <span class="badge bg-${badgeClass} smart-status-badge">${statusLabel}</span>
                         </div>
-                        <div class="hardware-meta">
-                            Temp: ${temperature}${powerOnHours ? ` • Power On: ${powerOnHours}` : ''}
-                        </div>
-                        <div class="hardware-meta">
-                            Realloc: ${reallocated}${mediaErrors}${warnings}
-                        </div>
+                        ${identityMeta}
+                        ${capacityMeta}
+                        ${temperatureMeta}
+                        ${powerMeta}
+                        ${healthMeta}
                         ${nvmeMeta}
                         ${note}
                     </div>

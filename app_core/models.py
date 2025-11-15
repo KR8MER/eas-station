@@ -650,6 +650,11 @@ class RadioReceiver(db.Model):
     stereo_enabled = db.Column(db.Boolean, nullable=False, default=True)  # FM stereo decoding
     deemphasis_us = db.Column(db.Float, nullable=False, default=75.0)  # De-emphasis (75μs NA, 50μs EU)
     enable_rbds = db.Column(db.Boolean, nullable=False, default=False)  # Extract RBDS/RDS from FM
+    squelch_enabled = db.Column(db.Boolean, nullable=False, default=False)  # Carrier-operated squelch
+    squelch_threshold_db = db.Column(db.Float, nullable=False, default=-65.0)  # Threshold in dBFS
+    squelch_open_ms = db.Column(db.Integer, nullable=False, default=150)  # Hold time before opening squelch
+    squelch_close_ms = db.Column(db.Integer, nullable=False, default=750)  # Hold time before muting
+    squelch_alarm = db.Column(db.Boolean, nullable=False, default=False)  # Raise alarm when carrier lost
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = db.Column(
         db.DateTime(timezone=True),
@@ -689,6 +694,11 @@ class RadioReceiver(db.Model):
             deemphasis_us=float(self.deemphasis_us) if self.deemphasis_us else 75.0,
             enable_rbds=bool(self.enable_rbds),
             auto_start=bool(self.auto_start),
+            squelch_enabled=bool(self.squelch_enabled),
+            squelch_threshold_db=float(self.squelch_threshold_db if self.squelch_threshold_db is not None else -65.0),
+            squelch_open_ms=int(self.squelch_open_ms or 150),
+            squelch_close_ms=int(self.squelch_close_ms or 750),
+            squelch_alarm=bool(self.squelch_alarm),
         )
 
     def latest_status(self) -> Optional["RadioReceiverStatus"]:

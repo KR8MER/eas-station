@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Callable, Iterable, Sequence, Tuple
 
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app_core.extensions import db
@@ -12,6 +12,14 @@ from app_core.models import RadioReceiver, RadioReceiverStatus
 
 
 _TABLE_NAMES: Iterable[str] = ("radio_receivers", "radio_receiver_status")
+
+_SQUELCH_COLUMN_DEFINITIONS: tuple[tuple[str, str]] = (
+    ("squelch_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
+    ("squelch_threshold_db", "DOUBLE PRECISION NOT NULL DEFAULT -65"),
+    ("squelch_open_ms", "INTEGER NOT NULL DEFAULT 150"),
+    ("squelch_close_ms", "INTEGER NOT NULL DEFAULT 750"),
+    ("squelch_alarm", "BOOLEAN NOT NULL DEFAULT FALSE"),
+)
 
 _IndexDefinition = Tuple[str, Callable[[], db.Index], Tuple[str, ...], bool]
 _INDEX_DEFINITIONS: dict[str, Tuple[_IndexDefinition, ...]] = {
@@ -113,4 +121,47 @@ def ensure_radio_tables(logger) -> bool:
         return False
 
 
-__all__ = ["ensure_radio_tables"]
+def ensure_radio_squelch_columns(logger) -> bool:
+    """Backfill squelch configuration columns when migrations haven't run."""
+
+    engine = db.engine
+    inspector = inspect(engine)
+
+    if "radio_receivers" not in inspector.get_table_names():
+        logger.debug(
+            "Skipping radio squelch column verification; radio_receivers table missing",
+        )
+        return True
+
+    dialect = engine.dialect.name
+
+    try:
+        existing_columns = {column["name"] for column in inspector.get_columns("radio_receivers")}
+        changed = False
+
+        for column_name, column_definition in _SQUELCH_COLUMN_DEFINITIONS:
+            if column_name in existing_columns:
+                continue
+
+            logger.info("Adding radio_receivers.%s column for squelch controls", column_name)
+
+            ddl = f"ALTER TABLE radio_receivers ADD COLUMN {column_name} {column_definition}"
+            db.session.execute(text(ddl))
+            if dialect == "postgresql":
+                db.session.execute(
+                    text(
+                        f"ALTER TABLE radio_receivers ALTER COLUMN {column_name} DROP DEFAULT"
+                    )
+                )
+            changed = True
+
+        if changed:
+            db.session.commit()
+        return True
+    except SQLAlchemyError as exc:
+        logger.warning("Could not ensure radio squelch columns: %s", exc)
+        db.session.rollback()
+        return False
+
+
+__all__ = ["ensure_radio_tables", "ensure_radio_squelch_columns"]
