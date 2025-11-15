@@ -48,6 +48,23 @@ DEFAULT_TIMEZONE=America/New_York
 
 ---
 
+### Raspberry Pi + GPIO in Portainer
+
+Running on a Pi with the OLED/GPIO button requires the extra device mappings that
+`docker-compose.pi.yml` provides. When creating or editing the stack in
+Portainer:
+
+1. Click **Advanced** → **Additional compose file** and enter
+   `docker-compose.pi.yml` so the stack loads both compose files.
+2. Deploy/redeploy so the `app` container shows `/dev/gpiomem` and
+   `/dev/gpiochip0` under **Devices**.
+3. (Optional) If you launch `./start-pi.sh` over SSH for diagnostics, pass
+   `--skip-env-sync` to keep your Portainer-managed environment values. The
+   script now prompts before overwriting the `app-config` volume and only copies
+   `.env` automatically when the volume is empty.
+
+---
+
 ## ✅ Verify It's Working
 
 ### 1. Check Containers (30 seconds after deploy)
