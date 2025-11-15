@@ -78,6 +78,35 @@ certificate_is_trusted_and_valid() {
     return 0
 }
 
+is_staging_certificate() {
+    CERT_PATH="${1:-/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem}"
+    CERT_DOMAIN="${2:-}"
+
+    if [ -z "$CERT_DOMAIN" ] && [ -n "$CERT_PATH" ]; then
+        CERT_DOMAIN=$(basename "$(dirname "$CERT_PATH")")
+    fi
+
+    if [ -n "$CERT_DOMAIN" ]; then
+        RENEWAL_CONFIG="/etc/letsencrypt/renewal/$CERT_DOMAIN.conf"
+
+        if [ -f "$RENEWAL_CONFIG" ] && grep -qi "acme-staging" "$RENEWAL_CONFIG"; then
+            return 0
+        fi
+    fi
+
+    if [ -s "$CERT_PATH" ]; then
+        ISSUER=$(openssl x509 -in "$CERT_PATH" -noout -issuer 2>/dev/null || true)
+
+        case "$ISSUER" in
+            *"Fake LE"*|*"Fake Let's Encrypt"*|*"staging"*|*"Staging"*)
+                return 0
+                ;;
+        esac
+    fi
+
+    return 1
+}
+
 describe_certificate_issue() {
     CERT_PATH="${1:-/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem}"
     CERT_DOMAIN="${2:-$DOMAIN_NAME}"
@@ -98,6 +127,10 @@ describe_certificate_issue() {
     if ! openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt "$CERT_PATH" >/dev/null 2>&1; then
         ISSUER=$(openssl x509 -in "$CERT_PATH" -noout -issuer 2>/dev/null || echo "unknown")
         echo "Certificate for $CERT_DOMAIN failed trust verification (issuer: $ISSUER)"
+    fi
+
+    if is_staging_certificate "$CERT_PATH" "$CERT_DOMAIN"; then
+        echo "Certificate for $CERT_DOMAIN is issued by Let's Encrypt staging environment"
     fi
 }
 
@@ -192,9 +225,16 @@ if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
         describe_certificate_issue "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" "$DOMAIN_NAME"
         CURRENT_CERT_SELF_SIGNED=1
     elif certificate_is_trusted_and_valid; then
-        echo "SSL certificates already exist for $DOMAIN_NAME"
-        echo "Skipping certificate generation"
-        CURRENT_CERT_SELF_SIGNED=0
+        if is_staging_certificate "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" "$DOMAIN_NAME"; then
+            echo "Existing certificate was issued by Let's Encrypt staging environment"
+            echo "Will request a trusted production certificate for $DOMAIN_NAME"
+            describe_certificate_issue "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" "$DOMAIN_NAME"
+            CURRENT_CERT_SELF_SIGNED=1
+        else
+            echo "SSL certificates already exist for $DOMAIN_NAME"
+            echo "Skipping certificate generation"
+            CURRENT_CERT_SELF_SIGNED=0
+        fi
     else
         describe_certificate_issue "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" "$DOMAIN_NAME"
         echo "Existing certificate for $DOMAIN_NAME is expired or invalid"

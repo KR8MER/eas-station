@@ -181,7 +181,8 @@
 }
 
 .brand-logo {
-    height: 80px;
+    height: 64px;
+    max-height: 64px;
     width: auto;
     display: block;
     padding: var(--logo-padding);

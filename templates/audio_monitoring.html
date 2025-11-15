@@ -239,9 +239,17 @@ function renderAudioSources() {
                     <!-- Audio Player -->
                     <div class="audio-player-container" id="player-container-${source.name}">
                         ${source.status === 'running' ? `
-                            <audio controls id="audio-${source.name}" src="${source.icecast_url || `/api/audio/stream/${encodeURIComponent(source.name)}`}" data-stream-type="${source.icecast_url ? 'icecast' : 'flask-proxy'}">
+                            <audio
+                                controls
+                                id="audio-${source.name}"
+                                preload="none"
+                                data-source-name="${escapeHtml(source.name)}"
+                                data-icecast-url="${source.icecast_url ? escapeHtml(source.icecast_url) : ''}"
+                                data-proxy-url="/api/audio/stream/${encodeURIComponent(source.name)}"
+                                data-initial-stream-type="${source.icecast_url ? 'icecast' : 'flask-proxy'}">
                                 Your browser does not support the audio element.
                             </audio>
+                            <div class="audio-player-status small mt-2 text-muted" id="player-status-${source.name}"></div>
                             ${source.icecast_url ? `
                                 <small class="text-success d-block mt-1">
                                     <i class="fas fa-broadcast-tower"></i> Professional Streaming (Icecast) - Better quality, no dropouts
@@ -255,12 +263,17 @@ function renderAudioSources() {
                                             ` : ''}
                                         </span>
                                     ` : ''}
+                                    <span class="d-block text-muted small mt-1">
+                                        <i class="fas fa-shield-alt"></i> HTTPS dashboards automatically fall back to the secure built-in player if Icecast is HTTP-only.
+                                    </span>
                                 </small>
                             ` : `
                                 <small class="text-muted d-block mt-1">
                                     <i class="fas fa-info-circle"></i> Basic Streaming Mode
-                                    <a href="/settings/audio#icecast" class="text-primary ms-2">
-                                        <i class="fas fa-arrow-up-right-from-square"></i> Enable Icecast for professional quality
+                                    <span class="d-block small text-muted mt-1">A secure built-in player is used automatically on HTTPS deployments.</span>
+                                    <a href="/settings/audio#icecast" class="d-inline-flex align-items-center gap-1 text-primary mt-1">
+                                        <i class="fas fa-arrow-up-right-from-square"></i>
+                                        <span>Enable Icecast for professional quality</span>
                                     </a>
                                 </small>
                             `}
@@ -476,18 +489,239 @@ function renderAudioSources() {
         </div>
     `).join('');
 
-    // Restore playing state of audio players after re-render
+    initializeAudioPlayers(playingStates, currentTimes);
+}
+
+function initializeAudioPlayers(playingStates = {}, currentTimes = {}) {
     audioSources.forEach(source => {
+        if (source.status !== 'running') {
+            setPlayerStatus(source.name, '', 'muted');
+            return;
+        }
+
         const audioEl = document.getElementById(`audio-${source.name}`);
-        if (audioEl && playingStates[source.name]) {
-            // Restore playback state
-            audioEl.currentTime = currentTimes[source.name] || 0;
-            // Use play() with error handling (browser may block autoplay)
-            audioEl.play().catch(err => {
-                console.log(`Could not auto-resume playback for ${source.name}:`, err.message);
+        if (!audioEl) {
+            return;
+        }
+
+        audioEl.dataset.sourceName = source.name;
+        if (!audioEl.dataset.proxyUrl) {
+            audioEl.dataset.proxyUrl = `/api/audio/stream/${encodeURIComponent(source.name)}`;
+        }
+
+        bindAudioPlayerEvents(audioEl);
+
+        const wasPlaying = Boolean(playingStates[source.name]);
+        const preferIcecast = shouldUseIcecastStream(audioEl);
+
+        if (preferIcecast) {
+            const icecastUrl = audioEl.dataset.icecastUrl;
+            audioEl.dataset.streamType = 'icecast';
+
+            if (icecastUrl && audioEl.src !== icecastUrl) {
+                audioEl.src = icecastUrl;
+                audioEl.dataset.suppressPauseMessage = '1';
+                audioEl.load();
+            }
+
+            setPlayerStatus(source.name, 'Ready. Press play to listen via Icecast.', 'muted');
+
+            if (wasPlaying) {
+                const resumeTime = currentTimes[source.name] || 0;
+                if (resumeTime > 0 && !Number.isNaN(resumeTime)) {
+                    try {
+                        audioEl.currentTime = resumeTime;
+                    } catch (err) {
+                        console.debug(`Unable to restore playback position for ${source.name}:`, err.message);
+                    }
+                }
+
+                audioEl.play().catch(err => {
+                    console.debug(`Could not auto-resume playback for ${source.name}:`, err.message);
+                });
+            }
+
+            return;
+        }
+
+        const fallbackReason = audioEl.dataset.icecastUrl ? 'Icecast stream is unavailable on secure connections.' : '';
+
+        switchToProxyStream(audioEl, source.name, {
+            autoplay: wasPlaying,
+            reason: fallbackReason,
+            notify: !wasPlaying
+        });
+    });
+}
+
+function bindAudioPlayerEvents(audioEl) {
+    if (audioEl.dataset.handlersBound === '1') {
+        return;
+    }
+
+    const sourceName = audioEl.dataset.sourceName || '';
+
+    audioEl.addEventListener('loadstart', () => {
+        setPlayerStatus(sourceName, 'Connecting to stream…', 'info');
+    });
+
+    audioEl.addEventListener('playing', () => {
+        audioEl.dataset.fallbackRetries = '0';
+        setPlayerStatus(sourceName, `${labelForStreamType(audioEl.dataset.streamType)} playing.`, 'success');
+    });
+
+    audioEl.addEventListener('waiting', () => {
+        setPlayerStatus(sourceName, 'Buffering…', 'info');
+    });
+
+    audioEl.addEventListener('stalled', () => {
+        setPlayerStatus(sourceName, 'Stream stalled – attempting to recover…', 'warning');
+    });
+
+    audioEl.addEventListener('pause', () => {
+        if (!audioEl.dataset.suppressPauseMessage) {
+            setPlayerStatus(sourceName, 'Playback paused.', 'muted');
+        }
+        audioEl.dataset.suppressPauseMessage = '';
+    });
+
+    audioEl.addEventListener('ended', () => {
+        setPlayerStatus(sourceName, 'Stream ended.', 'muted');
+    });
+
+    audioEl.addEventListener('error', onAudioPlaybackError);
+
+    audioEl.dataset.handlersBound = '1';
+}
+
+function shouldUseIcecastStream(audioEl) {
+    const icecastUrl = audioEl.dataset.icecastUrl;
+    if (!icecastUrl) {
+        return false;
+    }
+
+    if (window.location.protocol === 'https:' && /^http:\/\//i.test(icecastUrl)) {
+        return false;
+    }
+
+    return true;
+}
+
+function switchToProxyStream(audioEl, sourceName, options = {}) {
+    const { autoplay = false, reason = '', notify = true } = options;
+    const proxyUrl = audioEl.dataset.proxyUrl || `/api/audio/stream/${encodeURIComponent(sourceName)}`;
+
+    audioEl.dataset.streamType = 'flask-proxy';
+    audioEl.dataset.fallbackActive = audioEl.dataset.icecastUrl ? '1' : audioEl.dataset.fallbackActive;
+
+    const finalUrl = appendCacheBuster(proxyUrl);
+    if (audioEl.src !== finalUrl) {
+        audioEl.src = finalUrl;
+    }
+    audioEl.dataset.suppressPauseMessage = '1';
+    audioEl.load();
+
+    if (notify) {
+        if (audioEl.dataset.icecastUrl) {
+            const baseMessage = 'Using secure fallback stream.';
+            const message = reason ? `${reason} ${baseMessage}`.trim() : baseMessage;
+            setPlayerStatus(sourceName, message, reason ? 'warning' : 'info');
+        } else {
+            setPlayerStatus(sourceName, 'Ready. Press play to listen.', 'muted');
+        }
+    }
+
+    if (autoplay) {
+        const playPromise = audioEl.play();
+        if (playPromise && typeof playPromise.then === 'function') {
+            playPromise.then(() => {
+                setPlayerStatus(sourceName, `${labelForStreamType(audioEl.dataset.streamType)} playing.`, 'success');
+            }).catch(err => {
+                console.debug(`Autoplay blocked for ${sourceName}:`, err.message);
+                setPlayerStatus(sourceName, audioEl.dataset.icecastUrl
+                    ? 'Fallback stream ready. Press play to start listening.'
+                    : 'Ready. Press play to listen.',
+                    audioEl.dataset.icecastUrl ? 'warning' : 'muted');
             });
         }
-    });
+    }
+}
+
+function appendCacheBuster(url) {
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}ts=${Date.now()}`;
+}
+
+function setPlayerStatus(sourceName, message, level = 'muted') {
+    const statusEl = document.getElementById(`player-status-${sourceName}`);
+    if (!statusEl) {
+        return;
+    }
+
+    const levelClasses = {
+        muted: 'text-muted',
+        info: 'text-info',
+        success: 'text-success',
+        warning: 'text-warning',
+        danger: 'text-danger'
+    };
+
+    const baseClass = 'audio-player-status small mt-2';
+    const levelClass = levelClasses[level] || 'text-muted';
+
+    statusEl.className = `${baseClass} ${levelClass}`;
+    statusEl.textContent = message || '';
+}
+
+function labelForStreamType(streamType) {
+    switch (streamType) {
+        case 'icecast':
+            return 'Icecast stream';
+        case 'flask-proxy':
+            return 'Secure built-in stream';
+        default:
+            return 'Audio stream';
+    }
+}
+
+function onAudioPlaybackError(event) {
+    const audioEl = event.currentTarget;
+    const sourceName = audioEl.dataset.sourceName || 'unknown';
+    const streamType = audioEl.dataset.streamType || audioEl.dataset.initialStreamType || 'unknown';
+    const error = audioEl.error;
+
+    console.warn(`Audio playback error for ${sourceName} (${streamType})`, error);
+
+    if (streamType === 'icecast') {
+        const wasPlaying = !audioEl.paused;
+        setPlayerStatus(sourceName, 'Icecast stream failed. Switching to secure fallback…', 'warning');
+        switchToProxyStream(audioEl, sourceName, {
+            autoplay: wasPlaying,
+            notify: false
+        });
+        return;
+    }
+
+    if (streamType === 'flask-proxy') {
+        const retries = parseInt(audioEl.dataset.fallbackRetries || '0', 10);
+
+        if (retries < 3) {
+            audioEl.dataset.fallbackRetries = String(retries + 1);
+            const wasPlaying = !audioEl.paused;
+            setPlayerStatus(sourceName, 'Reconnecting to secure stream…', 'warning');
+
+            setTimeout(() => {
+                switchToProxyStream(audioEl, sourceName, {
+                    autoplay: wasPlaying,
+                    notify: false
+                });
+            }, 500);
+
+            return;
+        }
+
+        setPlayerStatus(sourceName, 'Unable to connect to audio stream. Please verify the source.', 'danger');
+    }
 }
 
 function getSourceIcon(type) {
