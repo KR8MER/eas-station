@@ -232,6 +232,7 @@ def _markdown_to_html(content: str) -> str:
 def _get_docs_structure() -> Dict[str, List[Dict[str, str]]]:
     """Get the documentation file structure organized by category."""
     docs_root = Path(__file__).parent.parent / 'docs'
+    static_docs_root = Path(__file__).parent.parent / 'static' / 'docs'
 
     structure = {
         'Getting Started': [],
@@ -261,6 +262,15 @@ def _get_docs_structure() -> Dict[str, List[Dict[str, str]]]:
             'title': 'Documentation Index',
             'path': 'README',
             'url': '/docs/README'
+        })
+
+    # Add repository statistics from static/docs (if exists)
+    repo_stats_file = static_docs_root / 'REPO_STATS.md'
+    if repo_stats_file.exists():
+        structure['Reference'].append({
+            'title': 'Repository Statistics',
+            'path': 'static/REPO_STATS',
+            'url': '/docs/static/REPO_STATS'
         })
 
     # Scan all markdown files
@@ -377,17 +387,26 @@ def register_documentation_routes(app: Flask, logger_instance: Any) -> None:
         if '..' in doc_path or doc_path.startswith('/'):
             abort(404)
 
-        # Construct file path
-        file_path = docs_root / f'{doc_path}.md'
+        # Check if this is a static docs file
+        if doc_path.startswith('static/'):
+            static_docs_root = Path(app.root_path) / 'static' / 'docs'
+            # Remove 'static/' prefix
+            relative_path = doc_path[7:]  # len('static/') = 7
+            file_path = static_docs_root / f'{relative_path}.md'
+            root_for_security = static_docs_root
+        else:
+            # Regular docs file
+            file_path = docs_root / f'{doc_path}.md'
+            root_for_security = docs_root
 
         # Check if file exists
         if not file_path.exists() or not file_path.is_file():
             logger.warning('Documentation file not found: %s', file_path)
             abort(404)
 
-        # Check if file is within docs directory (security)
+        # Check if file is within appropriate docs directory (security)
         try:
-            file_path.resolve().relative_to(docs_root.resolve())
+            file_path.resolve().relative_to(root_for_security.resolve())
         except ValueError:
             logger.warning('Attempted access outside docs directory: %s', file_path)
             abort(404)
