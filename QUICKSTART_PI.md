@@ -43,14 +43,20 @@ From your `.env` file:
 
 ## What Was Wrong
 
-**Before:** Docker couldn't access GPIO hardware
+**Problem 1:** Docker couldn't access GPIO hardware
 - App used `MockFactory` (fake GPIO)
 - OLED couldn't initialize (needs I2C on GPIO 2/3)
 - Logs showed: `"gpiozero hardware backends unavailable; using MockFactory fallback"`
 
-**After:** Docker has GPIO access via `docker-compose.pi.yml`
-- App uses real GPIO hardware
-- OLED displays system information
+**Problem 2:** Container read config from wrong location
+- docker-compose.yml uses `/app-config/.env` (volume for Portainer)
+- Your local `.env` file wasn't being used
+- Logs showed: `"OLED display disabled via configuration"`
+
+**After:** docker-compose.pi.yml fixes both issues
+- Mounts GPIO devices (`/dev/gpiomem`, `/dev/gpiochip0`)
+- Mounts local `.env` file directly into container
+- App uses real GPIO hardware and your configuration
 - Logs show: `"GPIO controller initialized using gpiozero OutputDevice"`
 
 ## Differences Between Startup Methods
