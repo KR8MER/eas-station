@@ -5,10 +5,11 @@ from __future__ import annotations
 import logging
 import os
 import re
+from functools import wraps
 from typing import Any, Dict, List
 from pathlib import Path
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, jsonify, render_template, request, current_app
 from werkzeug.exceptions import BadRequest
 
 from app_core.location import get_location_settings, _derive_county_zone_codes_from_fips
@@ -19,6 +20,28 @@ logger = logging.getLogger(__name__)
 
 # Create Blueprint for environment routes
 environment_bp = Blueprint('environment', __name__)
+
+
+def require_permission_or_setup_mode(permission_name: str):
+    """
+    Decorator that requires permission OR allows access during setup mode.
+    
+    This is critical for environment settings to be accessible even when
+    the database connection is misconfigured, allowing users to fix the
+    configuration without needing to destroy and redeploy the stack.
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            # Allow access if in setup mode (database failure, etc.)
+            if current_app.config.get('SETUP_MODE', False):
+                return f(*args, **kwargs)
+            
+            # Otherwise, use normal permission check
+            return require_permission(permission_name)(f)(*args, **kwargs)
+        return decorated_function
+    return decorator
+
 
 # Environment variable categories and their configurations
 ENV_CATEGORIES = {
@@ -91,7 +114,7 @@ ENV_CATEGORIES = {
                 'default': 'localhost',
                 'description': 'Domain name for SSL certificate (use "localhost" for testing with self-signed cert, or your actual domain for Let\'s Encrypt)',
                 'placeholder': 'eas.example.com',
-                'pattern': '^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$|^localhost$',
+                'pattern': r'^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$|^localhost$',
                 'title': 'Must be a valid domain name (e.g., eas.example.com) or "localhost"',
             },
             {
@@ -101,7 +124,7 @@ ENV_CATEGORIES = {
                 'default': 'admin@example.com',
                 'description': 'Email address for Let\'s Encrypt certificate expiration notifications',
                 'placeholder': 'admin@example.com',
-                'pattern': '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+                'pattern': r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
                 'title': 'Must be a valid email address',
             },
             {
@@ -124,7 +147,7 @@ ENV_CATEGORIES = {
                 'label': 'Host',
                 'type': 'text',
                 'required': True,
-                'default': 'host.docker.internal',
+                'default': 'alerts-db',
                 'description': 'Database server hostname or IP',
             },
             {
@@ -880,7 +903,7 @@ def register_environment_routes(app, logger):
 # Route definitions
 
 @environment_bp.route('/api/environment/categories')
-@require_permission('system.view_config')
+@require_permission_or_setup_mode('system.view_config')
 def get_environment_categories():
     """Get list of environment variable categories."""
     categories = []
@@ -895,7 +918,7 @@ def get_environment_categories():
     return jsonify(categories)
 
 @environment_bp.route('/api/environment/variables')
-@require_permission('system.view_config')
+@require_permission_or_setup_mode('system.view_config')
 def get_environment_variables():
     """Get all environment variables with current values."""
     # Read current values from .env or environment
@@ -949,7 +972,7 @@ def get_environment_variables():
     return jsonify(response)
 
 @environment_bp.route('/api/environment/variables', methods=['PUT'])
-@require_permission('system.configure')
+@require_permission_or_setup_mode('system.configure')
 def update_environment_variables():
     """Update environment variables."""
     try:
@@ -1034,7 +1057,7 @@ def update_environment_variables():
         return jsonify({'error': f'Failed to update environment variables: {str(e)}'}), 500
 
 @environment_bp.route('/api/environment/validate')
-@require_permission('system.view_config')
+@require_permission_or_setup_mode('system.view_config')
 def validate_environment():
     """Validate current environment configuration."""
     env_vars = read_env_file()
@@ -1107,29 +1130,32 @@ def validate_environment():
     })
 
 @environment_bp.route('/settings/environment')
-@require_permission('system.view_config')
+@require_permission_or_setup_mode('system.view_config')
 def environment_settings():
     """Render environment settings management page."""
     from app_core.auth.roles import has_permission
 
     try:
         location_settings = get_location_settings()
-        can_configure = has_permission('system.configure')
-        return render_template(
-            'settings/environment.html',
-            location_settings=location_settings,
-            can_configure=can_configure,
-        )
     except Exception as exc:
-        logger.error(f'Error rendering environment settings: {exc}')
-        return render_template(
-            'settings/environment.html',
-            location_settings=None,
-            can_configure=False,
-        )
+        logger.warning(f'Failed to load location settings (database may be unavailable): {exc}')
+        location_settings = None
+    
+    try:
+        can_configure = has_permission('system.configure')
+    except Exception as exc:
+        # During setup mode or database failure, allow configuration
+        logger.debug(f'Permission check failed (expected during setup mode): {exc}')
+        can_configure = current_app.config.get('SETUP_MODE', False)
+    
+    return render_template(
+        'settings/environment.html',
+        location_settings=location_settings,
+        can_configure=can_configure,
+    )
 
 @environment_bp.route('/admin/environment/download-env')
-@require_permission('system.view_config')
+@require_permission_or_setup_mode('system.view_config')
 def admin_download_env():
     """Download the current .env file as a backup."""
     from flask import send_file
@@ -1153,7 +1179,7 @@ def admin_download_env():
     )
 
 @environment_bp.route('/api/environment/generate-secret', methods=['POST'])
-@require_permission('system.configure')
+@require_permission_or_setup_mode('system.configure')
 def generate_secret_key_api():
     """Generate a new secret key."""
     import secrets

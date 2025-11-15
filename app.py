@@ -739,7 +739,15 @@ def before_request():
             'setup_view_env',
             'setup_download_env',
             'setup_upload_env',
-            'static'
+            'static',
+            # Environment settings - allow access during setup mode to fix database config
+            'environment.get_environment_categories',
+            'environment.get_environment_variables',
+            'environment.update_environment_variables',
+            'environment.validate_environment',
+            'environment.environment_settings',
+            'environment.admin_download_env',
+            'environment.generate_secret_key_api',
         }
         allowed_paths = {
             '/setup',
@@ -749,7 +757,14 @@ def before_request():
             '/setup/success',
             '/setup/view-env',
             '/setup/download-env',
-            '/setup/upload-env'
+            '/setup/upload-env',
+            # Environment settings paths
+            '/settings/environment',
+            '/api/environment/categories',
+            '/api/environment/variables',
+            '/api/environment/validate',
+            '/api/environment/generate-secret',
+            '/admin/environment/download-env',
         }
         is_allowed_endpoint = request.endpoint in allowed_endpoints if request.endpoint else False
         is_allowed_path = request.path in allowed_paths or request.path.startswith('/static/')
