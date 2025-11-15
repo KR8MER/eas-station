@@ -301,6 +301,62 @@ def test_audio_source_endpoint_restores_missing_adapter(audio_app):
         assert "sdr-wxrestore" in controller._sources
 
 
+def test_audio_start_endpoint_restores_missing_adapter(audio_app, monkeypatch):
+    with audio_app.app_context():
+        receiver = _create_receiver(identifier="WXSTART", display_name="Start NOAA")
+        db.session.add(receiver)
+        db.session.commit()
+
+        audio_admin.ensure_sdr_audio_monitor_source(receiver, start_immediately=False, commit=True)
+
+        controller = audio_admin._get_audio_controller()
+        assert "sdr-wxstart" in controller._sources
+
+        controller.remove_source("sdr-wxstart")
+        assert "sdr-wxstart" not in controller._sources
+
+        dummy_adapter = SimpleNamespace(
+            config=SimpleNamespace(
+                name="sdr-wxstart",
+                sample_rate=32000,
+                channels=1,
+                buffer_size=4096,
+                enabled=True,
+                priority=10,
+            ),
+            status=AudioSourceStatus.STOPPED,
+            error_message=None,
+            metrics=SimpleNamespace(metadata={}),
+        )
+
+        def _dummy_start():
+            dummy_adapter.status = AudioSourceStatus.RUNNING
+            return True
+
+        def _dummy_stop():
+            dummy_adapter.status = AudioSourceStatus.STOPPED
+
+        def _dummy_chunk(timeout: float = 0.2):  # pragma: no cover - not used in this test
+            return np.zeros(1024, dtype=np.float32)
+
+        dummy_adapter.start = _dummy_start  # type: ignore[attr-defined]
+        dummy_adapter.stop = _dummy_stop  # type: ignore[attr-defined]
+        dummy_adapter.get_audio_chunk = _dummy_chunk  # type: ignore[attr-defined]
+
+        def _fake_restore(controller_obj, db_config):
+            controller_obj.add_source(dummy_adapter)
+            return dummy_adapter
+
+        monkeypatch.setattr(audio_admin, "_restore_audio_source_from_db_config", _fake_restore)
+
+        client = audio_app.test_client()
+        response = client.post("/api/audio/sources/sdr-wxstart/start")
+
+        assert response.status_code == 200
+        assert dummy_adapter.status == AudioSourceStatus.RUNNING
+        assert "sdr-wxstart" in controller._sources
+
+
 def test_audio_stream_endpoint_uses_wav_mimetype(audio_app):
     with audio_app.app_context():
         controller = audio_admin._get_audio_controller()
