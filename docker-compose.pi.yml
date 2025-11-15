@@ -20,5 +20,5 @@ services:
     devices:
       - /dev/gpiomem:/dev/gpiomem    # GPIO memory access for user-space GPIO control
       - /dev/gpiochip0:/dev/gpiochip0  # GPIO chip device for modern GPIO libraries (lgpio)
-    group_add:
-      - gpio  # Add container user to gpio group for device permissions
+    # Note: group_add gpio removed - device mapping is sufficient for GPIO access
+    # If you get permission errors, run on host: sudo chmod 666 /dev/gpiomem

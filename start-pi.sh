@@ -72,6 +72,16 @@ else
 fi
 
 echo ""
+
+# Ensure GPIO devices have proper permissions
+if [ -e /dev/gpiomem ]; then
+    GPIOMEM_PERMS=$(stat -c "%a" /dev/gpiomem)
+    if [ "$GPIOMEM_PERMS" != "666" ]; then
+        echo "Fixing /dev/gpiomem permissions for Docker access..."
+        sudo chmod 666 /dev/gpiomem 2>/dev/null || echo "  Warning: Could not change permissions (may need sudo)"
+    fi
+fi
+
 echo "Starting EAS Station with Raspberry Pi GPIO support..."
 echo "Using: docker compose -f docker-compose.yml -f docker-compose.pi.yml"
 echo ""
