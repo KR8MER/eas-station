@@ -46,7 +46,7 @@ def upgrade() -> None:
         )
 
         # Populate any existing rows with the default value and then enforce non-null.
-        op.execute(
+        bind.execute(
             sa.text(
                 f"UPDATE {LED_STATUS_TABLE} SET {SERIAL_MODE_COLUMN} = :default"
                 f" WHERE {SERIAL_MODE_COLUMN} IS NULL"

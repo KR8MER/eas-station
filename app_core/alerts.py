@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from flask import current_app, has_app_context
 from sqlalchemy import or_, text
@@ -13,7 +13,7 @@ from sqlalchemy import or_, text
 from app_utils import ALERT_SOURCE_NOAA, normalize_alert_source, utc_now
 
 from .extensions import db
-from .models import CAPAlert, Intersection
+from .models import CAPAlert, EASMessage, Intersection
 
 
 _INVALID_BOUNDARY_IDS_LOGGED: Set[object] = set()
@@ -161,6 +161,69 @@ def get_expired_alerts_query():
 
     now = utc_now()
     return CAPAlert.query.filter(CAPAlert.expires < now)
+
+
+def _extract_text_from_payload(payload: Dict[str, object]) -> Optional[str]:
+    """Best-effort extraction of narration text from an EAS summary payload."""
+
+    if not isinstance(payload, dict):
+        return None
+
+    candidate_keys = (
+        "message_text",
+        "plain_text",
+        "summary",
+        "description",
+        "headline",
+        "instruction",
+    )
+    for key in candidate_keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def load_alert_plain_text_map(alert_ids: Sequence[int]) -> Dict[int, str]:
+    """Return a mapping of CAP alert IDs to EAS narration text."""
+
+    if not alert_ids:
+        return {}
+
+    rows = (
+        db.session.query(EASMessage)
+        .filter(EASMessage.cap_alert_id.in_(alert_ids))
+        .order_by(EASMessage.cap_alert_id.asc(), EASMessage.created_at.desc())
+        .all()
+    )
+
+    plain_text_map: Dict[int, str] = {}
+    seen: Set[int] = set()
+
+    for message in rows:
+        if not message.cap_alert_id or message.cap_alert_id in seen:
+            continue
+
+        payload_text: Optional[str] = None
+        if isinstance(message.text_payload, dict):
+            payload_text = _extract_text_from_payload(message.text_payload)
+
+        if not payload_text and message.text_filename:
+            try:  # pragma: no cover - defensive disk cache fallback
+                from app_core.eas_storage import load_or_cache_summary_payload
+
+                payload = load_or_cache_summary_payload(message)
+            except Exception:
+                payload = None
+            if payload:
+                payload_text = _extract_text_from_payload(payload)
+
+        if payload_text:
+            plain_text_map[message.cap_alert_id] = payload_text
+
+        seen.add(message.cap_alert_id)
+
+    return plain_text_map
 
 
 def ensure_multipolygon(geometry: Dict[str, object]) -> Dict[str, object]:

@@ -4,6 +4,44 @@
 
 set -e
 
+usage() {
+    cat <<EOF
+Usage: ./start-pi.sh [options]
+
+Options:
+  --force-env-sync   Always copy local .env into the app-config volume (overwrites existing)
+  --skip-env-sync    Do not copy local .env into the app-config volume
+  -h, --help         Show this message
+
+Without flags the script copies .env into the volume only when it does not
+already exist, or when you confirm an overwrite interactively.
+EOF
+}
+
+FORCE_ENV_SYNC=0
+SKIP_ENV_SYNC=0
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --force-env-sync)
+            FORCE_ENV_SYNC=1
+            ;;
+        --skip-env-sync)
+            SKIP_ENV_SYNC=1
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            usage
+            exit 1
+            ;;
+    esac
+    shift
+done
+
 echo "=== EAS Station - Raspberry Pi GPIO/OLED Startup ==="
 echo ""
 
@@ -119,23 +157,45 @@ fi
 
 echo "Syncing .env to persistent Docker volume..."
 
+sync_env_to_volume() {
+    docker run --rm \
+      -v eas-station_app-config:/app-config \
+      -v "$(pwd)/.env:/host-env:ro" \
+      alpine sh -c "cp /host-env /app-config/.env && chmod 644 /app-config/.env" 2>/dev/null
+}
+
 # Ensure volume exists by starting it briefly if needed
 if ! docker volume inspect eas-station_app-config &>/dev/null; then
     echo "Creating app-config volume..."
     docker volume create eas-station_app-config
 fi
 
-# Copy local .env to persistent volume
-# This preserves settings across git pulls and redeployments
-docker run --rm \
-  -v eas-station_app-config:/app-config \
-  -v "$(pwd)/.env:/host-env:ro" \
-  alpine sh -c "cp /host-env /app-config/.env && chmod 644 /app-config/.env" 2>/dev/null
+VOLUME_HAS_ENV=0
+if docker run --rm -v eas-station_app-config:/app-config alpine sh -c 'test -f /app-config/.env'; then
+    VOLUME_HAS_ENV=1
+fi
 
-if [ $? -eq 0 ]; then
-    echo "✓ Configuration synced to persistent volume"
+if [ $SKIP_ENV_SYNC -eq 1 ]; then
+    echo "Skipping configuration sync (--skip-env-sync specified)"
+elif [ $VOLUME_HAS_ENV -eq 1 ] && [ $FORCE_ENV_SYNC -eq 0 ]; then
+    echo "Existing configuration detected inside app-config volume."
+    read -p "Replace it with the local .env file? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        if sync_env_to_volume; then
+            echo "✓ Configuration synced to persistent volume"
+        else
+            echo "⚠ Warning: Could not sync .env to volume (continuing anyway)"
+        fi
+    else
+        echo "Preserving existing configuration in app-config volume."
+    fi
 else
-    echo "⚠ Warning: Could not sync .env to volume (continuing anyway)"
+    if sync_env_to_volume; then
+        echo "✓ Configuration synced to persistent volume"
+    else
+        echo "⚠ Warning: Could not sync .env to volume (continuing anyway)"
+    fi
 fi
 
 echo ""

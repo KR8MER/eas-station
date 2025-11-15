@@ -6,13 +6,16 @@ for custom screen templates.
 
 import logging
 import random
+import textwrap
 import threading
 import time
 from collections import deque
 from datetime import datetime, timedelta
-from typing import Deque, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Optional
 
 from flask import Flask
+
+from app_utils import ALERT_SOURCE_IPAWS, ALERT_SOURCE_MANUAL
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +89,18 @@ class ScreenManager:
         self._oled_button_lock = threading.Lock()
         self._oled_button_held = False
         self._oled_button_initialized = False
+        self._oled_alert_scroll_interval = 4
+        self._oled_alert_lines_per_frame = 2
+        self._oled_alert_wrap_width = 13
+        self._oled_alert_chunks: List[List[str]] = []
+        self._oled_alert_chunk_index = 0
+        self._current_alert_id: Optional[int] = None
+        self._current_alert_priority: Optional[int] = None
+        self._current_alert_text: Optional[str] = None
+        self._last_oled_alert_render = datetime.min
+        self._active_alert_cache: List[Dict[str, Any]] = []
+        self._active_alert_cache_timestamp = datetime.min
+        self._active_alert_cache_ttl = timedelta(seconds=1)
 
     def init_app(self, app: Flask):
         """Initialize with Flask app context.
@@ -274,7 +289,8 @@ class ScreenManager:
         if not self._oled_rotation:
             return
 
-        if self._oled_rotation.get('skip_on_alert') and self._has_active_alerts():
+        now = datetime.utcnow()
+        if self._oled_rotation.get('skip_on_alert') and self._handle_oled_alert_preemption(now):
             return
 
         screens = self._oled_rotation.get('screens', [])
@@ -289,7 +305,6 @@ class ScreenManager:
         screen_config = screens[current_index]
         duration = screen_config.get('duration', 10)
 
-        now = datetime.utcnow()
         if now - self._last_oled_update >= timedelta(seconds=duration):
             self._display_oled_screen(screen_config)
             self._last_oled_update = now
@@ -716,6 +731,259 @@ class ScreenManager:
 
         except Exception as e:
             logger.error(f"Error displaying OLED screen: {e}")
+
+    def _handle_oled_alert_preemption(self, now: datetime) -> bool:
+        """Display high-priority alerts on the OLED, preempting normal rotation."""
+
+        alerts = self._get_cached_active_alerts(now)
+        if not alerts:
+            if self._current_alert_id is not None:
+                self._reset_oled_alert_state()
+            return False
+
+        alerts.sort(
+            key=lambda entry: (
+                entry['priority_rank'],
+                -entry['priority_ts'].timestamp(),
+                entry['id'],
+            )
+        )
+        top_alert = alerts[0]
+
+        if (
+            self._current_alert_id != top_alert['id']
+            or self._current_alert_priority != top_alert['priority_rank']
+            or self._current_alert_text != top_alert['body_text']
+        ):
+            self._prepare_alert_chunks(top_alert)
+
+        if not self._oled_alert_chunks:
+            return True
+
+        if now - self._last_oled_alert_render < timedelta(seconds=self._oled_alert_scroll_interval):
+            return True
+
+        self._display_alert_chunk(top_alert)
+        self._last_oled_alert_render = now
+        self._last_oled_update = now
+        self._oled_alert_chunk_index = (self._oled_alert_chunk_index + 1) % len(self._oled_alert_chunks)
+        return True
+
+    def _prepare_alert_chunks(self, alert_meta: Dict[str, Any]) -> None:
+        text = alert_meta.get('body_text') or ''
+        chunks = self._chunk_alert_text(text)
+        self._oled_alert_chunks = chunks
+        self._oled_alert_chunk_index = 0
+        self._current_alert_id = alert_meta.get('id')
+        self._current_alert_priority = alert_meta.get('priority_rank')
+        self._current_alert_text = alert_meta.get('body_text')
+        header = alert_meta.get('header_text') or alert_meta.get('event') or 'Alert'
+        logger.info("OLED alert preemption engaged: %s", header)
+
+    def _chunk_alert_text(self, text: str) -> List[List[str]]:
+        cleaned = ' '.join((text or '').split())
+        if not cleaned:
+            cleaned = 'Active alert in effect.'
+
+        wrapped = textwrap.wrap(
+            cleaned,
+            width=self._oled_alert_wrap_width,
+            break_long_words=False,
+            break_on_hyphens=False,
+        )
+        if not wrapped:
+            wrapped = [cleaned]
+
+        frames: List[List[str]] = []
+        step = max(1, self._oled_alert_lines_per_frame)
+        for index in range(0, len(wrapped), step):
+            chunk = wrapped[index : index + step]
+            while len(chunk) < step:
+                chunk.append('')
+            frames.append(chunk)
+
+        return frames or [[cleaned]]
+
+    def _display_alert_chunk(self, alert_meta: Dict[str, Any]) -> None:
+        if not self._oled_alert_chunks:
+            return
+
+        try:
+            from app_core.oled import OLEDLine, initialise_oled_display
+            import app_core.oled as oled_module
+        except Exception as exc:  # pragma: no cover - hardware optional
+            logger.debug("OLED controller unavailable for alert display: %s", exc)
+            return
+
+        controller = oled_module.oled_controller or initialise_oled_display(logger)
+        if controller is None:
+            return
+
+        header_text = alert_meta.get('header_text') or 'Alert'
+        chunk = self._oled_alert_chunks[self._oled_alert_chunk_index]
+
+        line_objects = [
+            OLEDLine(
+                text=header_text,
+                x=0,
+                y=0,
+                font='small',
+                wrap=False,
+                max_width=124,
+            )
+        ]
+
+        start_y = 16
+        for idx, line in enumerate(chunk):
+            line_objects.append(
+                OLEDLine(
+                    text=line,
+                    x=0,
+                    y=start_y + idx * 22,
+                    font='large',
+                    wrap=False,
+                    allow_empty=True,
+                )
+            )
+
+        controller.display_lines(line_objects, clear=True)
+        logger.debug(
+            "OLED alert chunk displayed: %s (chunk %s/%s)",
+            header_text,
+            self._oled_alert_chunk_index + 1,
+            len(self._oled_alert_chunks),
+        )
+
+    def _reset_oled_alert_state(self) -> None:
+        self._oled_alert_chunks = []
+        self._oled_alert_chunk_index = 0
+        self._current_alert_id = None
+        self._current_alert_priority = None
+        self._current_alert_text = None
+        self._last_oled_alert_render = datetime.min
+
+    def _get_cached_active_alerts(self, now: datetime) -> List[Dict[str, Any]]:
+        if now - self._active_alert_cache_timestamp <= self._active_alert_cache_ttl:
+            return list(self._active_alert_cache)
+
+        payloads = self._query_active_alert_payloads()
+        self._active_alert_cache = payloads
+        self._active_alert_cache_timestamp = now
+        return list(payloads)
+
+    def _query_active_alert_payloads(self) -> List[Dict[str, Any]]:
+        try:
+            from sqlalchemy.orm import load_only
+
+            from app_core.alerts import (
+                get_active_alerts_query,
+                load_alert_plain_text_map,
+            )
+            from app_core.models import CAPAlert
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.error("Unable to query active alerts for OLED: %s", exc)
+            return []
+
+        query = (
+            get_active_alerts_query()
+            .options(
+                load_only(
+                    CAPAlert.id,
+                    CAPAlert.event,
+                    CAPAlert.severity,
+                    CAPAlert.headline,
+                    CAPAlert.description,
+                    CAPAlert.instruction,
+                    CAPAlert.area_desc,
+                    CAPAlert.expires,
+                    CAPAlert.sent,
+                    CAPAlert.updated_at,
+                    CAPAlert.created_at,
+                    CAPAlert.source,
+                )
+            )
+            .order_by(CAPAlert.sent.desc())
+        )
+
+        alerts = query.all()
+        if not alerts:
+            return []
+
+        alert_ids = [alert.id for alert in alerts if alert.id]
+        plain_text_map = load_alert_plain_text_map(alert_ids)
+        severity_order = {
+            'Extreme': 0,
+            'Severe': 1,
+            'Moderate': 2,
+            'Minor': 3,
+            'Unknown': 4,
+        }
+
+        payloads: List[Dict[str, Any]] = []
+        for alert in alerts:
+            if not alert.id:
+                continue
+
+            severity = (alert.severity or 'Unknown').title()
+            priority_rank = severity_order.get(severity, len(severity_order))
+            source_value = getattr(alert, 'source', None)
+            is_eas_source = source_value in {ALERT_SOURCE_IPAWS, ALERT_SOURCE_MANUAL}
+            body_text = self._compose_alert_body_text(alert, plain_text_map, is_eas_source)
+            header_text = self._format_alert_header(alert, severity)
+            payloads.append(
+                {
+                    'id': alert.id,
+                    'severity': severity,
+                    'event': alert.event,
+                    'source': source_value,
+                    'body_text': body_text,
+                    'header_text': header_text,
+                    'priority_rank': priority_rank,
+                    'priority_ts': self._extract_alert_priority_timestamp(alert),
+                }
+            )
+
+        return payloads
+
+    @staticmethod
+    def _compose_alert_body_text(alert, plain_text_map: Dict[int, str], is_eas_source: bool) -> str:
+        if is_eas_source:
+            plain_text = plain_text_map.get(alert.id)
+            if plain_text:
+                return plain_text.strip()
+
+        segments: List[str] = []
+        for attr in ('headline', 'description', 'instruction'):
+            value = getattr(alert, attr, '') or ''
+            if value:
+                segments.append(str(value).strip())
+
+        combined = '\n\n'.join(segments).strip()
+        if combined:
+            return combined
+
+        fallback = getattr(alert, 'event', None) or 'Active alert in effect.'
+        return str(fallback)
+
+    @staticmethod
+    def _format_alert_header(alert, severity: str) -> str:
+        parts = []
+        severity_value = severity.strip()
+        if severity_value:
+            parts.append(severity_value)
+        event_value = getattr(alert, 'event', '') or ''
+        if event_value:
+            parts.append(str(event_value).strip())
+        header = ' '.join(parts).strip()
+        return header or 'Alert'
+
+    @staticmethod
+    def _extract_alert_priority_timestamp(alert) -> datetime:
+        for attr_name in ('sent', 'updated_at', 'created_at'):
+            candidate = getattr(alert, attr_name, None)
+            if isinstance(candidate, datetime):
+                return candidate.replace(tzinfo=None) if candidate.tzinfo else candidate
+        return datetime.utcnow()
 
     def _has_active_alerts(self) -> bool:
         """Check if there are active alerts.

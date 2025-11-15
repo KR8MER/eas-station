@@ -6,6 +6,10 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 ### Added
+- Extended `/api/system_status` and `/api/system_health` with hostname, primary IPv4, uptime, and primary-interface metadata
+  so OLED/network templates can surface real host diagnostics.
+- Added a curated OLED showcase rotation (system overview, alerts, network beacon, IPAWS poll watch, audio health, and audio
+  telemetry) plus a `--display-type` flag to `scripts/create_example_screens.py` for targeted installs.
 - Enforced Argon Industria OLED reservations by blocking BCM pins 2, 3, 4, and 14 (physical header block 1-8) from GPIO configuration, greying them out in the GPIO Pin Map, and surfacing guidance in setup, environment, and hardware docs.
 - Provisioned default OLED status screens with system, alert, and audio telemetry plus on-device button shortcuts (short press to advance rotation, long press for a live snapshot).
 - Added Argon Industria SSD1306 OLED module support with full configuration tooling and display workflows
@@ -198,6 +202,22 @@ tracks releases under the 2.x series.
   "First-Time Administrator Setup" wizard when no accounts exist.
 - Introduced optional Azure AI speech synthesis to append narrated voiceovers when the
   appropriate credentials and SDK are available.
+
+## [2.9.0] - 2025-11-15
+### Added
+- OLED alert rotations now preempt normal playlists when `skip_on_alert` is enabled, prioritizing the most severe alert and
+  scrolling its text in a large font for the entire duration. EAS/IPAWS sources render their full plain-language narration while
+  other sources fall back to headline + description so operators always see useful context.
+- `/api/alerts` now returns each alert's source and (when available) the cached EAS narration text, allowing custom OLED/LED
+  templates or Portainer dashboards to display the same preemption-ready payloads.
+
+## [2.8.0] - 2025-02-15
+
+### Fixed
+- Prevented the `20251113_add_serial_mode_to_led_sign_status` Alembic migration from
+  raising `TypeError: execute() takes 2 positional arguments but 3 were given` by
+  issuing the default value backfill through the SQLAlchemy bind connection instead
+  of `op.execute`, ensuring upgrades complete cleanly before the app starts.
 - Added an offline pyttsx3 text-to-speech provider so narration can be generated without
   external network services when the engine is installed locally.
 - Authored dedicated `docs/reference/ABOUT.md` and `docs/guides/HELP.md` documentation describing the system mission, software stack, and operational playbooks, with cross-links from the README for quick discovery.
