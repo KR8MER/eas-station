@@ -53,6 +53,13 @@ tracks releases under the 2.x series.
   - SVG filters for depth, glow effects, and contemporary design polish
 
 ### Fixed
+- Restored SSL certificate and private key export downloads by mounting the Let's Encrypt
+  volume into the application container and searching both `/etc/letsencrypt` and
+  `/app-config/certs` for domain materials before returning actionable guidance.
+- Converted the Stream Profiles interface to the shared base layout with Bootstrap 5 modal
+  controls so its header, theming, and actions match the rest of the application.
+- Reduced excessive whitespace in dark themes by introducing theme-aware layout spacing
+  variables that tighten main content padding and footer offsets across all dark presets.
 - Ensure the 20251107 decoded audio segment migration only adds the
   attention tone and narration columns when they are missing so fresh
   installs don't abort before administrator accounts can be created.
