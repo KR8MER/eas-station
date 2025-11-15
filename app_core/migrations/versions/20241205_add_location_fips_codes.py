@@ -23,6 +23,11 @@ def upgrade() -> None:
     conn = op.get_bind()
     inspector = inspect(conn)
 
+    # If the table does not exist yet (fresh install on earlier revisions),
+    # skip the migration gracefully.
+    if "location_settings" not in inspector.get_table_names():
+        return
+
     # Check existing columns
     existing_columns = {col['name'] for col in inspector.get_columns('location_settings')}
 
@@ -55,5 +60,16 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    conn = op.get_bind()
+    inspector = inspect(conn)
+
+    if "location_settings" not in inspector.get_table_names():
+        return
+
+    existing_columns = {col['name'] for col in inspector.get_columns('location_settings')}
+
+    if "fips_codes" not in existing_columns:
+        return
+
     with op.batch_alter_table("location_settings", schema=None) as batch:
         batch.drop_column("fips_codes")
