@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
+import socket
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -13,7 +15,14 @@ from sqlalchemy import desc, func
 from app_core.extensions import db
 from app_core.models import Boundary, CAPAlert, EASMessage, Intersection, PollHistory
 from app_core.system_health import get_system_health
-from app_utils import UTC_TZ, get_location_timezone, get_location_timezone_name, local_now, utc_now
+from app_utils import (
+    UTC_TZ,
+    format_uptime,
+    get_location_timezone,
+    get_location_timezone_name,
+    local_now,
+    utc_now,
+)
 from app_core.eas_storage import get_eas_static_prefix, format_local_datetime
 from app_core.boundaries import (
     get_boundary_color,
@@ -48,6 +57,28 @@ def _get_cpu_usage_percent() -> float:
         _last_cpu_sample_value = psutil.cpu_percent(interval=None)
         _last_cpu_sample_timestamp = now
     return _last_cpu_sample_value
+
+
+def _get_primary_ip_address() -> Optional[str]:
+    """Best-effort detection of the host's primary IPv4 address."""
+
+    try:
+        with contextlib.closing(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as sock:
+            sock.connect(("8.8.8.8", 80))
+            ip_address = sock.getsockname()[0]
+            if ip_address:
+                return ip_address
+    except OSError:
+        pass
+
+    try:
+        ip_address = socket.gethostbyname(socket.gethostname())
+        if ip_address:
+            return ip_address
+    except OSError:
+        pass
+
+    return None
 
 
 def register_api_routes(app, logger):
@@ -731,6 +762,9 @@ def api_system_status():
 
         current_utc = utc_now()
         current_local = local_now()
+        hostname = socket.gethostname()
+        ip_address = _get_primary_ip_address()
+        uptime_seconds = max(current_utc.timestamp() - psutil.boot_time(), 0.0)
 
         status = 'healthy'
         status_reasons = []
@@ -862,6 +896,8 @@ def api_system_status():
                 'timestamp': current_utc.isoformat(),
                 'local_timestamp': current_local.isoformat(),
                 'timezone': get_location_timezone_name(),
+                'hostname': hostname,
+                'ip_address': ip_address,
                 'boundaries_count': total_boundaries,
                 'active_alerts_count': active_alerts,
                 'database_status': 'connected',
@@ -872,6 +908,8 @@ def api_system_status():
                     'disk_usage_percent': disk.percent,
                     'disk_free_gb': disk.free // (1024 * 1024 * 1024),
                 },
+                'uptime_seconds': uptime_seconds,
+                'uptime_human': format_uptime(uptime_seconds),
             }
         )
     except Exception as exc:

@@ -370,7 +370,11 @@ Supported operators: `==`, `!=`, `>`, `<`, `>=`, `<=`
 Run the example screen creation script:
 
 ```bash
+# Provision all sample LED, VFD, and OLED templates
 python3 scripts/create_example_screens.py
+
+# Only install the OLED showcase rotation
+python3 scripts/create_example_screens.py --display-type oled
 ```
 
 This creates:

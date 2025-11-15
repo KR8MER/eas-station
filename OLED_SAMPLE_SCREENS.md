@@ -137,6 +137,28 @@ When you hold the OLED button (GPIO 4, pin 7) for 1.25 seconds, this screen disp
 
 ---
 
+## Installing the Showcase Rotation
+
+Deploy the curated OLED rotation (system overview, alerts, network, poll telemetry, and audio health) with:
+
+```
+python3 scripts/create_example_screens.py --display-type oled
+```
+
+The script is idempotent: it creates any missing OLED screen templates, adds them to the default rotation, and leaves your custom screens untouched.
+
+### Included screens
+- **`oled_system_overview`** – command-deck clock with status summary and CPU/MEM/Disk utilization.
+- **`oled_alert_summary`** – highlighted event, severity, and area for the most urgent alert, plus an active alert count.
+- **`oled_network_beacon`** – hostname, uptime, primary interface name, IPv4 address, and link speed from `/api/system_health`.
+- **`oled_ipaws_poll_watch`** – timestamp, status, and fetch metrics for the last IPAWS poll run from `/api/system_status`.
+- **`oled_audio_health_matrix`** – audio health score, active source count, and silence detection for the newest health record.
+- **`oled_audio_telemetry`** – live peak/RMS readings for the busiest two audio sources.
+
+Re-run the script any time you upgrade to ensure your rotation contains the newest templates.
+
+---
+
 ## Sample Screen 3: Network Information
 
 ```json
@@ -194,6 +216,100 @@ When you hold the OLED button (GPIO 4, pin 7) for 1.25 seconds, this screen disp
 │  omv.local                     │
 │  IP Address:                   │
 │  192.168.1.100                 │
+└────────────────────────────────┘
+```
+
+---
+
+## Sample Screen 4: Network Beacon
+
+```json
+{
+  "name": "Network Beacon",
+  "display_type": "oled",
+  "enabled": true,
+  "template_data": {
+    "clear": true,
+    "lines": [
+      {"text": "◢ NETWORK BEACON ◣", "font": "medium", "invert": true, "wrap": false},
+      {"text": "{health.system.hostname}", "font": "small", "y": 15, "wrap": false},
+      {"text": "LAN {health.network.primary_interface_name}", "y": 27, "allow_empty": true},
+      {"text": "{health.network.primary_ipv4}", "y": 39, "allow_empty": true},
+      {
+        "text": "Speed {health.network.primary_interface.speed_mbps} Mbps  MTU {health.network.primary_interface.mtu}",
+        "y": 51,
+        "allow_empty": true,
+        "max_width": 124
+      }
+    ]
+  },
+  "data_sources": [
+    {"endpoint": "/api/system_health", "var_name": "health"}
+  ]
+}
+```
+
+**Renders as:**
+
+```
+┌────────────────────────────────┐
+│◢ NETWORK BEACON ◣             │
+│ argon-wxlab                   │
+│ LAN eth0                      │
+│ 192.168.1.87                  │
+│ Speed 1000 Mbps  MTU 1500     │
+└────────────────────────────────┘
+```
+
+---
+
+## Sample Screen 5: IPAWS Poll Watch
+
+```json
+{
+  "name": "IPAWS Poll Watch",
+  "display_type": "oled",
+  "enabled": true,
+  "template_data": {
+    "clear": true,
+    "lines": [
+      {"text": "◢ IPAWS POLLER ◣", "font": "medium", "invert": true},
+      {
+        "text": "Last {status.last_poll.local_timestamp}",
+        "y": 17,
+        "allow_empty": true,
+        "max_width": 124
+      },
+      {"text": "Status {status.last_poll.status}", "y": 29, "allow_empty": true},
+      {
+        "text": "+{status.last_poll.alerts_new} new / {status.last_poll.alerts_fetched} fetched",
+        "y": 41,
+        "allow_empty": true,
+        "max_width": 124
+      },
+      {
+        "text": "Source {status.last_poll.data_source}",
+        "y": 53,
+        "allow_empty": true,
+        "max_width": 124
+      }
+    ]
+  },
+  "data_sources": [
+    {"endpoint": "/api/system_status", "var_name": "status"}
+  ]
+}
+```
+
+**Renders as:**
+
+```
+┌────────────────────────────────┐
+│◢ IPAWS POLLER ◣               │
+│ Last 2025-11-15 18:00 EST     │
+│ Status success                │
+│ +0 new / 9 fetched            │
+│ Source ipaws.gov              │
 └────────────────────────────────┘
 ```
 

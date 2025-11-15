@@ -1,6 +1,6 @@
 """Create example screen templates to showcase display capabilities.
 
-This script creates various example screens for LED and VFD displays demonstrating:
+This script creates various example screens for LED, VFD, and OLED displays demonstrating:
 - System status and health monitoring
 - Resource usage (CPU, memory, disk)
 - Network information
@@ -9,11 +9,66 @@ This script creates various example screens for LED and VFD displays demonstrati
 - Temperature monitoring
 """
 
+import argparse
 import logging
+from typing import Any, Dict, Iterable, List, Optional, Sequence
+
 from app_core.extensions import db
 from app_core.models import DisplayScreen, ScreenRotation
 
 logger = logging.getLogger(__name__)
+
+
+def _append_missing_screens(
+    rotation: ScreenRotation,
+    new_entries: Iterable[Dict[str, int]],
+) -> bool:
+    """Append screen references that are not already part of a rotation."""
+
+    existing = rotation.screens or []
+    existing_ids = {entry.get("screen_id") for entry in existing if isinstance(entry, dict)}
+    appended = False
+
+    for entry in new_entries:
+        screen_id = entry.get("screen_id")
+        if not screen_id or screen_id in existing_ids:
+            continue
+        existing.append(entry)
+        existing_ids.add(screen_id)
+        appended = True
+
+    if appended:
+        rotation.screens = existing
+    return appended
+
+
+def _ensure_rotation(rotation_defaults: Dict[str, Any], screen_entries: List[Dict[str, int]]):
+    """Create a rotation or append any newly created screens."""
+
+    if not screen_entries:
+        return
+
+    rotation = ScreenRotation.query.filter_by(name=rotation_defaults["name"]).first()
+    if not rotation:
+        payload = dict(rotation_defaults)
+        payload["screens"] = list(screen_entries)
+        rotation = ScreenRotation(**payload)
+        db.session.add(rotation)
+        logger.info(f"Created {rotation_defaults['display_type'].upper()} rotation: {rotation_defaults['name']}")
+        return
+
+    if _append_missing_screens(rotation, screen_entries):
+        db.session.add(rotation)
+        logger.info(
+            "Updated %s rotation '%s' with %d screen(s)",
+            rotation.display_type.upper(),
+            rotation.name,
+            len(screen_entries),
+        )
+    else:
+        logger.info(
+            "Rotation '%s' already includes all requested screens", rotation.name
+        )
 
 
 # ============================================================
@@ -552,21 +607,34 @@ VFD_DUAL_VU_METER = {
 
 OLED_SYSTEM_OVERVIEW = {
     "name": "oled_system_overview",
-    "description": "Compact system health overview for the Argon OLED.",
+    "description": "Command deck clock with health summary and resource meters.",
     "display_type": "oled",
     "enabled": True,
     "priority": 1,
-    "refresh_interval": 30,
+    "refresh_interval": 20,
     "duration": 12,
     "template_data": {
         "clear": True,
         "lines": [
-            {"text": "{now.time_24}", "font": "large", "wrap": False, "x": 0, "y": 0},
-            {"text": "Status {status.status}", "font": "medium", "wrap": False, "x": 70, "y": 2},
-            {"text": "{status.status_summary}", "y": 22, "max_width": 124, "spacing": 3},
+            {
+                "text": "◢ SYSTEM STATUS ◣",
+                "font": "medium",
+                "wrap": False,
+                "invert": True,
+                "spacing": 1,
+                "y": 0,
+            },
+            {
+                "text": "{now.date}  {now.time_24}",
+                "font": "small",
+                "wrap": False,
+                "y": 15,
+                "max_width": 124,
+            },
+            {"text": "{status.status_summary}", "y": 27, "max_width": 124},
             {
                 "text": "CPU {status.system_resources.cpu_usage_percent}%  MEM {status.system_resources.memory_usage_percent}%",
-                "y": 44,
+                "y": 45,
                 "wrap": False,
                 "max_width": 124,
             },
@@ -585,35 +653,44 @@ OLED_SYSTEM_OVERVIEW = {
 
 OLED_ALERT_SUMMARY = {
     "name": "oled_alert_summary",
-    "description": "Active alert highlight with event and expiry details.",
+    "description": "Active alert highlight with event, severity, and affected area.",
     "display_type": "oled",
     "enabled": True,
     "priority": 2,
-    "refresh_interval": 20,
+    "refresh_interval": 15,
     "duration": 12,
     "template_data": {
         "clear": True,
         "lines": [
-            {"text": "Alerts {alerts.metadata.total_features}", "font": "medium", "wrap": False, "y": 0},
+            {
+                "text": "◢ ALERT STACK ◣",
+                "font": "medium",
+                "wrap": False,
+                "invert": True,
+                "spacing": 1,
+            },
+            {
+                "text": "Active {alerts.metadata.total_features}",
+                "font": "small",
+                "wrap": False,
+                "y": 15,
+            },
             {
                 "text": "{alerts.features[0].properties.event}",
-                "y": 18,
+                "font": "medium",
+                "y": 26,
                 "max_width": 124,
                 "allow_empty": True,
             },
             {
-                "text": "Severity {alerts.features[0].properties.severity}",
-                "y": 32,
+                "text": "Severity {alerts.features[0].properties.severity}  ·  Exp {alerts.features[0].properties.expires_iso}",
+                "y": 40,
                 "allow_empty": True,
-            },
-            {
-                "text": "Expires {alerts.features[0].properties.expires_iso}",
-                "y": 44,
-                "allow_empty": True,
+                "max_width": 124,
             },
             {
                 "text": "Area {alerts.features[0].properties.area_desc}",
-                "y": 56,
+                "y": 52,
                 "max_width": 124,
                 "allow_empty": True,
             },
@@ -624,37 +701,191 @@ OLED_ALERT_SUMMARY = {
     ],
 }
 
-OLED_AUDIO_TELEMETRY = {
-    "name": "oled_audio_telemetry",
-    "description": "Audio pipeline telemetry including live levels.",
+OLED_NETWORK_BEACON = {
+    "name": "oled_network_beacon",
+    "description": "Network beacon showing hostname, uptime, and LAN details.",
     "display_type": "oled",
     "enabled": True,
-    "priority": 2,
-    "refresh_interval": 15,
+    "priority": 1,
+    "refresh_interval": 45,
     "duration": 12,
     "template_data": {
         "clear": True,
         "lines": [
-            {"text": "Audio Sources {audio.total_sources}", "font": "medium", "wrap": False, "y": 0},
             {
-                "text": "Live Peak {audio.live_metrics[0].peak_level_db} dB",
-                "y": 20,
+                "text": "◢ NETWORK BEACON ◣",
+                "font": "medium",
+                "wrap": False,
+                "invert": True,
+                "spacing": 1,
+            },
+            {
+                "text": "{health.system.hostname}",
+                "font": "small",
+                "wrap": False,
+                "y": 15,
+                "max_width": 124,
+            },
+            {
+                "text": "Uptime {health.system.uptime_human}",
+                "y": 27,
                 "allow_empty": True,
             },
             {
-                "text": "RMS {audio.live_metrics[0].rms_level_db} dB",
-                "y": 32,
+                "text": "LAN {health.network.primary_interface_name}",
+                "y": 39,
                 "allow_empty": True,
             },
             {
-                "text": "Silence {audio.live_metrics[0].silence_detected}",
-                "y": 44,
+                "text": "{health.network.primary_ipv4}",
+                "y": 49,
                 "allow_empty": True,
             },
             {
-                "text": "Buffer {audio.live_metrics[0].buffer_utilization}%",
-                "y": 56,
+                "text": "Speed {health.network.primary_interface.speed_mbps} Mbps  MTU {health.network.primary_interface.mtu}",
+                "y": 59,
                 "allow_empty": True,
+                "max_width": 124,
+            },
+        ],
+    },
+    "data_sources": [
+        {"endpoint": "/api/system_health", "var_name": "health"},
+    ],
+}
+
+OLED_IPAWS_POLL_WATCH = {
+    "name": "oled_ipaws_poll_watch",
+    "description": "IPAWS poll recency, status, and last data source.",
+    "display_type": "oled",
+    "enabled": True,
+    "priority": 2,
+    "refresh_interval": 30,
+    "duration": 12,
+    "template_data": {
+        "clear": True,
+        "lines": [
+            {
+                "text": "◢ IPAWS POLLER ◣",
+                "font": "medium",
+                "wrap": False,
+                "invert": True,
+                "spacing": 1,
+            },
+            {
+                "text": "Last {status.last_poll.local_timestamp}",
+                "y": 17,
+                "allow_empty": True,
+                "max_width": 124,
+            },
+            {
+                "text": "Status {status.last_poll.status}",
+                "y": 29,
+                "allow_empty": True,
+            },
+            {
+                "text": "+{status.last_poll.alerts_new} new / {status.last_poll.alerts_fetched} fetched",
+                "y": 41,
+                "allow_empty": True,
+                "max_width": 124,
+            },
+            {
+                "text": "Source {status.last_poll.data_source}",
+                "y": 53,
+                "allow_empty": True,
+                "max_width": 124,
+            },
+        ],
+    },
+    "data_sources": [
+        {"endpoint": "/api/system_status", "var_name": "status"},
+    ],
+}
+
+OLED_AUDIO_HEALTH_MATRIX = {
+    "name": "oled_audio_health_matrix",
+    "description": "Audio ingest health and first-source diagnosis.",
+    "display_type": "oled",
+    "enabled": True,
+    "priority": 2,
+    "refresh_interval": 20,
+    "duration": 12,
+    "template_data": {
+        "clear": True,
+        "lines": [
+            {
+                "text": "◢ AUDIO HEALTH ◣",
+                "font": "medium",
+                "wrap": False,
+                "invert": True,
+                "spacing": 1,
+            },
+            {
+                "text": "Score {audio_health.overall_health_score}% ({audio_health.overall_status})",
+                "y": 15,
+                "allow_empty": True,
+                "max_width": 124,
+            },
+            {
+                "text": "Active {audio_health.active_sources}/{audio_health.total_sources}",
+                "y": 27,
+                "allow_empty": True,
+            },
+            {
+                "text": "{audio_health.health_records[0].source_name}",
+                "y": 39,
+                "allow_empty": True,
+                "max_width": 124,
+            },
+            {
+                "text": "Healthy {audio_health.health_records[0].is_healthy}  Silence {audio_health.health_records[0].silence_detected}",
+                "y": 51,
+                "allow_empty": True,
+                "max_width": 124,
+            },
+        ],
+    },
+    "data_sources": [
+        {"endpoint": "/api/audio/health", "var_name": "audio_health"},
+    ],
+}
+
+OLED_AUDIO_TELEMETRY = {
+    "name": "oled_audio_telemetry",
+    "description": "Live audio peaks and buffer utilization for leading sources.",
+    "display_type": "oled",
+    "enabled": True,
+    "priority": 2,
+    "refresh_interval": 12,
+    "duration": 12,
+    "template_data": {
+        "clear": True,
+        "lines": [
+            {
+                "text": "◢ AUDIO TELEMETRY ◣",
+                "font": "medium",
+                "wrap": False,
+                "invert": True,
+                "spacing": 1,
+            },
+            {"text": "Sources {audio.total_sources}", "font": "small", "wrap": False, "y": 15},
+            {
+                "text": "{audio.live_metrics[0].source_name}: {audio.live_metrics[0].peak_level_db} dB",
+                "y": 27,
+                "allow_empty": True,
+                "max_width": 124,
+            },
+            {
+                "text": "RMS {audio.live_metrics[0].rms_level_db} dB  ·  Silence {audio.live_metrics[0].silence_detected}",
+                "y": 39,
+                "allow_empty": True,
+                "max_width": 124,
+            },
+            {
+                "text": "{audio.live_metrics[1].source_name}: {audio.live_metrics[1].peak_level_db} dB | Buf {audio.live_metrics[1].buffer_utilization}%",
+                "y": 51,
+                "allow_empty": True,
+                "max_width": 124,
             },
         ],
     },
@@ -699,125 +930,127 @@ OLED_DEFAULT_ROTATION = {
 }
 
 
-def create_example_screens(app):
+def create_example_screens(app, display_types: Optional[Sequence[str]] = None):
     """Create example screen templates in the database.
 
     Args:
         app: Flask application instance
+        display_types: Optional iterable of display types to limit creation to
     """
+
+    requested = set(display_types or ("led", "vfd", "oled"))
+    valid_types = {"led", "vfd", "oled"}
+    requested &= valid_types
+
+    if not requested:
+        logger.warning("No valid display types requested; nothing to create")
+        return
+
     with app.app_context():
-        logger.info("Creating example screen templates...")
+        logger.info("Creating example screen templates for: %s", ", ".join(sorted(requested)))
 
-        # LED Templates
-        led_templates = [
-            LED_SYSTEM_STATUS,
-            LED_RESOURCES,
-            LED_NETWORK_INFO,
-            LED_ALERT_SUMMARY,
-            LED_TIME_DATE,
-            LED_RECEIVER_STATUS,
-        ]
+        if "led" in requested:
+            led_templates = [
+                LED_SYSTEM_STATUS,
+                LED_RESOURCES,
+                LED_NETWORK_INFO,
+                LED_ALERT_SUMMARY,
+                LED_TIME_DATE,
+                LED_RECEIVER_STATUS,
+            ]
 
-        led_screen_ids = []
-        for template in led_templates:
-            # Check if screen already exists
-            existing = DisplayScreen.query.filter_by(name=template["name"]).first()
-            if existing:
-                logger.info(f"Screen '{template['name']}' already exists, skipping")
-                led_screen_ids.append({"screen_id": existing.id, "duration": template["duration"]})
-                continue
+            led_screen_ids: List[Dict[str, int]] = []
+            for template in led_templates:
+                existing = DisplayScreen.query.filter_by(name=template["name"]).first()
+                if existing:
+                    logger.info(f"Screen '{template['name']}' already exists, skipping")
+                    led_screen_ids.append({"screen_id": existing.id, "duration": template["duration"]})
+                    continue
 
-            screen = DisplayScreen(**template)
-            db.session.add(screen)
-            db.session.flush()  # Get ID
-            led_screen_ids.append({"screen_id": screen.id, "duration": template["duration"]})
-            logger.info(f"Created LED screen: {template['name']}")
+                screen = DisplayScreen(**template)
+                db.session.add(screen)
+                db.session.flush()
+                led_screen_ids.append({"screen_id": screen.id, "duration": template["duration"]})
+                logger.info(f"Created LED screen: {template['name']}")
 
-        # VFD Templates
-        vfd_templates = [
-            VFD_SYSTEM_METERS,
-            VFD_AUDIO_VU_METER,
-            VFD_ALERT_DETAILS,
-            VFD_NETWORK_STATUS,
-            VFD_TEMP_MONITORING,
-            VFD_DUAL_VU_METER,
-        ]
-
-        vfd_screen_ids = []
-        for template in vfd_templates:
-            # Check if screen already exists
-            existing = DisplayScreen.query.filter_by(name=template["name"]).first()
-            if existing:
-                logger.info(f"Screen '{template['name']}' already exists, skipping")
-                vfd_screen_ids.append({"screen_id": existing.id, "duration": template["duration"]})
-                continue
-
-            screen = DisplayScreen(**template)
-            db.session.add(screen)
-            db.session.flush()  # Get ID
-            vfd_screen_ids.append({"screen_id": screen.id, "duration": template["duration"]})
-            logger.info(f"Created VFD screen: {template['name']}")
-
-        oled_templates = [
-            OLED_SYSTEM_OVERVIEW,
-            OLED_ALERT_SUMMARY,
-            OLED_AUDIO_TELEMETRY,
-        ]
-
-        oled_screen_ids = []
-        for template in oled_templates:
-            existing = DisplayScreen.query.filter_by(name=template["name"]).first()
-            if existing:
-                logger.info(f"Screen '{template['name']}' already exists, skipping")
-                oled_screen_ids.append({"screen_id": existing.id, "duration": template["duration"]})
-                continue
-
-            screen = DisplayScreen(**template)
-            db.session.add(screen)
-            db.session.flush()
-            oled_screen_ids.append({"screen_id": screen.id, "duration": template["duration"]})
-            logger.info(f"Created OLED screen: {template['name']}")
-
-        # Create rotations
-        led_rotation_data = LED_DEFAULT_ROTATION.copy()
-        led_rotation_data["screens"] = led_screen_ids
-
-        existing_led_rotation = ScreenRotation.query.filter_by(name=led_rotation_data["name"]).first()
-        if not existing_led_rotation:
-            led_rotation = ScreenRotation(**led_rotation_data)
-            db.session.add(led_rotation)
-            logger.info(f"Created LED rotation: {led_rotation_data['name']}")
+            _ensure_rotation(LED_DEFAULT_ROTATION, led_screen_ids)
         else:
-            logger.info(f"Rotation '{led_rotation_data['name']}' already exists, skipping")
+            logger.info("Skipping LED templates (not requested)")
 
-        vfd_rotation_data = VFD_DEFAULT_ROTATION.copy()
-        vfd_rotation_data["screens"] = vfd_screen_ids
+        if "vfd" in requested:
+            vfd_templates = [
+                VFD_SYSTEM_METERS,
+                VFD_AUDIO_VU_METER,
+                VFD_ALERT_DETAILS,
+                VFD_NETWORK_STATUS,
+                VFD_TEMP_MONITORING,
+                VFD_DUAL_VU_METER,
+            ]
 
-        existing_vfd_rotation = ScreenRotation.query.filter_by(name=vfd_rotation_data["name"]).first()
-        if not existing_vfd_rotation:
-            vfd_rotation = ScreenRotation(**vfd_rotation_data)
-            db.session.add(vfd_rotation)
-            logger.info(f"Created VFD rotation: {vfd_rotation_data['name']}")
+            vfd_screen_ids: List[Dict[str, int]] = []
+            for template in vfd_templates:
+                existing = DisplayScreen.query.filter_by(name=template["name"]).first()
+                if existing:
+                    logger.info(f"Screen '{template['name']}' already exists, skipping")
+                    vfd_screen_ids.append({"screen_id": existing.id, "duration": template["duration"]})
+                    continue
+
+                screen = DisplayScreen(**template)
+                db.session.add(screen)
+                db.session.flush()
+                vfd_screen_ids.append({"screen_id": screen.id, "duration": template["duration"]})
+                logger.info(f"Created VFD screen: {template['name']}")
+
+            _ensure_rotation(VFD_DEFAULT_ROTATION, vfd_screen_ids)
         else:
-            logger.info(f"Rotation '{vfd_rotation_data['name']}' already exists, skipping")
+            logger.info("Skipping VFD templates (not requested)")
 
-        oled_rotation_data = OLED_DEFAULT_ROTATION.copy()
-        oled_rotation_data["screens"] = oled_screen_ids
+        if "oled" in requested:
+            oled_templates = [
+                OLED_SYSTEM_OVERVIEW,
+                OLED_ALERT_SUMMARY,
+                OLED_NETWORK_BEACON,
+                OLED_IPAWS_POLL_WATCH,
+                OLED_AUDIO_HEALTH_MATRIX,
+                OLED_AUDIO_TELEMETRY,
+            ]
 
-        existing_oled_rotation = ScreenRotation.query.filter_by(name=oled_rotation_data["name"]).first()
-        if not existing_oled_rotation:
-            oled_rotation = ScreenRotation(**oled_rotation_data)
-            db.session.add(oled_rotation)
-            logger.info(f"Created OLED rotation: {oled_rotation_data['name']}")
+            oled_screen_ids: List[Dict[str, int]] = []
+            for template in oled_templates:
+                existing = DisplayScreen.query.filter_by(name=template["name"]).first()
+                if existing:
+                    logger.info(f"Screen '{template['name']}' already exists, skipping")
+                    oled_screen_ids.append({"screen_id": existing.id, "duration": template["duration"]})
+                    continue
+
+                screen = DisplayScreen(**template)
+                db.session.add(screen)
+                db.session.flush()
+                oled_screen_ids.append({"screen_id": screen.id, "duration": template["duration"]})
+                logger.info(f"Created OLED screen: {template['name']}")
+
+            _ensure_rotation(OLED_DEFAULT_ROTATION, oled_screen_ids)
         else:
-            logger.info(f"Rotation '{oled_rotation_data['name']}' already exists, skipping")
+            logger.info("Skipping OLED templates (not requested)")
 
         db.session.commit()
         logger.info("Example screen templates created successfully!")
 
 
 if __name__ == "__main__":
-    # Can be run standalone
+    parser = argparse.ArgumentParser(
+        description="Provision example LED, VFD, and OLED screen templates"
+    )
+    parser.add_argument(
+        "-d",
+        "--display-type",
+        action="append",
+        choices=["led", "vfd", "oled"],
+        help="Limit template creation to the specified display type (can be repeated)",
+    )
+    args = parser.parse_args()
+
     from app import create_app
+
     app = create_app()
-    create_example_screens(app)
+    create_example_screens(app, args.display_type)
