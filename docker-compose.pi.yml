@@ -20,6 +20,6 @@ services:
     devices:
       - /dev/gpiomem:/dev/gpiomem    # GPIO memory access for user-space GPIO control
       - /dev/gpiochip0:/dev/gpiochip0  # GPIO chip device for modern GPIO libraries (lgpio)
-    # Note: group_add gpio removed - device mapping is sufficient for GPIO access
-    # If you get permission errors, run on host: sudo chmod 666 /dev/gpiomem
+    group_add:
+      - gpio  # Add container user to host's gpio group for device access
     # Configuration: start-pi.sh syncs local .env to persistent volume before starting
