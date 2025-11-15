@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="cosmo">
 <head>
+    <!-- Immediately apply saved theme to prevent flash of wrong theme -->
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem('theme') || 'cosmo';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        })();
+    </script>
+    
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token }}">
