@@ -105,6 +105,28 @@ if [ -e /dev/gpiomem ]; then
     fi
 fi
 
+echo "Syncing .env to persistent Docker volume..."
+
+# Ensure volume exists by starting it briefly if needed
+if ! docker volume inspect eas-station_app-config &>/dev/null; then
+    echo "Creating app-config volume..."
+    docker volume create eas-station_app-config
+fi
+
+# Copy local .env to persistent volume
+# This preserves settings across git pulls and redeployments
+docker run --rm \
+  -v eas-station_app-config:/app-config \
+  -v "$(pwd)/.env:/host-env:ro" \
+  alpine sh -c "cp /host-env /app-config/.env && chmod 644 /app-config/.env" 2>/dev/null
+
+if [ $? -eq 0 ]; then
+    echo "✓ Configuration synced to persistent volume"
+else
+    echo "⚠ Warning: Could not sync .env to volume (continuing anyway)"
+fi
+
+echo ""
 echo "Starting EAS Station with Raspberry Pi GPIO support..."
 echo "Using: docker compose -f docker-compose.yml -f docker-compose.pi.yml"
 echo ""
