@@ -284,6 +284,12 @@ tracks releases under the 2.x series.
 - Prevented the LED fallback initializer from raising a `NameError` when the optional
   controller module is missing so deployments without sign hardware continue to boot.
 
+## [2.7.1] - 2025-11-15
+### Fixed
+- Backfill SDR squelch columns automatically when legacy deployments haven't run the
+  latest Alembic migration so radio settings and monitoring pages load without
+  column errors.
+
 ## [2.7.0] - 2025-11-14
 ### Added
 - Added an audio-monitor provisioning API and UI workflow that auto-starts SDR Icecast streams, surfaces RBDS programme data, and exposes squelch/carrier telemetry directly from the radio settings page for immediate listening checks.

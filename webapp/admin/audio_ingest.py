@@ -727,6 +727,75 @@ def _merge_metadata(*metadata_sources: Optional[Dict[str, Any]]) -> Optional[Dic
     return merged or None
 
 
+def _restore_audio_source_from_db_config(
+    controller: AudioIngestController,
+    db_config: AudioSourceConfigDB,
+) -> Optional[Any]:
+    """Recreate an audio adapter from its persisted configuration."""
+
+    config_params = db_config.config_params or {}
+
+    try:
+        source_type = AudioSourceType(db_config.source_type)
+    except ValueError:
+        logger.error(
+            "Unknown audio source type %s for %s", db_config.source_type, db_config.name
+        )
+        return None
+
+    runtime_config = AudioSourceConfig(
+        source_type=source_type,
+        name=db_config.name,
+        enabled=db_config.enabled,
+        priority=db_config.priority,
+        sample_rate=config_params.get('sample_rate', 44100),
+        channels=config_params.get('channels', 1),
+        buffer_size=config_params.get('buffer_size', 4096),
+        silence_threshold_db=config_params.get('silence_threshold_db', -60.0),
+        silence_duration_seconds=config_params.get('silence_duration_seconds', 5.0),
+        device_params=config_params.get('device_params', {}),
+    )
+
+    adapter = create_audio_source(runtime_config)
+
+    metadata = adapter.metrics.metadata or {}
+    device_params = config_params.get('device_params')
+    if isinstance(device_params, dict):
+        for key, value in device_params.items():
+            if value is None:
+                continue
+            metadata.setdefault(str(key), value)
+    adapter.metrics.metadata = metadata
+
+    controller.add_source(adapter)
+
+    started = False
+    if db_config.auto_start:
+        try:
+            started = controller.start_source(db_config.name)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning(
+                "Failed to auto-start audio source %s during restore: %s",
+                db_config.name,
+                exc,
+            )
+
+    if started:
+        auto_streaming = _get_auto_streaming_service()
+        if auto_streaming and auto_streaming.is_available():
+            try:
+                auto_streaming.add_source(db_config.name, adapter)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning(
+                    "Failed to attach Icecast stream for %s during restore: %s",
+                    db_config.name,
+                    exc,
+                )
+
+    logger.info("Restored audio source %s from database configuration", db_config.name)
+    return adapter
+
+
 def _sanitize_streaming_stats(stats: Optional[Dict[str, Any]], icecast_url: Optional[str]) -> Optional[Dict[str, Any]]:
     """Prepare streaming statistics for API output."""
     if not stats:
@@ -1080,19 +1149,21 @@ def api_get_audio_source(source_name: str):
         controller = _get_audio_controller()
         adapter = controller._sources.get(source_name)
 
+        db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+
+        if not adapter and db_config:
+            adapter = _restore_audio_source_from_db_config(controller, db_config)
+
         if not adapter:
-            # Check if source exists in database but not loaded
-            db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
             if db_config:
                 return jsonify({
-                    'error': 'Source exists in database but not loaded in memory',
-                    'hint': 'Restart the application to reload audio sources from database'
+                    'error': 'Source exists in database but could not be loaded',
+                    'hint': 'Restart the application or check audio ingest logs for errors'
                 }), 503  # Service Unavailable
-            else:
-                return jsonify({
-                    'error': f'Audio source "{source_name}" not found',
-                    'hint': 'Check /api/audio/sources for available sources'
-                }), 404
+            return jsonify({
+                'error': f'Audio source "{source_name}" not found',
+                'hint': 'Check /api/audio/sources for available sources'
+            }), 404
 
         return jsonify(_serialize_audio_source(source_name, adapter))
 

@@ -7,6 +7,7 @@ import pytest
 from flask import Flask
 import numpy as np
 
+from sqlalchemy import inspect, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.compiler import compiles
 
@@ -16,6 +17,16 @@ if str(ROOT) not in sys.path:
 
 from app_core.extensions import db
 from app_core.models import AudioSourceConfigDB, RadioReceiver
+from app_core.radio import ensure_radio_squelch_columns
+
+
+_EXPECTED_SQUELCH_COLUMNS: tuple[str, ...] = (
+    "squelch_enabled",
+    "squelch_threshold_db",
+    "squelch_open_ms",
+    "squelch_close_ms",
+    "squelch_alarm",
+)
 from app_core.audio.ingest import AudioSourceStatus
 from webapp.admin import audio_ingest as audio_admin
 import webapp.routes_settings_radio as radio_routes
@@ -55,7 +66,7 @@ def audio_app(tmp_path: Path):
         yield app
         db.session.remove()
         AudioSourceConfigDB.__table__.drop(bind=engine)
-        RadioReceiver.__table__.drop(bind=engine)
+        RadioReceiver.__table__.drop(bind=engine, checkfirst=True)
 
 
 def _create_receiver(**overrides) -> RadioReceiver:
@@ -84,6 +95,50 @@ def _create_receiver(**overrides) -> RadioReceiver:
     }
     data.update(overrides)
     return RadioReceiver(**data)
+
+
+def test_ensure_radio_squelch_columns_backfills_missing_columns(audio_app):
+    with audio_app.app_context():
+        engine = db.engine
+
+        # Replace the automatically created table with a legacy schema lacking squelch fields
+        RadioReceiver.__table__.drop(bind=engine, checkfirst=True)
+        db.session.execute(
+            text(
+                """
+                CREATE TABLE radio_receivers (
+                    id INTEGER PRIMARY KEY,
+                    identifier VARCHAR(64) NOT NULL,
+                    display_name VARCHAR(128) NOT NULL,
+                    driver VARCHAR(64) NOT NULL,
+                    frequency_hz FLOAT NOT NULL,
+                    sample_rate INTEGER NOT NULL,
+                    gain FLOAT,
+                    channel INTEGER,
+                    serial VARCHAR(128),
+                    auto_start BOOLEAN NOT NULL DEFAULT 1,
+                    enabled BOOLEAN NOT NULL DEFAULT 1,
+                    notes TEXT,
+                    modulation_type VARCHAR(16) NOT NULL DEFAULT 'IQ',
+                    audio_output BOOLEAN NOT NULL DEFAULT 0,
+                    stereo_enabled BOOLEAN NOT NULL DEFAULT 1,
+                    deemphasis_us FLOAT NOT NULL DEFAULT 75.0,
+                    enable_rbds BOOLEAN NOT NULL DEFAULT 0,
+                    created_at DATETIME,
+                    updated_at DATETIME
+                )
+                """
+            )
+        )
+        db.session.commit()
+
+        logger = logging.getLogger("radio-test")
+        assert ensure_radio_squelch_columns(logger) is True
+
+        inspector = inspect(engine)
+        column_names = {column["name"] for column in inspector.get_columns("radio_receivers")}
+
+        assert set(_EXPECTED_SQUELCH_COLUMNS).issubset(column_names)
 
 
 def test_ensure_sdr_audio_monitor_source_creates_config(audio_app):
@@ -221,6 +276,29 @@ def test_api_ensure_audio_monitor_endpoint(audio_app):
         assert payload_start["success"] is True
         assert payload_start["source_name"] == "sdr-wxmon"
         assert "message" in payload_start
+
+
+def test_audio_source_endpoint_restores_missing_adapter(audio_app):
+    with audio_app.app_context():
+        receiver = _create_receiver(identifier="WXRESTORE", display_name="Restore NOAA")
+        db.session.add(receiver)
+        db.session.commit()
+
+        audio_admin.ensure_sdr_audio_monitor_source(receiver, start_immediately=False, commit=True)
+
+        controller = audio_admin._get_audio_controller()
+        assert "sdr-wxrestore" in controller._sources
+
+        controller.remove_source("sdr-wxrestore")
+        assert "sdr-wxrestore" not in controller._sources
+
+        client = audio_app.test_client()
+        response = client.get("/api/audio/sources/sdr-wxrestore")
+
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["name"] == "sdr-wxrestore"
+        assert "sdr-wxrestore" in controller._sources
 
 
 def test_audio_stream_endpoint_uses_wav_mimetype(audio_app):
