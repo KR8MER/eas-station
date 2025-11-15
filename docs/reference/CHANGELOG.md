@@ -292,6 +292,12 @@ tracks releases under the 2.x series.
 - Prevented the LED fallback initializer from raising a `NameError` when the optional
   controller module is missing so deployments without sign hardware continue to boot.
 
+## [2.7.5] - 2025-11-15
+### Fixed
+- Allow first-time deployments to create the initial administrator from a dedicated
+  setup wizard page so Portainer users without console access can finish onboarding
+  without running CLI commands.
+
 ## [2.7.2] - 2025-11-15
 ### Fixed
 - Restore SDR audio monitor adapters on-demand for all audio ingest APIs, eliminating the recurring 503 responses and broken

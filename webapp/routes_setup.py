@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from flask import flash, g, jsonify, redirect, render_template, request, send_file, url_for
 
 from app_utils.setup_wizard import (
@@ -18,6 +20,14 @@ from app_core.location import _derive_county_zone_codes_from_fips
 from flask import session
 import secrets
 from datetime import datetime
+
+from sqlalchemy import func
+
+from app_core.auth.audit import AuditAction, AuditLogger
+from app_core.auth.roles import Role, RoleDefinition
+from app_core.extensions import db
+from app_core.models import AdminUser, SystemLog
+from app_utils import utc_now
 
 
 SETUP_REASON_MESSAGES = {
@@ -210,6 +220,126 @@ def register(app, logger):
 
         token = generate_secret_key()
         return jsonify({"secret_key": token})
+
+    @app.route("/setup/admin", methods=["GET", "POST"])
+    def setup_create_admin():
+        """Allow first-time deployments to create an administrator account without CLI access."""
+
+        setup_active = app.config.get("SETUP_MODE", False)
+        try:
+            admin_count = AdminUser.query.count()
+        except Exception:
+            setup_logger.exception("Failed to determine administrator account state during setup")
+            flash(
+                "Unable to verify administrator accounts because the database is not ready. "
+                "Please retry once migrations complete.",
+                "danger",
+            )
+            return redirect(url_for("setup_wizard"))
+        if admin_count > 0:
+            flash("An administrator account already exists. Please sign in.", "info")
+            return redirect(url_for("auth.login"))
+
+        form_data = {
+            "username": "",
+            "password": "",
+            "confirm_password": "",
+        }
+        errors = {}
+
+        if request.method == "POST":
+            form_data["username"] = (request.form.get("username") or "").strip()
+            password = request.form.get("password") or ""
+            confirm_password = request.form.get("confirm_password") or ""
+
+            if not form_data["username"]:
+                errors["username"] = "Username is required."
+            elif len(form_data["username"]) < 3:
+                errors["username"] = "Username must be at least 3 characters long."
+            elif not re.match(r"^[A-Za-z0-9_.-]+$", form_data["username"]):
+                errors["username"] = "Usernames may only include letters, numbers, dots, hyphens, or underscores."
+            else:
+                existing_user = AdminUser.query.filter(
+                    func.lower(AdminUser.username) == form_data["username"].lower()
+                ).first()
+                if existing_user:
+                    errors["username"] = "An account with that username already exists."
+
+            if len(password) < 12:
+                errors["password"] = "Password must be at least 12 characters long."
+            elif password.strip() != password:
+                errors["password"] = "Password cannot begin or end with whitespace."
+
+            if confirm_password != password:
+                errors["confirm_password"] = "Passwords do not match."
+
+            if not errors:
+                admin_user = AdminUser(username=form_data["username"])
+                admin_user.set_password(password)
+                admin_user.last_login_at = utc_now()
+
+                admin_role = Role.query.filter(
+                    func.lower(Role.name) == RoleDefinition.ADMIN.value
+                ).first()
+                if admin_role:
+                    admin_user.role = admin_role
+
+                log_entry = SystemLog(
+                    level="INFO",
+                    message="Initial administrator account created via setup wizard",
+                    module="setup",
+                    details={
+                        "username": admin_user.username,
+                        "remote_addr": request.remote_addr,
+                        "setup_mode_active": setup_active,
+                    },
+                )
+
+                db.session.add(admin_user)
+                db.session.add(log_entry)
+
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                    setup_logger.exception("Failed to create initial administrator account")
+                    flash("Unable to create administrator account. Please try again.", "danger")
+                else:
+                    AuditLogger.log(
+                        action=AuditAction.USER_CREATED,
+                        user_id=None,
+                        username="setup-wizard",
+                        resource_type="user",
+                        resource_id=str(admin_user.id),
+                        details={
+                            "username": admin_user.username,
+                            "created_during_setup": True,
+                        },
+                    )
+
+                    session.clear()
+                    csrf_key = app.config.get("CSRF_SESSION_KEY", CSRF_SESSION_KEY)
+                    session[csrf_key] = secrets.token_urlsafe(32)
+                    session["user_id"] = admin_user.id
+                    session.permanent = True
+
+                    flash(
+                        "Administrator account created successfully. You are now signed in.",
+                        "success",
+                    )
+                    setup_logger.info(
+                        "Initial administrator %s created via setup wizard", admin_user.username
+                    )
+                    return redirect(url_for("dashboard.admin"))
+
+        csrf_token = _ensure_csrf_token()
+        return render_template(
+            "setup_create_admin.html",
+            form_data=form_data,
+            errors=errors,
+            setup_active=setup_active,
+            csrf_token=csrf_token,
+        )
 
     @app.route("/setup/success")
     def setup_success():
