@@ -10,6 +10,8 @@ on:
 jobs:
   update-stats:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required to commit and push changes
     
     steps:
     - name: Checkout code
