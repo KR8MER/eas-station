@@ -1177,7 +1177,14 @@ def admin_download_ssl_cert():
 
     if not cert_path.exists():
         logger.warning(f'SSL certificate not found at {cert_path}')
-        return jsonify({'error': f'SSL certificate not found. Certificate path: {cert_path}'}), 404
+        error_message = f'SSL certificate not found at {cert_path}. '
+        if domain_name == 'localhost':
+            error_message += 'The system is configured for localhost. SSL certificates are only available when using a real domain with Let\'s Encrypt.'
+        else:
+            error_message += 'Please ensure certbot has successfully obtained a certificate for your domain.'
+        return render_template('error.html', 
+                             error='SSL Certificate Not Found',
+                             details=error_message), 404
 
     # Create a timestamped filename for the download
     timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
@@ -1210,7 +1217,14 @@ def admin_download_ssl_key():
 
     if not key_path.exists():
         logger.warning(f'SSL private key not found at {key_path}')
-        return jsonify({'error': f'SSL private key not found. Key path: {key_path}'}), 404
+        error_message = f'SSL private key not found at {key_path}. '
+        if domain_name == 'localhost':
+            error_message += 'The system is configured for localhost. SSL certificates and keys are only available when using a real domain with Let\'s Encrypt.'
+        else:
+            error_message += 'Please ensure certbot has successfully obtained a certificate for your domain.'
+        return render_template('error.html',
+                             error='SSL Private Key Not Found',
+                             details=error_message), 404
 
     # Create a timestamped filename for the download
     timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")

@@ -15,41 +15,42 @@
     .error-content {
         max-width: 600px;
         text-align: center;
-        background-color: var(--surface-color);
+        background-color: var(--surface-color, #ffffff);
         padding: 2rem;
         border-radius: 0.5rem;
-        box-shadow: 0 0.125rem 0.25rem var(--shadow-color);
+        box-shadow: 0 0.125rem 0.25rem var(--shadow-color, rgba(0, 0, 0, 0.1));
+        border: 1px solid var(--border-color, #e2e8f0);
     }
 
     .error-icon {
         font-size: 4rem;
-        color: var(--danger-color);
+        color: var(--danger-color, #e53e3e);
         margin-bottom: 1.5rem;
     }
 
     .error-title {
         font-size: 2rem;
         font-weight: 600;
-        color: var(--text-color);
+        color: var(--text-color, #1a202c);
         margin-bottom: 1rem;
     }
 
     .error-message {
         font-size: 1.1rem;
-        color: var(--text-secondary);
+        color: var(--text-secondary, #718096);
         margin-bottom: 1.5rem;
     }
 
     .error-details {
-        background-color: var(--bg-color);
-        border: 1px solid var(--border-color);
+        background-color: var(--bg-color, #f7fafc);
+        border: 1px solid var(--border-color, #e2e8f0);
         border-radius: 0.375rem;
         padding: 1rem;
         margin-top: 1.5rem;
         text-align: left;
         font-family: monospace;
         font-size: 0.9rem;
-        color: var(--text-color);
+        color: var(--text-color, #1a202c);
         overflow-x: auto;
     }
 
