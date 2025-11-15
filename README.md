@@ -384,11 +384,21 @@ See [Terms of Use](docs/policies/TERMS_OF_USE) and [FCC Compliance](docs/referen
 Current development focuses on:
 
 - ✅ **Core Features**: Multi-source ingestion, SAME encoding, geographic filtering
+- ✅ **System Diagnostics**: Web-based validation and health checking tool
+- ✅ **Stream Profiles**: Multi-bitrate Icecast streaming configuration
 - 🔄 **Hardware Parity**: Advanced relay control, multi-receiver coordination
 - ⏳ **Certification**: FCC Part 11 compliance documentation
 - ⏳ **Advanced Features**: Cloud sync, mobile app, multi-site coordination
 
 See [Roadmap](docs/roadmap/master_todo) for complete details.
+
+### Recent Additions (November 2025)
+
+- **System Diagnostics Tool** (`/diagnostics`) - Web-based installation validation with Docker, database, and configuration checks
+- **Stream Profile Manager** (`/settings/stream-profiles`) - Configure multiple Icecast streams with different bitrates and formats
+- **Quick Start Guide** - 15-minute deployment guide with common scenarios and troubleshooting
+
+See [New Features Guide](docs/NEW_FEATURES_2025-11) for detailed documentation.
 
 ## 📜 License
 
