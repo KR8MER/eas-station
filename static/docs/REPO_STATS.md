@@ -1,23 +1,23 @@
 # Repository Statistics
 
-**Generated:** 2025-11-15 14:19:23 UTC
+**Generated:** 2025-11-15 14:22:26 UTC
 
 ## Overview
 
-- **Total Files:** 562
-- **Total Directories:** 71
-- **Total Lines:** 190,429
-- **Code Lines:** 120,248
-- **Comment Lines:** 40,175
+- **Total Files:** 565
+- **Total Directories:** 72
+- **Total Lines:** 190,990
+- **Code Lines:** 120,716
+- **Comment Lines:** 40,217
 - **Total Routes:** 173
 
 ## Files by Type
 
 | File Type | Count |
 |-----------|-------|
-| Python | 231 |
+| Python | 232 |
 | Markdown | 143 |
-| HTML | 66 |
+| HTML | 68 |
 | Other | 56 |
 | Shell | 13 |
 | YAML | 12 |
@@ -32,9 +32,9 @@
 
 | Language | Total Lines | Code Lines | Comment Lines |
 |----------|-------------|------------|---------------|
-| Python | 81,272 | 32,138 | 35,881 |
+| Python | 81,363 | 32,186 | 35,902 |
 | Markdown | 50,125 | 38,568 | 0 |
-| HTML | 42,018 | 38,375 | 412 |
+| HTML | 42,488 | 38,795 | 433 |
 | CSS | 4,386 | 982 | 2,756 |
 | JavaScript | 3,889 | 2,922 | 476 |
 | Text | 2,277 | 2,133 | 0 |
@@ -66,10 +66,10 @@
 | webapp/routes/alert_verification.py | 5 |
 | webapp/routes_audio_tests.py | 4 |
 | webapp/routes_exports.py | 4 |
-| webapp/routes/eas_compliance.py | 3 |
-| webapp/eas/messages.py | 3 |
 | webapp/admin/audio/files.py | 3 |
 | webapp/admin/audio/received.py | 3 |
+| webapp/routes/eas_compliance.py | 3 |
+| webapp/eas/messages.py | 3 |
 | webapp/routes_diagnostics.py | 2 |
 | webapp/admin/audio/detail.py | 2 |
 | webapp/routes_settings_audio.py | 1 |
@@ -79,14 +79,14 @@
 
 ### Top Languages by Lines of Code
 
-**Python:** 32,138 lines  
+**Python:** 32,186 lines  
 `█████████████████████████████████████████`
 
 **Markdown:** 38,568 lines  
-`██████████████████████████████████████████████████`
-
-**HTML:** 38,375 lines  
 `█████████████████████████████████████████████████`
+
+**HTML:** 38,795 lines  
+`██████████████████████████████████████████████████`
 
 **CSS:** 982 lines  
 `█`
