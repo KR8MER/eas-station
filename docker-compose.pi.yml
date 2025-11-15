@@ -18,16 +18,16 @@
 services:
   app:
     env_file:
-      - .env  # Load database credentials and other settings from local .env
+      - .env  # Load all settings from local .env
     environment:
-      # Override database settings from .env (docker-compose env substitution doesn't work with env_file)
-      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
-      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
-      POSTGRES_DB: ${POSTGRES_DB:-casaos}
-      POSTGRES_USER: ${POSTGRES_USER:-casaos}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-casaos}
+      # Hard-code database settings for CasaOS PostgreSQL
+      POSTGRES_HOST: host.docker.internal
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: casaos
+      POSTGRES_USER: casaos
+      POSTGRES_PASSWORD: casaos
     devices:
       - /dev/gpiomem:/dev/gpiomem    # GPIO memory access for user-space GPIO control
       - /dev/gpiochip0:/dev/gpiochip0  # GPIO chip device for modern GPIO libraries (lgpio)
-    privileged: true  # Required for GPIO access on Pi 5 when gpio group isn't available
+    privileged: true  # Required for GPIO access on Pi 5
     # Configuration: start-pi.sh syncs local .env to persistent volume before starting
