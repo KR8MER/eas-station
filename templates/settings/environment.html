@@ -497,6 +497,39 @@
                 html += renderVariable(variable);
             }
 
+            // Add SSL certificate download section for HTTPS category
+            if (catId === 'https') {
+                html += `
+                    <div class="alert alert-warning mt-3">
+                        <h5><i class="fas fa-shield-alt"></i> SSL Certificate Export</h5>
+                        <p class="mb-3">
+                            <strong>Security Notice:</strong> You can download your SSL/TLS certificate and private key files 
+                            to use them in external deployments like Portainer. 
+                        </p>
+                        <p class="mb-3">
+                            <i class="fas fa-exclamation-triangle"></i> 
+                            <strong>WARNING:</strong> The private key is sensitive data. Only download it when necessary 
+                            and ensure it's stored securely. Never share or commit the private key to version control.
+                        </p>
+                        <div class="d-flex gap-2">
+                            <a href="${window.location.origin}/admin/environment/download-ssl-cert" 
+                               class="btn btn-outline-primary" target="_blank">
+                                <i class="fas fa-certificate me-2"></i>Download Certificate (fullchain.pem)
+                            </a>
+                            <a href="${window.location.origin}/admin/environment/download-ssl-key" 
+                               class="btn btn-outline-danger" target="_blank"
+                               onclick="return confirm('WARNING: You are about to download the SSL private key. This is sensitive security data. Only proceed if you need to use this certificate in another deployment (e.g., Portainer). Do you want to continue?');">
+                                <i class="fas fa-key me-2"></i>Download Private Key (privkey.pem)
+                            </a>
+                        </div>
+                        <small class="text-muted d-block mt-2">
+                            <i class="fas fa-info-circle"></i> 
+                            Files will be available at: <code>/etc/letsencrypt/live/${'{DOMAIN_NAME}'}/</code>
+                        </small>
+                    </div>
+                `;
+            }
+
             html += `
                         <div class="actions-bar">
                             ${canEdit ? `

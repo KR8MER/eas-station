@@ -1160,5 +1160,70 @@ def generate_secret_key_api():
     secret_key = secrets.token_hex(32)  # 64-character hex string
     return jsonify({'secret_key': secret_key})
 
+@environment_bp.route('/admin/environment/download-ssl-cert')
+@require_permission('system.view_config')
+def admin_download_ssl_cert():
+    """Download the SSL certificate file (fullchain.pem) for use in Portainer or other deployments.
+    
+    WARNING: This exposes the SSL certificate, which while public, should be handled carefully.
+    """
+    from flask import send_file, abort
+    import os
+    from datetime import datetime
+
+    # Get domain name from environment
+    domain_name = os.environ.get('DOMAIN_NAME', 'localhost')
+    cert_path = Path(f'/etc/letsencrypt/live/{domain_name}/fullchain.pem')
+
+    if not cert_path.exists():
+        logger.warning(f'SSL certificate not found at {cert_path}')
+        return jsonify({'error': f'SSL certificate not found. Certificate path: {cert_path}'}), 404
+
+    # Create a timestamped filename for the download
+    timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    download_name = f"{domain_name}-fullchain-{timestamp}.pem"
+
+    logger.info(f'Downloading SSL certificate for domain {domain_name}')
+
+    return send_file(
+        cert_path,
+        as_attachment=True,
+        download_name=download_name,
+        mimetype='application/x-pem-file'
+    )
+
+@environment_bp.route('/admin/environment/download-ssl-key')
+@require_permission('system.view_config')
+def admin_download_ssl_key():
+    """Download the SSL private key file (privkey.pem) for use in Portainer or other deployments.
+    
+    WARNING: This is a SECURITY SENSITIVE operation. The private key should be kept secure
+    and only downloaded when absolutely necessary for deployment purposes.
+    """
+    from flask import send_file, abort
+    import os
+    from datetime import datetime
+
+    # Get domain name from environment
+    domain_name = os.environ.get('DOMAIN_NAME', 'localhost')
+    key_path = Path(f'/etc/letsencrypt/live/{domain_name}/privkey.pem')
+
+    if not key_path.exists():
+        logger.warning(f'SSL private key not found at {key_path}')
+        return jsonify({'error': f'SSL private key not found. Key path: {key_path}'}), 404
+
+    # Create a timestamped filename for the download
+    timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    download_name = f"{domain_name}-privkey-{timestamp}.pem"
+
+    logger.warning(f'SECURITY: SSL private key downloaded for domain {domain_name} by user')
+
+    return send_file(
+        key_path,
+        as_attachment=True,
+        download_name=download_name,
+        mimetype='application/x-pem-file'
+    )
+
 
 __all__ = ['register_environment_routes', 'ENV_CATEGORIES']
