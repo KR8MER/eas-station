@@ -203,6 +203,14 @@ tracks releases under the 2.x series.
 - Introduced optional Azure AI speech synthesis to append narrated voiceovers when the
   appropriate credentials and SDK are available.
 
+## [2.9.0] - 2025-11-15
+### Added
+- OLED alert rotations now preempt normal playlists when `skip_on_alert` is enabled, prioritizing the most severe alert and
+  scrolling its text in a large font for the entire duration. EAS/IPAWS sources render their full plain-language narration while
+  other sources fall back to headline + description so operators always see useful context.
+- `/api/alerts` now returns each alert's source and (when available) the cached EAS narration text, allowing custom OLED/LED
+  templates or Portainer dashboards to display the same preemption-ready payloads.
+
 ## [2.8.0] - 2025-02-15
 
 ### Fixed

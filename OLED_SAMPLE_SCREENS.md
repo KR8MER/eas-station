@@ -11,6 +11,16 @@ Each screen is 128 pixels wide by 64 pixels tall, using the SSD1306 OLED driver.
 - `medium` (14px) - Fits ~4 lines
 - `large` (18px) - Fits ~3 lines
 
+## Automatic Alert Preemption
+
+OLED rotations that have `skip_on_alert` enabled now pause their normal playlist
+whenever an alert is active. The screen manager promotes the most severe alert in
+the system and scrolls it in a large font until it expires. EAS/IPAWS sources use
+the plain-language narration that accompanies the SAME header, while NOAA or
+other sources fall back to their headline + description pair. New alerts (or a
+severity escalation) immediately preempt anything already on the display, and
+the cycle returns to lower-severity alerts when the more urgent notice expires.
+
 ## Built-in Snapshot Screen
 
 When you hold the OLED button (GPIO 4, pin 7) for 1.25 seconds, this screen displays:

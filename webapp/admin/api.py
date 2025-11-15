@@ -16,6 +16,8 @@ from app_core.extensions import db
 from app_core.models import Boundary, CAPAlert, EASMessage, Intersection, PollHistory
 from app_core.system_health import get_system_health
 from app_utils import (
+    ALERT_SOURCE_IPAWS,
+    ALERT_SOURCE_MANUAL,
     UTC_TZ,
     format_uptime,
     get_location_timezone,
@@ -30,7 +32,11 @@ from app_core.boundaries import (
     get_boundary_group,
     normalize_boundary_type,
 )
-from app_core.alerts import get_active_alerts_query, get_expired_alerts_query
+from app_core.alerts import (
+    get_active_alerts_query,
+    get_expired_alerts_query,
+    load_alert_plain_text_map,
+)
 from app_utils import is_alert_expired
 from app_utils.pdf_generator import generate_pdf_document
 
@@ -496,8 +502,13 @@ def get_alerts():
             CAPAlert.description,
             CAPAlert.expires,
             CAPAlert.area_desc,
+            CAPAlert.source,
             func.ST_AsGeoJSON(CAPAlert.geom).label('geometry'),
         ).all()
+
+        alert_ids = [alert.id for alert in alerts if alert.id]
+        plain_text_map = load_alert_plain_text_map(alert_ids)
+        eas_sources = {ALERT_SOURCE_IPAWS, ALERT_SOURCE_MANUAL}
 
         county_boundary = None
         try:
@@ -537,6 +548,11 @@ def get_alerts():
                 if any(keyword in area_lower for keyword in county_keywords):
                     is_county_wide = True
 
+            source_value = alert.source
+            plain_text = None
+            if source_value in eas_sources:
+                plain_text = plain_text_map.get(alert.id)
+
             if geometry:
                 expires_iso = None
                 if alert.expires:
@@ -559,6 +575,8 @@ def get_alerts():
                                 else alert.description
                             ),
                             'area_desc': alert.area_desc,
+                            'source': source_value,
+                            'plain_text': plain_text,
                             'expires_iso': expires_iso,
                             'is_county_wide': is_county_wide,
                             'is_expired': is_alert_expired(alert.expires),
