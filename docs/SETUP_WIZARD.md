@@ -109,7 +109,7 @@ After initial configuration, administrators can access the wizard at:
 | **EAS_ORIGINATOR** | Originator code | Optional, 3 chars | `WXR`, `EAS`, `CIV` |
 | **EAS_STATION_ID** | Station identifier | Optional, 8 chars | `EASNODES` |
 | **EAS_MANUAL_FIPS_CODES** | Authorized FIPS | Numeric, comma-sep | `039001,039049` |
-| **EAS_GPIO_PIN** | GPIO relay pin | Optional, integer | `17` |
+| **EAS_GPIO_PIN** | GPIO relay pin | Optional, integer (BCM 2, 3, 4, 14 / physical 3-8 reserved for OLED) | `17` |
 
 ### Audio Ingest
 

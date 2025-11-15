@@ -9,6 +9,8 @@ import textwrap
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional
 
+from app_utils.gpio import ensure_gpiozero_pin_factory
+
 logger = logging.getLogger(__name__)
 
 try:  # pragma: no cover - optional dependency
@@ -25,6 +27,11 @@ except Exception as import_error:  # pragma: no cover - optional dependency
 else:
     _IMPORT_ERROR = None
 
+try:  # pragma: no cover - optional dependency
+    from gpiozero import Button
+except Exception:  # pragma: no cover - gpiozero optional on non-RPi
+    Button = None  # type: ignore[assignment]
+
 
 def _env_flag(name: str, default: str = "false") -> bool:
     return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "on"}
@@ -38,6 +45,15 @@ def _env_int(name: str, default: str) -> int:
     except (TypeError, ValueError):
         logger.warning("Invalid integer for %s=%s; using default %s", name, value, default)
         return int(default, base)
+
+
+def _env_float(name: str, default: str) -> float:
+    value = os.getenv(name, default)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        logger.warning("Invalid float for %s=%s; using default %s", name, value, default)
+        return float(default)
 
 
 @dataclass
@@ -224,11 +240,62 @@ OLED_ROTATE = (_env_int("OLED_ROTATE", "0") % 360) // 90
 OLED_CONTRAST = os.getenv("OLED_CONTRAST")
 OLED_FONT_PATH = os.getenv("OLED_FONT_PATH")
 OLED_DEFAULT_INVERT = _env_flag("OLED_DEFAULT_INVERT", "false")
+OLED_BUTTON_GPIO = _env_int("OLED_BUTTON_GPIO", "4")
+OLED_BUTTON_HOLD_SECONDS = max(0.5, _env_float("OLED_BUTTON_HOLD_SECONDS", "1.25"))
 
 OLED_AVAILABLE = False
 oled_controller: Optional[ArgonOLEDController] = None
+oled_button_device: Optional[Button] = None
 
 _oled_lock = threading.Lock()
+
+
+def ensure_oled_button(log: Optional[logging.Logger] = None) -> Optional[Button]:
+    """Initialise and return the OLED front-panel button if available."""
+
+    if Button is None:
+        if log:
+            log.debug("gpiozero Button class unavailable; skipping OLED button setup")
+        return None
+
+    if not OLED_ENABLED:
+        if log:
+            log.debug("OLED button disabled because OLED module is disabled")
+        return None
+
+    logger_ref = log or logger
+
+    with _oled_lock:
+        global oled_button_device
+        if oled_button_device is not None:
+            return oled_button_device
+
+        if not ensure_gpiozero_pin_factory(logger_ref):
+            logger_ref.debug("gpiozero pin factory unavailable; cannot initialise OLED button")
+            return None
+
+        try:
+            button = Button(
+                OLED_BUTTON_GPIO,
+                pull_up=True,
+                hold_time=OLED_BUTTON_HOLD_SECONDS,
+                bounce_time=0.05,
+            )
+        except Exception as exc:  # pragma: no cover - hardware specific
+            logger_ref.warning(
+                "Failed to initialise OLED button on GPIO %s: %s",
+                OLED_BUTTON_GPIO,
+                exc,
+            )
+            return None
+
+        oled_button_device = button
+        logger_ref.info(
+            "OLED button initialised on GPIO %s with hold time %.2fs",
+            OLED_BUTTON_GPIO,
+            OLED_BUTTON_HOLD_SECONDS,
+        )
+        return oled_button_device
 
 
 def initialise_oled_display(log: Optional[logging.Logger] = None) -> Optional[ArgonOLEDController]:
@@ -288,6 +355,8 @@ __all__ = [
     "OLEDLine",
     "ArgonOLEDController",
     "OLED_AVAILABLE",
+    "OLED_BUTTON_GPIO",
+    "OLED_BUTTON_HOLD_SECONDS",
     "OLED_CONTRAST",
     "OLED_DEFAULT_INVERT",
     "OLED_ENABLED",
@@ -297,6 +366,8 @@ __all__ = [
     "OLED_I2C_BUS",
     "OLED_ROTATE",
     "OLED_WIDTH",
+    "ensure_oled_button",
     "initialise_oled_display",
     "oled_controller",
+    "oled_button_device",
 ]

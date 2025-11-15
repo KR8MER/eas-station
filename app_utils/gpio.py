@@ -22,6 +22,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Set
 
+from app_utils.pi_pinout import ARGON_OLED_RESERVED_BCM, ARGON_OLED_RESERVED_PHYSICAL
+
 try:  # pragma: no cover - GPIO hardware is optional and platform specific
     from gpiozero import Device, OutputDevice
 except Exception:  # pragma: no cover - gracefully handle non-RPi environments
@@ -327,6 +329,14 @@ def _ensure_pin_factory(
             _PIN_FACTORY_READY = True
 
     return _PIN_FACTORY_READY
+
+
+def ensure_gpiozero_pin_factory(
+    logger=None, issue_recorder: Optional[Callable[[str], None]] = None
+) -> bool:
+    """Public helper to initialise gpiozero's pin factory."""
+
+    return _ensure_pin_factory(logger=logger, issue_recorder=issue_recorder)
 
 
 def _create_gpio_backend(exclude: Optional[Set[type]] = None) -> Optional[GPIOBackend]:
@@ -1186,6 +1196,16 @@ def load_gpio_pin_configs_from_env(logger=None) -> List[GPIOPinConfig]:
         if pin in seen:
             _log("warning", f"Duplicate GPIO pin {pin} ignored")
             return
+        if pin in ARGON_OLED_RESERVED_BCM:
+            reserved_physical = ", ".join(str(p) for p in sorted(ARGON_OLED_RESERVED_PHYSICAL))
+            _log(
+                "error",
+                (
+                    f"GPIO pin {pin} is reserved for the Argon OLED module (physical header block {reserved_physical}) "
+                    "and cannot be configured"
+                ),
+            )
+            return
         if pin < 2 or pin > 27:
             _log("error", f"GPIO pin {pin} is outside the supported BCM range (2-27)")
             return
@@ -1310,6 +1330,8 @@ def _stringify_behavior_matrix(matrix: Dict[int, Iterable[GPIOBehavior]]) -> Dic
     for pin, behaviors in matrix.items():
         if not behaviors:
             continue
+        if pin in ARGON_OLED_RESERVED_BCM:
+            continue
         result[str(pin)] = sorted({behavior.value for behavior in behaviors})
     return result
 
@@ -1349,6 +1371,13 @@ def load_gpio_behavior_matrix_from_env(logger=None) -> Dict[int, Set[GPIOBehavio
         except (TypeError, ValueError):
             if logger is not None:
                 logger.warning("Ignoring invalid GPIO behavior pin key %r", key)
+            continue
+
+        if pin in ARGON_OLED_RESERVED_BCM:
+            if logger is not None:
+                logger.warning(
+                    "Ignoring GPIO behavior assignment for reserved pin %s", pin
+                )
             continue
 
         behaviors: Set[GPIOBehavior] = set()

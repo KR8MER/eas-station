@@ -1,6 +1,7 @@
 """Tests for GPIO controller configuration behavior."""
 
 import json
+import logging
 from pathlib import Path
 import sys
 
@@ -84,6 +85,20 @@ def test_load_gpio_pin_configs_from_env(monkeypatch):
     override = next(cfg for cfg in configs if cfg.pin == 25)
     assert override.name == "Backup Relay"
     assert override.active_high is False
+
+
+def test_reserved_oled_pins_rejected(monkeypatch, caplog):
+    """Pins reserved for the OLED module should not be configurable."""
+
+    monkeypatch.setenv("EAS_GPIO_PIN", "4")
+    monkeypatch.setenv("GPIO_ADDITIONAL_PINS", "2:Aux:HIGH:1:60,14:Serial:HIGH:1:60")
+
+    test_logger = logging.getLogger("gpio-test")
+    with caplog.at_level(logging.ERROR, logger="gpio-test"):
+        configs = load_gpio_pin_configs_from_env(logger=test_logger)
+
+    assert configs == []
+    assert any("reserved" in record.message for record in caplog.records)
 
 
 def test_load_gpio_behavior_matrix_from_env(monkeypatch):

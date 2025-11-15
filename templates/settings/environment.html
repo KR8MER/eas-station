@@ -320,6 +320,7 @@
     let categoriesData = {};
     let currentValues = {};
     let hasChanges = false;
+    const RESERVED_GPIO_PINS = [2, 3, 4, 14];
     // Permission check passed from backend
     const canEdit = {{ 'true' if can_configure else 'false' }};
     console.log('canEdit =', canEdit);
@@ -559,6 +560,11 @@
 
         content.innerHTML = html;
 
+        // Apply reserved pin validation to number inputs
+        content.querySelectorAll('[data-disallow]').forEach(input => {
+            applyDisallowValidation(input);
+        });
+
         // Attach form submit handlers
         for (const catId of Object.keys(categoriesData)) {
             const form = document.getElementById(`form-${catId}`);
@@ -611,9 +617,12 @@
                         <div class="row g-2 align-items-end">
                             <div class="col-md-2">
                                 <label class="form-label small mb-1">BCM Pin #</label>
-                                <input type="number" class="form-control form-control-sm pin-number" 
+                                <input type="number" class="form-control form-control-sm pin-number"
                                        placeholder="17" min="2" max="27" value="${pin.pin}" ${disabledAttr}
                                        onchange="updateGPIOPinsValue()">
+                                <div class="form-text text-danger reserved-warning d-none">
+                                    Reserved for Argon OLED enclosure.
+                                </div>
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label small mb-1">Pin Name</label>
@@ -667,10 +676,51 @@
         return html;
     }
 
+    function applyDisallowValidation(input) {
+        if (!input || !input.dataset.disallow) {
+            return;
+        }
+
+        const disallowed = input.dataset.disallow
+            .split(',')
+            .map(value => parseInt(value.trim(), 10))
+            .filter(number => !Number.isNaN(number));
+        const feedback = input.closest('.variable-group')?.querySelector('.disallow-feedback');
+
+        const evaluate = () => {
+            const numeric = parseInt(input.value, 10);
+            const blocked = !Number.isNaN(numeric) && disallowed.includes(numeric);
+            if (blocked) {
+                input.classList.add('is-invalid');
+                if (feedback) {
+                    feedback.classList.remove('d-none');
+                }
+            } else {
+                input.classList.remove('is-invalid');
+                if (feedback) {
+                    feedback.classList.add('d-none');
+                }
+            }
+        };
+
+        if (input.dataset.disallowBound !== 'true') {
+            input.addEventListener('input', evaluate);
+            input.addEventListener('change', evaluate);
+            input.dataset.disallowBound = 'true';
+        }
+
+        evaluate();
+    }
+
     function renderVariable(variable) {
         const required = variable.required ? '<span class="variable-required">*</span>' : '';
         const sensitive = variable.sensitive ? '<span class="variable-sensitive"><i class="fas fa-lock"></i> Sensitive</span>' : '';
         const disabledAttr = !canEdit ? 'disabled' : '';
+        const disallow = Array.isArray(variable.disallow) ? variable.disallow : [];
+        const disallowAttr = disallow.length ? `data-disallow="${disallow.join(',')}"` : '';
+        const disallowMessage = disallow.length
+            ? `<div class="form-text text-danger disallow-feedback d-none">Pins ${disallow.join(', ')} are reserved for the Argon OLED enclosure.</div>`
+            : '';
 
         let inputHtml = '';
         const inputId = `var-${variable.key}`;
@@ -692,7 +742,7 @@
             }
             inputHtml += `</select>`;
         } else if (variable.type === 'textarea') {
-            inputHtml = `<textarea class="form-control" id="${inputId}" name="${variable.key}" rows="3" placeholder="${variable.placeholder || ''}" ${variable.required ? 'required' : ''} ${disabledAttr}>${value}</textarea>`;
+            inputHtml = `<textarea class="form-control" id="${inputId}" name="${variable.key}" rows="3" placeholder="${variable.placeholder || ''}" ${variable.required ? 'required' : ''} ${disabledAttr} ${disallowAttr}>${value}</textarea>`;
         } else if (variable.type === 'gpio_pin_builder') {
             // Custom GPIO Pin Builder interface
             inputHtml = renderGPIOPinBuilder(variable, value, disabledAttr);
@@ -711,14 +761,14 @@
             if (variable.key === 'SECRET_KEY' && canEdit) {
                 inputHtml = `
                     <div class="input-group">
-                        <input type="${inputType}" class="form-control" id="${inputId}" name="${variable.key}" value="${value}" ${step} ${min} ${max} ${maxlength} ${minlength} ${pattern} ${title} ${placeholder} ${variable.required ? 'required' : ''} ${disabledAttr}>
+                        <input type="${inputType}" class="form-control" id="${inputId}" name="${variable.key}" value="${value}" ${step} ${min} ${max} ${maxlength} ${minlength} ${pattern} ${title} ${placeholder} ${variable.required ? 'required' : ''} ${disabledAttr} ${disallowAttr}>
                         <button class="btn btn-outline-secondary" type="button" id="generate-secret-btn" onclick="generateSecretKey()">
                             <i class="fas fa-magic me-1"></i> Generate
                         </button>
                     </div>
                 `;
             } else {
-                inputHtml = `<input type="${inputType}" class="form-control" id="${inputId}" name="${variable.key}" value="${value}" ${step} ${min} ${max} ${maxlength} ${minlength} ${pattern} ${title} ${placeholder} ${variable.required ? 'required' : ''} ${disabledAttr}>`;
+                inputHtml = `<input type="${inputType}" class="form-control" id="${inputId}" name="${variable.key}" value="${value}" ${step} ${min} ${max} ${maxlength} ${minlength} ${pattern} ${title} ${placeholder} ${variable.required ? 'required' : ''} ${disabledAttr} ${disallowAttr}>`;
             }
         }
 
@@ -731,6 +781,7 @@
                 </label>
                 ${inputHtml}
                 ${variable.description && variable.type !== 'boolean' ? `<div class="variable-description">${variable.description}</div>` : ''}
+                ${disallowMessage}
             </div>
         `;
     }
@@ -792,9 +843,12 @@
             } else {
                 input.value = originalValue;
             }
+
+            applyDisallowValidation(input);
         }
 
         checkChanges(catId);
+        updateGPIOPinsValue();
     }
 
     async function saveCategory(catId) {
@@ -946,14 +1000,33 @@
         const pins = [];
         
         rows.forEach(row => {
-            const pin = row.querySelector('.pin-number').value.trim();
+            const pinInput = row.querySelector('.pin-number');
+            const warning = row.querySelector('.reserved-warning');
+            const pin = pinInput.value.trim();
+            const numericPin = parseInt(pin, 10);
+            const isReserved = pin && !Number.isNaN(numericPin) && RESERVED_GPIO_PINS.includes(numericPin);
+
+            if (isReserved) {
+                pinInput.classList.add('is-invalid');
+                row.classList.add('reserved-pin');
+                if (warning) {
+                    warning.classList.remove('d-none');
+                }
+            } else {
+                pinInput.classList.remove('is-invalid');
+                row.classList.remove('reserved-pin');
+                if (warning) {
+                    warning.classList.add('d-none');
+                }
+            }
+
             const name = row.querySelector('.pin-name').value.trim();
             const state = row.querySelector('.pin-state').value;
             const hold = row.querySelector('.pin-hold').value || '5';
             const watchdog = row.querySelector('.pin-watchdog').value || '300';
-            
-            // Only add if pin number is specified
-            if (pin) {
+
+            // Only add if pin number is specified and not reserved
+            if (pin && !isReserved) {
                 pins.push(`${pin}:${name}:${state}:${hold}:${watchdog}`);
             }
         });
@@ -981,9 +1054,12 @@
                 <div class="row g-2 align-items-end">
                     <div class="col-md-2">
                         <label class="form-label small mb-1">BCM Pin #</label>
-                        <input type="number" class="form-control form-control-sm pin-number" 
-                               placeholder="17" min="2" max="27" value="" 
+                        <input type="number" class="form-control form-control-sm pin-number"
+                               placeholder="17" min="2" max="27" value=""
                                onchange="updateGPIOPinsValue()">
+                        <div class="form-text text-danger reserved-warning d-none">
+                            Reserved for Argon OLED enclosure.
+                        </div>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label small mb-1">Pin Name</label>

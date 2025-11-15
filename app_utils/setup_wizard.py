@@ -17,6 +17,8 @@ import os
 import secrets
 from dotenv import dotenv_values
 
+from app_utils.pi_pinout import ARGON_OLED_RESERVED_BCM, ARGON_OLED_RESERVED_PHYSICAL
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ENV_TEMPLATE_PATH = PROJECT_ROOT / ".env.example"
 
@@ -307,6 +309,13 @@ def _validate_gpio_pin(value: str) -> str:
         raise ValueError("GPIO pin must be a number.")
     if not 2 <= pin <= 27:
         raise ValueError("GPIO pin must be between 2 and 27 (Raspberry Pi BCM numbering).")
+    if pin in ARGON_OLED_RESERVED_BCM:
+        physical = ", ".join(str(p) for p in sorted(ARGON_OLED_RESERVED_PHYSICAL))
+        reserved_bcm = ", ".join(str(p) for p in sorted(ARGON_OLED_RESERVED_BCM))
+        raise ValueError(
+            "Pins {bcm} (physical pins {physical}) are reserved for the Argon OLED enclosure and "
+            "cannot be reassigned.".format(bcm=reserved_bcm, physical=physical)
+        )
     return str(pin)
 
 
@@ -488,7 +497,10 @@ EAS_FIELDS = [
     WizardField(
         key="EAS_GPIO_PIN",
         label="GPIO Relay Pin",
-        description="GPIO pin number for relay control (2-27, leave blank to disable).",
+        description=(
+            "GPIO pin number for relay control (2-27, leave blank to disable). "
+            "Pins 2, 3, 4, and 14 are reserved for the Argon OLED enclosure."
+        ),
         required=False,
         validator=_validate_gpio_pin,
     ),

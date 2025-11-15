@@ -165,6 +165,7 @@ For custom integrations, use:
 
 **Pin usage:**
 - Physical pins 1–8: the module’s stacking header engages the first two rows of the 40-pin connector, pulling 3V3, 5V, SDA1 (GPIO2), SCL1 (GPIO3), and ground while mechanically supporting the remaining pins via pass-through traces
+- GPIO4 (physical pin 7) is wired to the front-panel push button and GPIO14 (physical pin 8) is used for the module heartbeat LED. Combined with the module's power rails (physical pins 1, 2, 4, 6) and I²C bus (physical pins 3 and 5), **the entire physical header block 1-8 is reserved** inside EAS Station and hidden from GPIO configuration tools.
 - Leaves the rest of the GPIO header available for relay/MOSFET hats (the board is only a shunt across the top-left corner)
 
 **Assembly notes:**
@@ -177,6 +178,7 @@ For custom integrations, use:
 2. Adjust `OLED_I2C_ADDRESS`, `OLED_WIDTH`, `OLED_HEIGHT`, or `OLED_ROTATE` if you are using a different SSD1306 panel variant.
 3. Create new **Custom Display Screens** with display type `oled` to push status layouts to the panel.
 4. Screens support variable substitution and will run in the same rotation system as LED/VFD displays via the new OLED rotation type.
+5. The Argon push button cycles to the next OLED screen on a short press and shows a system snapshot (CPU, alerts, audio levels) on a long press.
 
 > ℹ️ Vendor assembly instructions: [Argon Industria OLED Module PDF](https://cdn.shopify.com/s/files/1/0556/1660/2177/files/FOR_PRINT_ARGON_INDUSTRIA_OLED_55mmx90mm_20241219.pdf)
 

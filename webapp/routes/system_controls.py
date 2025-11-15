@@ -85,6 +85,8 @@ def register(app: Flask, logger) -> None:
             "bcm": pin_def.bcm,
             "description": pin_def.description,
             "is_gpio": pin_def.is_gpio,
+            "reserved_for": pin_def.reserved_for,
+            "reserved_detail": pin_def.reserved_detail,
             "configured": False,
             "active_high": None,
             "behaviors": [],
