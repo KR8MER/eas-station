@@ -22,6 +22,38 @@ logger = logging.getLogger(__name__)
 environment_bp = Blueprint('environment', __name__)
 
 
+def _get_domain_candidates() -> List[str]:
+    """Return possible domain names to inspect for SSL material."""
+
+    domain_value = os.environ.get('DOMAIN_NAME', 'localhost').strip()
+    if not domain_value:
+        return ['localhost']
+
+    # DOMAIN_NAME may contain multiple domains separated by commas or whitespace
+    candidates = [segment for segment in re.split(r'[\s,]+', domain_value) if segment]
+    return candidates or ['localhost']
+
+
+def _find_ssl_material(filename: str) -> tuple[Path | None, List[Path], str | None]:
+    """Search for SSL certificate/key material across supported locations."""
+
+    search_roots = [
+        Path('/etc/letsencrypt/live'),
+        Path('/app-config/certs/live'),
+    ]
+
+    attempted_paths: List[Path] = []
+
+    for domain_candidate in _get_domain_candidates():
+        for root in search_roots:
+            candidate = root / domain_candidate / filename
+            attempted_paths.append(candidate)
+            if candidate.exists():
+                return candidate, attempted_paths, domain_candidate
+
+    return None, attempted_paths, None
+
+
 def require_permission_or_setup_mode(permission_name: str):
     """
     Decorator that requires permission OR allows access during setup mode.
@@ -1193,30 +1225,46 @@ def admin_download_ssl_cert():
     
     WARNING: This exposes the SSL certificate, which while public, should be handled carefully.
     """
-    from flask import send_file, abort
-    import os
+    from flask import send_file
     from datetime import datetime
 
-    # Get domain name from environment
-    domain_name = os.environ.get('DOMAIN_NAME', 'localhost')
-    cert_path = Path(f'/etc/letsencrypt/live/{domain_name}/fullchain.pem')
+    cert_path, attempted_paths, resolved_domain = _find_ssl_material('fullchain.pem')
 
-    if not cert_path.exists():
-        logger.warning(f'SSL certificate not found at {cert_path}')
-        error_message = f'SSL certificate not found at {cert_path}. '
-        if domain_name == 'localhost':
-            error_message += 'The system is configured for localhost. SSL certificates are only available when using a real domain with Let\'s Encrypt.'
+    if not cert_path:
+        logger.warning('SSL certificate not found at expected locations', extra={
+            'attempted_paths': [str(path) for path in attempted_paths],
+        })
+
+        domain_candidates = _get_domain_candidates()
+        domain_hint = domain_candidates[0]
+        if domain_hint == 'localhost':
+            guidance = (
+                'The system is configured for localhost. SSL certificates are only available '
+                'when using a real domain with Let\'s Encrypt.'
+            )
         else:
-            error_message += 'Please ensure certbot has successfully obtained a certificate for your domain.'
-        return render_template('error.html', 
-                             error='SSL Certificate Not Found',
-                             details=error_message), 404
+            guidance = 'Please ensure certbot has successfully obtained a certificate for your domain.'
+
+        detail_lines = '\n'.join(str(path) for path in attempted_paths)
+        error_message = (
+            'SSL certificate could not be located.\n'
+            'Checked the following locations:\n'
+            f'{detail_lines}\n'
+            f'{guidance}'
+        )
+
+        return render_template(
+            'error.html',
+            error='SSL Certificate Not Found',
+            details=error_message,
+        ), 404
 
     # Create a timestamped filename for the download
     timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
-    download_name = f"{domain_name}-fullchain-{timestamp}.pem"
+    domain_label = resolved_domain or _get_domain_candidates()[0]
+    download_name = f"{domain_label}-fullchain-{timestamp}.pem"
 
-    logger.info(f'Downloading SSL certificate for domain {domain_name}')
+    logger.info('Downloading SSL certificate', extra={'domain': domain_label, 'path': str(cert_path)})
 
     return send_file(
         cert_path,
@@ -1233,30 +1281,46 @@ def admin_download_ssl_key():
     WARNING: This is a SECURITY SENSITIVE operation. The private key should be kept secure
     and only downloaded when absolutely necessary for deployment purposes.
     """
-    from flask import send_file, abort
-    import os
+    from flask import send_file
     from datetime import datetime
 
-    # Get domain name from environment
-    domain_name = os.environ.get('DOMAIN_NAME', 'localhost')
-    key_path = Path(f'/etc/letsencrypt/live/{domain_name}/privkey.pem')
+    key_path, attempted_paths, resolved_domain = _find_ssl_material('privkey.pem')
 
-    if not key_path.exists():
-        logger.warning(f'SSL private key not found at {key_path}')
-        error_message = f'SSL private key not found at {key_path}. '
-        if domain_name == 'localhost':
-            error_message += 'The system is configured for localhost. SSL certificates and keys are only available when using a real domain with Let\'s Encrypt.'
+    if not key_path:
+        logger.warning('SSL private key not found at expected locations', extra={
+            'attempted_paths': [str(path) for path in attempted_paths],
+        })
+
+        domain_candidates = _get_domain_candidates()
+        domain_hint = domain_candidates[0]
+        if domain_hint == 'localhost':
+            guidance = (
+                'The system is configured for localhost. SSL certificates and keys are only available '
+                'when using a real domain with Let\'s Encrypt.'
+            )
         else:
-            error_message += 'Please ensure certbot has successfully obtained a certificate for your domain.'
-        return render_template('error.html',
-                             error='SSL Private Key Not Found',
-                             details=error_message), 404
+            guidance = 'Please ensure certbot has successfully obtained a certificate for your domain.'
+
+        detail_lines = '\n'.join(str(path) for path in attempted_paths)
+        error_message = (
+            'SSL private key could not be located.\n'
+            'Checked the following locations:\n'
+            f'{detail_lines}\n'
+            f'{guidance}'
+        )
+
+        return render_template(
+            'error.html',
+            error='SSL Private Key Not Found',
+            details=error_message,
+        ), 404
 
     # Create a timestamped filename for the download
     timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
-    download_name = f"{domain_name}-privkey-{timestamp}.pem"
+    domain_label = resolved_domain or _get_domain_candidates()[0]
+    download_name = f"{domain_label}-privkey-{timestamp}.pem"
 
-    logger.warning(f'SECURITY: SSL private key downloaded for domain {domain_name} by user')
+    logger.warning('SECURITY: SSL private key downloaded', extra={'domain': domain_label, 'path': str(key_path)})
 
     return send_file(
         key_path,

@@ -1,255 +1,266 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stream Profiles - EAS Station</title>
-    {% include 'partials/common_head.html' %}
-    <style>
-        .profile-card {
-            transition: box-shadow 0.2s;
-        }
-        .profile-card:hover {
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        .profile-enabled {
-            border-left: 4px solid #28a745;
-        }
-        .profile-disabled {
-            border-left: 4px solid #dc3545;
-            opacity: 0.7;
-        }
-        .bandwidth-info {
-            font-size: 0.9rem;
-            color: #6c757d;
-        }
-    </style>
-</head>
-<body>
-    {% include 'partials/navbar.html' %}
-    
-    <div class="container-fluid mt-4">
-        <div class="row">
-            <div class="col-12">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <div>
-                        <h1><i class="fas fa-broadcast-tower"></i> Stream Profiles</h1>
-                        <p class="text-muted">Configure Icecast streaming profiles with different bitrates and formats</p>
-                    </div>
-                    <div>
-                        <button class="btn btn-primary" data-toggle="modal" data-target="#createProfileModal">
-                            <i class="fas fa-plus"></i> Create Profile
-                        </button>
-                    </div>
-                </div>
+{% extends 'base.html' %}
 
-                <!-- Bandwidth Summary -->
-                <div class="card mb-4">
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-3">
-                                <h5>Active Profiles</h5>
-                                <h2 id="activeProfileCount">-</h2>
-                            </div>
-                            <div class="col-md-3">
-                                <h5>Total Profiles</h5>
-                                <h2 id="totalProfileCount">-</h2>
-                            </div>
-                            <div class="col-md-6">
-                                <h5>Estimated Bandwidth Usage</h5>
-                                <h2 id="bandwidthEstimate">-</h2>
-                                <p class="bandwidth-info">Per hour for all active streams</p>
-                            </div>
+{% block title %}Stream Profiles - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+    .profile-card {
+        transition: box-shadow var(--transition-fast), transform var(--transition-fast);
+    }
+
+    .profile-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0.5rem 1.25rem var(--shadow-color);
+    }
+
+    .profile-enabled {
+        border-left: 4px solid var(--success-color);
+    }
+
+    .profile-disabled {
+        border-left: 4px solid var(--danger-color);
+        opacity: 0.78;
+    }
+
+    .bandwidth-info {
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+    }
+
+    .preset-toggle-group {
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .preset-toggle-group .btn {
+        flex: 1 1 150px;
+    }
+
+    @media (max-width: 576px) {
+        .preset-toggle-group .btn {
+            flex: 1 1 100%;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-3">
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+                <div>
+                    <h1 class="mb-1"><i class="fas fa-broadcast-tower me-2"></i>Stream Profiles</h1>
+                    <p class="text-muted mb-0">Configure Icecast streaming profiles with different bitrates and formats</p>
+                </div>
+                <button class="btn btn-primary btn-lg" data-bs-toggle="modal" data-bs-target="#createProfileModal">
+                    <i class="fas fa-plus me-2"></i>Create Profile
+                </button>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-body">
+                    <div class="row g-4 align-items-center">
+                        <div class="col-12 col-md-4">
+                            <h5 class="text-uppercase text-muted small mb-1">Active Profiles</h5>
+                            <h2 class="mb-0" id="activeProfileCount">-</h2>
                         </div>
-                    </div>
-                </div>
-
-                <!-- Profiles List -->
-                <div id="profilesContainer" class="row">
-                    <!-- Populated by JavaScript -->
-                </div>
-
-                <!-- Empty State -->
-                <div id="emptyState" class="card text-center py-5" style="display: none;">
-                    <div class="card-body">
-                        <i class="fas fa-broadcast-tower fa-5x text-muted mb-4"></i>
-                        <h3>No Stream Profiles</h3>
-                        <p class="text-muted">Create your first stream profile to get started</p>
-                        <button class="btn btn-primary" data-toggle="modal" data-target="#createProfileModal">
-                            <i class="fas fa-plus"></i> Create Profile
-                        </button>
+                        <div class="col-12 col-md-4">
+                            <h5 class="text-uppercase text-muted small mb-1">Total Profiles</h5>
+                            <h2 class="mb-0" id="totalProfileCount">-</h2>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <h5 class="text-uppercase text-muted small mb-1">Estimated Bandwidth Usage</h5>
+                            <h2 class="mb-1" id="bandwidthEstimate">-</h2>
+                            <p class="bandwidth-info mb-0">Per hour for all active streams</p>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Create/Edit Profile Modal -->
-    <div class="modal fade" id="createProfileModal" tabindex="-1" role="dialog">
-        <div class="modal-dialog modal-lg" role="document">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">
-                        <span id="modalTitleCreate">Create Stream Profile</span>
-                        <span id="modalTitleEdit" style="display: none;">Edit Stream Profile</span>
-                    </h5>
-                    <button type="button" class="close" data-dismiss="modal">
-                        <span>&times;</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <form id="profileForm">
-                        <input type="hidden" id="editMode" value="false">
-                        <input type="hidden" id="originalName" value="">
-                        
-                        <!-- Quick Presets -->
-                        <div class="form-group">
-                            <label>Quick Preset (Optional)</label>
-                            <div class="btn-group btn-group-toggle d-flex" data-toggle="buttons">
-                                <label class="btn btn-outline-secondary">
-                                    <input type="radio" name="preset" value=""> Custom
-                                </label>
-                                <label class="btn btn-outline-secondary">
-                                    <input type="radio" name="preset" value="low"> Low (64kbps)
-                                </label>
-                                <label class="btn btn-outline-secondary">
-                                    <input type="radio" name="preset" value="medium"> Medium (128kbps)
-                                </label>
-                                <label class="btn btn-outline-secondary">
-                                    <input type="radio" name="preset" value="high"> High (192kbps)
-                                </label>
-                                <label class="btn btn-outline-secondary">
-                                    <input type="radio" name="preset" value="premium"> Premium (320kbps)
-                                </label>
-                            </div>
-                            <small class="form-text text-muted">Select a preset to auto-fill settings, or choose Custom to configure manually</small>
-                        </div>
+            <div id="profilesContainer" class="row g-4"></div>
 
-                        <hr>
-
-                        <!-- Basic Settings -->
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label for="profileName">Profile Name *</label>
-                                    <input type="text" class="form-control" id="profileName" required>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label for="profileMount">Mount Point *</label>
-                                    <input type="text" class="form-control" id="profileMount" placeholder="/stream.mp3" required>
-                                    <small class="form-text text-muted">e.g., /stream.mp3 or /high.mp3</small>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Audio Settings -->
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="form-group">
-                                    <label for="profileFormat">Format *</label>
-                                    <select class="form-control" id="profileFormat" required>
-                                        <option value="mp3">MP3</option>
-                                        <option value="ogg">OGG Vorbis</option>
-                                        <option value="opus">Opus</option>
-                                        <option value="aac">AAC</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="form-group">
-                                    <label for="profileBitrate">Bitrate (kbps) *</label>
-                                    <input type="number" class="form-control" id="profileBitrate" min="32" max="320" value="128" required>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="form-group">
-                                    <label for="profileChannels">Channels *</label>
-                                    <select class="form-control" id="profileChannels" required>
-                                        <option value="1">Mono</option>
-                                        <option value="2" selected>Stereo</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Metadata -->
-                        <div class="form-group">
-                            <label for="profileDescription">Description</label>
-                            <input type="text" class="form-control" id="profileDescription" placeholder="High quality monitoring stream">
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label for="profileSampleRate">Sample Rate (Hz)</label>
-                                    <select class="form-control" id="profileSampleRate">
-                                        <option value="44100" selected>44100 (CD Quality)</option>
-                                        <option value="48000">48000 (Professional)</option>
-                                        <option value="32000">32000</option>
-                                        <option value="22050">22050</option>
-                                        <option value="16000">16000</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label for="profileGenre">Genre</label>
-                                    <input type="text" class="form-control" id="profileGenre" value="Emergency Alert">
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Advanced Settings -->
-                        <div class="custom-control custom-checkbox mb-3">
-                            <input type="checkbox" class="custom-control-input" id="profileEnabled" checked>
-                            <label class="custom-control-label" for="profileEnabled">Enable this profile</label>
-                        </div>
-
-                        <div class="alert alert-info">
-                            <strong>Note:</strong> Changes to stream profiles require restarting the Icecast service to take effect.
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" onclick="saveProfile()">
-                        <span id="saveButtonCreate">Create Profile</span>
-                        <span id="saveButtonEdit" style="display: none;">Save Changes</span>
+            <div id="emptyState" class="card text-center py-5" style="display: none;">
+                <div class="card-body">
+                    <i class="fas fa-broadcast-tower fa-4x text-muted mb-4"></i>
+                    <h3 class="mb-2">No Stream Profiles</h3>
+                    <p class="text-muted mb-4">Create your first stream profile to get started.</p>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createProfileModal">
+                        <i class="fas fa-plus me-2"></i>Create Profile
                     </button>
                 </div>
             </div>
         </div>
     </div>
+</div>
 
-    {% include 'partials/footer.html' %}
+<div class="modal fade" id="createProfileModal" tabindex="-1" aria-labelledby="createProfileModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createProfileModalLabel">
+                    <span id="modalTitleCreate">Create Stream Profile</span>
+                    <span id="modalTitleEdit" class="d-none">Edit Stream Profile</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="profileForm">
+                    <input type="hidden" id="editMode" value="false">
+                    <input type="hidden" id="originalName" value="">
 
-    <script>
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Quick Preset (Optional)</label>
+                        <div class="btn-group preset-toggle-group" role="group" aria-label="Preset selection">
+                            <input type="radio" class="btn-check" name="preset" id="preset-custom" value="" autocomplete="off" checked>
+                            <label class="btn btn-outline-secondary" for="preset-custom">Custom</label>
+
+                            <input type="radio" class="btn-check" name="preset" id="preset-low" value="low" autocomplete="off">
+                            <label class="btn btn-outline-secondary" for="preset-low">Low (64 kbps)</label>
+
+                            <input type="radio" class="btn-check" name="preset" id="preset-medium" value="medium" autocomplete="off">
+                            <label class="btn btn-outline-secondary" for="preset-medium">Medium (128 kbps)</label>
+
+                            <input type="radio" class="btn-check" name="preset" id="preset-high" value="high" autocomplete="off">
+                            <label class="btn btn-outline-secondary" for="preset-high">High (192 kbps)</label>
+
+                            <input type="radio" class="btn-check" name="preset" id="preset-premium" value="premium" autocomplete="off">
+                            <label class="btn btn-outline-secondary" for="preset-premium">Premium (320 kbps)</label>
+                        </div>
+                        <small class="form-text text-muted">Select a preset to auto-fill settings, or choose Custom to configure manually.</small>
+                    </div>
+
+                    <hr>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="profileName" class="form-label">Profile Name *</label>
+                            <input type="text" class="form-control" id="profileName" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="profileMount" class="form-label">Mount Point *</label>
+                            <input type="text" class="form-control" id="profileMount" placeholder="/stream.mp3" required>
+                            <small class="form-text text-muted">Example: /stream.mp3 or /high.mp3</small>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mt-1">
+                        <div class="col-md-4">
+                            <label for="profileFormat" class="form-label">Format *</label>
+                            <select class="form-select" id="profileFormat" required>
+                                <option value="mp3">MP3</option>
+                                <option value="ogg">OGG Vorbis</option>
+                                <option value="opus">Opus</option>
+                                <option value="aac">AAC</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="profileBitrate" class="form-label">Bitrate (kbps) *</label>
+                            <input type="number" class="form-control" id="profileBitrate" min="32" max="320" value="128" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="profileChannels" class="form-label">Channels *</label>
+                            <select class="form-select" id="profileChannels" required>
+                                <option value="1">Mono</option>
+                                <option value="2" selected>Stereo</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mt-3">
+                        <label for="profileDescription" class="form-label">Description</label>
+                        <input type="text" class="form-control" id="profileDescription" placeholder="High quality monitoring stream">
+                    </div>
+
+                    <div class="row g-3 mt-1">
+                        <div class="col-md-6">
+                            <label for="profileSampleRate" class="form-label">Sample Rate (Hz)</label>
+                            <select class="form-select" id="profileSampleRate">
+                                <option value="44100" selected>44100 (CD Quality)</option>
+                                <option value="48000">48000 (Professional)</option>
+                                <option value="32000">32000</option>
+                                <option value="22050">22050</option>
+                                <option value="16000">16000</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="profileGenre" class="form-label">Genre</label>
+                            <input type="text" class="form-control" id="profileGenre" value="Emergency Alert">
+                        </div>
+                    </div>
+
+                    <div class="form-check form-switch mt-4">
+                        <input class="form-check-input" type="checkbox" role="switch" id="profileEnabled" checked>
+                        <label class="form-check-label" for="profileEnabled">Enable this profile</label>
+                    </div>
+
+                    <div class="alert alert-info mt-4 mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Changes to stream profiles require restarting the Icecast service to take effect.
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveProfileBtn">
+                    <span id="saveButtonCreate">Create Profile</span>
+                    <span id="saveButtonEdit" class="d-none">Save Changes</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    (() => {
+        const profilesContainer = document.getElementById('profilesContainer');
+        const emptyStateCard = document.getElementById('emptyState');
+        const editModeInput = document.getElementById('editMode');
+        const originalNameInput = document.getElementById('originalName');
+        const profileForm = document.getElementById('profileForm');
+        const profileModalEl = document.getElementById('createProfileModal');
+        const saveProfileBtn = document.getElementById('saveProfileBtn');
+        const modalTitleCreate = document.getElementById('modalTitleCreate');
+        const modalTitleEdit = document.getElementById('modalTitleEdit');
+        const saveButtonCreate = document.getElementById('saveButtonCreate');
+        const saveButtonEdit = document.getElementById('saveButtonEdit');
+        const presetInputs = Array.from(document.querySelectorAll('input[name="preset"]'));
+        const profileModal = bootstrap.Modal.getOrCreateInstance(profileModalEl);
+
         let profiles = {};
 
-        // Load profiles on page load
-        document.addEventListener('DOMContentLoaded', loadProfiles);
-
-        // Preset selection handler
-        document.querySelectorAll('input[name="preset"]').forEach(radio => {
-            radio.addEventListener('change', function() {
-                if (this.value) {
-                    applyPreset(this.value);
-                }
+        document.addEventListener('DOMContentLoaded', () => {
+            loadProfiles();
+            presetInputs.forEach((radio) => {
+                radio.addEventListener('change', () => {
+                    if (radio.value) {
+                        applyPreset(radio.value);
+                    }
+                });
             });
         });
+
+        profileModalEl.addEventListener('hidden.bs.modal', resetForm);
+        saveProfileBtn.addEventListener('click', saveProfile);
 
         async function loadProfiles() {
             try {
                 const response = await fetch('/api/stream-profiles');
-                const data = await response.json();
-                
-                if (data.success) {
-                    profiles = data.profiles;
-                    displayProfiles();
-                    updateSummary(data);
+                if (!response.ok) {
+                    throw new Error(`Request failed with status ${response.status}`);
                 }
+
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.error || 'Unknown error');
+                }
+
+                profiles = data.profiles || {};
+                displayProfiles();
+                updateSummary();
             } catch (error) {
                 console.error('Error loading profiles:', error);
                 showAlert('Error loading stream profiles', 'danger');
@@ -257,43 +268,41 @@
         }
 
         function displayProfiles() {
-            const container = document.getElementById('profilesContainer');
-            container.innerHTML = '';
-            
+            profilesContainer.innerHTML = '';
+
             if (Object.keys(profiles).length === 0) {
-                document.getElementById('emptyState').style.display = 'block';
+                emptyStateCard.style.display = 'block';
                 return;
             }
-            
-            document.getElementById('emptyState').style.display = 'none';
-            
+
+            emptyStateCard.style.display = 'none';
+
             Object.entries(profiles).forEach(([name, profile]) => {
                 const card = createProfileCard(name, profile);
-                container.appendChild(card);
+                profilesContainer.appendChild(card);
             });
         }
 
         function createProfileCard(name, profile) {
             const col = document.createElement('div');
-            col.className = 'col-md-6 col-lg-4 mb-4';
-            
+            col.className = 'col-12 col-md-6 col-xl-4';
+
             const enabledClass = profile.enabled ? 'profile-enabled' : 'profile-disabled';
-            const statusBadge = profile.enabled 
-                ? '<span class="badge badge-success">Enabled</span>'
-                : '<span class="badge badge-secondary">Disabled</span>';
-            
+            const statusBadge = profile.enabled
+                ? '<span class="badge rounded-pill bg-success-subtle text-success-emphasis">Enabled</span>'
+                : '<span class="badge rounded-pill bg-secondary">Disabled</span>';
+
             col.innerHTML = `
                 <div class="card profile-card ${enabledClass}">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <h5 class="card-title mb-0">${escapeHtml(profile.name)}</h5>
+                    <div class="card-body d-flex flex-column gap-3">
+                        <div class="d-flex justify-content-between align-items-start gap-3">
+                            <div>
+                                <h5 class="card-title mb-1">${escapeHtml(profile.name)}</h5>
+                                <p class="text-muted small mb-0">${escapeHtml(profile.description || 'No description')}</p>
+                            </div>
                             ${statusBadge}
                         </div>
-                        <p class="text-muted small">${escapeHtml(profile.description || 'No description')}</p>
-                        
-                        <hr>
-                        
-                        <div class="row small">
+                        <div class="row g-3 small">
                             <div class="col-6">
                                 <strong>Mount:</strong> ${escapeHtml(profile.mount)}<br>
                                 <strong>Format:</strong> ${profile.format.toUpperCase()}<br>
@@ -305,80 +314,77 @@
                                 <strong>Est. Usage:</strong> ~${estimateBandwidth(profile.bitrate)} MB/hr
                             </div>
                         </div>
-                        
-                        <hr>
-                        
-                        <div class="btn-group btn-block" role="group">
-                            <button class="btn btn-sm btn-outline-primary" onclick="editProfile('${escapeHtml(name)}')">
-                                <i class="fas fa-edit"></i> Edit
+                        <div class="d-flex flex-wrap gap-2">
+                            <button class="btn btn-outline-primary btn-sm" onclick="editProfile('${escapeHtml(name)}')">
+                                <i class="fas fa-edit me-1"></i>Edit
                             </button>
-                            <button class="btn btn-sm btn-outline-${profile.enabled ? 'warning' : 'success'}" 
-                                    onclick="toggleProfile('${escapeHtml(name)}', ${!profile.enabled})">
-                                <i class="fas fa-power-off"></i> ${profile.enabled ? 'Disable' : 'Enable'}
+                            <button class="btn btn-outline-${profile.enabled ? 'warning' : 'success'} btn-sm" onclick="toggleProfile('${escapeHtml(name)}', ${String(!profile.enabled)})">
+                                <i class="fas fa-power-off me-1"></i>${profile.enabled ? 'Disable' : 'Enable'}
                             </button>
-                            <button class="btn btn-sm btn-outline-danger" onclick="deleteProfile('${escapeHtml(name)}')">
-                                <i class="fas fa-trash"></i> Delete
+                            <button class="btn btn-outline-danger btn-sm" onclick="deleteProfile('${escapeHtml(name)}')">
+                                <i class="fas fa-trash me-1"></i>Delete
                             </button>
                         </div>
                     </div>
                 </div>
             `;
-            
+
             return col;
         }
 
-        function updateSummary(data) {
-            document.getElementById('activeProfileCount').textContent = data.active_count;
-            document.getElementById('totalProfileCount').textContent = data.total_count;
-            
-            // Get bandwidth estimate
-            fetch('/api/stream-profiles/bandwidth-estimate')
-                .then(r => r.json())
-                .then(data => {
-                    if (data.success) {
-                        document.getElementById('bandwidthEstimate').textContent = 
-                            `${data.total_mb} MB`;
-                    }
-                });
+        async function updateSummary() {
+            document.getElementById('activeProfileCount').textContent = Object.values(profiles).filter((p) => p.enabled).length;
+            document.getElementById('totalProfileCount').textContent = Object.keys(profiles).length;
+
+            try {
+                const response = await fetch('/api/stream-profiles/bandwidth-estimate');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch bandwidth estimate');
+                }
+
+                const data = await response.json();
+                if (data.success) {
+                    document.getElementById('bandwidthEstimate').textContent = `${data.total_mb} MB`;
+                }
+            } catch (error) {
+                console.debug('Bandwidth estimate unavailable:', error);
+                document.getElementById('bandwidthEstimate').textContent = 'Unavailable';
+            }
         }
 
         function estimateBandwidth(bitrate) {
-            // Estimate MB per hour: bitrate (kbps) * 3600s / 8 / 1024
-            return Math.round(bitrate * 3600 / 8 / 1024);
+            return Math.round((bitrate * 3600) / 8 / 1024);
         }
 
         function applyPreset(preset) {
             const presets = {
-                'low': { bitrate: 64, channels: 1 },
-                'medium': { bitrate: 128, channels: 2 },
-                'high': { bitrate: 192, channels: 2 },
-                'premium': { bitrate: 320, channels: 2 }
+                low: { bitrate: 64, channels: 1, mount: '/low.mp3' },
+                medium: { bitrate: 128, channels: 2, mount: '/medium.mp3' },
+                high: { bitrate: 192, channels: 2, mount: '/high.mp3' },
+                premium: { bitrate: 320, channels: 2, mount: '/premium.mp3' },
             };
-            
-            if (presets[preset]) {
-                document.getElementById('profileBitrate').value = presets[preset].bitrate;
-                document.getElementById('profileChannels').value = presets[preset].channels;
-                
-                // Suggest mount point
-                if (!document.getElementById('editMode').value === 'true') {
-                    document.getElementById('profileMount').value = `/${preset}.mp3`;
-                }
+
+            const presetConfig = presets[preset];
+            if (!presetConfig) {
+                return;
+            }
+
+            document.getElementById('profileBitrate').value = presetConfig.bitrate;
+            document.getElementById('profileChannels').value = presetConfig.channels;
+
+            if (!isEditMode()) {
+                document.getElementById('profileMount').value = presetConfig.mount;
             }
         }
 
-        function editProfile(name) {
+        window.editProfile = (name) => {
             const profile = profiles[name];
-            if (!profile) return;
-            
-            // Set edit mode
-            document.getElementById('editMode').value = 'true';
-            document.getElementById('originalName').value = name;
-            document.getElementById('modalTitleCreate').style.display = 'none';
-            document.getElementById('modalTitleEdit').style.display = 'block';
-            document.getElementById('saveButtonCreate').style.display = 'none';
-            document.getElementById('saveButtonEdit').style.display = 'inline';
-            
-            // Fill form
+            if (!profile) {
+                return;
+            }
+
+            setEditMode(true, name);
+
             document.getElementById('profileName').value = profile.name;
             document.getElementById('profileMount').value = profile.mount;
             document.getElementById('profileFormat').value = profile.format;
@@ -388,134 +394,138 @@
             document.getElementById('profileSampleRate').value = profile.sample_rate;
             document.getElementById('profileGenre').value = profile.genre;
             document.getElementById('profileEnabled').checked = profile.enabled;
-            
-            // Show modal
-            $('#createProfileModal').modal('show');
-        }
+
+            profileModal.show();
+        };
 
         async function saveProfile() {
-            const editMode = document.getElementById('editMode').value === 'true';
-            const originalName = document.getElementById('originalName').value;
-            
+            const editMode = isEditMode();
+            const originalName = originalNameInput.value;
+
             const profile = {
                 name: document.getElementById('profileName').value,
                 mount: document.getElementById('profileMount').value,
                 format: document.getElementById('profileFormat').value,
-                bitrate: parseInt(document.getElementById('profileBitrate').value),
-                channels: parseInt(document.getElementById('profileChannels').value),
-                sample_rate: parseInt(document.getElementById('profileSampleRate').value),
+                bitrate: Number.parseInt(document.getElementById('profileBitrate').value, 10),
+                channels: Number.parseInt(document.getElementById('profileChannels').value, 10),
+                sample_rate: Number.parseInt(document.getElementById('profileSampleRate').value, 10),
                 description: document.getElementById('profileDescription').value,
                 genre: document.getElementById('profileGenre').value,
                 enabled: document.getElementById('profileEnabled').checked,
                 public: false,
                 fallback_mount: null,
                 max_listeners: 100,
-                burst_size: 65535
+                burst_size: 65535,
             };
-            
+
+            const requestInit = {
+                method: editMode ? 'PUT' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(profile),
+            };
+
+            const endpoint = editMode
+                ? `/api/stream-profiles/${encodeURIComponent(originalName)}`
+                : '/api/stream-profiles';
+
             try {
-                let response;
-                if (editMode) {
-                    response = await fetch(`/api/stream-profiles/${originalName}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(profile)
-                    });
-                } else {
-                    response = await fetch('/api/stream-profiles', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(profile)
-                    });
-                }
-                
+                const response = await fetch(endpoint, requestInit);
                 const data = await response.json();
-                
-                if (data.success) {
-                    showAlert(data.message, 'success');
-                    $('#createProfileModal').modal('hide');
-                    resetForm();
-                    loadProfiles();
-                } else {
-                    showAlert(data.error, 'danger');
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || `Save failed with status ${response.status}`);
                 }
+
+                showAlert(data.message, 'success');
+                profileModal.hide();
+                resetForm();
+                await loadProfiles();
             } catch (error) {
                 console.error('Error saving profile:', error);
-                showAlert('Error saving profile', 'danger');
+                showAlert(error.message || 'Error saving profile', 'danger');
             }
         }
 
-        async function toggleProfile(name, enable) {
-            const action = enable ? 'enable' : 'disable';
+        window.toggleProfile = async (name, enable) => {
+            const action = enable === true || enable === 'true' ? 'enable' : 'disable';
             try {
-                const response = await fetch(`/api/stream-profiles/${name}/${action}`, {
-                    method: 'POST'
-                });
+                const response = await fetch(`/api/stream-profiles/${encodeURIComponent(name)}/${action}`, { method: 'POST' });
                 const data = await response.json();
-                
-                if (data.success) {
-                    showAlert(data.message, 'success');
-                    loadProfiles();
-                } else {
-                    showAlert(data.error, 'danger');
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || `${action} request failed`);
                 }
+
+                showAlert(data.message, 'success');
+                await loadProfiles();
             } catch (error) {
                 console.error(`Error ${action}ing profile:`, error);
                 showAlert(`Error ${action}ing profile`, 'danger');
             }
-        }
+        };
 
-        async function deleteProfile(name) {
+        window.deleteProfile = async (name) => {
             if (!confirm(`Are you sure you want to delete the profile "${name}"?`)) {
                 return;
             }
-            
+
             try {
-                const response = await fetch(`/api/stream-profiles/${name}`, {
-                    method: 'DELETE'
-                });
+                const response = await fetch(`/api/stream-profiles/${encodeURIComponent(name)}`, { method: 'DELETE' });
                 const data = await response.json();
-                
-                if (data.success) {
-                    showAlert(data.message, 'success');
-                    loadProfiles();
-                } else {
-                    showAlert(data.error, 'danger');
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || 'Delete request failed');
                 }
+
+                showAlert(data.message, 'success');
+                await loadProfiles();
             } catch (error) {
                 console.error('Error deleting profile:', error);
                 showAlert('Error deleting profile', 'danger');
             }
-        }
+        };
 
         function resetForm() {
-            document.getElementById('profileForm').reset();
-            document.getElementById('editMode').value = 'false';
-            document.getElementById('originalName').value = '';
-            document.getElementById('modalTitleCreate').style.display = 'block';
-            document.getElementById('modalTitleEdit').style.display = 'none';
-            document.getElementById('saveButtonCreate').style.display = 'inline';
-            document.getElementById('saveButtonEdit').style.display = 'none';
-            
-            // Uncheck preset radio buttons
-            document.querySelectorAll('input[name="preset"]').forEach(radio => {
-                radio.checked = false;
+            profileForm.reset();
+            setEditMode(false);
+            presetInputs.forEach((radio) => {
+                radio.checked = radio.value === '';
             });
         }
 
-        // Reset form when modal is closed
-        $('#createProfileModal').on('hidden.bs.modal', resetForm);
+        function setEditMode(enabled, originalName = '') {
+            editModeInput.value = enabled ? 'true' : 'false';
+            originalNameInput.value = enabled ? originalName : '';
+            modalTitleCreate.classList.toggle('d-none', enabled);
+            modalTitleEdit.classList.toggle('d-none', !enabled);
+            saveButtonCreate.classList.toggle('d-none', enabled);
+            saveButtonEdit.classList.toggle('d-none', !enabled);
+        }
 
-        function showAlert(message, type) {
-            // Simple alert for now - could be enhanced with toast notifications
-            alert(message);
+        function isEditMode() {
+            return editModeInput.value === 'true';
+        }
+
+        function showAlert(message, level = 'info') {
+            if (window.EASNotifications && typeof window.EASNotifications.showToast === 'function') {
+                window.EASNotifications.showToast({ message, variant: level });
+                return;
+            }
+
+            const alertType = level === 'danger' ? 'error' : level;
+            window.dispatchEvent(new CustomEvent('app-notification', {
+                detail: {
+                    message,
+                    type: alertType,
+                },
+            }));
         }
 
         function escapeHtml(text) {
             const div = document.createElement('div');
-            div.textContent = text;
+            div.textContent = text ?? '';
             return div.innerHTML;
         }
-    </script>
-</body>
-</html>
+    })();
+</script>
+{% endblock %}

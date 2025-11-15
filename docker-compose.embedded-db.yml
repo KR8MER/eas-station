@@ -69,6 +69,7 @@ services:
       # NOTE: .env removed - loads empty file from Git. App loads from CONFIG_PATH at runtime.
     volumes:
       - app-config:/app-config  # Persistent volume for .env file
+      - certbot-conf:/etc/letsencrypt:ro  # Allow SSL export routes to read certificates
       - /var/run/docker.sock:/var/run/docker.sock:ro  # Allow container engine health checks
     environment:
       # Database connection - embedded database
