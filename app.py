@@ -124,6 +124,11 @@ from app_core.led import (
     initialise_led_controller,
     led_controller,
 )
+from app_core.oled import (
+    OLED_AVAILABLE,
+    initialise_oled_display,
+    oled_controller,
+)
 from app_core.vfd import (
     VFD_AVAILABLE,
     ensure_vfd_tables,
@@ -985,6 +990,8 @@ def initialize_database():
             if not LED_AVAILABLE:
                 initialise_led_controller(logger)
                 ensure_led_tables()
+            if not OLED_AVAILABLE:
+                initialise_oled_display(logger)
             if not VFD_AVAILABLE:
                 initialise_vfd_controller(logger)
                 ensure_vfd_tables()

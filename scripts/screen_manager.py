@@ -8,12 +8,56 @@ import logging
 import random
 import threading
 import time
+from collections import deque
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Deque, Dict, List, Optional
 
 from flask import Flask
 
 logger = logging.getLogger(__name__)
+
+
+SNAPSHOT_SCREEN_TEMPLATE = {
+    "name": "oled_snapshot_preview",
+    "display_type": "oled",
+    "enabled": True,
+    "priority": 0,
+    "refresh_interval": 15,
+    "duration": 10,
+    "template_data": {
+        "clear": True,
+        "lines": [
+            {"text": "{now.datetime}", "wrap": False, "y": 0, "max_width": 124},
+            {
+                "text": "Status {status.status} | Alerts {status.active_alerts_count}",
+                "y": 10,
+                "wrap": False,
+                "max_width": 124,
+            },
+            {"text": "{status.status_summary}", "y": 22, "max_width": 124},
+            {
+                "text": "Alert {alerts.features[0].properties.event}",
+                "y": 34,
+                "max_width": 124,
+                "allow_empty": True,
+            },
+            {
+                "text": "CPU {status.system_resources.cpu_usage_percent}%  MEM {status.system_resources.memory_usage_percent}%",
+                "y": 46,
+                "wrap": False,
+                "max_width": 124,
+            },
+            {
+                "text": "Audio Peak {audio.live_metrics[0].peak_level_db} dB", "y": 52, "allow_empty": True
+            },
+        ],
+    },
+    "data_sources": [
+        {"endpoint": "/api/system_status", "var_name": "status"},
+        {"endpoint": "/api/audio/metrics", "var_name": "audio"},
+        {"endpoint": "/api/alerts", "var_name": "alerts"},
+    ],
+}
 
 
 class ScreenManager:
@@ -30,10 +74,18 @@ class ScreenManager:
         self._thread: Optional[threading.Thread] = None
         self._led_rotation: Optional[Dict] = None
         self._vfd_rotation: Optional[Dict] = None
+        self._oled_rotation: Optional[Dict] = None
         self._led_current_index = 0
         self._vfd_current_index = 0
+        self._oled_current_index = 0
         self._last_led_update = datetime.min
         self._last_vfd_update = datetime.min
+        self._last_oled_update = datetime.min
+        self._oled_button = None
+        self._oled_button_actions: Deque[str] = deque()
+        self._oled_button_lock = threading.Lock()
+        self._oled_button_held = False
+        self._oled_button_initialized = False
 
     def init_app(self, app: Flask):
         """Initialize with Flask app context.
@@ -65,11 +117,14 @@ class ScreenManager:
         """Main loop for screen rotation."""
         while self._running:
             try:
+                self._ensure_oled_button_listener()
                 if self.app:
                     with self.app.app_context():
                         self._update_rotations()
                         self._check_led_rotation()
                         self._check_vfd_rotation()
+                        self._check_oled_rotation()
+                        self._process_oled_button_actions()
                 else:
                     logger.warning("No app context available")
 
@@ -107,6 +162,17 @@ class ScreenManager:
             else:
                 # Clear cache if no active rotation found
                 self._vfd_rotation = None
+
+            # Get active OLED rotation
+            oled_rotation = ScreenRotation.query.filter_by(
+                display_type='oled',
+                enabled=True
+            ).first()
+
+            if oled_rotation:
+                self._oled_rotation = oled_rotation.to_dict()
+            else:
+                self._oled_rotation = None
 
         except Exception as e:
             logger.error(f"Error loading rotations: {e}")
@@ -202,6 +268,204 @@ class ScreenManager:
 
             # Update database
             self._update_rotation_state('vfd', current_index, now)
+
+    def _check_oled_rotation(self):
+        """Check if OLED screen should rotate."""
+        if not self._oled_rotation:
+            return
+
+        if self._oled_rotation.get('skip_on_alert') and self._has_active_alerts():
+            return
+
+        screens = self._oled_rotation.get('screens', [])
+        if not screens:
+            return
+
+        current_index = self._oled_current_index
+        if current_index >= len(screens):
+            current_index = 0
+            self._oled_current_index = 0
+
+        screen_config = screens[current_index]
+        duration = screen_config.get('duration', 10)
+
+        now = datetime.utcnow()
+        if now - self._last_oled_update >= timedelta(seconds=duration):
+            self._display_oled_screen(screen_config)
+            self._last_oled_update = now
+
+            current_index += 1
+            if current_index >= len(screens):
+                current_index = 0
+
+                if self._oled_rotation.get('randomize'):
+                    random.shuffle(screens)
+                    self._oled_rotation['screens'] = screens
+
+            self._oled_current_index = current_index
+
+            self._update_rotation_state('oled', current_index, now)
+
+    def _ensure_oled_button_listener(self) -> None:
+        """Attach callbacks for the Argon OLED button when available."""
+
+        if self._oled_button_initialized:
+            return
+
+        try:
+            from app_core.oled import ensure_oled_button
+        except Exception as exc:  # pragma: no cover - optional dependency
+            logger.debug("OLED button support unavailable: %s", exc)
+            self._oled_button_initialized = True
+            return
+
+        button = ensure_oled_button(logger)
+        if button is None:
+            self._oled_button_initialized = True
+            return
+
+        button.when_pressed = self._handle_oled_button_press
+        button.when_released = self._handle_oled_button_release
+        button.when_held = self._handle_oled_button_hold
+        self._oled_button = button
+        self._oled_button_initialized = True
+        logger.info("OLED front-panel button listener registered")
+
+    def _queue_oled_button_action(self, action: str) -> None:
+        with self._oled_button_lock:
+            self._oled_button_actions.append(action)
+
+    def _handle_oled_button_press(self) -> None:  # pragma: no cover - hardware callback
+        self._oled_button_held = False
+
+    def _handle_oled_button_hold(self) -> None:  # pragma: no cover - hardware callback
+        self._oled_button_held = True
+        self._queue_oled_button_action('snapshot')
+
+    def _handle_oled_button_release(self) -> None:  # pragma: no cover - hardware callback
+        if not self._oled_button_held:
+            self._queue_oled_button_action('advance')
+        self._oled_button_held = False
+
+    def _process_oled_button_actions(self) -> None:
+        pending: List[str] = []
+        with self._oled_button_lock:
+            while self._oled_button_actions:
+                pending.append(self._oled_button_actions.popleft())
+
+        for action in pending:
+            if action == 'advance':
+                self._advance_oled_rotation()
+            elif action == 'snapshot':
+                self._display_oled_snapshot()
+
+    def _advance_oled_rotation(self) -> None:
+        if not self._oled_rotation:
+            return
+
+        screens = self._oled_rotation.get('screens', [])
+        if not screens:
+            return
+
+        current_index = self._oled_current_index
+        if current_index >= len(screens):
+            current_index = 0
+            self._oled_current_index = 0
+
+        screen_config = screens[current_index]
+        self._display_oled_screen(screen_config)
+
+        now = datetime.utcnow()
+        self._last_oled_update = now
+
+        current_index += 1
+        if current_index >= len(screens):
+            current_index = 0
+            if self._oled_rotation.get('randomize'):
+                random.shuffle(screens)
+                self._oled_rotation['screens'] = screens
+
+        self._oled_current_index = current_index
+        self._update_rotation_state('oled', current_index, now)
+
+    def _display_oled_snapshot(self) -> None:
+        try:
+            from app_core.oled import OLEDLine, initialise_oled_display
+            import app_core.oled as oled_module
+            from scripts.screen_renderer import ScreenRenderer
+        except Exception as exc:  # pragma: no cover - renderer dependencies
+            logger.debug("Unable to prepare OLED snapshot: %s", exc)
+            return
+
+        controller = oled_module.oled_controller or initialise_oled_display(logger)
+        if controller is None:
+            return
+
+        renderer = ScreenRenderer()
+        rendered = renderer.render_screen(SNAPSHOT_SCREEN_TEMPLATE)
+        if not rendered:
+            return
+
+        raw_lines = rendered.get('lines', [])
+        if not isinstance(raw_lines, list):
+            return
+
+        line_objects: List[OLEDLine] = []
+        for entry in raw_lines:
+            if isinstance(entry, OLEDLine):
+                line_objects.append(entry)
+                continue
+
+            if not isinstance(entry, dict):
+                continue
+
+            text = str(entry.get('text', ''))
+            try:
+                x_value = int(entry.get('x', 0) or 0)
+            except (TypeError, ValueError):
+                x_value = 0
+
+            y_raw = entry.get('y')
+            try:
+                y_value = int(y_raw) if y_raw is not None else None
+            except (TypeError, ValueError):
+                y_value = None
+
+            max_width_raw = entry.get('max_width')
+            try:
+                max_width_value = int(max_width_raw) if max_width_raw is not None else None
+            except (TypeError, ValueError):
+                max_width_value = None
+
+            try:
+                spacing_value = int(entry.get('spacing', 2))
+            except (TypeError, ValueError):
+                spacing_value = 2
+
+            line_objects.append(
+                OLEDLine(
+                    text=text,
+                    x=x_value,
+                    y=y_value,
+                    font=str(entry.get('font', 'small')),
+                    wrap=bool(entry.get('wrap', True)),
+                    max_width=max_width_value,
+                    spacing=spacing_value,
+                    invert=entry.get('invert'),
+                    allow_empty=bool(entry.get('allow_empty', False)),
+                )
+            )
+
+        controller.display_lines(
+            line_objects,
+            clear=rendered.get('clear', True),
+            invert=rendered.get('invert'),
+        )
+
+        now = datetime.utcnow()
+        self._last_oled_update = now
+        self._update_rotation_state('oled', self._oled_current_index, now)
+        logger.info("Displayed OLED snapshot via front-panel button")
 
     def _convert_led_enum(self, enum_class, value_str: str, default):
         """Convert a string to an LED enum value.
@@ -353,6 +617,106 @@ class ScreenManager:
         except Exception as e:
             logger.error(f"Error displaying VFD screen: {e}")
 
+    def _display_oled_screen(self, screen_config: Dict):
+        """Display a screen on the OLED module."""
+
+        try:
+            from app_core.models import DisplayScreen, db
+            from scripts.screen_renderer import ScreenRenderer
+            import app_core.oled as oled_module
+            from app_core.oled import OLEDLine, initialise_oled_display
+
+            screen_id = screen_config.get('screen_id')
+            if not screen_id:
+                return
+
+            screen = DisplayScreen.query.get(screen_id)
+            if not screen or not screen.enabled:
+                return
+
+            renderer = ScreenRenderer()
+            rendered = renderer.render_screen(screen.to_dict())
+
+            if not rendered:
+                return
+
+            controller = oled_module.oled_controller or initialise_oled_display(logger)
+            if controller is None:
+                return
+
+            raw_lines = rendered.get('lines', [])
+            if not isinstance(raw_lines, list):
+                return
+
+            line_objects: List[OLEDLine] = []
+            for entry in raw_lines:
+                if isinstance(entry, OLEDLine):
+                    line_objects.append(entry)
+                    continue
+
+                if not isinstance(entry, dict):
+                    continue
+
+                text = str(entry.get('text', ''))
+
+                try:
+                    x_value = int(entry.get('x', 0) or 0)
+                except (TypeError, ValueError):
+                    x_value = 0
+
+                y_raw = entry.get('y')
+                try:
+                    y_value = int(y_raw) if y_raw is not None else None
+                except (TypeError, ValueError):
+                    y_value = None
+
+                max_width_raw = entry.get('max_width')
+                try:
+                    max_width_value = int(max_width_raw) if max_width_raw is not None else None
+                except (TypeError, ValueError):
+                    max_width_value = None
+
+                try:
+                    spacing_value = int(entry.get('spacing', 2))
+                except (TypeError, ValueError):
+                    spacing_value = 2
+
+                line_objects.append(
+                    OLEDLine(
+                        text=text,
+                        x=x_value,
+                        y=y_value,
+                        font=str(entry.get('font', 'small')),
+                        wrap=bool(entry.get('wrap', True)),
+                        max_width=max_width_value,
+                        spacing=spacing_value,
+                        invert=entry.get('invert'),
+                        allow_empty=bool(entry.get('allow_empty', False)),
+                    )
+                )
+
+            if (
+                not line_objects
+                and not rendered.get('allow_empty_frame', False)
+                and not rendered.get('clear', True)
+            ):
+                return
+
+            controller.display_lines(
+                line_objects,
+                clear=rendered.get('clear', True),
+                invert=rendered.get('invert'),
+            )
+
+            screen.display_count += 1
+            screen.last_displayed_at = datetime.utcnow()
+            db.session.commit()
+
+            logger.info(f"Displayed OLED screen: {screen.name}")
+
+        except Exception as e:
+            logger.error(f"Error displaying OLED screen: {e}")
+
     def _has_active_alerts(self) -> bool:
         """Check if there are active alerts.
 
@@ -377,7 +741,7 @@ class ScreenManager:
         """Update rotation state in database.
 
         Args:
-            display_type: 'led' or 'vfd'
+            display_type: 'led', 'vfd', or 'oled'
             current_index: Current screen index
             timestamp: Timestamp of last rotation
         """

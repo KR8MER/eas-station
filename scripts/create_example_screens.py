@@ -547,6 +547,124 @@ VFD_DUAL_VU_METER = {
 
 
 # ============================================================
+# OLED Screen Templates
+# ============================================================
+
+OLED_SYSTEM_OVERVIEW = {
+    "name": "oled_system_overview",
+    "description": "Compact system health overview for the Argon OLED.",
+    "display_type": "oled",
+    "enabled": True,
+    "priority": 1,
+    "refresh_interval": 30,
+    "duration": 12,
+    "template_data": {
+        "clear": True,
+        "lines": [
+            {"text": "{now.time_24}", "font": "large", "wrap": False, "x": 0, "y": 0},
+            {"text": "Status {status.status}", "font": "medium", "wrap": False, "x": 70, "y": 2},
+            {"text": "{status.status_summary}", "y": 22, "max_width": 124, "spacing": 3},
+            {
+                "text": "CPU {status.system_resources.cpu_usage_percent}%  MEM {status.system_resources.memory_usage_percent}%",
+                "y": 44,
+                "wrap": False,
+                "max_width": 124,
+            },
+            {
+                "text": "Disk {status.system_resources.disk_usage_percent}%  Alerts {status.active_alerts_count}",
+                "y": 56,
+                "wrap": False,
+                "max_width": 124,
+            },
+        ],
+    },
+    "data_sources": [
+        {"endpoint": "/api/system_status", "var_name": "status"},
+    ],
+}
+
+OLED_ALERT_SUMMARY = {
+    "name": "oled_alert_summary",
+    "description": "Active alert highlight with event and expiry details.",
+    "display_type": "oled",
+    "enabled": True,
+    "priority": 2,
+    "refresh_interval": 20,
+    "duration": 12,
+    "template_data": {
+        "clear": True,
+        "lines": [
+            {"text": "Alerts {alerts.metadata.total_features}", "font": "medium", "wrap": False, "y": 0},
+            {
+                "text": "{alerts.features[0].properties.event}",
+                "y": 18,
+                "max_width": 124,
+                "allow_empty": True,
+            },
+            {
+                "text": "Severity {alerts.features[0].properties.severity}",
+                "y": 32,
+                "allow_empty": True,
+            },
+            {
+                "text": "Expires {alerts.features[0].properties.expires_iso}",
+                "y": 44,
+                "allow_empty": True,
+            },
+            {
+                "text": "Area {alerts.features[0].properties.area_desc}",
+                "y": 56,
+                "max_width": 124,
+                "allow_empty": True,
+            },
+        ],
+    },
+    "data_sources": [
+        {"endpoint": "/api/alerts", "var_name": "alerts"},
+    ],
+}
+
+OLED_AUDIO_TELEMETRY = {
+    "name": "oled_audio_telemetry",
+    "description": "Audio pipeline telemetry including live levels.",
+    "display_type": "oled",
+    "enabled": True,
+    "priority": 2,
+    "refresh_interval": 15,
+    "duration": 12,
+    "template_data": {
+        "clear": True,
+        "lines": [
+            {"text": "Audio Sources {audio.total_sources}", "font": "medium", "wrap": False, "y": 0},
+            {
+                "text": "Live Peak {audio.live_metrics[0].peak_level_db} dB",
+                "y": 20,
+                "allow_empty": True,
+            },
+            {
+                "text": "RMS {audio.live_metrics[0].rms_level_db} dB",
+                "y": 32,
+                "allow_empty": True,
+            },
+            {
+                "text": "Silence {audio.live_metrics[0].silence_detected}",
+                "y": 44,
+                "allow_empty": True,
+            },
+            {
+                "text": "Buffer {audio.live_metrics[0].buffer_utilization}%",
+                "y": 56,
+                "allow_empty": True,
+            },
+        ],
+    },
+    "data_sources": [
+        {"endpoint": "/api/audio/metrics", "var_name": "audio"},
+    ],
+}
+
+
+# ============================================================
 # Screen Rotations
 # ============================================================
 
@@ -568,6 +686,16 @@ VFD_DEFAULT_ROTATION = {
     "screens": [],  # Will be populated with screen IDs
     "randomize": False,
     "skip_on_alert": True
+}
+
+OLED_DEFAULT_ROTATION = {
+    "name": "oled_default_rotation",
+    "description": "Default OLED screen rotation cycle",
+    "display_type": "oled",
+    "enabled": True,
+    "screens": [],
+    "randomize": False,
+    "skip_on_alert": True,
 }
 
 
@@ -630,6 +758,26 @@ def create_example_screens(app):
             vfd_screen_ids.append({"screen_id": screen.id, "duration": template["duration"]})
             logger.info(f"Created VFD screen: {template['name']}")
 
+        oled_templates = [
+            OLED_SYSTEM_OVERVIEW,
+            OLED_ALERT_SUMMARY,
+            OLED_AUDIO_TELEMETRY,
+        ]
+
+        oled_screen_ids = []
+        for template in oled_templates:
+            existing = DisplayScreen.query.filter_by(name=template["name"]).first()
+            if existing:
+                logger.info(f"Screen '{template['name']}' already exists, skipping")
+                oled_screen_ids.append({"screen_id": existing.id, "duration": template["duration"]})
+                continue
+
+            screen = DisplayScreen(**template)
+            db.session.add(screen)
+            db.session.flush()
+            oled_screen_ids.append({"screen_id": screen.id, "duration": template["duration"]})
+            logger.info(f"Created OLED screen: {template['name']}")
+
         # Create rotations
         led_rotation_data = LED_DEFAULT_ROTATION.copy()
         led_rotation_data["screens"] = led_screen_ids
@@ -652,6 +800,17 @@ def create_example_screens(app):
             logger.info(f"Created VFD rotation: {vfd_rotation_data['name']}")
         else:
             logger.info(f"Rotation '{vfd_rotation_data['name']}' already exists, skipping")
+
+        oled_rotation_data = OLED_DEFAULT_ROTATION.copy()
+        oled_rotation_data["screens"] = oled_screen_ids
+
+        existing_oled_rotation = ScreenRotation.query.filter_by(name=oled_rotation_data["name"]).first()
+        if not existing_oled_rotation:
+            oled_rotation = ScreenRotation(**oled_rotation_data)
+            db.session.add(oled_rotation)
+            logger.info(f"Created OLED rotation: {oled_rotation_data['name']}")
+        else:
+            logger.info(f"Rotation '{oled_rotation_data['name']}' already exists, skipping")
 
         db.session.commit()
         logger.info("Example screen templates created successfully!")

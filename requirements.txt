@@ -68,6 +68,9 @@ numpy==2.2.1  # Required for SoapySDR sample processing
 pyserial==3.5  # Serial communication for VFD display
 Pillow==10.4.0  # Image processing for VFD graphics rendering
 
+# OLED display support (Argon Industria SSD1306 module)
+luma.oled==3.14.0  # I2C SSD1306/SH1106 driver used by the Argon OLED
+
 # GPIO control for Raspberry Pi hardware
 gpiozero==2.0.1
 

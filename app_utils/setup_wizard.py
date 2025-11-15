@@ -17,6 +17,8 @@ import os
 import secrets
 from dotenv import dotenv_values
 
+from app_utils.pi_pinout import ARGON_OLED_RESERVED_BCM, ARGON_OLED_RESERVED_PHYSICAL
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ENV_TEMPLATE_PATH = PROJECT_ROOT / ".env.example"
 
@@ -307,7 +309,53 @@ def _validate_gpio_pin(value: str) -> str:
         raise ValueError("GPIO pin must be a number.")
     if not 2 <= pin <= 27:
         raise ValueError("GPIO pin must be between 2 and 27 (Raspberry Pi BCM numbering).")
+    if pin in ARGON_OLED_RESERVED_BCM:
+        physical = ", ".join(str(p) for p in sorted(ARGON_OLED_RESERVED_PHYSICAL))
+        reserved_bcm = ", ".join(str(p) for p in sorted(ARGON_OLED_RESERVED_BCM))
+        raise ValueError(
+            "Pins {bcm} (physical pins {physical}) are reserved for the Argon OLED enclosure and "
+            "cannot be reassigned.".format(bcm=reserved_bcm, physical=physical)
+        )
     return str(pin)
+
+
+def _validate_non_negative_int(value: str) -> str:
+    """Validate that a value is an integer >= 0."""
+
+    if not value:
+        return value
+    try:
+        number = int(value, 10)
+    except ValueError:
+        raise ValueError("Value must be an integer.")
+    if number < 0:
+        raise ValueError("Value must be zero or greater.")
+    return str(number)
+
+
+def _validate_positive_int(value: str) -> str:
+    """Validate that a value is a positive integer."""
+
+    if not value:
+        return value
+    try:
+        number = int(value, 10)
+    except ValueError:
+        raise ValueError("Value must be an integer.")
+    if number <= 0:
+        raise ValueError("Value must be greater than zero.")
+    return str(number)
+
+
+def _validate_oled_rotation(value: str) -> str:
+    """Validate OLED rotation values (0/90/180/270)."""
+
+    if not value:
+        return value
+    allowed = {"0", "90", "180", "270"}
+    if value not in allowed:
+        raise ValueError("Rotation must be one of 0, 90, 180, or 270 degrees.")
+    return value
 
 
 def _validate_icecast_password(value: str) -> str:
@@ -449,7 +497,10 @@ EAS_FIELDS = [
     WizardField(
         key="EAS_GPIO_PIN",
         label="GPIO Relay Pin",
-        description="GPIO pin number for relay control (2-27, leave blank to disable).",
+        description=(
+            "GPIO pin number for relay control (2-27, leave blank to disable). "
+            "Pins 2, 3, 4, and 14 are reserved for the Argon OLED enclosure."
+        ),
         required=False,
         validator=_validate_gpio_pin,
     ),
@@ -557,6 +608,60 @@ HARDWARE_FIELDS = [
         key="VFD_PORT",
         label="VFD Serial Port",
         description="Serial port for Noritake VFD display (e.g., /dev/ttyUSB0, leave blank to disable).",
+        required=False,
+    ),
+    WizardField(
+        key="OLED_ENABLED",
+        label="Enable OLED Module",
+        description="Drive the Argon Industria OLED status display (true/false).",
+        validator=_validate_bool,
+        required=False,
+    ),
+    WizardField(
+        key="OLED_I2C_BUS",
+        label="OLED I2C Bus",
+        description="Linux I2C bus number (default 1 on Raspberry Pi).",
+        validator=_validate_non_negative_int,
+        required=False,
+    ),
+    WizardField(
+        key="OLED_I2C_ADDRESS",
+        label="OLED I2C Address",
+        description="I2C address for the OLED module (default 0x3C, leave blank to use default).",
+        required=False,
+    ),
+    WizardField(
+        key="OLED_WIDTH",
+        label="OLED Width (pixels)",
+        description="Logical width of the OLED panel (default 128).",
+        validator=_validate_positive_int,
+        required=False,
+    ),
+    WizardField(
+        key="OLED_HEIGHT",
+        label="OLED Height (pixels)",
+        description="Logical height of the OLED panel (default 64).",
+        validator=_validate_positive_int,
+        required=False,
+    ),
+    WizardField(
+        key="OLED_ROTATE",
+        label="OLED Rotation",
+        description="Rotation to match enclosure orientation (0, 90, 180, 270).",
+        validator=_validate_oled_rotation,
+        required=False,
+    ),
+    WizardField(
+        key="OLED_DEFAULT_INVERT",
+        label="OLED Invert Colours",
+        description="Invert the OLED colours (true/false).",
+        validator=_validate_bool,
+        required=False,
+    ),
+    WizardField(
+        key="OLED_FONT_PATH",
+        label="OLED Font Path",
+        description="Optional TTF font path used for rendering (leave blank for default).",
         required=False,
     ),
 ]

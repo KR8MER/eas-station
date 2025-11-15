@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -14,6 +15,7 @@ from werkzeug.exceptions import BadRequest
 
 from app_core.location import get_location_settings, _derive_county_zone_codes_from_fips
 from app_core.auth.roles import require_permission
+from app_utils.pi_pinout import ARGON_OLED_RESERVED_BCM, ARGON_OLED_RESERVED_PHYSICAL
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,61 @@ def _get_domain_candidates() -> List[str]:
     # DOMAIN_NAME may contain multiple domains separated by commas or whitespace
     candidates = [segment for segment in re.split(r'[\s,]+', domain_value) if segment]
     return candidates or ['localhost']
+
+
+def _raise_reserved_pin(field: str, pin: int) -> None:
+    physical = ", ".join(str(p) for p in sorted(ARGON_OLED_RESERVED_PHYSICAL))
+    raise BadRequest(
+        f"{field} cannot use GPIO pin {pin}; the Argon OLED enclosure reserves physical pins {physical}."
+    )
+
+
+def _validate_reserved_pin(field: str, value: str) -> None:
+    value = (value or '').strip()
+    if not value:
+        return
+    try:
+        pin = int(value, 10)
+    except ValueError:
+        return
+    if pin in ARGON_OLED_RESERVED_BCM:
+        _raise_reserved_pin(field, pin)
+
+
+def _validate_reserved_pin_collection(field: str, raw: str) -> None:
+    raw = (raw or '').strip()
+    if not raw:
+        return
+    entries = [segment.strip() for segment in re.split(r"[,\n]+", raw) if segment.strip()]
+    for entry in entries:
+        pin_segment = entry.split(":", 1)[0].strip()
+        if not pin_segment:
+            continue
+        try:
+            pin = int(pin_segment, 10)
+        except ValueError:
+            continue
+        if pin in ARGON_OLED_RESERVED_BCM:
+            _raise_reserved_pin(field, pin)
+
+
+def _validate_behavior_matrix_reserved(raw: str) -> None:
+    raw = (raw or '').strip()
+    if not raw:
+        return
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return
+    if not isinstance(payload, dict):
+        return
+    for key in payload.keys():
+        try:
+            pin = int(key)
+        except (TypeError, ValueError):
+            continue
+        if pin in ARGON_OLED_RESERVED_BCM:
+            _raise_reserved_pin('GPIO_PIN_BEHAVIOR_MATRIX', pin)
 
 
 def _find_ssl_material(filename: str) -> tuple[Path | None, List[Path], str | None]:
@@ -430,10 +487,14 @@ ENV_CATEGORIES = {
                 'key': 'EAS_GPIO_PIN',
                 'label': 'Primary Pin (BCM GPIO Number)',
                 'type': 'number',
-                'description': 'BCM GPIO pin number for relay control (e.g., GPIO 17 = BCM pin 17, physical pin 11). Leave empty to disable GPIO completely.',
+                'description': (
+                    'BCM GPIO pin number for relay control (e.g., GPIO 17 = BCM pin 17, physical pin 11). '
+                    'Leave empty to disable GPIO completely. Pins 2, 3, 4, and 14 are reserved for the Argon OLED enclosure.'
+                ),
                 'placeholder': 'e.g., 17',
                 'min': 2,
                 'max': 27,
+                'disallow': sorted(ARGON_OLED_RESERVED_BCM),
             },
             {
                 'key': 'EAS_GPIO_ACTIVE_STATE',
@@ -470,7 +531,8 @@ ENV_CATEGORIES = {
                 'type': 'gpio_pin_builder',
                 'description': (
                     'Configure additional GPIO pins beyond the primary pin. '
-                    'Click "Add Pin" to configure each additional relay or output.'
+                    'Click "Add Pin" to configure each additional relay or output. '
+                    'Pins 2, 3, 4, and 14 are reserved for the Argon OLED enclosure and are unavailable.'
                 ),
                 'category': 'gpio_enabled',
             },
@@ -617,6 +679,86 @@ ENV_CATEGORIES = {
                 'default': '38400',
                 'description': 'Serial communication speed',
                 'category': 'vfd_enabled',
+            },
+        ],
+    },
+    'oled': {
+        'name': 'OLED Display',
+        'icon': 'fa-microchip',
+        'description': 'Argon Industria SSD1306 OLED module',
+        'variables': [
+            {
+                'key': 'OLED_ENABLED',
+                'label': 'Enable OLED Module',
+                'type': 'select',
+                'options': ['false', 'true'],
+                'default': 'false',
+                'description': 'Set to true to drive the Argon Industria OLED status display.',
+            },
+            {
+                'key': 'OLED_I2C_BUS',
+                'label': 'I2C Bus',
+                'type': 'number',
+                'default': '1',
+                'description': 'Linux I2C bus number (use 1 for Raspberry Pi 3/4/5).',
+                'min': 0,
+                'max': 3,
+                'category': 'oled_enabled',
+            },
+            {
+                'key': 'OLED_I2C_ADDRESS',
+                'label': 'I2C Address',
+                'type': 'text',
+                'default': '0x3C',
+                'description': 'SSD1306 device address (hex like 0x3C or decimal).',
+                'pattern': '^(0x[0-9A-Fa-f]{2}|\d{1,3})$',
+                'category': 'oled_enabled',
+            },
+            {
+                'key': 'OLED_WIDTH',
+                'label': 'Width (pixels)',
+                'type': 'number',
+                'default': '128',
+                'description': 'Logical display width.',
+                'min': 32,
+                'max': 256,
+                'category': 'oled_enabled',
+            },
+            {
+                'key': 'OLED_HEIGHT',
+                'label': 'Height (pixels)',
+                'type': 'number',
+                'default': '64',
+                'description': 'Logical display height.',
+                'min': 16,
+                'max': 128,
+                'category': 'oled_enabled',
+            },
+            {
+                'key': 'OLED_ROTATE',
+                'label': 'Rotation',
+                'type': 'select',
+                'options': ['0', '90', '180', '270'],
+                'default': '0',
+                'description': 'Rotate output to match installation orientation.',
+                'category': 'oled_enabled',
+            },
+            {
+                'key': 'OLED_DEFAULT_INVERT',
+                'label': 'Invert Colours',
+                'type': 'select',
+                'options': ['false', 'true'],
+                'default': 'false',
+                'description': 'Draw dark text on a light background by default.',
+                'category': 'oled_enabled',
+            },
+            {
+                'key': 'OLED_FONT_PATH',
+                'label': 'Font Path',
+                'type': 'text',
+                'description': 'Optional path to a TTF font used for OLED rendering.',
+                'placeholder': '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+                'category': 'oled_enabled',
             },
         ],
     },
@@ -1044,6 +1186,13 @@ def update_environment_variables():
             if not found:
                 logger.error(f'Unknown variable attempted to be updated: {key}')
                 raise BadRequest(f'Unknown variable: {key}')
+
+            if key == 'EAS_GPIO_PIN':
+                _validate_reserved_pin(key, value)
+            elif key == 'GPIO_ADDITIONAL_PINS':
+                _validate_reserved_pin_collection(key, value)
+            elif key == 'GPIO_PIN_BEHAVIOR_MATRIX':
+                _validate_behavior_matrix_reserved(value)
 
             # Update value
             old_value = env_vars.get(key, '')

@@ -15,6 +15,8 @@ class PinDefinition:
     pin_type: str  # power, ground, gpio
     bcm: Optional[int] = None
     description: Optional[str] = None
+    reserved_for: Optional[str] = None
+    reserved_detail: Optional[str] = None
 
     @property
     def is_gpio(self) -> bool:
@@ -25,20 +27,80 @@ class PinDefinition:
 # at the Pi with the USB ports facing down).
 PIN_ROWS: List[Tuple[PinDefinition, PinDefinition]] = [
     (
-        PinDefinition(1, "3V3", "power", description="+3.3V power"),
-        PinDefinition(2, "5V", "power", description="+5V power"),
+        PinDefinition(
+            1,
+            "3V3",
+            "power",
+            description="+3.3V power",
+            reserved_for="Argon OLED module",
+            reserved_detail="Primary power feed",
+        ),
+        PinDefinition(
+            2,
+            "5V",
+            "power",
+            description="+5V power",
+            reserved_for="Argon OLED module",
+            reserved_detail="Supplemental power",
+        ),
     ),
     (
-        PinDefinition(3, "GPIO 2 / SDA1", "gpio", bcm=2, description="I2C SDA1"),
-        PinDefinition(4, "5V", "power", description="+5V power"),
+        PinDefinition(
+            3,
+            "GPIO 2 / SDA1",
+            "gpio",
+            bcm=2,
+            description="I2C SDA1",
+            reserved_for="Argon OLED module",
+            reserved_detail="I²C data bus",
+        ),
+        PinDefinition(
+            4,
+            "5V",
+            "power",
+            description="+5V power",
+            reserved_for="Argon OLED module",
+            reserved_detail="Supplemental power",
+        ),
     ),
     (
-        PinDefinition(5, "GPIO 3 / SCL1", "gpio", bcm=3, description="I2C SCL1"),
-        PinDefinition(6, "GND", "ground", description="Ground"),
+        PinDefinition(
+            5,
+            "GPIO 3 / SCL1",
+            "gpio",
+            bcm=3,
+            description="I2C SCL1",
+            reserved_for="Argon OLED module",
+            reserved_detail="I²C clock",
+        ),
+        PinDefinition(
+            6,
+            "GND",
+            "ground",
+            description="Ground",
+            reserved_for="Argon OLED module",
+            reserved_detail="Ground return",
+        ),
     ),
     (
-        PinDefinition(7, "GPIO 4", "gpio", bcm=4, description="GPCLK0 / General I/O"),
-        PinDefinition(8, "GPIO 14 / TXD0", "gpio", bcm=14, description="UART TXD0"),
+        PinDefinition(
+            7,
+            "GPIO 4",
+            "gpio",
+            bcm=4,
+            description="GPCLK0 / General I/O",
+            reserved_for="Argon OLED module",
+            reserved_detail="Front-panel button",
+        ),
+        PinDefinition(
+            8,
+            "GPIO 14 / TXD0",
+            "gpio",
+            bcm=14,
+            description="UART TXD0",
+            reserved_for="Argon OLED module",
+            reserved_detail="Display heartbeat",
+        ),
     ),
     (
         PinDefinition(9, "GND", "ground", description="Ground"),
@@ -107,6 +169,27 @@ PIN_ROWS: List[Tuple[PinDefinition, PinDefinition]] = [
 ]
 
 
+ARGON_OLED_RESERVED_PHYSICAL = {
+    pin.physical
+    for pin in (
+        pin_def
+        for row in PIN_ROWS
+        for pin_def in row
+        if pin_def.reserved_for == "Argon OLED module"
+    )
+}
+
+ARGON_OLED_RESERVED_BCM = {
+    pin.bcm
+    for pin in (
+        pin_def
+        for row in PIN_ROWS
+        for pin_def in row
+        if pin_def.reserved_for == "Argon OLED module" and pin_def.bcm is not None
+    )
+}
+
+
 def iter_pins() -> Iterable[PinDefinition]:
     """Yield each :class:`PinDefinition` in physical order."""
 
@@ -130,4 +213,6 @@ __all__ = [
     "PIN_ROWS",
     "iter_pins",
     "map_bcm_to_physical",
+    "ARGON_OLED_RESERVED_BCM",
+    "ARGON_OLED_RESERVED_PHYSICAL",
 ]

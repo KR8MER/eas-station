@@ -109,7 +109,7 @@ After initial configuration, administrators can access the wizard at:
 | **EAS_ORIGINATOR** | Originator code | Optional, 3 chars | `WXR`, `EAS`, `CIV` |
 | **EAS_STATION_ID** | Station identifier | Optional, 8 chars | `EASNODES` |
 | **EAS_MANUAL_FIPS_CODES** | Authorized FIPS | Numeric, comma-sep | `039001,039049` |
-| **EAS_GPIO_PIN** | GPIO relay pin | Optional, integer | `17` |
+| **EAS_GPIO_PIN** | GPIO relay pin | Optional, integer (BCM 2, 3, 4, 14 / physical 3-8 reserved for OLED) | `17` |
 
 ### Audio Ingest
 
@@ -135,6 +135,8 @@ After initial configuration, administrators can access the wizard at:
 | **DEFAULT_LED_LINES** | LED sign lines | Textarea, multi-line | 4 lines of text |
 | **LED_SIGN_IP** | LED sign IP address | Optional | `192.168.1.50` |
 | **VFD_PORT** | VFD serial port | Optional | `/dev/ttyUSB0` |
+| **OLED_ENABLED** | Enable OLED module | Optional (`true`/`false`) | `true` |
+| **OLED_I2C_ADDRESS** | OLED I2C address | Optional | `0x3C` |
 
 ---
 
@@ -174,6 +176,7 @@ After initial configuration, administrators can access the wizard at:
 7. **Configure Hardware** (Optional)
    - LED sign IP address if using Alpha protocol displays
    - VFD serial port if using Noritake VFD displays
+   - OLED I2C address if using the Argon Industria OLED module
    - GPIO pin for relay control
 
 8. **Backup Option**
