@@ -331,6 +331,64 @@ class ScreenRenderer:
 
         return commands
 
+    def render_oled_screen(self, screen_data: Dict[str, Any], api_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Render an OLED screen template."""
+
+        template = screen_data.get('template_data', {})
+        lines_config = template.get('lines', [])
+        default_wrap = bool(template.get('wrap', True))
+        default_spacing = template.get('spacing', 2)
+        default_max_width = template.get('max_width')
+        default_font = template.get('font')
+
+        rendered_lines: List[Dict[str, Any]] = []
+        for entry in lines_config:
+            if isinstance(entry, str):
+                text_value = self.substitute_variables(entry, api_data)
+                rendered_lines.append({'text': text_value})
+                continue
+
+            if not isinstance(entry, dict):
+                continue
+
+            text_template = entry.get('text', '')
+            rendered_text = self.substitute_variables(text_template, api_data)
+
+            line_payload: Dict[str, Any] = {'text': rendered_text}
+
+            if 'x' in entry:
+                line_payload['x'] = entry.get('x', 0)
+            if 'y' in entry:
+                line_payload['y'] = entry.get('y')
+
+            line_payload['wrap'] = entry.get('wrap', default_wrap)
+
+            max_width_value = entry.get('max_width', default_max_width)
+            if max_width_value is not None:
+                line_payload['max_width'] = max_width_value
+
+            spacing_value = entry.get('spacing', default_spacing)
+            if spacing_value is not None:
+                line_payload['spacing'] = spacing_value
+
+            font_value = entry.get('font', default_font)
+            if font_value:
+                line_payload['font'] = font_value
+
+            if 'invert' in entry:
+                line_payload['invert'] = entry.get('invert')
+            if 'allow_empty' in entry:
+                line_payload['allow_empty'] = bool(entry.get('allow_empty'))
+
+            rendered_lines.append(line_payload)
+
+        return {
+            'lines': rendered_lines,
+            'invert': template.get('invert'),
+            'clear': template.get('clear', True),
+            'allow_empty_frame': bool(template.get('allow_empty_frame', False)),
+        }
+
     def render_screen(self, screen: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Render a complete screen with data fetching.
 
@@ -367,6 +425,8 @@ class ScreenRenderer:
                 return self.render_led_screen(screen, api_data)
             elif display_type == 'vfd':
                 return self.render_vfd_screen(screen, api_data)
+            elif display_type == 'oled':
+                return self.render_oled_screen(screen, api_data)
             else:
                 logger.error(f"Unknown display type: {display_type}")
                 return None

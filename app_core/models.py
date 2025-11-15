@@ -1044,7 +1044,7 @@ class DisplayScreen(db.Model):
     # Screen identification
     name = db.Column(db.String(100), nullable=False, unique=True, index=True)
     description = db.Column(db.Text)
-    display_type = db.Column(db.String(10), nullable=False, index=True)  # 'led' or 'vfd'
+    display_type = db.Column(db.String(10), nullable=False, index=True)  # 'led', 'vfd', or 'oled'
 
     # Screen behavior
     enabled = db.Column(db.Boolean, default=True, nullable=False)
@@ -1103,7 +1103,7 @@ class ScreenRotation(db.Model):
     # Rotation identification
     name = db.Column(db.String(100), nullable=False, unique=True, index=True)
     description = db.Column(db.Text)
-    display_type = db.Column(db.String(10), nullable=False, index=True)  # 'led' or 'vfd'
+    display_type = db.Column(db.String(10), nullable=False, index=True)  # 'led', 'vfd', or 'oled'
 
     # Rotation behavior
     enabled = db.Column(db.Boolean, default=True, nullable=False)

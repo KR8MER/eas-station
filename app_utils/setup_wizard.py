@@ -310,6 +310,45 @@ def _validate_gpio_pin(value: str) -> str:
     return str(pin)
 
 
+def _validate_non_negative_int(value: str) -> str:
+    """Validate that a value is an integer >= 0."""
+
+    if not value:
+        return value
+    try:
+        number = int(value, 10)
+    except ValueError:
+        raise ValueError("Value must be an integer.")
+    if number < 0:
+        raise ValueError("Value must be zero or greater.")
+    return str(number)
+
+
+def _validate_positive_int(value: str) -> str:
+    """Validate that a value is a positive integer."""
+
+    if not value:
+        return value
+    try:
+        number = int(value, 10)
+    except ValueError:
+        raise ValueError("Value must be an integer.")
+    if number <= 0:
+        raise ValueError("Value must be greater than zero.")
+    return str(number)
+
+
+def _validate_oled_rotation(value: str) -> str:
+    """Validate OLED rotation values (0/90/180/270)."""
+
+    if not value:
+        return value
+    allowed = {"0", "90", "180", "270"}
+    if value not in allowed:
+        raise ValueError("Rotation must be one of 0, 90, 180, or 270 degrees.")
+    return value
+
+
 def _validate_icecast_password(value: str) -> str:
     """Validate Icecast password (ASCII-only, no Unicode characters)."""
     if not value:
@@ -557,6 +596,60 @@ HARDWARE_FIELDS = [
         key="VFD_PORT",
         label="VFD Serial Port",
         description="Serial port for Noritake VFD display (e.g., /dev/ttyUSB0, leave blank to disable).",
+        required=False,
+    ),
+    WizardField(
+        key="OLED_ENABLED",
+        label="Enable OLED Module",
+        description="Drive the Argon Industria OLED status display (true/false).",
+        validator=_validate_bool,
+        required=False,
+    ),
+    WizardField(
+        key="OLED_I2C_BUS",
+        label="OLED I2C Bus",
+        description="Linux I2C bus number (default 1 on Raspberry Pi).",
+        validator=_validate_non_negative_int,
+        required=False,
+    ),
+    WizardField(
+        key="OLED_I2C_ADDRESS",
+        label="OLED I2C Address",
+        description="I2C address for the OLED module (default 0x3C, leave blank to use default).",
+        required=False,
+    ),
+    WizardField(
+        key="OLED_WIDTH",
+        label="OLED Width (pixels)",
+        description="Logical width of the OLED panel (default 128).",
+        validator=_validate_positive_int,
+        required=False,
+    ),
+    WizardField(
+        key="OLED_HEIGHT",
+        label="OLED Height (pixels)",
+        description="Logical height of the OLED panel (default 64).",
+        validator=_validate_positive_int,
+        required=False,
+    ),
+    WizardField(
+        key="OLED_ROTATE",
+        label="OLED Rotation",
+        description="Rotation to match enclosure orientation (0, 90, 180, 270).",
+        validator=_validate_oled_rotation,
+        required=False,
+    ),
+    WizardField(
+        key="OLED_DEFAULT_INVERT",
+        label="OLED Invert Colours",
+        description="Invert the OLED colours (true/false).",
+        validator=_validate_bool,
+        required=False,
+    ),
+    WizardField(
+        key="OLED_FONT_PATH",
+        label="OLED Font Path",
+        description="Optional TTF font path used for rendering (leave blank for default).",
         required=False,
     ),
 ]
