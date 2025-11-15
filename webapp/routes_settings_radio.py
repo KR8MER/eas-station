@@ -30,6 +30,8 @@ from webapp.admin.audio_ingest import (
     ensure_sdr_audio_monitor_source,
     list_radio_managed_audio_sources,
     remove_radio_managed_audio_source,
+    _get_audio_controller,
+    _get_icecast_stream_url,
 )
 
 
@@ -85,6 +87,11 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
         "stereo_enabled": receiver.stereo_enabled,
         "deemphasis_us": receiver.deemphasis_us,
         "enable_rbds": receiver.enable_rbds,
+        "squelch_enabled": receiver.squelch_enabled,
+        "squelch_threshold_db": receiver.squelch_threshold_db,
+        "squelch_open_ms": receiver.squelch_open_ms,
+        "squelch_close_ms": receiver.squelch_close_ms,
+        "squelch_alarm": receiver.squelch_alarm,
         "latest_status": (
             {
                 "reported_at": latest.reported_at.isoformat() if latest and latest.reported_at else None,
@@ -233,6 +240,51 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
 
     if "enabled" in payload or not partial:
         data["enabled"] = _coerce_bool(payload.get("enabled"), True)
+
+    if not partial or "squelch_enabled" in payload:
+        data["squelch_enabled"] = _coerce_bool(payload.get("squelch_enabled"), False)
+
+    if not partial or "squelch_alarm" in payload:
+        data["squelch_alarm"] = _coerce_bool(payload.get("squelch_alarm"), False)
+
+    if not partial or "squelch_threshold_db" in payload:
+        threshold_val = payload.get("squelch_threshold_db")
+        if threshold_val in (None, "", []):
+            data["squelch_threshold_db"] = -65.0
+        else:
+            try:
+                parsed_threshold = float(threshold_val)
+                if parsed_threshold > 0 or parsed_threshold < -160:
+                    raise ValueError
+                data["squelch_threshold_db"] = parsed_threshold
+            except Exception:
+                return None, "Squelch threshold must be between -160 and 0 dBFS."
+
+    if not partial or "squelch_open_ms" in payload:
+        open_val = payload.get("squelch_open_ms")
+        if open_val in (None, "", []):
+            data["squelch_open_ms"] = 150
+        else:
+            try:
+                parsed_open = int(open_val)
+                if parsed_open < 0 or parsed_open > 60000:
+                    raise ValueError
+                data["squelch_open_ms"] = parsed_open
+            except Exception:
+                return None, "Squelch open delay must be between 0 and 60000 milliseconds."
+
+    if not partial or "squelch_close_ms" in payload:
+        close_val = payload.get("squelch_close_ms")
+        if close_val in (None, "", []):
+            data["squelch_close_ms"] = 750
+        else:
+            try:
+                parsed_close = int(close_val)
+                if parsed_close < 0 or parsed_close > 60000:
+                    raise ValueError
+                data["squelch_close_ms"] = parsed_close
+            except Exception:
+                return None, "Squelch hang time must be between 0 and 60000 milliseconds."
 
     if "notes" in payload:
         notes = payload.get("notes")
@@ -543,6 +595,83 @@ def register(app: Flask, logger) -> None:
             return jsonify({
                 "error": f"Failed to restart receiver: {str(exc)}"
             }), 500
+
+    @app.route("/api/radio/receivers/<int:receiver_id>/audio-monitor", methods=["POST"])
+    def api_ensure_audio_monitor(receiver_id: int) -> Any:
+        """Ensure an SDR audio monitor exists for the receiver and optionally start it."""
+
+        ensure_radio_tables(route_logger)
+        receiver = RadioReceiver.query.get_or_404(receiver_id)
+        payload = request.get_json(silent=True) or {}
+        start_now = bool(payload.get("start"))
+
+        try:
+            result = ensure_sdr_audio_monitor_source(
+                receiver,
+                start_immediately=start_now,
+                commit=True,
+            )
+        except Exception as exc:
+            route_logger.error(
+                "Failed to ensure audio monitor for %s: %s",
+                receiver.identifier,
+                exc,
+                exc_info=True,
+            )
+            _log_radio_event(
+                "ERROR",
+                f"Failed to ensure audio monitor for {receiver.identifier}: {exc}",
+                module_suffix="audio.ensure",
+                details={
+                    "identifier": receiver.identifier,
+                    "error": str(exc),
+                },
+            )
+            return jsonify({"error": "Unable to provision audio monitor."}), 500
+
+        source_name = result.get("source_name")
+        controller = None
+        adapter = None
+        status_value = None
+        metadata = None
+        icecast_url = None
+
+        try:
+            controller = _get_audio_controller()
+        except Exception:
+            controller = None
+
+        if controller and source_name:
+            adapter = controller._sources.get(source_name)
+            if adapter is not None:
+                status = getattr(adapter, "status", None)
+                status_value = status.value if status else None
+                metrics = getattr(adapter, "metrics", None)
+                metadata = getattr(metrics, "metadata", None)
+                icecast_url = _get_icecast_stream_url(source_name)
+
+        response_payload: Dict[str, Any] = {
+            "success": True,
+            "source_name": source_name,
+            "created": bool(result.get("created")),
+            "updated": bool(result.get("updated")),
+            "removed": bool(result.get("removed")),
+            "started": bool(result.get("started")),
+            "icecast_started": bool(result.get("icecast_started")),
+            "status": status_value,
+            "icecast_url": icecast_url,
+            "metadata": metadata,
+            "receiver_enabled": bool(receiver.enabled),
+            "audio_output": bool(receiver.audio_output),
+        }
+
+        if start_now:
+            response_payload["message"] = (
+                "Audio monitor started successfully." if response_payload["started"]
+                else "Audio monitor start requested."
+            )
+
+        return jsonify(response_payload)
 
     @app.route("/api/radio/discover", methods=["GET"])
     def api_discover_devices() -> Any:
