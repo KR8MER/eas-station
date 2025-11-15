@@ -13,6 +13,7 @@ from . import (
     routes_audio_tests,
     routes_backups,
     routes_debug,
+    routes_diagnostics,
     routes_exports,
     routes_settings_radio,
     routes_settings_audio,
@@ -23,6 +24,7 @@ from . import (
     routes_public,
     routes_setup,
     routes_security,
+    routes_stream_profiles,
     template_helpers,
     documentation,
 )
@@ -62,6 +64,8 @@ def iter_route_modules() -> Iterable[RouteModule]:
     yield RouteModule("routes_security", routes_security.register)
     yield RouteModule("routes_backups", routes_backups.register)
     yield RouteModule("routes_debug", routes_debug.register)
+    yield RouteModule("routes_diagnostics", routes_diagnostics.register)
+    yield RouteModule("routes_stream_profiles", routes_stream_profiles.register)
     yield RouteModule("routes_admin", routes_admin.register)
 
 
