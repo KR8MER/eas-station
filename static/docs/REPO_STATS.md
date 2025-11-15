@@ -1,15 +1,15 @@
 # Repository Statistics
 
-**Generated:** 2025-11-15 16:19:53 UTC
+**Generated:** 2025-11-15 16:29:36 UTC
 
 ## Overview
 
-- **Total Files:** 566
+- **Total Files:** 567
 - **Total Directories:** 72
-- **Total Lines:** 191,181
-- **Code Lines:** 120,834
-- **Comment Lines:** 40,265
-- **Total Routes:** 173
+- **Total Lines:** 191,402
+- **Code Lines:** 121,029
+- **Comment Lines:** 40,269
+- **Total Routes:** 174
 
 ## Files by Type
 
@@ -17,7 +17,7 @@
 |-----------|-------|
 | Python | 232 |
 | Markdown | 143 |
-| HTML | 69 |
+| HTML | 70 |
 | Other | 56 |
 | Shell | 13 |
 | YAML | 12 |
@@ -32,9 +32,9 @@
 
 | Language | Total Lines | Code Lines | Comment Lines |
 |----------|-------------|------------|---------------|
-| Python | 81,477 | 32,231 | 35,948 |
-| Markdown | 50,131 | 38,574 | 0 |
-| HTML | 42,559 | 38,862 | 435 |
+| Python | 81,607 | 32,339 | 35,952 |
+| Markdown | 50,137 | 38,579 | 0 |
+| HTML | 42,644 | 38,944 | 435 |
 | CSS | 4,386 | 982 | 2,756 |
 | JavaScript | 3,889 | 2,922 | 476 |
 | Text | 2,277 | 2,133 | 0 |
@@ -56,8 +56,8 @@
 | webapp/routes_analytics.py | 12 |
 | webapp/routes_public.py | 12 |
 | webapp/routes_monitoring.py | 10 |
+| webapp/routes_setup.py | 9 |
 | webapp/routes_stream_profiles.py | 9 |
-| webapp/routes_setup.py | 8 |
 | webapp/routes_backups.py | 8 |
 | webapp/eas/workflow.py | 8 |
 | webapp/routes/system_controls.py | 7 |
@@ -79,13 +79,13 @@
 
 ### Top Languages by Lines of Code
 
-**Python:** 32,231 lines  
+**Python:** 32,339 lines  
 `█████████████████████████████████████████`
 
-**Markdown:** 38,574 lines  
+**Markdown:** 38,579 lines  
 `█████████████████████████████████████████████████`
 
-**HTML:** 38,862 lines  
+**HTML:** 38,944 lines  
 `██████████████████████████████████████████████████`
 
 **CSS:** 982 lines  
