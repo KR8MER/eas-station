@@ -103,8 +103,8 @@ def register(app: Flask, logger) -> None:
                     return jsonify({"error": f"Missing required field: {field}"}), 400
 
             # Validate display_type
-            if data["display_type"] not in ["led", "vfd"]:
-                return jsonify({"error": "display_type must be 'led' or 'vfd'"}), 400
+            if data["display_type"] not in ["led", "vfd", "oled"]:
+                return jsonify({"error": "display_type must be 'led', 'vfd', or 'oled'"}), 400
 
             # Create screen
             screen = DisplayScreen(
@@ -157,8 +157,8 @@ def register(app: Flask, logger) -> None:
             if "description" in data:
                 screen.description = data["description"]
             if "display_type" in data:
-                if data["display_type"] not in ["led", "vfd"]:
-                    return jsonify({"error": "display_type must be 'led' or 'vfd'"}), 400
+                if data["display_type"] not in ["led", "vfd", "oled"]:
+                    return jsonify({"error": "display_type must be 'led', 'vfd', or 'oled'"}), 400
                 screen.display_type = data["display_type"]
             if "enabled" in data:
                 screen.enabled = data["enabled"]
@@ -314,6 +314,70 @@ def register(app: Flask, logger) -> None:
                             command.get("x2", 10),
                             command.get("y2", 10),
                         )
+            elif screen.display_type == "oled":
+                import app_core.oled as oled_module
+                from app_core.oled import OLEDLine, initialise_oled_display
+
+                controller = oled_module.oled_controller or initialise_oled_display(route_logger)
+                if controller is None:
+                    return jsonify({"error": "OLED controller not available"}), 503
+
+                raw_lines = rendered.get("lines", [])
+                if not isinstance(raw_lines, list):
+                    return jsonify({"error": "Invalid OLED payload"}), 500
+
+                line_objects: List[OLEDLine] = []
+                for entry in raw_lines:
+                    if isinstance(entry, OLEDLine):
+                        line_objects.append(entry)
+                        continue
+
+                    if not isinstance(entry, dict):
+                        continue
+
+                    text = str(entry.get("text", ""))
+
+                    try:
+                        x_value = int(entry.get("x", 0) or 0)
+                    except (TypeError, ValueError):
+                        x_value = 0
+
+                    y_raw = entry.get("y")
+                    try:
+                        y_value = int(y_raw) if y_raw is not None else None
+                    except (TypeError, ValueError):
+                        y_value = None
+
+                    max_width_raw = entry.get("max_width")
+                    try:
+                        max_width_value = int(max_width_raw) if max_width_raw is not None else None
+                    except (TypeError, ValueError):
+                        max_width_value = None
+
+                    try:
+                        spacing_value = int(entry.get("spacing", 2))
+                    except (TypeError, ValueError):
+                        spacing_value = 2
+
+                    line_objects.append(
+                        OLEDLine(
+                            text=text,
+                            x=x_value,
+                            y=y_value,
+                            font=str(entry.get("font", "small")),
+                            wrap=bool(entry.get("wrap", True)),
+                            max_width=max_width_value,
+                            spacing=spacing_value,
+                            invert=entry.get("invert"),
+                            allow_empty=bool(entry.get("allow_empty", False)),
+                        )
+                    )
+
+                controller.display_lines(
+                    line_objects,
+                    clear=rendered.get("clear", True),
+                    invert=rendered.get("invert"),
+                )
 
             # Update statistics
             screen.display_count += 1
@@ -391,8 +455,8 @@ def register(app: Flask, logger) -> None:
                     return jsonify({"error": f"Missing required field: {field}"}), 400
 
             # Validate display_type
-            if data["display_type"] not in ["led", "vfd"]:
-                return jsonify({"error": "display_type must be 'led' or 'vfd'"}), 400
+            if data["display_type"] not in ["led", "vfd", "oled"]:
+                return jsonify({"error": "display_type must be 'led', 'vfd', or 'oled'"}), 400
 
             # Create rotation
             rotation = ScreenRotation(
@@ -442,8 +506,8 @@ def register(app: Flask, logger) -> None:
             if "description" in data:
                 rotation.description = data["description"]
             if "display_type" in data:
-                if data["display_type"] not in ["led", "vfd"]:
-                    return jsonify({"error": "display_type must be 'led' or 'vfd'"}), 400
+                if data["display_type"] not in ["led", "vfd", "oled"]:
+                    return jsonify({"error": "display_type must be 'led', 'vfd', or 'oled'"}), 400
                 rotation.display_type = data["display_type"]
             if "enabled" in data:
                 rotation.enabled = data["enabled"]

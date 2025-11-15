@@ -6,6 +6,10 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 ### Added
+- Added Argon Industria SSD1306 OLED module support with full configuration tooling and display workflows
+  - Introduced `app_core/oled.py` with luma.oled-based controller, new `OLED_*` environment variables, and runtime initialization hooks
+  - Extended screen renderer, manager, and `/api/screens` endpoints with an `oled` display type alongside LED and VFD rotations
+  - Updated admin Environment editor, setup wizard, and hardware reference docs for OLED installation and configuration guidance
 - Added interactive GPIO Pin Map page (System → GPIO Pin Map) to visualize the 40-pin header and
   assign alert behaviors per BCM pin with persistence to `GPIO_PIN_BEHAVIOR_MATRIX`.
 - Added multi-pin GPIO configuration loader with persistent environment editor support, ensuring

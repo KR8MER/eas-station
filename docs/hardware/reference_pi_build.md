@@ -118,7 +118,7 @@ The Raspberry Pi 40-pin GPIO header provides control signals for external equipm
 #### Option 1: Waveshare RPi Relay Board (B)
 
 **Specifications:**
-- 4× SPDT relays (10A @ 250VAC, 10A @ 30VDC)
+- 3× SPDT relays (10A @ 250VAC, 10A @ 30VDC)
 - Optical isolation
 - Status LEDs
 - Standard GPIO control
@@ -127,7 +127,6 @@ The Raspberry Pi 40-pin GPIO header provides control signals for external equipm
 - Relay 1: GPIO26 (Pin 37)
 - Relay 2: GPIO20 (Pin 38)
 - Relay 3: GPIO21 (Pin 40)
-- Relay 4: GPIO19 (Pin 35)
 
 **Purchase:** ~$25-30 USD
 
@@ -156,6 +155,30 @@ For custom integrations, use:
 - **Diode**: 1N4007 flyback protection
 
 **Reference schematic:** See `docs/hardware/gpio.md` for detailed wiring.
+
+#### Option 4: Argon Industria OLED Module
+
+**Specifications:**
+- 0.96" 128×64 monochrome OLED (SSD1306 controller) with acrylic window
+- Connects to Raspberry Pi I2C bus (SDA1/SCL1) on address **0x3C**
+- Draws 3.3 V logic/power from physical pins 1 & 17 with optional 5 V pass-through
+
+**Pin usage:**
+- Physical pins 1–8: the module’s stacking header engages the first two rows of the 40-pin connector, pulling 3V3, 5V, SDA1 (GPIO2), SCL1 (GPIO3), and ground while mechanically supporting the remaining pins via pass-through traces
+- Leaves the rest of the GPIO header available for relay/MOSFET hats (the board is only a shunt across the top-left corner)
+
+**Assembly notes:**
+1. Follow the Argon instructions to remove the plastic window and fasten the OLED carrier to the Argon Industrial/ONE V5 top case.
+2. Slide the 8-pin header onto pins 1–8 of the Raspberry Pi (3V3, 5V, SDA1, SCL1, ground, and the adjacent UART pins) before reinstalling the top shell.
+3. Enable I²C in Raspberry Pi OS (`sudo raspi-config` → *Interface Options* → *I2C*).
+
+**EAS Station configuration:**
+1. Set `OLED_ENABLED=true` in `.env` (or through **Settings → Environment → OLED Display**).
+2. Adjust `OLED_I2C_ADDRESS`, `OLED_WIDTH`, `OLED_HEIGHT`, or `OLED_ROTATE` if you are using a different SSD1306 panel variant.
+3. Create new **Custom Display Screens** with display type `oled` to push status layouts to the panel.
+4. Screens support variable substitution and will run in the same rotation system as LED/VFD displays via the new OLED rotation type.
+
+> ℹ️ Vendor assembly instructions: [Argon Industria OLED Module PDF](https://cdn.shopify.com/s/files/1/0556/1660/2177/files/FOR_PRINT_ARGON_INDUSTRIA_OLED_55mmx90mm_20241219.pdf)
 
 ### Relay Wiring Safety
 
