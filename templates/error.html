@@ -15,61 +15,42 @@
     .error-content {
         max-width: 600px;
         text-align: center;
-        background-color: #fff;
+        background-color: var(--surface-color);
         padding: 2rem;
         border-radius: 0.5rem;
-        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-    }
-
-    [data-theme-mode="dark"] .error-content {
-        background-color: rgba(255, 255, 255, 0.05);
-        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.3);
+        box-shadow: 0 0.125rem 0.25rem var(--shadow-color);
     }
 
     .error-icon {
         font-size: 4rem;
-        color: var(--bs-danger);
+        color: var(--danger-color);
         margin-bottom: 1.5rem;
     }
 
     .error-title {
         font-size: 2rem;
         font-weight: 600;
-        color: var(--bs-dark);
+        color: var(--text-color);
         margin-bottom: 1rem;
-    }
-
-    [data-theme-mode="dark"] .error-title {
-        color: var(--bs-light);
     }
 
     .error-message {
         font-size: 1.1rem;
-        color: var(--bs-secondary);
+        color: var(--text-secondary);
         margin-bottom: 1.5rem;
     }
 
-    [data-theme-mode="dark"] .error-message {
-        color: rgba(255, 255, 255, 0.7);
-    }
-
     .error-details {
-        background-color: var(--bs-light);
-        border: 1px solid var(--bs-border-color);
+        background-color: var(--bg-color);
+        border: 1px solid var(--border-color);
         border-radius: 0.375rem;
         padding: 1rem;
         margin-top: 1.5rem;
         text-align: left;
         font-family: monospace;
         font-size: 0.9rem;
-        color: var(--bs-dark);
+        color: var(--text-color);
         overflow-x: auto;
-    }
-
-    [data-theme-mode="dark"] .error-details {
-        background-color: rgba(255, 255, 255, 0.05);
-        border-color: rgba(255, 255, 255, 0.1);
-        color: var(--bs-light);
     }
 
     .error-actions {
