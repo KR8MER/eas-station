@@ -27,19 +27,19 @@ echo "Checking GPIO device access..."
 GPIO_DEVICES_FOUND=0
 
 if [ -e /dev/gpiomem ]; then
-    echo "  ✓ /dev/gpiomem found"
+    echo "  ✓ /dev/gpiomem found (Pi 1-4)"
     ls -l /dev/gpiomem
     GPIO_DEVICES_FOUND=1
 else
-    echo "  ✗ /dev/gpiomem NOT FOUND"
+    echo "  ✗ /dev/gpiomem NOT FOUND (normal for Pi 5)"
 fi
 
 if [ -e /dev/gpiochip0 ]; then
-    echo "  ✓ /dev/gpiochip0 found"
+    echo "  ✓ /dev/gpiochip0 found (Pi 5 lgpio)"
     ls -l /dev/gpiochip0
     GPIO_DEVICES_FOUND=1
 else
-    echo "  ✗ /dev/gpiochip0 NOT FOUND (required for Pi 5)"
+    echo "  ✗ /dev/gpiochip0 NOT FOUND"
 fi
 
 if [ $GPIO_DEVICES_FOUND -eq 0 ]; then
@@ -102,6 +102,18 @@ if [ -e /dev/gpiomem ]; then
     if [ "$GPIOMEM_PERMS" != "666" ]; then
         echo "Fixing /dev/gpiomem permissions for Docker access..."
         sudo chmod 666 /dev/gpiomem 2>/dev/null || echo "  Warning: Could not change permissions (may need sudo)"
+    fi
+fi
+
+# For Pi 5, ensure gpiochip0 is accessible
+if [ -e /dev/gpiochip0 ]; then
+    GPIOCHIP_GROUP=$(stat -c "%G" /dev/gpiochip0)
+    if [ "$GPIOCHIP_GROUP" = "gpio" ]; then
+        # Add current user to gpio group if not already a member
+        if ! groups | grep -q gpio; then
+            echo "Note: Add yourself to gpio group for better permissions:"
+            echo "  sudo usermod -a -G gpio $USER"
+        fi
     fi
 fi
 
