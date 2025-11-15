@@ -17,6 +17,8 @@
 
 services:
   app:
+    env_file:
+      - .env  # Load database credentials and other settings from local .env
     devices:
       - /dev/gpiomem:/dev/gpiomem    # GPIO memory access for user-space GPIO control
       - /dev/gpiochip0:/dev/gpiochip0  # GPIO chip device for modern GPIO libraries (lgpio)
