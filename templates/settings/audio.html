@@ -516,13 +516,51 @@ async function saveIcecastConfig() {
     }
 }
 
+function sanitiseMount(mount) {
+    return (mount || '').replace(/^\/+/, '');
+}
+
+function buildIcecastUrl(server, port, mount) {
+    if (!server || !mount) {
+        return null;
+    }
+
+    const trimmedServer = server.trim();
+    const sanitizedMount = sanitiseMount(mount.trim());
+    const trimmedPort = (port || '').toString().trim();
+
+    if (!trimmedServer || !sanitizedMount) {
+        return null;
+    }
+
+    const hasScheme = /^https?:\/\//i.test(trimmedServer);
+
+    if (hasScheme) {
+        try {
+            const parsed = new URL(trimmedServer);
+            const finalPort = trimmedPort || parsed.port;
+            const hostPort = finalPort ? `${parsed.hostname}:${finalPort}` : parsed.host;
+            return `${parsed.protocol}//${hostPort}/${sanitizedMount}`;
+        } catch (error) {
+            console.warn('Invalid Icecast server URL provided, falling back to relative host handling:', error);
+        }
+    }
+
+    const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
+    const host = trimmedServer.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+    const portSegment = trimmedPort ? `:${trimmedPort}` : '';
+
+    return `${protocol}://${host}${portSegment}/${sanitizedMount}`;
+}
+
 function updateIcecastUrl() {
     const server = document.getElementById('icecastServer').value;
     const port = document.getElementById('icecastPort').value;
     const mount = document.getElementById('icecastMount').value;
 
-    if (server && port && mount) {
-        const url = `http://${server}:${port}/${mount}`;
+    const url = buildIcecastUrl(server, port, mount);
+
+    if (url) {
         document.getElementById('icecastUrlDisplay').textContent = url;
         document.getElementById('icecastStreamUrl').classList.remove('d-none');
     } else {
