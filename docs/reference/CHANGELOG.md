@@ -53,6 +53,12 @@ tracks releases under the 2.x series.
   - SVG filters for depth, glow effects, and contemporary design polish
 
 ### Fixed
+- Ensure the 20251107 decoded audio segment migration only adds the
+  attention tone and narration columns when they are missing so fresh
+  installs don't abort before administrator accounts can be created.
+- Allow fresh installations to run Alembic migrations without errors by skipping the
+  20241205 FIPS location settings upgrade when the `location_settings` table has not
+  been created yet.
 - Prevent SDR audio monitors from returning HTTP 503 errors by restoring persisted adapters before serving playback, start/stop,
   and waveform endpoints so the radio settings page can stream audio reliably after restarts.
 - Force dark-mode typography and link treatments to use the light contrast palette when `data-theme-mode="dark"` is active so
