@@ -151,6 +151,7 @@ class TestNVMESamsung990Pro:
             "is_rotational": False,
             "overall_status": "unknown",
             "temperature_celsius": None,
+            "temperature_sensors_celsius": [],
             "power_on_hours": None,
             "power_cycle_count": None,
             "reallocated_sector_count": None,
@@ -166,10 +167,35 @@ class TestNVMESamsung990Pro:
             "host_reads_bytes": None,
             "percentage_used": None,
             "unsafe_shutdowns": None,
+            "firmware_version": None,
+            "nvme_version_string": None,
+            "total_capacity_bytes": None,
+            "unallocated_capacity_bytes": None,
+            "nvme_number_of_namespaces": None,
+            "available_spare": None,
+            "available_spare_threshold": None,
+            "num_error_log_entries": None,
             "exit_status": 0,
             "error": None,
         }
         
+        # Populate static metadata
+        device_result["model"] = device_result.get("model") or report.get("model_name")
+        device_result["serial"] = device_result.get("serial") or report.get("serial_number")
+        device_result["firmware_version"] = report.get("firmware_version")
+        device_result["total_capacity_bytes"] = report.get("nvme_total_capacity")
+        device_result["unallocated_capacity_bytes"] = report.get("nvme_unallocated_capacity")
+        device_result["nvme_version_string"] = (report.get("nvme_version") or {}).get("string")
+        device_result["nvme_number_of_namespaces"] = report.get("nvme_number_of_namespaces")
+
+        nvme_info = report.get("nvme_smart_health_information_log") or {}
+        device_result["available_spare"] = nvme_info.get("available_spare")
+        device_result["available_spare_threshold"] = nvme_info.get("available_spare_threshold")
+        device_result["num_error_log_entries"] = nvme_info.get("num_err_log_entries")
+        device_result["temperature_sensors_celsius"] = [
+            float(value) for value in nvme_info.get("temperature_sensors", [])
+        ]
+
         # Parse smart status
         smart_status = report.get("smart_status") or {}
         passed = smart_status.get("passed")
@@ -205,10 +231,20 @@ class TestNVMESamsung990Pro:
         assert device_result["unsafe_shutdowns"] == 57, "Unsafe shutdowns should be 57"
         assert device_result["data_units_written_bytes"] > 0, "Data written should be > 0"
         assert device_result["data_units_read_bytes"] > 0, "Data read should be > 0"
-        
+
+        assert device_result["firmware_version"] == "4B2QJXD7", "Firmware version should match"
+        assert device_result["nvme_version_string"] == "2.0", "NVMe version should be captured"
+        assert device_result["total_capacity_bytes"] == 2000398934016, "Total capacity should match SMART data"
+        assert device_result["unallocated_capacity_bytes"] == 0, "Unallocated capacity should be 0"
+        assert device_result["nvme_number_of_namespaces"] == 1, "Namespace count should be recorded"
+        assert device_result["available_spare"] == 100, "Available spare should be 100%"
+        assert device_result["available_spare_threshold"] == 10, "Spare threshold should be 10%"
+        assert device_result["num_error_log_entries"] == 0, "Error log entries should be 0"
+        assert device_result["temperature_sensors_celsius"] == [45.0, 46.0], "Temperature sensors should be captured"
+
         # NVMe devices don't have reallocated sectors (ATA-specific)
         assert device_result["reallocated_sector_count"] is None, "Reallocated sectors N/A for NVMe"
-        
+
         # Verify key fields that the UI displays are NOT None
         ui_critical_fields = [
             "overall_status",

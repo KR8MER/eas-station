@@ -284,6 +284,13 @@ tracks releases under the 2.x series.
 - Prevented the LED fallback initializer from raising a `NameError` when the optional
   controller module is missing so deployments without sign hardware continue to boot.
 
+## [2.7.0] - 2025-11-14
+### Added
+- Added an audio-monitor provisioning API and UI workflow that auto-starts SDR Icecast streams, surfaces RBDS programme data, and exposes squelch/carrier telemetry directly from the radio settings page for immediate listening checks.
+
+### Changed
+- Enabled configurable squelch thresholds, timing, and carrier-loss alarms for SDR receivers with service-specific defaults tuned for Raspberry Pi deployments, reducing false positives while keeping CPU usage low.
+
 ## [2.4.16] - 2025-11-10
 ### Fixed
 - Removed the `APP_BUILD_VERSION` environment override so persistent `.env` files can no longer pin stale release numbers; the UI now always reflects the repository `VERSION` manifest.
