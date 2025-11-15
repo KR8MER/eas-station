@@ -427,6 +427,12 @@ def _base_radio_metadata(receiver: RadioReceiver, source_name: str) -> Dict[str,
         'receiver_modulation': (receiver.modulation_type or "IQ").upper(),
         'receiver_audio_output': bool(receiver.audio_output),
         'receiver_auto_start': bool(receiver.auto_start),
+        'rbds_enabled': bool(receiver.enable_rbds),
+        'squelch_enabled': bool(receiver.squelch_enabled),
+        'squelch_threshold_db': float(receiver.squelch_threshold_db or -65.0),
+        'squelch_open_ms': int(receiver.squelch_open_ms or 150),
+        'squelch_close_ms': int(receiver.squelch_close_ms or 750),
+        'carrier_alarm_enabled': bool(receiver.squelch_alarm),
         'source_category': 'sdr',
         'icecast_mount': f"/{source_name}",
     }
@@ -509,8 +515,12 @@ def ensure_sdr_audio_monitor_source(
     controller = _get_audio_controller()
     sample_rate, channels = _recommend_audio_stream(receiver)
     buffer_size = 4096 if channels == 1 else 8192
-    silence_threshold = -60.0
-    silence_duration = 5.0
+    silence_threshold = float(receiver.squelch_threshold_db or -60.0)
+    silence_duration = max(float(receiver.squelch_close_ms or 750) / 1000.0, 0.1)
+    squelch_open = int(receiver.squelch_open_ms or 150)
+    squelch_close = int(receiver.squelch_close_ms or 750)
+    squelch_enabled = bool(receiver.squelch_enabled)
+    carrier_alarm_enabled = bool(receiver.squelch_alarm)
 
     device_params = {
         'receiver_id': receiver.identifier,
@@ -518,6 +528,12 @@ def ensure_sdr_audio_monitor_source(
         'receiver_driver': receiver.driver,
         'receiver_frequency_hz': float(receiver.frequency_hz or 0.0),
         'receiver_modulation': (receiver.modulation_type or 'IQ').upper(),
+        'rbds_enabled': bool(receiver.enable_rbds),
+        'squelch_enabled': squelch_enabled,
+        'squelch_threshold_db': silence_threshold,
+        'squelch_open_ms': squelch_open,
+        'squelch_close_ms': squelch_close,
+        'carrier_alarm_enabled': carrier_alarm_enabled,
     }
 
     config_params = {
@@ -528,6 +544,11 @@ def ensure_sdr_audio_monitor_source(
         'silence_duration_seconds': silence_duration,
         'device_params': device_params,
         'managed_by': 'radio',
+        'squelch_enabled': squelch_enabled,
+        'squelch_threshold_db': silence_threshold,
+        'squelch_open_ms': squelch_open,
+        'squelch_close_ms': squelch_close,
+        'carrier_alarm_enabled': carrier_alarm_enabled,
     }
 
     start_flag = bool(start_immediately if start_immediately is not None else receiver.auto_start)
@@ -606,6 +627,12 @@ def ensure_sdr_audio_monitor_source(
     adapter = create_audio_source(runtime_config)
     metadata = adapter.metrics.metadata or {}
     metadata.update({k: v for k, v in _base_radio_metadata(receiver, source_name).items() if v is not None})
+    metadata.setdefault('carrier_present', None)
+    metadata.setdefault('squelch_state', 'open' if not squelch_enabled else 'pending')
+    metadata.setdefault('squelch_last_rms_db', None)
+    metadata.setdefault('carrier_alarm', False)
+    metadata.setdefault('rbds_program_type_name', None)
+    metadata.setdefault('rbds_last_updated', None)
     adapter.metrics.metadata = metadata
     controller.add_source(adapter)
 
@@ -700,6 +727,101 @@ def _merge_metadata(*metadata_sources: Optional[Dict[str, Any]]) -> Optional[Dic
     return merged or None
 
 
+def _restore_audio_source_from_db_config(
+    controller: AudioIngestController,
+    db_config: AudioSourceConfigDB,
+) -> Optional[Any]:
+    """Recreate an audio adapter from its persisted configuration."""
+
+    config_params = db_config.config_params or {}
+
+    try:
+        source_type = AudioSourceType(db_config.source_type)
+    except ValueError:
+        logger.error(
+            "Unknown audio source type %s for %s", db_config.source_type, db_config.name
+        )
+        return None
+
+    runtime_config = AudioSourceConfig(
+        source_type=source_type,
+        name=db_config.name,
+        enabled=db_config.enabled,
+        priority=db_config.priority,
+        sample_rate=config_params.get('sample_rate', 44100),
+        channels=config_params.get('channels', 1),
+        buffer_size=config_params.get('buffer_size', 4096),
+        silence_threshold_db=config_params.get('silence_threshold_db', -60.0),
+        silence_duration_seconds=config_params.get('silence_duration_seconds', 5.0),
+        device_params=config_params.get('device_params', {}),
+    )
+
+    adapter = create_audio_source(runtime_config)
+
+    metadata = adapter.metrics.metadata or {}
+    device_params = config_params.get('device_params')
+    if isinstance(device_params, dict):
+        for key, value in device_params.items():
+            if value is None:
+                continue
+            metadata.setdefault(str(key), value)
+    adapter.metrics.metadata = metadata
+
+    controller.add_source(adapter)
+
+    started = False
+    if db_config.auto_start:
+        try:
+            started = controller.start_source(db_config.name)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning(
+                "Failed to auto-start audio source %s during restore: %s",
+                db_config.name,
+                exc,
+            )
+
+    if started:
+        auto_streaming = _get_auto_streaming_service()
+        if auto_streaming and auto_streaming.is_available():
+            try:
+                auto_streaming.add_source(db_config.name, adapter)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning(
+                    "Failed to attach Icecast stream for %s during restore: %s",
+                    db_config.name,
+                    exc,
+                )
+
+    logger.info("Restored audio source %s from database configuration", db_config.name)
+    return adapter
+
+
+def _get_controller_and_adapter(
+    source_name: str,
+) -> Tuple[AudioIngestController, Optional[Any], Optional[AudioSourceConfigDB], bool]:
+    """Return the audio controller, adapter, DB config, and whether a restore occurred."""
+
+    controller = _get_audio_controller()
+    adapter = controller._sources.get(source_name)
+    db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+    restored = False
+
+    if adapter is None and db_config is not None:
+        try:
+            adapter = _restore_audio_source_from_db_config(controller, db_config)
+            restored = adapter is not None
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.error(
+                "Failed to restore audio source %s from persisted configuration: %s",
+                source_name,
+                exc,
+                exc_info=True,
+            )
+            adapter = None
+
+    return controller, adapter, db_config, restored
+
+
 def _sanitize_streaming_stats(stats: Optional[Dict[str, Any]], icecast_url: Optional[str]) -> Optional[Dict[str, Any]]:
     """Prepare streaming statistics for API output."""
     if not stats:
@@ -731,12 +853,14 @@ def _serialize_audio_source(
     adapter: Any,
     latest_metric: Optional[AudioSourceMetrics] = None,
     icecast_stats: Optional[Dict[str, Any]] = None,
+    db_config: Optional[AudioSourceConfigDB] = None,
 ) -> Dict[str, Any]:
     """Serialize an audio source adapter to JSON-compatible dict."""
     config = adapter.config
 
     # Fetch database config for additional fields
-    db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+    if db_config is None:
+        db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
 
     # Check if Icecast streaming is available for this source
     icecast_url = _get_icecast_stream_url(source_name)
@@ -1050,24 +1174,20 @@ def api_create_audio_source():
 def api_get_audio_source(source_name: str):
     """Get details of a specific audio source."""
     try:
-        controller = _get_audio_controller()
-        adapter = controller._sources.get(source_name)
+        controller, adapter, db_config, _ = _get_controller_and_adapter(source_name)
 
-        if not adapter:
-            # Check if source exists in database but not loaded
-            db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+        if adapter is None:
             if db_config:
                 return jsonify({
-                    'error': 'Source exists in database but not loaded in memory',
-                    'hint': 'Restart the application to reload audio sources from database'
-                }), 503  # Service Unavailable
-            else:
-                return jsonify({
-                    'error': f'Audio source "{source_name}" not found',
-                    'hint': 'Check /api/audio/sources for available sources'
-                }), 404
+                    'error': 'Source exists in database but could not be loaded',
+                    'hint': 'Check audio ingest logs for initialization errors',
+                }), 503
+            return jsonify({
+                'error': f'Audio source "{source_name}" not found',
+                'hint': 'Check /api/audio/sources for available sources'
+            }), 404
 
-        return jsonify(_serialize_audio_source(source_name, adapter))
+        return jsonify(_serialize_audio_source(source_name, adapter, db_config=db_config))
 
     except Exception as exc:
         logger.error('Error getting audio source %s: %s', source_name, exc)
@@ -1077,22 +1197,18 @@ def api_get_audio_source(source_name: str):
 def api_update_audio_source(source_name: str):
     """Update audio source configuration."""
     try:
-        controller = _get_audio_controller()
-        adapter = controller._sources.get(source_name)
+        controller, adapter, db_config, _restored = _get_controller_and_adapter(source_name)
 
-        if not adapter:
-            # Check if source exists in database but not loaded
-            db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+        if adapter is None:
             if db_config:
                 return jsonify({
-                    'error': 'Source exists in database but not loaded in memory',
-                    'hint': 'Restart the application to reload audio sources from database'
-                }), 503  # Service Unavailable
-            else:
-                return jsonify({
-                    'error': f'Audio source "{source_name}" not found',
-                    'hint': 'Check /api/audio/sources for available sources'
-                }), 404
+                    'error': 'Source exists in database but could not be loaded',
+                    'hint': 'Check audio ingest logs for initialization errors',
+                }), 503
+            return jsonify({
+                'error': f'Audio source "{source_name}" not found',
+                'hint': 'Check /api/audio/sources for available sources'
+            }), 404
 
         config = adapter.config
         data = request.get_json()
@@ -1157,15 +1273,10 @@ def api_update_audio_source(source_name: str):
 def api_delete_audio_source(source_name: str):
     """Delete an audio source."""
     try:
-        controller = _get_audio_controller()
+        controller, adapter, db_config, _ = _get_controller_and_adapter(source_name)
 
-        # Check DATABASE first (source of truth)
-        db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
         if not db_config:
             return jsonify({'error': 'Source not found in database'}), 404
-
-        # Check if source is in memory
-        adapter = controller._sources.get(source_name)
 
         # Stop if running (only if in memory)
         if adapter and adapter.status == AudioSourceStatus.RUNNING:
@@ -1197,22 +1308,18 @@ def api_delete_audio_source(source_name: str):
 def api_start_audio_source(source_name: str):
     """Start audio ingestion from a source."""
     try:
-        controller = _get_audio_controller()
-        adapter = controller._sources.get(source_name)
+        controller, adapter, db_config, _restored = _get_controller_and_adapter(source_name)
 
-        if not adapter:
-            # Check if source exists in database but not loaded
-            db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+        if adapter is None:
             if db_config:
                 return jsonify({
-                    'error': 'Source exists in database but not loaded in memory',
-                    'hint': 'Restart the application to reload audio sources from database'
-                }), 503  # Service Unavailable
-            else:
-                return jsonify({
-                    'error': f'Audio source "{source_name}" not found',
-                    'hint': 'Create the source first using POST /api/audio/sources'
-                }), 404
+                    'error': 'Source exists in database but could not be loaded',
+                    'hint': 'Check audio ingest logs for initialization errors',
+                }), 503
+            return jsonify({
+                'error': f'Audio source "{source_name}" not found',
+                'hint': 'Create the source first using POST /api/audio/sources'
+            }), 404
 
         if adapter.status == AudioSourceStatus.RUNNING:
             return jsonify({'message': 'Source is already running'}), 200
@@ -1243,22 +1350,18 @@ def api_start_audio_source(source_name: str):
 def api_stop_audio_source(source_name: str):
     """Stop audio ingestion from a source."""
     try:
-        controller = _get_audio_controller()
-        adapter = controller._sources.get(source_name)
+        controller, adapter, db_config, _ = _get_controller_and_adapter(source_name)
 
-        if not adapter:
-            # Check if source exists in database but not loaded
-            db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+        if adapter is None:
             if db_config:
                 return jsonify({
-                    'error': 'Source exists in database but not loaded in memory',
-                    'hint': 'Restart the application to reload audio sources from database'
-                }), 503  # Service Unavailable
-            else:
-                return jsonify({
-                    'error': f'Audio source "{source_name}" not found',
-                    'hint': 'Create the source first using POST /api/audio/sources'
-                }), 404
+                    'error': 'Source exists in database but could not be loaded',
+                    'hint': 'Check audio ingest logs for initialization errors',
+                }), 503
+            return jsonify({
+                'error': f'Audio source "{source_name}" not found',
+                'hint': 'Create the source first using POST /api/audio/sources'
+            }), 404
 
         if adapter.status == AudioSourceStatus.STOPPED:
             return jsonify({'message': 'Source is already stopped'}), 200
@@ -1572,22 +1675,18 @@ def api_discover_audio_devices():
 def api_get_waveform(source_name: str):
     """Get waveform data for a specific audio source."""
     try:
-        controller = _get_audio_controller()
-        adapter = controller._sources.get(source_name)
+        controller, adapter, db_config, _ = _get_controller_and_adapter(source_name)
 
-        if not adapter:
-            # Check if source exists in database but not loaded
-            db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+        if adapter is None:
             if db_config:
                 return jsonify({
-                    'error': 'Source exists in database but not loaded in memory',
-                    'hint': 'Restart the application to reload audio sources from database'
-                }), 503  # Service Unavailable
-            else:
-                return jsonify({
-                    'error': f'Audio source "{source_name}" not found',
-                    'hint': 'Check /api/audio/sources for available sources'
-                }), 404
+                    'error': 'Source exists in database but could not be loaded',
+                    'hint': 'Check audio ingest logs for initialization errors',
+                }), 503
+            return jsonify({
+                'error': f'Audio source "{source_name}" not found',
+                'hint': 'Check /api/audio/sources for available sources'
+            }), 404
 
         # Get waveform data from adapter
         waveform_data = adapter.get_waveform_data()
@@ -1611,22 +1710,18 @@ def api_get_waveform(source_name: str):
 def api_get_spectrogram(source_name: str):
     """Get spectrogram data for a specific audio source (for waterfall display)."""
     try:
-        controller = _get_audio_controller()
-        adapter = controller._sources.get(source_name)
+        controller, adapter, db_config, _ = _get_controller_and_adapter(source_name)
 
-        if not adapter:
-            # Check if source exists in database but not loaded
-            db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+        if adapter is None:
             if db_config:
                 return jsonify({
-                    'error': 'Source exists in database but not loaded in memory',
-                    'hint': 'Restart the application to reload audio sources from database'
-                }), 503  # Service Unavailable
-            else:
-                return jsonify({
-                    'error': f'Audio source "{source_name}" not found',
-                    'hint': 'Check /api/audio/sources for available sources'
-                }), 404
+                    'error': 'Source exists in database but could not be loaded',
+                    'hint': 'Check audio ingest logs for initialization errors',
+                }), 503
+            return jsonify({
+                'error': f'Audio source "{source_name}" not found',
+                'hint': 'Check /api/audio/sources for available sources'
+            }), 404
 
         # Get spectrogram data from adapter
         spectrogram_data = adapter.get_spectrogram_data()
@@ -1657,22 +1752,17 @@ def api_stream_audio(source_name: str):
     import io
     from flask import Response, stream_with_context
 
-    def generate_wav_stream():
+    def generate_wav_stream(active_adapter: Any):
         """Generator that yields WAV-formatted audio chunks."""
-        controller = _get_audio_controller()
-        adapter = controller._sources.get(source_name)
+        import numpy as np
 
-        if not adapter:
-            logger.error(f'Audio source not found: {source_name}')
-            return
-
-        if adapter.status != AudioSourceStatus.RUNNING:
+        if active_adapter.status != AudioSourceStatus.RUNNING:
             logger.error(f'Audio source not running: {source_name}')
             return
 
         # WAV header for streaming (we'll use a placeholder for data size)
-        sample_rate = adapter.config.sample_rate
-        channels = adapter.config.channels
+        sample_rate = active_adapter.config.sample_rate
+        channels = active_adapter.config.channels
         bits_per_sample = 16  # 16-bit PCM
 
         # Build WAV header
@@ -1710,9 +1800,8 @@ def api_stream_audio(source_name: str):
                 logger.warning(f'Prebuffer timeout for {source_name}, starting with {prebuffer_samples}/{prebuffer_target} samples')
                 break
 
-            audio_chunk = adapter.get_audio_chunk(timeout=0.2)
+            audio_chunk = active_adapter.get_audio_chunk(timeout=0.2)
             if audio_chunk is not None:
-                import numpy as np
                 if not isinstance(audio_chunk, np.ndarray):
                     audio_chunk = np.array(audio_chunk, dtype=np.float32)
 
@@ -1731,16 +1820,16 @@ def api_stream_audio(source_name: str):
         max_chunks = 999999999  # Effectively unlimited - stream until client disconnects
         silence_count = 0
         max_consecutive_silence = 200  # 10 seconds of silence before stopping (increased from 1s)
-        last_reported_status = adapter.status
+        last_reported_status = active_adapter.status
 
         try:
             while chunk_count < max_chunks:
                 # Get audio chunk from adapter (very short timeout to keep stream responsive)
-                audio_chunk = adapter.get_audio_chunk(timeout=0.05)
+                audio_chunk = active_adapter.get_audio_chunk(timeout=0.05)
 
                 if audio_chunk is None:
                     # No data available - yield silence to keep HTTP stream alive
-                    current_status = adapter.status
+                    current_status = active_adapter.status
                     if current_status == AudioSourceStatus.STOPPED:
                         logger.info(f'Audio source stopped: {source_name}')
                         break
@@ -1757,7 +1846,6 @@ def api_stream_audio(source_name: str):
                     # Yield a small chunk of silence (0.05 seconds worth)
                     # This keeps the HTTP connection alive and prevents browser timeout
                     silence_samples = int(sample_rate * channels * 0.05)
-                    import numpy as np
                     silence_chunk = np.zeros(silence_samples, dtype=np.int16)
                     yield silence_chunk.tobytes()
 
@@ -1769,11 +1857,10 @@ def api_stream_audio(source_name: str):
 
                 # Reset silence counter when we get real data
                 silence_count = 0
-                last_reported_status = adapter.status
+                last_reported_status = active_adapter.status
 
                 # Convert float32 [-1, 1] to int16 PCM
                 # Ensure we have a numpy array
-                import numpy as np
                 if not isinstance(audio_chunk, np.ndarray):
                     audio_chunk = np.array(audio_chunk, dtype=np.float32)
 
@@ -1792,17 +1879,18 @@ def api_stream_audio(source_name: str):
             logger.error(f'Error streaming audio from {source_name}: {exc}')
 
     try:
-        controller = _get_audio_controller()
-        adapter = controller._sources.get(source_name)
+        controller, adapter, db_config, _ = _get_controller_and_adapter(source_name)
 
-        if not adapter:
+        if adapter is None:
+            if db_config:
+                return jsonify({'error': 'Source exists in database but could not be loaded'}), 503
             return jsonify({'error': 'Source not found'}), 404
 
         if adapter.status == AudioSourceStatus.STOPPED:
             return jsonify({'error': 'Source not running. Please start the source first.'}), 400
 
         return Response(
-            stream_with_context(generate_wav_stream()),
+            stream_with_context(generate_wav_stream(adapter)),
             mimetype='audio/wav',
             headers={
                 'Cache-Control': 'no-cache, no-store, must-revalidate',

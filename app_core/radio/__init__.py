@@ -2,7 +2,7 @@
 
 from .drivers import AirspyReceiver, RTLSDRReceiver, register_builtin_drivers
 from .manager import ReceiverInterface, ReceiverConfig, RadioManager, ReceiverStatus
-from .schema import ensure_radio_tables
+from .schema import ensure_radio_tables, ensure_radio_squelch_columns
 from .discovery import (
     enumerate_devices,
     get_device_capabilities,
@@ -18,6 +18,7 @@ __all__ = [
     "RadioManager",
     "ReceiverStatus",
     "ensure_radio_tables",
+    "ensure_radio_squelch_columns",
     "AirspyReceiver",
     "RTLSDRReceiver",
     "register_builtin_drivers",

@@ -53,6 +53,8 @@ tracks releases under the 2.x series.
   - SVG filters for depth, glow effects, and contemporary design polish
 
 ### Fixed
+- Prevent SDR audio monitors from returning HTTP 503 errors by restoring persisted adapters before serving playback, start/stop,
+  and waveform endpoints so the radio settings page can stream audio reliably after restarts.
 - Force dark-mode typography and link treatments to use the light contrast palette when `data-theme-mode="dark"` is active so
   copy remains readable across every dark theme variation.
 - Remove the auto-injected skip navigation anchors so the navbar's leading section only presents the wordmark and health status
@@ -283,6 +285,24 @@ tracks releases under the 2.x series.
   file label so frames no longer begin with an invalid "AAA" sequence that the manual forbids.
 - Prevented the LED fallback initializer from raising a `NameError` when the optional
   controller module is missing so deployments without sign hardware continue to boot.
+
+## [2.7.2] - 2025-11-15
+### Fixed
+- Restore SDR audio monitor adapters on-demand for all audio ingest APIs, eliminating the recurring 503 responses and broken
+  playback streams reported on the radio settings page.
+
+## [2.7.1] - 2025-11-15
+### Fixed
+- Backfill SDR squelch columns automatically when legacy deployments haven't run the
+  latest Alembic migration so radio settings and monitoring pages load without
+  column errors.
+
+## [2.7.0] - 2025-11-14
+### Added
+- Added an audio-monitor provisioning API and UI workflow that auto-starts SDR Icecast streams, surfaces RBDS programme data, and exposes squelch/carrier telemetry directly from the radio settings page for immediate listening checks.
+
+### Changed
+- Enabled configurable squelch thresholds, timing, and carrier-loss alarms for SDR receivers with service-specific defaults tuned for Raspberry Pi deployments, reducing false positives while keeping CPU usage low.
 
 ## [2.4.16] - 2025-11-10
 ### Fixed

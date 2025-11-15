@@ -6,7 +6,7 @@ Flask-based CAP ingestion, SAME encoding, broadcast, and verification system
 Author: KR8MER Amateur Radio Emergency Communications
 Description: Multi-source alert aggregation with FCC-compliant SAME encoding, PostGIS spatial intelligence,
              SDR verification, and LED signage integration
-Version: 2.4.15 - Prevents stale version metadata and disables documentation caching
+Version: 2.7.2 - Restores SDR audio monitors on-demand to eliminate 503 playback errors
 """
 
 # =============================================================================
@@ -63,7 +63,7 @@ from app_core.eas_storage import (
 )
 from app_core.system_health import get_system_health, start_health_alert_worker
 from app_core.poller_debug import ensure_poll_debug_table
-from app_core.radio import ensure_radio_tables
+from app_core.radio import ensure_radio_tables, ensure_radio_squelch_columns
 from app_core.zones import ensure_zone_catalog
 from app_core.auth.roles import initialize_default_roles_and_permissions, Role
 from webapp import register_routes
@@ -949,6 +949,11 @@ def initialize_database():
             if not ensure_radio_tables(logger):
                 _db_initialization_error = RuntimeError(
                     "Radio receiver tables could not be ensured"
+                )
+                return False
+            if not ensure_radio_squelch_columns(logger):
+                _db_initialization_error = RuntimeError(
+                    "Radio squelch columns could not be ensured"
                 )
                 return False
             if not ensure_zone_catalog(logger):

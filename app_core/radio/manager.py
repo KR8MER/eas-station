@@ -33,6 +33,11 @@ class ReceiverConfig:
     deemphasis_us: float = 75.0  # De-emphasis time constant
     enable_rbds: bool = False  # Extract RBDS data
     auto_start: bool = True  # Start automatically when manager boots
+    squelch_enabled: bool = False  # Carrier-operated squelch
+    squelch_threshold_db: float = -65.0  # Threshold for squelch in dBFS
+    squelch_open_ms: int = 150  # Hold time before unmuting after carrier returns
+    squelch_close_ms: int = 750  # Hold time before muting after carrier loss
+    squelch_alarm: bool = False  # Raise alarm events on carrier loss
 
 
 @dataclass
