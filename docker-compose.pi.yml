@@ -19,6 +19,13 @@ services:
   app:
     env_file:
       - .env  # Load database credentials and other settings from local .env
+    environment:
+      # Override database settings from .env (docker-compose env substitution doesn't work with env_file)
+      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-casaos}
+      POSTGRES_USER: ${POSTGRES_USER:-casaos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-casaos}
     devices:
       - /dev/gpiomem:/dev/gpiomem    # GPIO memory access for user-space GPIO control
       - /dev/gpiochip0:/dev/gpiochip0  # GPIO chip device for modern GPIO libraries (lgpio)
