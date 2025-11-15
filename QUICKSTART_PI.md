@@ -48,15 +48,15 @@ From your `.env` file:
 - OLED couldn't initialize (needs I2C on GPIO 2/3)
 - Logs showed: `"gpiozero hardware backends unavailable; using MockFactory fallback"`
 
-**Problem 2:** Container read config from wrong location
-- docker-compose.yml uses `/app-config/.env` (volume for Portainer)
-- Your local `.env` file wasn't being used
+**Problem 2:** Container read config from persistent volume
+- docker-compose.yml uses `/app-config/.env` (Docker volume)
+- Your local `.env` file wasn't being synced to the volume
 - Logs showed: `"OLED display disabled via configuration"`
 
-**After:** docker-compose.pi.yml fixes both issues
-- Mounts GPIO devices (`/dev/gpiomem`, `/dev/gpiochip0`)
-- Mounts local `.env` file directly into container
-- App uses real GPIO hardware and your configuration
+**After:** Proper GPIO access + config sync
+- docker-compose.pi.yml: Mounts GPIO devices (`/dev/gpiomem`, `/dev/gpiochip0`)
+- start-pi.sh: Syncs local `.env` → persistent volume before starting
+- Settings persist across deployments and git updates
 - Logs show: `"GPIO controller initialized using gpiozero OutputDevice"`
 
 ## Differences Between Startup Methods
@@ -83,6 +83,17 @@ Combines `docker-compose.yml` + `docker-compose.pi.yml` to enable GPIO.
 | `verify-gpio-oled.sh` | Diagnostic script to verify GPIO/OLED working |
 | `OLED_GPIO_TROUBLESHOOTING.md` | Detailed troubleshooting guide |
 | `QUICKSTART_PI.md` | This quick reference |
+
+## Configuration Persistence
+
+Your settings are stored in a **persistent Docker volume** (`eas-station_app-config`).
+
+**The workflow:**
+1. Edit `.env` in your repo
+2. Run `./start-pi.sh` - automatically syncs to volume
+3. Settings survive `git pull`, container recreation, redeployment
+
+See `CONFIG_PERSISTENCE.md` for details on backup, migration, and volume management.
 
 ## Make It Permanent
 

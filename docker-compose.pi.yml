@@ -20,7 +20,6 @@ services:
     devices:
       - /dev/gpiomem:/dev/gpiomem    # GPIO memory access for user-space GPIO control
       - /dev/gpiochip0:/dev/gpiochip0  # GPIO chip device for modern GPIO libraries (lgpio)
-    volumes:
-      - ./.env:/app-config/.env:ro   # Mount local .env directly (read-only)
     # Note: group_add gpio removed - device mapping is sufficient for GPIO access
     # If you get permission errors, run on host: sudo chmod 666 /dev/gpiomem
+    # Configuration: start-pi.sh syncs local .env to persistent volume before starting
