@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Create Administrator - EAS Station{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-6 col-xl-5">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0"><i class="fas fa-user-plus me-2"></i>Create Administrator Account</h4>
+                </div>
+                <div class="card-body">
+                    {% if not setup_active %}
+                    <div class="alert alert-warning" role="alert">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Setup mode is currently disabled, but no administrator accounts exist yet. Creating
+                        an account here will immediately grant access to the admin console.
+                    </div>
+                    {% endif %}
+                    <p class="text-muted">
+                        Provide credentials for the first administrator account. Once created you will be signed in automatically
+                        and can manage additional users from the Admin Control Panel.
+                    </p>
+                    <form method="post" class="needs-validation" novalidate>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Username</label>
+                            <input type="text" class="form-control {% if errors.username %}is-invalid{% endif %}" id="username" name="username" value="{{ form_data.username }}" required autofocus>
+                            {% if errors.username %}
+                            <div class="invalid-feedback d-block">{{ errors.username }}</div>
+                            {% else %}
+                            <div class="form-text">Use letters, numbers, dashes, underscores, or dots.</div>
+                            {% endif %}
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <input type="password" class="form-control {% if errors.password %}is-invalid{% endif %}" id="password" name="password" required minlength="12">
+                            {% if errors.password %}
+                            <div class="invalid-feedback d-block">{{ errors.password }}</div>
+                            {% else %}
+                            <div class="form-text">Passwords must be at least 12 characters.</div>
+                            {% endif %}
+                        </div>
+                        <div class="mb-3">
+                            <label for="confirm_password" class="form-label">Confirm Password</label>
+                            <input type="password" class="form-control {% if errors.confirm_password %}is-invalid{% endif %}" id="confirm_password" name="confirm_password" required>
+                            {% if errors.confirm_password %}
+                            <div class="invalid-feedback d-block">{{ errors.confirm_password }}</div>
+                            {% endif %}
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-check-circle me-1"></i> Create Administrator
+                        </button>
+                    </form>
+                    <div class="alert alert-info mt-4" role="alert">
+                        <i class="fas fa-info-circle me-2"></i>
+                        If you prefer using the command line, you can also run
+                        <code>flask create-admin-user</code> from within the application container.
+                    </div>
+                </div>
+            </div>
+            <p class="text-center mt-3">
+                Already have credentials? <a href="{{ url_for('auth.login') }}">Return to the sign-in page</a>.
+            </p>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+    const forms = document.querySelectorAll('.needs-validation');
+    Array.from(forms).forEach(form => {
+        form.addEventListener('submit', event => {
+            if (!form.checkValidity()) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            form.classList.add('was-validated');
+        }, false);
+    });
+})();
+</script>
+{% endblock %}

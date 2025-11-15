@@ -19,9 +19,9 @@
                     {% if show_setup %}
                     <div class="alert alert-info" role="alert">
                         <i class="fas fa-info-circle"></i>
-                        No administrator accounts exist yet. Visit the
-                        <a href="{{ url_for('dashboard.admin') }}" class="alert-link">Admin Control Panel</a>
-                        to create the first account, or run
+                        No administrator accounts exist yet. Use the
+                        <a href="{{ url_for('setup_create_admin') }}" class="alert-link">Create Administrator wizard</a>
+                        to provision the first account, or run
                         <code>flask create-admin-user</code> inside the app container.
                     </div>
                     {% endif %}
