@@ -20,6 +20,5 @@ services:
     devices:
       - /dev/gpiomem:/dev/gpiomem    # GPIO memory access for user-space GPIO control
       - /dev/gpiochip0:/dev/gpiochip0  # GPIO chip device for modern GPIO libraries (lgpio)
-    group_add:
-      - gpio  # Add container user to host's gpio group for device access
+    privileged: true  # Required for GPIO access on Pi 5 when gpio group isn't available
     # Configuration: start-pi.sh syncs local .env to persistent volume before starting
