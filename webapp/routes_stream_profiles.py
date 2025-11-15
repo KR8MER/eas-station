@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Tuple
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, render_template, request
 
 from app_core.audio.stream_profiles import (
     StreamProfile,
@@ -30,6 +30,11 @@ logger = logging.getLogger(__name__)
 
 def register(app: Flask, route_logger: logging.Logger) -> None:
     """Register stream profile API routes."""
+    
+    @app.route("/settings/stream-profiles")
+    def stream_profiles_page() -> Any:
+        """Render the stream profiles management page."""
+        return render_template("stream_profiles.html")
     
     @app.route("/api/stream-profiles", methods=["GET"])
     def get_stream_profiles() -> Tuple[Any, int]:

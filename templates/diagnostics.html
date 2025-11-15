@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Diagnostics - EAS Station</title>
+    {% include 'partials/common_head.html' %}
+    <style>
+        .status-pass { color: #28a745; }
+        .status-warning { color: #ffc107; }
+        .status-fail { color: #dc3545; }
+        .status-info { color: #17a2b8; }
+        .check-item {
+            padding: 0.75rem;
+            border-bottom: 1px solid #dee2e6;
+            transition: background-color 0.2s;
+        }
+        .check-item:hover {
+            background-color: #f8f9fa;
+        }
+        .check-item:last-child {
+            border-bottom: none;
+        }
+        .check-icon {
+            font-size: 1.2rem;
+            margin-right: 0.5rem;
+        }
+        .diagnostics-section {
+            margin-bottom: 2rem;
+        }
+        .progress-container {
+            margin: 2rem 0;
+        }
+    </style>
+</head>
+<body>
+    {% include 'partials/navbar.html' %}
+    
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h1><i class="fas fa-stethoscope"></i> System Diagnostics</h1>
+                        <p class="text-muted">Validate your EAS Station installation and configuration</p>
+                    </div>
+                    <div>
+                        <button id="runDiagnosticsBtn" class="btn btn-primary btn-lg">
+                            <i class="fas fa-play"></i> Run Diagnostics
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Summary Cards -->
+                <div id="summaryCards" class="row mb-4" style="display: none;">
+                    <div class="col-md-3">
+                        <div class="card text-white bg-success">
+                            <div class="card-body">
+                                <h5 class="card-title">Passed</h5>
+                                <h2 id="passedCount">0</h2>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-white bg-warning">
+                            <div class="card-body">
+                                <h5 class="card-title">Warnings</h5>
+                                <h2 id="warningCount">0</h2>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-white bg-danger">
+                            <div class="card-body">
+                                <h5 class="card-title">Failed</h5>
+                                <h2 id="failedCount">0</h2>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-white bg-info">
+                            <div class="card-body">
+                                <h5 class="card-title">Information</h5>
+                                <h2 id="infoCount">0</h2>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div id="progressContainer" class="progress-container" style="display: none;">
+                    <div class="progress" style="height: 30px;">
+                        <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" style="width: 0%">
+                            <span id="progressText">Running diagnostics...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results Container -->
+                <div id="resultsContainer" style="display: none;">
+                    <!-- Passed Checks -->
+                    <div class="diagnostics-section">
+                        <div class="card">
+                            <div class="card-header bg-success text-white">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-check-circle"></i> Passed Checks
+                                </h5>
+                            </div>
+                            <div class="card-body p-0">
+                                <div id="passedChecks" class="list-group list-group-flush">
+                                    <!-- Populated by JavaScript -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Warnings -->
+                    <div class="diagnostics-section" id="warningsSection" style="display: none;">
+                        <div class="card">
+                            <div class="card-header bg-warning text-dark">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-exclamation-triangle"></i> Warnings
+                                </h5>
+                            </div>
+                            <div class="card-body p-0">
+                                <div id="warningChecks" class="list-group list-group-flush">
+                                    <!-- Populated by JavaScript -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Failed Checks -->
+                    <div class="diagnostics-section" id="failedSection" style="display: none;">
+                        <div class="card">
+                            <div class="card-header bg-danger text-white">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-times-circle"></i> Failed Checks
+                                </h5>
+                            </div>
+                            <div class="card-body p-0">
+                                <div id="failedChecks" class="list-group list-group-flush">
+                                    <!-- Populated by JavaScript -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Information -->
+                    <div class="diagnostics-section" id="infoSection" style="display: none;">
+                        <div class="card">
+                            <div class="card-header bg-info text-white">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-info-circle"></i> Additional Information
+                                </h5>
+                            </div>
+                            <div class="card-body p-0">
+                                <div id="infoChecks" class="list-group list-group-flush">
+                                    <!-- Populated by JavaScript -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Actions -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-tools"></i> Quick Actions</h5>
+                        </div>
+                        <div class="card-body">
+                            <button class="btn btn-primary mr-2" onclick="location.reload()">
+                                <i class="fas fa-redo"></i> Run Again
+                            </button>
+                            <button class="btn btn-secondary mr-2" onclick="window.location.href='/health/dependencies'">
+                                <i class="fas fa-heartbeat"></i> View Health Endpoint
+                            </button>
+                            <button class="btn btn-info mr-2" onclick="exportResults()">
+                                <i class="fas fa-download"></i> Export Results
+                            </button>
+                            <a href="/admin" class="btn btn-outline-primary">
+                                <i class="fas fa-arrow-left"></i> Back to Admin
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Welcome Message (shown before running) -->
+                <div id="welcomeMessage" class="card">
+                    <div class="card-body text-center py-5">
+                        <i class="fas fa-stethoscope fa-5x text-muted mb-4"></i>
+                        <h3>System Diagnostics Tool</h3>
+                        <p class="lead text-muted">
+                            This tool validates your EAS Station installation and configuration.
+                        </p>
+                        <p class="text-muted">
+                            It will check:
+                        </p>
+                        <ul class="list-unstyled text-left" style="max-width: 600px; margin: 0 auto;">
+                            <li><i class="fas fa-check text-success"></i> Docker services status</li>
+                            <li><i class="fas fa-check text-success"></i> Database connectivity</li>
+                            <li><i class="fas fa-check text-success"></i> Environment configuration</li>
+                            <li><i class="fas fa-check text-success"></i> Web interface accessibility</li>
+                            <li><i class="fas fa-check text-success"></i> System health endpoints</li>
+                            <li><i class="fas fa-check text-success"></i> Audio device availability</li>
+                            <li><i class="fas fa-check text-success"></i> Recent log errors</li>
+                        </ul>
+                        <button id="startDiagnosticsBtn" class="btn btn-primary btn-lg mt-4">
+                            <i class="fas fa-play"></i> Start Diagnostics
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% include 'partials/footer.html' %}
+
+    <script>
+        let diagnosticsData = null;
+
+        document.getElementById('runDiagnosticsBtn').addEventListener('click', runDiagnostics);
+        document.getElementById('startDiagnosticsBtn').addEventListener('click', runDiagnostics);
+
+        async function runDiagnostics() {
+            // Hide welcome message
+            document.getElementById('welcomeMessage').style.display = 'none';
+            
+            // Show progress
+            document.getElementById('progressContainer').style.display = 'block';
+            document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('progressText').textContent = 'Starting diagnostics...';
+            
+            // Hide results
+            document.getElementById('resultsContainer').style.display = 'none';
+            document.getElementById('summaryCards').style.display = 'none';
+
+            try {
+                // Simulate progress while running
+                let progress = 0;
+                const progressInterval = setInterval(() => {
+                    progress += 5;
+                    if (progress <= 90) {
+                        document.getElementById('progressBar').style.width = progress + '%';
+                    }
+                }, 200);
+
+                // Call API endpoint
+                const response = await fetch('/api/diagnostics/validate', {
+                    method: 'POST'
+                });
+
+                clearInterval(progressInterval);
+                document.getElementById('progressBar').style.width = '100%';
+                document.getElementById('progressText').textContent = 'Diagnostics complete!';
+
+                if (!response.ok) {
+                    throw new Error('Failed to run diagnostics');
+                }
+
+                diagnosticsData = await response.json();
+                
+                // Wait a moment to show completion
+                setTimeout(() => {
+                    document.getElementById('progressContainer').style.display = 'none';
+                    displayResults(diagnosticsData);
+                }, 1000);
+
+            } catch (error) {
+                console.error('Error running diagnostics:', error);
+                document.getElementById('progressText').textContent = 'Error: ' + error.message;
+                document.getElementById('progressBar').classList.remove('progress-bar-animated');
+                document.getElementById('progressBar').classList.add('bg-danger');
+            }
+        }
+
+        function displayResults(data) {
+            // Show summary cards
+            document.getElementById('summaryCards').style.display = 'flex';
+            document.getElementById('passedCount').textContent = data.passed.length;
+            document.getElementById('warningCount').textContent = data.warnings.length;
+            document.getElementById('failedCount').textContent = data.failed.length;
+            document.getElementById('infoCount').textContent = data.info.length;
+
+            // Clear previous results
+            document.getElementById('passedChecks').innerHTML = '';
+            document.getElementById('warningChecks').innerHTML = '';
+            document.getElementById('failedChecks').innerHTML = '';
+            document.getElementById('infoChecks').innerHTML = '';
+
+            // Populate passed checks
+            data.passed.forEach(msg => {
+                addCheckItem('passedChecks', msg, 'pass');
+            });
+
+            // Populate warnings
+            if (data.warnings.length > 0) {
+                document.getElementById('warningsSection').style.display = 'block';
+                data.warnings.forEach(msg => {
+                    addCheckItem('warningChecks', msg, 'warning');
+                });
+            }
+
+            // Populate failed checks
+            if (data.failed.length > 0) {
+                document.getElementById('failedSection').style.display = 'block';
+                data.failed.forEach(msg => {
+                    addCheckItem('failedChecks', msg, 'fail');
+                });
+            }
+
+            // Populate info
+            if (data.info.length > 0) {
+                document.getElementById('infoSection').style.display = 'block';
+                data.info.forEach(msg => {
+                    addCheckItem('infoChecks', msg, 'info');
+                });
+            }
+
+            // Show results
+            document.getElementById('resultsContainer').style.display = 'block';
+        }
+
+        function addCheckItem(containerId, message, status) {
+            const container = document.getElementById(containerId);
+            const item = document.createElement('div');
+            item.className = 'check-item';
+            
+            let icon = '';
+            let statusClass = '';
+            
+            switch(status) {
+                case 'pass':
+                    icon = '<i class="fas fa-check-circle check-icon status-pass"></i>';
+                    statusClass = 'status-pass';
+                    break;
+                case 'warning':
+                    icon = '<i class="fas fa-exclamation-triangle check-icon status-warning"></i>';
+                    statusClass = 'status-warning';
+                    break;
+                case 'fail':
+                    icon = '<i class="fas fa-times-circle check-icon status-fail"></i>';
+                    statusClass = 'status-fail';
+                    break;
+                case 'info':
+                    icon = '<i class="fas fa-info-circle check-icon status-info"></i>';
+                    statusClass = 'status-info';
+                    break;
+            }
+            
+            item.innerHTML = `${icon}<span class="${statusClass}">${escapeHtml(message)}</span>`;
+            container.appendChild(item);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function exportResults() {
+            if (!diagnosticsData) {
+                alert('No diagnostics data to export');
+                return;
+            }
+
+            const exportData = {
+                timestamp: new Date().toISOString(),
+                summary: {
+                    passed: diagnosticsData.passed.length,
+                    warnings: diagnosticsData.warnings.length,
+                    failed: diagnosticsData.failed.length,
+                    info: diagnosticsData.info.length
+                },
+                results: diagnosticsData
+            };
+
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `eas-diagnostics-${new Date().toISOString()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
