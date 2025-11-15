@@ -68,7 +68,30 @@ if grep -q "^OLED_ENABLED=true" .env 2>/dev/null; then
     echo "✓ OLED is enabled in .env"
 else
     echo "⚠ OLED_ENABLED not set to true in .env"
-    echo "  To enable OLED: Add 'OLED_ENABLED=true' to your .env file"
+    echo "  The OLED will not activate until you enable it."
+    echo ""
+    read -p "Enable OLED now? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        # Add or update OLED_ENABLED
+        if grep -q "^OLED_ENABLED=" .env; then
+            sed -i 's/^OLED_ENABLED=.*/OLED_ENABLED=true/' .env
+        elif grep -q "^#.*OLED_ENABLED=" .env; then
+            sed -i 's/^#.*OLED_ENABLED=.*/OLED_ENABLED=true/' .env
+        else
+            echo "OLED_ENABLED=true" >> .env
+        fi
+
+        # Ensure other OLED settings exist
+        grep -q "^OLED_I2C_BUS=" .env || echo "OLED_I2C_BUS=1" >> .env
+        grep -q "^OLED_I2C_ADDRESS=" .env || echo "OLED_I2C_ADDRESS=0x3C" >> .env
+        grep -q "^OLED_WIDTH=" .env || echo "OLED_WIDTH=128" >> .env
+        grep -q "^OLED_HEIGHT=" .env || echo "OLED_HEIGHT=64" >> .env
+        grep -q "^OLED_ROTATE=" .env || echo "OLED_ROTATE=0" >> .env
+        grep -q "^OLED_DEFAULT_INVERT=" .env || echo "OLED_DEFAULT_INVERT=false" >> .env
+
+        echo "✓ OLED enabled in .env"
+    fi
 fi
 
 echo ""
