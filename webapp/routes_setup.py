@@ -57,7 +57,7 @@ def register(app, logger):
             next_url = request.full_path if request.query_string else request.path
             if request.method == "GET":
                 flash("Please sign in to access the setup wizard.")
-                return redirect(url_for("login", next=next_url))
+                return redirect(url_for("auth.login", next=next_url))
             return jsonify({"error": "Authentication required"}), 401
 
         try:
@@ -219,7 +219,7 @@ def register(app, logger):
         is_authenticated = bool(current_user and current_user.is_authenticated)
 
         if not setup_active and not is_authenticated:
-            return redirect(url_for("login"))
+            return redirect(url_for("auth.login"))
 
         # Get the saved config from session
         saved_config = session.pop('_setup_saved_config', {})
@@ -255,7 +255,7 @@ def register(app, logger):
         is_authenticated = bool(current_user and current_user.is_authenticated)
 
         if not setup_active and not is_authenticated:
-            return redirect(url_for("login"))
+            return redirect(url_for("auth.login"))
 
         from app_utils.setup_wizard import ENV_OUTPUT_PATH
         import os
@@ -306,7 +306,7 @@ def register(app, logger):
         is_authenticated = bool(current_user and current_user.is_authenticated)
 
         if not setup_active and not is_authenticated:
-            return redirect(url_for("login"))
+            return redirect(url_for("auth.login"))
 
         from app_utils.setup_wizard import ENV_OUTPUT_PATH
 

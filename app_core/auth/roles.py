@@ -319,7 +319,7 @@ def _build_login_redirect():
 
     flash("Please sign in to continue.")
 
-    login_url = url_for("login")
+    login_url = url_for("auth.login")
     next_target = None
 
     if request.method in {"GET", "HEAD"}:
