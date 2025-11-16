@@ -93,6 +93,8 @@ class ArgonOLEDController:
         "small": 11,
         "medium": 14,
         "large": 18,
+        "xlarge": 28,
+        "huge": 36,
     }
 
     def __init__(
