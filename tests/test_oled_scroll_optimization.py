@@ -97,16 +97,25 @@ class TestPrepareScrollContent:
         assert dimensions['max_x'] >= 0
         assert dimensions['max_y'] >= 0
     
-    def test_prepare_scroll_content_creates_large_image(self, oled_controller, sample_lines, mock_pil_modules):
-        """Test that a large buffer image is created (2x display size)."""
+    def test_prepare_scroll_content_creates_padded_canvas(self, oled_controller, sample_lines, mock_pil_modules):
+        """Test that a padded canvas is created for seamless scrolling."""
         content_image, dimensions = oled_controller.prepare_scroll_content(sample_lines)
         
-        # Verify Image.new was called with correct size
+        # Verify Image.new was called with padded size
         mock_pil_modules['image'].new.assert_called()
         call_args = mock_pil_modules['image'].new.call_args_list[-1]
         mode, size = call_args[0]
         assert mode == "1"  # 1-bit monochrome
-        assert size == (oled_controller.width * 2, oled_controller.height * 2)
+        
+        # Canvas should be: original_width + separator_width + original_width
+        # With mocked textlength of 100px per line and 3 lines, original_width ≈ 100px
+        # Separator is at least display_width (128px)
+        # So total should be approximately 100 + 128 + 100 = 328+px
+        width, height = size
+        assert width >= oled_controller.width, \
+            f"Canvas width {width} should be at least display width {oled_controller.width}"
+        assert height >= oled_controller.height or height >= dimensions['max_y'], \
+            f"Canvas height {height} should accommodate content"
     
     def test_prepare_scroll_content_renders_text_once(self, oled_controller, sample_lines, mock_pil_modules):
         """Test that text is rendered during preparation (may be multiple times due to wrapping)."""
@@ -395,10 +404,16 @@ class TestScrollingTextBehavior:
         
         content_image, dimensions = oled_controller.prepare_scroll_content(lines)
         
-        # Verify that text.draw was called only once (no wrapping for scrolling)
-        # Scrolling text should remain as a single long line for smooth horizontal scrolling
-        assert mock_draw_obj.text.call_count == 1, \
-            "Scrolling text should be kept as a single line for smooth horizontal scrolling"
+        # Verify that text is rendered twice: once for original, once for duplicate
+        # Scrolling text should remain as a single long line (not wrapped), rendered twice for seamless loop
+        assert mock_draw_obj.text.call_count == 2, \
+            "Scrolling text should be rendered twice (original + duplicate) as single lines"
+        
+        # Verify both renders are for the same text (not wrapped into multiple lines)
+        for call in mock_draw_obj.text.call_args_list:
+            args, kwargs = call
+            rendered_text = args[1] if len(args) > 1 else kwargs.get('text', '')
+            assert rendered_text == long_text, "Text should not be wrapped into multiple lines"
     
     def test_prepare_scroll_content_single_line_for_all_text(self, oled_controller, mock_pil_modules):
         """Test that prepare_scroll_content keeps all text as single lines."""
@@ -415,8 +430,8 @@ class TestScrollingTextBehavior:
         
         content_image, dimensions = oled_controller.prepare_scroll_content(lines)
         
-        # Should only render once (no wrapping) 
-        assert mock_draw_obj.text.call_count == 1, \
+        # Should render twice (original + duplicate) as single lines (no wrapping)
+        assert mock_draw_obj.text.call_count == 2, \
             "Scrolling text should render as single line"
     
     def test_prepare_scroll_content_differs_from_display_lines(self, oled_controller, mock_pil_modules):
@@ -450,12 +465,12 @@ class TestScrollingTextBehavior:
         content_image, dimensions = oled_controller.prepare_scroll_content(lines)
         scroll_content_call_count = mock_draw_obj.text.call_count
         
-        # Scrolling content should NOT wrap (single line for smooth horizontal scroll)
-        assert scroll_content_call_count == 1, \
-            "Scrolling text should remain as single line for smooth horizontal scrolling"
+        # Scrolling content should render twice (original + duplicate) as single lines (no wrapping)
+        assert scroll_content_call_count == 2, \
+            f"Scrolling text should render twice (original + duplicate) as single lines, got {scroll_content_call_count}"
         
         # Display lines SHOULD wrap (multiple lines for static display)
-        assert display_lines_call_count > 1, \
+        assert display_lines_call_count > 2, \
             "Static text should be wrapped to fit display width"
         
         # They should be different!
@@ -481,11 +496,17 @@ class TestSeamlessScrollingLoop:
         
         content_image, dimensions = oled_controller.prepare_scroll_content(lines)
         
-        # Content is 200 pixels wide, display is 128 pixels
-        assert dimensions['max_x'] == 200
+        # Canvas width includes original + separator + duplicate
+        # Original width is 200px, separator is 128px, so total is 200+128+200 = 528px
+        assert dimensions['max_x'] == 528, f"Expected max_x=528 (original+sep+duplicate), got {dimensions['max_x']}"
+        assert dimensions['original_width'] == 200, "Original content should be 200px wide"
+        assert dimensions['separator_width'] == 128, "Separator should be at least display width (128px)"
         
-        # Test offset near the end (offset 180)
-        # This should wrap: show last 20px of content + first 108px wrapped
+        # Test offset 180 - should show part of first text + separator
+        # Window [180, 308] shows:
+        # - Last 20px of first text [180, 200]
+        # - First 108px of separator [200, 308]
+        # With seamless scrolling, this is a simple crop - no wrapping paste needed
         mock_img = mock_pil_modules['img']
         mock_img.crop.reset_mock()
         mock_img.paste.reset_mock()
@@ -494,12 +515,12 @@ class TestSeamlessScrollingLoop:
             content_image,
             dimensions,
             OLEDScrollEffect.SCROLL_LEFT,
-            offset=180,  # Near end of 200px content
+            offset=180,
         )
         
-        # Should paste twice: once for end of content, once for wrapped beginning
-        assert mock_img.paste.call_count == 2, \
-            "Should paste twice when wrapping (end + beginning)"
+        # With seamless scrolling, only ONE paste is needed (simple crop from pre-rendered canvas)
+        assert mock_img.paste.call_count == 1, \
+            "Seamless scrolling should require only one paste (simple crop from pre-rendered canvas)"
     
     def test_scroll_left_uses_modulo_for_offset(self, oled_controller, mock_pil_modules):
         """Test that offsets beyond content width wrap using modulo."""
