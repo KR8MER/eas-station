@@ -91,7 +91,6 @@ class ScreenManager:
         self._oled_button_initialized = False
         # Pixel-by-pixel scrolling configuration
         self._oled_scroll_offset = 0
-        self._oled_scroll_max_offset = 0
         self._oled_scroll_effect = None
         self._oled_scroll_speed = 2  # pixels per frame
         self._oled_scroll_fps = 30  # frames per second
@@ -771,75 +770,31 @@ class ScreenManager:
         self._last_oled_alert_render = now
         self._last_oled_update = now
 
-        # Advance scroll offset
+        # Advance scroll offset (loop is handled in display function)
         self._oled_scroll_offset += self._oled_scroll_speed
-
-        # Loop back to start when we reach the end
-        if self._oled_scroll_offset >= self._oled_scroll_max_offset:
-            self._oled_scroll_offset = 0
 
         return True
 
     def _prepare_alert_scroll(self, alert_meta: Dict[str, Any]) -> None:
-        """Prepare alert text for pixel-by-pixel scrolling."""
+        """Prepare alert text for right-to-left scrolling."""
         try:
-            from app_core.oled import OLEDScrollEffect
             import app_core.oled as oled_module
         except Exception as exc:
             logger.debug("OLED module unavailable: %s", exc)
             return
 
         # Get scroll configuration from environment
-        effect_name = oled_module.OLED_SCROLL_EFFECT
         self._oled_scroll_speed = oled_module.OLED_SCROLL_SPEED
         self._oled_scroll_fps = oled_module.OLED_SCROLL_FPS
 
-        # Map effect name to enum
-        effect_map = {
-            'scroll_left': OLEDScrollEffect.SCROLL_LEFT,
-            'scroll_right': OLEDScrollEffect.SCROLL_RIGHT,
-            'scroll_up': OLEDScrollEffect.SCROLL_UP,
-            'scroll_down': OLEDScrollEffect.SCROLL_DOWN,
-            'wipe_left': OLEDScrollEffect.WIPE_LEFT,
-            'wipe_right': OLEDScrollEffect.WIPE_RIGHT,
-            'wipe_up': OLEDScrollEffect.WIPE_UP,
-            'wipe_down': OLEDScrollEffect.WIPE_DOWN,
-            'fade_in': OLEDScrollEffect.FADE_IN,
-            'static': OLEDScrollEffect.STATIC,
-        }
-        self._oled_scroll_effect = effect_map.get(effect_name, OLEDScrollEffect.SCROLL_LEFT)
-
-        # Calculate max offset based on effect type
-        # For horizontal scrolling, we need the text width
-        # For vertical scrolling, we need the text height
-        # For wipe effects, max offset = display dimension
-        # For static/fade, max offset = small value for looping
-
-        if self._oled_scroll_effect in (OLEDScrollEffect.SCROLL_LEFT, OLEDScrollEffect.SCROLL_RIGHT):
-            # Estimate text width (approximate, will be refined in render)
-            text = alert_meta.get('body_text') or 'Active alert in effect.'
-            # Clean text by collapsing whitespace and removing newlines
-            text = ' '.join(text.split())
-            # Rough estimate: average char width * length
-            self._oled_scroll_max_offset = len(text) * 10
-        elif self._oled_scroll_effect in (OLEDScrollEffect.SCROLL_UP, OLEDScrollEffect.SCROLL_DOWN):
-            # For vertical scrolling, max offset depends on wrapped text height
-            self._oled_scroll_max_offset = 128  # Default height estimate
-        elif self._oled_scroll_effect in (OLEDScrollEffect.WIPE_LEFT, OLEDScrollEffect.WIPE_RIGHT):
-            self._oled_scroll_max_offset = 128  # Display width
-        elif self._oled_scroll_effect in (OLEDScrollEffect.WIPE_UP, OLEDScrollEffect.WIPE_DOWN):
-            self._oled_scroll_max_offset = 64  # Display height
-        elif self._oled_scroll_effect == OLEDScrollEffect.FADE_IN:
-            self._oled_scroll_max_offset = 10  # Flash 10 times
-        else:  # STATIC
-            self._oled_scroll_max_offset = 1  # No animation
-
+        # We're using simple right-to-left scrolling
+        self._oled_scroll_effect = True  # Just a flag to indicate scrolling is active
         self._oled_scroll_offset = 0
         self._current_alert_id = alert_meta.get('id')
         self._current_alert_priority = alert_meta.get('priority_rank')
         self._current_alert_text = alert_meta.get('body_text')
         header = alert_meta.get('header_text') or alert_meta.get('event') or 'Alert'
-        logger.info("OLED alert scroll engaged: %s (effect: %s)", header, self._oled_scroll_effect.value)
+        logger.info("OLED alert scroll engaged: %s (speed: %spx at %sfps)", header, self._oled_scroll_speed, self._oled_scroll_fps)
 
     def _display_alert_scroll_frame(self, alert_meta: Dict[str, Any]) -> None:
         """Render a single frame of the scrolling alert animation."""
@@ -849,6 +804,7 @@ class ScreenManager:
         try:
             from app_core.oled import OLEDLine, initialise_oled_display
             import app_core.oled as oled_module
+            from PIL import Image, ImageDraw
         except Exception as exc:  # pragma: no cover - hardware optional
             logger.debug("OLED controller unavailable for alert display: %s", exc)
             return
@@ -864,45 +820,58 @@ class ScreenManager:
         header_text = ' '.join(header_text.split())
         body_text = ' '.join(body_text.split())
 
-        # Create line objects for header and body
-        line_objects = [
-            OLEDLine(
-                text=header_text,
-                x=0,
-                y=0,
-                font='small',
-                wrap=False,
-                max_width=124,
-            ),
-            OLEDLine(
-                text=body_text,
-                x=0,
-                y=16,
-                font='large',
-                wrap=False,
-                allow_empty=False,
-            )
-        ]
+        # Get display dimensions
+        width = controller.width
+        height = controller.height
 
-        # Render the scroll frame
-        controller.render_scroll_frame(
-            line_objects,
-            self._oled_scroll_effect,
-            self._oled_scroll_offset
-        )
+        # Create final display image
+        active_invert = controller.default_invert
+        background = 255 if active_invert else 0
+        text_colour = 0 if active_invert else 255
+        display_image = Image.new("1", (width, height), color=background)
+        draw = ImageDraw.Draw(display_image)
+
+        # Render static header at top (y=0)
+        header_font = controller._fonts.get('small', controller._fonts['small'])
+        draw.text((0, 0), header_text, font=header_font, fill=text_colour)
+
+        # Calculate header height for positioning body text
+        header_height = controller._line_height(header_font) + 2  # Add small spacing
+
+        # Render scrolling body text
+        body_font = controller._fonts.get('large', controller._fonts['small'])
+
+        # Calculate text width for scrolling
+        try:
+            text_width = int(draw.textlength(body_text, font=body_font))
+        except AttributeError:
+            text_width = body_font.getsize(body_text)[0]
+
+        # Calculate scroll position (right to left)
+        scroll_x = width - self._oled_scroll_offset
+
+        # If text has scrolled completely off the left, reset to right
+        if scroll_x + text_width < 0:
+            scroll_x = width
+            self._oled_scroll_offset = 0
+
+        # Draw the scrolling text
+        body_y = header_height
+        draw.text((scroll_x, body_y), body_text, font=body_font, fill=text_colour)
+
+        # Display the final image
+        controller.device.display(display_image)
 
         logger.debug(
-            "OLED alert scroll frame: %s (offset %s/%s, effect: %s)",
+            "OLED alert scroll: %s (offset %s, x_pos %s)",
             header_text,
             self._oled_scroll_offset,
-            self._oled_scroll_max_offset,
-            self._oled_scroll_effect.value,
+            scroll_x,
         )
 
     def _reset_oled_alert_state(self) -> None:
         """Reset OLED alert scroll state."""
         self._oled_scroll_offset = 0
-        self._oled_scroll_max_offset = 0
         self._oled_scroll_effect = None
         self._current_alert_id = None
         self._current_alert_priority = None
