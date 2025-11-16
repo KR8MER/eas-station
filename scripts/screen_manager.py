@@ -803,14 +803,26 @@ class ScreenManager:
         speed = max(1, min(20, speed))
         fps = max(5, min(60, fps))
 
-        extents = self._calculate_oled_scroll_extents(controller, line_objects)
+        # Pre-render the content once before starting the animation
+        try:
+            content_image, dimensions = controller.prepare_scroll_content(
+                line_objects,
+                invert=rendered.get('invert'),
+            )
+        except Exception as exc:
+            logger.error("Unable to prepare OLED scroll content: %s", exc)
+            return False
+
+        extents = {'horizontal': dimensions['max_x'], 'vertical': dimensions['max_y']}
         max_offset = self._resolve_scroll_limit(effect, extents, controller)
         if max_offset <= 0:
             return False
 
+        # Render the first frame to display the initial state
         try:
             controller.render_scroll_frame(
-                line_objects,
+                content_image,
+                dimensions,
                 effect,
                 offset=0,
                 invert=rendered.get('invert'),
@@ -819,8 +831,10 @@ class ScreenManager:
             logger.error("Unable to start OLED scroll: %s", exc)
             return False
 
+        # Store the pre-rendered content for use in animation frames
         self._oled_screen_scroll_state = {
-            'lines': line_objects,
+            'content_image': content_image,
+            'dimensions': dimensions,
             'effect': effect,
             'invert': rendered.get('invert'),
             'speed': speed,
@@ -864,7 +878,8 @@ class ScreenManager:
 
         try:
             controller.render_scroll_frame(
-                state['lines'],
+                state['content_image'],
+                state['dimensions'],
                 state['effect'],
                 offset=self._oled_screen_scroll_offset,
                 invert=state.get('invert'),
@@ -878,54 +893,6 @@ class ScreenManager:
         self._oled_screen_scroll_offset += max(1, state['speed'])
         if self._oled_screen_scroll_offset >= max(1, state['max_offset']):
             self._oled_screen_scroll_offset = 0
-
-    def _calculate_oled_scroll_extents(self, controller, line_objects: List["OLEDLine"]) -> Dict[str, int]:
-        """Estimate how far text needs to travel for full-screen coverage."""
-
-        try:
-            from PIL import Image, ImageDraw
-        except Exception as exc:  # pragma: no cover - optional dependency
-            logger.debug("Pillow unavailable for OLED extent calculation: %s", exc)
-            return {'horizontal': controller.width, 'vertical': controller.height}
-
-        canvas_width = max(controller.width * 2, controller.width + 64)
-        canvas_height = max(controller.height * 2, controller.height + 16)
-        image = Image.new("1", (canvas_width, canvas_height), color=0)
-        draw = ImageDraw.Draw(image)
-        cursor_y = 0
-        max_x = 0
-        max_y = 0
-
-        for entry in line_objects:
-            if not entry.text and not entry.allow_empty:
-                continue
-
-            font_key = (entry.font or 'small').lower()
-            font = controller._fonts.get(font_key, controller._fonts['small'])
-            x = max(0, entry.x)
-            line_y = entry.y if entry.y is not None else cursor_y
-
-            draw.text((x, line_y), entry.text or '', font=font, fill=255)
-
-            try:
-                text_width = draw.textlength(entry.text or '', font=font)
-            except AttributeError:  # pragma: no cover - Pillow compatibility
-                text_width = font.getsize(entry.text or '')[0]
-
-            line_height = controller._line_height(font)
-            max_x = max(max_x, x + int(text_width))
-            max_y = max(max_y, line_y + line_height)
-
-            spacing = max(0, entry.spacing)
-            if entry.y is None:
-                cursor_y = line_y + line_height + spacing
-            else:
-                cursor_y = max(cursor_y, line_y + line_height + spacing)
-
-        return {
-            'horizontal': controller.width + max(0, max_x),
-            'vertical': controller.height + max(0, max_y),
-        }
 
     def _resolve_scroll_limit(self, effect, extents: Dict[str, int], controller) -> int:
         """Map a scroll effect to the maximum offset required before looping."""
