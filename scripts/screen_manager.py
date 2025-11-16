@@ -842,28 +842,57 @@ class ScreenManager:
         # Pre-render the entire scrolling text to a wide canvas
         # Make it wide enough for: screen_width + text_width + screen_width (for seamless loop)
         canvas_width = width + text_width + width
-        scroll_canvas = Image.new("1", (canvas_width, body_height), color=background)
-        canvas_draw = ImageDraw.Draw(scroll_canvas)
 
-        # Vertically center the text in the available body area
-        text_y = (body_height - text_height) // 2
+        # Log a warning for extremely wide canvases
+        if canvas_width > 20000:
+            logger.warning(
+                "Canvas extremely wide (%spx)! This may cause rendering issues. "
+                "Consider truncating or using smaller font for long messages.",
+                canvas_width
+            )
 
-        # Draw text starting at position width (so it starts off-screen to the right)
-        canvas_draw.text((width, text_y), body_text, font=body_font, fill=text_colour)
+        try:
+            scroll_canvas = Image.new("1", (canvas_width, body_height), color=background)
+            canvas_draw = ImageDraw.Draw(scroll_canvas)
+
+            # Vertically center the text in the available body area
+            text_y = (body_height - text_height) // 2
+
+            # Draw text starting at position width (so it starts off-screen to the right)
+            canvas_draw.text((width, text_y), body_text, font=body_font, fill=text_colour)
+
+            # Verify the canvas was created with correct size
+            actual_width, actual_height = scroll_canvas.size
+            if actual_width != canvas_width or actual_height != body_height:
+                logger.error(
+                    "Canvas size mismatch! Expected %sx%s, got %sx%s",
+                    canvas_width, body_height, actual_width, actual_height
+                )
+
+        except Exception as e:
+            logger.error(f"Failed to create scroll canvas: {e}")
+            # Fall back to a simpler scrolling method or truncate text
+            raise
 
         # Cache the pre-rendered canvas
         self._cached_scroll_canvas = scroll_canvas
         self._cached_scroll_text_width = text_width
         self._cached_body_area_height = body_height
 
-        # Debug: Save canvas to file for inspection
+        # Debug: Save a section of the canvas for inspection
         try:
-            import os
-            debug_path = "/tmp/oled_scroll_canvas_debug.png"
-            scroll_canvas.save(debug_path)
-            logger.info(f"Saved scroll canvas to {debug_path} for debugging")
+            # Save first 500px of canvas to reduce file size
+            debug_section = scroll_canvas.crop((0, 0, min(500, canvas_width), body_height))
+            debug_path = "/tmp/oled_scroll_debug_section.png"
+            debug_section.save(debug_path)
+            logger.info(f"Saved scroll canvas section (first 500px) to {debug_path}")
+
+            # Also try to save full canvas
+            full_debug_path = "/tmp/oled_scroll_full.png"
+            scroll_canvas.save(full_debug_path)
+            logger.info(f"Saved full scroll canvas ({canvas_width}px wide) to {full_debug_path}")
         except Exception as e:
-            logger.debug(f"Could not save debug canvas: {e}")
+            logger.error(f"Could not save debug canvas: {e}", exc_info=True)
 
         header = alert_meta.get('header_text') or alert_meta.get('event') or 'Alert'
         logger.info(
@@ -940,18 +969,19 @@ class ScreenManager:
         max_offset = width + self._cached_scroll_text_width
         if self._oled_scroll_offset >= max_offset:
             self._oled_scroll_offset = 0
-            logger.debug("OLED scroll reset - looping back to start")
+            logger.info("OLED scroll RESET - looped back to start (max_offset was %s)", max_offset)
 
-        # Log every 30 frames (about every 0.5 seconds at 60 FPS) to avoid spam
-        if self._oled_scroll_offset % 120 == 0:
-            logger.debug(
-                "OLED scroll: offset=%s/%s, crop=[%s:%s], canvas_width=%s, text_width=%s",
+        # Log at specific milestones to track scrolling progress
+        # Log at start, 25%, 50%, 75%, and near end
+        if self._oled_scroll_offset in [0, max_offset // 4, max_offset // 2, (max_offset * 3) // 4, max_offset - 100]:
+            progress_pct = (self._oled_scroll_offset / max_offset * 100) if max_offset > 0 else 0
+            logger.info(
+                "OLED scroll progress: %d%% (offset=%s/%s, crop=[%s:%s])",
+                int(progress_pct),
                 self._oled_scroll_offset,
                 max_offset,
                 crop_left,
                 crop_right,
-                self._cached_scroll_canvas.width if self._cached_scroll_canvas else 0,
-                self._cached_scroll_text_width,
             )
 
     def _reset_oled_alert_state(self) -> None:
