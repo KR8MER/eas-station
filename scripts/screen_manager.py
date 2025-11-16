@@ -96,11 +96,11 @@ class ScreenManager:
         self._oled_scroll_fps = 60  # frames per second (increased for ultra-smooth scrolling)
         self._oled_screen_scroll_state: Optional[Dict[str, Any]] = None
         self._oled_screen_scroll_offset = 0
-        self._last_oled_screen_frame = datetime.min
+        self._last_oled_screen_frame_time = 0.0  # Use monotonic time for precise frame timing
         self._current_alert_id: Optional[int] = None
         self._current_alert_priority: Optional[int] = None
         self._current_alert_text: Optional[str] = None
-        self._last_oled_alert_render = datetime.min
+        self._last_oled_alert_render_time = 0.0  # Use monotonic time for precise frame timing
         self._cached_header_text: Optional[str] = None  # Cache to reduce flickering
         self._cached_header_image = None  # Pre-rendered header to avoid redraw
         self._cached_scroll_canvas = None  # Pre-rendered full scrolling text
@@ -843,7 +843,7 @@ class ScreenManager:
             'max_offset': max_offset,
         }
         self._oled_screen_scroll_offset = 0
-        self._last_oled_screen_frame = datetime.utcnow()
+        self._last_oled_screen_frame_time = time.monotonic()
         return True
 
     def _clear_oled_screen_scroll_state(self) -> None:
@@ -851,7 +851,7 @@ class ScreenManager:
 
         self._oled_screen_scroll_state = None
         self._oled_screen_scroll_offset = 0
-        self._last_oled_screen_frame = datetime.min
+        self._last_oled_screen_frame_time = 0.0
 
     def _update_active_oled_scroll(self, now: datetime) -> None:
         """Advance OLED template scrolling when active."""
@@ -873,8 +873,11 @@ class ScreenManager:
             return
 
         state = self._oled_screen_scroll_state
-        frame_interval = timedelta(seconds=1.0 / max(1, state['fps']))
-        if now - self._last_oled_screen_frame < frame_interval:
+        frame_interval = 1.0 / max(1, state['fps'])  # Frame interval in seconds
+        current_time = time.monotonic()
+        
+        # Check if enough time has elapsed for the next frame
+        if current_time - self._last_oled_screen_frame_time < frame_interval:
             return
 
         try:
@@ -890,7 +893,7 @@ class ScreenManager:
             self._clear_oled_screen_scroll_state()
             return
 
-        self._last_oled_screen_frame = now
+        self._last_oled_screen_frame_time = current_time
         self._oled_screen_scroll_offset += max(1, state['speed'])
         if self._oled_screen_scroll_offset >= max(1, state['max_offset']):
             self._oled_screen_scroll_offset = 0
@@ -963,14 +966,15 @@ class ScreenManager:
         if self._oled_scroll_effect is None:
             return True
 
-        # Calculate frame interval based on FPS
-        frame_interval = timedelta(seconds=1.0 / self._oled_scroll_fps)
+        # Calculate frame interval based on FPS using monotonic time for precision
+        frame_interval = 1.0 / self._oled_scroll_fps  # Frame interval in seconds
+        current_time = time.monotonic()
 
-        if now - self._last_oled_alert_render < frame_interval:
+        if current_time - self._last_oled_alert_render_time < frame_interval:
             return True
 
         self._display_alert_scroll_frame(top_alert)
-        self._last_oled_alert_render = now
+        self._last_oled_alert_render_time = current_time
         self._last_oled_update = now
 
         # Advance scroll offset (loop is handled in display function)
@@ -1170,7 +1174,7 @@ class ScreenManager:
         self._current_alert_id = None
         self._current_alert_priority = None
         self._current_alert_text = None
-        self._last_oled_alert_render = datetime.min
+        self._last_oled_alert_render_time = 0.0
 
     def _get_cached_active_alerts(self, now: datetime) -> List[Dict[str, Any]]:
         if now - self._active_alert_cache_timestamp <= self._active_alert_cache_ttl:
