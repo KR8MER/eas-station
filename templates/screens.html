@@ -6,114 +6,240 @@
 
 {% block extra_css %}
 <style>
-/* Custom screens management styles */
-.screen-card {
+.screens-page {
+    gap: 1.25rem;
+}
+
+.page-hero {
+    background: linear-gradient(120deg, #2b59ff, #3a8ef6);
+    border-radius: 18px;
+    padding: 2rem;
+    color: #fff;
+    position: relative;
+    overflow: hidden;
+}
+
+.page-hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at top right, rgba(255,255,255,0.25), transparent 55%);
+    pointer-events: none;
+}
+
+.page-hero .hero-content {
+    position: relative;
+    z-index: 1;
+}
+
+.page-hero h1 {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.page-hero p {
+    margin-bottom: 1.25rem;
+    font-size: 1.05rem;
+    opacity: 0.95;
+}
+
+.hero-actions .btn {
+    margin-left: 0.5rem;
+}
+
+.summary-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 1.25rem;
+    min-height: 140px;
+    box-shadow: var(--card-shadow, 0 12px 24px rgba(15, 23, 42, 0.08));
+}
+
+.summary-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.summary-value {
+    font-size: 2rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.summary-subtitle {
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.filter-card {
+    border-radius: 14px;
+    border: 1px solid var(--border-color);
+    padding: 1.25rem;
+    background: var(--card-bg);
+    box-shadow: var(--card-shadow, 0 12px 24px rgba(15, 23, 42, 0.08));
+}
+
+.screen-card,
+.rotation-card,
+.doc-card {
     background-color: var(--card-bg);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: 16px;
     padding: 1.5rem;
-    margin-bottom: 1rem;
-    transition: transform 0.2s, box-shadow 0.2s;
+    margin-bottom: 1.25rem;
+    box-shadow: var(--card-shadow, 0 12px 24px rgba(15, 23, 42, 0.08));
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.screen-card:hover {
+.screen-card:hover,
+.rotation-card:hover,
+.doc-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.08);
 }
 
-[data-theme-mode="dark"] .screen-card:hover {
-    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.05);
-}
-
-.screen-header {
+.screen-card-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
+    align-items: flex-start;
+    gap: 1rem;
 }
 
-.screen-badge {
+.screen-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.display-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    font-weight: 600;
+}
+
+.display-chip.led { background: rgba(255, 193, 7, 0.18); color: #f4b400; }
+.display-chip.oled { background: rgba(32, 201, 151, 0.18); color: #20c997; }
+.display-chip.vfd { background: rgba(111, 66, 193, 0.18); color: #6f42c1; }
+
+.status-chip {
     padding: 0.25rem 0.75rem;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.status-chip.enabled { background: rgba(25, 135, 84, 0.18); color: #198754; }
+.status-chip.disabled { background: rgba(220, 53, 69, 0.18); color: #dc3545; }
+
+.screen-preview {
     border-radius: 12px;
-    font-size: 0.875rem;
-    font-weight: 500;
-}
-
-.badge-led {
-    background-color: #17a2b8;
-    color: white;
-}
-
-.badge-vfd {
-    background-color: #6f42c1;
-    color: white;
-}
-
-.badge-oled {
-    background-color: #20c997;
-    color: white;
-}
-
-.badge-enabled {
-    background-color: var(--success-color);
-    color: white;
-}
-
-.badge-disabled {
-    background-color: #6c757d;
-    color: white;
-}
-
-.screen-stats {
-    display: flex;
-    gap: 1.5rem;
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-    margin-top: 0.75rem;
-}
-
-.stat-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.btn-screen-action {
-    padding: 0.375rem 0.75rem;
-    font-size: 0.875rem;
-}
-
-.preview-container {
-    background: #000;
-    color: #0f0;
-    font-family: 'Courier New', monospace;
     padding: 1rem;
-    border-radius: 4px;
-    margin-top: 1rem;
-    min-height: 100px;
+    margin: 1.25rem 0 0.5rem;
+    background: #050505;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    min-height: 110px;
+    border: 1px solid rgba(255,255,255,0.08);
 }
 
-.vfd-preview {
-    background: #1a1a1a;
-    color: #00ff88;
-    border: 2px solid #333;
+.screen-preview[data-display="led"] { background: #050505; color: #f8c102; text-shadow: 0 0 12px rgba(255, 193, 7, 0.6); }
+.screen-preview[data-display="oled"] { background: #000; color: #f2f2f2; }
+.screen-preview[data-display="vfd"] { background: #010c01; color: #19ff96; border-color: rgba(25, 255, 150, 0.2); }
+
+.preview-line {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.preview-line + .preview-line { margin-top: 0.25rem; }
+.preview-line.large { font-size: 1.5rem; font-weight: 600; }
+.preview-line.medium { font-size: 1.1rem; font-weight: 500; }
+.preview-line.small { font-size: 0.95rem; }
+
+.preview-json {
+    max-height: 120px;
+    overflow: hidden;
+    font-size: 0.85rem;
+}
+
+.screen-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    border-top: 1px solid var(--border-color);
+    padding-top: 1rem;
+    margin-top: 1rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.datasource-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    background: rgba(13, 202, 240, 0.12);
+    color: var(--text-color);
+    margin-right: 0.35rem;
+}
+
+.conditions-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 0.5rem;
+    background: rgba(255, 193, 7, 0.18);
+    color: #f0ad4e;
+    font-size: 0.8rem;
+}
+
+.rotation-sequence {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    margin-top: 1rem;
 }
 
 .rotation-item {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    padding: 0.75rem;
+    gap: 0.85rem;
     background: var(--input-bg);
     border: 1px solid var(--border-color);
-    border-radius: 6px;
-    margin-bottom: 0.5rem;
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
 }
 
 .rotation-order {
-    font-weight: bold;
-    color: var(--primary-color);
-    min-width: 30px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
 }
 
 .empty-state {
@@ -125,7 +251,7 @@
 .empty-state i {
     font-size: 4rem;
     margin-bottom: 1rem;
-    opacity: 0.3;
+    opacity: 0.35;
 }
 
 .tab-pane {
@@ -133,46 +259,143 @@
 }
 
 .json-editor {
-    font-family: 'Courier New', monospace;
-    font-size: 0.875rem;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 0.9rem;
     min-height: 200px;
 }
 
-.help-text {
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-    margin-top: 0.5rem;
-}
-
 .priority-badge {
-    padding: 0.125rem 0.5rem;
-    border-radius: 8px;
+    padding: 0.2rem 0.55rem;
+    border-radius: 0.45rem;
     font-size: 0.75rem;
     font-weight: 600;
 }
 
-.priority-0 { background-color: #dc3545; color: white; }
-.priority-1 { background-color: #fd7e14; color: white; }
-.priority-2 { background-color: #0dcaf0; color: white; }
-.priority-3 { background-color: #6c757d; color: white; }
+.priority-0 { background-color: rgba(220,53,69,0.18); color: #dc3545; }
+.priority-1 { background-color: rgba(253,126,20,0.18); color: #fd7e14; }
+.priority-2 { background-color: rgba(13,202,240,0.18); color: #0dcaf0; }
+.priority-3 { background-color: rgba(108,117,125,0.18); color: #6c757d; }
+
+.doc-card table {
+    margin-top: 1rem;
+}
+
+.doc-card code {
+    font-size: 0.9rem;
+}
+
+.rotation-flags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.rotation-flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: rgba(0, 123, 255, 0.12);
+    color: var(--text-color);
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+}
+
+.screen-card-actions .btn {
+    margin-left: 0.4rem;
+}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4">
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h1><i class="fas fa-display"></i> Custom Display Screens</h1>
-                    <p class="text-muted">
-                        Manage dynamic content templates for LED signs, OLED panels, and VFD displays
-                    </p>
-                </div>
-                <div>
-                    <button class="btn btn-primary" onclick="showCreateScreenModal()">
-                        <i class="fas fa-plus"></i> Create Screen
-                    </button>
+<div class="container-fluid mt-4 screens-page">
+    <div class="page-hero mb-4 d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between">
+        <div class="hero-content">
+            <h1><i class="fas fa-display"></i> Custom Display Screens</h1>
+            <p>Curate playlists for every display type, monitor their health at a glance, and push updates with confidence.</p>
+        </div>
+        <div class="hero-actions mt-3 mt-lg-0">
+            <button class="btn btn-light text-primary" onclick="showCreateRotationModal()">
+                <i class="fas fa-sync"></i> New Rotation
+            </button>
+            <button class="btn btn-dark" onclick="showCreateScreenModal()">
+                <i class="fas fa-plus"></i> Create Screen
+            </button>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="summary-card">
+                <span class="summary-label">Total Screens</span>
+                <div class="summary-value" id="stat-total-screens">0</div>
+                <p class="summary-subtitle" id="stat-enabled-breakdown">0 enabled · 0 disabled</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="summary-card">
+                <span class="summary-label">LED Templates</span>
+                <div class="summary-value" id="stat-led-count">0</div>
+                <p class="summary-subtitle">Amber / RGB marquee layouts</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="summary-card">
+                <span class="summary-label">OLED Templates</span>
+                <div class="summary-value" id="stat-oled-count">0</div>
+                <p class="summary-subtitle">Front-panel quick looks</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="summary-card">
+                <span class="summary-label">VFD Templates</span>
+                <div class="summary-value" id="stat-vfd-count">0</div>
+                <p class="summary-subtitle">Rack status graphics</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="summary-card">
+                <span class="summary-label">Rotations</span>
+                <div class="summary-value" id="stat-rotations">0</div>
+                <p class="summary-subtitle" id="stat-rotations-subtitle">0 active</p>
+            </div>
+        </div>
+        <div class="col-xl-9 col-12">
+            <div class="filter-card">
+                <div class="row g-3 align-items-end">
+                    <div class="col-lg-6">
+                        <label class="form-label text-muted">Search by name or description</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-search"></i></span>
+                            <input type="text" class="form-control" id="screen-search" placeholder="Search screens...">
+                        </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6">
+                        <label class="form-label text-muted">Display Type</label>
+                        <select class="form-select" id="display-type-filter">
+                            <option value="">All Types</option>
+                            <option value="led">LED Only</option>
+                            <option value="oled">OLED Only</option>
+                            <option value="vfd">VFD Only</option>
+                        </select>
+                    </div>
+                    <div class="col-lg-2 col-md-6">
+                        <label class="form-label text-muted">Status</label>
+                        <select class="form-select" id="enabled-filter">
+                            <option value="">All Screens</option>
+                            <option value="true">Enabled Only</option>
+                            <option value="false">Disabled Only</option>
+                        </select>
+                    </div>
+                    <div class="col-lg-1 col-md-12">
+                        <button class="btn btn-outline-secondary w-100" onclick="resetFilters()">
+                            <i class="fas fa-rotate-left"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -200,30 +423,6 @@
     <div class="tab-content">
         <!-- Screens Tab -->
         <div class="tab-pane fade show active" id="screens-pane" role="tabpanel">
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <div class="input-group">
-                        <span class="input-group-text"><i class="fas fa-search"></i></span>
-                        <input type="text" class="form-control" id="screen-search" placeholder="Search screens...">
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <select class="form-select" id="display-type-filter">
-                        <option value="">All Display Types</option>
-                        <option value="led">LED Only</option>
-                        <option value="oled">OLED Only</option>
-                        <option value="vfd">VFD Only</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <select class="form-select" id="enabled-filter">
-                        <option value="">All Screens</option>
-                        <option value="true">Enabled Only</option>
-                        <option value="false">Disabled Only</option>
-                    </select>
-                </div>
-            </div>
-
             <div id="screens-list">
                 <div class="empty-state">
                     <i class="fas fa-spinner fa-spin"></i>
@@ -234,14 +433,6 @@
 
         <!-- Rotations Tab -->
         <div class="tab-pane fade" id="rotations-pane" role="tabpanel">
-            <div class="row mb-3">
-                <div class="col-12">
-                    <button class="btn btn-primary" onclick="showCreateRotationModal()">
-                        <i class="fas fa-plus"></i> Create Rotation
-                    </button>
-                </div>
-            </div>
-
             <div id="rotations-list">
                 <div class="empty-state">
                     <i class="fas fa-spinner fa-spin"></i>
@@ -252,7 +443,7 @@
 
         <!-- Documentation Tab -->
         <div class="tab-pane fade" id="docs-pane" role="tabpanel">
-            <div class="card">
+            <div class="doc-card">
                 <div class="card-body">
                     <h3><i class="fas fa-book"></i> Custom Screens Documentation</h3>
                     <p class="lead">Create dynamic display templates with API data integration.</p>
@@ -522,6 +713,16 @@
 let allScreens = [];
 let allRotations = [];
 let availableScreensForRotation = [];
+const DISPLAY_ICONS = {
+    led: 'fas fa-lightbulb',
+    oled: 'fas fa-mobile-screen-button',
+    vfd: 'fas fa-wave-square'
+};
+const DISPLAY_LABELS = {
+    led: 'LED',
+    oled: 'OLED',
+    vfd: 'VFD'
+};
 
 // Load screens on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -547,6 +748,7 @@ async function loadScreens() {
         console.log('Screens loaded:', data.screens?.length || 0);
         allScreens = data.screens || [];
         renderScreens();
+        updateScreenStats();
     } catch (error) {
         console.error('Error loading screens:', error);
         document.getElementById('screens-list').innerHTML = `
@@ -596,56 +798,7 @@ function renderScreens() {
         return;
     }
 
-    container.innerHTML = filtered.map(screen => `
-        <div class="screen-card">
-            <div class="screen-header">
-                <div>
-                    <h5 class="mb-1">
-                        <span class="screen-badge badge-${screen.display_type}">${screen.display_type.toUpperCase()}</span>
-                        ${screen.name}
-                        <span class="screen-badge badge-${screen.enabled ? 'enabled' : 'disabled'}">
-                            ${screen.enabled ? 'Enabled' : 'Disabled'}
-                        </span>
-                        <span class="priority-badge priority-${screen.priority}">
-                            P${screen.priority}
-                        </span>
-                    </h5>
-                    ${screen.description ? `<p class="text-muted mb-0">${screen.description}</p>` : ''}
-                </div>
-                <div class="btn-group">
-                    <button class="btn btn-sm btn-outline-primary" onclick="displayScreen(${screen.id})">
-                        <i class="fas fa-play"></i> Display
-                    </button>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="editScreen(${screen.id})">
-                        <i class="fas fa-edit"></i> Edit
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="deleteScreen(${screen.id}, '${screen.name}')">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            </div>
-            <div class="screen-stats">
-                <div class="stat-item">
-                    <i class="fas fa-clock"></i>
-                    <span>Refresh: ${screen.refresh_interval}s</span>
-                </div>
-                <div class="stat-item">
-                    <i class="fas fa-hourglass-half"></i>
-                    <span>Duration: ${screen.duration}s</span>
-                </div>
-                <div class="stat-item">
-                    <i class="fas fa-chart-line"></i>
-                    <span>Displayed: ${screen.display_count || 0} times</span>
-                </div>
-                ${screen.last_displayed_at ? `
-                <div class="stat-item">
-                    <i class="fas fa-calendar"></i>
-                    <span>Last: ${new Date(screen.last_displayed_at).toLocaleString()}</span>
-                </div>
-                ` : ''}
-            </div>
-        </div>
-    `).join('');
+    container.innerHTML = filtered.map(screen => buildScreenCard(screen)).join('');
 }
 
 // Load rotations
@@ -661,6 +814,7 @@ async function loadRotations() {
         console.log('Rotations loaded:', data.rotations?.length || 0);
         allRotations = data.rotations || [];
         renderRotations();
+        updateScreenStats();
     } catch (error) {
         console.error('Error loading rotations:', error);
         document.getElementById('rotations-list').innerHTML = `
@@ -692,44 +846,255 @@ function renderRotations() {
         return;
     }
 
-    container.innerHTML = allRotations.map(rotation => `
-        <div class="screen-card">
-            <div class="screen-header">
-                <div>
-                    <h5 class="mb-1">
-                        <span class="screen-badge badge-${rotation.display_type}">${rotation.display_type.toUpperCase()}</span>
-                        ${rotation.name}
-                        <span class="screen-badge badge-${rotation.enabled ? 'enabled' : 'disabled'}">
-                            ${rotation.enabled ? 'Active' : 'Inactive'}
-                        </span>
-                    </h5>
-                    ${rotation.description ? `<p class="text-muted mb-0">${rotation.description}</p>` : ''}
+    container.innerHTML = allRotations.map(rotation => {
+        const type = rotation.display_type || 'led';
+        const iconClass = getDisplayIcon(type);
+        const screenList = Array.isArray(rotation.screens) ? rotation.screens : [];
+        const totalDuration = screenList.reduce((acc, item) => acc + (parseInt(item.duration, 10) || 0), 0);
+        return `
+            <div class="rotation-card">
+                <div class="screen-card-header">
+                    <div>
+                        <div class="screen-title">
+                            <span class="display-chip ${type}"><i class="${iconClass}"></i>${getDisplayLabel(type)}</span>
+                            <h5 class="mb-0">${escapeHtml(rotation.name)}</h5>
+                            <span class="status-chip ${rotation.enabled ? 'enabled' : 'disabled'}">${rotation.enabled ? 'Active' : 'Paused'}</span>
+                        </div>
+                        ${rotation.description ? `<p class="text-muted mt-1 mb-0">${escapeHtml(rotation.description)}</p>` : ''}
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="editRotation(${rotation.id})">
+                            <i class="fas fa-edit"></i> Edit
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick='deleteRotation(${rotation.id}, ${JSON.stringify(rotation.name)})'>
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 </div>
-                <div class="btn-group">
-                    <button class="btn btn-sm btn-outline-secondary" onclick="editRotation(${rotation.id})">
+                <div class="screen-meta">
+                    <div class="meta-item"><i class="fas fa-list-ol"></i>${screenList.length} screens</div>
+                    <div class="meta-item"><i class="fas fa-stopwatch"></i>${totalDuration}s total cycle</div>
+                    <div class="meta-item"><i class="fas fa-shuffle"></i>${rotation.randomize ? 'Random order' : 'Fixed order'}</div>
+                </div>
+                <div class="rotation-flags">
+                    ${rotation.skip_on_alert ? '<span class="rotation-flag"><i class="fas fa-bell-slash"></i>Pauses during alerts</span>' : ''}
+                </div>
+                <div class="rotation-sequence">
+                    ${screenList.map((item, idx) => `
+                        <div class="rotation-item">
+                            <span class="rotation-order">${idx + 1}</span>
+                            <div>
+                                <div>Screen ID: ${item.screen_id}</div>
+                                <small class="text-muted">Duration ${item.duration || 0}s</small>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function buildScreenCard(screen) {
+    const type = screen.display_type || 'led';
+    const iconClass = getDisplayIcon(type);
+    const statusClass = screen.enabled ? 'enabled' : 'disabled';
+    const statusLabel = screen.enabled ? 'Enabled' : 'Disabled';
+    const description = screen.description ? `<p class="text-muted mt-1 mb-0">${escapeHtml(screen.description)}</p>` : '';
+    const previewMarkup = buildScreenPreview(screen);
+    const conditions = screen.conditions ? '<span class="conditions-pill"><i class="fas fa-code-branch"></i> Conditional</span>' : '';
+    const lastSeen = screen.last_displayed_at ? `<div class="meta-item"><i class="fas fa-calendar-alt"></i>${formatDate(screen.last_displayed_at)}</div>` : '';
+    const dataSources = buildDataSourceChips(screen);
+
+    return `
+        <div class="screen-card">
+            <div class="screen-card-header">
+                <div>
+                    <div class="screen-title">
+                        <span class="display-chip ${type}"><i class="${iconClass}"></i>${getDisplayLabel(type)}</span>
+                        <h5 class="mb-0">${escapeHtml(screen.name)}</h5>
+                        <span class="status-chip ${statusClass}">${statusLabel}</span>
+                        <span class="priority-badge priority-${screen.priority}">P${screen.priority}</span>
+                        ${conditions}
+                    </div>
+                    ${description}
+                </div>
+                <div class="screen-card-actions btn-group">
+                    <button class="btn btn-sm btn-outline-primary" onclick="displayScreen(${screen.id})">
+                        <i class="fas fa-play"></i> Display
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="editScreen(${screen.id})">
                         <i class="fas fa-edit"></i> Edit
                     </button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="deleteRotation(${rotation.id}, '${rotation.name}')">
+                    <button class="btn btn-sm btn-outline-danger" onclick='deleteScreen(${screen.id}, ${JSON.stringify(screen.name)})'>
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
             </div>
-            <div class="mt-2">
-                <strong><i class="fas fa-list-ol"></i> Screen Sequence (${rotation.screens.length} screens):</strong>
-                ${rotation.screens.map((item, idx) => `
-                    <div class="rotation-item mt-1">
-                        <span class="rotation-order">${idx + 1}.</span>
-                        <span>Screen ID: ${item.screen_id}</span>
-                        <span class="ms-auto">${item.duration}s</span>
-                    </div>
-                `).join('')}
+            <div class="screen-preview" data-display="${type}">
+                ${previewMarkup}
             </div>
-            <div class="screen-stats mt-2">
-                ${rotation.randomize ? '<div class="stat-item"><i class="fas fa-random"></i> Randomized</div>' : ''}
-                ${rotation.skip_on_alert ? '<div class="stat-item"><i class="fas fa-pause"></i> Pauses on alerts</div>' : ''}
+            <div class="screen-meta">
+                <div class="meta-item"><i class="fas fa-bolt"></i>${priorityLabel(screen.priority)}</div>
+                <div class="meta-item"><i class="fas fa-clock"></i>${screen.refresh_interval}s refresh</div>
+                <div class="meta-item"><i class="fas fa-hourglass-half"></i>${screen.duration}s duration</div>
+                <div class="meta-item"><i class="fas fa-chart-line"></i>${screen.display_count || 0} plays</div>
+                ${lastSeen}
+            </div>
+            <div class="mt-3">
+                ${dataSources}
             </div>
         </div>
-    `).join('');
+    `;
+}
+
+function buildDataSourceChips(screen) {
+    const sources = Array.isArray(screen.data_sources) ? screen.data_sources : [];
+    if (!sources.length) {
+        return '<span class="datasource-pill text-muted"><i class="fas fa-plug-circle-xmark"></i> No data sources</span>';
+    }
+
+    const chips = sources.slice(0, 3).map(source => {
+        const label = source.var_name || source.endpoint || 'Source';
+        return `<span class="datasource-pill"><i class="fas fa-plug"></i>${escapeHtml(label)}</span>`;
+    }).join('');
+
+    const remaining = sources.length - 3;
+    return remaining > 0
+        ? chips + `<span class="datasource-pill"><i class="fas fa-ellipsis-h"></i>+${remaining}</span>`
+        : chips;
+}
+
+function buildScreenPreview(screen) {
+    const template = screen.template_data || {};
+
+    if (screen.display_type === 'led') {
+        const lines = Array.isArray(template.lines) ? template.lines.map(extractLineText).filter(Boolean) : [];
+        if (!lines.length) {
+            return '<span class="text-muted">Add LED lines to preview</span>';
+        }
+        return lines.slice(0, 4).map((line, idx) => {
+            const sizeClass = idx === 0 ? 'large' : idx === 1 ? 'medium' : 'small';
+            return `<span class="preview-line ${sizeClass}">${escapeHtml(line)}</span>`;
+        }).join('');
+    }
+
+    if (screen.display_type === 'oled') {
+        const lines = Array.isArray(template.lines) ? template.lines : [];
+        if (!lines.length) {
+            return '<span class="text-muted">OLED layout will appear here</span>';
+        }
+        return lines.slice(0, 4).map(entry => {
+            const text = extractLineText(entry);
+            const font = (entry && entry.font ? entry.font.toLowerCase() : 'small');
+            const sizeClass = font === 'large' || font === 'xlarge' || font === 'huge' ? 'large' : font === 'medium' ? 'medium' : 'small';
+            return `<span class="preview-line ${sizeClass}">${escapeHtml(text)}</span>`;
+        }).join('');
+    }
+
+    if (screen.display_type === 'vfd') {
+        const elements = Array.isArray(template.elements) ? template.elements : [];
+        if (!elements.length) {
+            return '<span class="text-muted">Define VFD elements to preview</span>';
+        }
+        return elements.slice(0, 3).map(element => {
+            const type = element.type || 'element';
+            const coords = `(${element.x ?? 0},${element.y ?? 0})`;
+            return `<span class="preview-line">${escapeHtml(type)} ${coords}</span>`;
+        }).join('');
+    }
+
+    const jsonSnippet = JSON.stringify(template, null, 2) || '{}';
+    return `<pre class="preview-json">${escapeHtml(jsonSnippet)}</pre>`;
+}
+
+function extractLineText(entry) {
+    if (typeof entry === 'string') {
+        return entry;
+    }
+    if (entry && typeof entry === 'object') {
+        return entry.text || '';
+    }
+    return '';
+}
+
+function escapeHtml(value) {
+    if (value === null || value === undefined) {
+        return '';
+    }
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function formatDate(value) {
+    try {
+        return new Date(value).toLocaleString();
+    } catch (error) {
+        return value;
+    }
+}
+
+function priorityLabel(priority) {
+    switch (priority) {
+        case 0:
+            return 'Priority 0 · Emergency';
+        case 1:
+            return 'Priority 1 · High';
+        case 3:
+            return 'Priority 3 · Low';
+        default:
+            return 'Priority 2 · Normal';
+    }
+}
+
+function getDisplayIcon(type) {
+    return DISPLAY_ICONS[type] || 'fas fa-display';
+}
+
+function getDisplayLabel(type) {
+    return DISPLAY_LABELS[type] || (type ? type.toUpperCase() : 'DISPLAY');
+}
+
+function resetFilters() {
+    const searchInput = document.getElementById('screen-search');
+    const typeFilter = document.getElementById('display-type-filter');
+    const enabledFilter = document.getElementById('enabled-filter');
+    if (searchInput) searchInput.value = '';
+    if (typeFilter) typeFilter.value = '';
+    if (enabledFilter) enabledFilter.value = '';
+    renderScreens();
+}
+
+function updateScreenStats() {
+    const total = allScreens.length;
+    const enabled = allScreens.filter(screen => screen.enabled).length;
+    const disabled = total - enabled;
+    const totalEl = document.getElementById('stat-total-screens');
+    const breakdownEl = document.getElementById('stat-enabled-breakdown');
+    if (totalEl) totalEl.textContent = total;
+    if (breakdownEl) breakdownEl.textContent = `${enabled} enabled · ${disabled} disabled`;
+
+    const ledEl = document.getElementById('stat-led-count');
+    const oledEl = document.getElementById('stat-oled-count');
+    const vfdEl = document.getElementById('stat-vfd-count');
+    const ledCount = allScreens.filter(screen => screen.display_type === 'led').length;
+    const oledCount = allScreens.filter(screen => screen.display_type === 'oled').length;
+    const vfdCount = allScreens.filter(screen => screen.display_type === 'vfd').length;
+    if (ledEl) ledEl.textContent = ledCount;
+    if (oledEl) oledEl.textContent = oledCount;
+    if (vfdEl) vfdEl.textContent = vfdCount;
+
+    const rotationsEl = document.getElementById('stat-rotations');
+    const rotationsSubtitleEl = document.getElementById('stat-rotations-subtitle');
+    if (rotationsEl) rotationsEl.textContent = allRotations.length;
+    if (rotationsSubtitleEl) {
+        const activeRotations = allRotations.filter(rotation => rotation.enabled).length;
+        rotationsSubtitleEl.textContent = `${activeRotations} active`;
+    }
 }
 
 // Show create screen modal

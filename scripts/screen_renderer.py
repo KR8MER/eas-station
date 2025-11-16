@@ -382,11 +382,25 @@ class ScreenRenderer:
 
             rendered_lines.append(line_payload)
 
+        scroll_block = template.get('scroll', {}) if isinstance(template.get('scroll'), dict) else {}
+        scroll_effect = template.get('scroll_effect') or scroll_block.get('effect')
+        scroll_speed = template.get('scroll_speed', scroll_block.get('speed'))
+        scroll_fps = template.get('scroll_fps', scroll_block.get('fps'))
+
+        scroll_payload = {
+            'effect': scroll_effect.lower() if isinstance(scroll_effect, str) else None,
+            'speed': scroll_speed,
+            'fps': scroll_fps,
+        }
+
         return {
             'lines': rendered_lines,
             'invert': template.get('invert'),
             'clear': template.get('clear', True),
             'allow_empty_frame': bool(template.get('allow_empty_frame', False)),
+            'scroll_effect': scroll_payload['effect'],
+            'scroll_speed': scroll_payload['speed'],
+            'scroll_fps': scroll_payload['fps'],
         }
 
     def render_screen(self, screen: Dict[str, Any]) -> Optional[Dict[str, Any]]:
