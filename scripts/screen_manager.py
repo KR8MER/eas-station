@@ -823,7 +823,21 @@ class ScreenManager:
         header_font = controller._fonts.get('small', controller._fonts['small'])
         header_height = controller._line_height(header_font) + 1
         body_height = height - header_height
-        body_font = controller._fonts.get('huge', controller._fonts.get('xlarge', controller._fonts.get('large', controller._fonts['small'])))
+
+        # Choose font size based on message length to keep canvas manageable
+        # Huge font (36pt) creates 13,784px for 761 chars - too large for PIL!
+        if len(body_text) > 400:
+            # Use large font for very long messages
+            body_font = controller._fonts.get('large', controller._fonts['medium'])
+            logger.info("Using LARGE font due to long message (%s chars)", len(body_text))
+        elif len(body_text) > 200:
+            # Use xlarge for medium messages
+            body_font = controller._fonts.get('xlarge', controller._fonts['large'])
+            logger.info("Using XLARGE font for message (%s chars)", len(body_text))
+        else:
+            # Use huge font for short messages
+            body_font = controller._fonts.get('huge', controller._fonts.get('xlarge', controller._fonts.get('large', controller._fonts['small'])))
+            logger.info("Using HUGE font for short message (%s chars)", len(body_text))
 
         # Calculate text width and height for the pre-rendered canvas
         temp_img = Image.new("1", (1, 1))
