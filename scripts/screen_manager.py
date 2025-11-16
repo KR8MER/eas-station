@@ -882,8 +882,10 @@ class ScreenManager:
         # Debug: Save a section of the canvas for inspection
         try:
             import os
-            # Save to home directory instead of /tmp to ensure permissions work
-            debug_dir = os.path.expanduser("~/eas-station/debug")
+            # Save to application directory which should be mounted from host in Docker
+            # This allows access via WinSCP/SCP from the host filesystem
+            app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            debug_dir = os.path.join(app_dir, "debug")
             os.makedirs(debug_dir, exist_ok=True)
 
             # Save first 500px of canvas to reduce file size
