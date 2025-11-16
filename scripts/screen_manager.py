@@ -824,20 +824,9 @@ class ScreenManager:
         header_height = controller._line_height(header_font) + 1
         body_height = height - header_height
 
-        # Choose font size based on message length to keep canvas manageable
-        # Huge font (36pt) creates 13,784px for 761 chars - too large for PIL!
-        if len(body_text) > 400:
-            # Use large font for very long messages
-            body_font = controller._fonts.get('large', controller._fonts['medium'])
-            logger.info("Using LARGE font due to long message (%s chars)", len(body_text))
-        elif len(body_text) > 200:
-            # Use xlarge for medium messages
-            body_font = controller._fonts.get('xlarge', controller._fonts['large'])
-            logger.info("Using XLARGE font for message (%s chars)", len(body_text))
-        else:
-            # Use huge font for short messages
-            body_font = controller._fonts.get('huge', controller._fonts.get('xlarge', controller._fonts.get('large', controller._fonts['small'])))
-            logger.info("Using HUGE font for short message (%s chars)", len(body_text))
+        # Always use HUGE font for maximum visibility (user preference)
+        body_font = controller._fonts.get('huge', controller._fonts.get('xlarge', controller._fonts.get('large', controller._fonts['small'])))
+        logger.info("Using HUGE font for scrolling alert (%s chars)", len(body_text))
 
         # Calculate text width and height for the pre-rendered canvas
         temp_img = Image.new("1", (1, 1))
@@ -1009,6 +998,26 @@ class ScreenManager:
         # Paste the scrolling body below the header
         display_image.paste(body_window, (0, header_height))
 
+        # DEBUG: Save frames at key intervals to diagnose rendering issues
+        if not hasattr(self, '_debug_frame_count'):
+            self._debug_frame_count = 0
+            self._debug_saved_frames = []
+
+        # Save frames 0, 10, 20, 30, 40, 50 to see progression
+        if self._debug_frame_count in [0, 10, 20, 30, 40, 50] and self._debug_frame_count not in self._debug_saved_frames:
+            try:
+                import os
+                app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                debug_dir = os.path.join(app_dir, "debug")
+                os.makedirs(debug_dir, exist_ok=True)
+
+                frame_path = os.path.join(debug_dir, f"frame_{self._debug_frame_count:03d}_offset_{self._oled_scroll_offset}.png")
+                display_image.save(frame_path)
+                logger.info(f"📸 Saved frame {self._debug_frame_count} (offset={self._oled_scroll_offset}) to {frame_path}")
+                self._debug_saved_frames.append(self._debug_frame_count)
+            except Exception as e:
+                logger.error(f"Failed to save debug frame: {e}")
+
         # Display the final image
         controller.device.display(display_image)
 
@@ -1016,23 +1025,29 @@ class ScreenManager:
         # When offset reaches (width + text_width), reset to 0 for seamless loop
         max_offset = width + self._cached_scroll_text_width
 
-        # DEBUG: Log EVERY SINGLE FRAME for next 60 frames to diagnose stuttering
-        if not hasattr(self, '_debug_frame_count'):
-            self._debug_frame_count = 0
+        # DEBUG: Log frame details with timing to diagnose stuttering
+        if not hasattr(self, '_debug_last_offset'):
             self._debug_last_offset = 0
+            self._debug_last_display_time = None
 
         if self._debug_frame_count < 60:
+            import time
+            current_time = time.time()
+            time_delta = 0 if self._debug_last_display_time is None else (current_time - self._debug_last_display_time) * 1000
             offset_delta = self._oled_scroll_offset - self._debug_last_offset
+
             logger.info(
-                "FRAME %d: offset=%s (delta=%s), crop=[%s:%s], max=%s",
+                "FRAME %d: offset=%s (Δ%spx), crop=[%s:%s], time_delta=%.1fms, max=%s",
                 self._debug_frame_count,
                 self._oled_scroll_offset,
                 offset_delta,
                 crop_left,
                 crop_right,
+                time_delta,
                 max_offset
             )
             self._debug_last_offset = self._oled_scroll_offset
+            self._debug_last_display_time = current_time
             self._debug_frame_count += 1
 
         if self._oled_scroll_offset >= max_offset:
