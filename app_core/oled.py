@@ -214,22 +214,28 @@ class ArgonOLEDController:
 
         self.device.display(image)
 
-    def render_scroll_frame(
+    def prepare_scroll_content(
         self,
         lines: List[OLEDLine],
-        effect: OLEDScrollEffect,
-        offset: int,
         *,
         invert: Optional[bool] = None,
-    ) -> None:
+    ) -> tuple[Image.Image, Dict[str, int]]:
         """
-        Render a single frame of a scrolling animation.
+        Pre-render the full text content to a single image buffer.
+
+        This method is called once before the animation loop to render all text
+        into a large buffer. The animation loop then only needs to crop and display
+        portions of this buffer, making it much more efficient than redrawing text
+        on every frame.
 
         Args:
             lines: List of OLEDLine objects to render
-            effect: The scroll effect to apply
-            offset: Pixel offset for the current frame (0 to max_offset)
             invert: Whether to invert colors
+
+        Returns:
+            A tuple of (content_image, dimensions) where:
+            - content_image: PIL Image containing the fully rendered content
+            - dimensions: Dict with 'max_x' and 'max_y' indicating content bounds
         """
         active_invert = self.default_invert if invert is None else invert
         background = 255 if active_invert else 0
@@ -280,6 +286,38 @@ class ArgonOLEDController:
                     cursor_y = line_y + line_height + spacing
                 else:
                     cursor_y = max(cursor_y, line_y + line_height + spacing)
+
+        return content_image, {'max_x': max_x, 'max_y': max_y}
+
+    def render_scroll_frame(
+        self,
+        content_image: Image.Image,
+        dimensions: Dict[str, int],
+        effect: OLEDScrollEffect,
+        offset: int,
+        *,
+        invert: Optional[bool] = None,
+    ) -> None:
+        """
+        Render a single frame of a scrolling animation from pre-rendered content.
+
+        This method is optimized for performance - it only crops and displays portions
+        of the pre-rendered content_image, avoiding expensive text rendering on every
+        frame. This results in smooth, fluid scrolling even on resource-constrained
+        devices.
+
+        Args:
+            content_image: Pre-rendered PIL Image from prepare_scroll_content()
+            dimensions: Dict with 'max_x' and 'max_y' from prepare_scroll_content()
+            effect: The scroll effect to apply
+            offset: Pixel offset for the current frame (0 to max_offset)
+            invert: Whether to invert colors
+        """
+        active_invert = self.default_invert if invert is None else invert
+        background = 255 if active_invert else 0
+
+        max_x = dimensions.get('max_x', self.width)
+        max_y = dimensions.get('max_y', self.height)
 
         # Create display image
         display_image = Image.new("1", (self.width, self.height), color=background)
