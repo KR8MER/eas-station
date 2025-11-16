@@ -89,11 +89,12 @@ class ScreenManager:
         self._oled_button_lock = threading.Lock()
         self._oled_button_held = False
         self._oled_button_initialized = False
-        self._oled_alert_scroll_interval = 4
-        self._oled_alert_lines_per_frame = 2
-        self._oled_alert_wrap_width = 13
-        self._oled_alert_chunks: List[List[str]] = []
-        self._oled_alert_chunk_index = 0
+        # Pixel-by-pixel scrolling configuration
+        self._oled_scroll_offset = 0
+        self._oled_scroll_max_offset = 0
+        self._oled_scroll_effect = None
+        self._oled_scroll_speed = 2  # pixels per frame
+        self._oled_scroll_fps = 30  # frames per second
         self._current_alert_id: Optional[int] = None
         self._current_alert_priority: Optional[int] = None
         self._current_alert_text: Optional[str] = None
@@ -755,57 +756,92 @@ class ScreenManager:
             or self._current_alert_priority != top_alert['priority_rank']
             or self._current_alert_text != top_alert['body_text']
         ):
-            self._prepare_alert_chunks(top_alert)
+            self._prepare_alert_scroll(top_alert)
 
-        if not self._oled_alert_chunks:
+        if self._oled_scroll_effect is None:
             return True
 
-        if now - self._last_oled_alert_render < timedelta(seconds=self._oled_alert_scroll_interval):
+        # Calculate frame interval based on FPS
+        frame_interval = timedelta(seconds=1.0 / self._oled_scroll_fps)
+
+        if now - self._last_oled_alert_render < frame_interval:
             return True
 
-        self._display_alert_chunk(top_alert)
+        self._display_alert_scroll_frame(top_alert)
         self._last_oled_alert_render = now
         self._last_oled_update = now
-        self._oled_alert_chunk_index = (self._oled_alert_chunk_index + 1) % len(self._oled_alert_chunks)
+
+        # Advance scroll offset
+        self._oled_scroll_offset += self._oled_scroll_speed
+
+        # Loop back to start when we reach the end
+        if self._oled_scroll_offset >= self._oled_scroll_max_offset:
+            self._oled_scroll_offset = 0
+
         return True
 
-    def _prepare_alert_chunks(self, alert_meta: Dict[str, Any]) -> None:
-        text = alert_meta.get('body_text') or ''
-        chunks = self._chunk_alert_text(text)
-        self._oled_alert_chunks = chunks
-        self._oled_alert_chunk_index = 0
+    def _prepare_alert_scroll(self, alert_meta: Dict[str, Any]) -> None:
+        """Prepare alert text for pixel-by-pixel scrolling."""
+        try:
+            from app_core.oled import OLEDScrollEffect
+            import app_core.oled as oled_module
+        except Exception as exc:
+            logger.debug("OLED module unavailable: %s", exc)
+            return
+
+        # Get scroll configuration from environment
+        effect_name = oled_module.OLED_SCROLL_EFFECT
+        self._oled_scroll_speed = oled_module.OLED_SCROLL_SPEED
+        self._oled_scroll_fps = oled_module.OLED_SCROLL_FPS
+
+        # Map effect name to enum
+        effect_map = {
+            'scroll_left': OLEDScrollEffect.SCROLL_LEFT,
+            'scroll_right': OLEDScrollEffect.SCROLL_RIGHT,
+            'scroll_up': OLEDScrollEffect.SCROLL_UP,
+            'scroll_down': OLEDScrollEffect.SCROLL_DOWN,
+            'wipe_left': OLEDScrollEffect.WIPE_LEFT,
+            'wipe_right': OLEDScrollEffect.WIPE_RIGHT,
+            'wipe_up': OLEDScrollEffect.WIPE_UP,
+            'wipe_down': OLEDScrollEffect.WIPE_DOWN,
+            'fade_in': OLEDScrollEffect.FADE_IN,
+            'static': OLEDScrollEffect.STATIC,
+        }
+        self._oled_scroll_effect = effect_map.get(effect_name, OLEDScrollEffect.SCROLL_LEFT)
+
+        # Calculate max offset based on effect type
+        # For horizontal scrolling, we need the text width
+        # For vertical scrolling, we need the text height
+        # For wipe effects, max offset = display dimension
+        # For static/fade, max offset = small value for looping
+
+        if self._oled_scroll_effect in (OLEDScrollEffect.SCROLL_LEFT, OLEDScrollEffect.SCROLL_RIGHT):
+            # Estimate text width (approximate, will be refined in render)
+            text = alert_meta.get('body_text') or 'Active alert in effect.'
+            # Rough estimate: average char width * length
+            self._oled_scroll_max_offset = len(text) * 10
+        elif self._oled_scroll_effect in (OLEDScrollEffect.SCROLL_UP, OLEDScrollEffect.SCROLL_DOWN):
+            # For vertical scrolling, max offset depends on wrapped text height
+            self._oled_scroll_max_offset = 128  # Default height estimate
+        elif self._oled_scroll_effect in (OLEDScrollEffect.WIPE_LEFT, OLEDScrollEffect.WIPE_RIGHT):
+            self._oled_scroll_max_offset = 128  # Display width
+        elif self._oled_scroll_effect in (OLEDScrollEffect.WIPE_UP, OLEDScrollEffect.WIPE_DOWN):
+            self._oled_scroll_max_offset = 64  # Display height
+        elif self._oled_scroll_effect == OLEDScrollEffect.FADE_IN:
+            self._oled_scroll_max_offset = 10  # Flash 10 times
+        else:  # STATIC
+            self._oled_scroll_max_offset = 1  # No animation
+
+        self._oled_scroll_offset = 0
         self._current_alert_id = alert_meta.get('id')
         self._current_alert_priority = alert_meta.get('priority_rank')
         self._current_alert_text = alert_meta.get('body_text')
         header = alert_meta.get('header_text') or alert_meta.get('event') or 'Alert'
-        logger.info("OLED alert preemption engaged: %s", header)
+        logger.info("OLED alert scroll engaged: %s (effect: %s)", header, self._oled_scroll_effect.value)
 
-    def _chunk_alert_text(self, text: str) -> List[List[str]]:
-        cleaned = ' '.join((text or '').split())
-        if not cleaned:
-            cleaned = 'Active alert in effect.'
-
-        wrapped = textwrap.wrap(
-            cleaned,
-            width=self._oled_alert_wrap_width,
-            break_long_words=False,
-            break_on_hyphens=False,
-        )
-        if not wrapped:
-            wrapped = [cleaned]
-
-        frames: List[List[str]] = []
-        step = max(1, self._oled_alert_lines_per_frame)
-        for index in range(0, len(wrapped), step):
-            chunk = wrapped[index : index + step]
-            while len(chunk) < step:
-                chunk.append('')
-            frames.append(chunk)
-
-        return frames or [[cleaned]]
-
-    def _display_alert_chunk(self, alert_meta: Dict[str, Any]) -> None:
-        if not self._oled_alert_chunks:
+    def _display_alert_scroll_frame(self, alert_meta: Dict[str, Any]) -> None:
+        """Render a single frame of the scrolling alert animation."""
+        if self._oled_scroll_effect is None:
             return
 
         try:
@@ -820,8 +856,9 @@ class ScreenManager:
             return
 
         header_text = alert_meta.get('header_text') or 'Alert'
-        chunk = self._oled_alert_chunks[self._oled_alert_chunk_index]
+        body_text = alert_meta.get('body_text') or 'Active alert in effect.'
 
+        # Create line objects for header and body
         line_objects = [
             OLEDLine(
                 text=header_text,
@@ -830,33 +867,37 @@ class ScreenManager:
                 font='small',
                 wrap=False,
                 max_width=124,
+            ),
+            OLEDLine(
+                text=body_text,
+                x=0,
+                y=16,
+                font='large',
+                wrap=False,
+                allow_empty=False,
             )
         ]
 
-        start_y = 16
-        for idx, line in enumerate(chunk):
-            line_objects.append(
-                OLEDLine(
-                    text=line,
-                    x=0,
-                    y=start_y + idx * 22,
-                    font='large',
-                    wrap=False,
-                    allow_empty=True,
-                )
-            )
+        # Render the scroll frame
+        controller.render_scroll_frame(
+            line_objects,
+            self._oled_scroll_effect,
+            self._oled_scroll_offset
+        )
 
-        controller.display_lines(line_objects, clear=True)
         logger.debug(
-            "OLED alert chunk displayed: %s (chunk %s/%s)",
+            "OLED alert scroll frame: %s (offset %s/%s, effect: %s)",
             header_text,
-            self._oled_alert_chunk_index + 1,
-            len(self._oled_alert_chunks),
+            self._oled_scroll_offset,
+            self._oled_scroll_max_offset,
+            self._oled_scroll_effect.value,
         )
 
     def _reset_oled_alert_state(self) -> None:
-        self._oled_alert_chunks = []
-        self._oled_alert_chunk_index = 0
+        """Reset OLED alert scroll state."""
+        self._oled_scroll_offset = 0
+        self._oled_scroll_max_offset = 0
+        self._oled_scroll_effect = None
         self._current_alert_id = None
         self._current_alert_priority = None
         self._current_alert_text = None

@@ -7,6 +7,7 @@ import os
 import threading
 import textwrap
 from dataclasses import dataclass
+from enum import Enum
 from typing import Dict, Iterable, List, Optional
 
 from app_utils.gpio import ensure_gpiozero_pin_factory
@@ -54,6 +55,20 @@ def _env_float(name: str, default: str) -> float:
     except (TypeError, ValueError):
         logger.warning("Invalid float for %s=%s; using default %s", name, value, default)
         return float(default)
+
+
+class OLEDScrollEffect(Enum):
+    """Scroll effect types for OLED text animation."""
+    SCROLL_LEFT = "scroll_left"      # Right to left (default)
+    SCROLL_RIGHT = "scroll_right"    # Left to right
+    SCROLL_UP = "scroll_up"          # Bottom to top
+    SCROLL_DOWN = "scroll_down"      # Top to bottom
+    WIPE_LEFT = "wipe_left"          # Wipe from right to left
+    WIPE_RIGHT = "wipe_right"        # Wipe from left to right
+    WIPE_UP = "wipe_up"              # Wipe from bottom to top
+    WIPE_DOWN = "wipe_down"          # Wipe from top to bottom
+    FADE_IN = "fade_in"              # Fade in (flash effect)
+    STATIC = "static"                # No animation (instant display)
 
 
 @dataclass
@@ -194,6 +209,150 @@ class ArgonOLEDController:
 
         self.device.display(image)
 
+    def render_scroll_frame(
+        self,
+        lines: List[OLEDLine],
+        effect: OLEDScrollEffect,
+        offset: int,
+        *,
+        invert: Optional[bool] = None,
+    ) -> None:
+        """
+        Render a single frame of a scrolling animation.
+
+        Args:
+            lines: List of OLEDLine objects to render
+            effect: The scroll effect to apply
+            offset: Pixel offset for the current frame (0 to max_offset)
+            invert: Whether to invert colors
+        """
+        active_invert = self.default_invert if invert is None else invert
+        background = 255 if active_invert else 0
+        text_colour = 0 if active_invert else 255
+
+        # Create the full content image (may be larger than display)
+        content_image = Image.new("1", (self.width * 2, self.height * 2), color=background)
+        content_draw = ImageDraw.Draw(content_image)
+
+        # Render all lines to the content image
+        cursor_y = 0
+        max_x = 0
+        max_y = 0
+
+        for entry in lines:
+            if not entry.text and not entry.allow_empty:
+                continue
+
+            font_key = entry.font.lower()
+            font = self._fonts.get(font_key, self._fonts["small"])
+            x = max(0, entry.x)
+
+            segments = [entry.text]  # No wrapping for scrolling text
+            for segment in segments:
+                line_y = entry.y if entry.y is not None else cursor_y
+
+                fill_colour = text_colour
+                if entry.invert is True:
+                    fill_colour = background
+                elif entry.invert is False:
+                    fill_colour = text_colour
+
+                content_draw.text((x, line_y), segment, font=font, fill=fill_colour)
+
+                # Track content bounds
+                try:
+                    text_width = content_draw.textlength(segment, font=font)
+                except AttributeError:
+                    text_width = font.getsize(segment)[0]
+
+                max_x = max(max_x, x + int(text_width))
+
+                line_height = self._line_height(font)
+                max_y = max(max_y, line_y + line_height)
+
+                spacing = max(0, entry.spacing)
+                if entry.y is None:
+                    cursor_y = line_y + line_height + spacing
+                else:
+                    cursor_y = max(cursor_y, line_y + line_height + spacing)
+
+        # Create display image
+        display_image = Image.new("1", (self.width, self.height), color=background)
+
+        # Apply the effect
+        if effect == OLEDScrollEffect.SCROLL_LEFT:
+            # Scroll from right to left (text moves left)
+            src_x = offset
+            src_y = 0
+            display_image.paste(content_image.crop((src_x, src_y, src_x + self.width, src_y + self.height)), (0, 0))
+
+        elif effect == OLEDScrollEffect.SCROLL_RIGHT:
+            # Scroll from left to right (text moves right)
+            src_x = max(0, max_x - self.width - offset)
+            src_y = 0
+            display_image.paste(content_image.crop((src_x, src_y, src_x + self.width, src_y + self.height)), (0, 0))
+
+        elif effect == OLEDScrollEffect.SCROLL_UP:
+            # Scroll from bottom to top (text moves up)
+            src_x = 0
+            src_y = offset
+            display_image.paste(content_image.crop((src_x, src_y, src_x + self.width, src_y + self.height)), (0, 0))
+
+        elif effect == OLEDScrollEffect.SCROLL_DOWN:
+            # Scroll from top to bottom (text moves down)
+            src_x = 0
+            src_y = max(0, max_y - self.height - offset)
+            display_image.paste(content_image.crop((src_x, src_y, src_x + self.width, src_y + self.height)), (0, 0))
+
+        elif effect == OLEDScrollEffect.WIPE_LEFT:
+            # Wipe from right to left (reveal text from left)
+            reveal_width = min(self.width, offset)
+            src_x = 0
+            src_y = 0
+            cropped = content_image.crop((src_x, src_y, src_x + reveal_width, src_y + self.height))
+            display_image.paste(cropped, (0, 0))
+
+        elif effect == OLEDScrollEffect.WIPE_RIGHT:
+            # Wipe from left to right (reveal text from right)
+            reveal_width = min(self.width, offset)
+            src_x = max(0, self.width - reveal_width)
+            src_y = 0
+            dest_x = self.width - reveal_width
+            cropped = content_image.crop((src_x, src_y, src_x + reveal_width, src_y + self.height))
+            display_image.paste(cropped, (dest_x, 0))
+
+        elif effect == OLEDScrollEffect.WIPE_UP:
+            # Wipe from bottom to top (reveal text from bottom)
+            reveal_height = min(self.height, offset)
+            src_x = 0
+            src_y = max(0, self.height - reveal_height)
+            dest_y = self.height - reveal_height
+            cropped = content_image.crop((src_x, src_y, src_x + self.width, src_y + reveal_height))
+            display_image.paste(cropped, (0, dest_y))
+
+        elif effect == OLEDScrollEffect.WIPE_DOWN:
+            # Wipe from top to bottom (reveal text from top)
+            reveal_height = min(self.height, offset)
+            src_x = 0
+            src_y = 0
+            cropped = content_image.crop((src_x, src_y, src_x + self.width, src_y + reveal_height))
+            display_image.paste(cropped, (0, 0))
+
+        elif effect == OLEDScrollEffect.FADE_IN:
+            # Flash/fade effect (show on even offsets, hide on odd)
+            if offset % 2 == 0:
+                src_x = 0
+                src_y = 0
+                display_image.paste(content_image.crop((src_x, src_y, src_x + self.width, src_y + self.height)), (0, 0))
+
+        elif effect == OLEDScrollEffect.STATIC:
+            # No animation, just display
+            src_x = 0
+            src_y = 0
+            display_image.paste(content_image.crop((src_x, src_y, src_x + self.width, src_y + self.height)), (0, 0))
+
+        self.device.display(display_image)
+
     @staticmethod
     def _line_height(font: ImageFont.ImageFont) -> int:
         try:
@@ -242,6 +401,11 @@ OLED_FONT_PATH = os.getenv("OLED_FONT_PATH")
 OLED_DEFAULT_INVERT = _env_flag("OLED_DEFAULT_INVERT", "false")
 OLED_BUTTON_GPIO = _env_int("OLED_BUTTON_GPIO", "4")
 OLED_BUTTON_HOLD_SECONDS = max(0.5, _env_float("OLED_BUTTON_HOLD_SECONDS", "1.25"))
+
+# Scroll animation configuration
+OLED_SCROLL_EFFECT = os.getenv("OLED_SCROLL_EFFECT", "scroll_left").lower()
+OLED_SCROLL_SPEED = max(1, _env_int("OLED_SCROLL_SPEED", "2"))  # Pixels per frame (1-10)
+OLED_SCROLL_FPS = max(5, min(60, _env_int("OLED_SCROLL_FPS", "30")))  # Frames per second
 
 OLED_AVAILABLE = False
 oled_controller: Optional[ArgonOLEDController] = None
@@ -353,6 +517,7 @@ def initialise_oled_display(log: Optional[logging.Logger] = None) -> Optional[Ar
 
 __all__ = [
     "OLEDLine",
+    "OLEDScrollEffect",
     "ArgonOLEDController",
     "OLED_AVAILABLE",
     "OLED_BUTTON_GPIO",
@@ -365,6 +530,9 @@ __all__ = [
     "OLED_I2C_ADDRESS",
     "OLED_I2C_BUS",
     "OLED_ROTATE",
+    "OLED_SCROLL_EFFECT",
+    "OLED_SCROLL_FPS",
+    "OLED_SCROLL_SPEED",
     "OLED_WIDTH",
     "ensure_oled_button",
     "initialise_oled_display",
