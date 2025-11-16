@@ -310,11 +310,17 @@ class ArgonOLEDController:
 
         # Create padded buffer: [original][separator][original]
         # This creates a seamless loop for horizontal scrolling
-        # Buffer must be wide enough to crop at loop point (original_width + separator_width)
-        # Minimum width: (original_width + separator_width) + display_width
-        loop_point = original_width + separator_width
+        # 
+        # CRITICAL: Ensure only ONE copy of the text is visible at any time by adding
+        # sufficient padding. The separator plus any additional padding must be at least
+        # display_width to prevent both text copies from appearing simultaneously.
+        min_separator_and_padding = max(separator_width, self.width)
+        
+        # Buffer structure: [text][padding/separator][text]
+        # The loop point is set to original_width + min_separator_and_padding
+        loop_point = original_width + min_separator_and_padding
         min_buffer_width = loop_point + self.width
-        padded_width = max(min_buffer_width, original_width + separator_width + original_width)
+        padded_width = max(min_buffer_width, original_width + min_separator_and_padding + original_width)
         padded_height = max(max_y, self.height)
         
         content_image = Image.new("1", (padded_width, padded_height), color=background)
@@ -324,20 +330,21 @@ class ArgonOLEDController:
         for info in line_render_info:
             content_draw.text((info['x'], info['y']), info['text'], font=info['font'], fill=info['fill'])
 
-        # Render separator after original content
+        # Render separator centered in the padding area
         separator_y = (padded_height - self._line_height(separator_font)) // 2
-        content_draw.text((original_width, separator_y), separator, font=separator_font, fill=text_colour)
+        separator_x = original_width + (min_separator_and_padding - separator_width) // 2
+        content_draw.text((separator_x, separator_y), separator, font=separator_font, fill=text_colour)
 
-        # Render original content again after separator for seamless wrap
+        # Render original content again after separator+padding for seamless wrap
         for info in line_render_info:
-            offset_x = original_width + separator_width
+            offset_x = original_width + min_separator_and_padding
             content_draw.text((offset_x + info['x'], info['y']), info['text'], font=info['font'], fill=info['fill'])
 
         return content_image, {
             'max_x': padded_width,
             'max_y': max_y,
             'original_width': original_width,
-            'separator_width': separator_width,
+            'separator_width': min_separator_and_padding,  # Use actual padding width for loop calculation
         }
 
     def render_scroll_frame(
