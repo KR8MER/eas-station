@@ -17,6 +17,8 @@
         justify-content: space-between;
         align-items: center;
         margin-bottom: 15px;
+        gap: 0.75rem;
+        flex-wrap: wrap;
     }
 
     .display-title {
@@ -26,6 +28,9 @@
         display: flex;
         align-items: center;
         gap: 10px;
+        flex: 1 1 220px;
+        min-width: 0;
+        flex-wrap: wrap;
     }
 
     .display-status {
@@ -34,6 +39,7 @@
         border-radius: 12px;
         font-size: 0.85rem;
         font-weight: 500;
+        flex-shrink: 0;
     }
 
     .display-status.enabled {
@@ -51,14 +57,20 @@
         border: 3px solid #34495e;
         border-radius: 8px;
         padding: 15px;
-        display: inline-block;
+        display: flex;
+        justify-content: center;
         position: relative;
+        width: 100%;
+        overflow: hidden;
     }
 
     .display-canvas {
         display: block;
         image-rendering: pixelated;
         image-rendering: crisp-edges;
+        width: 100%;
+        height: auto;
+        max-width: 512px;
     }
 
     .display-info {
@@ -71,11 +83,13 @@
     .oled-canvas {
         background: #000;
         border: 2px solid #2c3e50;
+        max-width: 512px;
     }
 
     .vfd-canvas {
         background: #001a00;
         border: 2px solid #003300;
+        max-width: 420px;
     }
 
     .led-canvas {
@@ -118,6 +132,8 @@
         font-family: 'Courier New', monospace;
         line-height: 1.6;
         min-height: 100px;
+        width: 100%;
+        overflow-x: auto;
     }
 
     .led-line {
@@ -152,6 +168,22 @@
         margin: 10px 0 0 0;
         opacity: 0.9;
         font-size: 1.1rem;
+    }
+
+    @media (max-width: 575.98px) {
+        .display-header {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .display-title {
+            width: 100%;
+        }
+
+        .display-status {
+            width: 100%;
+            text-align: center;
+        }
     }
 </style>
 {% endblock %}
@@ -282,13 +314,19 @@ const oledCtx = oledCanvas.getContext('2d');
 const vfdCanvas = document.getElementById('vfd-canvas');
 const vfdCtx = vfdCanvas.getContext('2d');
 
-// Scale canvases for better visibility
+// Scale canvases for better visibility while keeping them responsive
 const oledScale = 4;
 const vfdScale = 3;
-oledCanvas.style.width = (128 * oledScale) + 'px';
-oledCanvas.style.height = (64 * oledScale) + 'px';
-vfdCanvas.style.width = (140 * vfdScale) + 'px';
-vfdCanvas.style.height = (32 * vfdScale) + 'px';
+const oledMaxWidth = (128 * oledScale) + 'px';
+const vfdMaxWidth = (140 * vfdScale) + 'px';
+
+oledCanvas.style.width = '100%';
+oledCanvas.style.height = 'auto';
+oledCanvas.style.maxWidth = oledMaxWidth;
+
+vfdCanvas.style.width = '100%';
+vfdCanvas.style.height = 'auto';
+vfdCanvas.style.maxWidth = vfdMaxWidth;
 
 // Initialize displays
 function initDisplays() {
