@@ -310,7 +310,11 @@ class ArgonOLEDController:
 
         # Create padded buffer: [original][separator][original]
         # This creates a seamless loop for horizontal scrolling
-        padded_width = original_width + separator_width + original_width
+        # Buffer must be wide enough to crop at loop point (original_width + separator_width)
+        # Minimum width: (original_width + separator_width) + display_width
+        loop_point = original_width + separator_width
+        min_buffer_width = loop_point + self.width
+        padded_width = max(min_buffer_width, original_width + separator_width + original_width)
         padded_height = max(max_y, self.height)
         
         content_image = Image.new("1", (padded_width, padded_height), color=background)
