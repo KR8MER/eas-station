@@ -143,7 +143,8 @@ class ScreenManager:
                 else:
                     logger.warning("No app context available")
 
-                time.sleep(1)  # Check every second
+                # Use faster loop for smooth OLED scrolling
+                time.sleep(0.033)  # ~30 FPS for smooth scrolling
 
             except Exception as e:
                 logger.error(f"Error in screen manager loop: {e}")
@@ -813,11 +814,14 @@ class ScreenManager:
         if controller is None:
             return
 
-        header_text = alert_meta.get('header_text') or 'Alert'
+        # Get current date/time for header
+        from datetime import datetime
+        now = datetime.now()
+        header_text = now.strftime("%m/%d/%y %H:%M:%S")
+
         body_text = alert_meta.get('body_text') or 'Active alert in effect.'
 
-        # Clean text by collapsing whitespace and removing newlines
-        header_text = ' '.join(header_text.split())
+        # Clean body text by collapsing whitespace and removing newlines
         body_text = ' '.join(body_text.split())
 
         # Get display dimensions
@@ -831,15 +835,15 @@ class ScreenManager:
         display_image = Image.new("1", (width, height), color=background)
         draw = ImageDraw.Draw(display_image)
 
-        # Render static header at top (y=0)
+        # Render static date/time header at top (y=0)
         header_font = controller._fonts.get('small', controller._fonts['small'])
         draw.text((0, 0), header_text, font=header_font, fill=text_colour)
 
         # Calculate header height for positioning body text
-        header_height = controller._line_height(header_font) + 2  # Add small spacing
+        header_height = controller._line_height(header_font) + 1  # Minimal spacing
 
-        # Render scrolling body text
-        body_font = controller._fonts.get('large', controller._fonts['small'])
+        # Render scrolling body text with HUGE font
+        body_font = controller._fonts.get('huge', controller._fonts.get('xlarge', controller._fonts.get('large', controller._fonts['small'])))
 
         # Calculate text width for scrolling
         try:
