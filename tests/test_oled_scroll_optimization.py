@@ -109,14 +109,14 @@ class TestPrepareScrollContent:
         assert size == (oled_controller.width * 2, oled_controller.height * 2)
     
     def test_prepare_scroll_content_renders_text_once(self, oled_controller, sample_lines, mock_pil_modules):
-        """Test that text is rendered exactly once during preparation."""
+        """Test that text is rendered during preparation (may be multiple times due to wrapping)."""
         mock_draw_obj = mock_pil_modules['draw_obj']
         mock_draw_obj.text.reset_mock()
         
         content_image, dimensions = oled_controller.prepare_scroll_content(sample_lines)
         
-        # Verify text was drawn for each line
-        assert mock_draw_obj.text.call_count == len(sample_lines)
+        # Verify text was drawn (at least once per line, possibly more due to wrapping)
+        assert mock_draw_obj.text.call_count >= len(sample_lines)
     
     def test_prepare_scroll_content_with_invert(self, oled_controller, sample_lines, mock_pil_modules):
         """Test content preparation with inverted colors."""
@@ -140,8 +140,8 @@ class TestPrepareScrollContent:
         
         content_image, dimensions = oled_controller.prepare_scroll_content(lines)
         
-        # Only one line should be drawn (empty line skipped)
-        assert mock_draw_obj.text.call_count == 1
+        # Only non-empty lines should be drawn (at least once, possibly more due to wrapping)
+        assert mock_draw_obj.text.call_count >= 1
     
     def test_prepare_scroll_content_calculates_bounds(self, oled_controller, sample_lines, mock_pil_modules):
         """Test that content bounds are calculated correctly."""
@@ -321,8 +321,8 @@ class TestScrollingPerformance:
         # Verify NO additional text rendering during frame rendering
         assert mock_draw_obj.text.call_count == 0
         
-        # All text rendering should have happened during preparation
-        assert text_calls_during_prep == len(sample_lines)
+        # All text rendering should have happened during preparation (at least once per line)
+        assert text_calls_during_prep >= len(sample_lines)
 
 
 class TestBackwardCompatibility:
@@ -376,3 +376,86 @@ class TestBackwardCompatibility:
         
         # All effects should render without error
         assert mock_pil_modules['device'].display.call_count == len(effects)
+
+
+class TestTextWrappingConsistency:
+    """Tests to ensure text wrapping is consistent between static and scrolling content."""
+    
+    def test_prepare_scroll_content_wraps_long_text(self, oled_controller, mock_pil_modules):
+        """Test that prepare_scroll_content wraps long text like display_lines does."""
+        from app_core.oled import OLEDLine
+        
+        # Create a line with very long text that should be wrapped
+        long_text = "This is a very long line of text that should definitely be wrapped to multiple lines when displayed"
+        lines = [
+            OLEDLine(text=long_text, x=0, y=0, font="small", wrap=True),
+        ]
+        
+        mock_draw_obj = mock_pil_modules['draw_obj']
+        mock_draw_obj.text.reset_mock()
+        
+        # Mock textlength to return a value that would trigger wrapping
+        # Assume each character is ~8 pixels, so 128 pixels = ~16 chars per line
+        def mock_textlength(text, font=None):
+            return len(text) * 8.0
+        mock_draw_obj.textlength = mock_textlength
+        
+        content_image, dimensions = oled_controller.prepare_scroll_content(lines)
+        
+        # Verify that text.draw was called multiple times (once per wrapped segment)
+        # The long text should be wrapped into multiple segments
+        assert mock_draw_obj.text.call_count > 1, \
+            "Long text should be wrapped into multiple segments"
+    
+    def test_prepare_scroll_content_respects_wrap_flag(self, oled_controller, mock_pil_modules):
+        """Test that prepare_scroll_content respects the wrap flag."""
+        from app_core.oled import OLEDLine
+        
+        long_text = "This is a very long line of text that could be wrapped"
+        
+        # Test with wrap=False
+        lines_no_wrap = [
+            OLEDLine(text=long_text, x=0, y=0, font="small", wrap=False),
+        ]
+        
+        mock_draw_obj = mock_pil_modules['draw_obj']
+        mock_draw_obj.text.reset_mock()
+        
+        content_image, dimensions = oled_controller.prepare_scroll_content(lines_no_wrap)
+        
+        # Should only render once (no wrapping)
+        assert mock_draw_obj.text.call_count == 1, \
+            "Text with wrap=False should render as single line"
+    
+    def test_prepare_scroll_content_wraps_like_display_lines(self, oled_controller, mock_pil_modules):
+        """Test that prepare_scroll_content wraps text the same way as display_lines."""
+        from app_core.oled import OLEDLine
+        
+        # Long text that will be wrapped
+        long_text = "EMERGENCY ALERT: This is a very long emergency message that needs to scroll"
+        lines = [
+            OLEDLine(text=long_text, x=0, y=0, font="small", wrap=True, max_width=128),
+        ]
+        
+        mock_draw_obj = mock_pil_modules['draw_obj']
+        
+        # Mock textlength to return consistent values
+        def mock_textlength(text, font=None):
+            return len(text) * 8.0
+        mock_draw_obj.textlength = mock_textlength
+        
+        # Test display_lines wrapping
+        mock_draw_obj.text.reset_mock()
+        oled_controller.display_lines(lines)
+        display_lines_call_count = mock_draw_obj.text.call_count
+        
+        # Test prepare_scroll_content wrapping
+        mock_draw_obj.text.reset_mock()
+        content_image, dimensions = oled_controller.prepare_scroll_content(lines)
+        scroll_content_call_count = mock_draw_obj.text.call_count
+        
+        # Both should wrap the text the same way
+        assert scroll_content_call_count == display_lines_call_count, \
+            f"prepare_scroll_content should wrap text like display_lines ({scroll_content_call_count} vs {display_lines_call_count})"
+        assert scroll_content_call_count > 1, \
+            "Long text should be wrapped into multiple segments"

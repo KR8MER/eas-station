@@ -257,8 +257,11 @@ class ArgonOLEDController:
             font_key = entry.font.lower()
             font = self._fonts.get(font_key, self._fonts["small"])
             x = max(0, entry.x)
+            max_width = entry.max_width
+            if entry.wrap and not max_width:
+                max_width = self.width - x
 
-            segments = [entry.text]  # No wrapping for scrolling text
+            segments = self._wrap_text(content_draw, entry.text, font, max_width, entry.wrap)
             for segment in segments:
                 line_y = entry.y if entry.y is not None else cursor_y
 
