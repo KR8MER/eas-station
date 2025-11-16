@@ -881,18 +881,31 @@ class ScreenManager:
 
         # Debug: Save a section of the canvas for inspection
         try:
+            import os
+            # Save to home directory instead of /tmp to ensure permissions work
+            debug_dir = os.path.expanduser("~/eas-station/debug")
+            os.makedirs(debug_dir, exist_ok=True)
+
             # Save first 500px of canvas to reduce file size
             debug_section = scroll_canvas.crop((0, 0, min(500, canvas_width), body_height))
-            debug_path = "/tmp/oled_scroll_debug_section.png"
-            debug_section.save(debug_path)
-            logger.info(f"Saved scroll canvas section (first 500px) to {debug_path}")
+            section_path = os.path.join(debug_dir, "oled_scroll_section.png")
+            debug_section.save(section_path)
+            logger.info(f"✓ Saved scroll canvas section to {section_path}")
 
             # Also try to save full canvas
-            full_debug_path = "/tmp/oled_scroll_full.png"
-            scroll_canvas.save(full_debug_path)
-            logger.info(f"Saved full scroll canvas ({canvas_width}px wide) to {full_debug_path}")
+            full_path = os.path.join(debug_dir, "oled_scroll_full.png")
+            scroll_canvas.save(full_path)
+            file_size_mb = os.path.getsize(full_path) / (1024 * 1024)
+            logger.info(f"✓ Saved full scroll canvas ({canvas_width}px × {body_height}px, {file_size_mb:.2f} MB) to {full_path}")
+
+            # Verify files were actually created
+            if not os.path.exists(section_path):
+                logger.error(f"✗ Section file was NOT created at {section_path}")
+            if not os.path.exists(full_path):
+                logger.error(f"✗ Full file was NOT created at {full_path}")
+
         except Exception as e:
-            logger.error(f"Could not save debug canvas: {e}", exc_info=True)
+            logger.error(f"✗ Failed to save debug canvas: {e}", exc_info=True)
 
         header = alert_meta.get('header_text') or alert_meta.get('event') or 'Alert'
         logger.info(
