@@ -92,12 +92,14 @@ class ScreenManager:
         # Pixel-by-pixel scrolling configuration
         self._oled_scroll_offset = 0
         self._oled_scroll_effect = None
-        self._oled_scroll_speed = 2  # pixels per frame
+        self._oled_scroll_speed = 4  # pixels per frame (increased for faster scrolling)
         self._oled_scroll_fps = 30  # frames per second
         self._current_alert_id: Optional[int] = None
         self._current_alert_priority: Optional[int] = None
         self._current_alert_text: Optional[str] = None
         self._last_oled_alert_render = datetime.min
+        self._cached_header_text: Optional[str] = None  # Cache to reduce flickering
+        self._cached_header_image = None  # Pre-rendered header to avoid redraw
         self._active_alert_cache: List[Dict[str, Any]] = []
         self._active_alert_cache_timestamp = datetime.min
         self._active_alert_cache_ttl = timedelta(seconds=1)
@@ -791,6 +793,8 @@ class ScreenManager:
         # We're using simple right-to-left scrolling
         self._oled_scroll_effect = True  # Just a flag to indicate scrolling is active
         self._oled_scroll_offset = 0
+        self._cached_header_text = None  # Clear cache for new alert
+        self._cached_header_image = None
         self._current_alert_id = alert_meta.get('id')
         self._current_alert_priority = alert_meta.get('priority_rank')
         self._current_alert_text = alert_meta.get('body_text')
@@ -817,7 +821,8 @@ class ScreenManager:
         # Get current date/time for header in local timezone
         from app_utils.time import local_now
         now = local_now()
-        header_text = now.strftime("%m/%d/%y %I:%M:%S %p")
+        # Remove seconds from header to reduce update frequency and flickering
+        header_text = now.strftime("%m/%d/%y %I:%M %p")
 
         body_text = alert_meta.get('body_text') or 'Active alert in effect.'
 
@@ -828,19 +833,27 @@ class ScreenManager:
         width = controller.width
         height = controller.height
 
-        # Create final display image
+        # Setup display parameters
         active_invert = controller.default_invert
         background = 255 if active_invert else 0
         text_colour = 0 if active_invert else 255
-        display_image = Image.new("1", (width, height), color=background)
-        draw = ImageDraw.Draw(display_image)
 
-        # Render static date/time header at top (y=0)
+        # Get fonts
         header_font = controller._fonts.get('small', controller._fonts['small'])
-        draw.text((0, 0), header_text, font=header_font, fill=text_colour)
+        header_height = controller._line_height(header_font) + 1
 
-        # Calculate header height for positioning body text
-        header_height = controller._line_height(header_font) + 1  # Minimal spacing
+        # Only recreate header image if text changed (reduces flickering)
+        if self._cached_header_text != header_text or self._cached_header_image is None:
+            header_image = Image.new("1", (width, header_height), color=background)
+            header_draw = ImageDraw.Draw(header_image)
+            header_draw.text((0, 0), header_text, font=header_font, fill=text_colour)
+            self._cached_header_image = header_image
+            self._cached_header_text = header_text
+
+        # Create final display image and paste cached header
+        display_image = Image.new("1", (width, height), color=background)
+        display_image.paste(self._cached_header_image, (0, 0))
+        draw = ImageDraw.Draw(display_image)
 
         # Render scrolling body text with HUGE font
         body_font = controller._fonts.get('huge', controller._fonts.get('xlarge', controller._fonts.get('large', controller._fonts['small'])))
@@ -878,6 +891,8 @@ class ScreenManager:
         """Reset OLED alert scroll state."""
         self._oled_scroll_offset = 0
         self._oled_scroll_effect = None
+        self._cached_header_text = None
+        self._cached_header_image = None
         self._current_alert_id = None
         self._current_alert_priority = None
         self._current_alert_text = None
