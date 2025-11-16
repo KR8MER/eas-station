@@ -112,9 +112,10 @@ class ArgonOLEDController:
         if i2c is None or ssd1306 is None or Image is None or ImageDraw is None or ImageFont is None:
             raise RuntimeError("luma.oled or Pillow not installed")
 
-        # Use fast I2C bus speed (400kHz) to eliminate visible column-by-column refresh
-        # Default is 100kHz which causes visible "curtain" effect during updates
-        serial = i2c(port=i2c_bus, address=i2c_address, bus_speed_hz=400000)
+        # I2C bus speed is configured at system level via /boot/firmware/config.txt
+        # Set dtparam=i2c_arm_baudrate=400000 for fast 400kHz speed to eliminate
+        # visible column-by-column refresh (default 100kHz causes "curtain" effect)
+        serial = i2c(port=i2c_bus, address=i2c_address)
         self.device = ssd1306(serial, width=width, height=height, rotate=rotate)
         if contrast is not None:
             try:
