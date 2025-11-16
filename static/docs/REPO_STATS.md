@@ -1,14 +1,14 @@
 # Repository Statistics
 
-**Generated:** 2025-11-16 16:18:00 UTC
+**Generated:** 2025-11-16 16:27:06 UTC
 
 ## Overview
 
 - **Total Files:** 579
 - **Total Directories:** 72
-- **Total Lines:** 198,292
-- **Code Lines:** 125,196
-- **Comment Lines:** 41,893
+- **Total Lines:** 198,307
+- **Code Lines:** 125,205
+- **Comment Lines:** 41,896
 - **Total Routes:** 176
 
 ## Files by Type
@@ -32,7 +32,7 @@
 
 | Language | Total Lines | Code Lines | Comment Lines |
 |----------|-------------|------------|---------------|
-| Python | 84,616 | 33,367 | 37,547 |
+| Python | 84,631 | 33,376 | 37,550 |
 | Markdown | 52,680 | 40,640 | 0 |
 | HTML | 43,502 | 39,657 | 419 |
 | CSS | 4,399 | 983 | 2,766 |
@@ -79,7 +79,7 @@
 
 ### Top Languages by Lines of Code
 
-**Python:** 33,367 lines  
+**Python:** 33,376 lines  
 `█████████████████████████████████████████`
 
 **Markdown:** 40,640 lines  
