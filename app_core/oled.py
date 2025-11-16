@@ -407,7 +407,7 @@ OLED_BUTTON_HOLD_SECONDS = max(0.5, _env_float("OLED_BUTTON_HOLD_SECONDS", "1.25
 # Scroll animation configuration
 OLED_SCROLL_EFFECT = os.getenv("OLED_SCROLL_EFFECT", "scroll_left").lower()
 OLED_SCROLL_SPEED = max(1, _env_int("OLED_SCROLL_SPEED", "4"))  # Pixels per frame (1-10)
-OLED_SCROLL_FPS = max(5, min(60, _env_int("OLED_SCROLL_FPS", "30")))  # Frames per second
+OLED_SCROLL_FPS = max(5, min(60, _env_int("OLED_SCROLL_FPS", "60")))  # Frames per second
 
 OLED_AVAILABLE = False
 oled_controller: Optional[ArgonOLEDController] = None

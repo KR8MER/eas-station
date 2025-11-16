@@ -93,13 +93,16 @@ class ScreenManager:
         self._oled_scroll_offset = 0
         self._oled_scroll_effect = None
         self._oled_scroll_speed = 4  # pixels per frame (increased for faster scrolling)
-        self._oled_scroll_fps = 30  # frames per second
+        self._oled_scroll_fps = 60  # frames per second (increased for ultra-smooth scrolling)
         self._current_alert_id: Optional[int] = None
         self._current_alert_priority: Optional[int] = None
         self._current_alert_text: Optional[str] = None
         self._last_oled_alert_render = datetime.min
         self._cached_header_text: Optional[str] = None  # Cache to reduce flickering
         self._cached_header_image = None  # Pre-rendered header to avoid redraw
+        self._cached_scroll_canvas = None  # Pre-rendered full scrolling text
+        self._cached_scroll_text_width = 0  # Width of pre-rendered text
+        self._cached_body_area_height = 0  # Height of body scrolling area
         self._active_alert_cache: List[Dict[str, Any]] = []
         self._active_alert_cache_timestamp = datetime.min
         self._active_alert_cache_ttl = timedelta(seconds=1)
@@ -145,8 +148,8 @@ class ScreenManager:
                 else:
                     logger.warning("No app context available")
 
-                # Use faster loop for smooth OLED scrolling
-                time.sleep(0.033)  # ~30 FPS for smooth scrolling
+                # Use high-speed loop for ultra-smooth OLED scrolling
+                time.sleep(0.016)  # ~60 FPS for butter-smooth scrolling
 
             except Exception as e:
                 logger.error(f"Error in screen manager loop: {e}")
@@ -779,18 +782,24 @@ class ScreenManager:
         return True
 
     def _prepare_alert_scroll(self, alert_meta: Dict[str, Any]) -> None:
-        """Prepare alert text for right-to-left scrolling."""
+        """Prepare alert text for right-to-left scrolling by pre-rendering the entire scroll canvas."""
         try:
             import app_core.oled as oled_module
+            from app_core.oled import initialise_oled_display
+            from PIL import Image, ImageDraw
         except Exception as exc:
             logger.debug("OLED module unavailable: %s", exc)
+            return
+
+        controller = oled_module.oled_controller or initialise_oled_display(logger)
+        if controller is None:
             return
 
         # Get scroll configuration from environment
         self._oled_scroll_speed = oled_module.OLED_SCROLL_SPEED
         self._oled_scroll_fps = oled_module.OLED_SCROLL_FPS
 
-        # We're using simple right-to-left scrolling
+        # Reset state
         self._oled_scroll_effect = True  # Just a flag to indicate scrolling is active
         self._oled_scroll_offset = 0
         self._cached_header_text = None  # Clear cache for new alert
@@ -798,18 +807,59 @@ class ScreenManager:
         self._current_alert_id = alert_meta.get('id')
         self._current_alert_priority = alert_meta.get('priority_rank')
         self._current_alert_text = alert_meta.get('body_text')
+
+        # Pre-render the entire scrolling text canvas for smooth scrolling
+        body_text = alert_meta.get('body_text') or 'Active alert in effect.'
+        body_text = ' '.join(body_text.split())  # Clean whitespace
+
+        # Get display parameters
+        width = controller.width
+        height = controller.height
+        active_invert = controller.default_invert
+        background = 255 if active_invert else 0
+        text_colour = 0 if active_invert else 255
+
+        # Calculate body area dimensions
+        header_font = controller._fonts.get('small', controller._fonts['small'])
+        header_height = controller._line_height(header_font) + 1
+        body_height = height - header_height
+        body_font = controller._fonts.get('huge', controller._fonts.get('xlarge', controller._fonts.get('large', controller._fonts['small'])))
+
+        # Calculate text width for the pre-rendered canvas
+        temp_img = Image.new("1", (1, 1))
+        temp_draw = ImageDraw.Draw(temp_img)
+        try:
+            text_width = int(temp_draw.textlength(body_text, font=body_font))
+        except AttributeError:
+            text_width = body_font.getsize(body_text)[0]
+
+        # Pre-render the entire scrolling text to a wide canvas
+        # Make it wide enough for: screen_width + text_width + screen_width (for seamless loop)
+        canvas_width = width + text_width + width
+        scroll_canvas = Image.new("1", (canvas_width, body_height), color=background)
+        canvas_draw = ImageDraw.Draw(scroll_canvas)
+
+        # Draw text starting at position width (so it starts off-screen to the right)
+        canvas_draw.text((width, 0), body_text, font=body_font, fill=text_colour)
+
+        # Cache the pre-rendered canvas
+        self._cached_scroll_canvas = scroll_canvas
+        self._cached_scroll_text_width = text_width
+        self._cached_body_area_height = body_height
+
         header = alert_meta.get('header_text') or alert_meta.get('event') or 'Alert'
-        logger.info("OLED alert scroll engaged: %s (speed: %spx at %sfps)", header, self._oled_scroll_speed, self._oled_scroll_fps)
+        logger.info("OLED alert scroll engaged: %s (speed: %spx at %sfps, text_width: %spx)",
+                    header, self._oled_scroll_speed, self._oled_scroll_fps, text_width)
 
     def _display_alert_scroll_frame(self, alert_meta: Dict[str, Any]) -> None:
-        """Render a single frame of the scrolling alert animation."""
-        if self._oled_scroll_effect is None:
+        """Render a single frame of the scrolling alert animation using pre-rendered canvas."""
+        if self._oled_scroll_effect is None or self._cached_scroll_canvas is None:
             return
 
         try:
-            from app_core.oled import OLEDLine, initialise_oled_display
+            from app_core.oled import initialise_oled_display
             import app_core.oled as oled_module
-            from PIL import Image, ImageDraw
+            from PIL import Image
         except Exception as exc:  # pragma: no cover - hardware optional
             logger.debug("OLED controller unavailable for alert display: %s", exc)
             return
@@ -824,11 +874,6 @@ class ScreenManager:
         # Remove seconds from header to reduce update frequency and flickering
         header_text = now.strftime("%m/%d/%y %I:%M %p")
 
-        body_text = alert_meta.get('body_text') or 'Active alert in effect.'
-
-        # Clean body text by collapsing whitespace and removing newlines
-        body_text = ' '.join(body_text.split())
-
         # Get display dimensions
         width = controller.width
         height = controller.height
@@ -838,12 +883,13 @@ class ScreenManager:
         background = 255 if active_invert else 0
         text_colour = 0 if active_invert else 255
 
-        # Get fonts
+        # Get fonts and calculate header height
         header_font = controller._fonts.get('small', controller._fonts['small'])
         header_height = controller._line_height(header_font) + 1
 
         # Only recreate header image if text changed (reduces flickering)
         if self._cached_header_text != header_text or self._cached_header_image is None:
+            from PIL import ImageDraw
             header_image = Image.new("1", (width, header_height), color=background)
             header_draw = ImageDraw.Draw(header_image)
             header_draw.text((0, 0), header_text, font=header_font, fill=text_colour)
@@ -853,38 +899,33 @@ class ScreenManager:
         # Create final display image and paste cached header
         display_image = Image.new("1", (width, height), color=background)
         display_image.paste(self._cached_header_image, (0, 0))
-        draw = ImageDraw.Draw(display_image)
 
-        # Render scrolling body text with HUGE font
-        body_font = controller._fonts.get('huge', controller._fonts.get('xlarge', controller._fonts.get('large', controller._fonts['small'])))
+        # Calculate crop window from pre-rendered scroll canvas
+        # The text starts at position 'width' in the canvas and scrolls left
+        crop_left = self._oled_scroll_offset
+        crop_right = crop_left + width
+        crop_box = (crop_left, 0, crop_right, self._cached_body_area_height)
 
-        # Calculate text width for scrolling
-        try:
-            text_width = int(draw.textlength(body_text, font=body_font))
-        except AttributeError:
-            text_width = body_font.getsize(body_text)[0]
+        # Crop the visible window from pre-rendered canvas (NO TEXT RENDERING!)
+        body_window = self._cached_scroll_canvas.crop(crop_box)
 
-        # Calculate scroll position (right to left)
-        scroll_x = width - self._oled_scroll_offset
-
-        # If text has scrolled completely off the left, reset to right
-        # Reset when right edge reaches left edge of screen for continuous loop
-        if scroll_x <= -text_width:
-            self._oled_scroll_offset = 0
-            scroll_x = width
-
-        # Draw the scrolling text
-        body_y = header_height
-        draw.text((scroll_x, body_y), body_text, font=body_font, fill=text_colour)
+        # Paste the scrolling body below the header
+        display_image.paste(body_window, (0, header_height))
 
         # Display the final image
         controller.device.display(display_image)
 
+        # Check if we need to loop back
+        # When offset reaches (width + text_width), reset to 0 for seamless loop
+        max_offset = width + self._cached_scroll_text_width
+        if self._oled_scroll_offset >= max_offset:
+            self._oled_scroll_offset = 0
+
         logger.debug(
-            "OLED alert scroll: %s (offset %s, x_pos %s)",
+            "OLED alert scroll: %s (offset %s/%s)",
             header_text,
             self._oled_scroll_offset,
-            scroll_x,
+            max_offset,
         )
 
     def _reset_oled_alert_state(self) -> None:
@@ -893,6 +934,9 @@ class ScreenManager:
         self._oled_scroll_effect = None
         self._cached_header_text = None
         self._cached_header_image = None
+        self._cached_scroll_canvas = None
+        self._cached_scroll_text_width = 0
+        self._cached_body_area_height = 0
         self._current_alert_id = None
         self._current_alert_priority = None
         self._current_alert_text = None
