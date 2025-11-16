@@ -110,6 +110,11 @@
                             <li><hr class="dropdown-divider"></li>
                             <li><h6 class="dropdown-header">Display Outputs</h6></li>
                             <li>
+                                <a class="dropdown-item" href="{{ url_for('displays_preview_page') }}">
+                                    <i class="fas fa-eye"></i> Live Display Preview
+                                </a>
+                            </li>
+                            <li>
                                 <a class="dropdown-item" href="{{ url_for('led_control') }}">
                                     <i class="fas fa-tv"></i> LED Sign
                                 </a>

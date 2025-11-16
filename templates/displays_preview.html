@@ -1,0 +1,460 @@
+{% extends "base.html" %}
+
+{% block title %}Display Preview - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+    .display-container {
+        background: #2c3e50;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .display-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+
+    .display-title {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: #ecf0f1;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .display-status {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+
+    .display-status.enabled {
+        background: #27ae60;
+        color: white;
+    }
+
+    .display-status.disabled {
+        background: #7f8c8d;
+        color: white;
+    }
+
+    .display-canvas-wrapper {
+        background: #000;
+        border: 3px solid #34495e;
+        border-radius: 8px;
+        padding: 15px;
+        display: inline-block;
+        position: relative;
+    }
+
+    .display-canvas {
+        display: block;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+    }
+
+    .display-info {
+        margin-top: 12px;
+        font-size: 0.9rem;
+        color: #95a5a6;
+        font-family: 'Courier New', monospace;
+    }
+
+    .oled-canvas {
+        background: #000;
+        border: 2px solid #2c3e50;
+    }
+
+    .vfd-canvas {
+        background: #001a00;
+        border: 2px solid #003300;
+    }
+
+    .led-canvas {
+        background: #1a1a1a;
+        border: 2px solid #333;
+    }
+
+    .refresh-indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #27ae60;
+        margin-left: 10px;
+        animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+    }
+
+    .display-specs {
+        margin-top: 10px;
+        padding: 10px;
+        background: #34495e;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        color: #ecf0f1;
+    }
+
+    .display-specs strong {
+        color: #3498db;
+    }
+
+    .led-preview {
+        background: #000;
+        padding: 10px;
+        border-radius: 4px;
+        font-family: 'Courier New', monospace;
+        line-height: 1.6;
+        min-height: 100px;
+    }
+
+    .led-line {
+        display: block;
+        font-size: 1.1rem;
+        font-weight: bold;
+        text-shadow: 0 0 10px currentColor;
+    }
+
+    .led-color-amber { color: #ffaa00; }
+    .led-color-red { color: #ff0000; }
+    .led-color-green { color: #00ff00; }
+    .led-color-yellow { color: #ffff00; }
+    .led-color-orange { color: #ff8800; }
+
+    .page-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px;
+        border-radius: 12px;
+        margin-bottom: 30px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .page-header h1 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 600;
+    }
+
+    .page-header p {
+        margin: 10px 0 0 0;
+        opacity: 0.9;
+        font-size: 1.1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="page-header">
+        <h1><i class="fas fa-tv"></i> Live Display Preview</h1>
+        <p>Real-time visualization of all display outputs with proper colors and animations</p>
+    </div>
+
+    <div class="row">
+        <!-- OLED Display (128x64 Monochrome) -->
+        <div class="col-lg-4 col-md-6">
+            <div class="display-container">
+                <div class="display-header">
+                    <div class="display-title">
+                        <i class="fas fa-mobile-screen"></i>
+                        OLED Display
+                        <span class="refresh-indicator" id="oled-refresh"></span>
+                    </div>
+                    <span class="display-status disabled" id="oled-status">Disabled</span>
+                </div>
+
+                <div class="display-canvas-wrapper">
+                    <canvas id="oled-canvas" class="display-canvas oled-canvas" width="128" height="64"></canvas>
+                </div>
+
+                <div class="display-specs">
+                    <strong>Resolution:</strong> <span id="oled-resolution">128x64</span> |
+                    <strong>Type:</strong> Monochrome OLED |
+                    <strong>Controller:</strong> SSD1306
+                </div>
+
+                <div class="display-info" id="oled-info">
+                    Initializing...
+                </div>
+            </div>
+        </div>
+
+        <!-- VFD Display (140x32 Graphics) -->
+        <div class="col-lg-4 col-md-6">
+            <div class="display-container">
+                <div class="display-header">
+                    <div class="display-title">
+                        <i class="fas fa-desktop"></i>
+                        VFD Display
+                        <span class="refresh-indicator" id="vfd-refresh"></span>
+                    </div>
+                    <span class="display-status disabled" id="vfd-status">Disabled</span>
+                </div>
+
+                <div class="display-canvas-wrapper">
+                    <canvas id="vfd-canvas" class="display-canvas vfd-canvas" width="140" height="32"></canvas>
+                </div>
+
+                <div class="display-specs">
+                    <strong>Resolution:</strong> <span id="vfd-resolution">140x32</span> |
+                    <strong>Type:</strong> VFD Graphics |
+                    <strong>Model:</strong> Noritake GU140x32F-7000B
+                </div>
+
+                <div class="display-info" id="vfd-info">
+                    Initializing...
+                </div>
+            </div>
+        </div>
+
+        <!-- LED Network Sign (4 Lines x 20 Chars) -->
+        <div class="col-lg-4 col-md-6">
+            <div class="display-container">
+                <div class="display-header">
+                    <div class="display-title">
+                        <i class="fas fa-rectangle-ad"></i>
+                        LED Network Sign
+                        <span class="refresh-indicator" id="led-refresh"></span>
+                    </div>
+                    <span class="display-status disabled" id="led-status">Disabled</span>
+                </div>
+
+                <div class="display-canvas-wrapper">
+                    <div id="led-preview" class="led-preview">
+                        <span class="led-line led-color-amber" id="led-line-0">--------------------</span>
+                        <span class="led-line led-color-amber" id="led-line-1">  LED SIGN READY    </span>
+                        <span class="led-line led-color-amber" id="led-line-2">   Awaiting Data    </span>
+                        <span class="led-line led-color-amber" id="led-line-3">--------------------</span>
+                    </div>
+                </div>
+
+                <div class="display-specs">
+                    <strong>Format:</strong> <span id="led-format">4 Lines × 20 Chars</span> |
+                    <strong>Type:</strong> Network LED |
+                    <strong>Interface:</strong> TCP/IP
+                </div>
+
+                <div class="display-info" id="led-info">
+                    Initializing...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                <strong>Live Updates:</strong> This page polls the display states every 500ms to provide real-time visualization.
+                OLED scrolling animation updates at 60 FPS when alerts are active.
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Display state and renderers
+let displayState = {
+    oled: { enabled: false },
+    vfd: { enabled: false },
+    led: { enabled: false }
+};
+
+let animationFrameId = null;
+let oledAnimationOffset = 0;
+
+// Get canvas contexts
+const oledCanvas = document.getElementById('oled-canvas');
+const oledCtx = oledCanvas.getContext('2d');
+const vfdCanvas = document.getElementById('vfd-canvas');
+const vfdCtx = vfdCanvas.getContext('2d');
+
+// Scale canvases for better visibility
+const oledScale = 4;
+const vfdScale = 3;
+oledCanvas.style.width = (128 * oledScale) + 'px';
+oledCanvas.style.height = (64 * oledScale) + 'px';
+vfdCanvas.style.width = (140 * vfdScale) + 'px';
+vfdCanvas.style.height = (32 * vfdScale) + 'px';
+
+// Initialize displays
+function initDisplays() {
+    // Clear OLED
+    oledCtx.fillStyle = '#000';
+    oledCtx.fillRect(0, 0, 128, 64);
+
+    // Clear VFD
+    vfdCtx.fillStyle = '#001a00';
+    vfdCtx.fillRect(0, 0, 140, 32);
+
+    // Draw "No Signal" message on OLED
+    oledCtx.fillStyle = '#888';
+    oledCtx.font = '8px monospace';
+    oledCtx.textAlign = 'center';
+    oledCtx.fillText('No Signal', 64, 32);
+
+    // Draw "No Signal" message on VFD
+    vfdCtx.fillStyle = '#004400';
+    vfdCtx.font = '10px monospace';
+    vfdCtx.textAlign = 'center';
+    vfdCtx.fillText('No Signal', 70, 18);
+}
+
+// Render OLED display
+function renderOLED(state) {
+    // Clear canvas
+    oledCtx.fillStyle = '#000';
+    oledCtx.fillRect(0, 0, 128, 64);
+
+    oledCtx.fillStyle = '#fff';
+    oledCtx.font = '8px monospace';
+    oledCtx.textAlign = 'left';
+
+    if (state.alert_active && state.alert_text) {
+        // Render header
+        if (state.header_text) {
+            oledCtx.fillText(state.header_text, 2, 8);
+        }
+
+        // Render scrolling alert text
+        oledCtx.font = 'bold 20px monospace';
+        const scrollX = 128 - oledAnimationOffset;
+        oledCtx.fillText(state.alert_text, scrollX, 45);
+
+        // Update animation offset (simulate 60 FPS scrolling)
+        const speed = state.scroll_speed || 4;
+        oledAnimationOffset = (oledAnimationOffset + speed) % (128 + (state.alert_text.length * 12));
+    } else {
+        // Show idle state
+        oledCtx.textAlign = 'center';
+        oledCtx.fillText('EAS STATION', 64, 25);
+        oledCtx.font = '7px monospace';
+        oledCtx.fillText('Ready', 64, 40);
+    }
+}
+
+// Render VFD display
+function renderVFD(state) {
+    // Clear canvas with VFD green glow
+    vfdCtx.fillStyle = '#001a00';
+    vfdCtx.fillRect(0, 0, 140, 32);
+
+    vfdCtx.fillStyle = '#00ff00';
+    vfdCtx.font = '10px monospace';
+    vfdCtx.textAlign = 'center';
+
+    // Show idle state
+    vfdCtx.fillText('EAS STATION - VFD', 70, 16);
+    vfdCtx.font = '8px monospace';
+    vfdCtx.fillText('No Active Display', 70, 26);
+}
+
+// Render LED sign
+function renderLED(state) {
+    const color = (state.color || 'AMBER').toLowerCase();
+    const colorClass = 'led-color-' + color;
+
+    for (let i = 0; i < 4; i++) {
+        const lineEl = document.getElementById(`led-line-${i}`);
+        if (lineEl) {
+            lineEl.className = `led-line ${colorClass}`;
+            // Show placeholder if no message
+            if (!state.current_message || !state.current_message.lines || !state.current_message.lines[i]) {
+                lineEl.textContent = '                    '; // 20 spaces
+            } else {
+                lineEl.textContent = state.current_message.lines[i].padEnd(20, ' ');
+            }
+        }
+    }
+}
+
+// Update display states from server
+async function updateDisplayStates() {
+    try {
+        const response = await fetch('/api/displays/current-state');
+        if (!response.ok) {
+            console.error('Failed to fetch display states');
+            return;
+        }
+
+        const newState = await response.json();
+        displayState = newState;
+
+        // Update status indicators
+        updateStatusIndicator('oled', newState.oled.enabled);
+        updateStatusIndicator('vfd', newState.vfd.enabled);
+        updateStatusIndicator('led', newState.led.enabled);
+
+        // Update info text
+        if (newState.oled.enabled && newState.oled.alert_active) {
+            document.getElementById('oled-info').textContent =
+                `Alert scrolling at ${newState.oled.scroll_speed}px/frame, offset: ${newState.oled.scroll_offset}`;
+        } else if (newState.oled.enabled) {
+            document.getElementById('oled-info').textContent = 'Display active - No alerts';
+        } else {
+            document.getElementById('oled-info').textContent = 'Display offline';
+        }
+
+        document.getElementById('vfd-info').textContent = newState.vfd.enabled ? 'Display active' : 'Display offline';
+        document.getElementById('led-info').textContent = newState.led.enabled ? 'Display active' : 'Display offline';
+
+        // Render displays
+        renderOLED(newState.oled);
+        renderVFD(newState.vfd);
+        renderLED(newState.led);
+
+    } catch (error) {
+        console.error('Error updating display states:', error);
+    }
+}
+
+// Update status indicator
+function updateStatusIndicator(displayType, enabled) {
+    const statusEl = document.getElementById(`${displayType}-status`);
+    if (statusEl) {
+        statusEl.textContent = enabled ? 'Enabled' : 'Disabled';
+        statusEl.className = `display-status ${enabled ? 'enabled' : 'disabled'}`;
+    }
+}
+
+// Animation loop for smooth OLED scrolling
+function animate() {
+    if (displayState.oled.enabled && displayState.oled.alert_active) {
+        renderOLED(displayState.oled);
+    }
+    animationFrameId = requestAnimationFrame(animate);
+}
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', function() {
+    initDisplays();
+    updateDisplayStates();
+
+    // Poll for updates every 500ms
+    setInterval(updateDisplayStates, 500);
+
+    // Start animation loop
+    animate();
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+    }
+});
+</script>
+{% endblock %}
