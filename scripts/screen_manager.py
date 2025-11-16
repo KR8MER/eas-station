@@ -94,6 +94,9 @@ class ScreenManager:
         self._oled_scroll_effect = None
         self._oled_scroll_speed = 4  # pixels per frame (increased for faster scrolling)
         self._oled_scroll_fps = 60  # frames per second (increased for ultra-smooth scrolling)
+        self._oled_screen_scroll_state: Optional[Dict[str, Any]] = None
+        self._oled_screen_scroll_offset = 0
+        self._last_oled_screen_frame = datetime.min
         self._current_alert_id: Optional[int] = None
         self._current_alert_priority: Optional[int] = None
         self._current_alert_text: Optional[str] = None
@@ -293,14 +296,17 @@ class ScreenManager:
     def _check_oled_rotation(self):
         """Check if OLED screen should rotate."""
         if not self._oled_rotation:
+            self._clear_oled_screen_scroll_state()
             return
 
         now = datetime.utcnow()
         if self._oled_rotation.get('skip_on_alert') and self._handle_oled_alert_preemption(now):
+            self._clear_oled_screen_scroll_state()
             return
 
         screens = self._oled_rotation.get('screens', [])
         if not screens:
+            self._clear_oled_screen_scroll_state()
             return
 
         current_index = self._oled_current_index
@@ -310,6 +316,10 @@ class ScreenManager:
 
         screen_config = screens[current_index]
         duration = screen_config.get('duration', 10)
+
+        # Update any in-progress OLED scroll animations even if the rotation entry
+        # has not advanced yet.
+        self._update_active_oled_scroll(now)
 
         if now - self._last_oled_update >= timedelta(seconds=duration):
             self._display_oled_screen(screen_config)
@@ -723,11 +733,22 @@ class ScreenManager:
             ):
                 return
 
-            controller.display_lines(
+            # Reset any previous animation context before showing the new frame.
+            self._clear_oled_screen_scroll_state()
+
+            scroll_started = self._start_oled_template_scroll(
+                controller,
                 line_objects,
-                clear=rendered.get('clear', True),
-                invert=rendered.get('invert'),
+                rendered,
+                oled_module,
             )
+
+            if not scroll_started:
+                controller.display_lines(
+                    line_objects,
+                    clear=rendered.get('clear', True),
+                    invert=rendered.get('invert'),
+                )
 
             screen.display_count += 1
             screen.last_displayed_at = datetime.utcnow()
@@ -737,6 +758,199 @@ class ScreenManager:
 
         except Exception as e:
             logger.error(f"Error displaying OLED screen: {e}")
+
+    def _start_oled_template_scroll(
+        self,
+        controller,
+        line_objects: List["OLEDLine"],
+        rendered: Dict[str, Any],
+        oled_module,
+    ) -> bool:
+        """Prepare scroll state for template-driven OLED animations."""
+
+        scroll_effect = rendered.get('scroll_effect')
+        if not isinstance(scroll_effect, str):
+            return False
+
+        effect_name = scroll_effect.strip().lower()
+        if not effect_name or effect_name == 'static':
+            return False
+
+        try:
+            from app_core.oled import OLEDScrollEffect
+        except Exception as exc:  # pragma: no cover - hardware optional
+            logger.debug("OLED scroll effects unavailable: %s", exc)
+            return False
+
+        try:
+            effect = OLEDScrollEffect(effect_name)
+        except ValueError:
+            logger.warning("Unknown OLED scroll effect '%s' in template", effect_name)
+            return False
+
+        try:
+            raw_speed = rendered.get('scroll_speed')
+            speed = int(raw_speed) if raw_speed is not None else oled_module.OLED_SCROLL_SPEED
+        except (TypeError, ValueError):
+            speed = oled_module.OLED_SCROLL_SPEED
+
+        try:
+            raw_fps = rendered.get('scroll_fps')
+            fps = int(raw_fps) if raw_fps is not None else oled_module.OLED_SCROLL_FPS
+        except (TypeError, ValueError):
+            fps = oled_module.OLED_SCROLL_FPS
+
+        speed = max(1, min(20, speed))
+        fps = max(5, min(60, fps))
+
+        extents = self._calculate_oled_scroll_extents(controller, line_objects)
+        max_offset = self._resolve_scroll_limit(effect, extents, controller)
+        if max_offset <= 0:
+            return False
+
+        try:
+            controller.render_scroll_frame(
+                line_objects,
+                effect,
+                offset=0,
+                invert=rendered.get('invert'),
+            )
+        except Exception as exc:
+            logger.error("Unable to start OLED scroll: %s", exc)
+            return False
+
+        self._oled_screen_scroll_state = {
+            'lines': line_objects,
+            'effect': effect,
+            'invert': rendered.get('invert'),
+            'speed': speed,
+            'fps': fps,
+            'max_offset': max_offset,
+        }
+        self._oled_screen_scroll_offset = 0
+        self._last_oled_screen_frame = datetime.utcnow()
+        return True
+
+    def _clear_oled_screen_scroll_state(self) -> None:
+        """Reset cached scroll animation data for normal OLED screens."""
+
+        self._oled_screen_scroll_state = None
+        self._oled_screen_scroll_offset = 0
+        self._last_oled_screen_frame = datetime.min
+
+    def _update_active_oled_scroll(self, now: datetime) -> None:
+        """Advance OLED template scrolling when active."""
+
+        if not self._oled_screen_scroll_state:
+            return
+
+        try:
+            import app_core.oled as oled_module
+            from app_core.oled import initialise_oled_display
+        except Exception as exc:  # pragma: no cover - optional dependency
+            logger.debug("OLED module unavailable for scrolling: %s", exc)
+            self._clear_oled_screen_scroll_state()
+            return
+
+        controller = oled_module.oled_controller or initialise_oled_display(logger)
+        if controller is None:
+            self._clear_oled_screen_scroll_state()
+            return
+
+        state = self._oled_screen_scroll_state
+        frame_interval = timedelta(seconds=1.0 / max(1, state['fps']))
+        if now - self._last_oled_screen_frame < frame_interval:
+            return
+
+        try:
+            controller.render_scroll_frame(
+                state['lines'],
+                state['effect'],
+                offset=self._oled_screen_scroll_offset,
+                invert=state.get('invert'),
+            )
+        except Exception as exc:
+            logger.error("Error rendering OLED scroll frame: %s", exc)
+            self._clear_oled_screen_scroll_state()
+            return
+
+        self._last_oled_screen_frame = now
+        self._oled_screen_scroll_offset += max(1, state['speed'])
+        if self._oled_screen_scroll_offset >= max(1, state['max_offset']):
+            self._oled_screen_scroll_offset = 0
+
+    def _calculate_oled_scroll_extents(self, controller, line_objects: List["OLEDLine"]) -> Dict[str, int]:
+        """Estimate how far text needs to travel for full-screen coverage."""
+
+        try:
+            from PIL import Image, ImageDraw
+        except Exception as exc:  # pragma: no cover - optional dependency
+            logger.debug("Pillow unavailable for OLED extent calculation: %s", exc)
+            return {'horizontal': controller.width, 'vertical': controller.height}
+
+        canvas_width = max(controller.width * 2, controller.width + 64)
+        canvas_height = max(controller.height * 2, controller.height + 16)
+        image = Image.new("1", (canvas_width, canvas_height), color=0)
+        draw = ImageDraw.Draw(image)
+        cursor_y = 0
+        max_x = 0
+        max_y = 0
+
+        for entry in line_objects:
+            if not entry.text and not entry.allow_empty:
+                continue
+
+            font_key = (entry.font or 'small').lower()
+            font = controller._fonts.get(font_key, controller._fonts['small'])
+            x = max(0, entry.x)
+            line_y = entry.y if entry.y is not None else cursor_y
+
+            draw.text((x, line_y), entry.text or '', font=font, fill=255)
+
+            try:
+                text_width = draw.textlength(entry.text or '', font=font)
+            except AttributeError:  # pragma: no cover - Pillow compatibility
+                text_width = font.getsize(entry.text or '')[0]
+
+            line_height = controller._line_height(font)
+            max_x = max(max_x, x + int(text_width))
+            max_y = max(max_y, line_y + line_height)
+
+            spacing = max(0, entry.spacing)
+            if entry.y is None:
+                cursor_y = line_y + line_height + spacing
+            else:
+                cursor_y = max(cursor_y, line_y + line_height + spacing)
+
+        return {
+            'horizontal': controller.width + max(0, max_x),
+            'vertical': controller.height + max(0, max_y),
+        }
+
+    def _resolve_scroll_limit(self, effect, extents: Dict[str, int], controller) -> int:
+        """Map a scroll effect to the maximum offset required before looping."""
+
+        try:
+            from app_core.oled import OLEDScrollEffect
+        except Exception:  # pragma: no cover - optional dependency
+            return max(controller.width, controller.height)
+
+        horizontal_limit = max(controller.width, extents.get('horizontal', controller.width))
+        vertical_limit = max(controller.height, extents.get('vertical', controller.height))
+
+        if effect in (OLEDScrollEffect.SCROLL_LEFT, OLEDScrollEffect.SCROLL_RIGHT):
+            return horizontal_limit
+        if effect in (OLEDScrollEffect.WIPE_LEFT, OLEDScrollEffect.WIPE_RIGHT):
+            return controller.width
+        if effect in (OLEDScrollEffect.SCROLL_UP, OLEDScrollEffect.SCROLL_DOWN):
+            return vertical_limit
+        if effect in (OLEDScrollEffect.WIPE_UP, OLEDScrollEffect.WIPE_DOWN):
+            return controller.height
+        if effect == OLEDScrollEffect.FADE_IN:
+            return 4
+
+        # Default fallback for any other effect names.
+        return max(horizontal_limit, vertical_limit)
 
     def _handle_oled_alert_preemption(self, now: datetime) -> bool:
         """Display high-priority alerts on the OLED, preempting normal rotation."""
