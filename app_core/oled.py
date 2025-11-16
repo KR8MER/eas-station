@@ -221,12 +221,15 @@ class ArgonOLEDController:
         invert: Optional[bool] = None,
     ) -> tuple[Image.Image, Dict[str, int]]:
         """
-        Pre-render the full text content to a single image buffer.
+        Pre-render the full text content to a padded image buffer for seamless scrolling.
 
-        This method is called once before the animation loop to render all text
-        into a large buffer. The animation loop then only needs to crop and display
-        portions of this buffer, making it much more efficient than redrawing text
-        on every frame.
+        For horizontal scrolling, creates a padded buffer with the pattern:
+        [original_text][separator][original_text]
+        
+        This allows the animation loop to scroll through the buffer with simple offset
+        incrementing. When the offset reaches the end of the first text + separator,
+        it resets to 0, creating a seamless continuous loop without complex boundary
+        calculations.
 
         Args:
             lines: List of OLEDLine objects to render
@@ -234,21 +237,23 @@ class ArgonOLEDController:
 
         Returns:
             A tuple of (content_image, dimensions) where:
-            - content_image: PIL Image containing the fully rendered content
-            - dimensions: Dict with 'max_x' and 'max_y' indicating content bounds
+            - content_image: PIL Image containing the fully rendered padded content
+            - dimensions: Dict with 'max_x', 'max_y', 'original_width', 'separator_width'
         """
         active_invert = self.default_invert if invert is None else invert
         background = 255 if active_invert else 0
         text_colour = 0 if active_invert else 255
 
-        # Create the full content image (may be larger than display)
-        content_image = Image.new("1", (self.width * 2, self.height * 2), color=background)
-        content_draw = ImageDraw.Draw(content_image)
-
-        # Render all lines to the content image
+        # First pass: calculate dimensions of original content
+        temp_image = Image.new("1", (1, 1), color=background)
+        temp_draw = ImageDraw.Draw(temp_image)
+        
         cursor_y = 0
-        max_x = 0
+        original_width = 0
         max_y = 0
+        
+        # Store line rendering info for second pass
+        line_render_info = []
 
         for entry in lines:
             if not entry.text and not entry.allow_empty:
@@ -258,39 +263,82 @@ class ArgonOLEDController:
             font = self._fonts.get(font_key, self._fonts["small"])
             x = max(0, entry.x)
 
-            # For scrolling content, keep text as a single continuous line
-            # This allows long text to scroll smoothly horizontally (like a ticker/marquee)
-            # rather than wrapping and appearing as stacked vertical lines that "bounce"
-            segments = [entry.text]
-            for segment in segments:
-                line_y = entry.y if entry.y is not None else cursor_y
+            # Keep text as single continuous line for smooth scrolling
+            text = entry.text
+            line_y = entry.y if entry.y is not None else cursor_y
 
+            fill_colour = text_colour
+            if entry.invert is True:
+                fill_colour = background
+            elif entry.invert is False:
                 fill_colour = text_colour
-                if entry.invert is True:
-                    fill_colour = background
-                elif entry.invert is False:
-                    fill_colour = text_colour
 
-                content_draw.text((x, line_y), segment, font=font, fill=fill_colour)
+            # Calculate text width
+            try:
+                text_width = int(temp_draw.textlength(text, font=font))
+            except AttributeError:
+                text_width = font.getsize(text)[0]
 
-                # Track content bounds
-                try:
-                    text_width = content_draw.textlength(segment, font=font)
-                except AttributeError:
-                    text_width = font.getsize(segment)[0]
+            original_width = max(original_width, x + text_width)
 
-                max_x = max(max_x, x + int(text_width))
+            line_height = self._line_height(font)
+            max_y = max(max_y, line_y + line_height)
 
-                line_height = self._line_height(font)
-                max_y = max(max_y, line_y + line_height)
+            # Store for second pass
+            line_render_info.append({
+                'text': text,
+                'x': x,
+                'y': line_y,
+                'font': font,
+                'fill': fill_colour,
+                'width': text_width,
+            })
 
-                spacing = max(0, entry.spacing)
-                if entry.y is None:
-                    cursor_y = line_y + line_height + spacing
-                else:
-                    cursor_y = max(cursor_y, line_y + line_height + spacing)
+            spacing = max(0, entry.spacing)
+            if entry.y is None:
+                cursor_y = line_y + line_height + spacing
+            else:
+                cursor_y = max(cursor_y, line_y + line_height + spacing)
 
-        return content_image, {'max_x': max_x, 'max_y': max_y}
+        # Calculate separator width
+        separator = '   ***   '
+        separator_font = self._fonts.get("small", self._fonts["small"])
+        try:
+            separator_width = int(temp_draw.textlength(separator, font=separator_font))
+        except AttributeError:
+            separator_width = separator_font.getsize(separator)[0]
+
+        # Create padded buffer: [original][separator][original]
+        # This creates a seamless loop for horizontal scrolling
+        # Buffer must be wide enough to crop at loop point (original_width + separator_width)
+        # Minimum width: (original_width + separator_width) + display_width
+        loop_point = original_width + separator_width
+        min_buffer_width = loop_point + self.width
+        padded_width = max(min_buffer_width, original_width + separator_width + original_width)
+        padded_height = max(max_y, self.height)
+        
+        content_image = Image.new("1", (padded_width, padded_height), color=background)
+        content_draw = ImageDraw.Draw(content_image)
+
+        # Render original content at position 0
+        for info in line_render_info:
+            content_draw.text((info['x'], info['y']), info['text'], font=info['font'], fill=info['fill'])
+
+        # Render separator after original content
+        separator_y = (padded_height - self._line_height(separator_font)) // 2
+        content_draw.text((original_width, separator_y), separator, font=separator_font, fill=text_colour)
+
+        # Render original content again after separator for seamless wrap
+        for info in line_render_info:
+            offset_x = original_width + separator_width
+            content_draw.text((offset_x + info['x'], info['y']), info['text'], font=info['font'], fill=info['fill'])
+
+        return content_image, {
+            'max_x': padded_width,
+            'max_y': max_y,
+            'original_width': original_width,
+            'separator_width': separator_width,
+        }
 
     def render_scroll_frame(
         self,
@@ -306,12 +354,12 @@ class ArgonOLEDController:
 
         This method is optimized for performance - it only crops and displays portions
         of the pre-rendered content_image, avoiding expensive text rendering on every
-        frame. This results in smooth, fluid scrolling even on resource-constrained
-        devices.
+        frame. With the padded buffer approach, horizontal scrolling is now a simple
+        crop operation without any complex boundary calculations.
 
         Args:
             content_image: Pre-rendered PIL Image from prepare_scroll_content()
-            dimensions: Dict with 'max_x' and 'max_y' from prepare_scroll_content()
+            dimensions: Dict with 'max_x', 'max_y', etc. from prepare_scroll_content()
             effect: The scroll effect to apply
             offset: Pixel offset for the current frame (0 to max_offset)
             invert: Whether to invert colors
@@ -328,28 +376,14 @@ class ArgonOLEDController:
         # Apply the effect
         if effect == OLEDScrollEffect.SCROLL_LEFT:
             # Scroll from right to left (text moves left)
-            # Use modulo to create seamless looping for news ticker effect
-            src_x = offset % max(1, max_x)
+            # With padded buffer, this is now a simple crop operation
+            # The buffer contains [original][separator][original], so scrolling is seamless
+            src_x = offset
             src_y = 0
             
-            # Check if we need to wrap around (showing end of text + beginning)
-            if src_x + self.width > max_x:
-                # Split display: show end of content + beginning wrapped around
-                first_part_width = max_x - src_x
-                second_part_width = self.width - first_part_width
-                
-                # Paste end of content on left
-                if first_part_width > 0:
-                    first_part = content_image.crop((src_x, src_y, max_x, src_y + self.height))
-                    display_image.paste(first_part, (0, 0))
-                
-                # Paste beginning of content on right (wrapped)
-                if second_part_width > 0:
-                    second_part = content_image.crop((0, src_y, second_part_width, src_y + self.height))
-                    display_image.paste(second_part, (first_part_width, 0))
-            else:
-                # Normal case: just crop and display
-                display_image.paste(content_image.crop((src_x, src_y, src_x + self.width, src_y + self.height)), (0, 0))
+            # Simple crop from padded buffer - no complex wrapping needed!
+            # The pre-rendered buffer already contains the repeated text for seamless loop
+            display_image.paste(content_image.crop((src_x, src_y, src_x + self.width, src_y + self.height)), (0, 0))
 
         elif effect == OLEDScrollEffect.SCROLL_RIGHT:
             # Scroll from left to right (text moves right)
