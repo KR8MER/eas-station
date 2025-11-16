@@ -825,13 +825,19 @@ class ScreenManager:
         body_height = height - header_height
         body_font = controller._fonts.get('huge', controller._fonts.get('xlarge', controller._fonts.get('large', controller._fonts['small'])))
 
-        # Calculate text width for the pre-rendered canvas
+        # Calculate text width and height for the pre-rendered canvas
         temp_img = Image.new("1", (1, 1))
         temp_draw = ImageDraw.Draw(temp_img)
         try:
             text_width = int(temp_draw.textlength(body_text, font=body_font))
+            # Get text bounding box for accurate height
+            bbox = temp_draw.textbbox((0, 0), body_text, font=body_font)
+            text_height = bbox[3] - bbox[1]
         except AttributeError:
-            text_width = body_font.getsize(body_text)[0]
+            # Fallback for older PIL versions
+            text_size = body_font.getsize(body_text)
+            text_width = text_size[0]
+            text_height = text_size[1]
 
         # Pre-render the entire scrolling text to a wide canvas
         # Make it wide enough for: screen_width + text_width + screen_width (for seamless loop)
@@ -839,17 +845,31 @@ class ScreenManager:
         scroll_canvas = Image.new("1", (canvas_width, body_height), color=background)
         canvas_draw = ImageDraw.Draw(scroll_canvas)
 
+        # Vertically center the text in the available body area
+        text_y = (body_height - text_height) // 2
+
         # Draw text starting at position width (so it starts off-screen to the right)
-        canvas_draw.text((width, 0), body_text, font=body_font, fill=text_colour)
+        canvas_draw.text((width, text_y), body_text, font=body_font, fill=text_colour)
 
         # Cache the pre-rendered canvas
         self._cached_scroll_canvas = scroll_canvas
         self._cached_scroll_text_width = text_width
         self._cached_body_area_height = body_height
 
+        # Debug: Save canvas to file for inspection
+        try:
+            import os
+            debug_path = "/tmp/oled_scroll_canvas_debug.png"
+            scroll_canvas.save(debug_path)
+            logger.info(f"Saved scroll canvas to {debug_path} for debugging")
+        except Exception as e:
+            logger.debug(f"Could not save debug canvas: {e}")
+
         header = alert_meta.get('header_text') or alert_meta.get('event') or 'Alert'
-        logger.info("OLED alert scroll engaged: %s (speed: %spx at %sfps, text_width: %spx)",
-                    header, self._oled_scroll_speed, self._oled_scroll_fps, text_width)
+        logger.info(
+            "OLED alert scroll engaged: %s (speed: %spx at %sfps, text_width: %spx, canvas_width: %spx, text_y: %s, body_text_len: %s chars)",
+            header, self._oled_scroll_speed, self._oled_scroll_fps, text_width, canvas_width, text_y, len(body_text)
+        )
 
     def _display_alert_scroll_frame(self, alert_meta: Dict[str, Any]) -> None:
         """Render a single frame of the scrolling alert animation using pre-rendered canvas."""
@@ -920,13 +940,19 @@ class ScreenManager:
         max_offset = width + self._cached_scroll_text_width
         if self._oled_scroll_offset >= max_offset:
             self._oled_scroll_offset = 0
+            logger.debug("OLED scroll reset - looping back to start")
 
-        logger.debug(
-            "OLED alert scroll: %s (offset %s/%s)",
-            header_text,
-            self._oled_scroll_offset,
-            max_offset,
-        )
+        # Log every 30 frames (about every 0.5 seconds at 60 FPS) to avoid spam
+        if self._oled_scroll_offset % 120 == 0:
+            logger.debug(
+                "OLED scroll: offset=%s/%s, crop=[%s:%s], canvas_width=%s, text_width=%s",
+                self._oled_scroll_offset,
+                max_offset,
+                crop_left,
+                crop_right,
+                self._cached_scroll_canvas.width if self._cached_scroll_canvas else 0,
+                self._cached_scroll_text_width,
+            )
 
     def _reset_oled_alert_state(self) -> None:
         """Reset OLED alert scroll state."""
