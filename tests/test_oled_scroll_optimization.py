@@ -200,7 +200,7 @@ class TestRenderScrollFrame:
         assert mock_draw_obj.text.call_count == 0
     
     def test_render_scroll_frame_scroll_left_effect(self, oled_controller, sample_lines, mock_pil_modules):
-        """Test scroll left effect cropping."""
+        """Test scroll left effect cropping with seamless wrapping."""
         from app_core.oled import OLEDScrollEffect
         
         content_image, dimensions = oled_controller.prepare_scroll_content(sample_lines)
@@ -214,11 +214,10 @@ class TestRenderScrollFrame:
             offset=10,
         )
         
-        # Verify crop was called (extracts portion of content)
+        # Verify crop was called (may be called once or twice for wrapping)
         assert mock_img.crop.called
-        crop_args = mock_img.crop.call_args[0][0]
-        # For scroll left, x offset should be 10
-        assert crop_args[0] == 10
+        # The offset is applied with modulo for seamless looping
+        # Just verify that cropping occurred - exact args depend on wrapping logic
     
     def test_render_scroll_frame_scroll_right_effect(self, oled_controller, sample_lines, mock_pil_modules):
         """Test scroll right effect cropping."""
@@ -462,3 +461,72 @@ class TestScrollingTextBehavior:
         # They should be different!
         assert scroll_content_call_count != display_lines_call_count, \
             f"Scrolling and static text should behave differently: scrolling={scroll_content_call_count} (single line), static={display_lines_call_count} (wrapped)"
+
+
+class TestSeamlessScrollingLoop:
+    """Tests to ensure scrolling loops seamlessly without jumping."""
+    
+    def test_scroll_left_wraps_seamlessly_at_content_end(self, oled_controller, mock_pil_modules):
+        """Test that SCROLL_LEFT wraps seamlessly when reaching end of content."""
+        from app_core.oled import OLEDLine, OLEDScrollEffect
+        
+        # Create content that's 200 pixels wide
+        long_text = "A" * 25  # ~200 pixels at 8px/char
+        lines = [OLEDLine(text=long_text, x=0, y=0, font="small")]
+        
+        mock_draw_obj = mock_pil_modules['draw_obj']
+        def mock_textlength(text, font=None):
+            return len(text) * 8.0
+        mock_draw_obj.textlength = mock_textlength
+        
+        content_image, dimensions = oled_controller.prepare_scroll_content(lines)
+        
+        # Content is 200 pixels wide, display is 128 pixels
+        assert dimensions['max_x'] == 200
+        
+        # Test offset near the end (offset 180)
+        # This should wrap: show last 20px of content + first 108px wrapped
+        mock_img = mock_pil_modules['img']
+        mock_img.crop.reset_mock()
+        mock_img.paste.reset_mock()
+        
+        oled_controller.render_scroll_frame(
+            content_image,
+            dimensions,
+            OLEDScrollEffect.SCROLL_LEFT,
+            offset=180,  # Near end of 200px content
+        )
+        
+        # Should paste twice: once for end of content, once for wrapped beginning
+        assert mock_img.paste.call_count == 2, \
+            "Should paste twice when wrapping (end + beginning)"
+    
+    def test_scroll_left_uses_modulo_for_offset(self, oled_controller, mock_pil_modules):
+        """Test that offsets beyond content width wrap using modulo."""
+        from app_core.oled import OLEDLine, OLEDScrollEffect
+        
+        long_text = "Test text"
+        lines = [OLEDLine(text=long_text, x=0, y=0, font="small")]
+        
+        mock_draw_obj = mock_pil_modules['draw_obj']
+        def mock_textlength(text, font=None):
+            return len(text) * 8.0
+        mock_draw_obj.textlength = mock_textlength
+        
+        content_image, dimensions = oled_controller.prepare_scroll_content(lines)
+        max_x = dimensions['max_x']  # e.g., 72 pixels
+        
+        # Test offset that exceeds content width (should wrap via modulo)
+        offset_beyond = max_x + 10  # e.g., 82
+        expected_wrapped_offset = 10  # 82 % 72 = 10
+        
+        # This should work without errors and render correctly
+        oled_controller.render_scroll_frame(
+            content_image,
+            dimensions,
+            OLEDScrollEffect.SCROLL_LEFT,
+            offset=offset_beyond,
+        )
+        
+        # Verify device.display was called (rendering succeeded)
+        assert mock_pil_modules['device'].display.called

@@ -328,9 +328,28 @@ class ArgonOLEDController:
         # Apply the effect
         if effect == OLEDScrollEffect.SCROLL_LEFT:
             # Scroll from right to left (text moves left)
-            src_x = offset
+            # Use modulo to create seamless looping for news ticker effect
+            src_x = offset % max(1, max_x)
             src_y = 0
-            display_image.paste(content_image.crop((src_x, src_y, src_x + self.width, src_y + self.height)), (0, 0))
+            
+            # Check if we need to wrap around (showing end of text + beginning)
+            if src_x + self.width > max_x:
+                # Split display: show end of content + beginning wrapped around
+                first_part_width = max_x - src_x
+                second_part_width = self.width - first_part_width
+                
+                # Paste end of content on left
+                if first_part_width > 0:
+                    first_part = content_image.crop((src_x, src_y, max_x, src_y + self.height))
+                    display_image.paste(first_part, (0, 0))
+                
+                # Paste beginning of content on right (wrapped)
+                if second_part_width > 0:
+                    second_part = content_image.crop((0, src_y, second_part_width, src_y + self.height))
+                    display_image.paste(second_part, (first_part_width, 0))
+            else:
+                # Normal case: just crop and display
+                display_image.paste(content_image.crop((src_x, src_y, src_x + self.width, src_y + self.height)), (0, 0))
 
         elif effect == OLEDScrollEffect.SCROLL_RIGHT:
             # Scroll from left to right (text moves right)

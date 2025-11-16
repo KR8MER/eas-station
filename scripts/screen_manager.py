@@ -895,7 +895,12 @@ class ScreenManager:
             self._oled_screen_scroll_offset = 0
 
     def _resolve_scroll_limit(self, effect, extents: Dict[str, int], controller) -> int:
-        """Map a scroll effect to the maximum offset required before looping."""
+        """Map a scroll effect to the maximum offset required before looping.
+        
+        For horizontal scrolling (news ticker style), the limit is set to the content
+        width. The render_scroll_frame method handles seamless wrapping using modulo,
+        creating a smooth continuous loop effect.
+        """
 
         try:
             from app_core.oled import OLEDScrollEffect
@@ -906,10 +911,12 @@ class ScreenManager:
         vertical_limit = max(controller.height, extents.get('vertical', controller.height))
 
         if effect in (OLEDScrollEffect.SCROLL_LEFT, OLEDScrollEffect.SCROLL_RIGHT):
+            # Return content width - render_scroll_frame will wrap seamlessly
             return horizontal_limit
         if effect in (OLEDScrollEffect.WIPE_LEFT, OLEDScrollEffect.WIPE_RIGHT):
             return controller.width
         if effect in (OLEDScrollEffect.SCROLL_UP, OLEDScrollEffect.SCROLL_DOWN):
+            # Return content height - render_scroll_frame will wrap seamlessly
             return vertical_limit
         if effect in (OLEDScrollEffect.WIPE_UP, OLEDScrollEffect.WIPE_DOWN):
             return controller.height
