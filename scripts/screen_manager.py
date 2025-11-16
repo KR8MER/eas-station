@@ -882,44 +882,10 @@ class ScreenManager:
         self._cached_scroll_text_width = text_width
         self._cached_body_area_height = body_height
 
-        # Debug: Save a section of the canvas for inspection
-        try:
-            import os
-            # Save to application directory which should be mounted from host in Docker
-            # This allows access via WinSCP/SCP from the host filesystem
-            app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            debug_dir = os.path.join(app_dir, "debug")
-            os.makedirs(debug_dir, exist_ok=True)
-
-            # Save first 500px of canvas to reduce file size
-            debug_section = scroll_canvas.crop((0, 0, min(500, canvas_width), body_height))
-            section_path = os.path.join(debug_dir, "oled_scroll_section.png")
-            debug_section.save(section_path)
-            logger.info(f"✓ Saved scroll canvas section to {section_path}")
-
-            # Also try to save full canvas
-            full_path = os.path.join(debug_dir, "oled_scroll_full.png")
-            scroll_canvas.save(full_path)
-            file_size_mb = os.path.getsize(full_path) / (1024 * 1024)
-            logger.info(f"✓ Saved full scroll canvas ({canvas_width}px × {body_height}px, {file_size_mb:.2f} MB) to {full_path}")
-
-            # Verify files were actually created
-            if not os.path.exists(section_path):
-                logger.error(f"✗ Section file was NOT created at {section_path}")
-            if not os.path.exists(full_path):
-                logger.error(f"✗ Full file was NOT created at {full_path}")
-
-        except Exception as e:
-            logger.error(f"✗ Failed to save debug canvas: {e}", exc_info=True)
-
         header = alert_meta.get('header_text') or alert_meta.get('event') or 'Alert'
         logger.info(
-            "OLED alert scroll engaged: %s (speed: %spx at %sfps, text_width: %spx, canvas_width: %spx, text_y: %s, body_text_len: %s chars)",
-            header, self._oled_scroll_speed, self._oled_scroll_fps, text_width, canvas_width, text_y, len(body_text)
-        )
-        logger.info(
-            "📊 CACHED VALUES: _cached_scroll_text_width=%s, _cached_body_area_height=%s, expected_max_offset=%s",
-            self._cached_scroll_text_width, self._cached_body_area_height, width + text_width
+            "OLED alert scroll started: %s (%spx at %sfps)",
+            header, self._oled_scroll_speed, self._oled_scroll_fps
         )
 
     def _display_alert_scroll_frame(self, alert_meta: Dict[str, Any]) -> None:
@@ -998,26 +964,6 @@ class ScreenManager:
         # Paste the scrolling body below the header
         display_image.paste(body_window, (0, header_height))
 
-        # DEBUG: Save frames at key intervals to diagnose rendering issues
-        if not hasattr(self, '_debug_frame_count'):
-            self._debug_frame_count = 0
-            self._debug_saved_frames = []
-
-        # Save frames 0, 10, 20, 30, 40, 50 to see progression
-        if self._debug_frame_count in [0, 10, 20, 30, 40, 50] and self._debug_frame_count not in self._debug_saved_frames:
-            try:
-                import os
-                app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                debug_dir = os.path.join(app_dir, "debug")
-                os.makedirs(debug_dir, exist_ok=True)
-
-                frame_path = os.path.join(debug_dir, f"frame_{self._debug_frame_count:03d}_offset_{self._oled_scroll_offset}.png")
-                display_image.save(frame_path)
-                logger.info(f"📸 Saved frame {self._debug_frame_count} (offset={self._oled_scroll_offset}) to {frame_path}")
-                self._debug_saved_frames.append(self._debug_frame_count)
-            except Exception as e:
-                logger.error(f"Failed to save debug frame: {e}")
-
         # Display the final image
         controller.device.display(display_image)
 
@@ -1025,41 +971,8 @@ class ScreenManager:
         # When offset reaches (width + text_width), reset to 0 for seamless loop
         max_offset = width + self._cached_scroll_text_width
 
-        # DEBUG: Log frame details with timing to diagnose stuttering
-        if not hasattr(self, '_debug_last_offset'):
-            self._debug_last_offset = 0
-            self._debug_last_display_time = None
-
-        if self._debug_frame_count < 60:
-            import time
-            current_time = time.time()
-            time_delta = 0 if self._debug_last_display_time is None else (current_time - self._debug_last_display_time) * 1000
-            offset_delta = self._oled_scroll_offset - self._debug_last_offset
-
-            logger.info(
-                "FRAME %d: offset=%s (Δ%spx), crop=[%s:%s], time_delta=%.1fms, max=%s",
-                self._debug_frame_count,
-                self._oled_scroll_offset,
-                offset_delta,
-                crop_left,
-                crop_right,
-                time_delta,
-                max_offset
-            )
-            self._debug_last_offset = self._oled_scroll_offset
-            self._debug_last_display_time = current_time
-            self._debug_frame_count += 1
-
         if self._oled_scroll_offset >= max_offset:
-            logger.warning(
-                "⚠️  RESET! offset=%s reached max_offset=%s (width=%s + text_width=%s)",
-                self._oled_scroll_offset,
-                max_offset,
-                width,
-                self._cached_scroll_text_width
-            )
             self._oled_scroll_offset = 0
-            self._debug_frame_count = 0  # Reset debug counter on loop
 
     def _reset_oled_alert_state(self) -> None:
         """Reset OLED alert scroll state."""
