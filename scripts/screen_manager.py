@@ -914,6 +914,10 @@ class ScreenManager:
             "OLED alert scroll engaged: %s (speed: %spx at %sfps, text_width: %spx, canvas_width: %spx, text_y: %s, body_text_len: %s chars)",
             header, self._oled_scroll_speed, self._oled_scroll_fps, text_width, canvas_width, text_y, len(body_text)
         )
+        logger.info(
+            "📊 CACHED VALUES: _cached_scroll_text_width=%s, _cached_body_area_height=%s, expected_max_offset=%s",
+            self._cached_scroll_text_width, self._cached_body_area_height, width + text_width
+        )
 
     def _display_alert_scroll_frame(self, alert_meta: Dict[str, Any]) -> None:
         """Render a single frame of the scrolling alert animation using pre-rendered canvas."""
@@ -1002,13 +1006,15 @@ class ScreenManager:
         if self._oled_scroll_offset % 240 == 0:  # Every 240 pixels (every ~1 second)
             progress_pct = (self._oled_scroll_offset / max_offset * 100) if max_offset > 0 else 0
             logger.info(
-                "SCROLL: offset=%s/%s (%d%%), crop=[%s:%s], canvas_width=%s",
+                "SCROLL: offset=%s/%s (%d%%), crop=[%s:%s], canvas_width=%s, cached_text_width=%s, width=%s",
                 self._oled_scroll_offset,
                 max_offset,
                 int(progress_pct),
                 crop_left,
                 crop_right,
                 self._cached_scroll_canvas.width if self._cached_scroll_canvas else 0,
+                self._cached_scroll_text_width,
+                width,
             )
 
         if self._oled_scroll_offset >= max_offset:
