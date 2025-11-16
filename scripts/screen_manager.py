@@ -813,8 +813,8 @@ class ScreenManager:
             logger.error("Unable to prepare OLED scroll content: %s", exc)
             return False
 
-        extents = {'horizontal': dimensions['max_x'], 'vertical': dimensions['max_y']}
-        max_offset = self._resolve_scroll_limit(effect, extents, controller)
+        # Pass dimensions directly - contains original_width, separator_width, max_x, max_y
+        max_offset = self._resolve_scroll_limit(effect, dimensions, controller)
         if max_offset <= 0:
             return False
 
@@ -897,9 +897,10 @@ class ScreenManager:
     def _resolve_scroll_limit(self, effect, extents: Dict[str, int], controller) -> int:
         """Map a scroll effect to the maximum offset required before looping.
         
-        For horizontal scrolling (news ticker style), the limit is set to the content
-        width. The render_scroll_frame method handles seamless wrapping using modulo,
-        creating a smooth continuous loop effect.
+        For horizontal scrolling with the padded buffer approach, the limit is set to 
+        original_width + separator_width. This ensures the animation completes one full 
+        cycle (showing all of the original text plus the separator) before resetting to 
+        offset 0 for a seamless loop.
         """
 
         try:
@@ -907,23 +908,30 @@ class ScreenManager:
         except Exception:  # pragma: no cover - optional dependency
             return max(controller.width, controller.height)
 
-        horizontal_limit = max(controller.width, extents.get('horizontal', controller.width))
-        vertical_limit = max(controller.height, extents.get('vertical', controller.height))
-
+        # For horizontal scrolling, use original_width + separator_width for the loop point
         if effect in (OLEDScrollEffect.SCROLL_LEFT, OLEDScrollEffect.SCROLL_RIGHT):
-            # Return content width - render_scroll_frame will wrap seamlessly
-            return horizontal_limit
+            original_width = extents.get('original_width', controller.width)
+            separator_width = extents.get('separator_width', 0)
+            return original_width + separator_width
+            
+        # For vertical scrolling, use the content height
+        if effect in (OLEDScrollEffect.SCROLL_UP, OLEDScrollEffect.SCROLL_DOWN):
+            vertical_limit = max(controller.height, extents.get('max_y', controller.height))
+            return vertical_limit
+            
+        # Wipe effects use display dimensions
         if effect in (OLEDScrollEffect.WIPE_LEFT, OLEDScrollEffect.WIPE_RIGHT):
             return controller.width
-        if effect in (OLEDScrollEffect.SCROLL_UP, OLEDScrollEffect.SCROLL_DOWN):
-            # Return content height - render_scroll_frame will wrap seamlessly
-            return vertical_limit
         if effect in (OLEDScrollEffect.WIPE_UP, OLEDScrollEffect.WIPE_DOWN):
             return controller.height
+            
+        # Fade effect
         if effect == OLEDScrollEffect.FADE_IN:
             return 4
 
-        # Default fallback for any other effect names.
+        # Default fallback
+        horizontal_limit = max(controller.width, extents.get('max_x', controller.width))
+        vertical_limit = max(controller.height, extents.get('max_y', controller.height))
         return max(horizontal_limit, vertical_limit)
 
     def _handle_oled_alert_preemption(self, now: datetime) -> bool:
