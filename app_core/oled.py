@@ -257,11 +257,11 @@ class ArgonOLEDController:
             font_key = entry.font.lower()
             font = self._fonts.get(font_key, self._fonts["small"])
             x = max(0, entry.x)
-            max_width = entry.max_width
-            if entry.wrap and not max_width:
-                max_width = self.width - x
 
-            segments = self._wrap_text(content_draw, entry.text, font, max_width, entry.wrap)
+            # For scrolling content, keep text as a single continuous line
+            # This allows long text to scroll smoothly horizontally (like a ticker/marquee)
+            # rather than wrapping and appearing as stacked vertical lines that "bounce"
+            segments = [entry.text]
             for segment in segments:
                 line_y = entry.y if entry.y is not None else cursor_y
 
