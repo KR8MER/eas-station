@@ -914,6 +914,10 @@ class ScreenManager:
             "OLED alert scroll engaged: %s (speed: %spx at %sfps, text_width: %spx, canvas_width: %spx, text_y: %s, body_text_len: %s chars)",
             header, self._oled_scroll_speed, self._oled_scroll_fps, text_width, canvas_width, text_y, len(body_text)
         )
+        logger.info(
+            "📊 CACHED VALUES: _cached_scroll_text_width=%s, _cached_body_area_height=%s, expected_max_offset=%s",
+            self._cached_scroll_text_width, self._cached_body_area_height, width + text_width
+        )
 
     def _display_alert_scroll_frame(self, alert_meta: Dict[str, Any]) -> None:
         """Render a single frame of the scrolling alert animation using pre-rendered canvas."""
@@ -970,8 +974,23 @@ class ScreenManager:
         crop_right = crop_left + width
         crop_box = (crop_left, 0, crop_right, self._cached_body_area_height)
 
+        # Verify crop coordinates are valid
+        canvas_width = self._cached_scroll_canvas.width
+        if crop_right > canvas_width:
+            logger.error(
+                "❌ CROP ERROR! crop_right=%s exceeds canvas_width=%s (offset=%s)",
+                crop_right, canvas_width, self._oled_scroll_offset
+            )
+            crop_right = canvas_width
+            crop_left = max(0, crop_right - width)
+            crop_box = (crop_left, 0, crop_right, self._cached_body_area_height)
+
         # Crop the visible window from pre-rendered canvas (NO TEXT RENDERING!)
-        body_window = self._cached_scroll_canvas.crop(crop_box)
+        try:
+            body_window = self._cached_scroll_canvas.crop(crop_box)
+        except Exception as e:
+            logger.error(f"❌ Crop failed! crop_box={crop_box}, canvas_size={self._cached_scroll_canvas.size}: {e}")
+            return
 
         # Paste the scrolling body below the header
         display_image.paste(body_window, (0, header_height))
@@ -982,22 +1001,31 @@ class ScreenManager:
         # Check if we need to loop back
         # When offset reaches (width + text_width), reset to 0 for seamless loop
         max_offset = width + self._cached_scroll_text_width
-        if self._oled_scroll_offset >= max_offset:
-            self._oled_scroll_offset = 0
-            logger.info("OLED scroll RESET - looped back to start (max_offset was %s)", max_offset)
 
-        # Log at specific milestones to track scrolling progress
-        # Log at start, 25%, 50%, 75%, and near end
-        if self._oled_scroll_offset in [0, max_offset // 4, max_offset // 2, (max_offset * 3) // 4, max_offset - 100]:
+        # LOG EVERY FRAME temporarily to diagnose the issue
+        if self._oled_scroll_offset % 240 == 0:  # Every 240 pixels (every ~1 second)
             progress_pct = (self._oled_scroll_offset / max_offset * 100) if max_offset > 0 else 0
             logger.info(
-                "OLED scroll progress: %d%% (offset=%s/%s, crop=[%s:%s])",
-                int(progress_pct),
+                "SCROLL: offset=%s/%s (%d%%), crop=[%s:%s], canvas_width=%s, cached_text_width=%s, width=%s",
                 self._oled_scroll_offset,
                 max_offset,
+                int(progress_pct),
                 crop_left,
                 crop_right,
+                self._cached_scroll_canvas.width if self._cached_scroll_canvas else 0,
+                self._cached_scroll_text_width,
+                width,
             )
+
+        if self._oled_scroll_offset >= max_offset:
+            logger.warning(
+                "⚠️  RESET! offset=%s reached max_offset=%s (width=%s + text_width=%s)",
+                self._oled_scroll_offset,
+                max_offset,
+                width,
+                self._cached_scroll_text_width
+            )
+            self._oled_scroll_offset = 0
 
     def _reset_oled_alert_state(self) -> None:
         """Reset OLED alert scroll state."""

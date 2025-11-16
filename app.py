@@ -666,7 +666,7 @@ def inject_global_vars():
         'led_available': LED_AVAILABLE,
         'system_version': app.config.get('SYSTEM_VERSION', get_current_version()),
         'static_asset_version': app.config.get('STATIC_ASSET_VERSION', get_current_version()),
-        'git_commit': get_current_commit(6),
+        'git_commit': get_current_commit(7),
         'shield_logos': {
             slug: get_shield_logo_data(slug)
             for slug in ('icecast', 'soapysdr')
