@@ -818,6 +818,8 @@ class ScreenManager:
         if self._oled_scroll_effect in (OLEDScrollEffect.SCROLL_LEFT, OLEDScrollEffect.SCROLL_RIGHT):
             # Estimate text width (approximate, will be refined in render)
             text = alert_meta.get('body_text') or 'Active alert in effect.'
+            # Clean text by collapsing whitespace and removing newlines
+            text = ' '.join(text.split())
             # Rough estimate: average char width * length
             self._oled_scroll_max_offset = len(text) * 10
         elif self._oled_scroll_effect in (OLEDScrollEffect.SCROLL_UP, OLEDScrollEffect.SCROLL_DOWN):
@@ -857,6 +859,10 @@ class ScreenManager:
 
         header_text = alert_meta.get('header_text') or 'Alert'
         body_text = alert_meta.get('body_text') or 'Active alert in effect.'
+
+        # Clean text by collapsing whitespace and removing newlines
+        header_text = ' '.join(header_text.split())
+        body_text = ' '.join(body_text.split())
 
         # Create line objects for header and body
         line_objects = [
