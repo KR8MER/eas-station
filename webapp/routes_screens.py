@@ -572,3 +572,89 @@ def register(app: Flask, logger) -> None:
                 "<h1>Screens Management Error</h1>"
                 f"<p>{e}</p><p><a href='/'>← Back to Main</a></p>"
             )
+
+    @app.route("/displays/preview")
+    def displays_preview_page():
+        """Live preview of all display outputs."""
+        try:
+            return render_template("displays_preview.html")
+        except Exception as e:
+            route_logger.error(f"Error loading displays preview page: {e}")
+            return (
+                "<h1>Display Preview Error</h1>"
+                f"<p>{e}</p><p><a href='/'>← Back to Main</a></p>"
+            )
+
+    @app.route("/api/displays/current-state")
+    def get_displays_current_state():
+        """Get the current state of all displays."""
+        try:
+            from scripts.screen_manager import screen_manager
+
+            state = {
+                "oled": {
+                    "enabled": False,
+                    "width": 128,
+                    "height": 64,
+                    "current_screen": None,
+                    "scroll_offset": 0,
+                    "alert_active": False,
+                },
+                "vfd": {
+                    "enabled": False,
+                    "width": 140,
+                    "height": 32,
+                    "current_screen": None,
+                },
+                "led": {
+                    "enabled": False,
+                    "lines": 4,
+                    "chars_per_line": 20,
+                    "current_message": None,
+                    "color": "AMBER",
+                },
+            }
+
+            # Get OLED state
+            if screen_manager:
+                try:
+                    import app_core.oled as oled_module
+                    if oled_module.oled_controller:
+                        state["oled"]["enabled"] = True
+                        state["oled"]["width"] = oled_module.oled_controller.width
+                        state["oled"]["height"] = oled_module.oled_controller.height
+
+                        # Get current alert state if scrolling
+                        if hasattr(screen_manager, '_oled_scroll_effect') and screen_manager._oled_scroll_effect:
+                            state["oled"]["alert_active"] = True
+                            state["oled"]["scroll_offset"] = screen_manager._oled_scroll_offset
+                            state["oled"]["alert_text"] = screen_manager._current_alert_text or ""
+                            state["oled"]["scroll_speed"] = screen_manager._oled_scroll_speed
+
+                            # Get cached header
+                            if hasattr(screen_manager, '_cached_header_text'):
+                                state["oled"]["header_text"] = screen_manager._cached_header_text
+                except Exception as e:
+                    route_logger.debug(f"Error getting OLED state: {e}")
+
+                # Get VFD state
+                try:
+                    from app_core.vfd import vfd_controller
+                    if vfd_controller:
+                        state["vfd"]["enabled"] = True
+                except Exception as e:
+                    route_logger.debug(f"Error getting VFD state: {e}")
+
+                # Get LED state
+                try:
+                    import app_core.led as led_module
+                    if led_module.led_controller:
+                        state["led"]["enabled"] = True
+                except Exception as e:
+                    route_logger.debug(f"Error getting LED state: {e}")
+
+            return jsonify(state)
+
+        except Exception as e:
+            route_logger.error(f"Error getting display states: {e}")
+            return jsonify({"error": str(e)}), 500
