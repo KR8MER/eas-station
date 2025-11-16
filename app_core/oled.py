@@ -330,10 +330,11 @@ class ArgonOLEDController:
         for info in line_render_info:
             content_draw.text((info['x'], info['y']), info['text'], font=info['font'], fill=info['fill'])
 
-        # Render separator centered in the padding area
-        separator_y = (padded_height - self._line_height(separator_font)) // 2
-        separator_x = original_width + (min_separator_and_padding - separator_width) // 2
-        content_draw.text((separator_x, separator_y), separator, font=separator_font, fill=text_colour)
+        # DO NOT render the separator text - it causes visual "two things scrolling" effect
+        # The separator area provides the necessary spacing for seamless scrolling,
+        # but rendering visible text (like "***") at a different Y position makes it look
+        # like two separate elements are scrolling at different vertical positions.
+        # Just leave this area blank for clean, single-element scrolling appearance.
 
         # Render original content again after separator+padding for seamless wrap
         for info in line_render_info:
