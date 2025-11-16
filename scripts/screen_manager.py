@@ -823,7 +823,21 @@ class ScreenManager:
         header_font = controller._fonts.get('small', controller._fonts['small'])
         header_height = controller._line_height(header_font) + 1
         body_height = height - header_height
-        body_font = controller._fonts.get('huge', controller._fonts.get('xlarge', controller._fonts.get('large', controller._fonts['small'])))
+
+        # Choose font size based on message length to keep canvas manageable
+        # Huge font (36pt) creates 13,784px for 761 chars - too large for PIL!
+        if len(body_text) > 400:
+            # Use large font for very long messages
+            body_font = controller._fonts.get('large', controller._fonts['medium'])
+            logger.info("Using LARGE font due to long message (%s chars)", len(body_text))
+        elif len(body_text) > 200:
+            # Use xlarge for medium messages
+            body_font = controller._fonts.get('xlarge', controller._fonts['large'])
+            logger.info("Using XLARGE font for message (%s chars)", len(body_text))
+        else:
+            # Use huge font for short messages
+            body_font = controller._fonts.get('huge', controller._fonts.get('xlarge', controller._fonts.get('large', controller._fonts['small'])))
+            logger.info("Using HUGE font for short message (%s chars)", len(body_text))
 
         # Calculate text width and height for the pre-rendered canvas
         temp_img = Image.new("1", (1, 1))
@@ -1002,20 +1016,24 @@ class ScreenManager:
         # When offset reaches (width + text_width), reset to 0 for seamless loop
         max_offset = width + self._cached_scroll_text_width
 
-        # LOG EVERY FRAME temporarily to diagnose the issue
-        if self._oled_scroll_offset % 240 == 0:  # Every 240 pixels (every ~1 second)
-            progress_pct = (self._oled_scroll_offset / max_offset * 100) if max_offset > 0 else 0
+        # DEBUG: Log EVERY SINGLE FRAME for next 60 frames to diagnose stuttering
+        if not hasattr(self, '_debug_frame_count'):
+            self._debug_frame_count = 0
+            self._debug_last_offset = 0
+
+        if self._debug_frame_count < 60:
+            offset_delta = self._oled_scroll_offset - self._debug_last_offset
             logger.info(
-                "SCROLL: offset=%s/%s (%d%%), crop=[%s:%s], canvas_width=%s, cached_text_width=%s, width=%s",
+                "FRAME %d: offset=%s (delta=%s), crop=[%s:%s], max=%s",
+                self._debug_frame_count,
                 self._oled_scroll_offset,
-                max_offset,
-                int(progress_pct),
+                offset_delta,
                 crop_left,
                 crop_right,
-                self._cached_scroll_canvas.width if self._cached_scroll_canvas else 0,
-                self._cached_scroll_text_width,
-                width,
+                max_offset
             )
+            self._debug_last_offset = self._oled_scroll_offset
+            self._debug_frame_count += 1
 
         if self._oled_scroll_offset >= max_offset:
             logger.warning(
@@ -1026,6 +1044,7 @@ class ScreenManager:
                 self._cached_scroll_text_width
             )
             self._oled_scroll_offset = 0
+            self._debug_frame_count = 0  # Reset debug counter on loop
 
     def _reset_oled_alert_state(self) -> None:
         """Reset OLED alert scroll state."""
