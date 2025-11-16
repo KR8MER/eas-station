@@ -814,10 +814,10 @@ class ScreenManager:
         if controller is None:
             return
 
-        # Get current date/time for header
-        from datetime import datetime
-        now = datetime.now()
-        header_text = now.strftime("%m/%d/%y %H:%M:%S")
+        # Get current date/time for header in local timezone
+        from app_utils.time import local_now
+        now = local_now()
+        header_text = now.strftime("%m/%d/%y %I:%M:%S %p")
 
         body_text = alert_meta.get('body_text') or 'Active alert in effect.'
 
@@ -855,9 +855,10 @@ class ScreenManager:
         scroll_x = width - self._oled_scroll_offset
 
         # If text has scrolled completely off the left, reset to right
-        if scroll_x + text_width < 0:
-            scroll_x = width
+        # Reset when right edge reaches left edge of screen for continuous loop
+        if scroll_x <= -text_width:
             self._oled_scroll_offset = 0
+            scroll_x = width
 
         # Draw the scrolling text
         body_y = header_height
