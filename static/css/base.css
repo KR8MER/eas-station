@@ -1277,3 +1277,300 @@ a:focus {
 [data-theme="nebula"] .bg-dark-subtle .text-dark {
     color: var(--text-color) !important;
 }
+
+/* ============================================
+   ALERT DETAIL PAGE FIXES
+   Fix hardcoded backgrounds and text colors
+   ============================================ */
+
+/* Alert detail page specific elements */
+[data-theme-mode="dark"] .affected-summary,
+[data-theme-mode="dark"] .alert-description,
+[data-theme-mode="dark"] .timing-card,
+[data-theme-mode="dark"] .technical-details,
+[data-theme-mode="dark"] .raw-data-container {
+    background-color: var(--surface-color) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-color) !important;
+}
+
+[data-theme-mode="dark"] .boundary-type-header {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-color) !important;
+}
+
+[data-theme-mode="dark"] .timing-label,
+[data-theme-mode="dark"] .detail-label {
+    color: var(--text-secondary) !important;
+}
+
+[data-theme-mode="dark"] .timing-value {
+    color: var(--primary-color) !important;
+}
+
+[data-theme-mode="dark"] .raw-data-content {
+    background-color: var(--bg-color) !important;
+    color: var(--text-color) !important;
+}
+
+[data-theme-mode="dark"] .boundary-item-simple {
+    border-color: var(--border-color) !important;
+}
+
+[data-theme-mode="dark"] .boundary-item-simple:nth-child(even) {
+    background-color: rgba(255, 255, 255, 0.02) !important;
+}
+
+[data-theme-mode="dark"] .boundary-name {
+    color: var(--text-color) !important;
+}
+
+[data-theme-mode="dark"] .alert-content {
+    color: var(--text-color) !important;
+}
+
+[data-theme-mode="dark"] .alert-instruction h6 {
+    color: var(--warning-color) !important;
+}
+
+[data-theme-mode="dark"] .popup-title {
+    color: var(--primary-color) !important;
+}
+
+[data-theme-mode="dark"] .popup-detail {
+    color: var(--text-color) !important;
+}
+
+/* Apply to individual dark themes as well */
+[data-theme="dark"] .affected-summary,
+[data-theme="dark"] .alert-description,
+[data-theme="dark"] .timing-card,
+[data-theme="dark"] .technical-details,
+[data-theme="dark"] .raw-data-container,
+[data-theme="coffee"] .affected-summary,
+[data-theme="coffee"] .alert-description,
+[data-theme="coffee"] .timing-card,
+[data-theme="coffee"] .technical-details,
+[data-theme="coffee"] .raw-data-container,
+[data-theme="aurora"] .affected-summary,
+[data-theme="aurora"] .alert-description,
+[data-theme="aurora"] .timing-card,
+[data-theme="aurora"] .technical-details,
+[data-theme="aurora"] .raw-data-container,
+[data-theme="nebula"] .affected-summary,
+[data-theme="nebula"] .alert-description,
+[data-theme="nebula"] .timing-card,
+[data-theme="nebula"] .technical-details,
+[data-theme="nebula"] .raw-data-container {
+    background-color: var(--surface-color) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-color) !important;
+}
+
+[data-theme="dark"] .boundary-type-header,
+[data-theme="coffee"] .boundary-type-header,
+[data-theme="aurora"] .boundary-type-header,
+[data-theme="nebula"] .boundary-type-header {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+    color: var(--text-color) !important;
+}
+
+[data-theme="dark"] .timing-label,
+[data-theme="dark"] .detail-label,
+[data-theme="coffee"] .timing-label,
+[data-theme="coffee"] .detail-label,
+[data-theme="aurora"] .timing-label,
+[data-theme="aurora"] .detail-label,
+[data-theme="nebula"] .timing-label,
+[data-theme="nebula"] .detail-label {
+    color: var(--text-secondary) !important;
+}
+
+[data-theme="dark"] .raw-data-content,
+[data-theme="coffee"] .raw-data-content,
+[data-theme="aurora"] .raw-data-content,
+[data-theme="nebula"] .raw-data-content {
+    background-color: var(--bg-color) !important;
+    color: var(--text-color) !important;
+}
+
+[data-theme="dark"] .boundary-item-simple,
+[data-theme="coffee"] .boundary-item-simple,
+[data-theme="aurora"] .boundary-item-simple,
+[data-theme="nebula"] .boundary-item-simple {
+    border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] .alert-content,
+[data-theme="coffee"] .alert-content,
+[data-theme="aurora"] .alert-content,
+[data-theme="nebula"] .alert-content {
+    color: var(--text-color) !important;
+}
+
+/* ============================================
+   ADDITIONAL PAGE-SPECIFIC FIXES
+   Fix hardcoded colors across all templates
+   ============================================ */
+
+/* Status badges and indicators */
+[data-theme-mode="dark"] .status-idle {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    color: var(--text-color) !important;
+}
+
+/* Documentation and content viewers */
+[data-theme-mode="dark"] .doc-content,
+[data-theme-mode="dark"] .doc-sidebar,
+[data-theme-mode="dark"] .doc-header {
+    background-color: var(--surface-color) !important;
+    color: var(--text-color) !important;
+}
+
+[data-theme-mode="dark"] .doc-nav-link {
+    color: var(--text-secondary) !important;
+}
+
+[data-theme-mode="dark"] .doc-nav-link:hover {
+    color: var(--accent-color) !important;
+}
+
+/* Audio monitoring and health dashboards */
+[data-theme-mode="dark"] .health-card,
+[data-theme-mode="dark"] .test-result-card,
+[data-theme-mode="dark"] .audio-source-card {
+    background-color: var(--surface-color) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-color) !important;
+}
+
+/* Admin panel specific */
+[data-theme-mode="dark"] .operation-card,
+[data-theme-mode="dark"] .rbac-card,
+[data-theme-mode="dark"] .audit-log-entry {
+    background-color: var(--surface-color) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-color) !important;
+}
+
+/* Logs and diagnostics */
+[data-theme-mode="dark"] .log-entry,
+[data-theme-mode="dark"] .diagnostic-panel {
+    background-color: var(--surface-color) !important;
+    color: var(--text-color) !important;
+}
+
+/* Map containers with inline styles */
+[data-theme-mode="dark"] #map {
+    background-color: var(--surface-color) !important;
+}
+
+/* Analytics and stats */
+[data-theme-mode="dark"] .stat-card,
+[data-theme-mode="dark"] .analytics-panel {
+    background-color: var(--surface-color) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-color) !important;
+}
+
+/* LED control and similar interfaces */
+[data-theme-mode="dark"] .control-panel,
+[data-theme-mode="dark"] .settings-panel {
+    background-color: var(--surface-color) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-color) !important;
+}
+
+/* Generic container classes with hardcoded backgrounds */
+[data-theme-mode="dark"] .content-container,
+[data-theme-mode="dark"] .data-container,
+[data-theme-mode="dark"] .info-panel {
+    background-color: var(--surface-color) !important;
+    color: var(--text-color) !important;
+}
+
+/* Fix small text and labels */
+[data-theme-mode="dark"] small,
+[data-theme-mode="dark"] .small {
+    color: var(--text-muted) !important;
+}
+
+/* Fix code blocks */
+[data-theme-mode="dark"] code {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    color: var(--accent-color) !important;
+}
+
+[data-theme-mode="dark"] pre {
+    background-color: var(--bg-color) !important;
+    color: var(--text-color) !important;
+    border-color: var(--border-color) !important;
+}
+
+[data-theme-mode="dark"] pre code {
+    background-color: transparent !important;
+    color: var(--text-color) !important;
+}
+
+/* Fix headers in sections */
+[data-theme-mode="dark"] h1,
+[data-theme-mode="dark"] h2,
+[data-theme-mode="dark"] h3,
+[data-theme-mode="dark"] h4,
+[data-theme-mode="dark"] h5,
+[data-theme-mode="dark"] h6 {
+    color: var(--text-color) !important;
+}
+
+/* Fix paragraphs and general text */
+[data-theme-mode="dark"] p {
+    color: var(--text-color) !important;
+}
+
+/* Fix strong and bold text */
+[data-theme-mode="dark"] strong,
+[data-theme-mode="dark"] b {
+    color: var(--text-color) !important;
+}
+
+/* Apply to individual themes */
+[data-theme="dark"] .status-idle,
+[data-theme="coffee"] .status-idle,
+[data-theme="aurora"] .status-idle,
+[data-theme="nebula"] .status-idle {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    color: var(--text-color) !important;
+}
+
+[data-theme="dark"] #map,
+[data-theme="coffee"] #map,
+[data-theme="aurora"] #map,
+[data-theme="nebula"] #map {
+    background-color: var(--surface-color) !important;
+}
+
+[data-theme="dark"] code,
+[data-theme="coffee"] code,
+[data-theme="aurora"] code,
+[data-theme="nebula"] code {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    color: var(--accent-color) !important;
+}
+
+[data-theme="dark"] pre,
+[data-theme="coffee"] pre,
+[data-theme="aurora"] pre,
+[data-theme="nebula"] pre {
+    background-color: var(--bg-color) !important;
+    color: var(--text-color) !important;
+    border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] pre code,
+[data-theme="coffee"] pre code,
+[data-theme="aurora"] pre code,
+[data-theme="nebula"] pre code {
+    background-color: transparent !important;
+    color: var(--text-color) !important;
+}
