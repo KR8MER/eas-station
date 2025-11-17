@@ -792,7 +792,7 @@ a:focus {
 
 /* ============================================
    BOOTSTRAP THEME OVERRIDES FOR DARK MODE
-   Fix white cards on dark themes
+   Fix white cards on dark themes and text visibility
    ============================================ */
 
 /* Override Bootstrap's hardcoded background colors to use theme variables */
@@ -824,6 +824,14 @@ a:focus {
     color: var(--text-muted) !important;
 }
 
+[data-theme-mode="dark"] .text-secondary {
+    color: var(--text-secondary) !important;
+}
+
+[data-theme-mode="dark"] .text-body {
+    color: var(--text-color) !important;
+}
+
 /* Fix table backgrounds in dark mode */
 [data-theme-mode="dark"] .table {
     color: var(--text-color);
@@ -842,4 +850,430 @@ a:focus {
 
 [data-theme-mode="dark"] .table tbody tr:hover {
     background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Fix badge text visibility on colored backgrounds */
+[data-theme-mode="dark"] .badge.bg-warning,
+[data-theme-mode="dark"] .bg-warning {
+    background-color: var(--warning-color) !important;
+}
+
+[data-theme-mode="dark"] .badge.bg-warning.text-dark,
+[data-theme-mode="dark"] .bg-warning .text-dark,
+[data-theme-mode="dark"] .bg-warning.text-dark {
+    color: #1a1a1a !important;
+}
+
+[data-theme-mode="dark"] .badge.bg-info,
+[data-theme-mode="dark"] .bg-info {
+    background-color: var(--info-color) !important;
+}
+
+[data-theme-mode="dark"] .badge.bg-info.text-dark,
+[data-theme-mode="dark"] .bg-info .text-dark,
+[data-theme-mode="dark"] .bg-info.text-dark {
+    color: #1a1a1a !important;
+}
+
+[data-theme-mode="dark"] .badge.bg-success {
+    background-color: var(--success-color) !important;
+}
+
+[data-theme-mode="dark"] .badge.bg-danger {
+    background-color: var(--danger-color) !important;
+}
+
+/* Fix subtle background variants */
+[data-theme-mode="dark"] .bg-light-subtle {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    color: var(--text-color) !important;
+}
+
+[data-theme-mode="dark"] .bg-dark-subtle {
+    background-color: rgba(0, 0, 0, 0.3) !important;
+    color: var(--text-color) !important;
+}
+
+[data-theme-mode="dark"] .bg-dark-subtle .text-dark {
+    color: var(--text-color) !important;
+}
+
+/* Fix list groups */
+[data-theme-mode="dark"] .list-group-item {
+    background-color: var(--surface-color);
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+[data-theme-mode="dark"] .list-group-item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Fix dropdown menus */
+[data-theme-mode="dark"] .dropdown-menu {
+    background-color: var(--surface-color);
+    border-color: var(--border-color);
+}
+
+[data-theme-mode="dark"] .dropdown-item {
+    color: var(--text-color);
+}
+
+[data-theme-mode="dark"] .dropdown-item:hover,
+[data-theme-mode="dark"] .dropdown-item:focus {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--accent-color);
+}
+
+/* Fix form controls */
+[data-theme-mode="dark"] .form-control,
+[data-theme-mode="dark"] .form-select {
+    background-color: var(--surface-color);
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+[data-theme-mode="dark"] .form-control:focus,
+[data-theme-mode="dark"] .form-select:focus {
+    background-color: var(--surface-color);
+    color: var(--text-color);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.25rem rgba(107, 150, 255, 0.25);
+}
+
+[data-theme-mode="dark"] .form-control::placeholder {
+    color: var(--text-muted);
+}
+
+[data-theme-mode="dark"] .form-control[readonly],
+[data-theme-mode="dark"] .form-control:disabled {
+    background-color: rgba(255, 255, 255, 0.03);
+    color: var(--text-muted);
+}
+
+/* Fix input groups */
+[data-theme-mode="dark"] .input-group-text {
+    background-color: var(--surface-color);
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+/* Fix modals */
+[data-theme-mode="dark"] .modal-content {
+    background-color: var(--surface-color);
+    color: var(--text-color);
+}
+
+[data-theme-mode="dark"] .modal-header,
+[data-theme-mode="dark"] .modal-footer {
+    border-color: var(--border-color);
+}
+
+/* Fix modal headers with bg-warning */
+[data-theme-mode="dark"] .modal-header.bg-warning {
+    background-color: var(--warning-color) !important;
+}
+
+[data-theme-mode="dark"] .modal-header.bg-warning .text-dark {
+    color: #1a1a1a !important;
+}
+
+/* Fix accordions */
+[data-theme-mode="dark"] .accordion-item {
+    background-color: var(--surface-color);
+    border-color: var(--border-color);
+}
+
+[data-theme-mode="dark"] .accordion-button {
+    background-color: var(--surface-color);
+    color: var(--text-color);
+}
+
+[data-theme-mode="dark"] .accordion-button:not(.collapsed) {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--accent-color);
+}
+
+/* Fix nav tabs */
+[data-theme-mode="dark"] .nav-tabs {
+    border-color: var(--border-color);
+}
+
+[data-theme-mode="dark"] .nav-tabs .nav-link {
+    color: var(--text-secondary);
+}
+
+[data-theme-mode="dark"] .nav-tabs .nav-link:hover,
+[data-theme-mode="dark"] .nav-tabs .nav-link:focus {
+    color: var(--accent-color);
+    border-color: var(--border-color);
+}
+
+[data-theme-mode="dark"] .nav-tabs .nav-link.active {
+    background-color: var(--surface-color);
+    color: var(--accent-color);
+    border-color: var(--border-color) var(--border-color) var(--surface-color);
+}
+
+/* Fix alerts */
+[data-theme-mode="dark"] .alert {
+    border-color: var(--border-color);
+}
+
+[data-theme-mode="dark"] .alert-warning {
+    background-color: rgba(255, 227, 173, 0.15);
+    border-color: var(--warning-color);
+    color: var(--warning-color);
+}
+
+[data-theme-mode="dark"] .alert-info {
+    background-color: rgba(173, 207, 255, 0.15);
+    border-color: var(--info-color);
+    color: var(--info-color);
+}
+
+[data-theme-mode="dark"] .alert-success {
+    background-color: rgba(103, 255, 214, 0.15);
+    border-color: var(--success-color);
+    color: var(--success-color);
+}
+
+[data-theme-mode="dark"] .alert-danger {
+    background-color: rgba(255, 175, 191, 0.15);
+    border-color: var(--danger-color);
+    color: var(--danger-color);
+}
+
+/* Fix breadcrumbs */
+[data-theme-mode="dark"] .breadcrumb {
+    background-color: transparent;
+}
+
+[data-theme-mode="dark"] .breadcrumb-item {
+    color: var(--text-secondary);
+}
+
+[data-theme-mode="dark"] .breadcrumb-item.active {
+    color: var(--text-color);
+}
+
+[data-theme-mode="dark"] .breadcrumb-item + .breadcrumb-item::before {
+    color: var(--text-muted);
+}
+
+/* Fix pagination */
+[data-theme-mode="dark"] .page-link {
+    background-color: var(--surface-color);
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+[data-theme-mode="dark"] .page-link:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--accent-color);
+    border-color: var(--border-color);
+}
+
+[data-theme-mode="dark"] .page-item.active .page-link {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #ffffff;
+}
+
+[data-theme-mode="dark"] .page-item.disabled .page-link {
+    background-color: var(--surface-color);
+    color: var(--text-muted);
+    border-color: var(--border-color);
+}
+
+/* Fix progress bars */
+[data-theme-mode="dark"] .progress {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Fix offcanvas */
+[data-theme-mode="dark"] .offcanvas {
+    background-color: var(--surface-color);
+    color: var(--text-color);
+}
+
+[data-theme-mode="dark"] .offcanvas-header {
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Fix tooltips and popovers */
+[data-theme-mode="dark"] .tooltip-inner {
+    background-color: var(--bg-primary);
+    color: var(--text-color);
+}
+
+[data-theme-mode="dark"] .popover {
+    background-color: var(--surface-color);
+    border-color: var(--border-color);
+}
+
+[data-theme-mode="dark"] .popover-header {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-color);
+}
+
+[data-theme-mode="dark"] .popover-body {
+    color: var(--text-color);
+}
+
+/* ============================================
+   INDIVIDUAL DARK THEME OVERRIDES
+   Apply same fixes to all dark theme variants
+   ============================================ */
+
+/* Dark Theme Specific */
+[data-theme="dark"] .bg-white,
+[data-theme="dark"] .card,
+[data-theme="dark"] .bg-light,
+[data-theme="coffee"] .bg-white,
+[data-theme="coffee"] .card,
+[data-theme="coffee"] .bg-light,
+[data-theme="aurora"] .bg-white,
+[data-theme="aurora"] .card,
+[data-theme="aurora"] .bg-light,
+[data-theme="nebula"] .bg-white,
+[data-theme="nebula"] .card,
+[data-theme="nebula"] .bg-light {
+    background-color: var(--surface-color) !important;
+    color: var(--text-color) !important;
+}
+
+/* Text color fixes for all dark themes */
+[data-theme="dark"] .text-dark,
+[data-theme="coffee"] .text-dark,
+[data-theme="aurora"] .text-dark,
+[data-theme="nebula"] .text-dark {
+    color: var(--text-color) !important;
+}
+
+[data-theme="dark"] .text-muted,
+[data-theme="coffee"] .text-muted,
+[data-theme="aurora"] .text-muted,
+[data-theme="nebula"] .text-muted {
+    color: var(--text-muted) !important;
+}
+
+[data-theme="dark"] .text-secondary,
+[data-theme="coffee"] .text-secondary,
+[data-theme="aurora"] .text-secondary,
+[data-theme="nebula"] .text-secondary {
+    color: var(--text-secondary) !important;
+}
+
+/* Form controls for all dark themes */
+[data-theme="dark"] .form-control,
+[data-theme="dark"] .form-select,
+[data-theme="coffee"] .form-control,
+[data-theme="coffee"] .form-select,
+[data-theme="aurora"] .form-control,
+[data-theme="aurora"] .form-select,
+[data-theme="nebula"] .form-control,
+[data-theme="nebula"] .form-select {
+    background-color: var(--surface-color);
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .form-control::placeholder,
+[data-theme="coffee"] .form-control::placeholder,
+[data-theme="aurora"] .form-control::placeholder,
+[data-theme="nebula"] .form-control::placeholder {
+    color: var(--text-muted);
+}
+
+/* Modal fixes for all dark themes */
+[data-theme="dark"] .modal-content,
+[data-theme="coffee"] .modal-content,
+[data-theme="aurora"] .modal-content,
+[data-theme="nebula"] .modal-content {
+    background-color: var(--surface-color);
+    color: var(--text-color);
+}
+
+/* Dropdown fixes for all dark themes */
+[data-theme="dark"] .dropdown-menu,
+[data-theme="coffee"] .dropdown-menu,
+[data-theme="aurora"] .dropdown-menu,
+[data-theme="nebula"] .dropdown-menu {
+    background-color: var(--surface-color);
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .dropdown-item,
+[data-theme="coffee"] .dropdown-item,
+[data-theme="aurora"] .dropdown-item,
+[data-theme="nebula"] .dropdown-item {
+    color: var(--text-color);
+}
+
+/* List group fixes for all dark themes */
+[data-theme="dark"] .list-group-item,
+[data-theme="coffee"] .list-group-item,
+[data-theme="aurora"] .list-group-item,
+[data-theme="nebula"] .list-group-item {
+    background-color: var(--surface-color);
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+/* Table fixes for all dark themes */
+[data-theme="dark"] .table,
+[data-theme="coffee"] .table,
+[data-theme="aurora"] .table,
+[data-theme="nebula"] .table {
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .table thead th,
+[data-theme="coffee"] .table thead th,
+[data-theme="aurora"] .table thead th,
+[data-theme="nebula"] .table thead th {
+    color: var(--text-color);
+}
+
+/* Badge fixes for all dark themes with proper contrast */
+[data-theme="dark"] .badge.bg-warning.text-dark,
+[data-theme="dark"] .bg-warning.text-dark,
+[data-theme="coffee"] .badge.bg-warning.text-dark,
+[data-theme="coffee"] .bg-warning.text-dark,
+[data-theme="aurora"] .badge.bg-warning.text-dark,
+[data-theme="aurora"] .bg-warning.text-dark,
+[data-theme="nebula"] .badge.bg-warning.text-dark,
+[data-theme="nebula"] .bg-warning.text-dark {
+    color: #1a1a1a !important;
+}
+
+[data-theme="dark"] .badge.bg-info.text-dark,
+[data-theme="dark"] .bg-info.text-dark,
+[data-theme="coffee"] .badge.bg-info.text-dark,
+[data-theme="coffee"] .bg-info.text-dark,
+[data-theme="aurora"] .badge.bg-info.text-dark,
+[data-theme="aurora"] .bg-info.text-dark,
+[data-theme="nebula"] .badge.bg-info.text-dark,
+[data-theme="nebula"] .bg-info.text-dark {
+    color: #1a1a1a !important;
+}
+
+/* Subtle background fixes for all dark themes */
+[data-theme="dark"] .bg-dark-subtle,
+[data-theme="coffee"] .bg-dark-subtle,
+[data-theme="aurora"] .bg-dark-subtle,
+[data-theme="nebula"] .bg-dark-subtle {
+    background-color: rgba(0, 0, 0, 0.3) !important;
+    color: var(--text-color) !important;
+}
+
+[data-theme="dark"] .bg-dark-subtle .text-dark,
+[data-theme="coffee"] .bg-dark-subtle .text-dark,
+[data-theme="aurora"] .bg-dark-subtle .text-dark,
+[data-theme="nebula"] .bg-dark-subtle .text-dark {
+    color: var(--text-color) !important;
 }
