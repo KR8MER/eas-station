@@ -362,8 +362,11 @@
             <button class="btn btn-light text-primary" onclick="showCreateRotationModal()">
                 <i class="fas fa-sync"></i> New Rotation
             </button>
-            <button class="btn btn-dark" onclick="showCreateScreenModal()">
-                <i class="fas fa-plus"></i> Create Screen
+            <a href="/screens/new" class="btn btn-success">
+                <i class="fas fa-paint-brush"></i> Create Screen
+            </a>
+            <button class="btn btn-outline-light btn-sm" onclick="showCreateScreenModal()" title="Advanced: Create screen with JSON">
+                <i class="fas fa-code"></i>
             </button>
         </div>
     </div>
@@ -1151,7 +1154,13 @@ function showCreateScreenModal() {
 }
 
 // Edit screen
-async function editScreen(id) {
+function editScreen(id) {
+    // Redirect to visual editor
+    window.location.href = `/screens/editor/${id}`;
+}
+
+// Legacy JSON edit function (keep for advanced users)
+async function editScreenJSON(id) {
     try {
         const response = await fetch(`/api/screens/${id}`);
         if (!response.ok) {
@@ -1160,7 +1169,7 @@ async function editScreen(id) {
         const screen = await response.json();
 
         // Populate form
-        document.getElementById('screenModalTitle').textContent = 'Edit Screen';
+        document.getElementById('screenModalTitle').textContent = 'Edit Screen (JSON Mode)';
         document.getElementById('screen-id').value = screen.id;
         document.getElementById('screen-name').value = screen.name || '';
         document.getElementById('screen-description').value = screen.description || '';
