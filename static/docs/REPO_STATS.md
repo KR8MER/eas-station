@@ -1,29 +1,29 @@
 # Repository Statistics
 
-**Generated:** 2025-11-17 18:07:38 UTC
+**Generated:** 2025-11-17 23:34:09 UTC
 
 ## Overview
 
-- **Total Files:** 596
+- **Total Files:** 600
 - **Total Directories:** 73
-- **Total Lines:** 203,724
-- **Code Lines:** 127,721
-- **Comment Lines:** 43,703
-- **Total Routes:** 176
+- **Total Lines:** 206,172
+- **Code Lines:** 129,203
+- **Comment Lines:** 44,259
+- **Total Routes:** 178
 
 ## Files by Type
 
 | File Type | Count |
 |-----------|-------|
 | Python | 241 |
-| Markdown | 157 |
-| HTML | 71 |
+| Markdown | 158 |
+| HTML | 72 |
 | Other | 58 |
 | Shell | 16 |
 | YAML | 12 |
 | SVG | 12 |
-| JavaScript | 10 |
-| CSS | 8 |
+| JavaScript | 11 |
+| CSS | 9 |
 | Text | 7 |
 | XML | 3 |
 | SQL | 1 |
@@ -32,11 +32,11 @@
 
 | Language | Total Lines | Code Lines | Comment Lines |
 |----------|-------------|------------|---------------|
-| Python | 86,468 | 33,719 | 38,636 |
-| Markdown | 54,970 | 42,418 | 0 |
-| HTML | 43,948 | 40,052 | 419 |
-| CSS | 5,243 | 983 | 3,487 |
-| JavaScript | 3,889 | 2,922 | 476 |
+| Python | 86,576 | 33,760 | 38,681 |
+| Markdown | 55,653 | 42,950 | 0 |
+| HTML | 44,333 | 40,392 | 434 |
+| CSS | 5,742 | 983 | 3,911 |
+| JavaScript | 4,662 | 3,491 | 548 |
 | Text | 2,280 | 2,135 | 0 |
 | Shell | 1,856 | 1,358 | 219 |
 | SVG | 1,697 | 1,274 | 176 |
@@ -50,7 +50,7 @@
 | File | Route Count |
 |------|-------------|
 | webapp/routes_settings_radio.py | 21 |
-| webapp/routes_screens.py | 15 |
+| webapp/routes_screens.py | 17 |
 | webapp/routes_vfd.py | 12 |
 | webapp/routes_led.py | 12 |
 | webapp/routes_analytics.py | 12 |
@@ -79,17 +79,17 @@
 
 ### Top Languages by Lines of Code
 
-**Python:** 33,719 lines  
+**Python:** 33,760 lines  
 `███████████████████████████████████████`
 
-**Markdown:** 42,418 lines  
+**Markdown:** 42,950 lines  
 `██████████████████████████████████████████████████`
 
-**HTML:** 40,052 lines  
+**HTML:** 40,392 lines  
 `███████████████████████████████████████████████`
 
 **CSS:** 983 lines  
 `█`
 
-**JavaScript:** 2,922 lines  
-`███`
+**JavaScript:** 3,491 lines  
+`████`
