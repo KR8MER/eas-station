@@ -634,6 +634,11 @@ def register(app: Flask, logger) -> None:
                             # Get cached header
                             if hasattr(screen_manager, '_cached_header_text'):
                                 state["oled"]["header_text"] = screen_manager._cached_header_text
+
+                        # Get preview image
+                        preview_image = oled_module.oled_controller.get_preview_image_base64()
+                        if preview_image:
+                            state["oled"]["preview_image"] = preview_image
                 except Exception as e:
                     route_logger.debug(f"Error getting OLED state: {e}")
 

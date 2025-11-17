@@ -126,6 +126,7 @@ class ArgonOLEDController:
         self.height = height
         self.default_invert = default_invert
         self._fonts = self._load_fonts(font_path)
+        self._last_image: Optional[Image.Image] = None  # Store last displayed image for preview
 
     def _load_fonts(self, font_path: Optional[str]) -> Dict[str, ImageFont.ImageFont]:
         fonts: Dict[str, ImageFont.ImageFont] = {}
@@ -157,6 +158,7 @@ class ArgonOLEDController:
         active_invert = self.default_invert if invert is None else invert
         background = 255 if active_invert else 0
         image = Image.new("1", (self.width, self.height), color=background)
+        self._last_image = image.copy()  # Store for preview
         self.device.display(image)
 
     def display_lines(
@@ -212,6 +214,7 @@ class ArgonOLEDController:
                     entry.y = line_y + line_height + spacing
                     cursor_y = max(cursor_y, entry.y)
 
+        self._last_image = image.copy()  # Store for preview
         self.device.display(image)
 
     def prepare_scroll_content(
@@ -458,6 +461,7 @@ class ArgonOLEDController:
             src_y = 0
             display_image.paste(content_image.crop((src_x, src_y, src_x + self.width, src_y + self.height)), (0, 0))
 
+        self._last_image = display_image.copy()  # Store for preview
         self.device.display(display_image)
 
     @staticmethod
@@ -495,6 +499,36 @@ class ArgonOLEDController:
                 continue
             wrapped.extend(textwrap.wrap(paragraph, width=max_chars) or [paragraph])
         return wrapped or [""]
+
+    def get_preview_image_base64(self) -> Optional[str]:
+        """Get the last displayed image as a base64-encoded PNG.
+
+        Returns:
+            Base64-encoded PNG string, or None if no image available
+        """
+        if self._last_image is None:
+            return None
+
+        try:
+            import base64
+            import io
+
+            # Convert monochrome image to RGB for PNG export
+            rgb_image = self._last_image.convert("RGB")
+
+            # Save to bytes buffer
+            buffer = io.BytesIO()
+            rgb_image.save(buffer, format="PNG")
+            buffer.seek(0)
+
+            # Encode as base64
+            img_bytes = buffer.getvalue()
+            b64_string = base64.b64encode(img_bytes).decode('utf-8')
+
+            return f"data:image/png;base64,{b64_string}"
+        except Exception as e:  # pragma: no cover - defensive
+            logger.error(f"Failed to export OLED preview image: {e}")
+            return None
 
 
 OLED_ENABLED = _env_flag("OLED_ENABLED", "false")
