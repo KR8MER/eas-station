@@ -573,6 +573,39 @@ def register(app: Flask, logger) -> None:
                 f"<p>{e}</p><p><a href='/'>← Back to Main</a></p>"
             )
 
+    @app.route("/screens/new")
+    def new_screen_editor():
+        """Visual screen editor for creating new screens."""
+        try:
+            return render_template("screen_editor.html", screen=None)
+        except Exception as e:
+            route_logger.error(f"Error loading screen editor: {e}")
+            return (
+                "<h1>Screen Editor Error</h1>"
+                f"<p>{e}</p><p><a href='/screens'>← Back to Screens</a></p>"
+            )
+
+    @app.route("/screens/editor/<int:screen_id>")
+    def edit_screen_editor(screen_id: int):
+        """Visual screen editor for editing existing screens."""
+        try:
+            screen = DisplayScreen.query.get(screen_id)
+
+            if not screen:
+                return (
+                    "<h1>Screen Not Found</h1>"
+                    f"<p>Screen ID {screen_id} not found</p>"
+                    "<p><a href='/screens'>← Back to Screens</a></p>"
+                ), 404
+
+            return render_template("screen_editor.html", screen=screen)
+        except Exception as e:
+            route_logger.error(f"Error loading screen editor for {screen_id}: {e}")
+            return (
+                "<h1>Screen Editor Error</h1>"
+                f"<p>{e}</p><p><a href='/screens'>← Back to Screens</a></p>"
+            )
+
     @app.route("/displays/preview")
     def displays_preview_page():
         """Live preview of all display outputs."""
@@ -634,6 +667,11 @@ def register(app: Flask, logger) -> None:
                             # Get cached header
                             if hasattr(screen_manager, '_cached_header_text'):
                                 state["oled"]["header_text"] = screen_manager._cached_header_text
+
+                        # Get preview image
+                        preview_image = oled_module.oled_controller.get_preview_image_base64()
+                        if preview_image:
+                            state["oled"]["preview_image"] = preview_image
                 except Exception as e:
                     route_logger.debug(f"Error getting OLED state: {e}")
 

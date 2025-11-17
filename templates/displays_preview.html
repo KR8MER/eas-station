@@ -357,6 +357,18 @@ function renderOLED(state) {
     oledCtx.fillStyle = '#000';
     oledCtx.fillRect(0, 0, 128, 64);
 
+    // If we have a preview image from the actual OLED controller, use it
+    if (state.preview_image) {
+        const img = new Image();
+        img.onload = function() {
+            // Draw the actual OLED display image
+            oledCtx.drawImage(img, 0, 0, 128, 64);
+        };
+        img.src = state.preview_image;
+        return;
+    }
+
+    // Fallback: render simulated display if no preview available
     oledCtx.fillStyle = '#fff';
     oledCtx.font = '8px monospace';
     oledCtx.textAlign = 'left';

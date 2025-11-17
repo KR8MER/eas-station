@@ -138,8 +138,13 @@ class ScreenManager:
         logger.info("Screen manager stopped")
 
     def _run_loop(self):
-        """Main loop for screen rotation."""
+        """Main loop for screen rotation with precise timing for smooth scrolling."""
+        target_fps = 60  # Target FPS for smooth OLED scrolling
+        target_interval = 1.0 / target_fps  # Target time per loop iteration
+
         while self._running:
+            loop_start = time.monotonic()
+
             try:
                 self._ensure_oled_button_listener()
                 if self.app:
@@ -152,12 +157,18 @@ class ScreenManager:
                 else:
                     logger.warning("No app context available")
 
-                # Use high-speed loop for ultra-smooth OLED scrolling
-                time.sleep(0.016)  # ~60 FPS for butter-smooth scrolling
-
             except Exception as e:
                 logger.error(f"Error in screen manager loop: {e}")
                 time.sleep(5)
+                continue
+
+            # Calculate how long to sleep to maintain target FPS
+            # This accounts for processing time to ensure consistent frame timing
+            loop_duration = time.monotonic() - loop_start
+            sleep_time = max(0, target_interval - loop_duration)
+
+            if sleep_time > 0:
+                time.sleep(sleep_time)
 
     def _update_rotations(self):
         """Load active screen rotations from database."""
@@ -873,11 +884,16 @@ class ScreenManager:
             return
 
         state = self._oled_screen_scroll_state
-        frame_interval = 1.0 / max(1, state['fps'])  # Frame interval in seconds
         current_time = time.monotonic()
-        
-        # Check if enough time has elapsed for the next frame
-        if current_time - self._last_oled_screen_frame_time < frame_interval:
+
+        # Calculate frame interval based on FPS
+        frame_interval = 1.0 / max(1, state['fps'])
+
+        # Calculate elapsed time since last frame
+        elapsed = current_time - self._last_oled_screen_frame_time
+
+        # Only render if we've exceeded the frame interval
+        if elapsed < frame_interval:
             return
 
         try:
@@ -893,8 +909,15 @@ class ScreenManager:
             self._clear_oled_screen_scroll_state()
             return
 
+        # Update timing with actual current time
         self._last_oled_screen_frame_time = current_time
-        self._oled_screen_scroll_offset += max(1, state['speed'])
+
+        # Advance scroll offset proportional to elapsed time for smooth scrolling
+        expected_frames = elapsed / frame_interval
+        pixels_to_advance = max(1, int(state['speed'] * expected_frames))
+        self._oled_screen_scroll_offset += pixels_to_advance
+
+        # Handle loop wraparound
         if self._oled_screen_scroll_offset >= max(1, state['max_offset']):
             self._oled_screen_scroll_offset = 0
 
@@ -966,19 +989,31 @@ class ScreenManager:
         if self._oled_scroll_effect is None:
             return True
 
-        # Calculate frame interval based on FPS using monotonic time for precision
-        frame_interval = 1.0 / self._oled_scroll_fps  # Frame interval in seconds
+        # Use monotonic time for precise frame timing
         current_time = time.monotonic()
 
-        if current_time - self._last_oled_alert_render_time < frame_interval:
+        # Calculate target frame interval based on FPS
+        frame_interval = 1.0 / max(1, self._oled_scroll_fps)
+
+        # Calculate elapsed time since last frame
+        elapsed = current_time - self._last_oled_alert_render_time
+
+        # Only render if we've exceeded the frame interval
+        if elapsed < frame_interval:
             return True
 
+        # Render the frame
         self._display_alert_scroll_frame(top_alert)
+
+        # Update timing - use actual current time for precision
         self._last_oled_alert_render_time = current_time
         self._last_oled_update = now
 
-        # Advance scroll offset (loop is handled in display function)
-        self._oled_scroll_offset += self._oled_scroll_speed
+        # Advance scroll offset proportional to elapsed time for smooth scrolling
+        # This compensates for any timing variations
+        expected_frames = elapsed / frame_interval
+        pixels_to_advance = int(self._oled_scroll_speed * expected_frames)
+        self._oled_scroll_offset += pixels_to_advance
 
         return True
 
@@ -1153,7 +1188,8 @@ class ScreenManager:
         # Paste the scrolling body below the header
         display_image.paste(body_window, (0, header_height))
 
-        # Display the final image
+        # Store and display the final image
+        controller._last_image = display_image.copy()  # Store for preview
         controller.device.display(display_image)
 
         # Check if we need to loop back using the seamless loop point

@@ -1,0 +1,364 @@
+{% extends "base.html" %}
+
+{% block title %}Screen Editor - EAS Station{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/screen-editor.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="screen-editor-container">
+    <!-- Header -->
+    <div class="editor-header">
+        <div class="header-left">
+            <a href="/screens" class="btn btn-secondary btn-sm">
+                <i class="fas fa-arrow-left"></i> Back to Screens
+            </a>
+            <h1 class="editor-title">
+                <i class="fas fa-paint-brush"></i>
+                <span id="screen-name-display">New Screen</span>
+            </h1>
+        </div>
+        <div class="header-right">
+            <button id="btn-preview" class="btn btn-info btn-sm">
+                <i class="fas fa-eye"></i> Preview
+            </button>
+            <button id="btn-save" class="btn btn-success">
+                <i class="fas fa-save"></i> Save Screen
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Editor Layout -->
+    <div class="editor-layout">
+        <!-- Left Sidebar - Properties Panel -->
+        <div class="sidebar sidebar-left">
+            <div class="panel">
+                <div class="panel-header">
+                    <i class="fas fa-cog"></i> Screen Settings
+                </div>
+                <div class="panel-body">
+                    <div class="form-group">
+                        <label>Screen Name *</label>
+                        <input type="text" id="screen-name" class="form-control" placeholder="My Custom Screen" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea id="screen-description" class="form-control" rows="2" placeholder="Optional description"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Display Type *</label>
+                        <select id="display-type" class="form-control">
+                            <option value="oled">OLED (128x64)</option>
+                            <option value="vfd">VFD (140x32)</option>
+                            <option value="led">LED Sign (4 lines)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Duration (seconds)</label>
+                        <input type="number" id="screen-duration" class="form-control" value="10" min="1" max="300">
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="screen-enabled" checked>
+                            Enabled
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Element Properties Panel -->
+            <div class="panel" id="element-props-panel" style="display: none;">
+                <div class="panel-header">
+                    <i class="fas fa-edit"></i> Element Properties
+                </div>
+                <div class="panel-body">
+                    <div class="form-group">
+                        <label>Text Content *</label>
+                        <input type="text" id="elem-text" class="form-control" placeholder="{variable} or Static Text">
+                        <small class="form-text text-muted">Use {variable} for dynamic data</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Font Size</label>
+                        <select id="elem-font" class="form-control">
+                            <option value="small">Small (11px)</option>
+                            <option value="medium">Medium (14px)</option>
+                            <option value="large">Large (18px)</option>
+                            <option value="xlarge">X-Large (28px)</option>
+                            <option value="huge">Huge (36px)</option>
+                        </select>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="form-group">
+                                <label>X Position</label>
+                                <input type="number" id="elem-x" class="form-control" value="0" min="0">
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="form-group">
+                                <label>Y Position</label>
+                                <input type="number" id="elem-y" class="form-control" value="0" min="0">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Max Width (px)</label>
+                        <input type="number" id="elem-max-width" class="form-control" placeholder="Auto">
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="elem-wrap">
+                            Word Wrap
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="elem-invert">
+                            Invert Colors
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="elem-allow-empty">
+                            Allow Empty
+                        </label>
+                    </div>
+
+                    <div class="button-group">
+                        <button id="btn-delete-element" class="btn btn-danger btn-sm">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                        <button id="btn-duplicate-element" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-copy"></i> Duplicate
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scroll Effects Panel (OLED/VFD only) -->
+            <div class="panel" id="effects-panel">
+                <div class="panel-header">
+                    <i class="fas fa-magic"></i> Animation Effects
+                </div>
+                <div class="panel-body">
+                    <div class="form-group">
+                        <label>Scroll Effect</label>
+                        <select id="scroll-effect" class="form-control">
+                            <option value="static">Static (No Animation)</option>
+                            <option value="scroll_left">← Scroll Left</option>
+                            <option value="scroll_right">→ Scroll Right</option>
+                            <option value="scroll_up">↑ Scroll Up</option>
+                            <option value="scroll_down">↓ Scroll Down</option>
+                            <option value="wipe_left">Wipe Left</option>
+                            <option value="wipe_right">Wipe Right</option>
+                            <option value="wipe_up">Wipe Up</option>
+                            <option value="wipe_down">Wipe Down</option>
+                            <option value="fade_in">Fade In</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="scroll-speed-group" style="display: none;">
+                        <label>Scroll Speed (px/frame)</label>
+                        <input type="range" id="scroll-speed" class="form-range" min="1" max="20" value="4">
+                        <div class="range-value"><span id="scroll-speed-value">4</span> px/frame</div>
+                    </div>
+
+                    <div class="form-group" id="scroll-fps-group" style="display: none;">
+                        <label>Frame Rate (FPS)</label>
+                        <input type="range" id="scroll-fps" class="form-range" min="5" max="60" value="60">
+                        <div class="range-value"><span id="scroll-fps-value">60</span> FPS</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center - Canvas Area -->
+        <div class="canvas-area">
+            <div class="canvas-toolbar">
+                <button id="btn-add-text" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Add Text Element
+                </button>
+                <button id="btn-clear-canvas" class="btn btn-outline-secondary">
+                    <i class="fas fa-eraser"></i> Clear All
+                </button>
+                <div class="toolbar-divider"></div>
+                <div class="zoom-controls">
+                    <button id="btn-zoom-out" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-search-minus"></i>
+                    </button>
+                    <span id="zoom-level">100%</span>
+                    <button id="btn-zoom-in" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-search-plus"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="canvas-wrapper">
+                <div class="canvas-container" id="canvas-container">
+                    <canvas id="display-canvas" width="128" height="64"></canvas>
+                    <div id="element-overlays"></div>
+                </div>
+                <div class="canvas-info">
+                    <span id="canvas-dimensions">128 x 64 pixels</span>
+                    <span class="separator">|</span>
+                    <span id="mouse-position">X: 0, Y: 0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Sidebar - Layers & Data Sources -->
+        <div class="sidebar sidebar-right">
+            <!-- Layers Panel -->
+            <div class="panel">
+                <div class="panel-header">
+                    <i class="fas fa-layer-group"></i> Layers
+                    <span class="layer-count" id="layer-count">0</span>
+                </div>
+                <div class="panel-body panel-body-scroll">
+                    <div id="layers-list" class="layers-list">
+                        <div class="empty-state">
+                            <i class="fas fa-inbox"></i>
+                            <p>No elements yet</p>
+                            <small>Click "Add Text Element" to start</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Sources Panel -->
+            <div class="panel">
+                <div class="panel-header">
+                    <i class="fas fa-database"></i> Data Sources
+                </div>
+                <div class="panel-body panel-body-scroll">
+                    <div class="form-group">
+                        <button id="btn-add-data-source" class="btn btn-sm btn-primary w-100">
+                            <i class="fas fa-plus"></i> Add Data Source
+                        </button>
+                    </div>
+                    <div id="data-sources-list" class="data-sources-list">
+                        <!-- Data sources will be listed here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Variable Helper -->
+            <div class="panel">
+                <div class="panel-header">
+                    <i class="fas fa-code"></i> Available Variables
+                </div>
+                <div class="panel-body panel-body-scroll">
+                    <div class="variable-help">
+                        <div class="variable-category">
+                            <strong>Built-in:</strong>
+                            <div class="variable-item" data-var="{now.time}">
+                                <code>{now.time}</code>
+                                <small>Current time (12h)</small>
+                            </div>
+                            <div class="variable-item" data-var="{now.date}">
+                                <code>{now.date}</code>
+                                <small>Current date</small>
+                            </div>
+                            <div class="variable-item" data-var="{now.datetime}">
+                                <code>{now.datetime}</code>
+                                <small>Date & time</small>
+                            </div>
+                        </div>
+                        <div id="dynamic-variables" class="variable-category">
+                            <!-- Dynamic variables from data sources will appear here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Data Source Modal -->
+<div class="modal fade" id="dataSourceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Data Source</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>API Endpoint *</label>
+                    <select id="data-source-endpoint" class="form-control">
+                        <option value="">Select an endpoint...</option>
+                        <option value="/api/system_status">System Status</option>
+                        <option value="/api/audio/metrics">Audio Metrics</option>
+                        <option value="/api/alerts">Active Alerts</option>
+                        <option value="/api/stream/status">Stream Status</option>
+                        <option value="/api/receivers">Radio Receivers</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Variable Name *</label>
+                    <input type="text" id="data-source-var-name" class="form-control" placeholder="status">
+                    <small class="form-text text-muted">Use this name in {variable} references</small>
+                </div>
+                <div class="form-group">
+                    <button id="btn-test-data-source" class="btn btn-sm btn-info">
+                        <i class="fas fa-flask"></i> Test & Preview Data
+                    </button>
+                </div>
+                <div id="data-source-preview" class="data-preview" style="display: none;">
+                    <!-- Preview will appear here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" id="btn-add-data-source-confirm" class="btn btn-primary">Add Source</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Preview Modal -->
+<div class="modal fade" id="previewModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Screen Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <canvas id="preview-canvas" width="128" height="64" style="border: 2px solid #333; max-width: 100%; height: auto;"></canvas>
+                <div class="mt-3">
+                    <button id="btn-send-to-display" class="btn btn-success">
+                        <i class="fas fa-paper-plane"></i> Send to Display Now
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<input type="hidden" id="screen-id" value="{{ screen.id if screen else '' }}">
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/screen-editor.js') }}"></script>
+<script>
+// Initialize editor with screen data (if editing existing)
+const screenData = {{ screen.to_dict() | tojson | safe if screen else '{}' }};
+if (Object.keys(screenData).length > 0) {
+    window.addEventListener('DOMContentLoaded', () => {
+        ScreenEditor.loadScreen(screenData);
+    });
+}
+</script>
+{% endblock %}
