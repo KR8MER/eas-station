@@ -371,6 +371,59 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Scheduling Automatic RWT Broadcasts -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="rwtScheduleHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#rwtScheduleCollapse">
+                                    <i class="fas fa-calendar-alt me-2"></i>Scheduling Automatic RWT Broadcasts
+                                </button>
+                            </h2>
+                            <div id="rwtScheduleCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p><strong>Required Weekly Test (RWT)</strong> broadcasts can be automatically scheduled to run on specific days and time windows.</p>
+
+                                    <h6><i class="fas fa-cog me-2"></i>Accessing RWT Schedule Configuration</h6>
+                                    <ol>
+                                        <li>Navigate to <strong>Broadcast → RWT Schedule</strong> from the navigation menu</li>
+                                        <li>Or visit <code>/rwt-schedule</code> directly</li>
+                                    </ol>
+
+                                    <h6 class="mt-3"><i class="fas fa-sliders-h me-2"></i>Configuration Options</h6>
+                                    <ul>
+                                        <li><strong>Enable/Disable:</strong> Toggle automatic RWT broadcasts on or off</li>
+                                        <li><strong>Days of Week:</strong> Select which days to send RWT (Monday through Sunday)</li>
+                                        <li><strong>Time Window:</strong> Set start and end times (e.g., 8:00 AM to 4:00 PM)</li>
+                                        <li><strong>SAME Codes:</strong> Configure which counties/areas receive the RWT (defaults to 7 Ohio counties)</li>
+                                        <li><strong>Originator Code:</strong> Choose WXR (Weather), EAS, CIV (Civil), or PEP</li>
+                                        <li><strong>Station Identifier:</strong> Set your 8-character station ID</li>
+                                    </ul>
+
+                                    <h6 class="mt-3"><i class="fas fa-broadcast-tower me-2"></i>RWT Broadcast Behavior</h6>
+                                    <p>Automatic RWT broadcasts are designed to be lean and FCC-compliant:</p>
+                                    <ul>
+                                        <li><strong>No TTS Narration:</strong> RWT contains only SAME headers and EOM tones</li>
+                                        <li><strong>No Attention Tones:</strong> Silent except for required signaling</li>
+                                        <li><strong>Once Per Day:</strong> Only one RWT sent per configured day</li>
+                                        <li><strong>Time Window:</strong> Broadcasts only during configured hours</li>
+                                        <li><strong>Logged:</strong> All broadcasts stored in database for compliance tracking</li>
+                                    </ul>
+
+                                    <h6 class="mt-3"><i class="fas fa-vial me-2"></i>Testing Your Configuration</h6>
+                                    <p>Use the <strong>"Send Test RWT Now"</strong> button to immediately trigger a test broadcast and verify your configuration.</p>
+
+                                    <div class="alert alert-light">
+                                        <i class="fas fa-clock me-2"></i>
+                                        <strong>Scheduling Note:</strong> The system checks every minute whether to send an RWT. Once configured, it runs automatically in the background.
+                                    </div>
+
+                                    <div class="alert alert-info">
+                                        <i class="fas fa-map-marker-alt me-2"></i>
+                                        <strong>Default Counties:</strong> By default, RWT includes Allen, Defiance, Hancock, Henry, Paulding, Van Wert, and Wood Counties in Ohio (FIPS codes 039003, 039039, 039063, 039069, 039125, 039161, 039173).
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
