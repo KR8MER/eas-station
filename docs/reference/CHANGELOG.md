@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.11.4] - 2025-11-22
+### Fixed
+- Fixed duplicate DOM element declarations on the Weekly Test Automation page that threw JavaScript errors and prevented saved
+  SAME/FIPS counties from loading into the scheduler or badge preview.
+
 ## [2.11.3] - 2025-11-21
 ### Fixed
 - Ensured the RWT scheduler always opens a Flask application context before touching the
@@ -78,6 +83,9 @@ tracks releases under the 2.x series.
   - Added peak/RMS metering and silence detection with PostgreSQL storage
   - Built web UI at `/settings/audio-sources` for source management with real-time metering
   - Exposed configuration for capture priority and failover in environment variables
+### Fixed
+- Documented the Weekly Test Automation county list regression addressed in 2.11.4 so QA can trace the scheduler fix through the
+  release pipeline.
 - Added FCC-compliant audio playout queue with deterministic priority-based scheduling
   - Created `app_core/audio/playout_queue.py` with Presidential > Local > State > National > Test precedence
   - Built `app_core/audio/output_service.py` background service for ALSA/JACK playback
