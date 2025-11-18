@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -96,6 +97,23 @@ def _read_env_commit() -> Optional[str]:
     return None
 
 
+def _read_env_branch() -> Optional[str]:
+    """Return the branch name provided via environment variables, if any."""
+
+    branch = os.getenv("GIT_BRANCH")
+    if branch:
+        return branch.strip() or None
+    return None
+
+
+def _read_env_commit_details() -> Tuple[Optional[str], Optional[str]]:
+    """Return commit date and message provided via environment variables."""
+
+    date = os.getenv("GIT_COMMIT_DATE")
+    message = os.getenv("GIT_COMMIT_MESSAGE")
+    return (date.strip() or None if date else None, message.strip() or None if message else None)
+
+
 def _read_git_head() -> Optional[str]:
     """Resolve the current commit hash from the local ``.git`` metadata."""
 
@@ -136,6 +154,91 @@ def _read_git_head() -> Optional[str]:
     return head_content
 
 
+def _read_git_branch() -> Optional[str]:
+    """Return the current branch name from the git metadata."""
+
+    git_dir = _resolve_git_directory()
+    if git_dir is None:
+        return None
+
+    head_path = git_dir / "HEAD"
+    try:
+        head_content = head_path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return None
+
+    if head_content.startswith("ref:"):
+        ref = head_content.split(" ", 1)[1].strip()
+        return ref.split("/")[-1]
+
+    return None
+
+
+def _format_reflog_timestamp(timestamp: str, tz_offset: str) -> Optional[str]:
+    """Return an ISO 8601 timestamp derived from reflog metadata."""
+
+    try:
+        epoch = int(timestamp)
+    except (TypeError, ValueError):
+        return None
+
+    try:
+        sign = 1 if tz_offset.startswith("+") else -1
+        hours = int(tz_offset[1:3])
+        minutes = int(tz_offset[3:5])
+        offset = timezone(sign * timedelta(hours=hours, minutes=minutes))
+    except Exception:
+        offset = timezone.utc
+
+    dt = datetime.fromtimestamp(epoch, tz=offset)
+    return dt.isoformat()
+
+
+def _read_git_reflog_entry() -> Optional[Dict[str, Optional[str]]]:
+    """Return commit metadata from the HEAD reflog if available."""
+
+    git_dir = _resolve_git_directory()
+    if git_dir is None:
+        return None
+
+    reflog_path = git_dir / "logs" / "HEAD"
+    try:
+        lines = reflog_path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return None
+
+    for line in reversed(lines):
+        line = line.strip()
+        if not line:
+            continue
+
+        if "\t" in line:
+            metadata, message = line.split("\t", 1)
+        else:
+            metadata, message = line, ""
+
+        metadata = metadata.strip()
+        if not metadata:
+            continue
+
+        parts = metadata.split()
+        if len(parts) < 4:
+            continue
+
+        new_commit = parts[1].strip() or None
+        timestamp = parts[-2]
+        tz_offset = parts[-1]
+        formatted_date = _format_reflog_timestamp(timestamp, tz_offset)
+
+        return {
+            "commit": new_commit,
+            "date": formatted_date,
+            "message": message.strip() or None,
+        }
+
+    return None
+
+
 @lru_cache(maxsize=1)
 def _resolve_git_commit() -> Optional[str]:
     """Resolve the active git commit hash from the environment or repository."""
@@ -160,4 +263,52 @@ def get_current_commit(short_length: int = 6) -> str:
     return commit[:short_length]
 
 
-__all__ = ["get_current_version", "get_current_commit"]
+def get_git_metadata() -> Dict[str, str]:
+    """Return commit metadata without relying on git CLI tools."""
+
+    commit = _resolve_git_commit()
+    branch = _read_env_branch() or _read_git_branch()
+    env_date, env_message = _read_env_commit_details()
+
+    reflog_entry = _read_git_reflog_entry()
+    if reflog_entry:
+        commit = commit or reflog_entry.get("commit")
+        commit_date = env_date or reflog_entry.get("date")
+        commit_message = env_message or reflog_entry.get("message")
+    else:
+        commit_date = env_date
+        commit_message = env_message
+
+    commit_hash_full = commit or "unknown"
+
+    return {
+        "commit_hash": commit_hash_full[:8] if commit_hash_full != "unknown" else "unknown",
+        "commit_hash_full": commit_hash_full,
+        "branch": branch or "unknown",
+        "commit_date": commit_date or "unknown",
+        "commit_message": commit_message or "unknown",
+    }
+
+
+def get_git_tree_state() -> Optional[bool]:
+    """Return the git tree cleanliness derived from environment metadata."""
+
+    state = os.getenv("GIT_TREE_STATE")
+    if not state:
+        return None
+
+    normalized = state.strip().lower()
+    if normalized in {"clean", "true", "1", "yes"}:
+        return True
+    if normalized in {"dirty", "false", "0", "no"}:
+        return False
+
+    return None
+
+
+__all__ = [
+    "get_current_version",
+    "get_current_commit",
+    "get_git_metadata",
+    "get_git_tree_state",
+]
