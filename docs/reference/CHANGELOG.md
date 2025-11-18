@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.11.3] - 2025-11-21
+### Fixed
+- Ensured the RWT scheduler always opens a Flask application context before touching the
+  database and no longer keeps that context open during idle sleeps, eliminating the
+  "working outside of application context" failures in the background worker.
+
 ## [2.11.2] - 2025-11-20
 ### Added
 - Added an offline alert self-test harness plus `scripts/run_alert_self_test.py` so operators can replay bundled RWT captures,
