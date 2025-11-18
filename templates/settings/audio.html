@@ -569,45 +569,84 @@ function updateIcecastUrl() {
 }
 
 async function startIcecastStream() {
+    const startBtn = document.getElementById('icecastStartBtn');
+    const stopBtn = document.getElementById('icecastStopBtn');
+    startBtn.disabled = true;
+
     try {
-        showIcecastStatus('Starting Icecast stream...', 'info');
-
-        // Note: This would require a new API endpoint to control the IcecastStreamer
-        // For now, show a message that it needs to be started via the example script
-        showIcecastStatus(
-            'To start Icecast streaming, use the integration example: ' +
-            'python3 examples/run_with_icecast_streaming.py',
-            'info'
+        await postIcecastAction(
+            '/api/audio/icecast/start',
+            'Starting Icecast stream...',
+            'Icecast streaming started'
         );
-
-        // TODO: Implement actual start/stop control via API
-        // const response = await fetch('/api/audio/icecast/start', { method: 'POST' });
-
     } catch (error) {
         console.error('Error starting Icecast stream:', error);
         showIcecastStatus('Failed to start stream: ' + error.message, 'danger');
+    } finally {
+        startBtn.disabled = false;
+        stopBtn.disabled = false;
     }
 }
 
 async function stopIcecastStream() {
+    const startBtn = document.getElementById('icecastStartBtn');
+    const stopBtn = document.getElementById('icecastStopBtn');
+    stopBtn.disabled = true;
+
     try {
-        showIcecastStatus('Stopping Icecast stream...', 'info');
-
-        // TODO: Implement actual start/stop control via API
-        // const response = await fetch('/api/audio/icecast/stop', { method: 'POST' });
-
-        showIcecastStatus('Stream control via API not yet implemented', 'warning');
-
+        await postIcecastAction(
+            '/api/audio/icecast/stop',
+            'Stopping Icecast stream...',
+            'Icecast streaming stopped'
+        );
     } catch (error) {
         console.error('Error stopping Icecast stream:', error);
         showIcecastStatus('Failed to stop stream: ' + error.message, 'danger');
+    } finally {
+        stopBtn.disabled = false;
+        startBtn.disabled = false;
     }
 }
 
-function showIcecastStatus(message, type) {
+async function postIcecastAction(endpoint, pendingMessage, fallbackSuccessMessage) {
+    if (pendingMessage) {
+        showIcecastStatus(pendingMessage, 'info');
+    }
+
+    const response = await fetch(endpoint, { method: 'POST' });
+    let payload = {};
+
+    try {
+        payload = await response.json();
+    } catch (error) {
+        payload = {};
+    }
+
+    if (!response.ok) {
+        throw new Error(payload.error || payload.message || `Request failed (${response.status})`);
+    }
+
+    const detail = formatIcecastStatusDetails(payload.status);
+    showIcecastStatus(payload.message || fallbackSuccessMessage, 'success', detail);
+    return payload;
+}
+
+function showIcecastStatus(message, type, details) {
     const statusDiv = document.getElementById('icecastStatus');
     statusDiv.className = `alert alert-${type}`;
-    statusDiv.textContent = message;
+    statusDiv.innerHTML = '';
+
+    const messageEl = document.createElement('div');
+    messageEl.textContent = message;
+    statusDiv.appendChild(messageEl);
+
+    if (details) {
+        const detailEl = document.createElement('div');
+        detailEl.classList.add('small', 'mt-1');
+        detailEl.textContent = details;
+        statusDiv.appendChild(detailEl);
+    }
+
     statusDiv.classList.remove('d-none');
 
     // Auto-hide success messages after 5 seconds
@@ -616,6 +655,28 @@ function showIcecastStatus(message, type) {
             statusDiv.classList.add('d-none');
         }, 5000);
     }
+}
+
+function formatIcecastStatusDetails(status) {
+    if (!status || typeof status !== 'object') {
+        return null;
+    }
+
+    const parts = [];
+
+    if (typeof status.active_stream_count === 'number') {
+        parts.push(`Active streams: ${status.active_stream_count}`);
+    }
+
+    if (status.server) {
+        parts.push(`Server ${status.server}`);
+    }
+
+    if (parts.length === 0) {
+        return null;
+    }
+
+    return parts.join(' • ');
 }
 
 function copyIcecastUrl() {
