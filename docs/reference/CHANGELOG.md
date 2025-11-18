@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.10.1] - 2025-02-15
+### Changed
+- Simplified Weekly Test Automation so the scheduler always follows the Default RWT Counties list, surfaced that list directly next to the form, and kept Quick RWT/manual defaults in sync via `LocationSettings`.
+
+### Fixed
+- Ensured edits made in the Default RWT Counties manager persist to `LocationSettings` and are honored by Quick RWT, manual broadcasts, and the automation scheduler so operators no longer lose county changes.
+
 ## [2.10.0] - 2025-11-18
 ### Added
 - Added comprehensive `utilities.css` with gradient, card, badge, spacing, layout, typography, shadow, border, visibility, and animation utilities
@@ -31,6 +38,7 @@ tracks releases under the 2.x series.
 ### Added
 - Extended `/api/system_status` and `/api/system_health` with hostname, primary IPv4, uptime, and primary-interface metadata
   so OLED/network templates can surface real host diagnostics.
+- Surfaced the Weekly Test Automation console with a county management side panel, Broadcast navigation entry, and in-product callouts so operators can edit RWT schedules and default SAME codes entirely from the UI.
 - Added a curated OLED showcase rotation (system overview, alerts, network beacon, IPAWS poll watch, audio health, and audio
   telemetry) plus a `--display-type` flag to `scripts/create_example_screens.py` for targeted installs.
 - Enforced Argon Industria OLED reservations by blocking BCM pins 2, 3, 4, and 14 (physical header block 1-8) from GPIO configuration, greying them out in the GPIO Pin Map, and surfacing guidance in setup, environment, and hardware docs.
@@ -117,6 +125,7 @@ tracks releases under the 2.x series.
 
 ### Changed
 - Refined the theming system with higher-contrast logo treatments and added Aurora, Nebula, and Sunset presets to expand the built-in palette while keeping the wordmark legible across gradients.
+- Renamed the "EAS Workflow" console to **Broadcast Builder** and linked the Weekly Test Automation page throughout the Broadcast menu and workflow hero banner so automation tooling is obvious to operators.
 - **Consolidated stream support in Audio Sources system** - Removed stream support from RadioReceiver model and UI, centralizing all HTTP/M3U stream configuration through the Audio Sources page where StreamSourceAdapter already provided full functionality
   - Removed `source_type` and `stream_url` fields from RadioReceiver database model
   - RadioReceiver now exclusively handles SDR hardware (RTL-SDR, Airspy)

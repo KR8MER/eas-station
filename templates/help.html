@@ -353,7 +353,7 @@
                             <div id="audioCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
                                 <div class="accordion-body">
                                     <div class="mb-3">
-                                        <strong>EAS Workflow Console:</strong>
+                                        <strong>Broadcast Builder Console:</strong>
                                         <p>Accessible from the top navigation once logged in. Use the browser-based workflow to:</p>
                                         <ul>
                                             <li>Pick a state or territory</li>
@@ -383,9 +383,9 @@
                                 <div class="accordion-body">
                                     <p><strong>Required Weekly Test (RWT)</strong> broadcasts can be automatically scheduled to run on specific days and time windows.</p>
 
-                                    <h6><i class="fas fa-cog me-2"></i>Accessing RWT Schedule Configuration</h6>
+                                    <h6><i class="fas fa-cog me-2"></i>Accessing Weekly Test Automation</h6>
                                     <ol>
-                                        <li>Navigate to <strong>Broadcast → RWT Schedule</strong> from the navigation menu</li>
+                                        <li>Navigate to <strong>Broadcast → Weekly Test Automation</strong> from the navigation menu</li>
                                         <li>Or visit <code>/rwt-schedule</code> directly</li>
                                     </ol>
 
@@ -394,10 +394,13 @@
                                         <li><strong>Enable/Disable:</strong> Toggle automatic RWT broadcasts on or off</li>
                                         <li><strong>Days of Week:</strong> Select which days to send RWT (Monday through Sunday)</li>
                                         <li><strong>Time Window:</strong> Set start and end times (e.g., 8:00 AM to 4:00 PM)</li>
-                                        <li><strong>SAME Codes:</strong> Configure which counties/areas receive the RWT (defaults to 7 Ohio counties)</li>
-                                        <li><strong>Originator Code:</strong> Choose WXR (Weather), EAS, CIV (Civil), or PEP</li>
-                                        <li><strong>Station Identifier:</strong> Set your 8-character station ID</li>
+                                        <li><strong>Coverage:</strong> The scheduler always follows the shared <em>Default RWT Counties</em> list that sits next to the form—update it once and Quick RWT, manual defaults, and automation all stay aligned.</li>
                                     </ul>
+
+                                    <div class="alert alert-light">
+                                        <i class="fas fa-microchip me-2"></i>
+                                        <strong>Originator &amp; Station:</strong> RWT automation reuses the <code>EAS_ORIGINATOR</code> and <code>EAS_STATION_ID</code> environment variables that also feed the Broadcast Builder console.
+                                    </div>
 
                                     <h6 class="mt-3"><i class="fas fa-broadcast-tower me-2"></i>RWT Broadcast Behavior</h6>
                                     <p>Automatic RWT broadcasts are designed to be lean and FCC-compliant:</p>
@@ -419,7 +422,7 @@
 
                                     <div class="alert alert-info">
                                         <i class="fas fa-map-marker-alt me-2"></i>
-                                        <strong>Default Counties:</strong> By default, RWT includes Allen, Defiance, Hancock, Henry, Paulding, Van Wert, and Wood Counties in Ohio (FIPS codes 039003, 039039, 039063, 039069, 039125, 039161, 039173).
+                                        <strong>Default Counties:</strong> Systems ship with Allen, Defiance, Hancock, Henry, Paulding, Van Wert, and Wood Counties in Ohio (FIPS codes 039003, 039039, 039063, 039069, 039125, 039161, 039173). Update the <em>Default RWT Counties</em> manager to write your own list into Location Settings—Quick RWT, the Broadcast Builder defaults, and the scheduler will all use it automatically.
                                     </div>
                                 </div>
                             </div>

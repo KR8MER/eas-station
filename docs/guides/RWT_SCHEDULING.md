@@ -13,18 +13,18 @@ The automatic RWT scheduler allows you to configure RWT broadcasts to run automa
 - **Automatic Scheduling**: Set it and forget it - RWT broadcasts send automatically
 - **Day Selection**: Choose specific days (Monday-Sunday)
 - **Time Windows**: Configure start and end times
-- **Geographic Targeting**: Specify SAME/FIPS codes for targeted areas
+- **Geographic Targeting**: Follow the shared Default RWT Counties list stored with your Location Settings
 - **Compliance Logging**: All broadcasts logged for FCC compliance tracking
 - **Lean Audio**: RWT contains only SAME header and EOM tones (no TTS, no attention tones)
 
 ---
 
-## Accessing RWT Schedule Configuration
+## Accessing the Weekly Test Automation Console
 
 ### Via Navigation Menu
 1. Log into EAS Station
 2. Click **Broadcast** in the top navigation bar
-3. Select **RWT Schedule** from the dropdown menu
+3. Select **Weekly Test Automation** from the dropdown menu
 
 ### Direct URL
 Navigate directly to: `https://your-server/rwt-schedule`
@@ -63,35 +63,35 @@ Set the hours during which RWT broadcasts can occur:
 
 ### 4. SAME/FIPS Codes
 
-Configure which geographic areas receive the RWT. Enter FIPS codes separated by commas or newlines.
+The scheduler now always follows the shared **Default RWT Counties** list displayed to the right of the form. Update that list once and every workflow (Quick RWT, "Load Default Codes" in Broadcast Builder, and the automation scheduler) will reuse it. The list is persisted to your `LocationSettings` record and is still capped at the SAME specification maximum of 31 entries.
 
-**Default**: 7 Ohio counties pre-configured:
-```
-039003  # Allen County, OH
-039039  # Defiance County, OH
-039063  # Hancock County, OH
-039069  # Henry County, OH
-039125  # Paulding County, OH
-039161  # Van Wert County, OH
-039173  # Wood County, OH
-```
+**Factory Default**: New installs ship with the Ohio counties that were previously hardcoded (Allen, Defiance, Hancock, Henry, Paulding, Van Wert, and Wood). As soon as you save your own list, those defaults are replaced everywhere.
 
-**To add your own counties**:
-1. Find FIPS codes at [NOAA FIPS Codes](https://www.weather.gov/nwr/FIPS)
-2. Enter as 6-digit codes (e.g., 039003 for Allen County, OH)
-3. Separate multiple codes with commas or newlines
+### 5. Default RWT Counties Card
 
-### 5. Originator Code
+Use the side panel to manage the shared county list that powers:
 
-Select the message originator:
-- **WXR** (National Weather Service) - Default
-- **EAS** (EAS Participant/Broadcaster)
-- **CIV** (Civil Authorities)
-- **PEP** (Primary Entry Point)
+- The Broadcast Builder "Load Default Codes" shortcut
+- Quick RWT presets
+- The Weekly Test Automation scheduler
 
-### 6. Station Identifier
+Features include:
 
-Enter your 8-character station identifier (e.g., `EASNODES`, `WXYZ123`, etc.). This will be automatically padded with spaces if shorter than 8 characters.
+- Add counties by typing the 6-digit SAME/FIPS code or using the state/county picker
+- Remove counties with one click
+- Enforce the 31-code SAME maximum automatically
+- Save updates directly to the `LocationSettings` record
+- Reload from the database if you want to discard in-progress edits
+- Persist everything directly to `LocationSettings` so every workflow stays in sync
+
+### 6. Originator & Station Identity
+
+RWT automation reuses the environment-driven values defined in `.env`:
+
+- `EAS_ORIGINATOR`
+- `EAS_STATION_ID`
+
+Update those variables (or the Environment Settings UI) to change the broadcast metadata used by the scheduler and Broadcast Builder console.
 
 ---
 

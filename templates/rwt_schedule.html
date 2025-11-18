@@ -1,26 +1,33 @@
 {% extends "base.html" %}
 
-{% block title %}RWT Schedule Configuration - EAS Station{% endblock %}
+{% block title %}Weekly Test Automation - EAS Station{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
-    <div class="row">
-        <div class="col-lg-8 mx-auto">
-            <h1 class="mb-4">
+    <div class="row mb-4">
+        <div class="col-12 col-xl-10 col-xxl-9">
+            <h1 class="mb-3">
                 <i class="fas fa-calendar-alt me-2"></i>
-                RWT Schedule Configuration
+                Weekly Test Automation
             </h1>
 
-            <div class="alert alert-info">
-                <i class="fas fa-info-circle me-2"></i>
-                <strong>Required Weekly Test (RWT) Automatic Scheduling</strong>
-                <p class="mb-0 mt-2">
-                    Configure automatic RWT broadcasts to run on specific days and time windows.
-                    RWT tests contain only SAME headers and EOM tones - no TTS narration or attention tones.
-                </p>
+            <div class="alert alert-info border-0 shadow-sm">
+                <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
+                    <div>
+                        <strong>Required Weekly Test (RWT) automation.</strong>
+                        Configure the schedule, then manage the shared county list used by Quick RWT and manual broadcasts.
+                    </div>
+                    <div class="text-muted small">
+                        RWTs automatically mute narration and attention tones—only SAME headers and EOM are generated.
+                    </div>
+                </div>
             </div>
+        </div>
+    </div>
 
-            <div class="card">
+    <div class="row g-4 align-items-start">
+        <div class="col-xl-7">
+            <div class="card h-100">
                 <div class="card-header">
                     <h5 class="mb-0">Schedule Configuration</h5>
                 </div>
@@ -108,14 +115,20 @@
                             </div>
                         </div>
 
-                        <!-- SAME Codes -->
+                        <!-- SAME Codes Preview -->
                         <div class="mb-4">
-                            <label for="sameCodesInput" class="form-label fw-bold">SAME/FIPS Codes</label>
-                            <textarea class="form-control font-monospace" id="sameCodesInput" rows="3" placeholder="Enter FIPS codes separated by commas or newlines&#10;Example: 039003, 039039, 039063">{{ default_same_codes|join(', ') }}</textarea>
-                            <small class="text-muted">Default: Ohio counties (Allen, Defiance, Hancock, Henry, Paulding, Van Wert, Wood)</small>
-                            <div class="alert alert-info mt-2">
+                            <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-2">
+                                <div>
+                                    <label class="form-label fw-bold mb-0">Active SAME/FIPS Coverage</label>
+                                    <div class="text-muted small">The scheduler reuses the shared default county list. Update it using the manager on the right.</div>
+                                </div>
+                                <span class="badge bg-light text-dark border" id="scheduleCountySourceBadge">Loading counties…</span>
+                            </div>
+                            <div class="same-chip-cloud mt-3" id="scheduleCountyList"></div>
+                            <div id="scheduleCountyEmpty" class="text-muted small">No default counties configured yet.</div>
+                            <div class="alert alert-info mt-3 mb-0">
                                 <i class="fas fa-info-circle me-2"></i>
-                                <strong>Note:</strong> Originator code and station identifier are configured via environment variables (EAS_ORIGINATOR, EAS_STATION_ID).
+                                Originator and station identifiers come from <code>EAS_ORIGINATOR</code> and <code>EAS_STATION_ID</code>.
                             </div>
                         </div>
 
@@ -150,18 +163,101 @@
                 </div>
             </div>
         </div>
+
+        <div class="col-xl-5">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Default RWT Counties</h5>
+                    <small class="text-muted">This shared list powers Quick RWT, manual defaults, and the scheduler.</small>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="countyCodeInput" class="form-label">Add County by SAME/FIPS Code</label>
+                        <div class="input-group">
+                            <input type="text" id="countyCodeInput" class="form-control" placeholder="039003" maxlength="6">
+                            <button class="btn btn-primary" type="button" id="addCountyCodeBtn">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                        <div class="form-text">Enter six digits. Non-numeric characters are ignored automatically.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Add Using Picker</label>
+                        <div class="row g-2">
+                            <div class="col-sm-6">
+                                <select id="stateSelect" class="form-select">
+                                    <option value="">Select State</option>
+                                    {% for state in state_tree %}
+                                    <option value="{{ state.state_fips }}">{{ state.name }} ({{ state.abbr }})</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-sm-6">
+                                <select id="countySelect" class="form-select" disabled>
+                                    <option value="">Select County</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="addCountyFromPickerBtn" disabled>
+                            <i class="fas fa-location-crosshairs me-1"></i>Add Selected County
+                        </button>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Selected Counties</label>
+                        <div id="countyList" class="d-flex flex-wrap gap-2"></div>
+                        <div id="countyListEmpty" class="text-muted small">No counties configured yet.</div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="button" class="btn btn-success" id="saveCountiesBtn">
+                            <i class="fas fa-save me-1"></i>Save Default Counties
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="reloadCountiesBtn">
+                            <i class="fas fa-undo me-1"></i>Reload from Database
+                        </button>
+                    </div>
+
+                    <div class="alert alert-light mt-3 mb-0">
+                        <i class="fas fa-circle-info me-2"></i>
+                        These counties populate the Broadcast Builder's "Load Default Codes" button and serve as the fallback for automatic RWT runs.
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+    const sameLookup = {{ same_lookup|tojson }};
+    const stateTree = {{ state_tree|tojson }};
+
     document.addEventListener('DOMContentLoaded', function() {
         const form = document.getElementById('rwtConfigForm');
         const testBtn = document.getElementById('testRWTBtn');
 
+        const countyListEl = document.getElementById('countyList');
+        const countyEmptyState = document.getElementById('countyListEmpty');
+        const countyCodeInput = document.getElementById('countyCodeInput');
+        const addCountyCodeBtn = document.getElementById('addCountyCodeBtn');
+        const stateSelect = document.getElementById('stateSelect');
+        const countySelect = document.getElementById('countySelect');
+        const addCountyFromPickerBtn = document.getElementById('addCountyFromPickerBtn');
+        const saveCountiesBtn = document.getElementById('saveCountiesBtn');
+        const reloadCountiesBtn = document.getElementById('reloadCountiesBtn');
+        const scheduleCountyListEl = document.getElementById('scheduleCountyList');
+        const scheduleCountyEmptyState = document.getElementById('scheduleCountyEmpty');
+        const scheduleCountySourceBadge = document.getElementById('scheduleCountySourceBadge');
+
+        let defaultCountyCodes = [];
+        let countySourceLabel = 'location_defaults';
+
         // Load configuration
         loadConfiguration();
+        loadLocationSettings();
 
         // Save configuration
         form.addEventListener('submit', function(e) {
@@ -174,6 +270,50 @@
             sendTestRWT();
         });
 
+        addCountyCodeBtn.addEventListener('click', function() {
+            addCountyCode(countyCodeInput.value);
+        });
+
+        countyCodeInput.addEventListener('keyup', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                addCountyCode(countyCodeInput.value);
+            }
+        });
+
+        stateSelect.addEventListener('change', function() {
+            populateCountySelect(this.value);
+        });
+
+        addCountyFromPickerBtn.addEventListener('click', function() {
+            const code = countySelect.value;
+            if (code) {
+                addCountyCode(code);
+            }
+        });
+
+        saveCountiesBtn.addEventListener('click', function() {
+            saveDefaultCounties();
+        });
+
+        reloadCountiesBtn.addEventListener('click', function() {
+            loadLocationSettings(true);
+        });
+
+        function updateCountySourceBadge(source) {
+            countySourceLabel = source || 'location_defaults';
+            if (!scheduleCountySourceBadge) {
+                return;
+            }
+            if (countySourceLabel === 'schedule') {
+                scheduleCountySourceBadge.textContent = 'Using saved schedule copy';
+                scheduleCountySourceBadge.className = 'badge bg-primary text-white';
+            } else {
+                scheduleCountySourceBadge.textContent = 'Following shared default list';
+                scheduleCountySourceBadge.className = 'badge bg-success text-white';
+            }
+        }
+
         function loadConfiguration() {
             fetch('/api/rwt-schedule/config', {
                 headers: {
@@ -184,6 +324,7 @@
             .then(data => {
                 if (data.success && data.config) {
                     const config = data.config;
+                    updateCountySourceBadge(config.same_codes_source);
 
                     // Enable/disable
                     document.getElementById('enabledCheckbox').checked = config.enabled || false;
@@ -198,11 +339,6 @@
                     document.getElementById('startMinute').value = config.start_minute || 0;
                     document.getElementById('endHour').value = config.end_hour || 16;
                     document.getElementById('endMinute').value = config.end_minute || 0;
-
-                    // SAME codes
-                    if (config.same_codes && config.same_codes.length > 0) {
-                        document.getElementById('sameCodesInput').value = config.same_codes.join(', ');
-                    }
 
                     // Last run info
                     if (config.last_run_at) {
@@ -238,11 +374,10 @@
             const endHour = parseInt(document.getElementById('endHour').value);
             const endMinute = parseInt(document.getElementById('endMinute').value);
 
-            const sameCodesText = document.getElementById('sameCodesInput').value;
-            const sameCodes = sameCodesText.split(/[\s,]+/)
-                .map(code => code.trim())
-                .filter(code => code.length > 0)
-                .map(code => code.padStart(6, '0').substring(0, 6));
+            if (enabled && defaultCountyCodes.length === 0) {
+                alert('Add at least one county to the shared list before enabling automatic RWT broadcasts.');
+                return;
+            }
 
             const data = {
                 enabled,
@@ -251,7 +386,7 @@
                 start_minute: startMinute,
                 end_hour: endHour,
                 end_minute: endMinute,
-                same_codes: sameCodes
+                same_codes: defaultCountyCodes
             };
 
             fetch('/api/rwt-schedule/config', {
@@ -308,6 +443,191 @@
                 testBtn.disabled = false;
                 testBtn.innerHTML = '<i class="fas fa-broadcast-tower me-2"></i>Send Test RWT Now';
                 alert('Failed to send test RWT');
+            });
+        }
+
+        function loadLocationSettings(showToast = false) {
+            fetch('/admin/location_settings', {
+                headers: {
+                    'X-CSRF-Token': window.CSRF_TOKEN
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                const settings = data.settings || {};
+                defaultCountyCodes = sanitizeCountyList(settings.fips_codes || []);
+                renderCountyList();
+                if (showToast) {
+                    alert('Reloaded county list from database.');
+                }
+            })
+            .catch(error => {
+                console.error('Failed to load location settings:', error);
+                alert('Failed to load default counties');
+            });
+        }
+
+        function sanitizeCountyList(values) {
+            const seen = new Set();
+            const cleaned = [];
+            values.forEach(value => {
+                const normalized = normalizeFips(value);
+                if (normalized && !seen.has(normalized) && cleaned.length < 31) {
+                    seen.add(normalized);
+                    cleaned.push(normalized);
+                }
+            });
+            return cleaned;
+        }
+
+        function normalizeFips(value) {
+            if (value === undefined || value === null) {
+                return null;
+            }
+            const digits = String(value).replace(/[^0-9]/g, '').slice(0, 6);
+            if (digits.length !== 6) {
+                return null;
+            }
+            return digits;
+        }
+
+        function addCountyCode(value) {
+            const normalized = normalizeFips(value);
+            if (!normalized) {
+                alert('Enter a six-digit SAME/FIPS code.');
+                return;
+            }
+            if (defaultCountyCodes.includes(normalized)) {
+                countyCodeInput.value = '';
+                return;
+            }
+            if (defaultCountyCodes.length >= 31) {
+                alert('The SAME specification allows a maximum of 31 counties.');
+                return;
+            }
+            defaultCountyCodes.push(normalized);
+            countyCodeInput.value = '';
+            renderCountyList();
+        }
+
+        function populateCountySelect(stateFips) {
+            countySelect.innerHTML = '<option value="">Select County</option>';
+            if (!stateFips) {
+                countySelect.disabled = true;
+                addCountyFromPickerBtn.disabled = true;
+                return;
+            }
+
+            const state = (stateTree || []).find(item => item.state_fips === stateFips);
+            if (!state) {
+                countySelect.disabled = true;
+                addCountyFromPickerBtn.disabled = true;
+                return;
+            }
+
+            countySelect.disabled = false;
+            addCountyFromPickerBtn.disabled = false;
+
+            if (state.statewide_code) {
+                const option = document.createElement('option');
+                option.value = state.statewide_code;
+                option.textContent = `${state.name} - Statewide`;
+                countySelect.appendChild(option);
+            }
+
+            (state.counties || []).forEach(county => {
+                const option = document.createElement('option');
+                option.value = county.code;
+                option.textContent = county.name;
+                countySelect.appendChild(option);
+            });
+        }
+
+        function renderCountyList() {
+            countyListEl.innerHTML = '';
+            if (defaultCountyCodes.length === 0) {
+                countyEmptyState.style.display = 'block';
+                renderScheduleCountyList();
+                return;
+            }
+            countyEmptyState.style.display = 'none';
+
+            defaultCountyCodes.forEach(code => {
+                const chip = document.createElement('span');
+                chip.className = 'badge bg-light text-dark border d-flex align-items-center gap-2 py-2 px-3';
+
+                const codeEl = document.createElement('code');
+                codeEl.textContent = code;
+                chip.appendChild(codeEl);
+
+                const label = document.createElement('span');
+                label.textContent = describeSameCode(code);
+                chip.appendChild(label);
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'btn btn-link text-danger p-0 ms-2';
+                removeBtn.innerHTML = '<i class="fas fa-times"></i>';
+                removeBtn.addEventListener('click', function() {
+                    defaultCountyCodes = defaultCountyCodes.filter(item => item !== code);
+                    renderCountyList();
+                });
+                chip.appendChild(removeBtn);
+
+                countyListEl.appendChild(chip);
+            });
+
+            renderScheduleCountyList();
+        }
+
+        function renderScheduleCountyList() {
+            if (!scheduleCountyListEl) {
+                return;
+            }
+            scheduleCountyListEl.innerHTML = '';
+            if (defaultCountyCodes.length === 0) {
+                scheduleCountyEmptyState.style.display = 'block';
+                return;
+            }
+            scheduleCountyEmptyState.style.display = 'none';
+            defaultCountyCodes.forEach(code => {
+                const chip = document.createElement('span');
+                chip.className = 'badge bg-secondary text-white';
+                chip.innerHTML = `<code class="me-1">${code}</code>${describeSameCode(code)}`;
+                scheduleCountyListEl.appendChild(chip);
+            });
+        }
+
+        function describeSameCode(code) {
+            if (sameLookup && sameLookup[code]) {
+                return sameLookup[code];
+            }
+            return 'Custom County';
+        }
+
+        function saveDefaultCounties() {
+            fetch('/admin/location_settings', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': window.CSRF_TOKEN
+                },
+                body: JSON.stringify({
+                    fips_codes: defaultCountyCodes
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Failed to save counties: ' + data.error);
+                    return;
+                }
+                alert('Default counties updated successfully.');
+                loadLocationSettings();
+            })
+            .catch(error => {
+                console.error('Failed to save counties:', error);
+                alert('Failed to save default counties');
             });
         }
     });
