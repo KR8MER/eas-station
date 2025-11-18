@@ -40,12 +40,8 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
         now = datetime.now(timezone.utc)
         identifier = f"RWT-AUTO-{now.strftime('%Y%m%d%H%M%S')}"
 
-        # Load EAS config
+        # Load EAS config (includes originator and station_id from environment)
         eas_config = load_eas_config()
-
-        # Override config with schedule settings
-        eas_config['originator'] = config.originator
-        eas_config['station_id'] = config.station_id
 
         # Create alert object for RWT
         alert_object = SimpleNamespace(

@@ -113,24 +113,10 @@
                             <label for="sameCodesInput" class="form-label fw-bold">SAME/FIPS Codes</label>
                             <textarea class="form-control font-monospace" id="sameCodesInput" rows="3" placeholder="Enter FIPS codes separated by commas or newlines&#10;Example: 039003, 039039, 039063">{{ default_same_codes|join(', ') }}</textarea>
                             <small class="text-muted">Default: Ohio counties (Allen, Defiance, Hancock, Henry, Paulding, Van Wert, Wood)</small>
-                        </div>
-
-                        <!-- Originator -->
-                        <div class="mb-4">
-                            <label for="originatorSelect" class="form-label fw-bold">Originator Code</label>
-                            <select class="form-select" id="originatorSelect">
-                                <option value="WXR">WXR - National Weather Service</option>
-                                <option value="EAS">EAS - EAS Participant</option>
-                                <option value="CIV">CIV - Civil Authorities</option>
-                                <option value="PEP">PEP - Primary Entry Point</option>
-                            </select>
-                        </div>
-
-                        <!-- Station ID -->
-                        <div class="mb-4">
-                            <label for="stationIdInput" class="form-label fw-bold">Station Identifier</label>
-                            <input type="text" class="form-control font-monospace" id="stationIdInput" maxlength="8" value="EASNODES" required>
-                            <small class="text-muted">8 characters max, auto-padded with spaces</small>
+                            <div class="alert alert-info mt-2">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Note:</strong> Originator code and station identifier are configured via environment variables (EAS_ORIGINATOR, EAS_STATION_ID).
+                            </div>
                         </div>
 
                         <!-- Buttons -->
@@ -218,12 +204,6 @@
                         document.getElementById('sameCodesInput').value = config.same_codes.join(', ');
                     }
 
-                    // Originator
-                    document.getElementById('originatorSelect').value = config.originator || 'WXR';
-
-                    // Station ID
-                    document.getElementById('stationIdInput').value = config.station_id || 'EASNODES';
-
                     // Last run info
                     if (config.last_run_at) {
                         document.getElementById('lastRunCard').style.display = 'block';
@@ -264,9 +244,6 @@
                 .filter(code => code.length > 0)
                 .map(code => code.padStart(6, '0').substring(0, 6));
 
-            const originator = document.getElementById('originatorSelect').value;
-            const stationId = document.getElementById('stationIdInput').value;
-
             const data = {
                 enabled,
                 days_of_week: daysOfWeek,
@@ -274,9 +251,7 @@
                 start_minute: startMinute,
                 end_hour: endHour,
                 end_minute: endMinute,
-                same_codes: sameCodes,
-                originator,
-                station_id: stationId
+                same_codes: sameCodes
             };
 
             fetch('/api/rwt-schedule/config', {
