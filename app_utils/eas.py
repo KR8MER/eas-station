@@ -574,7 +574,16 @@ def manual_default_same_codes() -> List[str]:
                 codes.append(digits.zfill(6)[:6])
 
     if not codes:
-        codes = ['039137']
+        # Default to Ohio counties: Allen, Defiance, Hancock, Henry, Paulding, Van Wert, Wood
+        codes = [
+            '039003',  # Allen County, OH
+            '039039',  # Defiance County, OH
+            '039063',  # Hancock County, OH
+            '039069',  # Henry County, OH
+            '039125',  # Paulding County, OH
+            '039161',  # Van Wert County, OH
+            '039173',  # Wood County, OH
+        ]
 
     return codes[:31]
 
@@ -846,6 +855,22 @@ class EASAudioGenerator:
         silence_between_headers: float = 1.0,
         silence_after_header: float = 1.0,
     ) -> Dict[str, object]:
+        # Extract event code from SAME header to detect RWT (Required Weekly Test)
+        # Header format: ZCZC-ORG-EEE-PSSCCC-... where EEE is the event code
+        event_code = None
+        if header:
+            parts = header.split('-')
+            if len(parts) > 2:
+                event_code = parts[2].strip().upper()
+
+        # For RWT (Required Weekly Test), disable TTS and attention tones
+        # RWT should only have SAME header and EOM tones
+        if event_code == 'RWT':
+            include_tts = False
+            tone_profile = 'none'
+            if self.logger:
+                self.logger.info("RWT detected: disabling TTS narration and attention tones")
+
         amplitude = 0.7 * 32767
         same_bits = encode_same_bits(header, include_preamble=True)
         header_samples = generate_fsk_samples(
