@@ -1,139 +1,775 @@
 {% extends 'base.html' %}
-{% block title %}System Version | EAS Station{% endblock %}
+{% block title %}Version & Changelog | EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Version page specific styles */
+    .version-hero {
+        background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+        color: white;
+        padding: 3rem 0;
+        margin-bottom: 2rem;
+        border-radius: var(--radius-lg, 0.5rem);
+    }
+
+    .version-badge {
+        display: inline-block;
+        font-size: 3rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .git-info-card {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: var(--radius-md, 0.375rem);
+        padding: 1.5rem;
+        margin-top: 1.5rem;
+    }
+
+    .git-info-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .git-info-item:last-child {
+        border-bottom: none;
+    }
+
+    .git-info-label {
+        font-weight: 600;
+        opacity: 0.9;
+    }
+
+    .git-info-value {
+        font-family: var(--font-mono);
+        opacity: 0.95;
+    }
+
+    /* Timeline styles */
+    .timeline {
+        position: relative;
+        padding: 2rem 0;
+    }
+
+    .timeline-item {
+        position: relative;
+        padding-left: 3rem;
+        padding-bottom: 2rem;
+        border-left: 2px solid var(--color-border, #dee2e6);
+    }
+
+    .timeline-item:last-child {
+        border-left-color: transparent;
+    }
+
+    .timeline-marker {
+        position: absolute;
+        left: -10px;
+        top: 0;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--primary-color);
+        border: 3px solid var(--color-surface, white);
+        box-shadow: 0 0 0 4px var(--color-border-light, #e9ecef);
+    }
+
+    .timeline-item.current .timeline-marker {
+        width: 24px;
+        height: 24px;
+        left: -13px;
+        background: linear-gradient(135deg, var(--success-color), #20c997);
+        animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { box-shadow: 0 0 0 4px var(--color-border-light, #e9ecef); }
+        50% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0.2); }
+    }
+
+    .timeline-content {
+        background: var(--color-surface, white);
+        border: 1px solid var(--color-border, #dee2e6);
+        border-radius: var(--radius-md, 0.375rem);
+        padding: 1.5rem;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .timeline-item.current .timeline-content {
+        border-color: var(--success-color);
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+    }
+
+    .version-tag {
+        display: inline-block;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--primary-color);
+        margin-bottom: 0.5rem;
+    }
+
+    .timeline-item.current .version-tag {
+        color: var(--success-color);
+    }
+
+    .version-date {
+        font-size: 0.875rem;
+        color: var(--color-text-secondary);
+        margin-bottom: 1rem;
+    }
+
+    .change-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .change-list li {
+        padding: 0.5rem 0 0.5rem 1.75rem;
+        position: relative;
+    }
+
+    .change-list li::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0.75rem;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: var(--color-text-secondary);
+    }
+
+    .change-category {
+        font-weight: 600;
+        color: var(--color-text-primary);
+        margin-top: 1rem;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .change-category.added { color: var(--success-color); }
+    .change-category.fixed { color: var(--danger-color); }
+    .change-category.changed { color: var(--info-color); }
+    .change-category.removed { color: var(--color-text-muted); }
+
+    /* Tab styles */
+    .nav-tabs .nav-link {
+        border-radius: var(--radius-md, 0.375rem) var(--radius-md, 0.375rem) 0 0;
+        font-weight: 500;
+    }
+
+    .tab-content {
+        background: var(--color-surface, white);
+        border: 1px solid var(--color-border, #dee2e6);
+        border-top: none;
+        border-radius: 0 0 var(--radius-md, 0.375rem) var(--radius-md, 0.375rem);
+        padding: 2rem;
+    }
+
+    /* Feature matrix */
+    .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+
+    .feature-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1rem;
+        background: var(--color-surface, white);
+        border: 1px solid var(--color-border, #dee2e6);
+        border-radius: var(--radius-md, 0.375rem);
+    }
+
+    .feature-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius-md, 0.375rem);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        flex-shrink: 0;
+    }
+
+    .feature-icon.available {
+        background: var(--color-success-light, #d1fae5);
+        color: var(--success-color, #10b981);
+    }
+
+    .feature-icon.unavailable {
+        background: var(--color-neutral-100, #f1f3f5);
+        color: var(--color-text-muted, #adb5bd);
+    }
+
+    .feature-info {
+        flex: 1;
+    }
+
+    .feature-name {
+        font-weight: 600;
+        color: var(--color-text-primary);
+        margin-bottom: 0.25rem;
+    }
+
+    .feature-version {
+        font-size: 0.75rem;
+        color: var(--color-text-secondary);
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container py-4">
-    <div class="row justify-content-center">
-        <div class="col-12 col-lg-8 col-xl-7">
-            <!-- Header -->
-            <div class="card shadow-sm mb-4 border-0">
-                <div class="card-body p-4 p-md-5">
-                    <div class="text-center mb-4">
-                        <img src="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}" alt="EAS Station logo" class="img-fluid mb-3" style="max-width: 500px;">
-                        <h1 class="display-6 fw-bold mb-3">System Information</h1>
-                        <p class="lead text-muted">EAS Station Version and Configuration</p>
+<div class="container-fluid">
+    <!-- Hero Section -->
+    <div class="version-hero text-center">
+        <div class="container">
+            <img src="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}"
+                 alt="EAS Station"
+                 class="img-fluid mb-4"
+                 style="max-width: 400px; filter: brightness(0) invert(1);">
+
+            <div class="version-badge">
+                Version {{ version_info.version }}
+            </div>
+
+            <p class="lead mb-0">Professional Emergency Alert System</p>
+            <p class="mb-4">{{ version_info.description }}</p>
+
+            <!-- Git Info Card -->
+            <div class="git-info-card">
+                <h5 class="mb-3"><i class="fab fa-git-alt me-2"></i>Build Information</h5>
+                <div class="git-info-item">
+                    <span class="git-info-label">Commit:</span>
+                    <span class="git-info-value">
+                        <a href="https://github.com/KR8MER/eas-station/commit/{{ git_info.commit_hash_full }}"
+                           target="_blank"
+                           class="text-white text-decoration-none">
+                            {{ git_info.commit_hash }}
+                        </a>
+                    </span>
+                </div>
+                <div class="git-info-item">
+                    <span class="git-info-label">Branch:</span>
+                    <span class="git-info-value">{{ git_info.branch }}</span>
+                </div>
+                <div class="git-info-item">
+                    <span class="git-info-label">Date:</span>
+                    <span class="git-info-value">{{ git_info.commit_date }}</span>
+                </div>
+                <div class="git-info-item">
+                    <span class="git-info-label">Message:</span>
+                    <span class="git-info-value">{{ git_info.commit_message }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Tabs -->
+        <ul class="nav nav-tabs mb-0" id="versionTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="overview-tab" data-bs-toggle="tab" data-bs-target="#overview" type="button" role="tab">
+                    <i class="fas fa-home me-2"></i>Overview
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="changelog-tab" data-bs-toggle="tab" data-bs-target="#changelog" type="button" role="tab">
+                    <i class="fas fa-list me-2"></i>Changelog
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="features-tab" data-bs-toggle="tab" data-bs-target="#features" type="button" role="tab">
+                    <i class="fas fa-puzzle-piece me-2"></i>Features
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="system-tab" data-bs-toggle="tab" data-bs-target="#system" type="button" role="tab">
+                    <i class="fas fa-cog me-2"></i>System Info
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="api-tab" data-bs-toggle="tab" data-bs-target="#api" type="button" role="tab">
+                    <i class="fas fa-code me-2"></i>JSON API
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="versionTabContent">
+            <!-- Overview Tab -->
+            <div class="tab-pane fade show active" id="overview" role="tabpanel">
+                <h3 class="mb-4">
+                    <i class="fas fa-star text-warning me-2"></i>
+                    What's New in {{ version_info.version }}
+                </h3>
+
+                {% if changelogs.main and changelogs.main|length > 0 %}
+                    {% set latest = changelogs.main[0] %}
+                    <div class="alert alert-info">
+                        <h5 class="alert-heading">Latest Release{% if latest.date %} - {{ latest.date }}{% endif %}</h5>
+
+                        {% if latest.added %}
+                        <div class="change-category added">
+                            <i class="fas fa-plus-circle"></i>
+                            <span>Added</span>
+                        </div>
+                        <ul class="change-list">
+                            {% for item in latest.added[:5] %}
+                            <li>{{ item }}</li>
+                            {% endfor %}
+                            {% if latest.added|length > 5 %}
+                            <li><em>...and {{ latest.added|length - 5 }} more additions</em></li>
+                            {% endif %}
+                        </ul>
+                        {% endif %}
+
+                        {% if latest.fixed %}
+                        <div class="change-category fixed">
+                            <i class="fas fa-wrench"></i>
+                            <span>Fixed</span>
+                        </div>
+                        <ul class="change-list">
+                            {% for item in latest.fixed[:5] %}
+                            <li>{{ item }}</li>
+                            {% endfor %}
+                            {% if latest.fixed|length > 5 %}
+                            <li><em>...and {{ latest.fixed|length - 5 }} more fixes</em></li>
+                            {% endif %}
+                        </ul>
+                        {% endif %}
+
+                        {% if latest.changed %}
+                        <div class="change-category changed">
+                            <i class="fas fa-sync-alt"></i>
+                            <span>Changed</span>
+                        </div>
+                        <ul class="change-list">
+                            {% for item in latest.changed[:3] %}
+                            <li>{{ item }}</li>
+                            {% endfor %}
+                            {% if latest.changed|length > 3 %}
+                            <li><em>...and {{ latest.changed|length - 3 }} more changes</em></li>
+                            {% endif %}
+                        </ul>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-secondary">
+                        <p class="mb-0">Changelog information not available.</p>
+                    </div>
+                {% endif %}
+
+                <div class="d-flex gap-2 mt-4">
+                    <a href="https://github.com/KR8MER/eas-station" class="btn btn-primary" target="_blank">
+                        <i class="fab fa-github me-2"></i>View on GitHub
+                    </a>
+                    <a href="https://github.com/KR8MER/eas-station/releases" class="btn btn-outline-secondary" target="_blank">
+                        <i class="fas fa-download me-2"></i>Releases
+                    </a>
+                    <a href="/docs" class="btn btn-outline-secondary">
+                        <i class="fas fa-book me-2"></i>Documentation
+                    </a>
+                </div>
+            </div>
+
+            <!-- Changelog Tab -->
+            <div class="tab-pane fade" id="changelog" role="tabpanel">
+                <h3 class="mb-4">
+                    <i class="fas fa-history me-2"></i>
+                    Release History
+                </h3>
+
+                {% if changelogs.main and changelogs.main|length > 0 %}
+                <div class="timeline">
+                    {% for entry in changelogs.main %}
+                    <div class="timeline-item {% if entry.is_current %}current{% endif %}">
+                        <div class="timeline-marker"></div>
+                        <div class="timeline-content">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <span class="version-tag">
+                                        v{{ entry.version }}
+                                        {% if entry.is_current %}
+                                        <span class="badge bg-success ms-2">Current</span>
+                                        {% endif %}
+                                    </span>
+                                    {% if entry.date %}
+                                    <div class="version-date">
+                                        <i class="far fa-calendar me-1"></i>{{ entry.date }}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            {% if entry.added %}
+                            <div class="change-category added">
+                                <i class="fas fa-plus-circle"></i>
+                                <span>Added ({{ entry.added|length }})</span>
+                            </div>
+                            <ul class="change-list">
+                                {% for item in entry.added[:10] %}
+                                <li>{{ item }}</li>
+                                {% endfor %}
+                                {% if entry.added|length > 10 %}
+                                <li><em>...{{ entry.added|length - 10 }} more</em></li>
+                                {% endif %}
+                            </ul>
+                            {% endif %}
+
+                            {% if entry.fixed %}
+                            <div class="change-category fixed">
+                                <i class="fas fa-wrench"></i>
+                                <span>Fixed ({{ entry.fixed|length }})</span>
+                            </div>
+                            <ul class="change-list">
+                                {% for item in entry.fixed[:10] %}
+                                <li>{{ item }}</li>
+                                {% endfor %}
+                                {% if entry.fixed|length > 10 %}
+                                <li><em>...{{ entry.fixed|length - 10 }} more</em></li>
+                                {% endif %}
+                            </ul>
+                            {% endif %}
+
+                            {% if entry.changed %}
+                            <div class="change-category changed">
+                                <i class="fas fa-sync-alt"></i>
+                                <span>Changed ({{ entry.changed|length }})</span>
+                            </div>
+                            <ul class="change-list">
+                                {% for item in entry.changed[:10] %}
+                                <li>{{ item }}</li>
+                                {% endfor %}
+                                {% if entry.changed|length > 10 %}
+                                <li><em>...{{ entry.changed|length - 10 }} more</em></li>
+                                {% endif %}
+                            </ul>
+                            {% endif %}
+
+                            {% if entry.security %}
+                            <div class="change-category" style="color: var(--danger-color);">
+                                <i class="fas fa-shield-alt"></i>
+                                <span>Security ({{ entry.security|length }})</span>
+                            </div>
+                            <ul class="change-list">
+                                {% for item in entry.security %}
+                                <li>{{ item }}</li>
+                                {% endfor %}
+                            </ul>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="alert alert-secondary">
+                    <p class="mb-0">No changelog entries found.</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Features Tab -->
+            <div class="tab-pane fade" id="features" role="tabpanel">
+                <h3 class="mb-4">
+                    <i class="fas fa-check-circle text-success me-2"></i>
+                    Installed Features
+                </h3>
+
+                <div class="feature-grid">
+                    <div class="feature-item">
+                        <div class="feature-icon available">
+                            <i class="fas fa-satellite-dish"></i>
+                        </div>
+                        <div class="feature-info">
+                            <div class="feature-name">CAP Alert Monitoring</div>
+                            <div class="feature-version">Core feature</div>
+                        </div>
                     </div>
 
-                    <!-- Version Information -->
-                    <div class="row g-3 mb-4">
-                        <div class="col-12">
-                            <div class="card bg-primary text-white">
-                                <div class="card-body text-center py-4">
-                                    <i class="fas fa-code-branch fa-2x mb-3"></i>
-                                    <h2 class="h3 mb-2">Version {{ version_info.version }}</h2>
-                                    <p class="mb-0">{{ version_info.name }}</p>
-                                </div>
+                    <div class="feature-item">
+                        <div class="feature-icon available">
+                            <i class="fas fa-broadcast-tower"></i>
+                        </div>
+                        <div class="feature-info">
+                            <div class="feature-name">EAS Broadcasting</div>
+                            <div class="feature-version">Core feature</div>
+                        </div>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-icon {% if version_info.led_available %}available{% else %}unavailable{% endif %}">
+                            <i class="fas fa-sign"></i>
+                        </div>
+                        <div class="feature-info">
+                            <div class="feature-name">LED Signs</div>
+                            <div class="feature-version">
+                                {% if version_info.led_available %}Available{% else %}Not configured{% endif %}
                             </div>
                         </div>
                     </div>
 
-                    <!-- System Details -->
-                    <div class="card mb-3">
-                        <div class="card-header bg-light">
-                            <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>System Details</h5>
+                    <div class="feature-item">
+                        <div class="feature-icon available">
+                            <i class="fas fa-display"></i>
                         </div>
-                        <div class="card-body">
-                            <dl class="row mb-0">
-                                <dt class="col-sm-4 text-muted">System Name</dt>
-                                <dd class="col-sm-8">{{ version_info.name }}</dd>
-
-                                <dt class="col-sm-4 text-muted">Description</dt>
-                                <dd class="col-sm-8">{{ version_info.description }}</dd>
-
-                                <dt class="col-sm-4 text-muted">Author</dt>
-                                <dd class="col-sm-8">{{ version_info.author }}</dd>
-
-                                <dt class="col-sm-4 text-muted">Version</dt>
-                                <dd class="col-sm-8">
-                                    <span class="badge bg-primary">{{ version_info.version }}</span>
-                                </dd>
-                            </dl>
+                        <div class="feature-info">
+                            <div class="feature-name">VFD Display</div>
+                            <div class="feature-version">v2.1.0+</div>
                         </div>
                     </div>
 
-                    <!-- Time Information -->
-                    <div class="card mb-3">
-                        <div class="card-header bg-light">
-                            <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Time Information</h5>
+                    <div class="feature-item">
+                        <div class="feature-icon available">
+                            <i class="fas fa-tv"></i>
                         </div>
-                        <div class="card-body">
-                            <dl class="row mb-0">
-                                <dt class="col-sm-4 text-muted">Timezone</dt>
-                                <dd class="col-sm-8">{{ version_info.timezone }}</dd>
-
-                                <dt class="col-sm-4 text-muted">Local Time</dt>
-                                <dd class="col-sm-8">
-                                    <code>{{ version_info.local_timestamp }}</code>
-                                </dd>
-
-                                <dt class="col-sm-4 text-muted">UTC Time</dt>
-                                <dd class="col-sm-8">
-                                    <code>{{ version_info.timestamp }}</code>
-                                </dd>
-                            </dl>
+                        <div class="feature-info">
+                            <div class="feature-name">OLED Support</div>
+                            <div class="feature-version">v2.8.0+</div>
                         </div>
                     </div>
 
-                    <!-- Features -->
-                    <div class="card mb-4">
-                        <div class="card-header bg-light">
-                            <h5 class="mb-0"><i class="fas fa-toggle-on me-2"></i>Features</h5>
+                    <div class="feature-item">
+                        <div class="feature-icon available">
+                            <i class="fas fa-radio"></i>
                         </div>
-                        <div class="card-body">
-                            <dl class="row mb-0">
-                                <dt class="col-sm-4 text-muted">LED Signs</dt>
-                                <dd class="col-sm-8">
-                                    {% if version_info.led_available %}
-                                        <span class="badge bg-success"><i class="fas fa-check me-1"></i>Available</span>
-                                    {% else %}
-                                        <span class="badge bg-secondary"><i class="fas fa-times me-1"></i>Not Available</span>
-                                    {% endif %}
-                                </dd>
-                            </dl>
+                        <div class="feature-info">
+                            <div class="feature-name">SDR/Radio</div>
+                            <div class="feature-version">v2.1.0+</div>
                         </div>
                     </div>
 
-                    <!-- JSON API Response -->
-                    <div class="card">
-                        <div class="card-header bg-light">
-                            <h5 class="mb-0"><i class="fas fa-code me-2"></i>JSON API Response</h5>
+                    <div class="feature-item">
+                        <div class="feature-icon available">
+                            <i class="fas fa-shield-alt"></i>
                         </div>
-                        <div class="card-body">
-                            <p class="text-muted small mb-2">This data is also available in JSON format at <code>/version</code></p>
-                            <pre class="bg-dark text-light p-3 rounded"><code>{{ version_json }}</code></pre>
+                        <div class="feature-info">
+                            <div class="feature-name">RBAC Security</div>
+                            <div class="feature-version">v2.3.0+</div>
+                        </div>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-icon available">
+                            <i class="fas fa-microphone"></i>
+                        </div>
+                        <div class="feature-info">
+                            <div class="feature-name">Audio Subsystem</div>
+                            <div class="feature-version">v2.7.0+</div>
+                        </div>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-icon available">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <div class="feature-info">
+                            <div class="feature-name">Analytics</div>
+                            <div class="feature-version">v2.0.0+</div>
+                        </div>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-icon available">
+                            <i class="fas fa-map-marked-alt"></i>
+                        </div>
+                        <div class="feature-info">
+                            <div class="feature-name">PostGIS Spatial</div>
+                            <div class="feature-version">Core feature</div>
+                        </div>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-icon available">
+                            <i class="fas fa-plug"></i>
+                        </div>
+                        <div class="feature-info">
+                            <div class="feature-name">GPIO Control</div>
+                            <div class="feature-version">v2.1.0+</div>
+                        </div>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-icon available">
+                            <i class="fab fa-docker"></i>
+                        </div>
+                        <div class="feature-info">
+                            <div class="feature-name">Docker Deployment</div>
+                            <div class="feature-version">Core feature</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert alert-info mt-4">
+                    <h5 class="alert-heading"><i class="fas fa-info-circle me-2"></i>Feature Status</h5>
+                    <p class="mb-0">
+                        This EAS Station installation includes all core features and professional-grade components
+                        for 24/7 emergency alert monitoring and broadcasting. Visit the
+                        <a href="/docs" class="alert-link">documentation</a> for detailed feature guides.
+                    </p>
+                </div>
+            </div>
+
+            <!-- System Info Tab -->
+            <div class="tab-pane fade" id="system" role="tabpanel">
+                <h3 class="mb-4">
+                    <i class="fas fa-server me-2"></i>
+                    System Information
+                </h3>
+
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Version Details</h5>
+                            </div>
+                            <div class="card-body">
+                                {% set items = [
+                                    {'label': 'System Name', 'value': version_info.name},
+                                    {'label': 'Version', 'value': '<span class="badge bg-primary">' ~ version_info.version ~ '</span>'},
+                                    {'label': 'Author', 'value': version_info.author},
+                                    {'label': 'Description', 'value': version_info.description}
+                                ] %}
+                                {% include 'components/data_list.html' with context %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-header bg-success text-white">
+                                <h5 class="mb-0"><i class="fab fa-git-alt me-2"></i>Git Information</h5>
+                            </div>
+                            <div class="card-body">
+                                {% set items = [
+                                    {'label': 'Commit Hash', 'value': '<code>' ~ git_info.commit_hash ~ '</code>'},
+                                    {'label': 'Branch', 'value': '<code>' ~ git_info.branch ~ '</code>'},
+                                    {'label': 'Commit Date', 'value': git_info.commit_date},
+                                    {'label': 'Message', 'value': '<em>' ~ git_info.commit_message ~ '</em>'}
+                                ] %}
+                                {% include 'components/data_list.html' with context %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-header bg-info text-white">
+                                <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Time Information</h5>
+                            </div>
+                            <div class="card-body">
+                                {% set items = [
+                                    {'label': 'Timezone', 'value': version_info.timezone},
+                                    {'label': 'Local Time', 'value': '<code>' ~ version_info.local_timestamp ~ '</code>'},
+                                    {'label': 'UTC Time', 'value': '<code>' ~ version_info.timestamp ~ '</code>'}
+                                ] %}
+                                {% include 'components/data_list.html' with context %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-header bg-warning text-dark">
+                                <h5 class="mb-0"><i class="fas fa-puzzle-piece me-2"></i>Features</h5>
+                            </div>
+                            <div class="card-body">
+                                {% set items = [
+                                    {'label': 'LED Signs', 'value': ('<span class="badge bg-success"><i class="fas fa-check me-1"></i>Available</span>' if version_info.led_available else '<span class="badge bg-secondary"><i class="fas fa-times me-1"></i>Not Available</span>')}
+                                ] %}
+                                {% include 'components/data_list.html' with context %}
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Quick Links -->
-            <div class="card shadow-sm border-0">
-                <div class="card-body p-4">
-                    <h5 class="mb-3"><i class="fas fa-link me-2"></i>Quick Links</h5>
-                    <div class="row g-2">
-                        <div class="col-md-6">
-                            <a href="/" class="btn btn-outline-primary w-100">
-                                <i class="fas fa-home me-2"></i>Dashboard
-                            </a>
-                        </div>
-                        <div class="col-md-6">
-                            <a href="/docs" class="btn btn-outline-secondary w-100">
-                                <i class="fas fa-book me-2"></i>Documentation
-                            </a>
-                        </div>
-                        <div class="col-md-6">
-                            <a href="/about" class="btn btn-outline-info w-100">
-                                <i class="fas fa-info-circle me-2"></i>About
-                            </a>
-                        </div>
-                        <div class="col-md-6">
-                            <a href="/version" class="btn btn-outline-success w-100" target="_blank">
-                                <i class="fas fa-file-code me-2"></i>JSON API
-                            </a>
-                        </div>
+            <!-- JSON API Tab -->
+            <div class="tab-pane fade" id="api" role="tabpanel">
+                <h3 class="mb-4">
+                    <i class="fas fa-code me-2"></i>
+                    JSON API Response
+                </h3>
+
+                <p class="text-muted">
+                    This data is also available in JSON format at
+                    <code>/version</code> for programmatic access.
+                </p>
+
+                <div class="card">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-file-code me-2"></i>JSON Output</span>
+                        <button class="btn btn-sm btn-outline-light" onclick="copyJsonToClipboard()">
+                            <i class="fas fa-copy me-1"></i>Copy
+                        </button>
                     </div>
+                    <div class="card-body p-0">
+                        <pre class="bg-dark text-light p-3 m-0 rounded-0" id="jsonOutput" style="max-height: 500px; overflow-y: auto;"><code>{{ version_json }}</code></pre>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <a href="/version" class="btn btn-primary" target="_blank">
+                        <i class="fas fa-external-link-alt me-2"></i>Open JSON Endpoint
+                    </a>
+                    <a href="/api/release-manifest" class="btn btn-outline-secondary" target="_blank">
+                        <i class="fas fa-file-contract me-2"></i>Release Manifest
+                    </a>
                 </div>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function copyJsonToClipboard() {
+        const jsonText = document.getElementById('jsonOutput').textContent;
+        navigator.clipboard.writeText(jsonText).then(() => {
+            // Show toast notification
+            if (window.showToast) {
+                window.showToast('JSON copied to clipboard!', 'success');
+            } else {
+                alert('JSON copied to clipboard!');
+            }
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+            if (window.showToast) {
+                window.showToast('Failed to copy JSON', 'danger');
+            } else {
+                alert('Failed to copy JSON');
+            }
+        });
+    }
+
+    // Activate tab from URL hash
+    document.addEventListener('DOMContentLoaded', function() {
+        const hash = window.location.hash;
+        if (hash) {
+            const tabButton = document.querySelector(`button[data-bs-target="${hash}"]`);
+            if (tabButton) {
+                const tab = new bootstrap.Tab(tabButton);
+                tab.show();
+            }
+        }
+
+        // Update URL hash when tab changes
+        const tabButtons = document.querySelectorAll('button[data-bs-toggle="tab"]');
+        tabButtons.forEach(button => {
+            button.addEventListener('shown.bs.tab', function(e) {
+                window.location.hash = e.target.getAttribute('data-bs-target');
+            });
+        });
+    });
+</script>
 {% endblock %}

@@ -292,10 +292,80 @@ def register(app: Flask, logger) -> None:
     def help_version():
         """Version information page with user-friendly HTML display."""
         import json
+        from app_utils.changelog_parser import parse_all_changelogs
+
+        # Get repository root
+        repo_root = Path(__file__).resolve().parents[1]
+        current_version = _system_version()
+
+        # Get git information
+        git_info = {}
+        try:
+            # Current commit hash
+            git_hash = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+                cwd=repo_root,
+            ).stdout.strip()
+            git_info["commit_hash"] = git_hash[:8] if git_hash else "unknown"
+            git_info["commit_hash_full"] = git_hash if git_hash else "unknown"
+
+            # Current branch
+            git_branch = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+                cwd=repo_root,
+            ).stdout.strip()
+            git_info["branch"] = git_branch if git_branch else "unknown"
+
+            # Commit date
+            git_date = subprocess.run(
+                ["git", "log", "-1", "--format=%ci"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+                cwd=repo_root,
+            ).stdout.strip()
+            git_info["commit_date"] = git_date if git_date else "unknown"
+
+            # Commit message
+            git_message = subprocess.run(
+                ["git", "log", "-1", "--format=%s"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+                cwd=repo_root,
+            ).stdout.strip()
+            git_info["commit_message"] = git_message if git_message else "unknown"
+
+        except Exception as exc:
+            route_logger.debug("Git info retrieval failed: %s", exc)
+            git_info = {
+                "commit_hash": "unknown",
+                "commit_hash_full": "unknown",
+                "branch": "unknown",
+                "commit_date": "unknown",
+                "commit_message": "unknown",
+            }
+
+        # Parse changelogs
+        try:
+            changelogs = parse_all_changelogs(repo_root, current_version)
+        except Exception as exc:
+            route_logger.debug("Changelog parsing failed: %s", exc)
+            changelogs = {}
 
         location = get_location_settings()
         version_data = {
-            "version": _system_version(),
+            "version": current_version,
             "name": "NOAA CAP Alerts System",
             "author": "KR8MER Amateur Radio Emergency Communications",
             "description": (
@@ -314,7 +384,9 @@ def register(app: Flask, logger) -> None:
         return render_template(
             "version.html",
             version_info=version_data,
-            version_json=version_json
+            version_json=version_json,
+            git_info=git_info,
+            changelogs=changelogs
         )
 
     @app.route("/api/release-manifest")

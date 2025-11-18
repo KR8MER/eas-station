@@ -1,0 +1,47 @@
+{#
+    Metric Card Component
+
+    Usage:
+    {% include 'components/metric_card.html' with context %}
+
+    Parameters:
+    - value: The metric value to display (required)
+    - label: The metric label/description (required)
+    - icon: Font Awesome icon class (optional)
+    - gradient: Gradient class name (default: 'gradient-primary')
+    - href: Link URL (optional, makes card clickable)
+    - badge: Badge text (optional)
+    - badge_class: Badge CSS class (optional, default: 'badge-info')
+
+    Example:
+    {% set value = "42" %}
+    {% set label = "Active Alerts" %}
+    {% set icon = "fa-bell" %}
+    {% set gradient = "gradient-warning" %}
+    {% include 'components/metric_card.html' with context %}
+#}
+
+{% if href %}
+<a href="{{ href }}" class="text-decoration-none">
+{% endif %}
+
+<div class="card-metric {{ gradient|default('gradient-primary') }} hover-lift">
+    {% if icon %}
+    <div class="mb-3">
+        <i class="fas {{ icon }} fa-2x"></i>
+    </div>
+    {% endif %}
+
+    <div class="metric-value">
+        {{ value }}
+        {% if badge %}
+        <span class="badge {{ badge_class|default('badge-info') }} ms-2">{{ badge }}</span>
+        {% endif %}
+    </div>
+
+    <div class="metric-label">{{ label }}</div>
+</div>
+
+{% if href %}
+</a>
+{% endif %}

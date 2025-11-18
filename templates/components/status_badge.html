@@ -1,0 +1,23 @@
+{#
+    Status Badge Component
+
+    Usage:
+    {% include 'components/status_badge.html' with context %}
+
+    Parameters:
+    - status: Status text (required)
+    - type: Badge type - 'online', 'offline', 'warning', 'info' (default: 'info')
+    - show_dot: Show status dot indicator (boolean, default: true)
+
+    Example:
+    {% set status = "Online" %}
+    {% set type = "online" %}
+    {% include 'components/status_badge.html' with context %}
+#}
+
+<span class="badge-status badge-{{ type|default('info') }}">
+    {% if show_dot is not defined or show_dot %}
+    <span class="badge-status-dot"></span>
+    {% endif %}
+    {{ status }}
+</span>

@@ -1,0 +1,25 @@
+{#
+    Data List Component (Definition list for displaying key-value pairs)
+
+    Usage:
+    {% include 'components/data_list.html' with context %}
+
+    Parameters:
+    - items: List of dicts with 'label' and 'value' keys (required)
+    - grid: Use grid layout (boolean, default: false)
+
+    Example:
+    {% set items = [
+        {'label': 'Version', 'value': '2.9.1'},
+        {'label': 'Released', 'value': 'November 2025'},
+        {'label': 'Author', 'value': 'KR8MER'}
+    ] %}
+    {% include 'components/data_list.html' with context %}
+#}
+
+<dl class="{% if grid %}data-grid{% else %}data-list{% endif %}">
+    {% for item in items %}
+        <dt>{{ item.label }}</dt>
+        <dd>{{ item.value|safe }}</dd>
+    {% endfor %}
+</dl>
