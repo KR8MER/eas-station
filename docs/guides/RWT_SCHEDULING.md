@@ -19,12 +19,12 @@ The automatic RWT scheduler allows you to configure RWT broadcasts to run automa
 
 ---
 
-## Accessing RWT Schedule Configuration
+## Accessing the Weekly Test Automation Console
 
 ### Via Navigation Menu
 1. Log into EAS Station
 2. Click **Broadcast** in the top navigation bar
-3. Select **RWT Schedule** from the dropdown menu
+3. Select **Weekly Test Automation** from the dropdown menu
 
 ### Direct URL
 Navigate directly to: `https://your-server/rwt-schedule`
@@ -63,9 +63,9 @@ Set the hours during which RWT broadcasts can occur:
 
 ### 4. SAME/FIPS Codes
 
-Configure which geographic areas receive the RWT. Enter FIPS codes separated by commas or newlines.
+Configure which geographic areas receive the RWT. Enter codes separated by commas or newlines, or click **Use in Schedule** to pull in your saved defaults. The system still limits the list to the SAME standard maximum of 31 entries.
 
-**Default**: 7 Ohio counties pre-configured:
+**Default**: 7 Ohio counties remain pre-configured until you save your own list:
 ```
 039003  # Allen County, OH
 039039  # Defiance County, OH
@@ -76,22 +76,31 @@ Configure which geographic areas receive the RWT. Enter FIPS codes separated by 
 039173  # Wood County, OH
 ```
 
-**To add your own counties**:
-1. Find FIPS codes at [NOAA FIPS Codes](https://www.weather.gov/nwr/FIPS)
-2. Enter as 6-digit codes (e.g., 039003 for Allen County, OH)
-3. Separate multiple codes with commas or newlines
+### 5. Default RWT Counties Card
 
-### 5. Originator Code
+Use the new side panel to manage the shared county list that powers:
 
-Select the message originator:
-- **WXR** (National Weather Service) - Default
-- **EAS** (EAS Participant/Broadcaster)
-- **CIV** (Civil Authorities)
-- **PEP** (Primary Entry Point)
+- The Broadcast Builder "Load Default Codes" shortcut
+- Quick RWT presets
+- Scheduler fallbacks when a saved schedule omits SAME codes
 
-### 6. Station Identifier
+Features include:
 
-Enter your 8-character station identifier (e.g., `EASNODES`, `WXYZ123`, etc.). This will be automatically padded with spaces if shorter than 8 characters.
+- Add counties by typing the 6-digit SAME/FIPS code or using the state/county picker
+- Remove counties with one click
+- Enforce the 31-code SAME maximum automatically
+- Save updates directly to the `LocationSettings` record
+- Reload from the database if you want to discard in-progress edits
+- Copy the curated list back into the schedule textarea with a single button
+
+### 6. Originator & Station Identity
+
+RWT automation reuses the environment-driven values defined in `.env`:
+
+- `EAS_ORIGINATOR`
+- `EAS_STATION_ID`
+
+Update those variables (or the Environment Settings UI) to change the broadcast metadata used by the scheduler and Broadcast Builder console.
 
 ---
 
