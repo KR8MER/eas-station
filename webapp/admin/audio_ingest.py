@@ -336,6 +336,64 @@ def _reload_auto_streaming_from_env() -> None:
         logger.error("Failed to reload auto-streaming configuration: %s", exc)
 
 
+def _safe_auto_stream_status(service) -> Optional[Dict[str, Any]]:
+    """Return the current auto-streaming status, handling errors gracefully."""
+
+    if not service or not hasattr(service, 'get_status'):
+        return None
+
+    try:
+        return service.get_status()
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.debug("Unable to read auto-streaming status: %s", exc)
+        return None
+
+
+def _start_auto_streaming_service() -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """Start the AutoStreamingService if configured and available."""
+
+    service = _get_auto_streaming_service()
+    if service is None:
+        logger.info("Auto-streaming service not initialized; attempting reload")
+        _reload_auto_streaming_from_env()
+        service = _get_auto_streaming_service()
+        if service is None:
+            return False, 'Icecast streaming is not configured', None
+
+    try:
+        if hasattr(service, 'is_available') and not service.is_available():
+            status = _safe_auto_stream_status(service)
+            return False, 'Icecast streaming service is not available', status
+
+        started = service.start()
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error('Failed to start auto-streaming service: %s', exc)
+        raise
+
+    status = _safe_auto_stream_status(service)
+    if started:
+        return True, 'Icecast streaming service started', status
+
+    return False, 'Icecast streaming service could not be started', status
+
+
+def _stop_auto_streaming_service() -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """Stop the AutoStreamingService if it is running."""
+
+    service = _get_auto_streaming_service()
+    if service is None:
+        return False, 'Icecast streaming is not configured', None
+
+    try:
+        service.stop()
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error('Failed to stop auto-streaming service: %s', exc)
+        raise
+
+    status = _safe_auto_stream_status(service)
+    return True, 'Icecast streaming service stopped', status
+
+
 
 def _sanitize_float(value: float) -> float:
     """Sanitize float values to be JSON-safe (no inf/nan, convert numpy types)."""
@@ -2206,6 +2264,38 @@ def api_update_icecast_config():
 
     except Exception as exc:
         logger.error('Error updating Icecast config: %s', exc)
+        return jsonify({'error': str(exc)}), 500
+
+
+@audio_ingest_bp.route('/api/audio/icecast/start', methods=['POST'])
+def api_start_icecast_stream():
+    """Start the Icecast auto-streaming service."""
+
+    try:
+        success, message, status = _start_auto_streaming_service()
+        response = {'message': message}
+        if status is not None:
+            response['status'] = status
+
+        return jsonify(response), 200 if success else 400
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error('Error starting Icecast streaming service: %s', exc)
+        return jsonify({'error': str(exc)}), 500
+
+
+@audio_ingest_bp.route('/api/audio/icecast/stop', methods=['POST'])
+def api_stop_icecast_stream():
+    """Stop the Icecast auto-streaming service."""
+
+    try:
+        success, message, status = _stop_auto_streaming_service()
+        response = {'message': message}
+        if status is not None:
+            response['status'] = status
+
+        return jsonify(response), 200 if success else 400
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error('Error stopping Icecast streaming service: %s', exc)
         return jsonify({'error': str(exc)}), 500
 
 @audio_ingest_bp.route('/audio/health/dashboard')

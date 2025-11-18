@@ -5,9 +5,11 @@ Unit tests for audio source adapters, ingest controller,
 and metering components.
 """
 
+import logging
 import pytest
 import numpy as np
 import time
+from flask import Flask
 from unittest.mock import Mock, patch
 
 from app_core.audio.ingest import (
@@ -16,6 +18,7 @@ from app_core.audio.ingest import (
 )
 from app_core.audio.sources import create_audio_source
 from app_core.audio.metering import AudioMeter, SilenceDetector, AudioHealthMonitor
+from webapp.admin import audio_ingest as audio_admin
 
 
 class TestAudioSourceConfig:
@@ -468,10 +471,89 @@ class TestAudioIngestController:
         controller.add_source(adapter)
         
         controller.cleanup()
-        
+
         assert len(controller._sources) == 0
         assert controller._active_source is None
 
 
+# ---------------------------------------------------------------------------
+# Icecast control API tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def icecast_control_app(monkeypatch):
+    """Create a lightweight Flask app with the audio ingest routes registered."""
+
+    app = Flask('icecast-control-test')
+    app.config['TESTING'] = True
+
+    monkeypatch.setattr(audio_admin, '_auto_streaming_service', None)
+    audio_admin.register_audio_ingest_routes(app, logging.getLogger('icecast-control-test'))
+
+    yield app
+
+
+def test_api_start_icecast_stream_success(icecast_control_app, monkeypatch):
+    service = Mock()
+    service.start.return_value = True
+    service.is_available.return_value = True
+    service.get_status.return_value = {
+        'active_stream_count': 0,
+        'server': 'localhost:8000'
+    }
+
+    monkeypatch.setattr(audio_admin, '_auto_streaming_service', service)
+
+    client = icecast_control_app.test_client()
+    response = client.post('/api/audio/icecast/start')
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload['message']
+    assert payload['status']['active_stream_count'] == 0
+    service.start.assert_called_once()
+
+
+def test_api_start_icecast_stream_requires_configuration(icecast_control_app, monkeypatch):
+    monkeypatch.setattr(audio_admin, '_auto_streaming_service', None)
+    monkeypatch.setattr(audio_admin, '_reload_auto_streaming_from_env', lambda: None)
+
+    client = icecast_control_app.test_client()
+    response = client.post('/api/audio/icecast/start')
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert 'configured' in payload['message'].lower()
+
+
+def test_api_stop_icecast_stream_success(icecast_control_app, monkeypatch):
+    service = Mock()
+    service.stop.return_value = None
+    service.get_status.return_value = {'active_stream_count': 0}
+
+    monkeypatch.setattr(audio_admin, '_auto_streaming_service', service)
+
+    client = icecast_control_app.test_client()
+    response = client.post('/api/audio/icecast/stop')
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert 'stopped' in payload['message'].lower()
+    service.stop.assert_called_once()
+
+
+def test_api_stop_icecast_stream_requires_configuration(icecast_control_app, monkeypatch):
+    monkeypatch.setattr(audio_admin, '_auto_streaming_service', None)
+
+    client = icecast_control_app.test_client()
+    response = client.post('/api/audio/icecast/stop')
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert 'configured' in payload['message'].lower()
+
+
 if __name__ == '__main__':
     pytest.main([__file__])
+
