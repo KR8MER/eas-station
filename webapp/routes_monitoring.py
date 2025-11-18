@@ -20,6 +20,7 @@ from app_core.radio import ensure_radio_tables
 from app_core.led import LED_AVAILABLE
 from app_core.location import get_location_settings
 from app_utils import get_location_timezone_name, local_now, utc_now
+from app_utils.versioning import get_git_metadata, get_git_tree_state
 
 
 def register(app: Flask, logger) -> None:
@@ -299,62 +300,7 @@ def register(app: Flask, logger) -> None:
         current_version = _system_version()
 
         # Get git information
-        git_info = {}
-        try:
-            # Current commit hash
-            git_hash = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=5,
-                cwd=repo_root,
-            ).stdout.strip()
-            git_info["commit_hash"] = git_hash[:8] if git_hash else "unknown"
-            git_info["commit_hash_full"] = git_hash if git_hash else "unknown"
-
-            # Current branch
-            git_branch = subprocess.run(
-                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=5,
-                cwd=repo_root,
-            ).stdout.strip()
-            git_info["branch"] = git_branch if git_branch else "unknown"
-
-            # Commit date
-            git_date = subprocess.run(
-                ["git", "log", "-1", "--format=%ci"],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=5,
-                cwd=repo_root,
-            ).stdout.strip()
-            git_info["commit_date"] = git_date if git_date else "unknown"
-
-            # Commit message
-            git_message = subprocess.run(
-                ["git", "log", "-1", "--format=%s"],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=5,
-                cwd=repo_root,
-            ).stdout.strip()
-            git_info["commit_message"] = git_message if git_message else "unknown"
-
-        except Exception as exc:
-            route_logger.debug("Git info retrieval failed: %s", exc)
-            git_info = {
-                "commit_hash": "unknown",
-                "commit_hash_full": "unknown",
-                "branch": "unknown",
-                "commit_date": "unknown",
-                "commit_message": "unknown",
-            }
+        git_info = get_git_metadata()
 
         # Parse changelogs
         try:
@@ -406,49 +352,8 @@ def register(app: Flask, logger) -> None:
             version = _system_version()
             repo_root = Path(__file__).resolve().parents[1]  # Still needed for git commands
 
-        # Get current git commit hash
-        try:
-            git_hash = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=5,
-                cwd=repo_root,
-            ).stdout.strip()
-            if not git_hash:
-                git_hash = "unknown"
-        except Exception:
-            git_hash = "unknown"
-
-        # Get git branch
-        try:
-            git_branch = subprocess.run(
-                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=5,
-                cwd=repo_root,
-            ).stdout.strip()
-            if not git_branch:
-                git_branch = "unknown"
-        except Exception:
-            git_branch = "unknown"
-
-        # Get git status (clean/dirty)
-        try:
-            git_status_output = subprocess.run(
-                ["git", "status", "--porcelain"],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=5,
-                cwd=repo_root,
-            ).stdout.strip()
-            git_clean = not bool(git_status_output)
-        except Exception:
-            git_clean = None
+        git_info = get_git_metadata()
+        git_clean = get_git_tree_state()
 
         # Get current database migration revision
         migration_revision = "unknown"
@@ -498,8 +403,8 @@ def register(app: Flask, logger) -> None:
             {
                 "version": version,
                 "git": {
-                    "commit": git_hash,
-                    "branch": git_branch,
+                    "commit": git_info.get("commit_hash_full", "unknown"),
+                    "branch": git_info.get("branch", "unknown"),
                     "clean": git_clean,
                 },
                 "database": {

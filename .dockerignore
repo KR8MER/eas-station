@@ -7,11 +7,15 @@ __pycache__/
 venv/
 # Ship minimal git metadata so runtime version detection can resolve
 # the active commit hash without copying the entire object database.
+# Include the HEAD reflog so commit date/message can be derived without
+# requiring the full git object database.
 .git/
 !.git/HEAD
 !.git/refs/
 !.git/refs/heads/
 !.git/refs/heads/*
+!.git/logs/
+!.git/logs/HEAD
 !.git/packed-refs
 logs/
 *.log
