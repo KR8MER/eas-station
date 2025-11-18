@@ -19,7 +19,7 @@ The `prepare_scroll_content()` method in `app_core/oled.py` was creating a seaml
 [text][separator_space][text]
 ```
 
-This pattern is CORRECT for preventing both text copies from being visible simultaneously (mathematical proof in `SMOKING_GUN_PROOF.md`). However, the implementation was also rendering a VISIBLE separator text "***" in the middle of the separator space.
+This pattern is CORRECT for preventing both text copies from being visible simultaneously (mathematical proof in `development/archive/SMOKING_GUN_PROOF.md`). However, the implementation was also rendering a VISIBLE separator text "***" in the middle of the separator space.
 
 **The Issue:**
 - Main alert text positioned at: **Y=8px** (huge font, 36px tall, vertically centered in 52px body area)

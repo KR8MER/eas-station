@@ -140,6 +140,18 @@ nav:
       - Developer Guidelines: development/AGENTS.md
       - Git Workflow: development/git_workflow.md
       - Contributing: process/CONTRIBUTING.md
+      - Historical Archive:
+          - AI Assistant Guide: development/archive/CLAUDE.md
+          - Frontend Architecture: development/archive/FRONTEND_ARCHITECTURE.md
+          - Display Quick Reference: development/archive/DISPLAY_QUICK_REFERENCE.md
+          - Config Persistence Guide: development/archive/CONFIG_PERSISTENCE.md
+          - Pi Quick Start (OLED + GPIO): development/archive/QUICKSTART_PI.md
+          - OLED/GPIO Troubleshooting: development/archive/OLED_GPIO_TROUBLESHOOTING.md
+          - OLED Sample Screens: development/archive/OLED_SAMPLE_SCREENS.md
+          - Feature Enhancement Summary: development/archive/FEATURE_ENHANCEMENT_SUMMARY.md
+          - OLED Fix Summary: development/archive/FIX_SUMMARY.md
+          - Smoking Gun Proof: development/archive/SMOKING_GUN_PROOF.md
+          - Visual Proof Pack: development/archive/VISUAL_PROOF.md
   - Deployment:
       - Audio Hardware: deployment/audio_hardware.md
       - Post Install Checklist: deployment/post_install.md

@@ -85,6 +85,21 @@ If you're new to EAS Station, start here:
 | [📝 Code Standards](development/AGENTS) | Style and quality standards |
 | [🎨 Frontend Development](frontend/FRONTEND_INDEX) | UI development guidelines |
 
+### Historical Development References (Archive)
+Legacy files that still contain useful background material are now located under `docs/development/archive/`:
+
+| Document | Why it matters |
+|----------|----------------|
+| [🤖 AI Assistant Guide](development/archive/CLAUDE.md) | Workflow guardrails for automation/AI contributors |
+| [🧱 Frontend Architecture](development/archive/FRONTEND_ARCHITECTURE.md) | Deep dive into the display system and Flask UI layers |
+| [🖥️ Display Quick Reference](development/archive/DISPLAY_QUICK_REFERENCE.md) | One-page cheat sheet for OLED/LED display modes |
+| [⚙️ Config Persistence](development/archive/CONFIG_PERSISTENCE.md) | Raspberry Pi volume/backups for persistent installs |
+| [🚀 Pi Quick Start](development/archive/QUICKSTART_PI.md) | Step-by-step OLED + GPIO bring-up on Raspberry Pi |
+| [🔌 OLED/GPIO Troubleshooting](development/archive/OLED_GPIO_TROUBLESHOOTING.md) | Direct fixes when Docker cannot access GPIO hardware |
+| [🖼️ OLED Sample Screens](development/archive/OLED_SAMPLE_SCREENS.md) | Reference layouts for 128x64 modules |
+| [✨ Feature Enhancement Summary](development/archive/FEATURE_ENHANCEMENT_SUMMARY.md) | Context for major UI/UX upgrades |
+| [🛠️ Fix + Proof Pack](development/archive/FIX_SUMMARY.md) | Bug write-up with links to smoking-gun & visual proof artifacts |
+
 ## 📈 Project Information
 
 ### Planning & Roadmap
