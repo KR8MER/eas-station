@@ -367,6 +367,8 @@ python app.py
 
 > **Quick Diagnostics**: Run `bash scripts/diagnostics/troubleshoot_connection.sh` to diagnose connection issues, or see [scripts/diagnostics/README.md](scripts/diagnostics/README.md) for all available tools.
 
+> **Alert Self-Test**: Open **Tools → Alert Verification** and use the built-in Alert Self-Test panel (or run `python scripts/run_alert_self_test.py`) to replay bundled RWT captures and confirm your configured FIPS codes still trigger activations. Detailed guidance lives in [docs/runbooks/alert_self_test.md](docs/runbooks/alert_self_test.md).
+
 ## ⚖️ Legal & Compliance
 
 !!! danger "FCC Compliance Warning"

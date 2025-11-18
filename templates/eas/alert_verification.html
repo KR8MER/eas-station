@@ -205,6 +205,187 @@
                 </div>
             {% endif %}
 
+            <div class="card mb-4" id="alert-self-test-panel">
+                <div class="card-header d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+                    <div>
+                        <h5 class="mb-1"><i class="fas fa-wave-square text-warning me-2"></i>Alert Self-Test Harness</h5>
+                        <p class="text-muted mb-0 small">
+                            Replay bundled or custom SAME captures through the live FIPS filter & duplicate suppression logic
+                            without waiting for a broadcaster to air an RWT.
+                        </p>
+                    </div>
+                    <div class="text-lg-end">
+                        <button class="btn btn-primary" id="run-self-test">
+                            <i class="fas fa-play-circle me-2"></i>Run Self-Test
+                        </button>
+                        <div class="spinner-border text-primary ms-3 d-none" role="status" id="self-test-spinner">
+                            <span class="visually-hidden">Processing...</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-xl-4">
+                            <div class="border rounded p-3 h-100">
+                                <h6 class="text-uppercase text-muted small mb-2">Configured Coverage</h6>
+                                <ul class="list-group small" id="configured-fips-list">
+                                    {% if self_test_configured_fips %}
+                                        {% for code in self_test_configured_fips %}
+                                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                <span class="fw-semibold">{{ code }}</span>
+                                                <span class="badge bg-light text-muted">Active</span>
+                                            </li>
+                                        {% endfor %}
+                                    {% else %}
+                                        <li class="list-group-item text-muted">No FIPS codes configured in Location Settings.</li>
+                                    {% endif %}
+                                </ul>
+                                <div class="mt-3">
+                                    <label for="fips-override" class="form-label">FIPS Override (comma/line separated)</label>
+                                    <input type="text" id="fips-override" class="form-control" placeholder="039137,039051">
+                                    <small class="text-muted">Leave blank to reuse the configured coverage shown above.</small>
+                                </div>
+                                <div class="row g-3 mt-1">
+                                    <div class="col-sm-6">
+                                        <label for="cooldown-input" class="form-label">Duplicate Cooldown (s)</label>
+                                        <input type="number" step="0.1" min="0" id="cooldown-input" class="form-control" value="30">
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <label for="source-name-input" class="form-label">Source Label</label>
+                                        <input type="text" id="source-name-input" class="form-control" value="self-test">
+                                    </div>
+                                </div>
+                                <div class="form-check form-switch mt-3">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="require-match" checked>
+                                    <label class="form-check-label" for="require-match">
+                                        Require at least one forwarded alert to pass
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-xl-4">
+                            <div class="border rounded p-3 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h6 class="text-uppercase text-muted small mb-0">Bundled Sample Library</h6>
+                                    {% if self_test_samples %}
+                                        <button class="btn btn-sm btn-outline-secondary" id="select-all-samples">
+                                            <i class="fas fa-check-double"></i> Select All
+                                        </button>
+                                    {% endif %}
+                                </div>
+                                {% if self_test_samples %}
+                                    <div class="list-group" id="sample-library">
+                                        {% for sample in self_test_samples %}
+                                            <label class="list-group-item d-flex justify-content-between align-items-center">
+                                                <span>
+                                                    <input class="form-check-input me-2 sample-checkbox" type="checkbox" value="{{ sample.relative_path }}" {% if sample.exists %}checked{% endif %}>
+                                                    {{ sample.name }}
+                                                </span>
+                                                {% if sample.exists %}
+                                                    <span class="badge bg-success-subtle text-success">Ready</span>
+                                                {% else %}
+                                                    <span class="badge bg-danger-subtle text-danger">Missing</span>
+                                                {% endif %}
+                                            </label>
+                                        {% endfor %}
+                                    </div>
+                                    <small class="text-muted d-block mt-2">Samples live in <code>samples/</code> within the appliance.</small>
+                                {% else %}
+                                    <p class="text-muted mb-0">No bundled samples detected. Upload recordings or reference an external path.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-xl-4">
+                            <div class="border rounded p-3 h-100">
+                                <h6 class="text-uppercase text-muted small mb-2">Custom Audio Paths</h6>
+                                <p class="text-muted small">Paste absolute or relative paths (one per line). Relative paths resolve from the application root.</p>
+                                <textarea class="form-control" id="custom-audio-paths" rows="6" placeholder="/var/audio/lab/rwt.wav"></textarea>
+                                <div class="form-check mt-3">
+                                    <input class="form-check-input" type="checkbox" id="include-default-samples" checked>
+                                    <label class="form-check-label" for="include-default-samples">
+                                        Include bundled samples when none are selected
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert d-none mt-4" id="self-test-error" role="alert"></div>
+
+                    <div id="self-test-feedback" class="mt-4" hidden>
+                        <div class="card shadow-sm border-0">
+                            <div class="card-body">
+                                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center">
+                                    <div>
+                                        <h4 class="mb-1" id="self-test-status">--</h4>
+                                        <p class="text-muted mb-0" id="self-test-summary">--</p>
+                                    </div>
+                                    <div class="text-lg-end mt-3 mt-lg-0">
+                                        <div class="d-flex flex-column flex-sm-row gap-3">
+                                            <div class="stat-pill bg-success-subtle text-success" id="stat-forwarded">
+                                                <strong class="d-block">Forwarded</strong>
+                                                <span class="display-6" id="forwarded-count">0</span>
+                                            </div>
+                                            <div class="stat-pill bg-warning-subtle text-warning" id="stat-duplicate">
+                                                <strong class="d-block">Duplicates</strong>
+                                                <span class="display-6" id="duplicate-count">0</span>
+                                            </div>
+                                            <div class="stat-pill bg-danger-subtle text-danger" id="stat-errors">
+                                                <strong class="d-block">Decode Errors</strong>
+                                                <span class="display-6" id="error-count">0</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <small class="text-muted">Executed at <span id="self-test-timestamp">--</span> using FIPS <span id="self-test-fips">--</span></small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card shadow-sm mt-4" id="self-test-results" hidden>
+                        <div class="card-header d-flex flex-column flex-lg-row justify-content-between align-items-lg-center">
+                            <div>
+                                <h6 class="mb-0"><i class="fas fa-list-check me-2"></i>Detailed Results</h6>
+                            </div>
+                            <div class="text-lg-end mt-2 mt-lg-0">
+                                <span class="badge bg-secondary" id="self-test-cooldown">Cooldown: 30s</span>
+                                <span class="badge bg-secondary ms-2" id="self-test-source">Source: self-test</span>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Status</th>
+                                        <th>Event</th>
+                                        <th>Originator</th>
+                                        <th>Matched FIPS</th>
+                                        <th>Reason</th>
+                                        <th>Audio</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="self-test-results-body">
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted">No runs yet.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <style>
+                #alert-self-test-panel .stat-pill {
+                    border-radius: 0.75rem;
+                    padding: 0.75rem 1.25rem;
+                    min-width: 140px;
+                    text-align: center;
+                }
+            </style>
+
             {% if recent_decodes %}
                 <hr>
                 <h6 class="text-muted text-uppercase mb-3">Recent Stored Decodes</h6>
@@ -624,6 +805,10 @@
 
 {% block scripts %}
     <script src="https://code.highcharts.com/highcharts.js"></script>
+    <script>
+        window.alertSelfTestContext = {{ alert_self_test_context | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/alert_self_test.js') }}"></script>
     <script src="{{ url_for('static', filename='js/charts/alert_delivery.js') }}"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
