@@ -11,11 +11,6 @@ DEFAULT_COUNTY_NAME = os.getenv("DEFAULT_COUNTY_NAME", "Putnam County")
 DEFAULT_STATE_CODE = os.getenv("DEFAULT_STATE_CODE", "OH")
 DEFAULT_ZONE_CODES = os.getenv("DEFAULT_ZONE_CODES", "OHZ016,OHC137")
 DEFAULT_FIPS_CODES = os.getenv("DEFAULT_FIPS_CODES", "039137")
-DEFAULT_AREA_TERMS = os.getenv(
-    "DEFAULT_AREA_TERMS",
-    "PUTNAM COUNTY,PUTNAM CO,OTTAWA,LEIPSIC,PANDORA,GLANDORF,KALIDA,FORT JENNINGS,"
-    "COLUMBUS GROVE,DUPONT,MILLER CITY,OTTOVILLE",
-)
 DEFAULT_MAP_CENTER_LAT = float(os.getenv("DEFAULT_MAP_CENTER_LAT", "41.0195"))
 DEFAULT_MAP_CENTER_LNG = float(os.getenv("DEFAULT_MAP_CENTER_LNG", "-84.1190"))
 DEFAULT_MAP_ZOOM = int(os.getenv("DEFAULT_MAP_ZOOM", "9"))
@@ -83,7 +78,9 @@ DEFAULT_LOCATION_SETTINGS = {
     "timezone": DEFAULT_TIMEZONE,
     "zone_codes": ensure_list(DEFAULT_ZONE_CODES),
     "fips_codes": list(_default_fips_codes),
-    "area_terms": ensure_list(DEFAULT_AREA_TERMS),
+    # Area-term matching has been retired from the CAP poller but the field is
+    # retained for backwards compatibility with stored settings/exports.
+    "area_terms": [],
     "map_center_lat": DEFAULT_MAP_CENTER_LAT,
     "map_center_lng": DEFAULT_MAP_CENTER_LNG,
     "map_default_zoom": DEFAULT_MAP_ZOOM,

@@ -70,7 +70,12 @@ from app_utils.alert_sources import (
     normalize_alert_source,
     summarise_sources,
 )
-from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS, ensure_list, normalise_upper
+from app_utils.location_settings import (
+    DEFAULT_LOCATION_SETTINGS,
+    ensure_list,
+    normalise_upper,
+    sanitize_fips_codes,
+)
 from app_utils.eas import EASBroadcaster, load_eas_config
 from app_core.radio import RadioManager, ensure_radio_tables
 
@@ -526,14 +531,9 @@ class CAPPoller:
                     for code in DEFAULT_LOCATION_SETTINGS['zone_codes']
                 ]
 
-        # Strict location terms
-        base_identifiers = self.location_settings['area_terms'] or list(DEFAULT_LOCATION_SETTINGS['area_terms'])
-        derived_identifiers = {self.county_upper}
-        if 'COUNTY' not in self.county_upper:
-            derived_identifiers.add(f"{self.county_upper} COUNTY")
-        derived_identifiers.add(self.county_upper.replace(' COUNTY', ''))
-        self.putnam_county_identifiers = list({term for term in base_identifiers if term} | derived_identifiers)
         self.zone_codes = set(self.location_settings['zone_codes'])
+        fips_codes, _ = sanitize_fips_codes(self.location_settings.get('fips_codes'))
+        self.same_codes = {code for code in fips_codes if code}
 
     # ---------- Engine with retry ----------
     def _ensure_source_columns(self):
@@ -773,11 +773,13 @@ class CAPPoller:
         try:
             record = self.db_session.query(LocationSettings).order_by(LocationSettings.id).first()
             if record:
+                fips_codes, _ = sanitize_fips_codes(record.fips_codes or defaults['fips_codes'])
                 settings.update({
                     'county_name': record.county_name or defaults['county_name'],
                     'state_code': (record.state_code or defaults['state_code']).upper(),
                     'timezone': record.timezone or defaults['timezone'],
                     'zone_codes': normalise_upper(record.zone_codes) or list(defaults['zone_codes']),
+                    'fips_codes': fips_codes or list(defaults['fips_codes']),
                     'area_terms': normalise_upper(record.area_terms) or list(defaults['area_terms']),
                     'map_center_lat': record.map_center_lat or defaults['map_center_lat'],
                     'map_center_lng': record.map_center_lng or defaults['map_center_lng'],
@@ -791,6 +793,8 @@ class CAPPoller:
 
         if not settings['zone_codes']:
             settings['zone_codes'] = list(defaults['zone_codes'])
+        if not settings.get('fips_codes'):
+            settings['fips_codes'] = list(defaults['fips_codes'])
         if not settings['area_terms']:
             settings['area_terms'] = list(defaults['area_terms'])
 
@@ -1269,6 +1273,14 @@ class CAPPoller:
         # Valid UGC format: 2 letters, C or Z, 3 digits
         return bool(re.match(r'^[A-Z]{2}[CZ]\d{3}$', ugc))
 
+    @staticmethod
+    def _normalize_same_code(value: Any) -> Optional[str]:
+        digits = ''.join(ch for ch in str(value) if ch.isdigit())
+        if not digits:
+            return None
+        normalized = digits.zfill(6)[:6]
+        return normalized if normalized.strip('0') else normalized
+
     def get_alert_relevance_details(self, alert_data: Dict) -> Dict[str, Any]:
         result: Dict[str, Any] = {
             'is_relevant': False,
@@ -1277,6 +1289,7 @@ class CAPPoller:
             'matched_terms': [],
             'relevance_matches': [],
             'ugc_codes': [],
+            'same_codes': [],
             'area_desc': '',
             'log': None,
         }
@@ -1286,6 +1299,7 @@ class CAPPoller:
             event = properties.get('event', 'Unknown')
             geocode = properties.get('geocode', {}) or {}
             ugc_codes = geocode.get('UGC', []) or []
+            same_codes_raw = geocode.get('SAME', []) or []
 
             # Validate and normalize UGC codes
             normalized_ugc = []
@@ -1302,11 +1316,47 @@ class CAPPoller:
 
             result['ugc_codes'] = normalized_ugc
 
+            normalized_same = []
+            for same in same_codes_raw:
+                normalized = self._normalize_same_code(same)
+                if normalized:
+                    normalized_same.append(normalized)
+            result['same_codes'] = normalized_same
+
             area_desc_raw = properties.get('areaDesc') or ''
             if isinstance(area_desc_raw, list):
                 area_desc_raw = '; '.join(area_desc_raw)
             area_desc_upper = area_desc_raw.upper()
             result['area_desc'] = area_desc_raw
+
+            for same in normalized_same:
+                if same in self.same_codes:
+                    message = f"✓ Alert ACCEPTED by SAME: {event} ({same})"
+                    result.update(
+                        {
+                            'is_relevant': True,
+                            'reason': 'SAME_MATCH',
+                            'matched_ugc': same,
+                            'relevance_matches': [same],
+                            'log': {'level': 'info', 'message': message},
+                        }
+                    )
+                    return result
+
+                if same.endswith('000'):
+                    prefix = same[:3]
+                    if prefix and any(code.startswith(prefix) for code in self.same_codes):
+                        message = f"✓ Alert ACCEPTED by statewide SAME: {event} ({same})"
+                        result.update(
+                            {
+                                'is_relevant': True,
+                                'reason': 'SAME_MATCH',
+                                'matched_ugc': same,
+                                'relevance_matches': [same],
+                                'log': {'level': 'info', 'message': message},
+                            }
+                        )
+                        return result
 
             for ugc in normalized_ugc:
                 if ugc in self.zone_codes:
@@ -1321,30 +1371,6 @@ class CAPPoller:
                         }
                     )
                     return result
-
-            # Use word boundary matching to avoid partial matches
-            # (e.g., "PUTNAM" shouldn't match "WEST PUTNAM CITY")
-            matched_terms = []
-            for term in self.putnam_county_identifiers:
-                if not term:
-                    continue
-                # Use word boundaries to ensure we match complete terms
-                pattern = r'\b' + re.escape(term) + r'\b'
-                if re.search(pattern, area_desc_upper):
-                    matched_terms.append(term)
-
-            result['matched_terms'] = matched_terms
-            if matched_terms:
-                message = f"✓ Alert ACCEPTED by area match: {event} ({matched_terms[0]})"
-                result.update(
-                    {
-                        'is_relevant': True,
-                        'reason': 'AREA_MATCH',
-                        'relevance_matches': matched_terms,
-                        'log': {'level': 'info', 'message': message},
-                    }
-                )
-                return result
 
             message = (
                 f"✗ REJECT (not specific enough for {self.county_upper}): {event} - {area_desc_upper}"
