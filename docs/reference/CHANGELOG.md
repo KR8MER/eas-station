@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.10.1] - 2025-02-15
+### Changed
+- Simplified Weekly Test Automation so the scheduler always follows the Default RWT Counties list, surfaced that list directly next to the form, and kept Quick RWT/manual defaults in sync via `LocationSettings`.
+
+### Fixed
+- Ensured edits made in the Default RWT Counties manager persist to `LocationSettings` and are honored by Quick RWT, manual broadcasts, and the automation scheduler so operators no longer lose county changes.
+
 ## [2.10.0] - 2025-11-18
 ### Added
 - Added comprehensive `utilities.css` with gradient, card, badge, spacing, layout, typography, shadow, border, visibility, and animation utilities

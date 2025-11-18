@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import List
+
 from flask import jsonify, render_template, request
 from app_core.extensions import db
 from app_core.models import RWTScheduleConfig, SystemLog
@@ -15,15 +17,12 @@ def register_routes(app, logger):
     @app.route('/rwt-schedule')
     def rwt_schedule_page():
         """Render the RWT schedule configuration page."""
-        default_same_codes = manual_default_same_codes()
-
         # Provide state/county tree for proper selection UI
         state_tree = get_us_state_county_tree()
         same_lookup = get_same_lookup()
 
         return render_template(
             'rwt_schedule.html',
-            default_same_codes=default_same_codes,
             state_tree=state_tree,
             same_lookup=same_lookup,
         )
@@ -51,12 +50,18 @@ def register_routes(app, logger):
                         'last_run_at': None,
                         'last_run_status': None,
                         'last_run_details': {},
+                        'same_codes_source': 'location_defaults',
                     }
                 })
 
+            payload = config.to_dict()
+            if not payload.get('same_codes'):
+                payload['same_codes'] = manual_default_same_codes()
+            payload['same_codes_source'] = 'location_defaults'
+
             return jsonify({
                 'success': True,
-                'config': config.to_dict()
+                'config': payload
             })
 
         except Exception as exc:
@@ -93,9 +98,29 @@ def register_routes(app, logger):
             if not (0 <= end_hour <= 23 and 0 <= end_minute <= 59):
                 return jsonify({'success': False, 'error': 'Invalid end time'}), 400
 
-            same_codes = data.get('same_codes', [])
-            if not isinstance(same_codes, list):
+            same_codes_input = data.get('same_codes')
+            if same_codes_input is None:
+                same_codes_input = manual_default_same_codes()
+            elif not isinstance(same_codes_input, list):
                 return jsonify({'success': False, 'error': 'same_codes must be an array'}), 400
+
+            same_codes: List[str] = []
+            seen_codes = set()
+            for code in same_codes_input:
+                digits = ''.join(ch for ch in str(code) if ch.isdigit())
+                if not digits:
+                    continue
+                normalized = digits.zfill(6)[:6]
+                if normalized in seen_codes:
+                    continue
+                seen_codes.add(normalized)
+                same_codes.append(normalized)
+
+            if len(same_codes) > 31:
+                same_codes = same_codes[:31]
+
+            if enabled and not same_codes:
+                return jsonify({'success': False, 'error': 'Configure at least one SAME/FIPS code before enabling automatic RWT broadcasts.'}), 400
 
             # Get or create configuration
             config = RWTScheduleConfig.query.first()

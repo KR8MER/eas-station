@@ -13,7 +13,7 @@ The automatic RWT scheduler allows you to configure RWT broadcasts to run automa
 - **Automatic Scheduling**: Set it and forget it - RWT broadcasts send automatically
 - **Day Selection**: Choose specific days (Monday-Sunday)
 - **Time Windows**: Configure start and end times
-- **Geographic Targeting**: Specify SAME/FIPS codes for targeted areas
+- **Geographic Targeting**: Follow the shared Default RWT Counties list stored with your Location Settings
 - **Compliance Logging**: All broadcasts logged for FCC compliance tracking
 - **Lean Audio**: RWT contains only SAME header and EOM tones (no TTS, no attention tones)
 
@@ -63,26 +63,17 @@ Set the hours during which RWT broadcasts can occur:
 
 ### 4. SAME/FIPS Codes
 
-Configure which geographic areas receive the RWT. Enter codes separated by commas or newlines, or click **Use in Schedule** to pull in your saved defaults. The system still limits the list to the SAME standard maximum of 31 entries.
+The scheduler now always follows the shared **Default RWT Counties** list displayed to the right of the form. Update that list once and every workflow (Quick RWT, "Load Default Codes" in Broadcast Builder, and the automation scheduler) will reuse it. The list is persisted to your `LocationSettings` record and is still capped at the SAME specification maximum of 31 entries.
 
-**Default**: 7 Ohio counties remain pre-configured until you save your own list:
-```
-039003  # Allen County, OH
-039039  # Defiance County, OH
-039063  # Hancock County, OH
-039069  # Henry County, OH
-039125  # Paulding County, OH
-039161  # Van Wert County, OH
-039173  # Wood County, OH
-```
+**Factory Default**: New installs ship with the Ohio counties that were previously hardcoded (Allen, Defiance, Hancock, Henry, Paulding, Van Wert, and Wood). As soon as you save your own list, those defaults are replaced everywhere.
 
 ### 5. Default RWT Counties Card
 
-Use the new side panel to manage the shared county list that powers:
+Use the side panel to manage the shared county list that powers:
 
 - The Broadcast Builder "Load Default Codes" shortcut
 - Quick RWT presets
-- Scheduler fallbacks when a saved schedule omits SAME codes
+- The Weekly Test Automation scheduler
 
 Features include:
 
@@ -91,7 +82,7 @@ Features include:
 - Enforce the 31-code SAME maximum automatically
 - Save updates directly to the `LocationSettings` record
 - Reload from the database if you want to discard in-progress edits
-- Copy the curated list back into the schedule textarea with a single button
+- Persist everything directly to `LocationSettings` so every workflow stays in sync
 
 ### 6. Originator & Station Identity
 
