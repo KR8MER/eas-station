@@ -4,6 +4,29 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.10.0] - 2025-11-18
+### Added
+- Added comprehensive `utilities.css` with gradient, card, badge, spacing, layout, typography, shadow, border, visibility, and animation utilities
+- Created reusable template component partials in `templates/components/` for metric cards, stat cards, page headers, status badges, and data lists
+- Built new professional version page (`/help/version`) with tabbed interface featuring Overview, Changelog, Features, System Info, and JSON API tabs
+- Added `changelog_parser.py` utility to parse CHANGELOG.md files and extract structured version history
+- Integrated git commit information display (hash, branch, date, message) on version page
+- Added visual timeline visualization for changelog with animated current version marker
+- Added comprehensive feature matrix showing all installed system components and their availability status
+- Added copy-to-clipboard functionality for JSON API output
+
+### Changed
+- Updated `base.html` template to include all CSS files in proper order: design-system, base, components, utilities, layout, and enhancements
+- Replaced basic version page with comprehensive tabbed interface showing full release history from parsed CHANGELOG.md
+- Enhanced version route in `routes_monitoring.py` to include git metadata and parsed changelog data
+- Standardized gradient usage across all templates with new utility classes (.gradient-primary, .gradient-success, etc.)
+- Improved version page accessibility with URL hash-based tab navigation
+
+### Fixed
+- Fixed inconsistent gradient implementations across templates by centralizing in utilities.css
+- Fixed missing CSS files (design-system.css, components.css) not being loaded in base template
+- Improved dark theme compatibility for version page components
+
 ## [Unreleased]
 ### Added
 - Extended `/api/system_status` and `/api/system_health` with hostname, primary IPv4, uptime, and primary-interface metadata

@@ -1,0 +1,38 @@
+{#
+    Stat Card Component (Smaller metrics for grids)
+
+    Usage:
+    {% include 'components/stat_card.html' with context %}
+
+    Parameters:
+    - value: The stat value to display (required)
+    - label: The stat label/description (required)
+    - gradient: Gradient class name (optional)
+    - icon: Font Awesome icon class (optional)
+    - href: Link URL (optional, makes card clickable)
+
+    Example:
+    {% set value = "12" %}
+    {% set label = "Sources" %}
+    {% set gradient = "gradient-success-subtle" %}
+    {% include 'components/stat_card.html' with context %}
+#}
+
+{% if href %}
+<a href="{{ href }}" class="text-decoration-none">
+{% endif %}
+
+<div class="card-stat {% if gradient %}{{ gradient }}{% else %}border{% endif %}">
+    {% if icon %}
+    <div class="mb-2">
+        <i class="fas {{ icon }}"></i>
+    </div>
+    {% endif %}
+
+    <div class="stat-value">{{ value }}</div>
+    <div class="stat-label">{{ label }}</div>
+</div>
+
+{% if href %}
+</a>
+{% endif %}

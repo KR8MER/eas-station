@@ -1,0 +1,47 @@
+{#
+    Page Header Component
+
+    Usage:
+    {% include 'components/page_header.html' with context %}
+
+    Parameters:
+    - title: Page title (required)
+    - subtitle: Page subtitle/description (optional)
+    - icon: Font Awesome icon class (optional)
+    - gradient: Use gradient background (boolean, default: false)
+    - actions: HTML for action buttons (optional)
+
+    Example with gradient:
+    {% set title = "System Health" %}
+    {% set subtitle = "Monitor system performance and status" %}
+    {% set icon = "fa-heartbeat" %}
+    {% set gradient = true %}
+    {% include 'components/page_header.html' with context %}
+
+    Example with actions:
+    {% set title = "Alerts" %}
+    {% set subtitle = "Active emergency alerts" %}
+    {% set actions %}
+        <button class="btn btn-primary">New Alert</button>
+    {% endset %}
+    {% include 'components/page_header.html' with context %}
+#}
+
+<div class="{% if gradient %}page-header-gradient{% else %}page-header{% endif %}">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            {% if icon %}
+            <i class="fas {{ icon }} me-2"></i>
+            {% endif %}
+            <h1 class="page-title d-inline">{{ title }}</h1>
+            {% if subtitle %}
+            <p class="page-subtitle mt-2">{{ subtitle }}</p>
+            {% endif %}
+        </div>
+        {% if actions %}
+        <div class="d-flex gap-2">
+            {{ actions|safe }}
+        </div>
+        {% endif %}
+    </div>
+</div>
