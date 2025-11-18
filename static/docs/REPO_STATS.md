@@ -1,28 +1,28 @@
 # Repository Statistics
 
-**Generated:** 2025-11-18 15:32:06 UTC
+**Generated:** 2025-11-18 16:37:25 UTC
 
 ## Overview
 
-- **Total Files:** 613
+- **Total Files:** 623
 - **Total Directories:** 73
-- **Total Lines:** 209,863
-- **Code Lines:** 131,527
-- **Comment Lines:** 45,044
-- **Total Routes:** 182
+- **Total Lines:** 211,387
+- **Code Lines:** 132,871
+- **Comment Lines:** 44,969
+- **Total Routes:** 183
 
 ## Files by Type
 
 | File Type | Count |
 |-----------|-------|
-| Python | 245 |
-| Markdown | 159 |
+| Python | 253 |
+| Markdown | 160 |
 | HTML | 79 |
 | Other | 58 |
 | Shell | 16 |
 | YAML | 12 |
 | SVG | 12 |
-| JavaScript | 11 |
+| JavaScript | 12 |
 | CSS | 10 |
 | Text | 7 |
 | XML | 3 |
@@ -32,11 +32,11 @@
 
 | Language | Total Lines | Code Lines | Comment Lines |
 |----------|-------------|------------|---------------|
-| Python | 87,552 | 34,075 | 39,167 |
-| Markdown | 56,088 | 43,249 | 0 |
-| HTML | 46,101 | 41,964 | 449 |
+| Python | 88,544 | 34,938 | 39,092 |
+| Markdown | 56,188 | 43,327 | 0 |
+| HTML | 46,286 | 42,144 | 449 |
 | CSS | 6,254 | 1,121 | 4,195 |
-| JavaScript | 4,662 | 3,491 | 548 |
+| JavaScript | 4,909 | 3,714 | 548 |
 | Text | 2,280 | 2,135 | 0 |
 | Shell | 1,856 | 1,358 | 219 |
 | SVG | 1,697 | 1,274 | 176 |
@@ -61,9 +61,9 @@
 | webapp/routes_backups.py | 8 |
 | webapp/eas/workflow.py | 8 |
 | webapp/routes/system_controls.py | 7 |
+| webapp/routes/alert_verification.py | 6 |
 | webapp/documentation.py | 5 |
 | webapp/routes_debug.py | 5 |
-| webapp/routes/alert_verification.py | 5 |
 | webapp/routes_audio_tests.py | 4 |
 | webapp/routes_exports.py | 4 |
 | webapp/routes_rwt_schedule.py | 4 |
@@ -80,17 +80,17 @@
 
 ### Top Languages by Lines of Code
 
-**Python:** 34,075 lines  
-`███████████████████████████████████████`
+**Python:** 34,938 lines  
+`████████████████████████████████████████`
 
-**Markdown:** 43,249 lines  
+**Markdown:** 43,327 lines  
 `██████████████████████████████████████████████████`
 
-**HTML:** 41,964 lines  
+**HTML:** 42,144 lines  
 `████████████████████████████████████████████████`
 
 **CSS:** 1,121 lines  
 `█`
 
-**JavaScript:** 3,491 lines  
+**JavaScript:** 3,714 lines  
 `████`
