@@ -361,13 +361,6 @@ ENV_CATEGORIES = {
                 'placeholder': 'OHZ016,OHC137',
             },
             {
-                'key': 'DEFAULT_AREA_TERMS',
-                'label': 'Area Search Terms',
-                'type': 'textarea',
-                'description': 'Comma-separated location names to match in alerts',
-                'placeholder': 'PUTNAM COUNTY,PUTNAM CO,OTTAWA',
-            },
-            {
                 'key': 'DEFAULT_MAP_CENTER_LAT',
                 'label': 'Map Center Latitude',
                 'type': 'number',

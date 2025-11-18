@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.11.6] - 2025-11-23
+### Removed
+- Dropped the `DEFAULT_AREA_TERMS` environment variable, the accompanying admin editor entry, and the template references so
+  environment exports no longer list unused area-search keywords.
+### Changed
+- Default location snapshots now seed `area_terms` with an empty list rather than mirroring the removed environment variable,
+  keeping historic values intact without encouraging new deployments to rely on the deprecated fallback.
+
+## [2.11.5] - 2025-11-23
+### Fixed
+- Removed the CAP poller's area-term fallback so alerts only appear on `/alerts` when their SAME or UGC codes match the
+  configured counties, preventing neighboring-county descriptions from triggering the UI.
+
 ## [2.11.4] - 2025-11-22
 ### Fixed
 - Fixed duplicate DOM element declarations on the Weekly Test Automation page that threw JavaScript errors and prevented saved
@@ -78,6 +91,9 @@ tracks releases under the 2.x series.
   - Added `AnalyticsScheduler` for automated background processing of metrics aggregation and analysis
   - Documented complete analytics system architecture and usage in `app_core/analytics/README.md`
   - Published comprehensive compliance reporting playbook in `docs/compliance/reporting_playbook.md` with workflows for weekly/monthly test verification, performance monitoring, anomaly investigation, and regulatory audit preparation
+### Fixed
+- Removed the CAP poller's area-term fallback so `/alerts` only surfaces entries that explicitly name the configured SAME or
+  UGC codes, eliminating false positives from neighboring county descriptions.
 - Added comprehensive audio ingest pipeline for unified capture from SDR, ALSA, and file sources
   - Implemented `app_core/audio/ingest.py` with pluggable source adapters and PCM normalization
   - Added peak/RMS metering and silence detection with PostgreSQL storage
