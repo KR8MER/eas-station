@@ -1,7 +1,7 @@
 """Add RWT schedule configuration table
 
 Revision ID: 20251118_add_rwt_schedule_config
-Revises: 20251107_add_tone_and_narration
+Revises: 20251116_populate_oled_example_screens
 Create Date: 2025-11-18
 
 This migration adds the rwt_schedule_config table to store automatic
@@ -18,7 +18,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 # revision identifiers, used by Alembic.
 revision = '20251118_add_rwt_schedule_config'
-down_revision = '20251107_add_tone_and_narration'
+down_revision = '20251116_populate_oled_example_screens'
 branch_labels = None
 depends_on = None
 
