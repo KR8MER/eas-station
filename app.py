@@ -578,6 +578,15 @@ try:
 except Exception as screen_mgr_error:
     logger.warning('Screen manager could not be started: %s', screen_mgr_error)
 
+# Start RWT (Required Weekly Test) scheduler
+try:
+    from app_core.rwt_scheduler import start_scheduler as start_rwt_scheduler
+    if not app.config.get('SETUP_MODE'):
+        start_rwt_scheduler()
+        logger.info('RWT scheduler started for automatic weekly tests')
+except Exception as rwt_scheduler_error:
+    logger.warning('RWT scheduler could not be started: %s', rwt_scheduler_error)
+
 # =============================================================================
 # BOUNDARY TYPE METADATA
 # =============================================================================

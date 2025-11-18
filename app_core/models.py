@@ -1142,6 +1142,69 @@ class ScreenRotation(db.Model):
         }
 
 
+class RWTScheduleConfig(db.Model):
+    """Configuration for automatic Required Weekly Test (RWT) scheduling.
+
+    Allows administrators to configure automatic RWT broadcasts on specific
+    days of the week and time windows. The scheduler will automatically generate
+    and send RWT tests according to the configured schedule.
+    """
+    __tablename__ = "rwt_schedule_config"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Schedule configuration
+    enabled = db.Column(db.Boolean, default=True, nullable=False)
+
+    # Days of week (0=Monday, 6=Sunday) stored as JSON array
+    # Example: [0, 2, 4] for Monday, Wednesday, Friday
+    days_of_week = db.Column(JSONB, nullable=False, default=list)
+
+    # Time window configuration
+    start_hour = db.Column(db.Integer, nullable=False, default=8)  # 0-23
+    start_minute = db.Column(db.Integer, nullable=False, default=0)  # 0-59
+    end_hour = db.Column(db.Integer, nullable=False, default=16)  # 0-23
+    end_minute = db.Column(db.Integer, nullable=False, default=0)  # 0-59
+
+    # SAME codes to include (JSON array of FIPS codes)
+    same_codes = db.Column(JSONB, nullable=False, default=list)
+
+    # Originator code (e.g., 'WXR', 'EAS')
+    originator = db.Column(db.String(3), nullable=False, default='WXR')
+
+    # Station identifier
+    station_id = db.Column(db.String(8), nullable=False, default='EASNODES')
+
+    # Timestamps
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    # Last run tracking
+    last_run_at = db.Column(db.DateTime(timezone=True))
+    last_run_status = db.Column(db.String(20))  # 'success', 'failed', etc.
+    last_run_details = db.Column(JSONB)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert configuration to dictionary for API responses."""
+        return {
+            'id': self.id,
+            'enabled': self.enabled,
+            'days_of_week': list(self.days_of_week or []),
+            'start_hour': self.start_hour,
+            'start_minute': self.start_minute,
+            'end_hour': self.end_hour,
+            'end_minute': self.end_minute,
+            'same_codes': list(self.same_codes or []),
+            'originator': self.originator,
+            'station_id': self.station_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'last_run_at': self.last_run_at.isoformat() if self.last_run_at else None,
+            'last_run_status': self.last_run_status,
+            'last_run_details': dict(self.last_run_details or {}),
+        }
+
+
 __all__ = [
     "Boundary",
     "CAPAlert",
@@ -1164,4 +1227,5 @@ __all__ = [
     "ScreenRotation",
     "VFDDisplay",
     "VFDStatus",
+    "RWTScheduleConfig",
 ]
