@@ -15,7 +15,12 @@ from typing import Any, Dict, Optional
 from app_core.extensions import db
 from app_core.models import RWTScheduleConfig, ManualEASActivation, SystemLog
 from app_utils import utc_now
-from app_utils.eas import EASAudioGenerator, build_same_header, load_eas_config
+from app_utils.eas import (
+    EASAudioGenerator,
+    build_same_header,
+    load_eas_config,
+    manual_default_same_codes,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +61,15 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
             message_type='Alert',
         )
 
+        same_codes = [code for code in (config.same_codes or []) if code]
+        if not same_codes:
+            same_codes = manual_default_same_codes()
+
+        if not same_codes:
+            raise ValueError(
+                "No SAME/FIPS codes are configured for automatic RWT broadcasts"
+            )
+
         # Prepare payload wrapper
         payload_wrapper = {
             'identifier': identifier,
@@ -66,7 +80,7 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
             'raw_json': {
                 'properties': {
                     'geocode': {
-                        'SAME': config.same_codes or [],
+                        'SAME': same_codes,
                     }
                 }
             },
@@ -129,7 +143,7 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
             details={
                 'identifier': identifier,
                 'same_header': header,
-                'location_count': len(config.same_codes),
+                'location_count': len(same_codes),
                 'schedule_id': config.id,
             }
         ))

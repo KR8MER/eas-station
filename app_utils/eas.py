@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
+from flask import current_app, has_app_context
+
 from app_utils.event_codes import EVENT_CODE_REGISTRY, resolve_event_code
 from app_utils.fips_codes import P_DIGIT_LABELS
 from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS
@@ -572,6 +574,22 @@ def manual_default_same_codes() -> List[str]:
             digits = re.sub(r'[^0-9]', '', token)
             if digits:
                 codes.append(digits.zfill(6)[:6])
+
+    if not codes and has_app_context():
+        try:
+            from app_core.location import get_location_settings  # Imported lazily to avoid circular import
+
+            settings = get_location_settings()
+            stored_codes = settings.get('fips_codes') or settings.get('same_codes') or []
+            for value in stored_codes:
+                digits = re.sub(r'[^0-9]', '', str(value))
+                if digits:
+                    codes.append(digits.zfill(6)[:6])
+        except Exception as exc:  # pragma: no cover - defensive
+            if current_app:
+                current_app.logger.warning(
+                    "Failed to load location-based SAME defaults: %s", exc
+                )
 
     if not codes:
         # Default to Ohio counties: Allen, Defiance, Hancock, Henry, Paulding, Van Wert, Wood
