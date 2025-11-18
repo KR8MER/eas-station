@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.11.2] - 2025-11-20
+### Added
+- Added an offline alert self-test harness plus `scripts/run_alert_self_test.py` so operators can replay bundled RWT captures,
+  verify duplicate suppression, and confirm the configured FIPS list still forwards alerts without waiting for a live activation.
+- Folded the alert self-test harness into the **Tools → Alert Verification** dashboard so operators can replay bundled or custom
+  audio from the same analytics page and capture screenshots for customer assurances.
+### Changed
+- Consolidated the alert self-test workflow into the Alert Verification dashboard so operators validate decoding, analytics,
+  and FIPS filtering from a single Tools entry instead of bouncing between separate pages.
+
 ## [2.10.0] - 2025-11-18
 ### Added
 - Added comprehensive `utilities.css` with gradient, card, badge, spacing, layout, typography, shadow, border, visibility, and animation utilities

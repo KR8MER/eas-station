@@ -9,8 +9,17 @@ import time
 import uuid
 import threading
 from collections import OrderedDict
+from pathlib import Path
 from types import SimpleNamespace
-from typing import Dict, List, Optional, Tuple, OrderedDict as TypingOrderedDict
+from typing import (
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    OrderedDict as TypingOrderedDict,
+)
 
 from flask import (
     Flask,
@@ -24,6 +33,11 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 
+from app_core.audio.self_test import (
+    AlertSelfTestHarness,
+    AlertSelfTestResult,
+    AlertSelfTestStatus,
+)
 from app_core.eas_storage import (
     build_alert_delivery_trends,
     collect_alert_delivery_records,
@@ -31,12 +45,13 @@ from app_core.eas_storage import (
     record_audio_decode_result,
 )
 from app_core.models import EASDecodedAudio
+from app_core.location import get_location_settings
 import base64
 import io
 import wave
 import struct
 import numpy as np
-from app_utils import format_local_datetime
+from app_utils import format_local_datetime, utc_now
 from app_utils.export import generate_csv
 from app_utils.eas_decode import (
     AudioDecodeError,
@@ -46,6 +61,16 @@ from app_utils.eas_decode import (
     decode_same_audio,
 )
 from app_utils.eas_detection import detect_eas_from_file
+
+
+DEFAULT_SAMPLE_FILES: Tuple[Path, ...] = (
+    Path("samples/ZCZC-EAS-RWT-039137+0015-3042020-KR8MER.wav"),
+    Path("samples/ZCZC-EAS-RWT-042001-042071-042133+0300-3040858-WJONTV.wav"),
+)
+
+
+class AlertSelfTestError(RuntimeError):
+    """Raised when the self-test inputs are invalid."""
 
 
 # Progress tracking infrastructure
@@ -781,6 +806,80 @@ def register(app: Flask, logger) -> None:
     """Register alert verification routes on the Flask application."""
 
     route_logger = logger.getChild("alert_verification")
+    repo_root = Path(app.root_path).resolve()
+
+    def _load_configured_fips(override: Iterable[str]) -> List[str]:
+        override_list = [str(code).strip() for code in (override or []) if str(code).strip()]
+        if override_list:
+            return override_list
+
+        settings = get_location_settings()
+        return list(settings.get("fips_codes") or [])
+
+    def _resolve_audio_paths(paths: Sequence[str], include_defaults: bool) -> List[Path]:
+        resolved: List[Path] = []
+        seen: set[Path] = set()
+
+        def _add(candidate: Path) -> None:
+            target = candidate.resolve()
+            if target in seen:
+                return
+            if not target.exists():
+                raise AlertSelfTestError(f"Audio sample not found: {target}")
+            seen.add(target)
+            resolved.append(target)
+
+        for raw_value in paths or []:
+            if not raw_value:
+                continue
+            candidate = Path(str(raw_value)).expanduser()
+            if not candidate.is_absolute():
+                candidate = repo_root / candidate
+            _add(candidate)
+
+        if include_defaults or not resolved:
+            for rel_path in DEFAULT_SAMPLE_FILES:
+                candidate = (repo_root / rel_path).resolve()
+                if candidate.exists():
+                    _add(candidate)
+
+        if not resolved:
+            raise AlertSelfTestError("No audio samples were provided or available.")
+
+        return resolved
+
+    def _result_to_dict(item: AlertSelfTestResult) -> dict:
+        return {
+            "audio_path": item.audio_path,
+            "status": item.status.value,
+            "reason": item.reason,
+            "event_code": item.event_code,
+            "originator": item.originator,
+            "alert_fips_codes": item.alert_fips_codes,
+            "matched_fips_codes": item.matched_fips_codes,
+            "confidence": item.confidence,
+            "duration_seconds": item.duration_seconds,
+            "raw_text": item.raw_text,
+            "duplicate": item.duplicate,
+            "error": item.error,
+            "timestamp": item.timestamp,
+        }
+
+    def _describe_bundled_samples() -> List[dict]:
+        items: List[dict] = []
+        for rel_path in DEFAULT_SAMPLE_FILES:
+            absolute = (repo_root / rel_path).resolve()
+            exists = absolute.exists()
+            size_bytes = absolute.stat().st_size if exists else None
+            items.append(
+                {
+                    "name": rel_path.name,
+                    "relative_path": str(rel_path),
+                    "exists": exists,
+                    "size_bytes": size_bytes,
+                }
+            )
+        return items
 
     def _resolve_window_days() -> int:
         value = request.values.get("days", type=int)
@@ -1116,6 +1215,15 @@ def register(app: Flask, logger) -> None:
 
         recent_decodes = load_recent_audio_decodes(limit=5)
 
+        bundled_samples = _describe_bundled_samples()
+        configured_fips = _load_configured_fips([])
+        alert_self_test_context = {
+            "configured_fips": configured_fips,
+            "default_cooldown": 30.0,
+            "default_samples": bundled_samples,
+            "generated_at": utc_now().isoformat(),
+        }
+
         # Mark progress as complete
         if request.method == "POST" and progress_id:
             progress = ProgressTracker(progress_id)
@@ -1134,7 +1242,81 @@ def register(app: Flask, logger) -> None:
             recent_decodes=recent_decodes,
             decode_segment_urls=decode_segment_urls,
             progress_id=progress_id,
+            self_test_configured_fips=configured_fips,
+            self_test_samples=bundled_samples,
+            alert_self_test_context=alert_self_test_context,
         )
+
+    @app.route("/api/alert-self-test/run", methods=["POST"])
+    def run_alert_self_test():
+        payload = request.get_json(force=True, silent=True) or {}
+
+        user_audio_paths = payload.get("audio_paths") or []
+        use_default_samples = bool(payload.get("use_default_samples", not user_audio_paths))
+        cooldown = payload.get("duplicate_cooldown", 30.0)
+        source_name = str(payload.get("source_name") or "self-test").strip() or "self-test"
+        require_match = bool(payload.get("require_match", False))
+        fips_override = payload.get("fips_codes") or []
+
+        try:
+            cooldown_value = max(0.0, float(cooldown))
+        except (TypeError, ValueError):
+            return (
+                jsonify({"success": False, "error": "Duplicate cooldown must be numeric."}),
+                400,
+            )
+
+        try:
+            resolved_paths = _resolve_audio_paths(user_audio_paths, use_default_samples)
+        except AlertSelfTestError as exc:
+            route_logger.warning("Alert self-test rejected: %s", exc)
+            return jsonify({"success": False, "error": str(exc)}), 400
+
+        configured_fips = _load_configured_fips(fips_override)
+
+        harness = AlertSelfTestHarness(
+            configured_fips,
+            duplicate_cooldown_seconds=cooldown_value,
+            source_name=source_name,
+        )
+
+        route_logger.info(
+            "Running alert self-test: audio=%s fips=%s cooldown=%s source=%s",
+            ",".join(str(path) for path in resolved_paths),
+            ",".join(harness.configured_fips_codes) or "<none>",
+            cooldown_value,
+            source_name,
+        )
+
+        results = harness.run_audio_files(resolved_paths)
+        forwarded = sum(1 for item in results if item.status == AlertSelfTestStatus.FORWARDED)
+        decode_errors = sum(1 for item in results if item.status == AlertSelfTestStatus.DECODE_ERROR)
+
+        if require_match and forwarded == 0:
+            success = False
+            error = "No alerts matched the configured FIPS codes."
+        else:
+            success = True
+            error = None
+
+        response = {
+            "success": success,
+            "error": error,
+            "configured_fips": harness.configured_fips_codes,
+            "audio_samples": [
+                {"path": str(path), "name": path.name}
+                for path in resolved_paths
+            ],
+            "duplicate_cooldown": cooldown_value,
+            "source_name": source_name,
+            "results": [_result_to_dict(item) for item in results],
+            "forwarded_count": forwarded,
+            "decode_error_count": decode_errors,
+            "default_samples_used": use_default_samples and not user_audio_paths,
+            "timestamp": utc_now().isoformat(),
+        }
+
+        return jsonify(response)
 
     @app.route("/admin/alert-verification/progress/<operation_id>")
     def alert_verification_progress(operation_id: str):

@@ -9,6 +9,7 @@ This is the bridge between the audio subsystem and the alert detection logic.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import logging
 import os
@@ -18,6 +19,7 @@ import time
 import wave
 from dataclasses import dataclass
 from datetime import datetime
+from collections import OrderedDict
 from typing import Optional, Callable, List
 
 import numpy as np
@@ -26,6 +28,7 @@ from app_utils.eas_decode import decode_same_audio, SAMEAudioDecodeResult
 from app_utils import utc_now
 from app_utils.eas_codes import get_event_name, get_originator_name
 from .source_manager import AudioSourceManager
+from .fips_utils import determine_fips_matches
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +154,26 @@ class EASAlert:
     audio_file_path: Optional[str] = None
 
 
+def compute_alert_signature(alert: EASAlert) -> str:
+    """Create a deterministic hash of decoded SAME headers for deduplication."""
+    header_texts: List[str] = []
+    for header in alert.headers or []:
+        if not isinstance(header, dict):
+            continue
+        raw_value = header.get('raw_text') or header.get('header')
+        if isinstance(raw_value, str) and raw_value.strip():
+            header_texts.append(raw_value.strip())
+
+    base_text = "||".join(header_texts).strip()
+    if not base_text:
+        base_text = (alert.raw_text or "").strip()
+
+    if not base_text:
+        base_text = f"{alert.source_name}|{alert.timestamp.isoformat()}"
+
+    return hashlib.sha256(base_text.encode('utf-8', 'ignore')).hexdigest()
+
+
 def create_fips_filtering_callback(
     configured_fips_codes: List[str],
     forward_callback: Callable[[EASAlert], None],
@@ -212,12 +235,10 @@ def create_fips_filtering_callback(
                             if code:
                                 alert_fips_codes.append(code)
 
-        # Check for FIPS code match
-        matches = set(alert_fips_codes) & set(configured_fips_codes)
+        matched_fips_list = determine_fips_matches(alert_fips_codes, configured_fips_codes)
 
-        if matches:
+        if matched_fips_list:
             # Alert matches configured FIPS codes - FORWARD IT
-            matched_fips_list = list(sorted(matches))
             forwarding_reason = f"FIPS match: {', '.join(matched_fips_list)}"
 
             log.warning(
@@ -357,6 +378,8 @@ class ContinuousEASMonitor:
         self._alerts_detected = 0
         self._scans_performed = 0
         self._last_alert_time: Optional[float] = None
+        self._duplicate_cooldown_seconds = 30.0
+        self._recent_alert_signatures: OrderedDict[str, float] = OrderedDict()
         self._active_scans = 0  # Track concurrent scans
         self._scan_lock = threading.Lock()  # Protect scan counter
 
@@ -634,17 +657,16 @@ class ContinuousEASMonitor:
                 logger.error(f"Failed to save alert audio: {e}")
         # === END AUDIO SAVING ===
 
-        # Check if this is a duplicate (within cooldown period)
-        # Note: Duplicates are still LOGGED and AUDIO SAVED above, but not processed further
-        if self._last_alert_time:
-            time_since_last = current_time - self._last_alert_time
-            if time_since_last < 30.0:  # 30 second cooldown
-                logger.info(
-                    f"Alert within cooldown period ({time_since_last:.1f}s) - "
-                    f"logged and audio saved, but not activating"
-                )
-                return
+        alert_signature = compute_alert_signature(alert)
+        if self._is_duplicate_alert(alert_signature, current_time):
+            logger.info(
+                "Alert duplicate detected within %.1fs window - "
+                "logged/audio archived but not activating", 
+                self._duplicate_cooldown_seconds,
+            )
+            return
 
+        self._recent_alert_signatures[alert_signature] = current_time
         self._last_alert_time = current_time
         self._alerts_detected += 1
 
@@ -709,6 +731,20 @@ class ContinuousEASMonitor:
 
         return f"{timestamp_str}_{originator}-{event_code}.wav"
 
+    def _purge_expired_alert_signatures(self, cutoff_timestamp: float) -> None:
+        """Drop stored alert signatures that are older than the provided cutoff."""
+        while self._recent_alert_signatures:
+            oldest_signature, timestamp = next(iter(self._recent_alert_signatures.items()))
+            if timestamp >= cutoff_timestamp:
+                break
+            self._recent_alert_signatures.popitem(last=False)
+
+    def _is_duplicate_alert(self, signature: str, current_time: float) -> bool:
+        """Return True if the provided signature was seen recently."""
+        cutoff = current_time - self._duplicate_cooldown_seconds
+        self._purge_expired_alert_signatures(cutoff)
+        return signature in self._recent_alert_signatures
+
     def get_stats(self) -> dict:
         """Get monitoring statistics."""
         return {
@@ -722,4 +758,4 @@ class ContinuousEASMonitor:
         }
 
 
-__all__ = ['ContinuousEASMonitor', 'EASAlert', 'create_fips_filtering_callback']
+__all__ = ['ContinuousEASMonitor', 'EASAlert', 'create_fips_filtering_callback', 'compute_alert_signature']
