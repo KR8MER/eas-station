@@ -56,6 +56,8 @@ This document tracks the state of EAS Station documentation and identifies areas
 | `FUNCTION_TREE*.md` | Various | Developer index references | ✅ Canonical |
 | Compose & Docker assets | Various | Deployment manifests | ✅ Required |
 
+> **2025-11-15 Verification:** Root directory now contains only `README.md` plus required non-Markdown assets after relocating legacy markdown artifacts to `docs/development/archive/`.
+
 ### Newly Archived or Relocated
 | File | New Location | Notes |
 |------|--------------|-------|
