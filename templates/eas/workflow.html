@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}EAS Workflow Console{% endblock %}
+{% block title %}Broadcast Builder Console{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -156,7 +156,7 @@
     <div class="workflow-hero mb-4">
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
             <div>
-                <h1 class="h2 mb-2"><i class="fas fa-broadcast-tower me-2"></i>EAS Workflow Console</h1>
+                <h1 class="h2 mb-2"><i class="fas fa-broadcast-tower me-2"></i>Broadcast Builder Console</h1>
                 <p class="mb-0 opacity-75">
                     Build and archive manual SAME activations, generate audio assets, and review recent transmissions in one secure hub.
                 </p>
@@ -174,6 +174,20 @@
                     <div class="fw-semibold">Attention Tone</div>
                     <div>{{ '%.1f'|format(eas_attention_seconds|float) }} seconds</div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="alert alert-warning border-0 shadow-sm mb-4">
+        <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
+            <div>
+                <strong>Need to tune your Required Weekly Test automation?</strong>
+                Manage the scheduler and shared county list from the dedicated Weekly Test Automation page.
+            </div>
+            <div>
+                <a href="{{ url_for('rwt_schedule_page') }}" class="btn btn-warning text-dark fw-semibold">
+                    <i class="fas fa-calendar-alt me-2"></i>Manage Weekly Test Automation
+                </a>
             </div>
         </div>
     </div>
