@@ -1185,7 +1185,11 @@ class RWTScheduleConfig(db.Model):
     last_run_details = db.Column(JSONB)
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert configuration to dictionary for API responses."""
+        """Convert configuration to dictionary for API responses.
+
+        Note: originator and station_id are read from environment variables,
+        not from this configuration.
+        """
         return {
             'id': self.id,
             'enabled': self.enabled,
@@ -1195,8 +1199,6 @@ class RWTScheduleConfig(db.Model):
             'end_hour': self.end_hour,
             'end_minute': self.end_minute,
             'same_codes': list(self.same_codes or []),
-            'originator': self.originator,
-            'station_id': self.station_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'last_run_at': self.last_run_at.isoformat() if self.last_run_at else None,

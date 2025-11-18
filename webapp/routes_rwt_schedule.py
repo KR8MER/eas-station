@@ -6,6 +6,7 @@ from flask import jsonify, render_template, request
 from app_core.extensions import db
 from app_core.models import RWTScheduleConfig, SystemLog
 from app_utils.eas import manual_default_same_codes
+from app_utils.fips_codes import get_us_state_county_tree, get_same_lookup
 
 
 def register_routes(app, logger):
@@ -16,9 +17,15 @@ def register_routes(app, logger):
         """Render the RWT schedule configuration page."""
         default_same_codes = manual_default_same_codes()
 
+        # Provide state/county tree for proper selection UI
+        state_tree = get_us_state_county_tree()
+        same_lookup = get_same_lookup()
+
         return render_template(
             'rwt_schedule.html',
             default_same_codes=default_same_codes,
+            state_tree=state_tree,
+            same_lookup=same_lookup,
         )
 
     @app.route('/api/rwt-schedule/config', methods=['GET'])
@@ -41,8 +48,6 @@ def register_routes(app, logger):
                         'end_hour': 16,
                         'end_minute': 0,
                         'same_codes': default_same_codes,
-                        'originator': 'WXR',
-                        'station_id': 'EASNODES',
                         'last_run_at': None,
                         'last_run_status': None,
                         'last_run_details': {},
@@ -92,9 +97,6 @@ def register_routes(app, logger):
             if not isinstance(same_codes, list):
                 return jsonify({'success': False, 'error': 'same_codes must be an array'}), 400
 
-            originator = str(data.get('originator', 'WXR')).strip().upper()[:3]
-            station_id = str(data.get('station_id', 'EASNODES')).strip().upper()[:8].ljust(8)
-
             # Get or create configuration
             config = RWTScheduleConfig.query.first()
             if config is None:
@@ -108,8 +110,6 @@ def register_routes(app, logger):
             config.end_hour = end_hour
             config.end_minute = end_minute
             config.same_codes = same_codes
-            config.originator = originator
-            config.station_id = station_id
 
             db.session.add(config)
 
