@@ -12,6 +12,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
+from flask import Flask, has_app_context
 from app_core.extensions import db
 from app_core.models import RWTScheduleConfig, ManualEASActivation, SystemLog
 from app_utils import utc_now
@@ -192,16 +193,20 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
 class RWTScheduler:
     """Manages automatic RWT broadcast scheduling."""
 
-    def __init__(self, check_interval_minutes: int = 1):
+    def __init__(self, app: Flask, check_interval_minutes: int = 1):
         """Initialize the RWT scheduler.
 
         Args:
             check_interval_minutes: How often to check if RWT should be sent (default: 1 minute)
         """
+        if app is None:
+            raise ValueError("A Flask application instance is required for the RWT scheduler")
+
         self.check_interval = timedelta(minutes=check_interval_minutes)
         self.running = False
         self.thread: Optional[threading.Thread] = None
         self.logger = logger
+        self.app = app
 
     def start(self):
         """Start the scheduler in a background thread."""
@@ -228,16 +233,23 @@ class RWTScheduler:
         """Main scheduler loop."""
         while self.running:
             try:
-                self._check_and_send_rwt()
-                # Sleep for the check interval
-                time.sleep(self.check_interval.total_seconds())
-
+                with self.app.app_context():
+                    self._check_and_send_rwt()
             except Exception as e:
                 self.logger.error("Error in RWT scheduler loop: %s", e, exc_info=True)
                 time.sleep(60)  # Wait before retrying
+                continue
+
+            # Sleep for the check interval outside the application context
+            time.sleep(self.check_interval.total_seconds())
 
     def _check_and_send_rwt(self):
         """Check if RWT should be sent and send it if conditions are met."""
+        ctx = None
+        if not has_app_context():
+            ctx = self.app.app_context()
+            ctx.push()
+
         try:
             # Get active configuration
             config = RWTScheduleConfig.query.filter_by(enabled=True).first()
@@ -279,23 +291,30 @@ class RWTScheduler:
 
         except Exception as exc:
             self.logger.error("Failed to check/send RWT: %s", exc, exc_info=True)
+        finally:
+            if ctx is not None:
+                ctx.pop()
 
 
 # Global scheduler instance
 _scheduler: Optional[RWTScheduler] = None
 
 
-def get_scheduler() -> RWTScheduler:
+def get_scheduler(app: Optional[Flask] = None) -> RWTScheduler:
     """Get the global RWT scheduler instance."""
     global _scheduler
     if _scheduler is None:
-        _scheduler = RWTScheduler()
+        if app is None:
+            raise RuntimeError(
+                "A Flask application must be provided the first time the RWT scheduler is accessed"
+            )
+        _scheduler = RWTScheduler(app)
     return _scheduler
 
 
-def start_scheduler():
+def start_scheduler(app: Optional[Flask] = None):
     """Start the global RWT scheduler."""
-    scheduler = get_scheduler()
+    scheduler = get_scheduler(app)
     scheduler.start()
 
 
