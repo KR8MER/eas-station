@@ -238,6 +238,20 @@
     document.addEventListener('DOMContentLoaded', function() {
         const form = document.getElementById('rwtConfigForm');
         const testBtn = document.getElementById('testRWTBtn');
+        const sameCodesInput = document.getElementById('sameCodesInput');
+
+        const countyListEl = document.getElementById('countyList');
+        const countyEmptyState = document.getElementById('countyListEmpty');
+        const countyCodeInput = document.getElementById('countyCodeInput');
+        const addCountyCodeBtn = document.getElementById('addCountyCodeBtn');
+        const stateSelect = document.getElementById('stateSelect');
+        const countySelect = document.getElementById('countySelect');
+        const addCountyFromPickerBtn = document.getElementById('addCountyFromPickerBtn');
+        const saveCountiesBtn = document.getElementById('saveCountiesBtn');
+        const reloadCountiesBtn = document.getElementById('reloadCountiesBtn');
+        const copyCountiesBtn = document.getElementById('copyCountiesToScheduleBtn');
+
+        let defaultCountyCodes = [];
 
         const countyListEl = document.getElementById('countyList');
         const countyEmptyState = document.getElementById('countyListEmpty');
