@@ -1,5 +1,31 @@
 <!-- Modern, Clean Navigation Component -->
 {% set is_authenticated = current_user is defined and current_user and current_user.is_authenticated %}
+{% set can_view_alerts = has_permission('alerts.view') %}
+{% set can_view_logs = has_permission('logs.view') %}
+{% set can_manage_analytics = has_permission('analytics_manage') %}
+{% set can_view_eas = has_permission('eas.view') %}
+{% set can_manage_receivers = has_permission('receivers.view') %}
+{% set can_view_gpio = has_permission('gpio.view') %}
+{% set can_view_system_config = has_permission('system.view_config') %}
+{% set can_manage_config = has_permission('system.configure') %}
+{% set can_export_alerts = has_permission('alerts.export') %}
+{% set can_manage_users = has_permission('system.manage_users') %}
+{% set can_view_users = has_permission('system.view_users') or can_manage_users %}
+
+{% set show_broadcast_workflow = can_view_eas %}
+{% set show_broadcast_outputs = can_view_eas %}
+{% set show_broadcast_inputs = can_manage_receivers %}
+{% set show_broadcast_dropdown = show_broadcast_workflow or show_broadcast_outputs or show_broadcast_inputs %}
+
+{% set show_settings_configuration = can_view_system_config or can_manage_config %}
+{% set show_settings_hardware = can_view_gpio %}
+{% set show_settings_security = can_manage_users or can_view_users %}
+{% set show_settings_dropdown = show_settings_configuration or show_settings_hardware or show_settings_security %}
+
+{% set show_alerts_radio_section = is_authenticated and (can_view_alerts or can_manage_receivers or can_view_logs) %}
+{% set show_tools_testing = is_authenticated and (can_manage_receivers or can_view_alerts) %}
+{% set show_tools_data = is_authenticated and (can_export_alerts or can_manage_config) %}
+{% set show_tools_analytics = is_authenticated and (can_manage_analytics or can_view_logs or can_view_alerts or can_manage_config) %}
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top shadow-sm">
     <div class="container-fluid">
@@ -66,7 +92,13 @@
                                     <i class="fas fa-satellite-dish"></i> Active & History
                                 </a>
                             </li>
+                            <li>
+                                <a class="dropdown-item" href="/stats">
+                                    <i class="fas fa-chart-bar"></i> Alert Statistics
+                                </a>
+                            </li>
 
+                            {% if show_alerts_radio_section %}
                             <li><hr class="dropdown-divider"></li>
                             <li><h6 class="dropdown-header">Over-the-Air (Radio)</h6></li>
                             <li>
@@ -79,11 +111,12 @@
                                     <i class="fas fa-headphones"></i> Live Monitor
                                 </a>
                             </li>
+                            {% endif %}
                         </ul>
                     </li>
 
                     <!-- Broadcast Operations -->
-                    {% if is_authenticated %}
+                    {% if show_broadcast_dropdown %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle"
                            href="#"
@@ -95,6 +128,7 @@
                             <span>Broadcast</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="broadcastDropdown">
+                            {% if show_broadcast_workflow %}
                             <li><h6 class="dropdown-header">EAS Workflow</h6></li>
                             <li>
                                 <a class="dropdown-item" href="{{ url_for('eas.workflow_home') }}">
@@ -106,8 +140,12 @@
                                     <i class="fas fa-clock-rotate-left"></i> Broadcast Archive
                                 </a>
                             </li>
+                            {% endif %}
 
+                            {% if show_broadcast_outputs %}
+                            {% if show_broadcast_inputs %}
                             <li><hr class="dropdown-divider"></li>
+                            {% endif %}
                             <li><h6 class="dropdown-header">Display Outputs</h6></li>
                             <li>
                                 <a class="dropdown-item" href="{{ url_for('displays_preview_page') }}">
@@ -129,8 +167,12 @@
                                     <i class="fas fa-display"></i> Custom Screens
                                 </a>
                             </li>
+                            {% endif %}
 
+                            {% if show_broadcast_inputs %}
+                            {% if show_broadcast_workflow or show_broadcast_outputs %}
                             <li><hr class="dropdown-divider"></li>
+                            {% endif %}
                             <li><h6 class="dropdown-header">Inputs & Sources</h6></li>
                             <li>
                                 <a class="dropdown-item" href="{{ url_for('radio_settings') }}">
@@ -142,12 +184,13 @@
                                     <i class="fas fa-microphone"></i> Audio Streams
                                 </a>
                             </li>
+                            {% endif %}
                         </ul>
                     </li>
                     {% endif %}
 
                     <!-- Settings & Configuration -->
-                    {% if is_authenticated %}
+                    {% if show_settings_dropdown %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle"
                            href="#"
@@ -159,7 +202,9 @@
                             <span>Settings</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="settingsDropdown">
+                            {% if show_settings_configuration %}
                             <li><h6 class="dropdown-header">System Configuration</h6></li>
+                            {% if can_view_system_config %}
                             <li>
                                 <a class="dropdown-item" href="/admin">
                                     <i class="fas fa-sliders"></i> System Settings
@@ -170,9 +215,22 @@
                                     <i class="fas fa-cog"></i> Environment Variables
                                 </a>
                             </li>
+                            {% endif %}
+                            {% if can_manage_config %}
+                            <li>
+                                <a class="dropdown-item" href="/settings/stream-profiles">
+                                    <i class="fas fa-broadcast-tower"></i> Stream Profiles
+                                </a>
+                            </li>
+                            {% endif %}
+                            {% endif %}
 
+                            {% if show_settings_hardware %}
+                            {% if show_settings_configuration %}
                             <li><hr class="dropdown-divider"></li>
+                            {% endif %}
                             <li><h6 class="dropdown-header">Hardware</h6></li>
+                            {% if can_view_gpio %}
                             <li>
                                 <a class="dropdown-item" href="{{ url_for('gpio_pin_map') }}">
                                     <i class="fas fa-map"></i> GPIO Pin Map
@@ -183,29 +241,32 @@
                                     <i class="fas fa-microchip"></i> GPIO Control
                                 </a>
                             </li>
+                            {% endif %}
+                            {% endif %}
 
+                            {% if show_settings_security %}
+                            {% if show_settings_configuration or show_settings_hardware %}
                             <li><hr class="dropdown-divider"></li>
-                            <li><h6 class="dropdown-header">Streaming</h6></li>
-                            <li>
-                                <a class="dropdown-item" href="/settings/stream-profiles">
-                                    <i class="fas fa-broadcast-tower"></i> Stream Profiles
-                                </a>
-                            </li>
-
-                            <li><hr class="dropdown-divider"></li>
+                            {% endif %}
                             <li><h6 class="dropdown-header">Security</h6></li>
+                            {% if can_view_users %}
                             <li>
                                 <a class="dropdown-item" href="/admin/rbac">
                                     <i class="fas fa-user-shield"></i> Users & Roles
                                 </a>
                             </li>
+                            {% endif %}
+                            {% if can_manage_users %}
                             <li>
                                 <a class="dropdown-item" href="/security/settings">
                                     <i class="fas fa-lock"></i> Security Settings
                                 </a>
                             </li>
+                            {% endif %}
+                            {% endif %}
                         </ul>
                     </li>
+                    {% endif %}
 
                     <!-- Tools & Diagnostics -->
                     <li class="nav-item dropdown">
@@ -230,19 +291,25 @@
                                     <i class="fas fa-heartbeat"></i> Health Dashboard
                                 </a>
                             </li>
+                            {% if is_authenticated and can_view_logs %}
                             <li>
                                 <a class="dropdown-item" href="/logs">
                                     <i class="fas fa-file-alt"></i> System Logs
                                 </a>
                             </li>
+                            {% endif %}
 
+                            {% if show_tools_testing %}
                             <li><hr class="dropdown-divider"></li>
                             <li><h6 class="dropdown-header">Testing & Validation</h6></li>
+                            {% if can_manage_receivers %}
                             <li>
                                 <a class="dropdown-item" href="{{ url_for('audio_tests_dashboard') }}">
                                     <i class="fas fa-flask"></i> Audio Tests
                                 </a>
                             </li>
+                            {% endif %}
+                            {% if can_view_alerts %}
                             <li>
                                 <a class="dropdown-item" href="{{ url_for('alert_verification') }}">
                                     <i class="fas fa-shield-check"></i> Alert Verification
@@ -253,20 +320,29 @@
                                     <i class="fas fa-clipboard-check"></i> FCC Compliance
                                 </a>
                             </li>
+                            {% endif %}
+                            {% endif %}
 
+                            {% if show_tools_data %}
                             <li><hr class="dropdown-divider"></li>
                             <li><h6 class="dropdown-header">Data & Backup</h6></li>
+                            {% if can_export_alerts %}
                             <li>
                                 <a class="dropdown-item" href="/export/alerts">
                                     <i class="fas fa-download"></i> Export Data
                                 </a>
                             </li>
+                            {% endif %}
+                            {% if can_manage_config %}
                             <li>
                                 <a class="dropdown-item" href="/admin/backups">
                                     <i class="fas fa-database"></i> Backup Manager
                                 </a>
                             </li>
+                            {% endif %}
+                            {% endif %}
 
+                            {% if show_tools_analytics %}
                             <li><hr class="dropdown-divider"></li>
                             <li><h6 class="dropdown-header">Analytics & Reporting</h6></li>
                             <li>
@@ -279,19 +355,23 @@
                                     <i class="fas fa-chart-bar"></i> Alert Statistics
                                 </a>
                             </li>
+                            {% if can_view_logs %}
                             <li>
                                 <a class="dropdown-item" href="/admin/audit-logs">
                                     <i class="fas fa-clipboard-list"></i> Audit Logs
                                 </a>
                             </li>
+                            {% endif %}
+                            {% if can_manage_config %}
                             <li>
                                 <a class="dropdown-item" href="/admin/operations">
                                     <i class="fas fa-cogs"></i> Operations Report
                                 </a>
                             </li>
+                            {% endif %}
+                            {% endif %}
                         </ul>
                     </li>
-                    {% endif %}
 
                     <!-- Help & Documentation -->
                     <li class="nav-item dropdown">
