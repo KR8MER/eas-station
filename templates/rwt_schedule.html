@@ -1,0 +1,340 @@
+{% extends "base.html" %}
+
+{% block title %}RWT Schedule Configuration - EAS Station{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <h1 class="mb-4">
+                <i class="fas fa-calendar-alt me-2"></i>
+                RWT Schedule Configuration
+            </h1>
+
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Required Weekly Test (RWT) Automatic Scheduling</strong>
+                <p class="mb-0 mt-2">
+                    Configure automatic RWT broadcasts to run on specific days and time windows.
+                    RWT tests contain only SAME headers and EOM tones - no TTS narration or attention tones.
+                </p>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Schedule Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <form id="rwtConfigForm">
+                        <!-- Enable/Disable -->
+                        <div class="mb-4">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="enabledCheckbox">
+                                <label class="form-check-label" for="enabledCheckbox">
+                                    <strong>Enable Automatic RWT Broadcasts</strong>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Days of Week -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Days of Week</label>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input day-checkbox" type="checkbox" value="0" id="day-monday">
+                                        <label class="form-check-label" for="day-monday">Monday</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input day-checkbox" type="checkbox" value="1" id="day-tuesday">
+                                        <label class="form-check-label" for="day-tuesday">Tuesday</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input day-checkbox" type="checkbox" value="2" id="day-wednesday">
+                                        <label class="form-check-label" for="day-wednesday">Wednesday</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input day-checkbox" type="checkbox" value="3" id="day-thursday">
+                                        <label class="form-check-label" for="day-thursday">Thursday</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input day-checkbox" type="checkbox" value="4" id="day-friday">
+                                        <label class="form-check-label" for="day-friday">Friday</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input day-checkbox" type="checkbox" value="5" id="day-saturday">
+                                        <label class="form-check-label" for="day-saturday">Saturday</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input day-checkbox" type="checkbox" value="6" id="day-sunday">
+                                        <label class="form-check-label" for="day-sunday">Sunday</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Time Window -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Time Window</label>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label class="form-label">Start Time</label>
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <input type="number" class="form-control" id="startHour" min="0" max="23" value="8" required>
+                                            <small class="text-muted">Hour (0-23)</small>
+                                        </div>
+                                        <div class="col-6">
+                                            <input type="number" class="form-control" id="startMinute" min="0" max="59" value="0" required>
+                                            <small class="text-muted">Minute (0-59)</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">End Time</label>
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <input type="number" class="form-control" id="endHour" min="0" max="23" value="16" required>
+                                            <small class="text-muted">Hour (0-23)</small>
+                                        </div>
+                                        <div class="col-6">
+                                            <input type="number" class="form-control" id="endMinute" min="0" max="59" value="0" required>
+                                            <small class="text-muted">Minute (0-59)</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SAME Codes -->
+                        <div class="mb-4">
+                            <label for="sameCodesInput" class="form-label fw-bold">SAME/FIPS Codes</label>
+                            <textarea class="form-control font-monospace" id="sameCodesInput" rows="3" placeholder="Enter FIPS codes separated by commas or newlines&#10;Example: 039003, 039039, 039063">{{ default_same_codes|join(', ') }}</textarea>
+                            <small class="text-muted">Default: Ohio counties (Allen, Defiance, Hancock, Henry, Paulding, Van Wert, Wood)</small>
+                        </div>
+
+                        <!-- Originator -->
+                        <div class="mb-4">
+                            <label for="originatorSelect" class="form-label fw-bold">Originator Code</label>
+                            <select class="form-select" id="originatorSelect">
+                                <option value="WXR">WXR - National Weather Service</option>
+                                <option value="EAS">EAS - EAS Participant</option>
+                                <option value="CIV">CIV - Civil Authorities</option>
+                                <option value="PEP">PEP - Primary Entry Point</option>
+                            </select>
+                        </div>
+
+                        <!-- Station ID -->
+                        <div class="mb-4">
+                            <label for="stationIdInput" class="form-label fw-bold">Station Identifier</label>
+                            <input type="text" class="form-control font-monospace" id="stationIdInput" maxlength="8" value="EASNODES" required>
+                            <small class="text-muted">8 characters max, auto-padded with spaces</small>
+                        </div>
+
+                        <!-- Buttons -->
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-between">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>Save Configuration
+                            </button>
+                            <button type="button" class="btn btn-secondary" id="testRWTBtn">
+                                <i class="fas fa-broadcast-tower me-2"></i>Send Test RWT Now
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Last Run Info -->
+            <div class="card mt-4" id="lastRunCard" style="display: none;">
+                <div class="card-header">
+                    <h5 class="mb-0">Last Automatic Run</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Time:</strong> <span id="lastRunTime">-</span>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Status:</strong> <span id="lastRunStatus">-</span>
+                        </div>
+                    </div>
+                    <div class="mt-2" id="lastRunDetails"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('rwtConfigForm');
+        const testBtn = document.getElementById('testRWTBtn');
+
+        // Load configuration
+        loadConfiguration();
+
+        // Save configuration
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            saveConfiguration();
+        });
+
+        // Test RWT
+        testBtn.addEventListener('click', function() {
+            sendTestRWT();
+        });
+
+        function loadConfiguration() {
+            fetch('/api/rwt-schedule/config', {
+                headers: {
+                    'X-CSRF-Token': window.CSRF_TOKEN
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.config) {
+                    const config = data.config;
+
+                    // Enable/disable
+                    document.getElementById('enabledCheckbox').checked = config.enabled || false;
+
+                    // Days of week
+                    document.querySelectorAll('.day-checkbox').forEach(cb => {
+                        cb.checked = (config.days_of_week || []).includes(parseInt(cb.value));
+                    });
+
+                    // Time window
+                    document.getElementById('startHour').value = config.start_hour || 8;
+                    document.getElementById('startMinute').value = config.start_minute || 0;
+                    document.getElementById('endHour').value = config.end_hour || 16;
+                    document.getElementById('endMinute').value = config.end_minute || 0;
+
+                    // SAME codes
+                    if (config.same_codes && config.same_codes.length > 0) {
+                        document.getElementById('sameCodesInput').value = config.same_codes.join(', ');
+                    }
+
+                    // Originator
+                    document.getElementById('originatorSelect').value = config.originator || 'WXR';
+
+                    // Station ID
+                    document.getElementById('stationIdInput').value = config.station_id || 'EASNODES';
+
+                    // Last run info
+                    if (config.last_run_at) {
+                        document.getElementById('lastRunCard').style.display = 'block';
+                        document.getElementById('lastRunTime').textContent = new Date(config.last_run_at).toLocaleString();
+                        document.getElementById('lastRunStatus').textContent = config.last_run_status || '-';
+
+                        const statusSpan = document.getElementById('lastRunStatus');
+                        statusSpan.className = config.last_run_status === 'success' ? 'badge bg-success' : 'badge bg-danger';
+
+                        if (config.last_run_details) {
+                            const details = typeof config.last_run_details === 'string' ? JSON.stringify(config.last_run_details) : JSON.stringify(config.last_run_details, null, 2);
+                            document.getElementById('lastRunDetails').innerHTML = `<pre class="mt-2 mb-0">${details}</pre>`;
+                        }
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Failed to load configuration:', error);
+                alert('Failed to load configuration');
+            });
+        }
+
+        function saveConfiguration() {
+            // Collect form data
+            const enabled = document.getElementById('enabledCheckbox').checked;
+
+            const daysOfWeek = Array.from(document.querySelectorAll('.day-checkbox:checked'))
+                .map(cb => parseInt(cb.value));
+
+            const startHour = parseInt(document.getElementById('startHour').value);
+            const startMinute = parseInt(document.getElementById('startMinute').value);
+            const endHour = parseInt(document.getElementById('endHour').value);
+            const endMinute = parseInt(document.getElementById('endMinute').value);
+
+            const sameCodesText = document.getElementById('sameCodesInput').value;
+            const sameCodes = sameCodesText.split(/[\s,]+/)
+                .map(code => code.trim())
+                .filter(code => code.length > 0)
+                .map(code => code.padStart(6, '0').substring(0, 6));
+
+            const originator = document.getElementById('originatorSelect').value;
+            const stationId = document.getElementById('stationIdInput').value;
+
+            const data = {
+                enabled,
+                days_of_week: daysOfWeek,
+                start_hour: startHour,
+                start_minute: startMinute,
+                end_hour: endHour,
+                end_minute: endMinute,
+                same_codes: sameCodes,
+                originator,
+                station_id: stationId
+            };
+
+            fetch('/api/rwt-schedule/config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': window.CSRF_TOKEN
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Configuration saved successfully!');
+                    loadConfiguration();
+                } else {
+                    alert('Failed to save configuration: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Failed to save configuration:', error);
+                alert('Failed to save configuration');
+            });
+        }
+
+        function sendTestRWT() {
+            if (!confirm('Send a test RWT broadcast now?')) {
+                return;
+            }
+
+            testBtn.disabled = true;
+            testBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Sending...';
+
+            fetch('/api/rwt-schedule/test', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-Token': window.CSRF_TOKEN
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                testBtn.disabled = false;
+                testBtn.innerHTML = '<i class="fas fa-broadcast-tower me-2"></i>Send Test RWT Now';
+
+                if (data.success) {
+                    alert('Test RWT sent successfully!\nIdentifier: ' + (data.result.identifier || 'Unknown'));
+                    loadConfiguration();
+                } else {
+                    alert('Failed to send test RWT: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Failed to send test RWT:', error);
+                testBtn.disabled = false;
+                testBtn.innerHTML = '<i class="fas fa-broadcast-tower me-2"></i>Send Test RWT Now';
+                alert('Failed to send test RWT');
+            });
+        }
+    });
+</script>
+{% endblock %}
