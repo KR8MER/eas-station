@@ -357,11 +357,44 @@
         align-items: center;
         justify-content: space-between;
         gap: 0.5rem;
+        flex-wrap: wrap;
     }
 
     .map-card .card-body {
         padding: 0;
         overflow: hidden;
+    }
+
+    .map-refresh-meta {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0.2rem;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+    }
+
+    .map-refresh-meta .meta-row {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        text-align: right;
+    }
+
+    .map-refresh-meta .status-pill {
+        background: rgba(32, 72, 133, 0.12);
+        border-radius: 999px;
+        text-transform: uppercase;
+        font-size: 0.68rem;
+        letter-spacing: 0.08em;
+        padding: 0.1rem 0.6rem;
+        color: var(--primary-color);
+        font-weight: 600;
+    }
+
+    .map-refresh-meta strong {
+        color: var(--text-color);
+        font-weight: 600;
     }
 
     .loading-message {
@@ -524,6 +557,16 @@
         .metric-value {
             font-size: 1.35rem;
         }
+
+        .map-refresh-meta {
+            align-items: flex-start;
+            width: 100%;
+        }
+
+        .map-refresh-meta .meta-row {
+            justify-content: flex-start;
+            text-align: left;
+        }
     }
 
 .dashboard-sidebar {
@@ -554,7 +597,7 @@
             <p class="page-subtitle">Stay aware of CAP activity across {{ county_name }}{% if state_code %}, {{ state_code }}{% endif %}.</p>
         </div>
         <div class="page-header-actions">
-            <button class="btn btn-light text-primary d-inline-flex align-items-center" onclick="refreshData()">
+            <button class="btn btn-light text-primary d-inline-flex align-items-center" onclick="refreshData({ includeBoundaries: true, reason: 'Manual refresh' })">
                 <i class="fas fa-sync-alt" id="refresh-icon"></i>
                 <span>Refresh Map</span>
             </button>
@@ -742,11 +785,27 @@
         <div class="col-lg-8 col-xxl-9 order-1 order-lg-2 d-flex flex-column gap-4">
             <div class="card map-card shadow-sm">
                 <div class="card-header">
-                    <h5 class="mb-0 d-flex align-items-center gap-2">
-                        <i class="fas fa-map text-primary"></i>
-                        <span>Interactive Emergency Alert Map</span>
-                    </h5>
-                    <span class="badge bg-success" id="map-status-badge">Loading...</span>
+                    <div class="d-flex align-items-center gap-2">
+                        <h5 class="mb-0 d-flex align-items-center gap-2">
+                            <i class="fas fa-map text-primary"></i>
+                            <span>Interactive Emergency Alert Map</span>
+                        </h5>
+                        <span class="badge bg-success" id="map-status-badge">Loading...</span>
+                    </div>
+                    <div class="map-refresh-meta" aria-live="polite">
+                        <div class="meta-row">
+                            <i class="fas fa-clock-rotate-left"></i>
+                            <span>Last updated</span>
+                            <strong id="map-data-last-updated">--</strong>
+                        </div>
+                        <div class="meta-row">
+                            <span class="status-pill" id="map-refresh-source">Waiting</span>
+                            <div>
+                                <i class="fas fa-arrows-rotate"></i>
+                                <span>Next refresh in <strong id="map-refresh-countdown">--</strong></span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-body">
                     <div id="map">
@@ -841,6 +900,105 @@ const MAP_CENTER = [
 const MAP_ZOOM = Number(LOCATION_SETTINGS.map_default_zoom ?? 10) || 10;
 const LOCATION_LABEL = `${(LOCATION_SETTINGS.county_name || 'Configured Location')}${LOCATION_SETTINGS.state_code ? ', ' + LOCATION_SETTINGS.state_code : ''}`;
 
+const AUTO_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+let autoRefreshTimerId = null;
+let refreshCountdownIntervalId = null;
+let nextAutoRefreshAt = null;
+let lastRefreshTimestamp = null;
+let lastRefreshSource = 'Waiting';
+let isMapReady = false;
+let isRefreshInFlight = false;
+
+function updateLastUpdateDisplays() {
+    if (!lastRefreshTimestamp) {
+        return;
+    }
+
+    const formattedTime = lastRefreshTimestamp.toLocaleTimeString();
+    const metricElement = document.getElementById('last-update');
+    const headerElement = document.getElementById('map-data-last-updated');
+    const sourceElement = document.getElementById('map-refresh-source');
+
+    if (metricElement) {
+        metricElement.textContent = formattedTime;
+    }
+
+    if (headerElement) {
+        headerElement.textContent = formattedTime;
+        headerElement.setAttribute('title', lastRefreshTimestamp.toLocaleString());
+    }
+
+    if (sourceElement) {
+        sourceElement.textContent = lastRefreshSource;
+    }
+}
+
+function renderRefreshCountdown() {
+    const countdownElement = document.getElementById('map-refresh-countdown');
+    if (!countdownElement) {
+        return;
+    }
+
+    if (isRefreshInFlight) {
+        countdownElement.textContent = 'Refreshing…';
+        return;
+    }
+
+    if (!nextAutoRefreshAt) {
+        countdownElement.textContent = '—';
+        return;
+    }
+
+    const remaining = Math.max(0, nextAutoRefreshAt - Date.now());
+    if (remaining === 0) {
+        countdownElement.textContent = 'Refreshing…';
+        return;
+    }
+
+    const minutes = Math.floor(remaining / 60000);
+    const seconds = Math.floor((remaining % 60000) / 1000);
+    countdownElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+function startCountdownTicker() {
+    if (refreshCountdownIntervalId) {
+        clearInterval(refreshCountdownIntervalId);
+    }
+    refreshCountdownIntervalId = setInterval(renderRefreshCountdown, 1000);
+}
+
+function markRefreshInProgress() {
+    const countdownElement = document.getElementById('map-refresh-countdown');
+    nextAutoRefreshAt = null;
+    isRefreshInFlight = true;
+    if (countdownElement) {
+        countdownElement.textContent = 'Refreshing…';
+    }
+}
+
+function scheduleAutoRefresh(delayMs = AUTO_REFRESH_INTERVAL_MS) {
+    if (!isMapReady) {
+        return;
+    }
+    isRefreshInFlight = false;
+    if (autoRefreshTimerId) {
+        clearTimeout(autoRefreshTimerId);
+        autoRefreshTimerId = null;
+    }
+    nextAutoRefreshAt = Date.now() + delayMs;
+    renderRefreshCountdown();
+    startCountdownTicker();
+    autoRefreshTimerId = setTimeout(() => {
+        refreshData({ reason: 'Automatic refresh', showSpinner: false });
+    }, delayMs);
+}
+
+function markDataRefreshed(source = 'Automatic refresh') {
+    lastRefreshTimestamp = new Date();
+    lastRefreshSource = source;
+    updateLastUpdateDisplays();
+}
+
 // Boundary helpers
 function sanitizeBoundaryType(value) {
     if (!value) {
@@ -900,7 +1058,7 @@ function getBoundaryMetadata(rawType, displayType, colorHint) {
 }
 
 // Map initialization
-function initMap() {
+async function initMap() {
     try {
         console.log(`🗺️ Initializing Leaflet map for ${LOCATION_LABEL}...`);
 
@@ -927,9 +1085,13 @@ function initMap() {
         updateMapStatus('Ready', 'success');
 
         // Load initial data
-        loadAlerts();
-        loadBoundaries();
-        updateSystemStatus();
+        await Promise.all([
+            loadAlerts(),
+            loadBoundaries(),
+            updateSystemStatus()
+        ]);
+        isMapReady = true;
+        markDataRefreshed('Initial load');
 
         // Set up event listeners
         setupEventListeners();
@@ -1445,12 +1607,6 @@ async function updateSystemStatus() {
     } catch (error) {
         console.warn('Could not fetch system status:', error);
     }
-
-    // Update timestamp
-    const element = document.getElementById('last-update');
-    if (element) {
-        element.textContent = new Date().toLocaleTimeString();
-    }
 }
 
 // Event handlers
@@ -1487,27 +1643,50 @@ function setupEventListeners() {
 }
 
 // Action functions
-async function refreshData() {
+async function refreshData(options = {}) {
+    if (!isMapReady) {
+        console.warn('Map is not ready yet; skipping refresh request.');
+        return;
+    }
+
+    const {
+        includeBoundaries = false,
+        reason = 'Manual refresh',
+        showSpinner = true
+    } = options;
     const refreshBtn = document.getElementById('refresh-icon');
-    if (refreshBtn) {
+    if (refreshBtn && showSpinner) {
         refreshBtn.classList.add('fa-spin');
     }
 
+    if (autoRefreshTimerId) {
+        clearTimeout(autoRefreshTimerId);
+        autoRefreshTimerId = null;
+    }
+    markRefreshInProgress();
+
     try {
-        await Promise.all([
+        const tasks = [
             loadAlerts(),
             updateSystemStatus()
-        ]);
+        ];
+
+        if (includeBoundaries) {
+            tasks.push(loadBoundaries());
+        }
+
+        await Promise.all(tasks);
+        markDataRefreshed(reason);
         showToast('Map data refreshed successfully', 'success');
     } catch (error) {
         showToast('Failed to refresh data', 'error');
-    }
-
-    setTimeout(() => {
-        if (refreshBtn) {
+        console.error('Refresh failed:', error);
+    } finally {
+        scheduleAutoRefresh();
+        if (refreshBtn && showSpinner) {
             refreshBtn.classList.remove('fa-spin');
         }
-    }, 2000);
+    }
 }
 
 function centerOnConfiguredLocation() {
@@ -1787,24 +1966,21 @@ function showMapError(message) {
 }
 
 // Initialize everything when page loads
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     console.log('📄 Interactive map page loaded');
 
     try {
-        initMap();
-
-        // Auto-refresh every 5 minutes
-        setInterval(() => {
-            loadAlerts();
-            updateSystemStatus();
-        }, 300000);
+        await initMap();
+        if (isMapReady) {
+            scheduleAutoRefresh();
+        }
 
         // Keyboard shortcuts
         document.addEventListener('keydown', function(e) {
             if (e.key === 'r' || e.key === 'R') {
                 if (!e.ctrlKey && !e.metaKey) {
                     e.preventDefault();
-                    refreshData();
+                    refreshData({ includeBoundaries: true, reason: 'Keyboard shortcut' });
                 }
             }
         });
@@ -1841,7 +2017,7 @@ window.mapDebug = {
 
     refreshAll: function() {
         console.log('🔄 Refreshing all map data...');
-        refreshData();
+        refreshData({ includeBoundaries: true, reason: 'Debug refresh' });
     },
 
     inspectMap: function() {

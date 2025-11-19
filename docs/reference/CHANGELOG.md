@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.11.7] - 2025-11-18
+### Changed
+- Added a refresh-status meta block on the dashboard map card that now shows the last update time, refresh source, and a live
+  countdown so operators can see when the next automatic poll will fire without scrolling.
+- Replaced the fixed interval timer with a scheduler that pauses during manual refreshes, resumes after success or failure, and
+  prevents overlapping automatic refresh attempts.
+- Updated the dashboard refresh action so manual, automatic, keyboard, and debug triggers all share the same code path,
+  optionally reload boundary layers, and correctly update the "Last Update" metric and header badge.
+
 ## [2.11.6] - 2025-11-23
 ### Removed
 - Dropped the `DEFAULT_AREA_TERMS` environment variable, the accompanying admin editor entry, and the template references so
