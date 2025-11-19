@@ -2,15 +2,32 @@
 
 {% block title %}Sign In - EAS Station{% endblock %}
 
+{% block meta %}
+<meta name="robots" content="noindex, noarchive, nosnippet">
+<meta name="googlebot" content="noindex, noarchive, nosnippet">
+<meta name="description" content="Secure administrator sign in for the official EAS Station management console.">
+<link rel="canonical" href="{{ request.url_root.rstrip('/') }}/login">
+{% endblock %}
+
 {% block content %}
 <div class="container py-5">
-    <div class="row justify-content-center">
-        <div class="col-md-6 col-lg-5">
+    <div class="row justify-content-center g-4 align-items-start">
+        <div class="col-md-6 col-lg-5 order-2 order-md-1">
             <div class="card shadow-sm border-0">
                 <div class="card-header bg-primary text-white">
                     <h4 class="mb-0"><i class="fas fa-user-shield"></i> Administrator Sign In</h4>
                 </div>
                 <div class="card-body">
+                    <div class="alert alert-warning d-flex align-items-start" role="alert" id="login-security-notice">
+                        <i class="fas fa-lock me-2 mt-1"></i>
+                        <div>
+                            <strong>Authorized personnel only.</strong>
+                            Access is limited to vetted EAS Station administrators. Suspicious activity is logged and may be
+                            reported to the security team.
+                            <span class="d-block small text-muted">Verify the URL shows your organization's official certificate
+                                before signing in.</span>
+                        </div>
+                    </div>
                     {% if error %}
                     <div class="alert alert-danger" role="alert">
                         <i class="fas fa-exclamation-triangle"></i> {{ error }}
@@ -25,23 +42,30 @@
                         <code>flask create-admin-user</code> inside the app container.
                     </div>
                     {% endif %}
-                    <form method="post" class="needs-validation" novalidate>
+                    <form method="post" class="needs-validation" novalidate aria-describedby="login-security-notice">
                         <input type="hidden" name="next" value="{{ next }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <div class="mb-3">
                             <label for="username" class="form-label">Username</label>
-                            <input type="text" class="form-control" id="username" name="username" required autofocus>
+                            <input type="text" class="form-control" id="username" name="username" required autofocus
+                                   autocomplete="username" inputmode="text">
                             <div class="invalid-feedback">Please enter your username.</div>
                         </div>
                         <div class="mb-3">
                             <label for="password" class="form-label">Password</label>
-                            <input type="password" class="form-control" id="password" name="password" required>
+                            <input type="password" class="form-control" id="password" name="password" required
+                                   autocomplete="current-password">
                             <div class="invalid-feedback">Please enter your password.</div>
                         </div>
                         <button type="submit" class="btn btn-primary w-100">
                             <i class="fas fa-sign-in-alt"></i> Sign In
                         </button>
                     </form>
+                    <p class="text-muted small mt-3 mb-0">
+                        By signing in you acknowledge acceptance of the
+                        <a href="{{ url_for('terms_page') }}" class="link-secondary">Terms of Use</a> and
+                        <a href="{{ url_for('privacy_page') }}" class="link-secondary">Privacy Policy</a>.
+                    </p>
                 </div>
             </div>
             <p class="text-center text-muted mt-3">
@@ -52,6 +76,43 @@
                     <i class="fas fa-wrench me-1"></i>Launch environment setup wizard
                 </a>
             </p>
+        </div>
+        <div class="col-md-6 col-lg-5 order-1 order-md-2">
+            <div class="card h-100 border-info shadow-sm">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-shield-alt me-2"></i>Trust & Safety Checklist</h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-3">This official EAS Station console prioritizes user safety and transparency. Review the quick
+                        checklist below before entering credentials:</p>
+                    <ul class="list-unstyled mb-4">
+                        <li class="d-flex mb-2">
+                            <i class="fas fa-certificate text-success me-2 mt-1"></i>
+                            <span>Confirm the domain matches your deployment and the browser reports a valid TLS certificate.</span>
+                        </li>
+                        <li class="d-flex mb-2">
+                            <i class="fas fa-fingerprint text-success me-2 mt-1"></i>
+                            <span>Only administrators provisioned inside EAS Station should sign in. Never reuse credentials from
+                                other services.</span>
+                        </li>
+                        <li class="d-flex mb-2">
+                            <i class="fas fa-user-lock text-success me-2 mt-1"></i>
+                            <span>Logins are audited, session timeouts are enforced, and repeated failures trigger security
+                                alerts.</span>
+                        </li>
+                        <li class="d-flex">
+                            <i class="fas fa-envelope text-success me-2 mt-1"></i>
+                            <span>If you suspect phishing or certificate issues, alert your organization immediately using the
+                                established incident response channel.</span>
+                        </li>
+                    </ul>
+                    <div class="alert alert-info" role="alert">
+                        <i class="fas fa-life-ring me-2"></i>
+                        Need help verifying authenticity? Visit the <a href="{{ url_for('help_page') }}" class="alert-link">Help
+                            Center</a> for full security guidance.
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
