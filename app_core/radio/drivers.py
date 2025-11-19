@@ -293,9 +293,9 @@ class _SoapySDRReceiver(ReceiverInterface):
         try:
             device = SoapySDR.Device(args)
         except Exception as exc:
-            raise RuntimeError(
-                f"Unable to open SoapySDR device for driver '{self.driver_hint}': {exc}"
-            ) from exc
+            device = self._retry_device_open_without_serial(
+                SoapySDR, args, exc
+            )
 
         try:
             device.setSampleRate(SoapySDR.SOAPY_SDR_RX, channel, self.config.sample_rate)
@@ -317,6 +317,57 @@ class _SoapySDRReceiver(ReceiverInterface):
             raise
 
         return _SoapySDRHandle(device=device, stream=stream, sdr_module=SoapySDR, numpy_module=numpy)
+
+    def _retry_device_open_without_serial(
+        self,
+        sdr_module,
+        original_args: Dict[str, str],
+        original_exc: Exception,
+    ) -> object:
+        serial = original_args.get("serial")
+        if not serial:
+            raise RuntimeError(
+                f"Unable to open SoapySDR device for driver '{self.driver_hint}': {original_exc}"
+            ) from original_exc
+
+        fallback_args = dict(original_args)
+        fallback_args.pop("serial", None)
+        if not fallback_args.get("driver"):
+            fallback_args["driver"] = self.driver_hint
+        if "device_id" not in fallback_args and self.config.channel is not None:
+            fallback_args["device_id"] = str(self.config.channel)
+
+        self._emit_event(
+            "warning",
+            "Falling back to autodetected SDR device after serial open failure",
+            details={
+                "driver": self.driver_hint,
+                "serial": serial,
+                "error": str(original_exc),
+            },
+        )
+        self._interface_logger.warning(
+            "Failed to open SDR %s with serial %s (%s); retrying without serial filter",
+            self.driver_hint or "unknown",
+            serial,
+            original_exc,
+        )
+
+        try:
+            device = sdr_module.Device(fallback_args)
+        except Exception as fallback_exc:
+            raise RuntimeError(
+                "Unable to open SoapySDR device for driver "
+                f"'{self.driver_hint}' using serial '{serial}': {original_exc}; "
+                f"retry without serial also failed: {fallback_exc}"
+            ) from fallback_exc
+
+        self._emit_event(
+            "info",
+            "Opened SDR device without serial filter after fallback",
+            details={"driver": self.driver_hint, "serial": serial},
+        )
+        return device
 
     def _teardown_handle(self, handle: Optional[_SoapySDRHandle] = None) -> None:
         if handle is None:
