@@ -165,6 +165,8 @@ tracks releases under the 2.x series.
   - Documented complete analytics system architecture and usage in `app_core/analytics/README.md`
   - Published comprehensive compliance reporting playbook in `docs/compliance/reporting_playbook.md` with workflows for weekly/monthly test verification, performance monitoring, anomaly investigation, and regulatory audit preparation
 ### Fixed
+- Hardened backup API endpoints by validating backup names to block path traversal before
+  touching the filesystem.
 - Removed the CAP poller's area-term fallback so `/alerts` only surfaces entries that explicitly name the configured SAME or
   UGC codes, eliminating false positives from neighboring county descriptions.
 - Added comprehensive audio ingest pipeline for unified capture from SDR, ALSA, and file sources

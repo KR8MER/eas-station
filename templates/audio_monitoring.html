@@ -1354,6 +1354,15 @@ function startLevelPolling() {
     levelIntervalHandle = setInterval(updateLevelMeters, 1000);
 }
 
+function startLevelPolling() {
+    if (levelIntervalHandle) {
+        clearInterval(levelIntervalHandle);
+    }
+
+    updateLevelMeters();
+    levelIntervalHandle = setInterval(updateLevelMeters, 1000);
+}
+
 // Load sources on page load
 document.addEventListener('DOMContentLoaded', function() {
     renderStreamModeControls();
