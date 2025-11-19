@@ -97,6 +97,13 @@ def parse_nws_datetime(dt_string):
 def format_local_datetime(dt, include_utc=True):
     return util_format_local_datetime(dt, include_utc=include_utc)
 
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on", "t", "y"}
+
 # =======================================================================================
 # Optional LED controller import
 # =======================================================================================
@@ -371,10 +378,13 @@ class CAPPoller:
         led_sign_ip: str = None,
         led_sign_port: int = 10001,
         cap_endpoints: Optional[List[str]] = None,
+        *,
+        enable_radio_captures: bool = False,
     ):
         self.database_url = database_url
         self.led_sign_ip = led_sign_ip
         self.led_sign_port = led_sign_port
+        self.enable_radio_captures = enable_radio_captures
 
         self.logger = logging.getLogger(__name__)
 
@@ -462,7 +472,13 @@ class CAPPoller:
             self.logger.warning("Invalid RADIO_CAPTURE_DURATION; defaulting to 30 seconds")
             self.radio_capture_duration = 30.0
 
-        self._setup_radio_manager()
+        if self.enable_radio_captures:
+            self._setup_radio_manager()
+        else:
+            self.logger.info(
+                "SDR capture requests from the CAP poller are disabled; set CAP_POLLER_ENABLE_RADIO=1 or pass --radio-captures"
+                " to let alert playbacks trigger IQ/PCM recordings."
+            )
 
         # Endpoint configuration & defaults
         self.poller_mode = (os.getenv('CAP_POLLER_MODE', 'NOAA') or 'NOAA').strip().upper()
@@ -2137,6 +2153,18 @@ def main():
     parser.add_argument('--continuous', action='store_true', help='Run continuously')
     parser.add_argument('--interval', type=int, default=int(os.getenv('POLL_INTERVAL_SEC', '300')),
                         help='Polling interval seconds (default: 300, minimum: 30)')
+    radio_default = _env_flag('CAP_POLLER_ENABLE_RADIO', False)
+    parser.add_argument(
+        '--radio-captures',
+        dest='radio_captures',
+        action=argparse.BooleanOptionalAction,
+        default=radio_default,
+        help=(
+            'Let the CAP poller request SDR capture files via RadioManager when alert audio plays. '
+            'This does not manage continuous SDR monitoring. '
+            'Defaults to disabled; set CAP_POLLER_ENABLE_RADIO=1 or pass --radio-captures to enable.'
+        ),
+    )
     parser.add_argument('--cap-endpoint', dest='cap_endpoints', action='append', default=[],
                         help='Custom CAP feed endpoint (repeatable)')
     parser.add_argument('--cap-endpoints', dest='cap_endpoints_csv',
@@ -2168,7 +2196,13 @@ def main():
             if endpoint.strip()
         ])
 
-    poller = CAPPoller(args.database_url, args.led_ip, args.led_port, cap_endpoints=cli_endpoints or None)
+    poller = CAPPoller(
+        args.database_url,
+        args.led_ip,
+        args.led_port,
+        cap_endpoints=cli_endpoints or None,
+        enable_radio_captures=args.radio_captures,
+    )
 
     try:
         if args.fix_geometry:
