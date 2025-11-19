@@ -224,7 +224,7 @@ def register(app: Flask, logger) -> None:
                 return jsonify({"error": "Screen not found"}), 404
 
             # Render screen
-            renderer = ScreenRenderer()
+            renderer = ScreenRenderer(allow_preview_samples=True)
             rendered = renderer.render_screen(screen.to_dict())
 
             if not rendered:
@@ -249,7 +249,7 @@ def register(app: Flask, logger) -> None:
                 return jsonify({"error": "Screen not found"}), 404
 
             # Render screen
-            renderer = ScreenRenderer()
+            renderer = ScreenRenderer(allow_preview_samples=False)
             rendered = renderer.render_screen(screen.to_dict())
 
             if not rendered:

@@ -358,30 +358,34 @@ class ArgonOLEDController:
                 # Clamp dimensions to display
                 width = min(width, self.width - x)
                 height = min(height, self.height - y)
+                x2 = min(self.width - 1, x + width - 1)
+                y2 = min(self.height - 1, y + height - 1)
 
                 # Draw border if requested
                 if show_border:
                     draw.rectangle(
-                        [(x, y), (x + width, y + height)],
+                        [(x, y), (x2, y2)],
                         fill=None,
                         outline=draw_colour
                     )
                     # Fill area is inside border
-                    fill_x = x + 1
-                    fill_y = y + 1
-                    fill_max_width = width - 2
-                    fill_height = height - 2
+                    fill_x = min(self.width - 1, x + 1)
+                    fill_y = min(self.height - 1, y + 1)
+                    interior_width = max(0, (x2 - x) - 1)
+                    interior_height = max(0, (y2 - y) - 1)
                 else:
                     fill_x = x
                     fill_y = y
-                    fill_max_width = width
-                    fill_height = height
+                    interior_width = max(0, x2 - x + 1)
+                    interior_height = max(0, y2 - y + 1)
 
                 # Calculate and draw filled portion
-                fill_width = int((value / 100.0) * fill_max_width)
-                if fill_width > 0 and fill_height > 0:
+                fill_width = int((value / 100.0) * interior_width)
+                if fill_width > 0 and interior_height > 0:
+                    fill_x2 = min(self.width - 1, fill_x + fill_width - 1)
+                    fill_y2 = min(self.height - 1, fill_y + interior_height - 1)
                     draw.rectangle(
-                        [(fill_x, fill_y), (fill_x + fill_width, fill_y + fill_height)],
+                        [(fill_x, fill_y), (fill_x2, fill_y2)],
                         fill=draw_colour,
                         outline=None
                     )
@@ -401,16 +405,18 @@ class ArgonOLEDController:
                 # Clamp to display
                 width = min(width, self.width - x)
                 height = min(height, self.height - y)
+                x2 = min(self.width - 1, x + width - 1)
+                y2 = min(self.height - 1, y + height - 1)
 
                 if filled:
                     draw.rectangle(
-                        [(x, y), (x + width, y + height)],
+                        [(x, y), (x2, y2)],
                         fill=draw_colour,
                         outline=None
                     )
                 else:
                     draw.rectangle(
-                        [(x, y), (x + width, y + height)],
+                        [(x, y), (x2, y2)],
                         fill=None,
                         outline=draw_colour
                     )
@@ -739,10 +745,12 @@ class ArgonOLEDController:
         draw = ImageDraw.Draw(image)
 
         # Clamp coordinates to display bounds
+        width = max(1, width)
+        height = max(1, height)
         x1 = max(0, min(self.width - 1, x))
         y1 = max(0, min(self.height - 1, y))
-        x2 = max(0, min(self.width, x + width))
-        y2 = max(0, min(self.height, y + height))
+        x2 = max(x1, min(self.width - 1, x + width - 1))
+        y2 = max(y1, min(self.height - 1, y + height - 1))
 
         if filled:
             draw.rectangle([(x1, y1), (x2, y2)], fill=draw_colour, outline=None)
@@ -799,33 +807,37 @@ class ArgonOLEDController:
         bar_width = max(1, min(self.width - x1, width))
         bar_height = max(1, min(self.height - y1, height))
         value_clamped = max(0.0, min(100.0, value))
+        x2 = min(self.width - 1, x1 + bar_width - 1)
+        y2 = min(self.height - 1, y1 + bar_height - 1)
 
         # Draw border if requested
         if show_border:
             draw.rectangle(
-                [(x1, y1), (x1 + bar_width, y1 + bar_height)],
+                [(x1, y1), (x2, y2)],
                 fill=None,
                 outline=draw_colour
             )
             # Fill area is inside the border
-            fill_x = x1 + 1
-            fill_y = y1 + 1
-            fill_max_width = bar_width - 2
-            fill_height = bar_height - 2
+            fill_x = min(self.width - 1, x1 + 1)
+            fill_y = min(self.height - 1, y1 + 1)
+            interior_width = max(0, (x2 - x1) - 1)
+            interior_height = max(0, (y2 - y1) - 1)
         else:
             # No border, use full dimensions
             fill_x = x1
             fill_y = y1
-            fill_max_width = bar_width
-            fill_height = bar_height
+            interior_width = max(0, x2 - x1 + 1)
+            interior_height = max(0, y2 - y1 + 1)
 
         # Calculate filled portion width
-        fill_width = int((value_clamped / 100.0) * fill_max_width)
+        fill_width = int((value_clamped / 100.0) * interior_width)
 
         # Draw filled portion
-        if fill_width > 0:
+        if fill_width > 0 and interior_height > 0:
+            fill_x2 = min(self.width - 1, fill_x + fill_width - 1)
+            fill_y2 = min(self.height - 1, fill_y + interior_height - 1)
             draw.rectangle(
-                [(fill_x, fill_y), (fill_x + fill_width, fill_y + fill_height)],
+                [(fill_x, fill_y), (fill_x2, fill_y2)],
                 fill=draw_colour,
                 outline=None
             )
