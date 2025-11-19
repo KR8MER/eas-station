@@ -6,12 +6,132 @@ dynamic content populated from API endpoints.
 
 import logging
 import re
-import requests
+from copy import deepcopy
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
+
+import requests
 from urllib.parse import urljoin, urlparse
 
 logger = logging.getLogger(__name__)
+
+
+PREVIEW_SAMPLE_DATA: Dict[str, Any] = {
+    "status": {
+        "status": "healthy",
+        "status_summary": "All systems operational.",
+        "database_status": "connected",
+        "hostname": "wx-station",
+        "ip_address": "192.168.10.25",
+        "active_alerts_count": 0,
+        "uptime_human": "12d 5h",
+        "uptime_seconds": 1_080_000,
+        "system_resources": {
+            "cpu_usage_percent": 43.1,
+            "memory_usage_percent": 58.2,
+            "disk_usage_percent": 71.0,
+            "disk_free_gb": 128,
+        },
+        "last_poll": {
+            "local_timestamp": "2025-11-19T04:47:00-05:00",
+            "status": "success",
+            "alerts_new": 0,
+            "alerts_fetched": 6,
+            "data_source": "NWS-ALPHA",
+        },
+    },
+    "network": {
+        "ip_address": "192.168.10.25",
+        "hostname": "wx-station",
+        "uptime_human": "12d 5h",
+    },
+    "location": {
+        "county_name": "Putnam County",
+        "state_code": "OH",
+    },
+    "temp": {
+        "cpu": 54.2,
+        "cpu_percent": 42.0,
+    },
+    "alerts": {
+        "type": "FeatureCollection",
+        "metadata": {
+            "total_features": 1,
+            "generated_at": "2025-11-19T04:47:00Z",
+        },
+        "features": [
+            {
+                "properties": {
+                    "event": "Flood Warning",
+                    "severity": "Moderate",
+                    "area_desc": "Putnam County, OH",
+                    "expires_iso": "2025-11-19T08:15:00Z",
+                }
+            }
+        ],
+    },
+    "receivers": [
+        {
+            "display_name": "WXJ-93 Airspy",
+            "latest_status": {
+                "signal_strength": -43.0,
+                "locked": True,
+            },
+        }
+    ],
+    "audio": {
+        "total_sources": 2,
+        "left_bar_width": 118,
+        "right_bar_width": 112,
+        "peak_level_db": -3.2,
+        "live_metrics": [
+            {
+                "source_name": "WNCI",
+                "peak_level_db": -3.5,
+                "rms_level_db": -14.2,
+                "silence_detected": False,
+                "buffer_utilization": 24.0,
+                "timestamp": "2025-11-19T04:45:00Z",
+            },
+            {
+                "source_name": "WXJ-93",
+                "peak_level_db": -8.0,
+                "rms_level_db": -19.0,
+                "silence_detected": False,
+                "buffer_utilization": 38.0,
+                "timestamp": "2025-11-19T04:45:00Z",
+            },
+        ],
+    },
+    "audio_health": {
+        "overall_health_score": 96.4,
+        "overall_status": "healthy",
+        "active_sources": 3,
+        "total_sources": 4,
+        "health_records": [
+            {
+                "source_name": "WXJ-93",
+                "is_healthy": True,
+                "silence_detected": False,
+                "health_score": 97.5,
+            }
+        ],
+    },
+    "health": {
+        "system": {
+            "hostname": "wx-station",
+            "uptime_human": "12d 5h",
+        },
+        "network": {
+            "primary_interface_name": "eth0",
+            "primary_ipv4": "192.168.10.25",
+            "primary_interface": {
+                "speed_mbps": 1000,
+                "mtu": 1500,
+            },
+        },
+    },
+}
 
 
 class ScreenRenderer:
@@ -34,6 +154,16 @@ class ScreenRenderer:
         self.base_url = base_url
         self._data_cache: Dict[str, Any] = {}
         self._cache_timestamp: Dict[str, datetime] = {}
+
+    def _get_preview_sample(self, var_name: Optional[str], endpoint: Optional[str]) -> Any:
+        """Return curated preview data when live API calls fail."""
+
+        sample = None
+        if var_name and var_name in PREVIEW_SAMPLE_DATA:
+            sample = PREVIEW_SAMPLE_DATA[var_name]
+        elif endpoint and endpoint in PREVIEW_SAMPLE_DATA:
+            sample = PREVIEW_SAMPLE_DATA[endpoint]
+        return deepcopy(sample) if sample is not None else {}
 
     def _validate_endpoint(self, endpoint: str) -> bool:
         """Validate that an endpoint is safe to fetch from.
@@ -73,21 +203,35 @@ class ScreenRenderer:
         # Validate endpoint to prevent SSRF attacks
         if not self._validate_endpoint(endpoint):
             logger.error(f"Endpoint rejected for security reasons: {endpoint}")
-            self._data_cache[var_name] = {}
+            self._data_cache[var_name] = self._get_preview_sample(var_name, endpoint)
             return
 
+        payload: Any = None
         try:
             url = urljoin(self.base_url, endpoint)
             response = requests.get(url, params=params or {}, timeout=5)
             response.raise_for_status()
+            payload = response.json()
+            if isinstance(payload, dict) and payload.get("error"):
+                logger.warning(
+                    "Endpoint %s responded with error payload: %s",
+                    endpoint,
+                    payload.get("error"),
+                )
+                payload = None
+        except Exception as exc:
+            logger.error(f"Failed to fetch data from {endpoint}: {exc}")
+            payload = None
 
-            self._data_cache[var_name] = response.json()
+        if payload is None:
+            preview_data = self._get_preview_sample(var_name, endpoint)
+            if preview_data:
+                logger.debug("Using preview sample data for %s (%s)", var_name, endpoint)
+            self._data_cache[var_name] = preview_data
+        else:
+            self._data_cache[var_name] = payload
             self._cache_timestamp[var_name] = datetime.utcnow()
-
             logger.debug(f"Fetched data from {endpoint} as '{var_name}'")
-        except Exception as e:
-            logger.error(f"Failed to fetch data from {endpoint}: {e}")
-            self._data_cache[var_name] = {}
 
     def get_nested_value(self, data: Dict, path: str, default: Any = "") -> Any:
         """Get a nested value from a dictionary using dot notation.
@@ -451,6 +595,9 @@ class ScreenRenderer:
                     'y': element.get('y', 0),
                     'font': element.get('font', 'small'),
                     'invert': element.get('invert'),
+                    'align': element.get('align'),
+                    'max_width': element.get('max_width'),
+                    'overflow': element.get('overflow'),
                 })
 
             elif elem_type == 'bar':

@@ -128,6 +128,47 @@ class ArgonOLEDController:
         self._fonts = self._load_fonts(font_path)
         self._last_image: Optional[Image.Image] = None  # Store last displayed image for preview
 
+    @staticmethod
+    def _measure_text(draw: ImageDraw.ImageDraw, font: ImageFont.ImageFont, text: str) -> int:
+        if not text:
+            return 0
+        try:
+            return int(draw.textlength(text, font=font))
+        except AttributeError:
+            return font.getsize(text)[0]
+
+    def _fit_text_to_width(
+        self,
+        draw: ImageDraw.ImageDraw,
+        font: ImageFont.ImageFont,
+        text: str,
+        max_width: Optional[int],
+        overflow_mode: str,
+    ) -> str:
+        if not text or not max_width or max_width <= 0:
+            return text
+
+        width = self._measure_text(draw, font, text)
+        if width <= max_width:
+            return text
+
+        if overflow_mode == "trim":
+            truncated = text
+            while truncated and self._measure_text(draw, font, truncated) > max_width:
+                truncated = truncated[:-1]
+            return truncated
+
+        ellipsis = "\u2026"
+        ellipsis_width = self._measure_text(draw, font, ellipsis)
+        if ellipsis_width >= max_width:
+            return ellipsis
+
+        available = max_width - ellipsis_width
+        truncated = text
+        while truncated and self._measure_text(draw, font, truncated) > available:
+            truncated = truncated[:-1]
+        return f"{truncated}{ellipsis}" if truncated else ellipsis
+
     def _load_fonts(self, font_path: Optional[str]) -> Dict[str, ImageFont.ImageFont]:
         fonts: Dict[str, ImageFont.ImageFont] = {}
         candidate_paths: Iterable[Optional[str]] = (
@@ -261,10 +302,31 @@ class ArgonOLEDController:
                 if not text:
                     continue
 
-                x = max(0, min(self.width - 1, element.get('x', 0)))
+                x_anchor = max(0, min(self.width - 1, int(element.get('x', 0))))
                 y = max(0, min(self.height - 1, element.get('y', 0)))
                 font_key = element.get('font', 'small').lower()
                 font = self._fonts.get(font_key, self._fonts["small"])
+                align = str(element.get('align', 'left') or 'left').lower()
+                overflow_mode = str(element.get('overflow', 'ellipsis') or 'ellipsis').lower()
+                max_width = element.get('max_width')
+                max_width_value = None
+                if isinstance(max_width, (int, float)):
+                    max_width_value = int(max_width)
+                text = self._fit_text_to_width(draw, font, text, max_width_value, overflow_mode)
+                text_width = self._measure_text(draw, font, text)
+                if text_width <= 0:
+                    continue
+
+                if align == 'right':
+                    x = max(0, x_anchor - text_width)
+                elif align == 'center':
+                    x = max(0, min(self.width - 1, x_anchor - text_width // 2))
+                else:
+                    x = x_anchor
+
+                if x + text_width > self.width:
+                    x = max(0, self.width - text_width)
+                y = max(0, min(self.height - 1, y))
 
                 # Check if text would be out of bounds
                 if y >= self.height:
