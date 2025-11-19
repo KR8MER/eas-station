@@ -31,61 +31,63 @@ display_screens = table(
 
 
 # Updated screen templates with professional bar graphs and proper spacing
+# Display: 128x64 pixels
+# Font heights: small=11px, medium=14px
+# Max content: medium header (14px) + 3 lines (11px each) = 59px
 UPDATED_SCREENS = {
     "oled_system_overview": {
         "clear": True,
         "elements": [
-            # Header
-            {"type": "text", "text": "◢ SYSTEM STATUS ◣", "x": 0, "y": 0, "font": "medium", "invert": True},
-            # Date and time
-            {"type": "text", "text": "{now.date}  {now.time_24}", "x": 0, "y": 17, "font": "small"},
-            # CPU bar
-            {"type": "text", "text": "CPU", "x": 0, "y": 30, "font": "small"},
-            {"type": "bar", "value": "{status.system_resources.cpu_usage_percent}", "x": 28, "y": 30, "width": 70, "height": 8},
-            {"type": "text", "text": "{status.system_resources.cpu_usage_percent}%", "x": 102, "y": 30, "font": "small"},
-            # Memory bar
-            {"type": "text", "text": "MEM", "x": 0, "y": 41, "font": "small"},
-            {"type": "bar", "value": "{status.system_resources.memory_usage_percent}", "x": 28, "y": 41, "width": 70, "height": 8},
-            {"type": "text", "text": "{status.system_resources.memory_usage_percent}%", "x": 102, "y": 41, "font": "small"},
-            # Disk bar
-            {"type": "text", "text": "DISK", "x": 0, "y": 52, "font": "small"},
-            {"type": "bar", "value": "{status.system_resources.disk_usage_percent}", "x": 28, "y": 52, "width": 70, "height": 8},
-            {"type": "text", "text": "{status.system_resources.disk_usage_percent}%", "x": 102, "y": 52, "font": "small"},
+            # Header (y=0-13, 14px medium font inverted)
+            {"type": "text", "text": "SYSTEM STATUS", "x": 0, "y": 0, "font": "medium", "invert": True},
+            # CPU bar (y=17-27, bar is 8px centered in 11px line height)
+            {"type": "text", "text": "CPU", "x": 0, "y": 17, "font": "small"},
+            {"type": "bar", "value": "{status.system_resources.cpu_usage_percent}", "x": 26, "y": 18, "width": 76, "height": 7},
+            {"type": "text", "text": "{status.system_resources.cpu_usage_percent}%", "x": 105, "y": 17, "font": "small"},
+            # Memory bar (y=30-40)
+            {"type": "text", "text": "MEM", "x": 0, "y": 30, "font": "small"},
+            {"type": "bar", "value": "{status.system_resources.memory_usage_percent}", "x": 26, "y": 31, "width": 76, "height": 7},
+            {"type": "text", "text": "{status.system_resources.memory_usage_percent}%", "x": 105, "y": 30, "font": "small"},
+            # Disk bar (y=43-53)
+            {"type": "text", "text": "DSK", "x": 0, "y": 43, "font": "small"},
+            {"type": "bar", "value": "{status.system_resources.disk_usage_percent}", "x": 26, "y": 44, "width": 76, "height": 7},
+            {"type": "text", "text": "{status.system_resources.disk_usage_percent}%", "x": 105, "y": 43, "font": "small"},
+            # Date/time footer (y=56-63, only 8px showing but that's ok for small font)
+            {"type": "text", "text": "{now.date} {now.time_24}", "x": 0, "y": 56, "font": "small"},
         ],
     },
     "oled_alert_summary": {
         "clear": True,
         "lines": [
+            # Header (y=0-13)
             {
-                "text": "◢ ALERT STACK ◣",
+                "text": "ALERT STACK",
                 "font": "medium",
                 "wrap": False,
                 "invert": True,
-                "spacing": 2,
                 "y": 0,
             },
+            # Content line 1 (y=17-27)
             {
-                "text": "Active {alerts.metadata.total_features}",
+                "text": "Active: {alerts.metadata.total_features}",
                 "font": "small",
                 "wrap": False,
                 "y": 17,
+                "max_width": 124,
             },
+            # Content line 2 (y=30-40) - event name
             {
                 "text": "{alerts.features[0].properties.event}",
-                "font": "medium",
-                "y": 29,
+                "font": "small",
+                "y": 30,
                 "max_width": 124,
                 "allow_empty": True,
             },
+            # Content line 3 (y=43-53) - severity and area
             {
-                "text": "{alerts.features[0].properties.severity}",
-                "y": 45,
-                "allow_empty": True,
-                "max_width": 124,
-            },
-            {
-                "text": "{alerts.features[0].properties.area_desc}",
-                "y": 56,
+                "text": "{alerts.features[0].properties.severity} - {alerts.features[0].properties.area_desc}",
+                "font": "small",
+                "y": 43,
                 "max_width": 124,
                 "allow_empty": True,
             },
@@ -94,14 +96,15 @@ UPDATED_SCREENS = {
     "oled_network_beacon": {
         "clear": True,
         "lines": [
+            # Header (y=0-13)
             {
-                "text": "◢ NETWORK BEACON ◣",
+                "text": "NETWORK",
                 "font": "medium",
                 "wrap": False,
                 "invert": True,
-                "spacing": 2,
                 "y": 0,
             },
+            # Content line 1 (y=17-27)
             {
                 "text": "{health.system.hostname}",
                 "font": "small",
@@ -109,54 +112,56 @@ UPDATED_SCREENS = {
                 "y": 17,
                 "max_width": 124,
             },
-            {
-                "text": "Up {health.system.uptime_human}",
-                "y": 29,
-                "allow_empty": True,
-            },
-            {
-                "text": "IF {health.network.primary_interface_name}",
-                "y": 41,
-                "allow_empty": True,
-            },
+            # Content line 2 (y=30-40)
             {
                 "text": "{health.network.primary_ipv4}",
-                "y": 52,
+                "font": "small",
+                "y": 30,
                 "allow_empty": True,
+                "max_width": 124,
+            },
+            # Content line 3 (y=43-53)
+            {
+                "text": "Up {health.system.uptime_human}",
+                "font": "small",
+                "y": 43,
+                "allow_empty": True,
+                "max_width": 124,
             },
         ],
     },
     "oled_ipaws_poll_watch": {
         "clear": True,
         "lines": [
+            # Header (y=0-13)
             {
-                "text": "◢ IPAWS POLLER ◣",
+                "text": "IPAWS POLLER",
                 "font": "medium",
                 "wrap": False,
                 "invert": True,
-                "spacing": 2,
                 "y": 0,
             },
+            # Content line 1 (y=17-27)
             {
-                "text": "Last {status.last_poll.local_timestamp}",
+                "text": "Last: {status.last_poll.local_timestamp}",
+                "font": "small",
                 "y": 17,
                 "allow_empty": True,
                 "max_width": 124,
             },
+            # Content line 2 (y=30-40)
             {
-                "text": "Status {status.last_poll.status}",
-                "y": 29,
-                "allow_empty": True,
-            },
-            {
-                "text": "+{status.last_poll.alerts_new} new",
-                "y": 41,
+                "text": "Status: {status.last_poll.status}",
+                "font": "small",
+                "y": 30,
                 "allow_empty": True,
                 "max_width": 124,
             },
+            # Content line 3 (y=43-53)
             {
-                "text": "Source {status.last_poll.data_source}",
-                "y": 52,
+                "text": "+{status.last_poll.alerts_new} new / {status.last_poll.alerts_fetched} fetched",
+                "font": "small",
+                "y": 43,
                 "allow_empty": True,
                 "max_width": 124,
             },
@@ -165,33 +170,35 @@ UPDATED_SCREENS = {
     "oled_audio_health_matrix": {
         "clear": True,
         "lines": [
+            # Header (y=0-13)
             {
-                "text": "◢ AUDIO HEALTH ◣",
+                "text": "AUDIO HEALTH",
                 "font": "medium",
                 "wrap": False,
                 "invert": True,
-                "spacing": 2,
                 "y": 0,
             },
+            # Content line 1 (y=17-27)
             {
-                "text": "Score {audio_health.overall_health_score}%",
+                "text": "Score: {audio_health.overall_health_score}% ({audio_health.overall_status})",
+                "font": "small",
                 "y": 17,
                 "allow_empty": True,
                 "max_width": 124,
             },
+            # Content line 2 (y=30-40)
             {
-                "text": "{audio_health.overall_status}",
-                "y": 29,
+                "text": "Active: {audio_health.active_sources}/{audio_health.total_sources} sources",
+                "font": "small",
+                "y": 30,
                 "allow_empty": True,
+                "max_width": 124,
             },
-            {
-                "text": "Active {audio_health.active_sources}/{audio_health.total_sources}",
-                "y": 41,
-                "allow_empty": True,
-            },
+            # Content line 3 (y=43-53)
             {
                 "text": "{audio_health.health_records[0].source_name}",
-                "y": 52,
+                "font": "small",
+                "y": 43,
                 "allow_empty": True,
                 "max_width": 124,
             },
@@ -200,35 +207,35 @@ UPDATED_SCREENS = {
     "oled_audio_telemetry": {
         "clear": True,
         "lines": [
+            # Header (y=0-13)
             {
-                "text": "◢ AUDIO TELEMETRY ◣",
+                "text": "AUDIO METERS",
                 "font": "medium",
                 "wrap": False,
                 "invert": True,
-                "spacing": 2,
                 "y": 0,
             },
-            {
-                "text": "Sources {audio.total_sources}",
-                "font": "small",
-                "wrap": False,
-                "y": 17,
-            },
+            # Content line 1 (y=17-27)
             {
                 "text": "{audio.live_metrics[0].source_name}",
-                "y": 29,
+                "font": "small",
+                "y": 17,
                 "allow_empty": True,
                 "max_width": 124,
             },
+            # Content line 2 (y=30-40)
             {
-                "text": "Peak {audio.live_metrics[0].peak_level_db} dB",
-                "y": 41,
+                "text": "Peak: {audio.live_metrics[0].peak_level_db} dB",
+                "font": "small",
+                "y": 30,
                 "allow_empty": True,
                 "max_width": 124,
             },
+            # Content line 3 (y=43-53)
             {
-                "text": "Silence {audio.live_metrics[0].silence_detected}",
-                "y": 52,
+                "text": "RMS: {audio.live_metrics[0].rms_level_db} dB",
+                "font": "small",
+                "y": 43,
                 "allow_empty": True,
                 "max_width": 124,
             },
