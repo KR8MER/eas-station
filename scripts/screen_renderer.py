@@ -145,18 +145,29 @@ class ScreenRenderer:
         '/version',
     }
 
-    def __init__(self, base_url: str = "http://localhost:5000"):
+    def __init__(
+        self,
+        base_url: str = "http://localhost:5000",
+        *,
+        allow_preview_samples: bool = False,
+    ):
         """Initialize the screen renderer.
 
         Args:
             base_url: Base URL for API endpoint requests
+            allow_preview_samples: When True, substitute canned sample data if
+                a data source cannot be fetched. Hardware display paths should
+                leave this disabled so that only live information is shown.
         """
         self.base_url = base_url
         self._data_cache: Dict[str, Any] = {}
         self._cache_timestamp: Dict[str, datetime] = {}
+        self.allow_preview_samples = allow_preview_samples
 
     def _get_preview_sample(self, var_name: Optional[str], endpoint: Optional[str]) -> Any:
         """Return curated preview data when live API calls fail."""
+        if not self.allow_preview_samples:
+            return {}
 
         sample = None
         if var_name and var_name in PREVIEW_SAMPLE_DATA:
@@ -226,7 +237,11 @@ class ScreenRenderer:
         if payload is None:
             preview_data = self._get_preview_sample(var_name, endpoint)
             if preview_data:
-                logger.debug("Using preview sample data for %s (%s)", var_name, endpoint)
+                logger.debug(
+                    "Using preview sample data for %s (%s)",
+                    var_name,
+                    endpoint,
+                )
             self._data_cache[var_name] = preview_data
         else:
             self._data_cache[var_name] = payload

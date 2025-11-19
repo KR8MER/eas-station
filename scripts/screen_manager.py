@@ -30,26 +30,77 @@ SNAPSHOT_SCREEN_TEMPLATE = {
     "template_data": {
         "clear": True,
         "elements": [
-            # Header (y=0-13, medium inverted)
-            {"type": "text", "text": "SNAPSHOT", "x": 0, "y": 0, "font": "medium", "invert": True},
-            # CPU bar (y=17-27)
-            {"type": "text", "text": "CPU", "x": 0, "y": 17, "font": "small"},
-            {"type": "bar", "value": "{status.system_resources.cpu_usage_percent}", "x": 26, "y": 18, "width": 76, "height": 7},
-            {"type": "text", "text": "{status.system_resources.cpu_usage_percent}%", "x": 105, "y": 17, "font": "small"},
-            # Memory bar (y=30-40)
-            {"type": "text", "text": "MEM", "x": 0, "y": 30, "font": "small"},
-            {"type": "bar", "value": "{status.system_resources.memory_usage_percent}", "x": 26, "y": 31, "width": 76, "height": 7},
-            {"type": "text", "text": "{status.system_resources.memory_usage_percent}%", "x": 105, "y": 30, "font": "small"},
-            # Status and alerts (y=43-53)
-            {"type": "text", "text": "{status.status} - {status.active_alerts_count} alerts", "x": 0, "y": 43, "font": "small"},
-            # Date/time (y=56-63)
-            {"type": "text", "text": "{now.date} {now.time_24}", "x": 0, "y": 56, "font": "small"},
+            # Live header row
+            {"type": "text", "text": "{now.time_24}", "x": 0, "y": 0, "font": "small"},
+            {
+                "type": "text",
+                "text": "{status.status} · {status.active_alerts_count} alerts",
+                "x": 127,
+                "y": 0,
+                "font": "small",
+                "align": "right",
+                "max_width": 96,
+                "overflow": "trim",
+            },
+            # CPU bar (y≈12-20)
+            {"type": "text", "text": "CPU", "x": 0, "y": 12, "font": "small"},
+            {"type": "bar", "value": "{status.system_resources.cpu_usage_percent}", "x": 28, "y": 13, "width": 76, "height": 7},
+            {
+                "type": "text",
+                "text": "{status.system_resources.cpu_usage_percent}%",
+                "x": 125,
+                "y": 12,
+                "font": "small",
+                "align": "right",
+                "max_width": 30,
+                "overflow": "trim",
+            },
+            # Memory bar (y≈24-32)
+            {"type": "text", "text": "MEM", "x": 0, "y": 24, "font": "small"},
+            {"type": "bar", "value": "{status.system_resources.memory_usage_percent}", "x": 28, "y": 25, "width": 76, "height": 7},
+            {
+                "type": "text",
+                "text": "{status.system_resources.memory_usage_percent}%",
+                "x": 125,
+                "y": 24,
+                "font": "small",
+                "align": "right",
+                "max_width": 30,
+                "overflow": "trim",
+            },
+            # Status summary row
+            {
+                "type": "text",
+                "text": "{status.status_summary}",
+                "x": 0,
+                "y": 40,
+                "font": "small",
+                "max_width": 84,
+                "overflow": "ellipsis",
+            },
+            {
+                "type": "text",
+                "text": "{now.date}",
+                "x": 125,
+                "y": 40,
+                "font": "small",
+                "align": "right",
+                "max_width": 40,
+                "overflow": "trim",
+            },
+            {
+                "type": "text",
+                "text": "Last poll {status.last_poll.local_timestamp}",
+                "x": 0,
+                "y": 52,
+                "font": "small",
+                "max_width": 128,
+                "overflow": "ellipsis",
+            },
         ],
     },
     "data_sources": [
         {"endpoint": "/api/system_status", "var_name": "status"},
-        {"endpoint": "/api/audio/metrics", "var_name": "audio"},
-        {"endpoint": "/api/alerts", "var_name": "alerts"},
     ],
 }
 
@@ -440,7 +491,7 @@ class ScreenManager:
         if controller is None:
             return
 
-        renderer = ScreenRenderer()
+        renderer = ScreenRenderer(allow_preview_samples=False)
         rendered = renderer.render_screen(SNAPSHOT_SCREEN_TEMPLATE)
         if not rendered:
             return
@@ -552,7 +603,7 @@ class ScreenManager:
                 return
 
             # Render screen
-            renderer = ScreenRenderer()
+            renderer = ScreenRenderer(allow_preview_samples=False)
             rendered = renderer.render_screen(screen.to_dict())
 
             if not rendered:
@@ -608,7 +659,7 @@ class ScreenManager:
                 return
 
             # Render screen
-            renderer = ScreenRenderer()
+            renderer = ScreenRenderer(allow_preview_samples=False)
             commands = renderer.render_screen(screen.to_dict())
 
             if not commands:
@@ -673,7 +724,7 @@ class ScreenManager:
             if not screen or not screen.enabled:
                 return
 
-            renderer = ScreenRenderer()
+            renderer = ScreenRenderer(allow_preview_samples=False)
             rendered = renderer.render_screen(screen.to_dict())
 
             if not rendered:
