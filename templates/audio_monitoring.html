@@ -12,6 +12,30 @@
 
 <div class="row mb-3">
     <div class="col-12">
+        <div class="card">
+            <div class="card-body d-flex flex-wrap gap-3 align-items-center justify-content-between">
+                <div>
+                    <h5 class="mb-1">Streaming mode</h5>
+                    <p class="text-muted small mb-0">
+                        Use the built-in HTTPS player when Icecast is blocked or unreliable. Switch to Icecast when available for long-distance listening.
+                    </p>
+                </div>
+                <div class="btn-group" role="group" aria-label="Audio streaming mode">
+                    <button type="button" class="btn btn-outline-primary" id="stream-mode-builtin" onclick="setPreferredStreamMode('builtin')">
+                        <i class="fas fa-lock"></i> Built-in (HTTPS)
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" id="stream-mode-icecast" onclick="setPreferredStreamMode('icecast')">
+                        <i class="fas fa-broadcast-tower"></i> Icecast (if available)
+                    </button>
+                </div>
+                <div class="text-muted small" id="stream-mode-status"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-12">
         <div class="alert alert-info">
             <i class="fas fa-info-circle"></i>
             <strong>Live Audio Monitoring:</strong> Audio sources must be running to stream audio. Use the start button if a source is stopped.
@@ -176,7 +200,41 @@
 <script>
 let audioSources = [];
 let levelIntervalHandle = null;
+const STREAM_MODE_KEY = 'audioMonitorStreamMode';
 const htmlEntityDecoder = document.createElement('textarea');
+
+function getPreferredStreamMode() {
+    const stored = (localStorage.getItem(STREAM_MODE_KEY) || '').toLowerCase();
+    return stored === 'icecast' ? 'icecast' : 'builtin';
+}
+
+function setPreferredStreamMode(mode) {
+    const normalized = mode === 'icecast' ? 'icecast' : 'builtin';
+    localStorage.setItem(STREAM_MODE_KEY, normalized);
+    renderStreamModeControls();
+    // Re-evaluate current players using the newly selected mode
+    initializeAudioPlayers();
+}
+
+function renderStreamModeControls() {
+    const mode = getPreferredStreamMode();
+    const builtInBtn = document.getElementById('stream-mode-builtin');
+    const icecastBtn = document.getElementById('stream-mode-icecast');
+    const statusEl = document.getElementById('stream-mode-status');
+
+    if (builtInBtn && icecastBtn) {
+        builtInBtn.classList.toggle('btn-primary', mode === 'builtin');
+        builtInBtn.classList.toggle('btn-outline-primary', mode !== 'builtin');
+        icecastBtn.classList.toggle('btn-secondary', mode === 'icecast');
+        icecastBtn.classList.toggle('btn-outline-secondary', mode !== 'icecast');
+    }
+
+    if (statusEl) {
+        statusEl.textContent = mode === 'icecast'
+            ? 'Icecast will be used when reachable; HTTPS-only pages still fall back automatically.'
+            : 'Built-in HTTPS stream preferred. Icecast will only be used if you switch modes.';
+    }
+}
 
 // Fetch audio sources from API
 async function loadAudioSources() {
@@ -660,6 +718,10 @@ function shouldUseIcecastStream(audioEl) {
         return false;
     }
 
+    if (getPreferredStreamMode() !== 'icecast') {
+        return false;
+    }
+
     if (window.location.protocol === 'https:' && /^http:\/\//i.test(icecastUrl)) {
         return false;
     }
@@ -852,10 +914,12 @@ function normalizeNowPlayingMetadata(metadata) {
     const icyFields = metadata.icy && metadata.icy.fields ? metadata.icy.fields : {};
     const streamTitleInfo = parseStreamTitle(icyFields.text);
 
-    const artworkUrl = metadata.artwork_url
+    const artworkUrl = sanitizeArtworkUrl(
+        metadata.artwork_url
         || (metadata.now_playing && metadata.now_playing.artwork_url)
         || (icyFields && icyFields.amgArtworkURL)
-        || (icyFields && icyFields.artworkURL);
+        || (icyFields && icyFields.artworkURL)
+    );
 
     const stationIdentifiers = collectStationIdentifiers(metadata, icyFields);
 
@@ -913,6 +977,36 @@ function normalizeNowPlayingMetadata(metadata) {
     }
 
     return { artworkUrl, title, artist, album, length };
+}
+
+function sanitizeArtworkUrl(value) {
+    if (value === null || value === undefined) {
+        return '';
+    }
+
+    const text = String(value).trim();
+    if (!text) {
+        return '';
+    }
+
+    const lower = text.toLowerCase();
+    const banned = new Set(['null', 'none', 'n/a', 'na', 'undefined', 'about:blank']);
+    if (banned.has(lower)) {
+        return '';
+    }
+
+    const isHttp = /^https?:\/\//i.test(text);
+    const isRootRelative = text.startsWith('/');
+
+    if (!isHttp && !isRootRelative) {
+        return '';
+    }
+
+    if (isRootRelative && text.length <= 1) {
+        return '';
+    }
+
+    return text;
 }
 
 function parseStreamTitle(rawText) {
@@ -1260,8 +1354,18 @@ function startLevelPolling() {
     levelIntervalHandle = setInterval(updateLevelMeters, 1000);
 }
 
+function startLevelPolling() {
+    if (levelIntervalHandle) {
+        clearInterval(levelIntervalHandle);
+    }
+
+    updateLevelMeters();
+    levelIntervalHandle = setInterval(updateLevelMeters, 1000);
+}
+
 // Load sources on page load
 document.addEventListener('DOMContentLoaded', function() {
+    renderStreamModeControls();
     loadAudioSources();
 
     // Auto-refresh every 30 seconds (increased from 5s to reduce interruptions)
