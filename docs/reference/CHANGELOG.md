@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.12.3] - 2025-11-29
+### Fixed
+- Updated the OLED layout migration to use uniquely named bind parameters so Alembic can compile the update statement without colliding with column names, preventing the `bindparam() name 'name' is reserved` failure during upgrades.
+
+## [2.12.2] - 2025-11-29
+### Fixed
+- Added an automatic SoapySDR fallback that retries opening receivers without the serial filter when the initial connection fails, letting Airspy radios initialize even if the driver rejects the serialized arguments.
+- Updated the OLED layout migration to JSON-serialize `template_data` before persisting it to PostgreSQL so upgrades no longer crash with `can't adapt type 'dict'` errors.
+
 ## [2.12.1] - 2025-11-27
 ### Changed
 - Rebuilt the EAS Station wordmark as an inline SVG partial that inherits theme colors for its accent bars and lettering, so the logo automatically matches whichever palette operators choose without filters or manual assets.
