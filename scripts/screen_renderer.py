@@ -451,6 +451,9 @@ class ScreenRenderer:
                     'y': element.get('y', 0),
                     'font': element.get('font', 'small'),
                     'invert': element.get('invert'),
+                    'align': element.get('align'),
+                    'max_width': element.get('max_width'),
+                    'overflow': element.get('overflow'),
                 })
 
             elif elem_type == 'bar':
