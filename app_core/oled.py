@@ -234,9 +234,11 @@ class ArgonOLEDController:
                 max_width = self.width - x
 
             segments = self._wrap_text(draw, entry.text, font, max_width, entry.wrap)
+            line_height = self._line_height(font)
             for idx, segment in enumerate(segments):
                 line_y = entry.y if entry.y is not None else cursor_y
-                if line_y >= self.height:
+                # Check if text would extend beyond screen bounds
+                if line_y + line_height > self.height:
                     break
 
                 fill_colour = text_colour
@@ -246,8 +248,6 @@ class ArgonOLEDController:
                     fill_colour = text_colour
 
                 draw.text((x, line_y), segment, font=font, fill=fill_colour)
-
-                line_height = self._line_height(font)
                 spacing = max(0, entry.spacing)
                 if entry.y is None:
                     cursor_y = line_y + line_height + spacing
@@ -328,8 +328,9 @@ class ArgonOLEDController:
                     x = max(0, self.width - text_width)
                 y = max(0, min(self.height - 1, y))
 
-                # Check if text would be out of bounds
-                if y >= self.height:
+                # Check if text would be out of bounds (including height)
+                text_height = self._line_height(font)
+                if y + text_height > self.height:
                     continue
 
                 elem_invert = element.get('invert')
