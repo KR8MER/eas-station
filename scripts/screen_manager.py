@@ -30,24 +30,20 @@ SNAPSHOT_SCREEN_TEMPLATE = {
     "template_data": {
         "clear": True,
         "elements": [
-            # Header with local date/time
-            {"type": "text", "text": "{now.datetime}", "x": 0, "y": 0, "font": "small"},
-            # System status
-            {"type": "text", "text": "{status.status}", "x": 0, "y": 12, "font": "small"},
-            # CPU bar graph
-            {"type": "text", "text": "CPU", "x": 0, "y": 24, "font": "small"},
-            {"type": "bar", "value": "{status.system_resources.cpu_usage_percent}", "x": 26, "y": 24, "width": 72, "height": 8},
-            {"type": "text", "text": "{status.system_resources.cpu_usage_percent}%", "x": 102, "y": 24, "font": "small"},
-            # Memory bar graph
-            {"type": "text", "text": "MEM", "x": 0, "y": 35, "font": "small"},
-            {"type": "bar", "value": "{status.system_resources.memory_usage_percent}", "x": 26, "y": 35, "width": 72, "height": 8},
-            {"type": "text", "text": "{status.system_resources.memory_usage_percent}%", "x": 102, "y": 35, "font": "small"},
-            # Disk bar graph
-            {"type": "text", "text": "DISK", "x": 0, "y": 46, "font": "small"},
-            {"type": "bar", "value": "{status.system_resources.disk_usage_percent}", "x": 26, "y": 46, "width": 72, "height": 8},
-            {"type": "text", "text": "{status.system_resources.disk_usage_percent}%", "x": 102, "y": 46, "font": "small"},
-            # Alert count
-            {"type": "text", "text": "Alerts: {status.active_alerts_count}", "x": 0, "y": 57, "font": "small"},
+            # Header (y=0-13, medium inverted)
+            {"type": "text", "text": "SNAPSHOT", "x": 0, "y": 0, "font": "medium", "invert": True},
+            # CPU bar (y=17-27)
+            {"type": "text", "text": "CPU", "x": 0, "y": 17, "font": "small"},
+            {"type": "bar", "value": "{status.system_resources.cpu_usage_percent}", "x": 26, "y": 18, "width": 76, "height": 7},
+            {"type": "text", "text": "{status.system_resources.cpu_usage_percent}%", "x": 105, "y": 17, "font": "small"},
+            # Memory bar (y=30-40)
+            {"type": "text", "text": "MEM", "x": 0, "y": 30, "font": "small"},
+            {"type": "bar", "value": "{status.system_resources.memory_usage_percent}", "x": 26, "y": 31, "width": 76, "height": 7},
+            {"type": "text", "text": "{status.system_resources.memory_usage_percent}%", "x": 105, "y": 30, "font": "small"},
+            # Status and alerts (y=43-53)
+            {"type": "text", "text": "{status.status} - {status.active_alerts_count} alerts", "x": 0, "y": 43, "font": "small"},
+            # Date/time (y=56-63)
+            {"type": "text", "text": "{now.date} {now.time_24}", "x": 0, "y": 56, "font": "small"},
         ],
     },
     "data_sources": [
