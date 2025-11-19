@@ -143,7 +143,7 @@ LED_NETWORK_INFO = {
         "lines": [
             "NETWORK INFO",
             "IP: {network.ip_address}",
-            "Up: {network.uptime}",
+            "Up: {network.uptime_human}",
             "{now.time}"
         ],
         "color": "BLUE",
@@ -461,7 +461,7 @@ VFD_NETWORK_STATUS = {
                 "type": "text",
                 "x": 6,
                 "y": 24,
-                "text": "Uptime: {network.uptime}"
+                "text": "Uptime: {network.uptime_human}"
             }
         ]
     },
