@@ -389,7 +389,12 @@ class ScreenManager:
 
         for action in pending:
             if action == 'advance':
-                self._advance_oled_rotation()
+                # If alert is showing, dismiss it; otherwise advance rotation
+                if self._current_alert_id is not None:
+                    logger.info("Button press: Dismissing alert preemption")
+                    self._reset_oled_alert_state()
+                else:
+                    self._advance_oled_rotation()
             elif action == 'snapshot':
                 self._display_oled_snapshot()
 
@@ -1062,10 +1067,10 @@ class ScreenManager:
         height = controller.height
         active_invert = controller.default_invert
 
-        # Calculate body area dimensions
-        header_font = controller._fonts.get('small', controller._fonts['small'])
-        header_height = controller._line_height(header_font) + 1
-        body_height = height - header_height
+        # Calculate body area dimensions (matching display frame header)
+        # Header is 14px medium font inverted, body starts at y=14
+        header_height = 14  # Medium inverted header (matches other screens)
+        body_height = height - header_height  # 64 - 14 = 50px for scrolling text
 
         # Always use HUGE font for maximum visibility (user preference)
         body_font_name = 'huge'
@@ -1153,8 +1158,8 @@ class ScreenManager:
         # Get current date/time for header in local timezone
         from app_utils.time import local_now
         now = local_now()
-        # Remove seconds from header to reduce update frequency and flickering
-        header_text = now.strftime("%m/%d/%y %I:%M %p")
+        # Use compact header format to fit in medium inverted bar
+        header_text = now.strftime("%m/%d %I:%M%p").replace(" 0", " ").lower()
 
         # Get display dimensions
         width = controller.width
@@ -1165,16 +1170,23 @@ class ScreenManager:
         background = 255 if active_invert else 0
         text_colour = 0 if active_invert else 255
 
-        # Get fonts and calculate header height
-        header_font = controller._fonts.get('small', controller._fonts['small'])
-        header_height = controller._line_height(header_font) + 1
+        # Use MEDIUM font for header to match other screens (professional look)
+        header_font = controller._fonts.get('medium', controller._fonts['small'])
+        header_height = 14  # Medium font is 14px tall
 
         # Only recreate header image if text changed (reduces flickering)
         if self._cached_header_text != header_text or self._cached_header_image is None:
             from PIL import ImageDraw
-            header_image = Image.new("1", (width, header_height), color=background)
+            # Create inverted header bar like other screens
+            header_image = Image.new("1", (width, header_height), color=text_colour)  # Inverted background
             header_draw = ImageDraw.Draw(header_image)
-            header_draw.text((0, 0), header_text, font=header_font, fill=text_colour)
+            header_draw.text((0, 0), "ALERT", font=header_font, fill=background)  # White on black
+            # Add time on right side
+            try:
+                time_width = int(header_draw.textlength(header_text, font=header_font))
+            except AttributeError:
+                time_width = header_font.getsize(header_text)[0]
+            header_draw.text((width - time_width - 2, 0), header_text, font=header_font, fill=background)
             self._cached_header_image = header_image
             self._cached_header_text = header_text
 
