@@ -4,17 +4,11 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
-## [2.12.9] - 2025-11-20
-### Changed
-- Standardized backup API error responses with HTTP status titles and structured
-  details so clients see professional messages when validation or filesystem
-  issues occur.
-
-## [2.12.8] - 2025-11-19
-### Security
-- Hardened backup management endpoints by rejecting path traversal backup names before
-  running restore, delete, download, or validation actions, ensuring operations stay
-  inside the configured backup directory.
+## [2.12.8] - 2025-12-03
+### Fixed
+- Corrected the default Icecast external port variable so Icecast URLs use the configured `ICECAST_EXTERNAL_PORT` rather than
+  inheriting overrides meant for the internal port, preventing browsers from being pointed to blocked or unmapped port 8080
+  endpoints.
 
 ## [2.12.7] - 2025-12-02
 ### Fixed
