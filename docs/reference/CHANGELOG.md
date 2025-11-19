@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.12.0] - 2025-11-27
+### Added
+- Introduced two new UI themes, **Midnight** and **Tide**, complete with theme-switcher entries and CSS variable palettes so operators can choose between a deep slate dark mode and a crisp coastal light mode.
+- Published NOAA, FEMA IPAWS, and ARRL resource badges plus a curated "Trusted Field Resources" section on the Help page so the most requested links are visual, organized, and no longer broken.
+
+### Changed
+- Modernized the Help & Operations Guide layout with hero quick links, an operations flow mini-timeline, refreshed typography, and a reorganized assistance section for a more professional flow.
+- Added dedicated Help-page utility styles that sharpen quick-link tiles, timeline steps, and resource cards, ensuring the guide matches the rest of the dashboard polish.
+
 ## [2.11.7] - 2025-11-18
 ### Changed
 - Added a refresh-status meta block on the dashboard map card that now shows the last update time, refresh source, and a live

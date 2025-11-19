@@ -92,6 +92,18 @@
             mode: 'light',
             description: 'Golden hour gradient with warm oranges',
             builtin: true
+        },
+        'midnight': {
+            name: 'Midnight',
+            mode: 'dark',
+            description: 'Deep slate dashboard with neon telemetry accents',
+            builtin: true
+        },
+        'tide': {
+            name: 'Tide',
+            mode: 'light',
+            description: 'Crisp coastal palette with aqua highlights',
+            builtin: true
         }
     };
 
