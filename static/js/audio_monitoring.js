@@ -273,7 +273,7 @@ async function updateMetrics() {
  */
 async function updateWaveform(sourceId) {
     // Check if we should display waterfall spectrogram instead
-    const useWaterfall = window.audioVisualizationMode === 'waterfall' || true; // Default to waterfall
+    const useWaterfall = window.audioVisualizationMode === 'waterfall';
 
     if (useWaterfall) {
         try {
