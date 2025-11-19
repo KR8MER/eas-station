@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 
 revision = "20251119_fix_oled_screens_layout"
-down_revision = "20251116_populate_oled_example_screens"
+down_revision = "20251118_add_rwt_schedule_config"
 branch_labels = None
 depends_on = None
 
