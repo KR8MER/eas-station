@@ -9,7 +9,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app_core.radio.drivers import RTLSDRReceiver
+from app_core.radio.drivers import RTLSDRReceiver, _SoapySDRReceiver
 from app_core.radio.manager import ReceiverConfig
 
 
@@ -198,3 +198,20 @@ def test_receiver_logs_error_and_recovery(monkeypatch):
         receiver.stop()
         monkeypatch.delitem(sys.modules, "SoapySDR", raising=False)
         _DeviceFactory.open_count = 0
+
+
+def test_read_error_description_includes_lock_hint():
+    description = _SoapySDRReceiver._describe_soapysdr_error(-7)
+    assert "not locked" in description.lower()
+
+    annotated = _SoapySDRReceiver._annotate_lock_hint(description)
+    assert "pll" in annotated.lower()
+    assert "hint" in annotated.lower()
+
+
+def test_unknown_error_code_still_formats_message():
+    description = _SoapySDRReceiver._describe_soapysdr_error(-99)
+    assert "unknown" in description.lower()
+
+    annotated = _SoapySDRReceiver._annotate_lock_hint("generic error")
+    assert annotated == "generic error"

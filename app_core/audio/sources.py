@@ -359,24 +359,28 @@ class SDRSourceAdapter(AudioSourceAdapter):
                     audio_array, rbds_data = self._demodulator.demodulate(iq_complex)
 
                     # Update RBDS data and metadata if available
-                    if rbds_data:
-                        self._rbds_data = rbds_data
+                    latest_rbds = rbds_data or self._rbds_data
+                    if latest_rbds:
+                        if rbds_data:
+                            self._rbds_data = rbds_data
                         if self.metrics.metadata is None:
                             self.metrics.metadata = {}
                         metadata = self.metrics.metadata
-                        metadata['rbds_ps_name'] = rbds_data.ps_name
-                        metadata['rbds_radio_text'] = rbds_data.radio_text
-                        metadata['rbds_pty'] = rbds_data.pty
-                        metadata['rbds_pi_code'] = rbds_data.pi_code
-                        metadata['rbds_tp'] = rbds_data.tp
-                        metadata['rbds_ta'] = rbds_data.ta
-                        metadata['rbds_ms'] = rbds_data.ms
+                        metadata['rbds_ps_name'] = latest_rbds.ps_name
+                        metadata['rbds_radio_text'] = latest_rbds.radio_text
+                        metadata['rbds_pty'] = latest_rbds.pty
+                        metadata['rbds_pi_code'] = latest_rbds.pi_code
+                        metadata['rbds_tp'] = latest_rbds.tp
+                        metadata['rbds_ta'] = latest_rbds.ta
+                        metadata['rbds_ms'] = latest_rbds.ms
                         metadata['rbds_program_type_name'] = (
-                            RBDS_PROGRAM_TYPES.get(int(rbds_data.pty))
-                            if rbds_data.pty is not None
+                            RBDS_PROGRAM_TYPES.get(int(latest_rbds.pty))
+                            if latest_rbds.pty is not None
                             else None
                         )
-                        metadata['rbds_last_updated'] = time.time()
+                        if rbds_data:
+                            metadata['rbds_last_updated'] = time.time()
+                        metadata.setdefault('rbds_last_updated', time.time())
                         self.metrics.metadata = metadata
 
                     return self._apply_squelch(audio_array)

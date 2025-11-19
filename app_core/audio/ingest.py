@@ -96,6 +96,7 @@ class AudioSourceAdapter(ABC):
         self._capture_thread: Optional[threading.Thread] = None
         self._audio_queue = queue.Queue(maxsize=500)  # Increased from 100 to handle network jitter
         self._last_metrics_update = 0.0
+        self._start_time = 0.0
         # Waveform buffer for visualization (stores last 2048 samples)
         self._waveform_buffer = np.zeros(2048, dtype=np.float32)
         self._waveform_lock = threading.Lock()
@@ -110,6 +111,10 @@ class AudioSourceAdapter(ABC):
         self._last_error_time = 0.0
         # Activity tracking for capture loop optimization
         self._had_data_activity = False  # Some sources set this when they read data but can't decode yet
+        self._restart_lock = threading.Lock()
+        self._restart_count = 0
+        self._last_restart = 0.0
+        self._last_error: Optional[str] = None
 
     @abstractmethod
     def _start_capture(self) -> None:
@@ -136,25 +141,29 @@ class AudioSourceAdapter(ABC):
             self.status = AudioSourceStatus.STARTING
             self._stop_event.clear()
             self._start_capture()
-            
+
             self._capture_thread = threading.Thread(
                 target=self._capture_loop,
                 name=f"audio-{self.config.name}",
                 daemon=True
             )
             self._capture_thread.start()
-            
+
             # Wait briefly to ensure startup
             time.sleep(0.1)
             if self.status == AudioSourceStatus.STARTING:
                 self.status = AudioSourceStatus.RUNNING
-                
+
+            self._start_time = time.time()
+            self._last_metrics_update = time.time()
+            self._last_error = None
             logger.info(f"Started audio source: {self.config.name}")
             return True
-            
+
         except Exception as e:
             self.status = AudioSourceStatus.ERROR
             self.error_message = str(e)
+            self._last_error = str(e)
             logger.error(f"Failed to start audio source {self.config.name}: {e}")
             return False
 
@@ -167,7 +176,8 @@ class AudioSourceAdapter(ABC):
         self.status = AudioSourceStatus.STOPPED
         self.error_message = None  # Clear any error message
         self._stop_event.set()
-        
+        self._start_time = 0.0
+
         if self._capture_thread and self._capture_thread.is_alive():
             self._capture_thread.join(timeout=5.0)
         
@@ -222,6 +232,7 @@ class AudioSourceAdapter(ABC):
                 logger.error(f"Error in capture loop for {self.config.name}: {e}")
                 self.status = AudioSourceStatus.ERROR
                 self.error_message = str(e)
+                self._last_error = str(e)
                 break
 
         logger.debug(f"Capture loop stopped for {self.config.name}")
@@ -259,6 +270,11 @@ class AudioSourceAdapter(ABC):
 
         # Preserve existing metadata (e.g., RBDS information) across metric updates
         current_metadata = self.metrics.metadata if self.metrics else None
+        if current_metadata is None:
+            current_metadata = {}
+        current_metadata['source_restart_count'] = self._restart_count
+        current_metadata['source_last_error'] = self._last_error
+        current_metadata['source_start_time'] = self._start_time
 
         # Update metrics
         self.metrics = AudioMetrics(
@@ -274,6 +290,57 @@ class AudioSourceAdapter(ABC):
         )
 
         self._last_metrics_update = current_time
+
+    def restart(
+        self,
+        reason: str,
+        *,
+        delay: float = 0.25,
+        max_attempts: int = 2,
+    ) -> bool:
+        """Attempt to restart the adapter when it becomes unhealthy."""
+
+        if not self.config.enabled:
+            logger.debug(
+                "Skipping restart for %s because the source is disabled",
+                self.config.name,
+            )
+            return False
+
+        attempts = max(1, int(max_attempts))
+        with self._restart_lock:
+            for attempt in range(1, attempts + 1):
+                logger.warning(
+                    "%s: restarting audio source (%s) [attempt %s/%s]",
+                    self.config.name,
+                    reason,
+                    attempt,
+                    attempts,
+                )
+                self.stop()
+                if delay > 0:
+                    time.sleep(delay)
+                if self.start():
+                    self._restart_count += 1
+                    self._last_restart = time.time()
+                    self._last_error = None
+                    logger.info(
+                        "%s: audio source restarted successfully after %s",
+                        self.config.name,
+                        reason,
+                    )
+                    return True
+                backoff = min(delay * attempt, 2.0)
+                if backoff > 0:
+                    time.sleep(backoff)
+
+            logger.error(
+                "%s: failed to restart audio source after %s attempt(s) (%s)",
+                self.config.name,
+                attempts,
+                reason,
+            )
+            return False
 
     def _update_waveform_buffer(self, audio_chunk: np.ndarray) -> None:
         """Update the waveform buffer with new audio data."""
@@ -335,10 +402,29 @@ class AudioSourceAdapter(ABC):
 class AudioIngestController:
     """Main controller for managing multiple audio sources."""
 
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        enable_monitor: bool = True,
+        monitor_interval: float = 1.0,
+        stall_seconds: float = 5.0,
+    ) -> None:
         self._sources: Dict[str, AudioSourceAdapter] = {}
         self._active_source: Optional[str] = None
         self._lock = threading.RLock()
+        self._monitor_enabled = enable_monitor
+        self._monitor_interval = max(0.5, float(monitor_interval))
+        self._monitor_stall_seconds = max(1.0, float(stall_seconds))
+        self._monitor_grace_period = 5.0
+        self._monitor_stop = threading.Event()
+        self._monitor_thread: Optional[threading.Thread] = None
+        if enable_monitor:
+            self._monitor_thread = threading.Thread(
+                target=self._monitor_loop,
+                name="AudioSourceMonitor",
+                daemon=True,
+            )
+            self._monitor_thread.start()
 
     def add_source(self, source: AudioSourceAdapter) -> None:
         """Add an audio source to the controller."""
@@ -442,9 +528,78 @@ class AudioIngestController:
         with self._lock:
             return list(self._sources.keys())
 
+    def ensure_source_running(
+        self,
+        name: str,
+        *,
+        reason: str = "on-demand",
+        timeout: float = 5.0,
+    ) -> bool:
+        """Ensure the specified source is running, restarting if required."""
+
+        with self._lock:
+            adapter = self._sources.get(name)
+
+        if adapter is None or not adapter.config.enabled:
+            return False
+
+        if adapter.status == AudioSourceStatus.RUNNING:
+            return True
+
+        logger.warning(
+            "Attempting to recover audio source %s due to %s (status=%s)",
+            name,
+            reason,
+            adapter.status.value,
+        )
+        adapter.restart(f"{reason}")
+        deadline = time.time() + max(1.0, timeout)
+        while time.time() < deadline:
+            if adapter.status == AudioSourceStatus.RUNNING:
+                return True
+            time.sleep(0.1)
+
+        return adapter.status == AudioSourceStatus.RUNNING
+
     def cleanup(self) -> None:
         """Cleanup all sources and threads."""
         self.stop_all()
+        self._monitor_stop.set()
+        if self._monitor_thread and self._monitor_thread.is_alive():
+            self._monitor_thread.join(timeout=2.0)
+            self._monitor_thread = None
         with self._lock:
             self._sources.clear()
             self._active_source = None
+
+    def _monitor_loop(self) -> None:
+        """Background monitor that auto-recovers unhealthy sources."""
+        while not self._monitor_stop.is_set():
+            now = time.time()
+            with self._lock:
+                snapshot = list(self._sources.items())
+            for name, adapter in snapshot:
+                self._evaluate_source_health(name, adapter, now)
+            self._monitor_stop.wait(timeout=self._monitor_interval)
+
+    def _evaluate_source_health(
+        self,
+        name: str,
+        adapter: AudioSourceAdapter,
+        now: float,
+    ) -> None:
+        if not adapter.config.enabled:
+            return
+
+        status = adapter.status
+
+        if status == AudioSourceStatus.RUNNING:
+            if adapter._start_time and now - adapter._start_time < self._monitor_grace_period:
+                return
+            last_update = adapter._last_metrics_update or (adapter.metrics.timestamp if adapter.metrics else 0.0)
+            if last_update == 0.0 or now - last_update > self._monitor_stall_seconds:
+                adapter.restart("stalled capture (no audio samples)")
+            return
+
+        if status in (AudioSourceStatus.ERROR, AudioSourceStatus.DISCONNECTED):
+            adapter.restart(f"status={status.value}")

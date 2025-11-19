@@ -1944,8 +1944,21 @@ def api_stream_audio(source_name: str):
                 return jsonify({'error': 'Source exists in database but could not be loaded'}), 503
             return jsonify({'error': 'Source not found'}), 404
 
-        if adapter.status == AudioSourceStatus.STOPPED:
-            return jsonify({'error': 'Source not running. Please start the source first.'}), 400
+        if adapter.status != AudioSourceStatus.RUNNING:
+            recovered = controller.ensure_source_running(
+                source_name,
+                reason="live stream request",
+                timeout=8.0,
+            )
+            if recovered:
+                adapter = controller._sources.get(source_name)
+            else:
+                detail = (
+                    adapter.error_message
+                    or getattr(adapter, '_last_error', None)
+                    or 'Source not running. Please start the source first.'
+                )
+                return jsonify({'error': detail}), 503
 
         return Response(
             stream_with_context(generate_wav_stream(adapter)),
