@@ -195,6 +195,13 @@
     --success: #4caf50;
     --warning: #ffa726;
     --danger: #ef5350;
+
+    /* Branding */
+    --logo-backdrop: rgba(255, 255, 255, 0.96);
+    --logo-border-color: rgba(67, 160, 71, 0.22);
+    --logo-shadow: 0 12px 28px rgba(51, 105, 30, 0.35);
+    --logo-padding: 0.25rem 0.65rem;
+    --logo-radius: 14px;
 }
 
 /* Red Theme - Bold red accent theme */
@@ -227,6 +234,13 @@
     --success: #66bb6a;
     --warning: #ffa726;
     --danger: #d32f2f;
+
+    /* Branding */
+    --logo-backdrop: rgba(255, 255, 255, 0.96);
+    --logo-border-color: rgba(198, 40, 40, 0.22);
+    --logo-shadow: 0 12px 28px rgba(183, 28, 28, 0.35);
+    --logo-padding: 0.25rem 0.65rem;
+    --logo-radius: 14px;
 }
 
 /* Green Theme - Nature-inspired green theme */
@@ -259,6 +273,13 @@
     --success: #66bb6a;
     --warning: #ffa726;
     --danger: #ef5350;
+
+    /* Branding */
+    --logo-backdrop: rgba(255, 255, 255, 0.96);
+    --logo-border-color: rgba(46, 125, 50, 0.22);
+    --logo-shadow: 0 12px 28px rgba(27, 94, 32, 0.35);
+    --logo-padding: 0.25rem 0.65rem;
+    --logo-radius: 14px;
 }
 
 /* Blue Theme - Ocean blue theme */
@@ -291,6 +312,13 @@
     --success: #66bb6a;
     --warning: #ffa726;
     --danger: #ef5350;
+
+    /* Branding */
+    --logo-backdrop: rgba(255, 255, 255, 0.96);
+    --logo-border-color: rgba(21, 101, 192, 0.22);
+    --logo-shadow: 0 12px 28px rgba(13, 71, 161, 0.35);
+    --logo-padding: 0.25rem 0.65rem;
+    --logo-radius: 14px;
 }
 
 /* Purple Theme - Royal purple theme */
@@ -323,6 +351,13 @@
     --success: #66bb6a;
     --warning: #ffa726;
     --danger: #ef5350;
+
+    /* Branding */
+    --logo-backdrop: rgba(255, 255, 255, 0.96);
+    --logo-border-color: rgba(106, 27, 154, 0.22);
+    --logo-shadow: 0 12px 28px rgba(74, 20, 140, 0.35);
+    --logo-padding: 0.25rem 0.65rem;
+    --logo-radius: 14px;
 }
 
 /* Pink Theme - Soft pink theme */
@@ -355,6 +390,13 @@
     --success: #66bb6a;
     --warning: #ffa726;
     --danger: #ef5350;
+
+    /* Branding */
+    --logo-backdrop: rgba(255, 255, 255, 0.96);
+    --logo-border-color: rgba(194, 24, 91, 0.22);
+    --logo-shadow: 0 12px 28px rgba(136, 14, 79, 0.35);
+    --logo-padding: 0.25rem 0.65rem;
+    --logo-radius: 14px;
 }
 
 /* Orange Theme - Energetic orange theme */
@@ -387,6 +429,13 @@
     --success: #66bb6a;
     --warning: #ffa726;
     --danger: #ef5350;
+
+    /* Branding */
+    --logo-backdrop: rgba(255, 255, 255, 0.96);
+    --logo-border-color: rgba(230, 81, 0, 0.22);
+    --logo-shadow: 0 12px 28px rgba(230, 81, 0, 0.35);
+    --logo-padding: 0.25rem 0.65rem;
+    --logo-radius: 14px;
 }
 
 /* Yellow Theme - Bright yellow theme */
@@ -419,6 +468,13 @@
     --success: #66bb6a;
     --warning: #ffa726;
     --danger: #ef5350;
+
+    /* Branding */
+    --logo-backdrop: rgba(255, 255, 255, 0.96);
+    --logo-border-color: rgba(245, 127, 23, 0.22);
+    --logo-shadow: 0 12px 28px rgba(245, 127, 23, 0.35);
+    --logo-padding: 0.25rem 0.65rem;
+    --logo-radius: 14px;
 }
 
 /* Aurora Theme - Polar lights inspired dark theme */
