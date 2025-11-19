@@ -1,0 +1,20 @@
+<svg width="220" height="100" viewBox="0 0 220 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">IPAWS Reference Badge</title>
+  <desc id="desc">Stylized IPAWS interoperability badge for help page resource links.</desc>
+  <defs>
+    <linearGradient id="ipawsGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f766e" />
+      <stop offset="100%" stop-color="#115e59" />
+    </linearGradient>
+  </defs>
+  <rect x="6" y="10" width="208" height="80" rx="18" fill="url(#ipawsGradient)" />
+  <g fill="none" stroke="#a7f3d0" stroke-width="3" stroke-linecap="round">
+    <path d="M40 50 h40" />
+    <path d="M140 50 h40" />
+    <circle cx="110" cy="50" r="28" />
+    <circle cx="110" cy="50" r="16" />
+  </g>
+  <text x="25" y="38" font-size="14" font-weight="600" font-family="'Inter', 'Segoe UI', Arial, sans-serif" fill="#ccfbf1">FEMA</text>
+  <text x="25" y="74" font-size="14" font-weight="600" font-family="'Inter', 'Segoe UI', Arial, sans-serif" fill="#ccfbf1">IPAWS</text>
+  <text x="110" y="58" font-size="32" font-weight="700" font-family="'Inter', 'Segoe UI', Arial, sans-serif" fill="#ecfeff" text-anchor="middle">IPAWS</text>
+</svg>
