@@ -377,7 +377,15 @@ class ScreenRenderer:
             if 'y' in entry:
                 line_payload['y'] = entry.get('y')
 
-            line_payload['wrap'] = entry.get('wrap', default_wrap)
+            # If a template pins a line to an explicit Y coordinate and doesn't
+            # override wrapping, default to False so wrapped segments don't
+            # stack on top of each other at the same position.
+            has_explicit_y = entry.get('y') is not None
+            wrap_value = entry.get('wrap')
+            if wrap_value is None:
+                wrap_value = default_wrap if not has_explicit_y else False
+
+            line_payload['wrap'] = wrap_value
 
             max_width_value = entry.get('max_width', default_max_width)
             if max_width_value is not None:
@@ -443,6 +451,9 @@ class ScreenRenderer:
                     'y': element.get('y', 0),
                     'font': element.get('font', 'small'),
                     'invert': element.get('invert'),
+                    'align': element.get('align'),
+                    'max_width': element.get('max_width'),
+                    'overflow': element.get('overflow'),
                 })
 
             elif elem_type == 'bar':

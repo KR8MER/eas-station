@@ -7,11 +7,13 @@ Create Date: 2025-11-19
 
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
+
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.sql import table, column
 from sqlalchemy.dialects.postgresql import JSONB
-from datetime import datetime, timezone
+from sqlalchemy.sql import column, table
 
 
 revision = "20251119_fix_oled_screens_layout"
@@ -25,6 +27,7 @@ display_screens = table(
     "display_screens",
     column("id", sa.Integer),
     column("name", sa.String),
+    column("display_type", sa.String),
     column("template_data", JSONB),
     column("updated_at", sa.DateTime),
 )
@@ -249,14 +252,21 @@ def upgrade() -> None:
     conn = op.get_bind()
     now = datetime.now(timezone.utc)
 
+    update_stmt = (
+        display_screens.update()
+        .where(display_screens.c.name == sa.bindparam("target_screen_name"))
+        .where(display_screens.c.display_type == "oled")
+    )
+
     for screen_name, template_data in UPDATED_SCREENS.items():
-        # Update the template_data for each screen
+        serialized_template = json.loads(json.dumps(template_data))
         conn.execute(
-            sa.text(
-                "UPDATE display_screens SET template_data = :template_data, updated_at = :updated_at "
-                "WHERE name = :name AND display_type = 'oled'"
-            ),
-            {"template_data": template_data, "updated_at": now, "name": screen_name}
+            update_stmt,
+            {
+                "template_data": serialized_template,
+                "updated_at": now,
+                "target_screen_name": screen_name,
+            },
         )
 
 
