@@ -168,10 +168,10 @@ def test_enhanced_poller():
     print("\n🧪 Testing Enhanced Poller Duplicate Detection...")
 
     try:
-        from poller.cap_poller import CAPPoller
+        from poller.cap_poller import CAPPoller, build_database_url_from_env
 
         with app.app_context():
-            poller = CAPPoller()
+            poller = CAPPoller(build_database_url_from_env())
 
             # Check for duplicates using the enhanced method
             duplicates = poller.check_for_duplicate_identifiers()
