@@ -254,7 +254,7 @@ def upgrade() -> None:
 
     update_stmt = (
         display_screens.update()
-        .where(display_screens.c.name == sa.bindparam("name"))
+        .where(display_screens.c.name == sa.bindparam("target_screen_name"))
         .where(display_screens.c.display_type == "oled")
     )
 
@@ -265,7 +265,7 @@ def upgrade() -> None:
             {
                 "template_data": serialized_template,
                 "updated_at": now,
-                "name": screen_name,
+                "target_screen_name": screen_name,
             },
         )
 
