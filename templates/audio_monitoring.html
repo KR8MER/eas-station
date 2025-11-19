@@ -617,20 +617,24 @@ function bindAudioPlayerEvents(audioEl) {
     const sourceName = audioEl.dataset.sourceName || '';
 
     audioEl.addEventListener('loadstart', () => {
+        clearStreamRecoveryTimer(audioEl);
         setPlayerStatus(sourceName, 'Connecting to stream…', 'info');
     });
 
     audioEl.addEventListener('playing', () => {
         audioEl.dataset.fallbackRetries = '0';
+        clearStreamRecoveryTimer(audioEl);
         setPlayerStatus(sourceName, `${labelForStreamType(audioEl.dataset.streamType)} playing.`, 'success');
     });
 
     audioEl.addEventListener('waiting', () => {
         setPlayerStatus(sourceName, 'Buffering…', 'info');
+        scheduleStreamRecovery(audioEl, sourceName);
     });
 
     audioEl.addEventListener('stalled', () => {
         setPlayerStatus(sourceName, 'Stream stalled – attempting to recover…', 'warning');
+        scheduleStreamRecovery(audioEl, sourceName);
     });
 
     audioEl.addEventListener('pause', () => {
@@ -638,6 +642,7 @@ function bindAudioPlayerEvents(audioEl) {
             setPlayerStatus(sourceName, 'Playback paused.', 'muted');
         }
         audioEl.dataset.suppressPauseMessage = '';
+        clearStreamRecoveryTimer(audioEl);
     });
 
     audioEl.addEventListener('ended', () => {
@@ -705,6 +710,44 @@ function switchToProxyStream(audioEl, sourceName, options = {}) {
 function appendCacheBuster(url) {
     const separator = url.includes('?') ? '&' : '?';
     return `${url}${separator}ts=${Date.now()}`;
+}
+
+function clearStreamRecoveryTimer(audioEl) {
+    const timerId = audioEl.dataset.stallTimerId ? parseInt(audioEl.dataset.stallTimerId, 10) : null;
+    if (timerId) {
+        clearTimeout(timerId);
+    }
+    audioEl.dataset.stallTimerId = '';
+}
+
+function scheduleStreamRecovery(audioEl, sourceName) {
+    clearStreamRecoveryTimer(audioEl);
+
+    const streamType = audioEl.dataset.streamType || audioEl.dataset.initialStreamType || 'unknown';
+    const wasPlaying = !audioEl.paused;
+    const timeoutMs = streamType === 'icecast' ? 3500 : 2000;
+
+    const timerId = window.setTimeout(() => {
+        audioEl.dataset.stallTimerId = '';
+
+        const currentType = audioEl.dataset.streamType || audioEl.dataset.initialStreamType || 'unknown';
+        if (currentType !== streamType) {
+            return;
+        }
+
+        if (currentType === 'icecast') {
+            const reason = 'Icecast stream stalled or unreachable. Switching to secure fallback.';
+            switchToProxyStream(audioEl, sourceName, { autoplay: wasPlaying, reason });
+            return;
+        }
+
+        if (currentType === 'flask-proxy') {
+            setPlayerStatus(sourceName, 'Reconnecting to secure stream…', 'warning');
+            switchToProxyStream(audioEl, sourceName, { autoplay: wasPlaying, notify: false });
+        }
+    }, timeoutMs);
+
+    audioEl.dataset.stallTimerId = String(timerId);
 }
 
 function setPlayerStatus(sourceName, message, level = 'muted') {
