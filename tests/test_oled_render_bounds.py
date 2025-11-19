@@ -100,3 +100,125 @@ def test_draw_bar_graph_clamps_coordinates(oled_controller, mock_pil_modules):
 
     assert draw_obj.rectangle.call_count >= 1
     _assert_points_within_bounds(draw_obj.rectangle.call_args_list, oled_controller.width, oled_controller.height)
+
+
+def test_render_frame_text_height_bounds_checking(oled_controller, mock_pil_modules):
+    """Test that text extending beyond screen height is not rendered"""
+    draw_obj = mock_pil_modules['draw_obj']
+    font_obj = mock_pil_modules['font'].truetype.return_value
+
+    # Mock font height of 12 pixels
+    font_obj.getbbox = Mock(return_value=(0, 0, 50, 12))
+    draw_obj.text.reset_mock()
+
+    # Text at Y=58 with height 12 would extend to Y=70 (beyond 64)
+    oled_controller.render_frame([
+        {'type': 'text', 'text': 'Out of bounds', 'x': 0, 'y': 58, 'font': 'small'}
+    ])
+
+    # Text should NOT be rendered since it would exceed bounds
+    assert draw_obj.text.call_count == 0, "Text extending beyond screen bounds should not be rendered"
+
+
+def test_render_frame_text_exactly_at_bounds(oled_controller, mock_pil_modules):
+    """Test that text exactly fitting within bounds is rendered"""
+    draw_obj = mock_pil_modules['draw_obj']
+    font_obj = mock_pil_modules['font'].truetype.return_value
+
+    # Mock font height of 12 pixels
+    font_obj.getbbox = Mock(return_value=(0, 0, 50, 12))
+    draw_obj.text.reset_mock()
+
+    # Text at Y=52 with height 12 would extend to Y=64 (exactly at bounds)
+    oled_controller.render_frame([
+        {'type': 'text', 'text': 'Fits perfectly', 'x': 0, 'y': 52, 'font': 'small'}
+    ])
+
+    # Text should be rendered since it fits exactly
+    assert draw_obj.text.call_count == 1, "Text fitting exactly within bounds should be rendered"
+
+    # Verify Y coordinate is within bounds
+    call_args = draw_obj.text.call_args
+    x, y = call_args.args[0]
+    assert y == 52
+
+
+def test_render_frame_text_within_bounds(oled_controller, mock_pil_modules):
+    """Test that text well within bounds is rendered"""
+    draw_obj = mock_pil_modules['draw_obj']
+    font_obj = mock_pil_modules['font'].truetype.return_value
+
+    # Mock font height of 12 pixels
+    font_obj.getbbox = Mock(return_value=(0, 0, 50, 12))
+    draw_obj.text.reset_mock()
+
+    # Text at Y=40 with height 12 would extend to Y=52 (well within 64)
+    oled_controller.render_frame([
+        {'type': 'text', 'text': 'Safe position', 'x': 0, 'y': 40, 'font': 'small'}
+    ])
+
+    # Text should be rendered
+    assert draw_obj.text.call_count == 1
+
+    # Verify Y coordinate
+    call_args = draw_obj.text.call_args
+    x, y = call_args.args[0]
+    assert y == 40
+
+
+def test_display_lines_text_height_bounds_checking(oled_controller, mock_pil_modules):
+    """Test that display_lines respects text height bounds"""
+    from app_core.oled import OLEDLineEntry
+
+    draw_obj = mock_pil_modules['draw_obj']
+    font_obj = mock_pil_modules['font'].truetype.return_value
+
+    # Mock font height of 12 pixels
+    font_obj.getbbox = Mock(return_value=(0, 0, 50, 12))
+    draw_obj.text.reset_mock()
+
+    # Create lines where the last one would exceed bounds
+    lines = [
+        OLEDLineEntry(text="Line 1", x=0, y=0, font="small"),
+        OLEDLineEntry(text="Line 2", x=0, y=52, font="small"),  # Y=52, extends to 64 - OK
+        OLEDLineEntry(text="Line 3", x=0, y=58, font="small"),  # Y=58, extends to 70 - OUT OF BOUNDS
+    ]
+
+    oled_controller.display_lines(lines)
+
+    # Should render only first 2 lines, not the third
+    assert draw_obj.text.call_count == 2, "Only text within bounds should be rendered"
+
+    # Verify the Y coordinates of rendered text
+    call_args_list = draw_obj.text.call_args_list
+    assert call_args_list[0].args[0][1] == 0  # First line at Y=0
+    assert call_args_list[1].args[0][1] == 52  # Second line at Y=52
+
+
+def test_render_frame_multiple_font_sizes(oled_controller, mock_pil_modules):
+    """Test bounds checking with different font sizes"""
+    draw_obj = mock_pil_modules['draw_obj']
+    font_obj = mock_pil_modules['font'].truetype.return_value
+    draw_obj.text.reset_mock()
+
+    # Test with larger font (18 pixels)
+    font_obj.getbbox = Mock(return_value=(0, 0, 50, 18))
+
+    oled_controller.render_frame([
+        # Y=50 + 18 = 68, exceeds 64
+        {'type': 'text', 'text': 'Large font', 'x': 0, 'y': 50, 'font': 'large'},
+    ])
+
+    # Should not render
+    assert draw_obj.text.call_count == 0, "Large font text exceeding bounds should not be rendered"
+
+    draw_obj.text.reset_mock()
+
+    # Test with same large font at safe position
+    oled_controller.render_frame([
+        # Y=46 + 18 = 64, exactly fits
+        {'type': 'text', 'text': 'Large font safe', 'x': 0, 'y': 46, 'font': 'large'},
+    ])
+
+    # Should render
+    assert draw_obj.text.call_count == 1, "Large font text exactly fitting should be rendered"
