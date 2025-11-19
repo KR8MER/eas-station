@@ -623,26 +623,33 @@ def _generate_silence(duration: float, sample_rate: int) -> List[int]:
 
 
 def _normalize_audio_amplitude(samples: List[int], target_amplitude: float) -> List[int]:
-    """Normalize audio samples to match the target amplitude.
+    """Normalize audio samples to match the target amplitude using RMS.
 
-    This ensures TTS audio has the same volume level as SAME/AFSK tones.
+    This ensures TTS audio has the same perceived loudness as SAME/AFSK tones.
+    Uses RMS (Root Mean Square) normalization which better represents perceived
+    loudness compared to peak normalization.
     """
     if not samples:
         return samples
 
-    # Calculate peak amplitude of the input samples
-    peak = max(abs(s) for s in samples)
+    # Calculate RMS (Root Mean Square) of the input samples
+    sum_squares = sum(s * s for s in samples)
+    rms = math.sqrt(sum_squares / len(samples))
 
     # Avoid division by zero
-    if peak == 0:
+    if rms == 0:
         return samples
 
-    # Calculate the scaling factor needed to reach target amplitude
-    # Use 0.95 safety factor to prevent clipping
-    scale = (target_amplitude * 0.95) / peak
+    # For sine wave tones (SAME/attention), RMS ≈ peak / sqrt(2)
+    # So target RMS should be target_amplitude / sqrt(2)
+    target_rms = target_amplitude / math.sqrt(2)
+
+    # Calculate the scaling factor needed to reach target RMS
+    scale = target_rms / rms
 
     # Apply scaling to all samples
-    return [int(s * scale) for s in samples]
+    # Clamp to prevent overflow beyond int16 range
+    return [max(-32768, min(32767, int(s * scale))) for s in samples]
 
 
 def _write_wave_file(path: str, samples: Sequence[int], sample_rate: int) -> None:
