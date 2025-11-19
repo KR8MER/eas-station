@@ -12,7 +12,6 @@ This document explains the EAS Station template architecture, where page element
 ├── base_new.html             # ❌ ORPHANED - Not used anywhere
 ├── components/               # Reusable components
 │   ├── navbar.html           # ✅ ACTIVE - Current navbar (modern design with theme support)
-│   ├── navbar_old.html       # ❌ DEPRECATED - Old navbar with RBAC features (superseded)
 │   ├── confidence_scale.html # ✅ ACTIVE - Macro component
 │   └── form-example.html     # ❌ ORPHANED - Example file
 ├── admin/                    # Admin interface templates
@@ -23,9 +22,10 @@ This document explains the EAS Station template architecture, where page element
 ├── settings/                 # Settings templates
 └── stats/                    # Statistics templates
 
-/components/                   # ⚠️ WRONG LOCATION - Should be in templates/
-├── footer.html               # ❌ DELETED - Was orphaned, not included anywhere
-└── page_header.html          # ⚠️ CHECK - Macro component, wrong location
+docs/development/archive/templates/  # 📦 Archived template snapshots
+├── components/navbar_old.html       # ❌ Legacy navbar kept for reference
+├── components/page_header.html      # ⚠️ Legacy macro retained for documentation
+└── partials/footer.html             # ❌ Legacy include (superseded by base.html)
 ```
 
 ---

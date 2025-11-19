@@ -4,6 +4,34 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.12.2] - 2025-11-27
+### Fixed
+- Adjusted the inline SVG wordmark to pull its lettering and accent fills from dedicated
+  brand variables so the logo stays visible on high-contrast themes like Coffee and Midnight
+  instead of blending into the backdrop.
+- Updated every fallback string (JSON metadata, map landing page, and CLI utilities) that still
+  referenced the "NOAA CAP Alerts System" name so operators always see the current EAS Station
+  branding even when templates fail to render.
+
+### Changed
+- Archived the unused legacy templates (old navbar, version/system-health pages, and partials)
+  under `docs/development/archive/templates/` to keep the active `templates/` tree focused on the
+  files Flask actually imports.
+
+## [2.12.1] - 2025-11-27
+### Changed
+- Rebuilt the EAS Station wordmark as an inline SVG partial that inherits theme colors for its accent bars and lettering, so the logo automatically matches whichever palette operators choose without filters or manual assets.
+- Updated the navigation bar and hero sections on the Help, About, Privacy, Terms, and Version pages to consume the new partial, eliminating duplicate markup and keeping the refreshed layout consistent in every mode.
+
+## [2.12.0] - 2025-11-27
+### Added
+- Introduced two new UI themes, **Midnight** and **Tide**, complete with theme-switcher entries and CSS variable palettes so operators can choose between a deep slate dark mode and a crisp coastal light mode.
+- Published NOAA, FEMA IPAWS, and ARRL resource badges plus a curated "Trusted Field Resources" section on the Help page so the most requested links are visual, organized, and no longer broken.
+
+### Changed
+- Modernized the Help & Operations Guide layout with hero quick links, an operations flow mini-timeline, refreshed typography, and a reorganized assistance section for a more professional flow.
+- Added dedicated Help-page utility styles that sharpen quick-link tiles, timeline steps, and resource cards, ensuring the guide matches the rest of the dashboard polish.
+
 ## [2.11.7] - 2025-11-18
 ### Changed
 - Added a refresh-status meta block on the dashboard map card that now shows the last update time, refresh source, and a live

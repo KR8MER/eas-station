@@ -234,10 +234,9 @@
     <!-- Hero Section -->
     <div class="version-hero text-center">
         <div class="container">
-            <img src="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}"
-                 alt="EAS Station"
-                 class="img-fluid mb-4"
-                 style="max-width: 400px; filter: brightness(0) invert(1);">
+            {% with logo_classes='img-fluid mb-4 mx-auto', logo_style='max-width: 400px;' %}
+                {% include 'partials/logo_wordmark.html' %}
+            {% endwith %}
 
             <div class="version-badge">
                 Version {{ version_info.version }}

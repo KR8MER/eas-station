@@ -43,7 +43,7 @@ def register(app: Flask, logger) -> None:
         except Exception as exc:  # pragma: no cover - fallback rendering
             route_logger.error("Error rendering index template: %s", exc)
             return (
-                "<h1>NOAA CAP Alerts System</h1><p>Map interface loading...</p>"
+                "<h1>EAS Station</h1><p>Map interface loading...</p>"
                 "<p><a href='/stats'>📊 Statistics</a> | "
                 "<a href='/alerts'>📝 Alerts History</a> | "
                 "<a href='/admin'>⚙️ Admin</a></p>"

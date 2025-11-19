@@ -28,14 +28,14 @@ cat > templates/base.html << 'EOF'
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}NOAA CAP Alerts System{% endblock %}</title>
+    <title>{% block title %}EAS Station{% endblock %}</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container-fluid">
-            <a class="navbar-brand" href="/">NOAA CAP Alerts</a>
+            <a class="navbar-brand" href="/">EAS Station</a>
             <div class="navbar-nav ms-auto">
                 <a class="nav-link" href="/">Map</a>
                 <a class="nav-link" href="/admin">Admin</a>

@@ -276,7 +276,7 @@ def register(app: Flask, logger) -> None:
         return jsonify(
             {
                 "version": _system_version(),
-                "name": "NOAA CAP Alerts System",
+                "name": "EAS Station",
                 "author": "KR8MER Amateur Radio Emergency Communications",
                 "description": (
                     f"Emergency alert system for {location['county_name']}, "
@@ -312,7 +312,7 @@ def register(app: Flask, logger) -> None:
         location = get_location_settings()
         version_data = {
             "version": current_version,
-            "name": "NOAA CAP Alerts System",
+            "name": "EAS Station",
             "author": "KR8MER Amateur Radio Emergency Communications",
             "description": (
                 f"Emergency alert system for {location['county_name']}, "

@@ -204,7 +204,7 @@ def test_enhanced_poller():
 
 def main():
     """Main cleanup function"""
-    print("🚨 NOAA CAP Alert Duplicate Cleanup Utility")
+    print("🚨 EAS Station CAP Alert Duplicate Cleanup Utility")
     print("=" * 50)
 
     # Test the enhanced poller first

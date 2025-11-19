@@ -195,6 +195,25 @@
                 border-color var(--transition-medium);
 }
 
+.logo-wordmark {
+    display: block;
+    height: auto;
+    max-width: 100%;
+}
+
+.logo-wordmark .logo-bar {
+    fill: var(--logo-accent, var(--accent-primary, var(--accent-color, #ef4444)));
+}
+
+.logo-wordmark .logo-text-primary {
+    fill: var(--logo-text-primary, var(--dark-color, var(--text-color, #1e293b)));
+}
+
+.logo-wordmark .logo-text-secondary {
+    fill: var(--logo-text-secondary, var(--dark-color, var(--text-color, #1e293b)));
+    opacity: var(--logo-text-secondary-opacity, 0.6);
+}
+
 /* Hide brand text on mobile devices */
 @media (max-width: 767.98px) {
     .brand-text {

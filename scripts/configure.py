@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Configuration settings for NOAA CAP Alerts System
+Configuration settings for EAS Station
 """
 
 import os

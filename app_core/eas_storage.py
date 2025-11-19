@@ -1483,7 +1483,7 @@ def generate_compliance_log_pdf(
     """Generate a minimal PDF summary for compliance logs."""
 
     header_lines = [
-        "NOAA CAP Alerts System — EAS Compliance Log",
+        "EAS Station — EAS Compliance Log",
         f"Generated: {format_local_datetime(utc_now(), include_utc=True)}",
     ]
 

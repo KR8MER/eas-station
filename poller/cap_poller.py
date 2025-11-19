@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-NOAA CAP Alert Poller with configurable location filtering
+EAS Station CAP Alert Poller with configurable location filtering
 Docker-safe DB defaults, strict jurisdiction filtering, PostGIS geometry/intersections,
 optional LED sign integration.
 

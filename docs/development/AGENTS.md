@@ -326,22 +326,22 @@ if alert.geom and boundary.geom:
 | File | Status | Action Required |
 |------|--------|----------------|
 | `templates/base_new.html` | ❌ Not used anywhere | Can be deleted |
-| `templates/components/navbar_old.html` | ❌ Superseded by navbar.html | Keep as reference, do not edit |
+| `docs/development/archive/templates/components/navbar_old.html` | ❌ Superseded by navbar.html | Archived for reference, do not edit |
 | `components/navbar.html` | ❌ Wrong directory | Should be deleted |
-| `components/footer.html` | ❌ Was deleted (not included) | Already removed |
-| `components/page_header.html` | ⚠️ Macro component, wrong location | Move to templates/components/ if used |
+| `docs/development/archive/templates/partials/footer.html` | ❌ Was deleted (not included) | Archived for reference |
+| `docs/development/archive/templates/components/page_header.html` | ⚠️ Macro component | Archived macro, prefer bespoke headers |
 
 #### When Making Changes to Page Elements
 
 **Changing the Navbar:**
 - ✅ Edit: `templates/components/navbar.html`
-- ❌ Don't edit: `templates/components/navbar_old.html` (deprecated)
+- ❌ Don't edit: `docs/development/archive/templates/components/navbar_old.html` (archived)
 - ❌ Don't edit: `components/navbar.html` (wrong location)
 - **Features**: Bootstrap 5 navbar, dropdowns, health indicator, theme selector (palette icon), quick theme toggle
 
 **Changing the Footer:**
 - ✅ Edit: `templates/base.html` (lines 103-144)
-- ❌ Don't edit: `components/footer.html` (deleted - was orphaned)
+- ❌ Don't edit: `docs/development/archive/templates/partials/footer.html` (archived include)
 
 **Changing System Status Banner:**
 - ✅ Edit: `templates/base.html` (lines 72-81)

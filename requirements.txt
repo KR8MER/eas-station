@@ -1,4 +1,4 @@
-# NOAA CAP Alerts System Requirements
+# EAS Station Requirements
 #
 # NOTE: PostgreSQL with the PostGIS extension is required for spatial
 # functionality, but it must be provisioned in its own container or

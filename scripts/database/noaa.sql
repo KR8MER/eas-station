@@ -1,4 +1,4 @@
--- NOAA CAP Alerts and GIS Boundary Mapping System
+-- EAS Station Alerts and GIS Boundary Mapping System
 -- PostgreSQL + PostGIS Database Schema
 
 -- Create boundaries table for static district boundaries
