@@ -413,7 +413,7 @@ function renderAudioSources() {
                                 <small class="text-muted">${(source.metrics.buffer_utilization * 100).toFixed(1)}%</small>
                             </div>
                             <div class="progress" style="height: 6px;">
-                                <div class="progress-bar ${source.metrics.buffer_utilization > 0.8 ? 'bg-warning' : source.metrics.buffer_utilization > 0.95 ? 'bg-danger' : 'bg-success'}"
+                                <div class="progress-bar ${source.metrics.buffer_utilization > 0.95 ? 'bg-danger' : source.metrics.buffer_utilization > 0.8 ? 'bg-warning' : 'bg-success'}"
                                      role="progressbar"
                                      style="width: ${(source.metrics.buffer_utilization * 100).toFixed(1)}%"
                                      aria-valuenow="${(source.metrics.buffer_utilization * 100).toFixed(1)}"
@@ -1343,15 +1343,6 @@ async function updateLevelMeters() {
     } catch (error) {
         console.debug('Level meter update skipped:', error);
     }
-}
-
-function startLevelPolling() {
-    if (levelIntervalHandle) {
-        clearInterval(levelIntervalHandle);
-    }
-
-    updateLevelMeters();
-    levelIntervalHandle = setInterval(updateLevelMeters, 1000);
 }
 
 function startLevelPolling() {
