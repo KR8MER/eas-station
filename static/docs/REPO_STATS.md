@@ -1,22 +1,22 @@
 # Repository Statistics
 
-**Generated:** 2025-11-19 13:28:44 UTC
+**Generated:** 2025-11-19 13:35:53 UTC
 
 ## Overview
 
-- **Total Files:** 634
+- **Total Files:** 635
 - **Total Directories:** 74
-- **Total Lines:** 214,534
-- **Code Lines:** 134,971
-- **Comment Lines:** 45,542
-- **Total Routes:** 183
+- **Total Lines:** 214,710
+- **Code Lines:** 134,113
+- **Comment Lines:** 46,546
+- **Total Routes:** 184
 
 ## Files by Type
 
 | File Type | Count |
 |-----------|-------|
 | Python | 259 |
-| Markdown | 161 |
+| Markdown | 162 |
 | HTML | 80 |
 | Other | 58 |
 | Shell | 16 |
@@ -32,9 +32,9 @@
 
 | Language | Total Lines | Code Lines | Comment Lines |
 |----------|-------------|------------|---------------|
-| Python | 90,428 | 36,172 | 39,443 |
-| Markdown | 56,741 | 43,769 | 0 |
-| HTML | 46,657 | 42,483 | 450 |
+| Python | 90,524 | 35,248 | 40,447 |
+| Markdown | 56,818 | 43,832 | 0 |
+| HTML | 46,660 | 42,486 | 450 |
 | CSS | 6,512 | 1,125 | 4,416 |
 | JavaScript | 4,921 | 3,726 | 548 |
 | Text | 2,280 | 2,135 | 0 |
@@ -51,10 +51,10 @@
 |------|-------------|
 | webapp/routes_settings_radio.py | 21 |
 | webapp/routes_screens.py | 17 |
+| webapp/routes_public.py | 13 |
 | webapp/routes_vfd.py | 12 |
 | webapp/routes_led.py | 12 |
 | webapp/routes_analytics.py | 12 |
-| webapp/routes_public.py | 12 |
 | webapp/routes_monitoring.py | 10 |
 | webapp/routes_setup.py | 9 |
 | webapp/routes_stream_profiles.py | 9 |
@@ -80,13 +80,13 @@
 
 ### Top Languages by Lines of Code
 
-**Python:** 36,172 lines  
-`█████████████████████████████████████████`
+**Python:** 35,248 lines  
+`████████████████████████████████████████`
 
-**Markdown:** 43,769 lines  
+**Markdown:** 43,832 lines  
 `██████████████████████████████████████████████████`
 
-**HTML:** 42,483 lines  
+**HTML:** 42,486 lines  
 `████████████████████████████████████████████████`
 
 **CSS:** 1,125 lines  
