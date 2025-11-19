@@ -68,9 +68,17 @@ Each roadmap item below references the requirement(s) it unlocks so contributors
 
 ## 6. Deployment & Setup Experience (Requirement 6)
 - **Goal**: Reduce onboarding time for lab evaluators and contributors.
-- **Status**: The `.env` setup wizard and environment editor exist, and Icecast rebroadcast settings now persist through the API/UI; hardware deployment notes and automated validation remain outstanding.
+- **Status**: 🔄 **Partially Complete** – Setup wizard, environment editor, Icecast persistence, stream profiles, and diagnostics tool are online; hardware deployment notes and automated validation remain outstanding.
+- **Completed**:
+  1. ✅ Setup wizard (`tools/setup_wizard.py`) with guided `.env` configuration.
+  2. ✅ Environment editor UI for runtime configuration changes.
+  3. ✅ Icecast rebroadcast configuration persistence through `/api/audio/icecast/config` and Audio Settings UI.
+  4. ✅ Stream profiles management at `/stream-profiles` for multiple bitrate/format configurations.
+  5. ✅ System diagnostics tool at `/diagnostics` for installation validation and troubleshooting.
+  6. ✅ Quick start documentation in `docs/deployment/quick_start.md`.
+  7. ✅ Deployment guides for Portainer in `docs/deployment/portainer/`.
 - **Plan**:
-  1. Expand `tools/setup_wizard.py` with receiver/audio presets and document the happy path in `docs/deployment/quick_start.md`.
+  1. Expand `tools/setup_wizard.py` with receiver/audio presets and automated hardware detection.
   2. Extend `docker-compose.yml` with optional audio capture daemons and document udev/USB permissions under `docs/deployment/audio_hardware.md`.
   3. Document the reference Raspberry Pi build—including relay HAT pinouts, RS-232 adapter configuration, and supported USB audio chipsets—in `docs/hardware/reference_pi_build.md`.
   4. Add integration tests (pytest) that mock ingest/output paths and GPIO behaviors under `tests/` to protect against regressions.
@@ -139,7 +147,46 @@ Maintaining this document:
 - Link to relevant PRs or issues for traceability.
 - Keep safety disclaimers and legal obligations visible when new functionality might impact operational risk.
 
+## Recently Completed (November 2025)
+
+### Icecast Stream Profiles ✅ COMPLETE
+- **Status**: ✅ **Completed November 2025** – Configurable stream profiles with multiple format support delivered.
+- **Delivered**:
+  1. ✅ Created `/stream-profiles` UI at `templates/stream_profiles.html` for managing multiple Icecast streams.
+  2. ✅ Implemented `app_core/audio/stream_profiles.py` backend with JSON persistence.
+  3. ✅ Added quality presets (Low/Medium/High/Premium) with automatic bitrate/channel configuration.
+  4. ✅ Built format support for MP3, OGG Vorbis, Opus, and AAC encoding.
+  5. ✅ Implemented bandwidth estimation calculator for capacity planning.
+  6. ✅ Created API endpoints at `/api/stream-profiles/*` for programmatic access.
+  7. ✅ Documented in `docs/NEW_FEATURES_2025-11.md` with comprehensive usage guide.
+
+### Weekly Test Automation (RWT Scheduler) ✅ COMPLETE
+- **Status**: ✅ **Completed November 2025** – Automated Required Weekly Test scheduling delivered.
+- **Delivered**:
+  1. ✅ Created `/rwt_schedule` route with `templates/rwt_schedule.html` UI.
+  2. ✅ Implemented automated RWT broadcast scheduling with county management.
+  3. ✅ Added database models for RWT schedule persistence.
+  4. ✅ Integrated into help page and about page documentation.
+
+### WYSIWYG Screen Editor ✅ COMPLETE
+- **Status**: ✅ **Completed November 2025** – Visual screen editor for display management delivered.
+- **Delivered**:
+  1. ✅ Created `/screens/editor` route with `templates/screen_editor.html`.
+  2. ✅ Implemented Phase 1 & 2 visual editing capabilities.
+  3. ✅ Added comprehensive Mermaid architecture diagrams.
+
+### System Diagnostics Tool ✅ COMPLETE
+- **Status**: ✅ **Completed November 2025** – Comprehensive system validation tool delivered.
+- **Delivered**:
+  1. ✅ Created `/diagnostics` route with `templates/diagnostics.html` web interface.
+  2. ✅ Implemented Docker status, database connectivity, and environment validation checks.
+  3. ✅ Added log analysis, audio device detection, and health endpoint verification.
+  4. ✅ Built JSON export functionality for compliance and troubleshooting.
+  5. ✅ Documented in `docs/NEW_FEATURES_2025-11.md`.
+
 ## Recommended Future Enhancements
 - Capture RBDS metadata surfaced by the new demodulator in a web dashboard widget and expose it via the analytics API for downstream signage.
 - Add a standby node bootstrap script that replays the latest backup, re-seeds SSL credentials, and validates Icecast connectivity before promoting the node.
-- Ship configurable Icecast stream profiles (per-source bitrate/format overrides) so FM stereo feeds can be published alongside low-bandwidth monitoring streams.
+- Implement automated documentation synchronization tool that scans code to update roadmap completion status.
+- Create interactive roadmap web UI at `/roadmap` with live progress tracking and PR linking.
+- Build feature flag system to allow gradual rollout of new UI components (e.g., toggle between old/new alerts page).
