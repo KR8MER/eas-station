@@ -197,8 +197,12 @@
 
 .logo-wordmark {
     display: block;
-    height: auto;
     max-width: 100%;
+}
+
+/* Only set auto height when not used with brand-logo */
+.logo-wordmark:not(.brand-logo) {
+    height: auto;
 }
 
 .logo-wordmark .logo-bar {
