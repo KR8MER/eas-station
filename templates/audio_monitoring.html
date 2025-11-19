@@ -66,19 +66,6 @@
     height: 54px;
 }
 
-.waveform-container {
-    background: #000;
-    border-radius: 4px;
-    padding: 0.5rem;
-    margin-bottom: 1rem;
-    height: 120px;
-}
-
-.waveform-canvas {
-    width: 100%;
-    height: 100%;
-}
-
 .status-badge {
     font-size: 0.875rem;
     padding: 0.375rem 0.75rem;
@@ -144,11 +131,51 @@
     background: #000;
     transform: translateX(-50%);
 }
+
+.vu-meter {
+    background: #101010;
+    border-radius: 10px;
+    padding: 0.75rem;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+.vu-track {
+    position: relative;
+    height: 14px;
+    border-radius: 7px;
+    background: linear-gradient(90deg, #1e7e34, #ffc107 70%, #dc3545);
+    overflow: hidden;
+}
+
+.vu-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 0%;
+    background: rgba(255, 255, 255, 0.75);
+    box-shadow: 0 0 6px rgba(255,255,255,0.4);
+    transition: width 0.15s ease-out, opacity 0.15s ease-out;
+}
+
+.vu-fill.rms {
+    background: rgba(0, 198, 255, 0.75);
+    box-shadow: 0 0 6px rgba(0,198,255,0.4);
+}
+
+.vu-labels {
+    font-size: 0.85rem;
+    color: #adb5bd;
+}
+
+.vu-labels span {
+    font-variant-numeric: tabular-nums;
+}
 </style>
 
 <script>
 let audioSources = [];
-let waveformIntervals = {};
+let levelIntervalHandle = null;
 const htmlEntityDecoder = document.createElement('textarea');
 
 // Fetch audio sources from API
@@ -161,19 +188,14 @@ async function loadAudioSources() {
         const data = await response.json();
         audioSources = data.sources || [];
         renderAudioSources();
-
-        // Start waveform updates for running sources
-        audioSources.forEach(source => {
-            if (source.status === 'running') {
-                startWaveformUpdate(source.name);
-            }
-        });
+        startLevelPolling();
     } catch (error) {
         console.error('Failed to load audio sources:', error);
         document.getElementById('audio-sources-container').innerHTML = `
             <div class="col-12">
                 <div class="alert alert-danger">
                     <strong>Error loading audio sources:</strong> ${error.message}
+                    <div class="small text-muted mt-1">Check that you are signed in and the audio API is reachable.</div>
                 </div>
             </div>
         `;
@@ -206,7 +228,12 @@ function renderAudioSources() {
         }
     });
 
-    container.innerHTML = audioSources.map(source => `
+    container.innerHTML = audioSources.map(source => {
+        const safeId = sanitizeId(source.name);
+        const peakValue = source.metrics?.peak_level_db;
+        const rmsValue = source.metrics?.rms_level_db;
+
+        return `
         <div class="col-lg-6 col-xl-4 mb-3">
             <div class="card audio-source-card status-${source.status}">
                 <div class="card-header">
@@ -231,9 +258,16 @@ function renderAudioSources() {
                 <div class="card-body">
                     ${source.description ? `<p class="text-muted">${escapeHtml(source.description)}</p>` : ''}
 
-                    <!-- Waveform visualization -->
-                    <div class="waveform-container" id="waveform-${source.name}" style="display: ${source.status === 'running' ? 'block' : 'none'};">
-                        <canvas class="waveform-canvas" id="canvas-${source.name}" width="800" height="100"></canvas>
+                    <!-- Live level meter -->
+                    <div class="vu-meter" aria-live="polite">
+                        <div class="d-flex justify-content-between vu-labels mb-2">
+                            <span id="peak-label-${safeId}">Peak: ${formatDbLabel(peakValue)}</span>
+                            <span id="rms-label-${safeId}">RMS: ${formatDbLabel(rmsValue)}</span>
+                        </div>
+                        <div class="vu-track" role="presentation">
+                            <div class="vu-fill" id="peak-meter-${safeId}" style="width: ${calculateFillWidth(peakValue)}%"></div>
+                            <div class="vu-fill rms" id="rms-meter-${safeId}" style="width: ${calculateFillWidth(rmsValue)}%"></div>
+                        </div>
                     </div>
 
                     <!-- Audio Player -->
@@ -487,9 +521,30 @@ function renderAudioSources() {
                 </div>
             </div>
         </div>
-    `).join('');
+    `;}).join('');
 
     initializeAudioPlayers(playingStates, currentTimes);
+}
+
+function sanitizeId(text) {
+    return (text || '').toString().replace(/[^a-zA-Z0-9_-]/g, '-');
+}
+
+function formatDbLabel(value) {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+        return '-- dBFS';
+    }
+    return `${value.toFixed(1)} dBFS`;
+}
+
+function calculateFillWidth(value) {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+        return 0;
+    }
+    const MIN_DB = -60;
+    const MAX_DB = 0;
+    const clamped = Math.max(MIN_DB, Math.min(MAX_DB, value));
+    return ((clamped - MIN_DB) / (MAX_DB - MIN_DB)) * 100;
 }
 
 function initializeAudioPlayers(playingStates = {}, currentTimes = {}) {
@@ -562,20 +617,24 @@ function bindAudioPlayerEvents(audioEl) {
     const sourceName = audioEl.dataset.sourceName || '';
 
     audioEl.addEventListener('loadstart', () => {
+        clearStreamRecoveryTimer(audioEl);
         setPlayerStatus(sourceName, 'Connecting to stream…', 'info');
     });
 
     audioEl.addEventListener('playing', () => {
         audioEl.dataset.fallbackRetries = '0';
+        clearStreamRecoveryTimer(audioEl);
         setPlayerStatus(sourceName, `${labelForStreamType(audioEl.dataset.streamType)} playing.`, 'success');
     });
 
     audioEl.addEventListener('waiting', () => {
         setPlayerStatus(sourceName, 'Buffering…', 'info');
+        scheduleStreamRecovery(audioEl, sourceName);
     });
 
     audioEl.addEventListener('stalled', () => {
         setPlayerStatus(sourceName, 'Stream stalled – attempting to recover…', 'warning');
+        scheduleStreamRecovery(audioEl, sourceName);
     });
 
     audioEl.addEventListener('pause', () => {
@@ -583,6 +642,7 @@ function bindAudioPlayerEvents(audioEl) {
             setPlayerStatus(sourceName, 'Playback paused.', 'muted');
         }
         audioEl.dataset.suppressPauseMessage = '';
+        clearStreamRecoveryTimer(audioEl);
     });
 
     audioEl.addEventListener('ended', () => {
@@ -650,6 +710,44 @@ function switchToProxyStream(audioEl, sourceName, options = {}) {
 function appendCacheBuster(url) {
     const separator = url.includes('?') ? '&' : '?';
     return `${url}${separator}ts=${Date.now()}`;
+}
+
+function clearStreamRecoveryTimer(audioEl) {
+    const timerId = audioEl.dataset.stallTimerId ? parseInt(audioEl.dataset.stallTimerId, 10) : null;
+    if (timerId) {
+        clearTimeout(timerId);
+    }
+    audioEl.dataset.stallTimerId = '';
+}
+
+function scheduleStreamRecovery(audioEl, sourceName) {
+    clearStreamRecoveryTimer(audioEl);
+
+    const streamType = audioEl.dataset.streamType || audioEl.dataset.initialStreamType || 'unknown';
+    const wasPlaying = !audioEl.paused;
+    const timeoutMs = streamType === 'icecast' ? 3500 : 2000;
+
+    const timerId = window.setTimeout(() => {
+        audioEl.dataset.stallTimerId = '';
+
+        const currentType = audioEl.dataset.streamType || audioEl.dataset.initialStreamType || 'unknown';
+        if (currentType !== streamType) {
+            return;
+        }
+
+        if (currentType === 'icecast') {
+            const reason = 'Icecast stream stalled or unreachable. Switching to secure fallback.';
+            switchToProxyStream(audioEl, sourceName, { autoplay: wasPlaying, reason });
+            return;
+        }
+
+        if (currentType === 'flask-proxy') {
+            setPlayerStatus(sourceName, 'Reconnecting to secure stream…', 'warning');
+            switchToProxyStream(audioEl, sourceName, { autoplay: wasPlaying, notify: false });
+        }
+    }, timeoutMs);
+
+    audioEl.dataset.stallTimerId = String(timerId);
 }
 
 function setPlayerStatus(sourceName, message, level = 'muted') {
@@ -1101,9 +1199,6 @@ async function stopSource(sourceName) {
             return;
         }
 
-        // Stop waveform updates
-        stopWaveformUpdate(sourceName);
-
         // Reload sources
         loadAudioSources();
     } catch (error) {
@@ -1112,70 +1207,57 @@ async function stopSource(sourceName) {
     }
 }
 
-function startWaveformUpdate(sourceName) {
-    // Clear any existing interval
-    stopWaveformUpdate(sourceName);
-
-    // Update waveform every 100ms
-    waveformIntervals[sourceName] = setInterval(() => updateWaveform(sourceName), 100);
-}
-
-function stopWaveformUpdate(sourceName) {
-    if (waveformIntervals[sourceName]) {
-        clearInterval(waveformIntervals[sourceName]);
-        delete waveformIntervals[sourceName];
+function updateLevelMetersFromSnapshot(snapshot) {
+    if (!snapshot || !Array.isArray(snapshot.live_metrics)) {
+        return;
     }
-}
 
-async function updateWaveform(sourceName) {
-    try {
-        const response = await fetch(`/api/audio/waveform/${encodeURIComponent(sourceName)}`);
-        if (!response.ok) return;
+    snapshot.live_metrics.forEach(metric => {
+        const safeId = sanitizeId(metric.source_id);
+        const peakBar = document.getElementById(`peak-meter-${safeId}`);
+        const rmsBar = document.getElementById(`rms-meter-${safeId}`);
+        const peakLabel = document.getElementById(`peak-label-${safeId}`);
+        const rmsLabel = document.getElementById(`rms-label-${safeId}`);
 
-        const data = await response.json();
-        const canvas = document.getElementById(`canvas-${sourceName}`);
-        if (!canvas) return;
-
-        const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const height = canvas.height;
-
-        // Clear canvas
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, width, height);
-
-        // Draw waveform
-        ctx.strokeStyle = '#00ff00';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-
-        const waveform = data.waveform || [];
-        const step = width / waveform.length;
-
-        for (let i = 0; i < waveform.length; i++) {
-            const x = i * step;
-            const y = (waveform[i] + 1) * height / 2; // Convert from [-1, 1] to canvas coords
-
-            if (i === 0) {
-                ctx.moveTo(x, y);
-            } else {
-                ctx.lineTo(x, y);
-            }
+        if (peakBar) {
+            peakBar.style.width = `${calculateFillWidth(metric.peak_level_db)}%`;
+            peakBar.style.opacity = metric.source_status === 'running' ? 1 : 0.35;
         }
 
-        ctx.stroke();
+        if (rmsBar) {
+            rmsBar.style.width = `${calculateFillWidth(metric.rms_level_db)}%`;
+            rmsBar.style.opacity = metric.source_status === 'running' ? 0.9 : 0.3;
+        }
 
-        // Draw center line
-        ctx.strokeStyle = '#333';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, height / 2);
-        ctx.lineTo(width, height / 2);
-        ctx.stroke();
+        if (peakLabel) {
+            peakLabel.textContent = `Peak: ${formatDbLabel(metric.peak_level_db)}`;
+        }
+        if (rmsLabel) {
+            rmsLabel.textContent = `RMS: ${formatDbLabel(metric.rms_level_db)}`;
+        }
+    });
+}
 
+async function updateLevelMeters() {
+    try {
+        const response = await fetch('/api/audio/metrics');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        updateLevelMetersFromSnapshot(data);
     } catch (error) {
-        console.error(`Error updating waveform for ${sourceName}:`, error);
+        console.debug('Level meter update skipped:', error);
     }
+}
+
+function startLevelPolling() {
+    if (levelIntervalHandle) {
+        clearInterval(levelIntervalHandle);
+    }
+
+    updateLevelMeters();
+    levelIntervalHandle = setInterval(updateLevelMeters, 1000);
 }
 
 // Load sources on page load
@@ -1189,9 +1271,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Clean up intervals when page unloads
 window.addEventListener('beforeunload', function() {
-    Object.keys(waveformIntervals).forEach(sourceName => {
-        stopWaveformUpdate(sourceName);
-    });
+    if (levelIntervalHandle) {
+        clearInterval(levelIntervalHandle);
+        levelIntervalHandle = null;
+    }
 });
 </script>
 {% endblock %}
