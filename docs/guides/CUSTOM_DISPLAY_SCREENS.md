@@ -88,7 +88,7 @@ Templates support variable substitution using `{variable.path}` syntax:
 
 #### Network Info
 - `{network.ip_address}` - System IP address
-- `{network.uptime}` - System uptime
+- `{network.uptime_human}` - System uptime (human readable)
 
 #### Time/Date (built-in)
 - `{now.time}` - Current time (12-hour format)
@@ -288,7 +288,7 @@ Supported operators: `==`, `!=`, `>`, `<`, `>=`, `<=`
     "lines": [
       "NETWORK INFO",
       "IP: {network.ip_address}",
-      "Uptime: {network.uptime}",
+      "Uptime: {network.uptime_human}",
       "{now.time}"
     ],
     "color": "BLUE",
