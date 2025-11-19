@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Any
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, url_for
 from sqlalchemy import text
 from alembic import command, config as alembic_config
 from alembic.script import ScriptDirectory
@@ -432,16 +432,24 @@ def register(app: Flask, logger) -> None:
     def robots():
         """Robots.txt for web crawlers."""
 
-        return (
-            """User-agent: *
-Disallow: /admin/
-Disallow: /api/
-Disallow: /debug/
-Allow: /
-""",
-            200,
-            {"Content-Type": "text/plain"},
-        )
+        sitemap_url = None
+        try:
+            sitemap_url = url_for("sitemap", _external=True)
+        except Exception as exc:  # pragma: no cover - defensive
+            route_logger.debug("Unable to build sitemap URL for robots.txt: %s", exc)
+
+        robots_lines = [
+            "User-agent: *",
+            "Disallow: /admin/",
+            "Disallow: /api/",
+            "Disallow: /debug/",
+            "Allow: /",
+        ]
+
+        if sitemap_url:
+            robots_lines.append(f"Sitemap: {sitemap_url}")
+
+        return ("\n".join(robots_lines) + "\n", 200, {"Content-Type": "text/plain"})
 
     @app.route("/api/monitoring/radio")
     def monitoring_radio():
