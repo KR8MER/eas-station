@@ -1,0 +1,16 @@
+<svg width="220" height="100" viewBox="0 0 220 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">NOAA Reference Badge</title>
+  <desc id="desc">Minimal NOAA-style emblem for documentation link callouts.</desc>
+  <defs>
+    <linearGradient id="noaaGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1d4ed8" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+  </defs>
+  <rect x="6" y="10" width="208" height="80" rx="22" fill="url(#noaaGradient)" />
+  <circle cx="70" cy="50" r="28" fill="#e0f2fe" />
+  <path d="M50 48 Q70 28 90 48 T130 48" fill="none" stroke="#0f172a" stroke-width="3" stroke-linecap="round" />
+  <path d="M50 58 Q70 78 90 58 T130 58" fill="none" stroke="#0f172a" stroke-width="3" stroke-linecap="round" />
+  <text x="120" y="52" font-size="30" font-weight="700" font-family="'Inter', 'Segoe UI', Arial, sans-serif" fill="#e0f2fe">NOAA</text>
+  <text x="120" y="72" font-size="14" font-weight="500" font-family="'Inter', 'Segoe UI', Arial, sans-serif" fill="#bfdbfe" letter-spacing="0.25em">WX OPS</text>
+</svg>

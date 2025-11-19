@@ -7,7 +7,9 @@
             <!-- Header -->
             <div class="card shadow-sm mb-4 border-0">
                 <div class="card-body p-4 p-md-5 text-center">
-                    <img src="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}" alt="EAS Station logo" class="img-fluid mb-3" style="max-width: 500px;">
+                    {% with logo_classes='img-fluid mb-3 mx-auto', logo_style='max-width: 500px;' %}
+                        {% include 'partials/logo_wordmark.html' %}
+                    {% endwith %}
                     <i class="fas fa-life-ring fa-3x text-primary mb-3 d-block"></i>
                     <h1 class="display-5 fw-bold mb-3">Help & Operations Guide</h1>
                     <p class="lead text-muted">Complete documentation for operating and maintaining your EAS Station</p>
@@ -20,66 +22,134 @@
                 </div>
             </div>
 
-            <!-- Quick Navigation -->
-            <div class="card shadow-sm mb-4 border-0 bg-light">
-                <div class="card-body p-4">
-                    <h2 class="h5 mb-3"><i class="fas fa-compass me-2"></i>Quick Navigation</h2>
-                    <div class="row g-2 g-lg-3">
-                        <div class="col-sm-6 col-lg-4">
-                            <a href="#getting-started" class="btn btn-outline-primary w-100 text-start d-flex align-items-center"
-                               data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top"
-                               title="Get up and running with EAS Station">
-                                <i class="fas fa-rocket me-2"></i>
-                                <span>Getting Started</span>
-                            </a>
+            <!-- Quick Navigation + Flow -->
+            <div class="row g-3 mb-4">
+                <div class="col-lg-8">
+                    <div class="card shadow-sm border-0 quick-links-card h-100">
+                        <div class="card-body p-4">
+                            <div class="d-flex align-items-center justify-content-between mb-3">
+                                <div>
+                                    <h2 class="h5 mb-1"><i class="fas fa-compass me-2"></i>Quick Navigation</h2>
+                                    <p class="text-muted mb-0">Jump directly into the workflows you open most often.</p>
+                                </div>
+                                <span class="badge bg-primary-subtle text-primary fw-semibold">7 shortcuts</span>
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-sm-6">
+                                    <a href="#getting-started" class="help-quick-link" title="Deployment prerequisites">
+                                        <div class="help-quick-icon bg-primary-subtle text-primary">
+                                            <i class="fas fa-rocket"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-1">Getting Started</h6>
+                                            <p class="text-muted mb-0 small">Install, provision, and verify your stack.</p>
+                                        </div>
+                                    </a>
+                                </div>
+                                <div class="col-sm-6">
+                                    <a href="#routine-operations" class="help-quick-link" title="End-to-end daily cadence">
+                                        <div class="help-quick-icon bg-success-subtle text-success">
+                                            <i class="fas fa-project-diagram"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-1">Daily Operations</h6>
+                                            <p class="text-muted mb-0 small">Monitor, validate, broadcast, and archive.</p>
+                                        </div>
+                                    </a>
+                                </div>
+                                <div class="col-sm-6">
+                                    <a href="#troubleshooting" class="help-quick-link" title="Common break/fix steps">
+                                        <div class="help-quick-icon bg-danger-subtle text-danger">
+                                            <i class="fas fa-tools"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-1">Troubleshooting</h6>
+                                            <p class="text-muted mb-0 small">Playbooks for the failures we see most.</p>
+                                        </div>
+                                    </a>
+                                </div>
+                                <div class="col-sm-6">
+                                    <a href="#reference-commands" class="help-quick-link" title="Useful shell helpers">
+                                        <div class="help-quick-icon bg-info-subtle text-info">
+                                            <i class="fas fa-terminal"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-1">Reference Commands</h6>
+                                            <p class="text-muted mb-0 small">Docker, Postgres, and analytics utilities.</p>
+                                        </div>
+                                    </a>
+                                </div>
+                                <div class="col-sm-6">
+                                    <a href="/admin" class="help-quick-link" title="Open the administration panel">
+                                        <div class="help-quick-icon bg-secondary-subtle text-secondary">
+                                            <i class="fas fa-sliders"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-1">Admin Panel</h6>
+                                            <p class="text-muted mb-0 small">User, RBAC, and infrastructure controls.</p>
+                                        </div>
+                                    </a>
+                                </div>
+                                <div class="col-sm-6">
+                                    <a href="/system_health" class="help-quick-link" title="System diagnostics">
+                                        <div class="help-quick-icon bg-warning-subtle text-warning">
+                                            <i class="fas fa-heartbeat"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-1">System Health</h6>
+                                            <p class="text-muted mb-0 small">Live service status and background workers.</p>
+                                        </div>
+                                    </a>
+                                </div>
+                                <div class="col-sm-6">
+                                    <a href="/docs/RBAC_PERMISSION_TREE" class="help-quick-link" title="Role definitions">
+                                        <div class="help-quick-icon bg-dark-subtle text-dark">
+                                            <i class="fas fa-sitemap"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-1">Permission Tree</h6>
+                                            <p class="text-muted mb-0 small">Compare every role and inherited scope.</p>
+                                        </div>
+                                    </a>
+                                </div>
+                            </div>
                         </div>
-                        <div class="col-sm-6 col-lg-4">
-                            <a href="#routine-operations" class="btn btn-outline-primary w-100 text-start d-flex align-items-center"
-                               data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top"
-                               title="Review the end-to-end workflow from monitoring to follow-up">
-                                <i class="fas fa-project-diagram me-2"></i>
-                                <span>Daily Operations</span>
-                            </a>
-                        </div>
-                        <div class="col-sm-6 col-lg-4">
-                            <a href="#troubleshooting" class="btn btn-outline-primary w-100 text-start d-flex align-items-center"
-                               data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top"
-                               title="Common issues and solutions">
-                                <i class="fas fa-tools me-2"></i>
-                                <span>Troubleshooting</span>
-                            </a>
-                        </div>
-                        <div class="col-sm-6 col-lg-4">
-                            <a href="#reference-commands" class="btn btn-outline-primary w-100 text-start d-flex align-items-center"
-                               data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top"
-                               title="Useful commands and utilities">
-                                <i class="fas fa-terminal me-2"></i>
-                                <span>Reference Commands</span>
-                            </a>
-                        </div>
-                        <div class="col-sm-6 col-lg-4">
-                            <a href="/admin" class="btn btn-outline-primary w-100 text-start d-flex align-items-center"
-                               data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top"
-                               title="Open the administration panel">
-                                <i class="fas fa-cog me-2"></i>
-                                <span>Admin Panel</span>
-                            </a>
-                        </div>
-                        <div class="col-sm-6 col-lg-4">
-                            <a href="/system_health" class="btn btn-outline-primary w-100 text-start d-flex align-items-center"
-                               data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top"
-                               title="Check system health and status">
-                                <i class="fas fa-heartbeat me-2"></i>
-                                <span>System Health</span>
-                            </a>
-                        </div>
-                        <div class="col-sm-6 col-lg-4">
-                            <a href="/docs/RBAC_PERMISSION_TREE" class="btn btn-outline-primary w-100 text-start d-flex align-items-center"
-                               data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top"
-                               title="View complete permission matrix for all roles">
-                                <i class="fas fa-sitemap me-2"></i>
-                                <span>Permission Tree</span>
-                            </a>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card shadow-sm border-0 operations-flow-card h-100">
+                        <div class="card-body p-4">
+                            <h2 class="h6 text-uppercase text-muted fw-bold mb-3">Operations Flow</h2>
+                            <ul class="list-unstyled operations-flow mb-0">
+                                <li>
+                                    <span class="flow-step">1</span>
+                                    <div>
+                                        <h6 class="mb-0">Monitor &amp; Capture</h6>
+                                        <p class="text-muted small mb-0">CAP polling + SDR ingest keep alerts flowing in.</p>
+                                    </div>
+                                </li>
+                                <li>
+                                    <span class="flow-step">2</span>
+                                    <div>
+                                        <h6 class="mb-0">Analyze &amp; Verify</h6>
+                                        <p class="text-muted small mb-0">Rule filters, analytics, and operator review.</p>
+                                    </div>
+                                </li>
+                                <li>
+                                    <span class="flow-step">3</span>
+                                    <div>
+                                        <h6 class="mb-0">Broadcast &amp; Notify</h6>
+                                        <p class="text-muted small mb-0">Builder, audio playout, GPIO, and displays.</p>
+                                    </div>
+                                </li>
+                                <li>
+                                    <span class="flow-step">4</span>
+                                    <div>
+                                        <h6 class="mb-0">Audit &amp; Improve</h6>
+                                        <p class="text-muted small mb-0">Archive, compliance, and analytics feedback.</p>
+                                    </div>
+                                </li>
+                            </ul>
                         </div>
                     </div>
                 </div>
@@ -647,6 +717,58 @@
                 </div>
             </div>
 
+            <!-- Trusted Field Resources -->
+            <div class="card shadow-sm mb-4 border-0" id="field-resources">
+                <div class="card-body p-4">
+                    <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-lg-between mb-4">
+                        <div>
+                            <h2 class="h4 mb-1"><i class="fas fa-handshake-angle me-2 text-primary"></i>Trusted Field Resources</h2>
+                            <p class="text-muted mb-0">Curated references from NOAA, FEMA IPAWS, and ARRL to keep operations sharp.</p>
+                        </div>
+                        <div class="d-flex gap-2 mt-3 mt-lg-0">
+                            <span class="badge bg-primary-subtle text-primary">NOAA</span>
+                            <span class="badge bg-success-subtle text-success">FEMA IPAWS</span>
+                            <span class="badge bg-danger-subtle text-danger">ARRL</span>
+                        </div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="help-resource-card h-100">
+                                <img src="{{ url_for('static', filename='img/resources/noaa-badge.svg') }}" alt="NOAA field reference badge" class="help-resource-logo mb-3" loading="lazy">
+                                <h5>NOAA Weather Service</h5>
+                                <p class="text-muted">Primary CAP documentation, glossary, and sample payloads.</p>
+                                <ul class="list-unstyled small mb-0">
+                                    <li><a href="https://www.weather.gov/documentation/services-web-api" class="text-decoration-none" target="_blank">Services API Guide</a></li>
+                                    <li><a href="https://alerts.weather.gov/" class="text-decoration-none" target="_blank">Operational CAP Feeds</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="help-resource-card h-100">
+                                <img src="{{ url_for('static', filename='img/resources/ipaws-badge.svg') }}" alt="FEMA IPAWS badge" class="help-resource-logo mb-3" loading="lazy">
+                                <h5>FEMA IPAWS Lab</h5>
+                                <p class="text-muted">Interoperability, architecture, and test schedule references.</p>
+                                <ul class="list-unstyled small mb-0">
+                                    <li><a href="https://www.fema.gov/emergency-managers/practitioners/integrated-public-alert-warning-system" class="text-decoration-none" target="_blank">IPAWS Overview</a></li>
+                                    <li><a href="https://www.fema.gov/pdf/emergency/ipaws/ipaws_open_platform_for_emergency_networks.pdf" class="text-decoration-none" target="_blank">OPEN Interface</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="help-resource-card h-100">
+                                <img src="{{ url_for('static', filename='img/resources/arrl-badge.svg') }}" alt="ARRL field badge" class="help-resource-logo mb-3" loading="lazy">
+                                <h5>ARRL Field Playbooks</h5>
+                                <p class="text-muted">ARES task books, ICS-213 templates, and readiness checklists.</p>
+                                <ul class="list-unstyled small mb-0">
+                                    <li><a href="https://www.arrl.org/ares" class="text-decoration-none" target="_blank">ARRL ARES Program</a></li>
+                                    <li><a href="https://www.arrl.org/files/file/ARESFieldResourcesManual.pdf" class="text-decoration-none" target="_blank">Field Resources Manual (PDF)</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Quick Actions -->
             <div class="card shadow-sm mb-4 border-0">
                 <div class="card-body p-4">
@@ -703,5 +825,3 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
-</create-file>
-<script src="https://sites.super.myninja.ai/_assets/ninja-daytona-script.js"></script>
