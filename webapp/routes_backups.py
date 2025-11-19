@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 from datetime import datetime
+from http import HTTPStatus
 from pathlib import Path
 from typing import Optional
 
@@ -22,6 +23,42 @@ def register(app: Flask, logger) -> None:
         """Get configured backup directory."""
         backup_path = app.config.get("BACKUP_DIR", "/var/backups/eas-station")
         return Path(backup_path)
+
+    def resolve_backup_path(backup_name: str) -> Path:
+        """Resolve a backup name to a safe path within the backup directory.
+
+        Rejects path traversal attempts (absolute paths, parent references, or
+        nested components) and ensures the resolved path remains under the
+        configured backup directory before using it in filesystem operations.
+        """
+
+        if not backup_name or backup_name != Path(backup_name).name:
+            raise ValueError("Invalid backup name")
+
+        backup_dir = get_backup_dir().resolve()
+        candidate = (backup_dir / backup_name).resolve()
+
+        if candidate == backup_dir or backup_dir not in candidate.parents:
+            raise ValueError("Backup path must stay within the backup directory")
+
+        return candidate
+
+    def error_response(status: HTTPStatus, message: str, detail: str | None = None):
+        """Return a standardized error response with professional metadata."""
+
+        payload = {
+            "success": False,
+            "error": {
+                "status": status.value,
+                "title": status.phrase,
+                "message": message,
+            },
+        }
+
+        if detail:
+            payload["error"]["detail"] = detail
+
+        return jsonify(payload), status.value
 
     def run_script(script_name: str, args: list[str]) -> tuple[bool, str, str]:
         """Run a backup script and return results."""
@@ -176,11 +213,11 @@ def register(app: Flask, logger) -> None:
             })
         else:
             route_logger.error(f"Backup failed: {stderr}")
-            return jsonify({
-                "success": False,
-                "message": "Backup failed",
-                "error": stderr or "Unknown error",
-            }), 500
+            return error_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                "Backup failed",
+                detail=stderr or "Unknown error",
+            )
 
     @app.route("/api/backups/restore", methods=["POST"])
     @require_auth
@@ -191,17 +228,18 @@ def register(app: Flask, logger) -> None:
         backup_name = data.get("backup_name")
 
         if not backup_name:
-            return jsonify({
-                "success": False,
-                "message": "Backup name is required",
-            }), 400
+            return error_response(HTTPStatus.BAD_REQUEST, "Backup name is required")
 
-        backup_path = get_backup_dir() / backup_name
+        try:
+            backup_path = resolve_backup_path(backup_name)
+        except ValueError as exc:
+            return error_response(HTTPStatus.BAD_REQUEST, str(exc))
+
         if not backup_path.exists():
-            return jsonify({
-                "success": False,
-                "message": f"Backup not found: {backup_name}",
-            }), 404
+            return error_response(
+                HTTPStatus.NOT_FOUND,
+                f"Backup not found: {backup_name}",
+            )
 
         route_logger.warning(f"Restoring backup: {backup_name}")
 
@@ -228,11 +266,11 @@ def register(app: Flask, logger) -> None:
             })
         else:
             route_logger.error(f"Restore failed: {stderr}")
-            return jsonify({
-                "success": False,
-                "message": "Restore failed",
-                "error": stderr or "Unknown error",
-            }), 500
+            return error_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                "Restore failed",
+                detail=stderr or "Unknown error",
+            )
 
     @app.route("/api/backups/delete", methods=["POST"])
     @require_auth
@@ -243,17 +281,18 @@ def register(app: Flask, logger) -> None:
         backup_name = data.get("backup_name")
 
         if not backup_name:
-            return jsonify({
-                "success": False,
-                "message": "Backup name is required",
-            }), 400
+            return error_response(HTTPStatus.BAD_REQUEST, "Backup name is required")
 
-        backup_path = get_backup_dir() / backup_name
+        try:
+            backup_path = resolve_backup_path(backup_name)
+        except ValueError as exc:
+            return error_response(HTTPStatus.BAD_REQUEST, str(exc))
+
         if not backup_path.exists():
-            return jsonify({
-                "success": False,
-                "message": f"Backup not found: {backup_name}",
-            }), 404
+            return error_response(
+                HTTPStatus.NOT_FOUND,
+                f"Backup not found: {backup_name}",
+            )
 
         try:
             import shutil
@@ -266,22 +305,27 @@ def register(app: Flask, logger) -> None:
             })
         except Exception as exc:
             route_logger.error(f"Failed to delete backup: {exc}")
-            return jsonify({
-                "success": False,
-                "message": f"Failed to delete backup: {exc}",
-            }), 500
+            return error_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                "Failed to delete backup",
+                detail=str(exc),
+            )
 
     @app.route("/api/backups/download/<backup_name>")
     @require_auth
     @require_role("Admin", "Operator")
     def api_download_backup(backup_name: str):
         """API endpoint to download a backup as a tarball."""
-        backup_path = get_backup_dir() / backup_name
+        try:
+            backup_path = resolve_backup_path(backup_name)
+        except ValueError as exc:
+            return error_response(HTTPStatus.BAD_REQUEST, str(exc))
+
         if not backup_path.exists():
-            return jsonify({
-                "success": False,
-                "message": f"Backup not found: {backup_name}",
-            }), 404
+            return error_response(
+                HTTPStatus.NOT_FOUND,
+                f"Backup not found: {backup_name}",
+            )
 
         # Create a tarball of the backup
         import tarfile
@@ -300,22 +344,27 @@ def register(app: Flask, logger) -> None:
             )
         except Exception as exc:
             route_logger.error(f"Failed to create backup download: {exc}")
-            return jsonify({
-                "success": False,
-                "message": f"Failed to create download: {exc}",
-            }), 500
+            return error_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                "Failed to create download",
+                detail=str(exc),
+            )
 
     @app.route("/api/backups/validate/<backup_name>")
     @require_auth
     @require_role("Admin", "Operator", "Analyst")
     def api_validate_backup(backup_name: str):
         """API endpoint to validate a backup."""
-        backup_path = get_backup_dir() / backup_name
+        try:
+            backup_path = resolve_backup_path(backup_name)
+        except ValueError as exc:
+            return error_response(HTTPStatus.BAD_REQUEST, str(exc))
+
         if not backup_path.exists():
-            return jsonify({
-                "success": False,
-                "message": f"Backup not found: {backup_name}",
-            }), 404
+            return error_response(
+                HTTPStatus.NOT_FOUND,
+                f"Backup not found: {backup_name}",
+            )
 
         # Check for required files
         required_files = ["metadata.json", ".env"]

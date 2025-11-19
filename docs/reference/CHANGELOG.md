@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.12.9] - 2025-11-20
+### Changed
+- Standardized backup API error responses with HTTP status titles and structured
+  details so clients see professional messages when validation or filesystem
+  issues occur.
+
+## [2.12.8] - 2025-11-19
+### Security
+- Hardened backup management endpoints by rejecting path traversal backup names before
+  running restore, delete, download, or validation actions, ensuring operations stay
+  inside the configured backup directory.
+
 ## [2.12.7] - 2025-12-02
 ### Fixed
 - Hardened the SDR audio monitoring stack by adding an auto-healing ingest controller that restarts stalled/error sources,
@@ -150,6 +162,8 @@ tracks releases under the 2.x series.
   - Documented complete analytics system architecture and usage in `app_core/analytics/README.md`
   - Published comprehensive compliance reporting playbook in `docs/compliance/reporting_playbook.md` with workflows for weekly/monthly test verification, performance monitoring, anomaly investigation, and regulatory audit preparation
 ### Fixed
+- Hardened backup API endpoints by validating backup names to block path traversal before
+  touching the filesystem.
 - Removed the CAP poller's area-term fallback so `/alerts` only surfaces entries that explicitly name the configured SAME or
   UGC codes, eliminating false positives from neighboring county descriptions.
 - Added comprehensive audio ingest pipeline for unified capture from SDR, ALSA, and file sources
