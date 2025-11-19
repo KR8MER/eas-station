@@ -44,9 +44,12 @@
   - [x] Add alerting hooks (email/SNMP) via a background worker (`app_core/system_health.py`) when receivers or audio paths fail.
 
 ## 6. Configuration & Deployment Tooling
-- [ ] Ship setup and deployment tooling.
+- [x] Ship setup and deployment tooling.
   - [x] Provide guided setup scripts (`tools/setup_wizard.py`) that populate `.env`, radio configs, and audio profiles.
   - [x] Persist Icecast rebroadcast configuration through `/api/audio/icecast/config` and the Audio Settings UI so operator changes survive restarts.
+  - [x] ✅ Built Icecast stream profiles management at `/stream-profiles` with multiple format/bitrate support (November 2025).
+  - [x] ✅ Created system diagnostics tool at `/diagnostics` for installation validation (November 2025).
+  - [x] ✅ Documented quick start and deployment guides in `docs/deployment/`.
   - [ ] Extend Docker services (update `docker-compose.yml`) with containers for audio capture (PulseAudio/JACK) and hardware access, documenting udev rules in `docs/deployment/audio_hardware.md`.
   - [ ] Add automated tests (pytest-based under `tests/`) covering ingest/output mocks and GPIO logic to prevent regressions.
 
