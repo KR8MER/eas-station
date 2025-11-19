@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.12.8] - 2025-12-03
+### Fixed
+- Corrected the default Icecast external port variable so Icecast URLs use the configured `ICECAST_EXTERNAL_PORT` rather than
+  inheriting overrides meant for the internal port, preventing browsers from being pointed to blocked or unmapped port 8080
+  endpoints.
+
 ## [2.12.7] - 2025-12-02
 ### Fixed
 - Hardened the SDR audio monitoring stack by adding an auto-healing ingest controller that restarts stalled/error sources,
