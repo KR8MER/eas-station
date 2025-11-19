@@ -234,7 +234,9 @@
     <!-- Hero Section -->
     <div class="version-hero text-center">
         <div class="container">
-            {% include 'partials/logo_wordmark.html' with logo_classes='img-fluid mb-4 mx-auto' logo_style='max-width: 400px;' %}
+            {% with logo_classes='img-fluid mb-4 mx-auto', logo_style='max-width: 400px;' %}
+                {% include 'partials/logo_wordmark.html' %}
+            {% endwith %}
 
             <div class="version-badge">
                 Version {{ version_info.version }}

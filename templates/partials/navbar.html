@@ -6,7 +6,9 @@
         <!-- Brand -->
         <div class="navbar-brand-group">
             <a class="navbar-brand" href="/">
-                {% include 'partials/logo_wordmark.html' with logo_classes='brand-logo' %}
+                {% with logo_classes='brand-logo' %}
+                    {% include 'partials/logo_wordmark.html' %}
+                {% endwith %}
             </a>
 
             <!-- System Health Indicator -->

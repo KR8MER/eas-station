@@ -8,7 +8,9 @@
             <div class="card shadow-sm mb-4 border-0">
                 <div class="card-body p-4 p-md-5">
                     <div class="text-center mb-4">
-                        {% include 'partials/logo_wordmark.html' with logo_classes='img-fluid mb-3 mx-auto' logo_style='max-width: 500px;' %}
+                        {% with logo_classes='img-fluid mb-3 mx-auto', logo_style='max-width: 500px;' %}
+                            {% include 'partials/logo_wordmark.html' %}
+                        {% endwith %}
                         <h1 class="display-6 fw-bold mb-3">System Information</h1>
                         <p class="lead text-muted">EAS Station Version and Configuration</p>
                     </div>
