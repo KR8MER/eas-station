@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.12.5] - 2025-11-30
+### Changed
+- Disabled the CAP poller's optional SDR capture orchestration by default so its RadioManager hooks stay idle unless the poller
+  needs to request IQ/PCM recordings for an alert playback, added the `CAP_POLLER_ENABLE_RADIO` environment flag, and exposed a
+  `--radio-captures/--no-radio-captures` CLI switch so operators can explicitly opt into capture requests when they actually
+  want files.
+
 ## [2.12.4] - 2025-11-29
 ### Fixed
 - Forced OLED templates with manually positioned lines to default to no-wrapping in the renderer so preview cards and physical
