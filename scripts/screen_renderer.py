@@ -132,8 +132,14 @@ class ScreenRenderer:
         Returns:
             String with variables substituted
         """
-        # Add built-in variables
-        now = datetime.now()
+        # Add built-in variables using local timezone
+        try:
+            from app_utils.time import local_now
+            now = local_now()
+        except ImportError:
+            # Fallback to system local time if app_utils not available
+            now = datetime.now()
+
         builtin_data = {
             'now': {
                 'time': now.strftime('%I:%M %p'),
@@ -332,9 +338,19 @@ class ScreenRenderer:
         return commands
 
     def render_oled_screen(self, screen_data: Dict[str, Any], api_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Render an OLED screen template."""
+        """Render an OLED screen template.
+
+        Supports both legacy 'lines' format and new 'elements' format for graphics.
+        """
 
         template = screen_data.get('template_data', {})
+
+        # Check if using new elements-based format (for bar graphs, etc.)
+        elements_config = template.get('elements', [])
+        if elements_config:
+            return self._render_oled_elements(template, api_data)
+
+        # Legacy lines-based format
         lines_config = template.get('lines', [])
         default_wrap = bool(template.get('wrap', True))
         default_spacing = template.get('spacing', 2)
@@ -401,6 +417,73 @@ class ScreenRenderer:
             'scroll_effect': scroll_payload['effect'],
             'scroll_speed': scroll_payload['speed'],
             'scroll_fps': scroll_payload['fps'],
+        }
+
+    def _render_oled_elements(self, template: Dict[str, Any], api_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Render OLED screen using elements format (supports bar graphs, shapes, etc.)."""
+
+        elements_config = template.get('elements', [])
+        rendered_elements: List[Dict[str, Any]] = []
+
+        for element in elements_config:
+            if not isinstance(element, dict):
+                continue
+
+            elem_type = element.get('type', '')
+
+            if elem_type == 'text':
+                # Text element
+                text_template = element.get('text', '')
+                rendered_text = self.substitute_variables(text_template, api_data)
+
+                rendered_elements.append({
+                    'type': 'text',
+                    'text': rendered_text,
+                    'x': element.get('x', 0),
+                    'y': element.get('y', 0),
+                    'font': element.get('font', 'small'),
+                    'invert': element.get('invert'),
+                })
+
+            elif elem_type == 'bar':
+                # Bar graph element
+                value_template = element.get('value', '0')
+                value_str = self.substitute_variables(value_template, api_data)
+
+                try:
+                    value = float(value_str)
+                except (ValueError, TypeError):
+                    value = 0.0
+
+                # Clamp to 0-100
+                value = max(0.0, min(100.0, value))
+
+                rendered_elements.append({
+                    'type': 'bar',
+                    'x': element.get('x', 0),
+                    'y': element.get('y', 0),
+                    'width': element.get('width', 50),
+                    'height': element.get('height', 8),
+                    'value': value,
+                    'border': element.get('border', True),
+                })
+
+            elif elem_type == 'rectangle':
+                # Rectangle element
+                rendered_elements.append({
+                    'type': 'rectangle',
+                    'x': element.get('x', 0),
+                    'y': element.get('y', 0),
+                    'width': element.get('width', 10),
+                    'height': element.get('height', 10),
+                    'filled': element.get('filled', False),
+                })
+
+        return {
+            'elements': rendered_elements,
+            'invert': template.get('invert'),
+            'clear': template.get('clear', True),
+            'allow_empty_frame': bool(template.get('allow_empty_frame', False)),
         }
 
     def render_screen(self, screen: Dict[str, Any]) -> Optional[Dict[str, Any]]:

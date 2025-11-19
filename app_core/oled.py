@@ -217,6 +217,145 @@ class ArgonOLEDController:
         self._last_image = image.copy()  # Store for preview
         self.device.display(image)
 
+    def render_frame(
+        self,
+        elements: List[Dict[str, Any]],
+        *,
+        clear: bool = True,
+        invert: Optional[bool] = None,
+    ) -> None:
+        """Render a complete frame with text, bar graphs, and shapes.
+
+        Professional composite rendering for audio equipment-style displays.
+        Elements are rendered in order, allowing for layering effects.
+
+        Args:
+            elements: List of element dictionaries with 'type' and parameters
+            clear: Whether to clear the display first
+            invert: Whether to invert colors
+
+        Element types:
+            - {'type': 'text', 'text': str, 'x': int, 'y': int, 'font': str}
+            - {'type': 'bar', 'x': int, 'y': int, 'width': int, 'height': int,
+               'value': float, 'border': bool}
+            - {'type': 'rectangle', 'x': int, 'y': int, 'width': int, 'height': int,
+               'filled': bool}
+        """
+        if clear:
+            active_invert = self.default_invert if invert is None else invert
+        else:
+            active_invert = invert if invert is not None else self.default_invert
+
+        background = 255 if active_invert else 0
+        draw_colour = 0 if active_invert else 255
+
+        image = Image.new("1", (self.width, self.height), color=background)
+        draw = ImageDraw.Draw(image)
+
+        for element in elements:
+            elem_type = element.get('type', '')
+
+            if elem_type == 'text':
+                # Text element
+                text = str(element.get('text', ''))
+                if not text:
+                    continue
+
+                x = max(0, min(self.width - 1, element.get('x', 0)))
+                y = max(0, min(self.height - 1, element.get('y', 0)))
+                font_key = element.get('font', 'small').lower()
+                font = self._fonts.get(font_key, self._fonts["small"])
+
+                # Check if text would be out of bounds
+                if y >= self.height:
+                    continue
+
+                elem_invert = element.get('invert')
+                if elem_invert is True:
+                    fill_colour = background
+                elif elem_invert is False:
+                    fill_colour = draw_colour
+                else:
+                    fill_colour = draw_colour
+
+                draw.text((x, y), text, font=font, fill=fill_colour)
+
+            elif elem_type == 'bar':
+                # Bar graph element
+                x = max(0, element.get('x', 0))
+                y = max(0, element.get('y', 0))
+                width = max(1, element.get('width', 50))
+                height = max(1, element.get('height', 8))
+                value = max(0.0, min(100.0, element.get('value', 0.0)))
+                show_border = element.get('border', True)
+
+                # Check bounds
+                if x >= self.width or y >= self.height:
+                    continue
+
+                # Clamp dimensions to display
+                width = min(width, self.width - x)
+                height = min(height, self.height - y)
+
+                # Draw border if requested
+                if show_border:
+                    draw.rectangle(
+                        [(x, y), (x + width, y + height)],
+                        fill=None,
+                        outline=draw_colour
+                    )
+                    # Fill area is inside border
+                    fill_x = x + 1
+                    fill_y = y + 1
+                    fill_max_width = width - 2
+                    fill_height = height - 2
+                else:
+                    fill_x = x
+                    fill_y = y
+                    fill_max_width = width
+                    fill_height = height
+
+                # Calculate and draw filled portion
+                fill_width = int((value / 100.0) * fill_max_width)
+                if fill_width > 0 and fill_height > 0:
+                    draw.rectangle(
+                        [(fill_x, fill_y), (fill_x + fill_width, fill_y + fill_height)],
+                        fill=draw_colour,
+                        outline=None
+                    )
+
+            elif elem_type == 'rectangle':
+                # Rectangle element
+                x = max(0, element.get('x', 0))
+                y = max(0, element.get('y', 0))
+                width = max(1, element.get('width', 10))
+                height = max(1, element.get('height', 10))
+                filled = element.get('filled', False)
+
+                # Check bounds
+                if x >= self.width or y >= self.height:
+                    continue
+
+                # Clamp to display
+                width = min(width, self.width - x)
+                height = min(height, self.height - y)
+
+                if filled:
+                    draw.rectangle(
+                        [(x, y), (x + width, y + height)],
+                        fill=draw_colour,
+                        outline=None
+                    )
+                else:
+                    draw.rectangle(
+                        [(x, y), (x + width, y + height)],
+                        fill=None,
+                        outline=draw_colour
+                    )
+
+        self._last_image = image.copy()
+        self.device.display(image)
+
     def prepare_scroll_content(
         self,
         lines: List[OLEDLine],
@@ -499,6 +638,138 @@ class ArgonOLEDController:
                 continue
             wrapped.extend(textwrap.wrap(paragraph, width=max_chars) or [paragraph])
         return wrapped or [""]
+
+    def draw_rectangle(
+        self,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        *,
+        filled: bool = False,
+        invert: Optional[bool] = None,
+        clear: bool = False,
+    ) -> None:
+        """Draw a rectangle on the OLED display.
+
+        Args:
+            x: Left edge X coordinate
+            y: Top edge Y coordinate
+            width: Rectangle width in pixels
+            height: Rectangle height in pixels
+            filled: If True, draw filled rectangle; if False, draw outline only
+            invert: Whether to invert colors
+            clear: Whether to clear the display first
+        """
+        active_invert = self.default_invert if invert is None else invert
+        background = 255 if active_invert else 0
+        draw_colour = 0 if active_invert else 255
+
+        if clear:
+            image = Image.new("1", (self.width, self.height), color=background)
+        else:
+            # Get current display or create new one
+            if self._last_image is not None:
+                image = self._last_image.copy()
+            else:
+                image = Image.new("1", (self.width, self.height), color=background)
+
+        draw = ImageDraw.Draw(image)
+
+        # Clamp coordinates to display bounds
+        x1 = max(0, min(self.width - 1, x))
+        y1 = max(0, min(self.height - 1, y))
+        x2 = max(0, min(self.width, x + width))
+        y2 = max(0, min(self.height, y + height))
+
+        if filled:
+            draw.rectangle([(x1, y1), (x2, y2)], fill=draw_colour, outline=None)
+        else:
+            draw.rectangle([(x1, y1), (x2, y2)], fill=None, outline=draw_colour)
+
+        self._last_image = image.copy()
+        self.device.display(image)
+
+    def draw_bar_graph(
+        self,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        value: float,
+        *,
+        show_border: bool = True,
+        invert: Optional[bool] = None,
+        clear: bool = False,
+    ) -> None:
+        """Draw a horizontal bar graph (meter) on the OLED display.
+
+        Professional audio-style bar graph with border and filled level indicator.
+
+        Args:
+            x: Left edge X coordinate
+            y: Top edge Y coordinate
+            width: Total bar width in pixels
+            height: Bar height in pixels
+            value: Fill percentage (0.0 to 100.0)
+            show_border: If True, draw border around bar
+            invert: Whether to invert colors
+            clear: Whether to clear the display first
+        """
+        active_invert = self.default_invert if invert is None else invert
+        background = 255 if active_invert else 0
+        draw_colour = 0 if active_invert else 255
+
+        if clear:
+            image = Image.new("1", (self.width, self.height), color=background)
+        else:
+            # Get current display or create new one
+            if self._last_image is not None:
+                image = self._last_image.copy()
+            else:
+                image = Image.new("1", (self.width, self.height), color=background)
+
+        draw = ImageDraw.Draw(image)
+
+        # Clamp coordinates and value
+        x1 = max(0, min(self.width - 1, x))
+        y1 = max(0, min(self.height - 1, y))
+        bar_width = max(1, min(self.width - x1, width))
+        bar_height = max(1, min(self.height - y1, height))
+        value_clamped = max(0.0, min(100.0, value))
+
+        # Draw border if requested
+        if show_border:
+            draw.rectangle(
+                [(x1, y1), (x1 + bar_width, y1 + bar_height)],
+                fill=None,
+                outline=draw_colour
+            )
+            # Fill area is inside the border
+            fill_x = x1 + 1
+            fill_y = y1 + 1
+            fill_max_width = bar_width - 2
+            fill_height = bar_height - 2
+        else:
+            # No border, use full dimensions
+            fill_x = x1
+            fill_y = y1
+            fill_max_width = bar_width
+            fill_height = bar_height
+
+        # Calculate filled portion width
+        fill_width = int((value_clamped / 100.0) * fill_max_width)
+
+        # Draw filled portion
+        if fill_width > 0:
+            draw.rectangle(
+                [(fill_x, fill_y), (fill_x + fill_width, fill_y + fill_height)],
+                fill=draw_colour,
+                outline=None
+            )
+
+        self._last_image = image.copy()
+        self.device.display(image)
 
     def get_preview_image_base64(self) -> Optional[str]:
         """Get the last displayed image as a base64-encoded PNG.
