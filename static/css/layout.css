@@ -186,10 +186,10 @@
     width: auto;
     display: block;
     padding: var(--logo-padding);
-    background: var(--logo-backdrop);
+    background: transparent;
     border-radius: var(--logo-radius);
-    border: 1px solid var(--logo-border-color);
-    box-shadow: var(--logo-shadow);
+    border: none;
+    box-shadow: none;
     transition: background-color var(--transition-medium),
                 box-shadow var(--transition-medium),
                 border-color var(--transition-medium);
@@ -215,6 +215,19 @@
 
 .logo-wordmark .logo-text-secondary {
     fill: var(--text-secondary, #64748b);
+}
+
+/* Navbar logo - ensure text is always readable on navbar gradient */
+.navbar .brand-logo .logo-text-primary {
+    fill: #ffffff;
+}
+
+.navbar .brand-logo .logo-text-secondary {
+    fill: rgba(255, 255, 255, 0.85);
+}
+
+.navbar .brand-logo .logo-bar {
+    fill: #ffffff;
 }
 
 /* Hide brand text on mobile devices */
