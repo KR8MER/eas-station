@@ -190,6 +190,15 @@ _setup_mode_reasons: List[str] = []
 
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 
+# Google Search Console integration helpers
+app.config['GOOGLE_SITE_VERIFICATION'] = os.environ.get('GOOGLE_SITE_VERIFICATION', '')
+
+_sitemap_limit_default = os.environ.get('SITEMAP_ALERT_LIMIT', '50')
+try:
+    app.config['SITEMAP_ALERT_LIMIT'] = max(0, int(_sitemap_limit_default)) or 50
+except ValueError:
+    app.config['SITEMAP_ALERT_LIMIT'] = 50
+
 raw_secure_flag = os.environ.get('SESSION_COOKIE_SECURE')
 if raw_secure_flag is not None:
     session_cookie_secure = raw_secure_flag.lower() in {'1', 'true', 'yes'}
@@ -690,6 +699,7 @@ def inject_global_vars():
         'setup_mode_reasons': app.config.get('SETUP_MODE_REASONS', ()),
         'csrf_token': generate_csrf_token(),
         'has_permission': has_permission,
+        'google_site_verification': app.config.get('GOOGLE_SITE_VERIFICATION'),
     }
 
 

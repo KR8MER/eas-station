@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
+from html import escape
 from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Flask, render_template, request, url_for, Response
@@ -48,6 +49,83 @@ def register(app: Flask, logger) -> None:
                 "<a href='/alerts'>📝 Alerts History</a> | "
                 "<a href='/admin'>⚙️ Admin</a></p>"
             )
+
+    @app.route("/sitemap.xml")
+    def sitemap():
+        """Expose an XML sitemap for search engines and uptime robots."""
+
+        urls: List[Dict[str, str]] = []
+        today_iso = utc_now().date().isoformat()
+
+        static_endpoints: List[Tuple[str, str, str]] = [
+            ("index", "daily", "1.0"),
+            ("stats", "daily", "0.8"),
+            ("alerts", "hourly", "0.9"),
+            ("help_page", "weekly", "0.5"),
+            ("about_page", "weekly", "0.5"),
+            ("privacy_page", "yearly", "0.3"),
+            ("terms_page", "yearly", "0.3"),
+            ("system_health_page", "hourly", "0.6"),
+            ("logs", "hourly", "0.4"),
+        ]
+
+        for endpoint, changefreq, priority in static_endpoints:
+            try:
+                urls.append(
+                    {
+                        "loc": url_for(endpoint, _external=True),
+                        "lastmod": today_iso,
+                        "changefreq": changefreq,
+                        "priority": priority,
+                    }
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                route_logger.debug("Skipping sitemap endpoint %s: %s", endpoint, exc)
+
+        alert_entries: List[CAPAlert] = []
+        try:
+            alert_entries = (
+                CAPAlert.query.order_by(CAPAlert.sent.desc())
+                .limit(app.config.get("SITEMAP_ALERT_LIMIT", 50))
+                .all()
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            route_logger.warning("Unable to load alerts for sitemap: %s", exc)
+
+        for alert in alert_entries:
+            try:
+                alert_url = url_for("api.alert_detail", alert_id=alert.id, _external=True)
+            except Exception as exc:  # pragma: no cover - defensive
+                route_logger.debug("Skipping alert %s in sitemap: %s", alert.id, exc)
+                continue
+
+            last_modified = alert.updated_at or alert.sent or utc_now()
+            urls.append(
+                {
+                    "loc": alert_url,
+                    "lastmod": last_modified.isoformat(),
+                    "changefreq": "hourly",
+                    "priority": "0.7",
+                }
+            )
+
+        xml_lines = [
+            "<?xml version='1.0' encoding='UTF-8'?>",
+            "<urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>",
+        ]
+
+        for entry in urls:
+            xml_lines.append("  <url>")
+            xml_lines.append(f"    <loc>{escape(entry['loc'])}</loc>")
+            if entry.get("lastmod"):
+                xml_lines.append(f"    <lastmod>{escape(entry['lastmod'])}</lastmod>")
+            xml_lines.append(f"    <changefreq>{entry['changefreq']}</changefreq>")
+            xml_lines.append(f"    <priority>{entry['priority']}</priority>")
+            xml_lines.append("  </url>")
+
+        xml_lines.append("</urlset>")
+
+        return Response("\n".join(xml_lines), mimetype="application/xml")
 
     @app.route("/stats")
     def stats():
