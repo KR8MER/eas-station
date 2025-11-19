@@ -77,6 +77,8 @@ class FMDemodulator:
         self._rbds_bit_buffer: List[int] = []
         self._rbds_expected_block: Optional[int] = None
         self._rbds_partial_group: List[int] = []
+        # RBDS uses differential BPSK, so we must keep the previous symbol polarity
+        self._rbds_prev_symbol: float = 1.0
 
     def demodulate(self, iq_samples: np.ndarray) -> Tuple[np.ndarray, Optional[RBDSData]]:
         """
@@ -235,7 +237,7 @@ class FMDemodulator:
             center = phase + samples_per_symbol / 2.0
             idx = int(min(max(int(center), 0), len(resampled) - 1))
             sample = resampled[idx]
-            bits.append(1 if sample >= 0 else 0)
+            bits.append(self._rbds_symbol_to_bit(float(sample)))
 
             early_idx = int(min(max(int(center - samples_per_symbol / 4.0), 0), len(resampled) - 1))
             late_idx = int(min(max(int(center + samples_per_symbol / 4.0), 0), len(resampled) - 1))
@@ -295,6 +297,19 @@ class FMDemodulator:
         if changed:
             return self._rbds_decoder.get_current_data()
         return None
+
+    def _rbds_symbol_to_bit(self, sample: float) -> int:
+        """Decode a differentially-encoded RBDS symbol into a data bit."""
+
+        symbol = 1.0 if sample >= 0 else -1.0
+        previous = self._rbds_prev_symbol
+        self._rbds_prev_symbol = symbol
+
+        if previous is None:
+            return 0
+
+        # Differential BPSK: bit=0 when polarity stays the same, 1 when it flips
+        return 0 if symbol == previous else 1
 
     def _decode_rbds_block(self, bits: List[int]) -> Tuple[Optional[str], Optional[int]]:
         value = 0

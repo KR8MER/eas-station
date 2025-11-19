@@ -96,6 +96,15 @@ class _SoapySDRReceiver(ReceiverInterface):
     """Common functionality for receivers implemented via SoapySDR."""
 
     driver_hint: str = ""
+    _SOAPY_ERROR_DESCRIPTIONS = {
+        -1: "Timeout waiting for samples (SOAPY_SDR_TIMEOUT)",
+        -2: "Sample underflow on the SDR (SOAPY_SDR_UNDERFLOW)",
+        -3: "Sample overflow in the SDR driver (SOAPY_SDR_OVERFLOW)",
+        -4: "Stream reported a driver error (SOAPY_SDR_STREAM_ERROR)",
+        -5: "Corrupted data from device (SOAPY_SDR_CORRUPTION)",
+        -6: "Operation not supported by device (SOAPY_SDR_NOT_SUPPORTED)",
+        -7: "Receiver PLL is not locked (SOAPY_SDR_NOT_LOCKED)",
+    }
 
     def __init__(
         self,
@@ -123,6 +132,40 @@ class _SoapySDRReceiver(ReceiverInterface):
     # ------------------------------------------------------------------
     # Lifecycle helpers
     # ------------------------------------------------------------------
+    @classmethod
+    def _describe_soapysdr_error(cls, code: int) -> str:
+        """Return a human-readable message for a SoapySDR error code."""
+
+        description = cls._SOAPY_ERROR_DESCRIPTIONS.get(code)
+        if description:
+            return f"SoapySDR readStream error {code}: {description}"
+        return f"SoapySDR readStream error {code}: Unknown error"
+
+    @staticmethod
+    def _annotate_lock_hint(message: str) -> str:
+        """Attach a PLL lock hint when SoapySDR reports NOT_LOCKED conditions."""
+
+        if not isinstance(message, str):
+            return message
+
+        lowered = message.lower()
+        keywords = (
+            "not locked",
+            "pll lock",
+            "pll unlock",
+            "soapysdr readstream error -7",
+            "error -7",
+            "soapysdr_not_locked",
+        )
+        if any(keyword in lowered for keyword in keywords):
+            hint = (
+                "Receiver PLL is not locked; ensure the SDR has a valid antenna, "
+                "reference clock, and that the tuner frequency is supported."
+            )
+            if hint not in message:
+                return f"{message} (hint: {hint})"
+        return message
+
     def start(self) -> None:  # noqa: D401 - documented in base class
         if self._running.is_set():
             return
@@ -308,13 +351,14 @@ class _SoapySDRReceiver(ReceiverInterface):
                 SoapySDR.SOAPY_SDR_CF32,
             )
             device.activateStream(stream)
-        except Exception:
+        except Exception as exc:
             # Ensure hardware resources are released before bubbling the error up.
             try:
                 device.close()
             except Exception:  # pragma: no cover - best-effort cleanup
                 pass
-            raise
+            message = self._annotate_lock_hint(str(exc))
+            raise RuntimeError(f"Failed to configure SoapySDR device: {message}") from exc
 
         return _SoapySDRHandle(device=device, stream=stream, sdr_module=SoapySDR, numpy_module=numpy)
 
@@ -326,8 +370,9 @@ class _SoapySDRReceiver(ReceiverInterface):
     ) -> object:
         serial = original_args.get("serial")
         if not serial:
+            message = self._annotate_lock_hint(str(original_exc))
             raise RuntimeError(
-                f"Unable to open SoapySDR device for driver '{self.driver_hint}': {original_exc}"
+                f"Unable to open SoapySDR device for driver '{self.driver_hint}': {message}"
             ) from original_exc
 
         fallback_args = dict(original_args)
@@ -356,10 +401,12 @@ class _SoapySDRReceiver(ReceiverInterface):
         try:
             device = sdr_module.Device(fallback_args)
         except Exception as fallback_exc:
+            annotated_original = self._annotate_lock_hint(str(original_exc))
+            annotated_fallback = self._annotate_lock_hint(str(fallback_exc))
             raise RuntimeError(
                 "Unable to open SoapySDR device for driver "
-                f"'{self.driver_hint}' using serial '{serial}': {original_exc}; "
-                f"retry without serial also failed: {fallback_exc}"
+                f"'{self.driver_hint}' using serial '{serial}': {annotated_original}; "
+                f"retry without serial also failed: {annotated_fallback}"
             ) from fallback_exc
 
         self._emit_event(
@@ -433,7 +480,9 @@ class _SoapySDRReceiver(ReceiverInterface):
             try:
                 result = handle.device.readStream(handle.stream, [buffer], len(buffer))
                 if result.ret < 0:
-                    raise RuntimeError(f"SoapySDR readStream error: {result.ret}")
+                    message = self._describe_soapysdr_error(result.ret)
+                    message = self._annotate_lock_hint(message)
+                    raise RuntimeError(message)
 
                 if result.ret > 0:
                     magnitude = float(handle.numpy.mean(handle.numpy.abs(buffer[: result.ret])))

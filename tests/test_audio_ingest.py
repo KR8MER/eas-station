@@ -10,6 +10,7 @@ import pytest
 import numpy as np
 import time
 from flask import Flask
+from typing import Optional
 from unittest.mock import Mock, patch
 
 from app_core.audio.ingest import (
@@ -19,6 +20,35 @@ from app_core.audio.ingest import (
 from app_core.audio.sources import create_audio_source
 from app_core.audio.metering import AudioMeter, SilenceDetector, AudioHealthMonitor
 from webapp.admin import audio_ingest as audio_admin
+
+
+class DummyCaptureAdapter(AudioSourceAdapter):
+    """Simple adapter used to exercise restart and controller logic."""
+
+    def __init__(self, name: str = "dummy", *, fail_after: Optional[int] = None):
+        config = AudioSourceConfig(
+            source_type=AudioSourceType.FILE,
+            name=name,
+            buffer_size=256,
+        )
+        super().__init__(config)
+        self._fail_after = fail_after
+        self._chunks_read = 0
+
+    def _start_capture(self) -> None:
+        self._chunks_read = 0
+
+    def _stop_capture(self) -> None:
+        pass
+
+    def _read_audio_chunk(self):
+        if self._stop_event.is_set():
+            return None
+        self._chunks_read += 1
+        if self._fail_after is not None and self._chunks_read > self._fail_after:
+            raise RuntimeError("simulated capture failure")
+        time.sleep(0.005)
+        return np.zeros(self.config.buffer_size, dtype=np.float32)
 
 
 class TestAudioSourceConfig:
@@ -381,14 +411,14 @@ class TestAudioIngestController:
 
     def test_controller_creation(self):
         """Test creating an ingest controller."""
-        controller = AudioIngestController()
+        controller = AudioIngestController(enable_monitor=False)
         
         assert len(controller._sources) == 0
         assert controller._active_source is None
 
     def test_add_source(self):
         """Test adding a source to the controller."""
-        controller = AudioIngestController()
+        controller = AudioIngestController(enable_monitor=False)
         
         config = AudioSourceConfig(
             source_type=AudioSourceType.FILE,
@@ -404,7 +434,7 @@ class TestAudioIngestController:
 
     def test_remove_source(self):
         """Test removing a source from the controller."""
-        controller = AudioIngestController()
+        controller = AudioIngestController(enable_monitor=False)
         
         config = AudioSourceConfig(
             source_type=AudioSourceType.FILE,
@@ -421,7 +451,7 @@ class TestAudioIngestController:
 
     def test_source_priority_selection(self):
         """Test source selection based on priority."""
-        controller = AudioIngestController()
+        controller = AudioIngestController(enable_monitor=False)
         
         # Add sources with different priorities
         config1 = AudioSourceConfig(
@@ -459,7 +489,7 @@ class TestAudioIngestController:
 
     def test_cleanup(self):
         """Test controller cleanup."""
-        controller = AudioIngestController()
+        controller = AudioIngestController(enable_monitor=False)
         
         config = AudioSourceConfig(
             source_type=AudioSourceType.FILE,
@@ -474,6 +504,36 @@ class TestAudioIngestController:
 
         assert len(controller._sources) == 0
         assert controller._active_source is None
+
+    def test_adapter_restart_recovers_running_state(self):
+        """Verify restart() stops and restarts the capture loop."""
+        adapter = DummyCaptureAdapter()
+        assert adapter.start()
+        time.sleep(0.2)
+        assert adapter.status == AudioSourceStatus.RUNNING
+
+        assert adapter.restart("unit-test", delay=0.0)
+        time.sleep(0.2)
+        assert adapter.status == AudioSourceStatus.RUNNING
+        assert adapter._restart_count >= 1
+        adapter.stop()
+
+    def test_ensure_source_running_requests_restart(self):
+        """Controller should restart unhealthy adapters on demand."""
+        controller = AudioIngestController(enable_monitor=False)
+        adapter = DummyCaptureAdapter(name="ensure-test")
+        controller.add_source(adapter)
+        adapter.config.enabled = True
+        adapter.status = AudioSourceStatus.ERROR
+
+        def _restart(reason):
+            adapter.status = AudioSourceStatus.RUNNING
+            return True
+
+        adapter.restart = Mock(side_effect=_restart)
+
+        assert controller.ensure_source_running("ensure-test", reason="unit-test") is True
+        adapter.restart.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.12.7] - 2025-12-02
+### Fixed
+- Hardened the SDR audio monitoring stack by adding an auto-healing ingest controller that restarts stalled/error sources,
+  auto-starts adapters when the live audio endpoint is hit, and exposes restart/error metadata so operators stop seeing
+  permanent 503 responses, 0% buffer utilization, and "stream stalled" warnings on the monitoring dashboard.
+
+## [2.12.6] - 2025-12-01
+### Fixed
+- Added a differential RBDS symbol slicer so FM demodulation correctly reconstructs PI/PS/RadioText metadata and keeps the latest
+  decoded fields available to the SDR audio monitor.
+- Hardened the SoapySDR receiver implementation by mapping stream error codes (including SOAPY_SDR_NOT_LOCKED) to descriptive
+  messages and attaching PLL lock hints so operators immediately see when a tuner simply needs to acquire lock instead of chasing
+  misleading "cannot open device" errors.
+
 ## [2.12.5] - 2025-11-30
 ### Changed
 - Disabled the CAP poller's optional SDR capture orchestration by default so its RadioManager hooks stay idle unless the poller
