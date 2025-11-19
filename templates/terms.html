@@ -7,7 +7,7 @@
             <div class="card shadow-sm border-0 mb-4">
                 <div class="card-body p-4 p-md-5">
                     <div class="text-center mb-4">
-                        <img src="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}" alt="EAS Station logo" class="img-fluid mb-3" style="max-width: 500px;">
+                        {% include 'partials/logo_wordmark.html' with logo_classes='img-fluid mb-3 mx-auto' logo_style='max-width: 500px;' %}
                         <i class="fas fa-scale-balanced fa-3x text-primary mb-3 d-block"></i>
                         <h1 class="display-6 fw-bold">Terms of Use</h1>
                         <p class="text-muted mb-0">Last updated: {{ current_time().strftime('%B %d, %Y') }}</p>

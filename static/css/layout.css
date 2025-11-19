@@ -195,6 +195,24 @@
                 border-color var(--transition-medium);
 }
 
+.logo-wordmark {
+    display: block;
+    height: auto;
+    max-width: 100%;
+}
+
+.logo-wordmark .logo-bar {
+    fill: var(--accent-primary, var(--accent-color, #ef4444));
+}
+
+.logo-wordmark .logo-text-primary {
+    fill: var(--text-color, #1e293b);
+}
+
+.logo-wordmark .logo-text-secondary {
+    fill: var(--text-secondary, #64748b);
+}
+
 /* Hide brand text on mobile devices */
 @media (max-width: 767.98px) {
     .brand-text {

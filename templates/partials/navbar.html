@@ -6,10 +6,7 @@
         <!-- Brand -->
         <div class="navbar-brand-group">
             <a class="navbar-brand" href="/">
-                <img src="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}"
-                     alt="EAS Station"
-                     class="brand-logo"
-                     loading="lazy">
+                {% include 'partials/logo_wordmark.html' with logo_classes='brand-logo' %}
             </a>
 
             <!-- System Health Indicator -->
