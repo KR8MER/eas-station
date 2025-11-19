@@ -29,30 +29,25 @@ SNAPSHOT_SCREEN_TEMPLATE = {
     "duration": 10,
     "template_data": {
         "clear": True,
-        "lines": [
-            {"text": "{now.datetime}", "wrap": False, "y": 0, "max_width": 124},
-            {
-                "text": "Status {status.status} | Alerts {status.active_alerts_count}",
-                "y": 10,
-                "wrap": False,
-                "max_width": 124,
-            },
-            {"text": "{status.status_summary}", "y": 22, "max_width": 124},
-            {
-                "text": "Alert {alerts.features[0].properties.event}",
-                "y": 34,
-                "max_width": 124,
-                "allow_empty": True,
-            },
-            {
-                "text": "CPU {status.system_resources.cpu_usage_percent}%  MEM {status.system_resources.memory_usage_percent}%",
-                "y": 46,
-                "wrap": False,
-                "max_width": 124,
-            },
-            {
-                "text": "Audio Peak {audio.live_metrics[0].peak_level_db} dB", "y": 52, "allow_empty": True
-            },
+        "elements": [
+            # Header with local date/time
+            {"type": "text", "text": "{now.datetime}", "x": 0, "y": 0, "font": "small"},
+            # System status
+            {"type": "text", "text": "{status.status}", "x": 0, "y": 12, "font": "small"},
+            # CPU bar graph
+            {"type": "text", "text": "CPU", "x": 0, "y": 24, "font": "small"},
+            {"type": "bar", "value": "{status.system_resources.cpu_usage_percent}", "x": 26, "y": 24, "width": 72, "height": 8},
+            {"type": "text", "text": "{status.system_resources.cpu_usage_percent}%", "x": 102, "y": 24, "font": "small"},
+            # Memory bar graph
+            {"type": "text", "text": "MEM", "x": 0, "y": 35, "font": "small"},
+            {"type": "bar", "value": "{status.system_resources.memory_usage_percent}", "x": 26, "y": 35, "width": 72, "height": 8},
+            {"type": "text", "text": "{status.system_resources.memory_usage_percent}%", "x": 102, "y": 35, "font": "small"},
+            # Disk bar graph
+            {"type": "text", "text": "DISK", "x": 0, "y": 46, "font": "small"},
+            {"type": "bar", "value": "{status.system_resources.disk_usage_percent}", "x": 26, "y": 46, "width": 72, "height": 8},
+            {"type": "text", "text": "{status.system_resources.disk_usage_percent}%", "x": 102, "y": 46, "font": "small"},
+            # Alert count
+            {"type": "text", "text": "Alerts: {status.active_alerts_count}", "x": 0, "y": 57, "font": "small"},
         ],
     },
     "data_sources": [
@@ -687,6 +682,24 @@ class ScreenManager:
             if controller is None:
                 return
 
+            # Check if using new elements-based format (for bar graphs, etc.)
+            raw_elements = rendered.get('elements')
+            if raw_elements is not None and isinstance(raw_elements, list):
+                # New elements-based format
+                controller.render_frame(
+                    raw_elements,
+                    clear=rendered.get('clear', True),
+                    invert=rendered.get('invert'),
+                )
+
+                screen.display_count += 1
+                screen.last_displayed_at = datetime.utcnow()
+                db.session.commit()
+
+                logger.info(f"Displayed OLED screen (elements): {screen.name}")
+                return
+
+            # Legacy lines-based format
             raw_lines = rendered.get('lines', [])
             if not isinstance(raw_lines, list):
                 return
@@ -1062,7 +1075,7 @@ class ScreenManager:
         body_font_name = 'huge'
         logger.info("Using HUGE font for scrolling alert (%s chars)", len(body_text))
 
-        # Calculate text height for vertical centering
+        # Calculate text height
         body_font = controller._fonts.get(body_font_name, controller._fonts.get('xlarge', controller._fonts.get('large', controller._fonts['small'])))
         temp_img = Image.new("1", (1, 1))
         temp_draw = ImageDraw.Draw(temp_img)
@@ -1074,8 +1087,9 @@ class ScreenManager:
             # Fallback for older PIL versions
             text_height = body_font.getsize(body_text)[1]
 
-        # Vertically center the text in the available body area
-        text_y = (body_height - text_height) // 2
+        # Position text to start immediately at top of body area (y=0 in body coordinates)
+        # This ensures the header and scrolling text don't have a gap between them
+        text_y = 0
 
         # Use the seamless scrolling API with OLEDLine
         # This will create a buffer with pattern: [text][separator][text]
