@@ -53,70 +53,30 @@ Alert Database & Actions
 
 ## Hardware Options Available
 
-### Option 1: Silicon Labs Si4707 Chip ⭐⭐⭐⭐⭐ (Best Technical Solution)
+### Option 1: Silicon Labs Si4707 Chip ❌ (DISCONTINUED - Not Viable)
 
-**What It Is:**
-- Single-chip weather band radio receiver + SAME decoder
+**What It Was:**
+- Single-chip weather band receiver + SAME decoder
 - Integrated FSK demodulator (520.83 baud)
 - Built-in 1050Hz attention tone detector
 - Digital I2C/SPI interface
 
-**Technical Specifications:**
-- **Frequency Range:** 162.400-162.550 MHz (all 7 NOAA WX channels)
-- **SAME Decoding:** Hardware FSK demodulation + SAME protocol parsing
-- **Interface:** I2C (primary), SPI, or 3-wire
-- **Supply Voltage:** 2.7V to 5.5V (3.3V typical)
-- **Current:** 13mA active, 1μA standby
-- **Package:** QFN-20 (5mm × 5mm)
+**Current Status: DISCONTINUED**
 
-**How It Works:**
-```
-Antenna Input
-    ↓
-Internal RF Tuner (162.4-162.55 MHz)
-    ↓
-FM Demodulator
-    ↓
-FSK Demodulator (1562.5 Hz / 2083.3 Hz at 520.83 baud)
-    ↓
-SAME Protocol Parser
-    ↓
-I2C Digital Output → Raspberry Pi
-```
+The Si4707 was the **only integrated chip** with weather band receiver + hardware SAME decoder. Silicon Labs sold this division to Skyworks, and Skyworks has since **discontinued the entire Si4707 product line**.
 
-**Data Interface:**
-- Decoded SAME message available via I2C registers
-- Can trigger GPIO interrupt when alert received
-- Audio output available for monitoring/recording
-- RSSI (signal strength) and SNR available
+**Availability:**
+- DigiKey: ❌ Discontinued / Out of Stock
+- Mouser: ❌ Discontinued / Out of Stock
+- All breakout boards: ❌ Discontinued
+- No replacement chip exists
 
-**Off-the-Shelf Modules:**
+**Why This Matters:**
+- Si4707 was **unique** - no other chip has integrated SAME decoding
+- Cannot design custom PCB (no chips available)
+- Must use alternative approaches
 
-| Module | Manufacturer | Status | Price | Availability |
-|--------|-------------|--------|-------|--------------|
-| **SparkFun Si4707 Breakout** | SparkFun | ❌ Discontinued | Was ~$40 | None |
-| **AIW Industries Si4707 Module** | AIW Industries | ❌ Discontinued | Was ~$50 | Tindie (gone) |
-| **yniibi96 RPi HAT** | yniibi96 (Tindie) | ❌ Discontinued | Was ~$60 | None |
-
-**Current Situation:** All modules discontinued, but **chip is still available**
-
-**Si4707 IC Availability:**
-- DigiKey: ✅ Available ($4-6 each in single quantity)
-- Mouser: ✅ Available
-- Arrow: ✅ Available
-- Minimum order: 1 piece
-
-**Recommendation:** **Custom PCB design** using Si4707 chip
-
-**Design Complexity:**
-- **Hardware:** Moderate (RF design, antenna matching)
-- **PCB:** 4-layer recommended (2-layer possible)
-- **Components:** ~30-40 parts (SMD)
-- **Firmware:** Example code available (Arduino, Python)
-- **Cost:** $200-500 for initial prototype run (5-10 boards)
-- **Timeline:** 4-8 weeks (design + fabrication + assembly)
-
-**Value:** ⭐⭐⭐⭐⭐ **Excellent** - Best technical solution, but requires custom hardware
+**Value:** ❌ **Not Available** - Dead end, no longer a viable option
 
 ---
 
@@ -360,12 +320,16 @@ Raspberry Pi 40-pin GPIO Header
 
 ## Recommended Implementation Path
 
-### Immediate Term (This Month): Weather Radio + Audio
+### **UPDATED: Si4707 is NLA - Weather Radio is Only Viable Option**
+
+Since the Si4707 chip is discontinued with no replacement, **commercial weather radio + audio interface** is the only practical hardware solution.
+
+### Immediate Term (This Week): Weather Radio + Audio ⭐⭐⭐⭐ RECOMMENDED
 
 **Hardware:**
-1. Purchase Midland WR400 weather radio ($60-80)
+1. Purchase Midland WR400 weather radio ($60-80) - **Amazon has it**
 2. 3.5mm aux cable ($5)
-3. USB audio interface (or use Pi audio input) ($20-50)
+3. USB audio interface ($20-50) OR use Pi audio input
 
 **Software:**
 1. Connect radio audio output to Pi
@@ -374,51 +338,37 @@ Raspberry Pi 40-pin GPIO Header
 
 **Time:** 1-2 days to set up and test
 **Cost:** $85-135
-**Benefit:** Immediate hardware receiver, validates approach
+**Benefit:** Immediate hardware receiver, proven approach
 
 ---
 
-### Medium Term (3-6 Months): Custom Si4707 HAT
+### Medium Term (Optional): Hardware FSK Decoder
 
-**Prerequisites:**
-- Confirmed that weather radio + audio approach works
-- Budget allocated for custom hardware ($200-400)
-- Someone with PCB design skills (or hire designer)
+**If you want to offload FSK decoding from software:**
 
-**Steps:**
-1. Design schematic based on Si4707 reference design
-2. Layout PCB (4-layer recommended)
-3. Order PCB + components
-4. Assemble prototype
-5. Develop Python library
-6. Integrate with EAS Station
+Build XR-2211 FSK demodulator circuit:
+- Takes audio from weather radio
+- Outputs digital levels (mark/space) to GPIO
+- Python reads GPIO bits and parses SAME protocol
 
-**Time:** 8-12 weeks
-**Cost:** $200-400 initial prototype
-**Benefit:** Elegant hardware solution, fully integrated
+**Cost:** $10-20 (XR-2211 chip + passive components)
+**Complexity:** Moderate (analog circuit design)
+**Benefit:** Offloads FSK demodulation to hardware
 
 ---
 
-### Long Term (1+ Year): Production HAT
+### Long Term: No Integrated Solution Available
 
-**If successful:**
-1. Refine design based on prototype testing
-2. Order small production run (10-50 boards)
-3. Potentially sell to community (recoup costs)
-4. Open-source design files
-5. Document thoroughly
+**Reality Check:**
+- ❌ Si4707 chip discontinued (was the only integrated solution)
+- ❌ No replacement chip exists
+- ❌ Custom PCB not viable without chips
+- ✅ Weather radio + audio is the practical long-term solution
 
-**Potential Community Interest:**
-- Amateur radio operators
-- Weather enthusiasts
-- Emergency management professionals
-- Broadcast engineers
-
-**Economics:**
-- Sell HAT for $60-80 (assembled)
-- Cost: $20-30 (components + PCB)
-- Profit: $30-50 per board
-- Break-even: ~10-15 boards
+**Alternatives:**
+1. Continue with weather radio + audio (works well)
+2. Upgrade to commercial EAS equipment ($3,000-$7,000)
+3. Hope for new integrated chip (unlikely - small market)
 
 ---
 
