@@ -378,6 +378,7 @@ class ContinuousEASMonitor:
         self._stop_event.set()  # Initialize in "stopped" state
         self._alerts_detected = 0
         self._scans_performed = 0
+        self._last_scan_time: Optional[float] = None
         self._last_alert_time: Optional[float] = None
         self._duplicate_cooldown_seconds = 30.0
         self._recent_alert_signatures: OrderedDict[str, float] = OrderedDict()
@@ -467,7 +468,7 @@ class ContinuousEASMonitor:
             "buffer_fill_seconds": buffer_fill_seconds,
             "scans_performed": self._scans_performed,
             "alerts_detected": self._alerts_detected,
-            "last_scan_time": None,  # TODO: track this
+            "last_scan_time": self._last_scan_time,
             "last_alert_time": self._last_alert_time,
             "active_scans": active_scans,
             "audio_flowing": audio_flowing,
@@ -515,6 +516,7 @@ class ContinuousEASMonitor:
                 if current_time - last_scan_time >= self.scan_interval:
                     self._scan_for_alerts()
                     last_scan_time = current_time
+                    self._last_scan_time = current_time
                 else:
                     # Brief sleep to avoid busy-waiting
                     time.sleep(0.01)
