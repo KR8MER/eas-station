@@ -43,12 +43,18 @@ def initialize_eas_monitor(audio_manager, alert_callback=None, auto_start=True) 
         try:
             from .eas_monitor import ContinuousEASMonitor
             from .ingest import AudioIngestController
-            from .controller_adapter import AudioControllerAdapter
+            from .broadcast_adapter import BroadcastAudioAdapter
 
-            # If we got an AudioIngestController, wrap it in an adapter
+            # If we got an AudioIngestController, use broadcast adapter for non-destructive audio access
             if isinstance(audio_manager, AudioIngestController):
-                logger.info("Adapting AudioIngestController for EAS monitor")
-                audio_manager = AudioControllerAdapter(audio_manager, sample_rate=22050)
+                logger.info("Creating BroadcastAudioAdapter for EAS monitor (non-destructive subscription)")
+                broadcast_queue = audio_manager.get_broadcast_queue()
+                audio_manager = BroadcastAudioAdapter(
+                    broadcast_queue=broadcast_queue,
+                    subscriber_id="eas-monitor",
+                    sample_rate=22050
+                )
+                logger.info(f"EAS monitor subscribed to broadcast queue: {broadcast_queue.name}")
 
             _monitor_instance = ContinuousEASMonitor(
                 audio_manager=audio_manager,
