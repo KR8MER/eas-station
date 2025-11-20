@@ -9,17 +9,16 @@ from flask import Flask, jsonify, redirect, render_template, request, url_for
 from sqlalchemy.exc import OperationalError
 
 from app_core.extensions import db
+import app_core.led as led_module
 from app_core.led import (
     Color,
     DisplayMode,
     Font,
     FontSize,
-    LED_AVAILABLE,
     MessagePriority,
     SpecialFunction,
     Speed,
     ensure_led_tables,
-    led_controller,
 )
 from app_core.models import LEDMessage, LEDSignStatus
 from app_utils import utc_now
@@ -43,7 +42,7 @@ def register(app: Flask, logger) -> None:
             ensure_led_tables()
 
             # Get LED status from controller if available
-            led_status = led_controller.get_status() if led_controller else None
+            led_status = led_module.led_controller.get_status() if led_module.led_controller else None
 
             # If controller isn't available, create status from environment
             if not led_status:
@@ -71,8 +70,8 @@ def register(app: Flask, logger) -> None:
                     raise
 
             canned_messages: List[Dict[str, Any]] = []
-            if led_controller:
-                for name, config in led_controller.canned_messages.items():
+            if led_module.led_controller:
+                for name, config in led_module.led_controller.canned_messages.items():
                     lines = config.get("lines") or config.get("text") or []
                     if isinstance(lines, str):
                         lines = [lines]
@@ -101,7 +100,7 @@ def register(app: Flask, logger) -> None:
                 led_status=led_status,
                 recent_messages=recent_messages,
                 canned_messages=canned_messages,
-                led_available=LED_AVAILABLE,
+                led_available=led_module.LED_AVAILABLE,
             )
         except Exception as exc:  # pragma: no cover - defensive
             route_logger.error("Error loading LED control page: %s", exc)
@@ -117,7 +116,7 @@ def register(app: Flask, logger) -> None:
 
             payload = request.get_json(silent=True) or {}
 
-            if not led_controller:
+            if not led_module.led_controller:
                 return jsonify({"success": False, "error": "LED controller not available"})
 
             if not _led_enums_available():
@@ -278,7 +277,7 @@ def register(app: Flask, logger) -> None:
             db.session.add(led_message)
             db.session.commit()
 
-            result = led_controller.send_message(
+            result = led_module.led_controller.send_message(
                 lines=sanitised_lines,
                 color=color,
                 font=font,
@@ -316,7 +315,7 @@ def register(app: Flask, logger) -> None:
             if not message_name:
                 return jsonify({"success": False, "error": "Message name is required"})
 
-            if not led_controller:
+            if not led_module.led_controller:
                 return jsonify({"success": False, "error": "LED controller not available"})
 
             led_message = LEDMessage(
@@ -328,7 +327,7 @@ def register(app: Flask, logger) -> None:
             db.session.add(led_message)
             db.session.commit()
 
-            result = led_controller.send_canned_message(message_name, **parameters)
+            result = led_module.led_controller.send_canned_message(message_name, **parameters)
 
             if result:
                 led_message.sent_at = utc_now()
@@ -350,10 +349,10 @@ def register(app: Flask, logger) -> None:
         try:
             ensure_led_tables()
 
-            if not led_controller:
+            if not led_module.led_controller:
                 return jsonify({"success": False, "error": "LED controller not available"})
 
-            result = led_controller.clear_display()
+            result = led_module.led_controller.clear_display()
 
             if result:
                 led_message = LEDMessage(
@@ -382,10 +381,10 @@ def register(app: Flask, logger) -> None:
             if not 1 <= brightness <= 16:
                 return jsonify({"success": False, "error": "Brightness must be between 1 and 16"})
 
-            if not led_controller:
+            if not led_module.led_controller:
                 return jsonify({"success": False, "error": "LED controller not available"})
 
-            result = led_controller.set_brightness(brightness)
+            result = led_module.led_controller.set_brightness(brightness)
 
             if result:
                 ip_address = os.getenv("LED_SIGN_IP", "")
@@ -403,10 +402,10 @@ def register(app: Flask, logger) -> None:
     @app.route("/api/led/test", methods=["POST"])
     def api_led_test():
         try:
-            if not led_controller:
+            if not led_module.led_controller:
                 return jsonify({"success": False, "error": "LED controller not available"})
 
-            result = led_controller.test_all_features()
+            result = led_module.led_controller.test_all_features()
 
             led_message = LEDMessage(
                 message_type="system",
@@ -430,7 +429,7 @@ def register(app: Flask, logger) -> None:
             message = data.get("message", "EMERGENCY ALERT")
             duration = int(data.get("duration", 30))
 
-            if not led_controller:
+            if not led_module.led_controller:
                 return jsonify({"success": False, "error": "LED controller not available"})
 
             led_message = LEDMessage(
@@ -443,7 +442,7 @@ def register(app: Flask, logger) -> None:
             db.session.add(led_message)
             db.session.commit()
 
-            result = led_controller.emergency_override(message, duration)
+            result = led_module.led_controller.emergency_override(message, duration)
 
             if result:
                 led_message.sent_at = utc_now()
@@ -462,7 +461,7 @@ def register(app: Flask, logger) -> None:
             # Check if health check is requested (default: True for active monitoring)
             check_health = request.args.get('health_check', 'true').lower() == 'true'
 
-            if not led_controller:
+            if not led_module.led_controller:
                 # Return configuration even when not connected
                 return jsonify({
                     "success": True,
@@ -474,7 +473,7 @@ def register(app: Flask, logger) -> None:
                 })
 
             # Get status with optional active health check
-            status = led_controller.get_status(check_health=check_health)
+            status = led_module.led_controller.get_status(check_health=check_health)
 
             return jsonify({
                 "success": True,
@@ -525,11 +524,11 @@ def register(app: Flask, logger) -> None:
 
     @app.route("/api/led/canned_messages")
     def api_led_canned_messages():
-        if not led_controller:
+        if not led_module.led_controller:
             return jsonify({"success": False, "error": "LED controller not available"})
 
         canned = []
-        for name, config in led_controller.canned_messages.items():
+        for name, config in led_module.led_controller.canned_messages.items():
             canned.append(
                 {
                     "name": name,
