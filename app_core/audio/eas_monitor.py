@@ -335,8 +335,8 @@ class ContinuousEASMonitor:
     def __init__(
         self,
         audio_manager: AudioSourceManager,
-        buffer_duration: float = 30.0,  # Reduced from 120s to 30s for faster scanning
-        scan_interval: float = 5.0,  # Increased from 2s to 5s to reduce CPU load
+        buffer_duration: float = 10.0,  # Optimized for SAME detection (3s header × 3 bursts + margin)
+        scan_interval: float = 10.0,  # Prevents scan pileup - matches buffer for reliable detection
         sample_rate: int = 22050,
         alert_callback: Optional[Callable[[EASAlert], None]] = None,
         save_audio_files: bool = True,
