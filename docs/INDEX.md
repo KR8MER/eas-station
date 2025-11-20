@@ -120,7 +120,7 @@ Legacy files that still contain useful background material are now located under
 | [📊 Documentation Audit](documentation_audit) | Documentation status and maintenance tracking |
 | [🗃️ Documentation Archive](archive/README) | Historical bug reports & security analyses |
 | [🔐 Security Policy](development/AGENTS) | Security considerations |
-| [📜 License](https://github.com/KR8MER/eas-station/blob/main/LICENSE) | MIT License terms |
+| [📜 License](https://github.com/KR8MER/eas-station/blob/main/LICENSE) | AGPL-3.0 License (dual-licensed with Commercial License) |
 
 ## 🏢 Operational Documentation
 

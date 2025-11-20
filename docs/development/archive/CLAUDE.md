@@ -35,7 +35,7 @@
 
 ### Project Metadata
 - **Version:** 2.7.2 (see `/home/user/eas-station/VERSION`)
-- **License:** MIT License
+- **License:** GNU Affero General Public License v3 (AGPL-3.0) / Commercial License (dual-licensed)
 - **Author:** KR8MER Amateur Radio Emergency Communications
 - **Repository:** https://github.com/KR8MER/eas-station
 - **Primary Branch:** `main`

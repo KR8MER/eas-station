@@ -191,7 +191,7 @@ Documentation improvements are always welcome! Please:
 
 ## 📜 License
 
-This documentation is part of the EAS Station project, licensed under the MIT License. See [LICENSE](../LICENSE) for details.
+This documentation is part of the EAS Station project, dual-licensed under the GNU Affero General Public License v3 (AGPL-3.0) for open-source use and a Commercial License for proprietary use. See [LICENSE](../LICENSE) and [LICENSE-COMMERCIAL](../LICENSE-COMMERCIAL) for details.
 
 ---
 
