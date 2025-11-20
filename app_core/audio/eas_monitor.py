@@ -434,7 +434,7 @@ class ContinuousEASMonitor:
         - running: bool
         - buffer_duration: float (seconds)
         - scan_interval: float (seconds)
-        - buffer_utilization: float (0-100%)
+        - buffer_utilization: float (0.0-1.0, where 1.0 = 100%)
         - buffer_fill_seconds: float (how much audio is in buffer)
         - scans_performed: int
         - alerts_detected: int
@@ -447,12 +447,12 @@ class ContinuousEASMonitor:
         """
         is_running = not self._stop_event.is_set()
 
-        # Calculate buffer utilization
+        # Calculate buffer utilization (return as 0.0-1.0 for UI to convert to percentage)
         with self._buffer_lock:
             buffer_len = len(self._audio_buffer)
             # Simple heuristic: buffer is "full" if we've written at least once
             buffer_fill_seconds = (buffer_len / self.sample_rate) if self._buffer_pos > 0 else 0
-            buffer_utilization = min(100.0, (buffer_fill_seconds / self.buffer_duration) * 100.0)
+            buffer_utilization = min(1.0, buffer_fill_seconds / self.buffer_duration)
 
         # Audio flowing if we've written data
         audio_flowing = self._buffer_pos > 0
