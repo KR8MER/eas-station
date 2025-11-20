@@ -17,14 +17,14 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """Tests for the Git Commit badge URL encoding in the footer.
 
 This test verifies that the Git Commit badge displays correctly for both:
 1. Actual git commit hashes (e.g., "07EF1E")
 2. Dev build placeholder ("DEV BUILD")
 """
-
-from __future__ import annotations
 
 import re
 from pathlib import Path

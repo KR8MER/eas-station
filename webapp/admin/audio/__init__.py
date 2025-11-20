@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Audio archive and manual EAS route registration."""
-
 from __future__ import annotations
+
+"""Audio archive and manual EAS route registration."""
 
 from typing import Any
 

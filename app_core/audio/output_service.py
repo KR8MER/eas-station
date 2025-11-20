@@ -17,6 +17,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """
 Audio Output Service for deterministic EAS alert playback.
 
@@ -24,8 +26,6 @@ This module provides a service component that manages the audio playout queue
 and coordinates with hardware (audio output devices, GPIO relays) for reliable
 and FCC-compliant alert broadcasting.
 """
-
-from __future__ import annotations
 
 import logging
 import os

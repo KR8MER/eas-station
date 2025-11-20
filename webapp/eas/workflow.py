@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Routes backing the EAS workflow area."""
-
 from __future__ import annotations
+
+"""Routes backing the EAS workflow area."""
 
 import base64
 import json

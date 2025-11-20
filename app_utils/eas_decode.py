@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Decode SAME/EAS headers from audio files containing alert bursts."""
-
 from __future__ import annotations
+
+"""Decode SAME/EAS headers from audio files containing alert bursts."""
 
 import io
 import math

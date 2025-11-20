@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Audio archive listing and filtering routes."""
-
 from __future__ import annotations
+
+"""Audio archive listing and filtering routes."""
 
 import math
 from datetime import datetime, timezone

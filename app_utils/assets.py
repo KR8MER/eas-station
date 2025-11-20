@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Helpers for working with embedded static assets."""
-
 from __future__ import annotations
+
+"""Helpers for working with embedded static assets."""
 
 import base64
 from functools import lru_cache

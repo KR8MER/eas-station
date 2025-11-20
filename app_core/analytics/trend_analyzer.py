@@ -17,6 +17,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """Trend analysis with linear regression and statistical methods.
 
 This module provides functionality to analyze trends in time-series metrics:
@@ -25,8 +27,6 @@ This module provides functionality to analyze trends in time-series metrics:
 - Statistical significance testing
 - Forecasting future values
 """
-
-from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta

@@ -17,8 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Backup and restore management routes."""
 from __future__ import annotations
+
+"""Backup and restore management routes."""
 
 import json
 import subprocess

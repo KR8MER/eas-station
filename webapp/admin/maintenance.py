@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Administrative maintenance and manual import routes."""
-
 from __future__ import annotations
+
+"""Administrative maintenance and manual import routes."""
 
 import os
 import subprocess

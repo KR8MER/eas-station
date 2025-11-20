@@ -17,6 +17,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """
 API Routes for Stream Profile Management
 
@@ -29,8 +31,6 @@ Provides REST API for managing Icecast stream profiles:
 - POST /api/stream-profiles/<name>/enable - Enable profile
 - POST /api/stream-profiles/<name>/disable - Disable profile
 """
-
-from __future__ import annotations
 
 import logging
 from typing import Any, Dict, Tuple

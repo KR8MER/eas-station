@@ -17,6 +17,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """
 Stream Profile Configuration for Icecast
 
@@ -54,8 +56,6 @@ Usage:
     # Get active profiles
     profiles = manager.get_active_profiles()
 """
-
-from __future__ import annotations
 
 import json
 import logging

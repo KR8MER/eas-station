@@ -17,6 +17,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """Metrics aggregation for collecting and storing time-series data.
 
 This module provides functionality to aggregate metrics from various sources:
@@ -26,8 +28,6 @@ This module provides functionality to aggregate metrics from various sources:
 - GPIO activation patterns
 - Compliance metrics
 """
-
-from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta

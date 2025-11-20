@@ -18,9 +18,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Utility script for manually importing NOAA alerts into the database."""
-
 from __future__ import annotations
+
+"""Utility script for manually importing NOAA alerts into the database."""
 
 import argparse
 import os

@@ -18,9 +18,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Utility to exercise StreamSourceAdapter against one or more HTTP streams."""
-
 from __future__ import annotations
+
+"""Utility to exercise StreamSourceAdapter against one or more HTTP streams."""
 
 import argparse
 import json

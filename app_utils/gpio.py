@@ -17,6 +17,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """Unified GPIO control for transmitter keying and peripheral hardware.
 
 This module provides reliable, auditable control over GPIO pins with features including:
@@ -27,8 +29,6 @@ This module provides reliable, auditable control over GPIO pins with features in
 - Multiple relay/pin management
 - Thread-safe operations
 """
-
-from __future__ import annotations
 
 import json
 import os

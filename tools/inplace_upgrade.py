@@ -18,6 +18,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """Utility to perform an in-place upgrade of the EAS Station stack.
 
 This script keeps the existing containers and volumes intact while pulling the
@@ -26,7 +28,6 @@ is intended to support the "upgrade in place" workflow described in the
 project documentation so operators do not need to tear down and recreate the
 stack on every release.
 """
-from __future__ import annotations
 
 import argparse
 import shutil

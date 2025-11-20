@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Data export routes for alerts, boundaries, and statistics."""
-
 from __future__ import annotations
+
+"""Data export routes for alerts, boundaries, and statistics."""
 
 from typing import Any, Dict, List
 

@@ -17,14 +17,14 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """
 Audio Metering and Silence Detection
 
 Provides real-time audio level monitoring, silence detection,
 and alerting for audio pipeline health monitoring.
 """
-
-from __future__ import annotations
 
 import logging
 import threading

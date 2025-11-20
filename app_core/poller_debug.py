@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Utilities for capturing and presenting poller debug information."""
-
 from __future__ import annotations
+
+"""Utilities for capturing and presenting poller debug information."""
 
 from typing import Iterable, List
 

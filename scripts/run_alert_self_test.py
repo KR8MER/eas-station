@@ -18,9 +18,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Replay curated SAME audio and verify alert activation logic."""
-
 from __future__ import annotations
+
+"""Replay curated SAME audio and verify alert activation logic."""
 
 import argparse
 import sys

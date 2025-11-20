@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Download endpoints for generated audio assets."""
-
 from __future__ import annotations
+
+"""Download endpoints for generated audio assets."""
 
 import io
 import json

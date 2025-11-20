@@ -17,8 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Authentication helpers for the admin interface."""
 from __future__ import annotations
+
+"""Authentication helpers for the admin interface."""
 
 from flask import Blueprint
 

@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Template filter and global registrations for the Flask app."""
-
 from __future__ import annotations
+
+"""Template filter and global registrations for the Flask app."""
 
 from flask import Flask
 

@@ -18,9 +18,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Analyze bit-level framing differences between generated and external SAME files."""
-
 from __future__ import annotations
+
+"""Analyze bit-level framing differences between generated and external SAME files."""
 
 import sys
 from pathlib import Path

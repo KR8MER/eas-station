@@ -17,6 +17,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """
 Enhanced EAS Tone Detection Module
 
@@ -26,8 +28,6 @@ Provides robust detection for:
 - End-of-Message (EOM) detection
 - Narration extraction and segmentation
 """
-
-from __future__ import annotations
 
 import math
 from dataclasses import dataclass

@@ -17,13 +17,13 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """
 Audio Pipeline Test Runner Routes
 
 Web UI for running and viewing audio pipeline test results.
 """
-
-from __future__ import annotations
 
 import json
 import subprocess

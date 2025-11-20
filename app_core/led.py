@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""LED sign integration helpers used by the Flask application."""
-
 from __future__ import annotations
+
+"""LED sign integration helpers used by the Flask application."""
 
 import os
 import threading

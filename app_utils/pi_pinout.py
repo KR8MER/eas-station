@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Static metadata for the Raspberry Pi 40-pin header."""
-
 from __future__ import annotations
+
+"""Static metadata for the Raspberry Pi 40-pin header."""
 
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple

@@ -17,6 +17,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """Scheduled tasks for analytics aggregation and analysis.
 
 This module provides scheduled background tasks for:
@@ -24,8 +26,6 @@ This module provides scheduled background tasks for:
 - Trend analysis
 - Anomaly detection
 """
-
-from __future__ import annotations
 
 import logging
 import threading

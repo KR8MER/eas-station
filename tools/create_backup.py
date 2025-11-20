@@ -18,8 +18,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Create a comprehensive snapshot of configuration, database, media, and Docker volumes."""
 from __future__ import annotations
+
+"""Create a comprehensive snapshot of configuration, database, media, and Docker volumes."""
 
 import argparse
 import json

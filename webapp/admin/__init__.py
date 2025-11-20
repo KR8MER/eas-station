@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Organised registration helpers for legacy admin routes."""
-
 from __future__ import annotations
+
+"""Organised registration helpers for legacy admin routes."""
 
 from app_utils.eas import load_eas_config
 

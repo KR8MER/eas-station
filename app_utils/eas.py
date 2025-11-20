@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Helpers for generating and broadcasting EAS-compatible audio output."""
-
 from __future__ import annotations
+
+"""Helpers for generating and broadcasting EAS-compatible audio output."""
 
 import io
 import json

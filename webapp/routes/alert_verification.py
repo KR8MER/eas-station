@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Routes powering the alert verification and analytics dashboard."""
-
 from __future__ import annotations
+
+"""Routes powering the alert verification and analytics dashboard."""
 
 import json
 import os

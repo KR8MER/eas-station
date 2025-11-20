@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""REST-style API routes used by the admin interface."""
-
 from __future__ import annotations
+
+"""REST-style API routes used by the admin interface."""
 
 import contextlib
 import json

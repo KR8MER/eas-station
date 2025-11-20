@@ -17,6 +17,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """
 Lock-Free Ring Buffer for Real-Time Audio
 
@@ -31,8 +33,6 @@ Key Features:
 - Cache-line aligned for performance
 - Suitable for real-time audio processing
 """
-
-from __future__ import annotations
 
 import ctypes
 import logging

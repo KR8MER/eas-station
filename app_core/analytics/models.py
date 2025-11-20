@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Analytics database models for trend analysis and anomaly detection."""
-
 from __future__ import annotations
+
+"""Analytics database models for trend analysis and anomaly detection."""
 
 from typing import Any, Dict, Optional
 

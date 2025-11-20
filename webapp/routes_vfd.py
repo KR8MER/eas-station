@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""VFD display routes for Noritake GU140x32F-7000B graphics control."""
-
 from __future__ import annotations
+
+"""VFD display routes for Noritake GU140x32F-7000B graphics control."""
 
 import base64
 import io

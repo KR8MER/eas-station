@@ -18,8 +18,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Restore an EAS Station backup with validation and safety checks."""
 from __future__ import annotations
+
+"""Restore an EAS Station backup with validation and safety checks."""
 
 import argparse
 import json

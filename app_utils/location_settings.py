@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Location settings defaults and helpers for the NOAA alerts system."""
-
 from __future__ import annotations
+
+"""Location settings defaults and helpers for the NOAA alerts system."""
 
 import os
 from typing import Iterable, List, Sequence, Tuple

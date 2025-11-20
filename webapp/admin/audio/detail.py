@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Detailed audio history routes."""
-
 from __future__ import annotations
+
+"""Detailed audio history routes."""
 
 from datetime import datetime
 from typing import Dict, List, Optional

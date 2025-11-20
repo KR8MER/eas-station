@@ -18,9 +18,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Check which decoder path is being used for each file."""
-
 from __future__ import annotations
+
+"""Check which decoder path is being used for each file."""
 
 import sys
 from pathlib import Path

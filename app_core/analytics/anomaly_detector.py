@@ -17,6 +17,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """Anomaly detection using statistical methods.
 
 This module provides functionality to detect anomalies in time-series metrics:
@@ -25,8 +27,6 @@ This module provides functionality to detect anomalies in time-series metrics:
 - Trend break detection
 - Pattern violation detection
 """
-
-from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta

@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Text-to-speech helpers used by the EAS audio generator."""
-
 from __future__ import annotations
+
+"""Text-to-speech helpers used by the EAS audio generator."""
 
 import audioop
 import ctypes.util

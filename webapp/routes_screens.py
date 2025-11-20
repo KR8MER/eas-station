@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Custom screen management routes for LED and VFD displays."""
-
 from __future__ import annotations
+
+"""Custom screen management routes for LED and VFD displays."""
 
 from typing import Any, Dict, List
 

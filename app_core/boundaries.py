@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Boundary metadata helpers used by the NOAA alerts application."""
-
 from __future__ import annotations
+
+"""Boundary metadata helpers used by the NOAA alerts application."""
 
 import math
 import re

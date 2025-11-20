@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Administrative routes for managing generated EAS messages."""
-
 from __future__ import annotations
+
+"""Administrative routes for managing generated EAS messages."""
 
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional

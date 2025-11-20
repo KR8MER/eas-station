@@ -18,9 +18,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Test confidence display with visual interpretation."""
-
 from __future__ import annotations
+
+"""Test confidence display with visual interpretation."""
 
 import sys
 from pathlib import Path
