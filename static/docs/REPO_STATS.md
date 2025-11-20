@@ -1,15 +1,15 @@
 # Repository Statistics
 
-**Generated:** 2025-11-20 04:44:31 UTC
+**Generated:** 2025-11-20 05:25:59 UTC
 
 ## Overview
 
 - **Total Files:** 636
 - **Total Directories:** 74
-- **Total Lines:** 215,409
-- **Code Lines:** 134,706
-- **Comment Lines:** 46,547
-- **Total Routes:** 184
+- **Total Lines:** 215,518
+- **Code Lines:** 134,799
+- **Comment Lines:** 46,551
+- **Total Routes:** 185
 
 ## Files by Type
 
@@ -32,9 +32,9 @@
 
 | Language | Total Lines | Code Lines | Comment Lines |
 |----------|-------------|------------|---------------|
-| Python | 90,952 | 35,598 | 40,448 |
+| Python | 91,020 | 35,655 | 40,451 |
 | Markdown | 56,849 | 43,858 | 0 |
-| HTML | 46,900 | 42,703 | 450 |
+| HTML | 46,941 | 42,739 | 451 |
 | CSS | 6,512 | 1,125 | 4,416 |
 | JavaScript | 4,921 | 3,726 | 548 |
 | Text | 2,280 | 2,135 | 0 |
@@ -51,9 +51,9 @@
 |------|-------------|
 | webapp/routes_settings_radio.py | 21 |
 | webapp/routes_screens.py | 17 |
+| webapp/routes_led.py | 13 |
 | webapp/routes_public.py | 13 |
 | webapp/routes_vfd.py | 12 |
-| webapp/routes_led.py | 12 |
 | webapp/routes_analytics.py | 12 |
 | webapp/routes_monitoring.py | 10 |
 | webapp/routes_setup.py | 9 |
@@ -80,13 +80,13 @@
 
 ### Top Languages by Lines of Code
 
-**Python:** 35,598 lines  
+**Python:** 35,655 lines  
 `████████████████████████████████████████`
 
 **Markdown:** 43,858 lines  
 `██████████████████████████████████████████████████`
 
-**HTML:** 42,703 lines  
+**HTML:** 42,739 lines  
 `████████████████████████████████████████████████`
 
 **CSS:** 1,125 lines  
