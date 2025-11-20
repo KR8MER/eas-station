@@ -1,6 +1,6 @@
 # <img src="static/img/eas-system-wordmark.svg" alt="EAS Station" width="48" height="48" style="vertical-align: middle;"> EAS Station
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0) [![Commercial License](https://img.shields.io/badge/License-Commercial-green.svg)](LICENSE-COMMERCIAL)
 [![Docker](https://img.shields.io/badge/docker-supported-blue.svg)](https://www.docker.com/)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
 [![PostgreSQL](https://img.shields.io/badge/postgresql-17-blue.svg)](https://www.postgresql.org/)
@@ -404,18 +404,51 @@ See [New Features Guide](docs/NEW_FEATURES_2025-11) for detailed documentation.
 
 ## 📜 License
 
-EAS Station is licensed under the [MIT License](LICENSE).
+EAS Station is available under **dual licensing**:
+
+### Open Source License (AGPL v3)
+
+For open-source projects and non-commercial use, EAS Station is licensed under the [GNU Affero General Public License v3 (AGPL-3.0)](LICENSE).
+
+**Key requirements:**
+- ✅ Free to use, modify, and distribute
+- ✅ Must keep source code open
+- ✅ Must share modifications if you deploy as a web service
+- ✅ Must retain copyright and attribution notices
+- ❌ Cannot remove author attribution or rebrand
+
+See [LICENSE](LICENSE) file for full AGPL terms.
+
+### Commercial License
+
+For proprietary/closed-source use without AGPL obligations, a [Commercial License](LICENSE-COMMERCIAL) is available.
+
+**Benefits:**
+- ✅ No source code disclosure requirements
+- ✅ Integration into proprietary systems
+- ✅ Priority support and updates
+- ✅ Custom development assistance
+
+**Contact for commercial licensing:** See [LICENSE-COMMERCIAL](LICENSE-COMMERCIAL) for details.
+
+---
+
+### Copyright & Attribution
 
 ```
-MIT License
-
-Copyright (c) 2025 KR8MER
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files...
+Copyright (c) 2025 Timothy Kramer (KR8MER)
+EAS Station - https://github.com/KR8MER/eas-station
 ```
 
-See [LICENSE](LICENSE) file for full text.
+**IMPORTANT:** All derivative works must retain attribution to the original author.
+Rebranding or removing attribution is prohibited under both licenses.
+See [NOTICE](NOTICE) file for complete terms.
+
+### Why Dual Licensing?
+
+- **For hobbyists & open-source**: Free to use under AGPL
+- **For commercial use**: Option to license without copyleft obligations
+- **For everyone**: Protects the author's rights and prevents unauthorized rebranding
 
 ## 🙏 Acknowledgments
 
