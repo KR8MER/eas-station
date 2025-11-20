@@ -1535,18 +1535,20 @@ function updateEASMonitorDisplay(status) {
         bufferBar.setAttribute('aria-valuenow', bufferPct);
 
         // Color code based on utilization
+        // For circular buffer: 100% = healthy (green), low = warning/problem
         bufferBar.className = 'progress-bar progress-bar-striped';
         if (running) {
             bufferBar.classList.add('progress-bar-animated');
         }
 
         if (bufferUtil < 0.01) {
+            // No audio flowing
             bufferBar.classList.add('bg-warning');
-        } else if (bufferUtil > 0.95) {
-            bufferBar.classList.add('bg-danger');
-        } else if (bufferUtil > 0.8) {
-            bufferBar.classList.add('bg-warning');
+        } else if (bufferUtil < 0.5) {
+            // Still filling up (startup or audio issues)
+            bufferBar.classList.add('bg-info');
         } else {
+            // Normal operation (50-100% is healthy for circular buffer)
             bufferBar.classList.add('bg-success');
         }
     }
@@ -1566,9 +1568,14 @@ function updateEASMonitorDisplay(status) {
         } else if (bufferUtil < 0.01) {
             bufferStatus.innerHTML = '⚠️ No audio data flowing';
             bufferStatus.className = 'text-warning d-block mt-1';
-        } else if (bufferUtil > 0.95) {
-            bufferStatus.innerHTML = '⚠️ Buffer nearly full - possible processing lag';
-            bufferStatus.className = 'text-danger d-block mt-1';
+        } else if (bufferUtil >= 0.95) {
+            // Circular buffer at 100% is NORMAL steady-state operation
+            bufferStatus.innerHTML = '✓ Buffer full - ready for scanning';
+            bufferStatus.className = 'text-success d-block mt-1';
+        } else if (bufferUtil < 0.5) {
+            // Low buffer could indicate startup or audio issues
+            bufferStatus.innerHTML = '<i class="fas fa-hourglass-half"></i> Buffer filling...';
+            bufferStatus.className = 'text-info d-block mt-1';
         } else {
             bufferStatus.innerHTML = '✓ Audio flowing normally';
             bufferStatus.className = 'text-success d-block mt-1';
