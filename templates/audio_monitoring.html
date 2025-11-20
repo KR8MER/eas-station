@@ -355,7 +355,7 @@ function renderStreamModeControls() {
 }
 
 // Fetch audio sources from API
-async function loadAudioSources() {
+async function loadAudioSources(fullRender = true) {
     try {
         const response = await fetch('/api/audio/sources');
         if (!response.ok) {
@@ -363,22 +363,61 @@ async function loadAudioSources() {
         }
         const data = await response.json();
         audioSources = data.sources || [];
-        renderAudioSources();
-        startLevelPolling();
+        renderAudioSources(fullRender);
+        if (fullRender) {
+            startLevelPolling();
+        }
     } catch (error) {
         console.error('Failed to load audio sources:', error);
-        document.getElementById('audio-sources-container').innerHTML = `
-            <div class="col-12">
-                <div class="alert alert-danger">
-                    <strong>Error loading audio sources:</strong> ${error.message}
-                    <div class="small text-muted mt-1">Check that you are signed in and the audio API is reachable.</div>
+        if (fullRender) {
+            document.getElementById('audio-sources-container').innerHTML = `
+                <div class="col-12">
+                    <div class="alert alert-danger">
+                        <strong>Error loading audio sources:</strong> ${error.message}
+                        <div class="small text-muted mt-1">Check that you are signed in and the audio API is reachable.</div>
+                    </div>
                 </div>
-            </div>
-        `;
+            `;
+        }
     }
 }
 
-function renderAudioSources() {
+function updateMetricsOnly() {
+    // Update metrics for each source without touching audio players
+    audioSources.forEach(source => {
+        const safeId = sanitizeId(source.name);
+
+        // Update status badge
+        const card = document.querySelector(`[data-source-card="${source.name}"]`);
+        if (card) {
+            card.className = `card audio-source-card status-${source.status}`;
+        }
+
+        // Update metrics if source is running
+        if (source.status === 'running' && source.metrics) {
+            // Update level meters
+            const peakMeter = document.getElementById(`peak-meter-${safeId}`);
+            const rmsMeter = document.getElementById(`rms-meter-${safeId}`);
+            const peakLabel = document.getElementById(`peak-label-${safeId}`);
+            const rmsLabel = document.getElementById(`rms-label-${safeId}`);
+
+            if (peakMeter) {
+                peakMeter.style.width = `${calculateFillWidth(source.metrics.peak_level_db)}%`;
+            }
+            if (rmsMeter) {
+                rmsMeter.style.width = `${calculateFillWidth(source.metrics.rms_level_db)}%`;
+            }
+            if (peakLabel) {
+                peakLabel.textContent = `Peak: ${formatDbLabel(source.metrics.peak_level_db)}`;
+            }
+            if (rmsLabel) {
+                rmsLabel.textContent = `RMS: ${formatDbLabel(source.metrics.rms_level_db)}`;
+            }
+        }
+    });
+}
+
+function renderAudioSources(fullRender = true) {
     const container = document.getElementById('audio-sources-container');
 
     if (audioSources.length === 0) {
@@ -390,6 +429,12 @@ function renderAudioSources() {
                 </div>
             </div>
         `;
+        return;
+    }
+
+    // If not doing full render, just update metrics without touching players
+    if (!fullRender) {
+        updateMetricsOnly();
         return;
     }
 
@@ -411,7 +456,7 @@ function renderAudioSources() {
 
         return `
         <div class="col-lg-6 col-xl-4 mb-3">
-            <div class="card audio-source-card status-${source.status}">
+            <div class="card audio-source-card status-${source.status}" data-source-card="${escapeHtml(source.name)}">
                 <div class="card-header">
                     <div class="d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">
@@ -735,12 +780,21 @@ function initializeAudioPlayers(playingStates = {}, currentTimes = {}) {
             return;
         }
 
+        // Check if this is a fresh initialization (no handlers bound yet)
+        const isNewPlayer = audioEl.dataset.handlersBound !== '1';
+
         audioEl.dataset.sourceName = source.name;
         if (!audioEl.dataset.proxyUrl) {
             audioEl.dataset.proxyUrl = `/api/audio/stream/${encodeURIComponent(source.name)}`;
         }
 
         bindAudioPlayerEvents(audioEl);
+
+        // If player was already initialized and playing, don't interrupt it
+        if (!isNewPlayer && !audioEl.paused && audioEl.currentTime > 0) {
+            console.debug(`Preserving active playback for ${source.name}`);
+            return;
+        }
 
         const wasPlaying = Boolean(playingStates[source.name]);
         const preferIcecast = shouldUseIcecastStream(audioEl);
@@ -905,7 +959,8 @@ function scheduleStreamRecovery(audioEl, sourceName) {
 
     const streamType = audioEl.dataset.streamType || audioEl.dataset.initialStreamType || 'unknown';
     const wasPlaying = !audioEl.paused;
-    const timeoutMs = streamType === 'icecast' ? 3500 : 2000;
+    // Increased timeouts to prevent premature reconnections during normal buffering
+    const timeoutMs = streamType === 'icecast' ? 10000 : 8000;
 
     const timerId = window.setTimeout(() => {
         audioEl.dataset.stallTimerId = '';
@@ -970,6 +1025,15 @@ function onAudioPlaybackError(event) {
 
     console.warn(`Audio playback error for ${sourceName} (${streamType})`, error);
 
+    // Debounce: Don't retry if we recently had an error (within last 5 seconds)
+    const lastErrorTime = parseInt(audioEl.dataset.lastErrorTime || '0', 10);
+    const now = Date.now();
+    if (now - lastErrorTime < 5000) {
+        console.debug(`Debouncing error recovery for ${sourceName} (last error was ${(now - lastErrorTime) / 1000}s ago)`);
+        return;
+    }
+    audioEl.dataset.lastErrorTime = String(now);
+
     if (streamType === 'icecast') {
         const wasPlaying = !audioEl.paused;
         setPlayerStatus(sourceName, 'Icecast stream failed. Switching to secure fallback…', 'warning');
@@ -983,22 +1047,23 @@ function onAudioPlaybackError(event) {
     if (streamType === 'flask-proxy') {
         const retries = parseInt(audioEl.dataset.fallbackRetries || '0', 10);
 
-        if (retries < 3) {
+        if (retries < 2) {  // Reduced from 3 to 2 retries
             audioEl.dataset.fallbackRetries = String(retries + 1);
             const wasPlaying = !audioEl.paused;
             setPlayerStatus(sourceName, 'Reconnecting to secure stream…', 'warning');
 
+            // Increased delay to give network time to stabilize
             setTimeout(() => {
                 switchToProxyStream(audioEl, sourceName, {
                     autoplay: wasPlaying,
                     notify: false
                 });
-            }, 500);
+            }, 2000);  // Increased from 500ms to 2000ms
 
             return;
         }
 
-        setPlayerStatus(sourceName, 'Unable to connect to audio stream. Please verify the source.', 'danger');
+        setPlayerStatus(sourceName, 'Unable to connect to audio stream. Please refresh the page or check the source.', 'danger');
     }
 }
 
@@ -1421,9 +1486,11 @@ async function stopSource(sourceName) {
 
 function updateLevelMetersFromSnapshot(snapshot) {
     if (!snapshot || !Array.isArray(snapshot.live_metrics)) {
+        console.debug('No live_metrics in snapshot');
         return;
     }
 
+    let updatedCount = 0;
     snapshot.live_metrics.forEach(metric => {
         const safeId = sanitizeId(metric.source_id);
         const peakBar = document.getElementById(`peak-meter-${safeId}`);
@@ -1431,10 +1498,13 @@ function updateLevelMetersFromSnapshot(snapshot) {
         const peakLabel = document.getElementById(`peak-label-${safeId}`);
         const rmsLabel = document.getElementById(`rms-label-${safeId}`);
 
-        if (peakBar) {
-            peakBar.style.width = `${calculateFillWidth(metric.peak_level_db)}%`;
-            peakBar.style.opacity = metric.source_status === 'running' ? 1 : 0.35;
+        if (!peakBar) {
+            console.debug(`VU meter elements not found for source_id: ${metric.source_id} (safeId: ${safeId})`);
+            return;
         }
+
+        peakBar.style.width = `${calculateFillWidth(metric.peak_level_db)}%`;
+        peakBar.style.opacity = metric.source_status === 'running' ? 1 : 0.35;
 
         if (rmsBar) {
             rmsBar.style.width = `${calculateFillWidth(metric.rms_level_db)}%`;
@@ -1447,7 +1517,10 @@ function updateLevelMetersFromSnapshot(snapshot) {
         if (rmsLabel) {
             rmsLabel.textContent = `RMS: ${formatDbLabel(metric.rms_level_db)}`;
         }
+        updatedCount++;
     });
+
+    console.debug(`Updated ${updatedCount} VU meters from ${snapshot.live_metrics.length} metrics`);
 }
 
 async function updateLevelMeters() {
@@ -1731,12 +1804,11 @@ function startEASMonitorPolling() {
 // Load sources on page load
 document.addEventListener('DOMContentLoaded', function() {
     renderStreamModeControls();
-    loadAudioSources();
+    loadAudioSources(true); // Initial full render
     startEASMonitorPolling();
 
-    // Auto-refresh every 30 seconds (increased from 5s to reduce interruptions)
-    // Only refreshes status/metrics, not the entire player
-    setInterval(loadAudioSources, 30000);
+    // Auto-refresh every 30 seconds - only updates metrics, never interrupts playback
+    setInterval(() => loadAudioSources(false), 30000);
 });
 
 // Clean up intervals when page unloads
