@@ -645,28 +645,45 @@ def register(app: Flask, logger) -> None:
     def api_led_reconnect():
         """Attempt to reinitialize the LED controller connection."""
         try:
-            from app_core.led import initialise_led_controller, LED_SIGN_IP, LED_SIGN_PORT
+            from app_core.led import LED_SIGN_IP, LED_SIGN_PORT, LEDSignController, get_location_settings
             import app_core.led as led_module
 
             route_logger.info(f"Attempting to reconnect to LED sign at {LED_SIGN_IP}:{LED_SIGN_PORT}")
 
-            # Try to reinitialize
-            controller = initialise_led_controller(route_logger)
+            # Try to create a new controller directly (bypass initialise_led_controller's checks)
+            try:
+                settings = get_location_settings()
+                controller = LEDSignController(
+                    LED_SIGN_IP,
+                    LED_SIGN_PORT,
+                    location_settings=settings,
+                )
 
-            if controller:
-                # Update the global led_controller variable
-                led_module.led_controller = controller
-                led_module.LED_AVAILABLE = True
+                # Check if connected
+                if controller.connected:
+                    # Update the global variables
+                    led_module.led_controller = controller
+                    led_module.LED_AVAILABLE = True
 
-                return jsonify({
-                    "success": True,
-                    "message": f"Successfully connected to LED sign at {LED_SIGN_IP}:{LED_SIGN_PORT}",
-                    "connected": True
-                })
-            else:
+                    route_logger.info(f"Successfully reconnected to LED sign at {LED_SIGN_IP}:{LED_SIGN_PORT}")
+
+                    return jsonify({
+                        "success": True,
+                        "message": f"Successfully connected to LED sign at {LED_SIGN_IP}:{LED_SIGN_PORT}",
+                        "connected": True
+                    })
+                else:
+                    return jsonify({
+                        "success": False,
+                        "error": f"Could not connect to LED sign at {LED_SIGN_IP}:{LED_SIGN_PORT}. Check bridge is powered on and configured as TCP Server on port {LED_SIGN_PORT}.",
+                        "connected": False
+                    })
+
+            except Exception as connect_error:
+                route_logger.error(f"Error creating LED controller: {connect_error}")
                 return jsonify({
                     "success": False,
-                    "error": f"Could not connect to LED sign at {LED_SIGN_IP}:{LED_SIGN_PORT}. Check bridge is powered on and configured as TCP Server on port {LED_SIGN_PORT}.",
+                    "error": f"Failed to create controller: {str(connect_error)}",
                     "connected": False
                 })
 
