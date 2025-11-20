@@ -2023,13 +2023,25 @@ function saveSerialConfig() {
 
 // Loading functions
 function loadLEDStatus() {
-    fetch('/api/led/status')
+    // Active health check is enabled by default (health_check=true)
+    // This will ping the bridge to verify it's actually responding
+    fetch('/api/led/status?health_check=true')
     .then(response => response.json())
     .then(data => {
         ledStatus = data;
         updateStatusDisplay();
+
+        // Log health check results for debugging
+        if (data.health_checked) {
+            console.log(`LED health check: ${data.connected ? 'PASS' : 'FAIL'} at ${data.timestamp}`);
+        }
     })
-    .catch(error => console.error('Error loading LED status:', error));
+    .catch(error => {
+        console.error('Error loading LED status:', error);
+        // Update UI to show disconnected on error
+        ledStatus = { connected: false, error: error.message };
+        updateStatusDisplay();
+    });
 }
 
 function reconnectLED() {

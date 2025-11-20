@@ -1275,8 +1275,65 @@ class Alpha9120CController:
             self.logger.error(f"Error in comprehensive feature test: {e}")
             return False
 
-    def get_status(self) -> Dict:
-        """Get current Alpha 9120C status with M-Protocol capabilities"""
+    def health_check(self) -> bool:
+        """
+        Perform active health check by attempting to connect/verify socket.
+
+        Returns:
+            bool: True if bridge is responsive, False otherwise
+        """
+        if not self.connected or not self.socket:
+            # Try to reconnect
+            return self.connect()
+
+        try:
+            # Check if socket is still alive using a quick test
+            # Send a minimal memory allocation command (doesn't affect display)
+            test_cmd = b'\x00\x00' + self.sign_id.encode('ascii') + b'\x1B$A\x00\x00\x00'
+
+            self.socket.sendall(test_cmd)
+
+            # Try to read ACK/NAK with short timeout
+            original_timeout = self.socket.gettimeout()
+            self.socket.settimeout(2.0)
+
+            try:
+                response = self.socket.recv(1)
+                self.socket.settimeout(original_timeout)
+
+                if response in (self.ACK, self.NAK):
+                    self.connected = True
+                    return True
+                else:
+                    # Unexpected response, try reconnect
+                    self.logger.warning(f"Unexpected health check response: {response.hex()}")
+                    self.disconnect()
+                    return self.connect()
+
+            except socket.timeout:
+                self.socket.settimeout(original_timeout)
+                self.logger.warning("Health check timeout - bridge not responding")
+                self.disconnect()
+                return False
+
+        except Exception as e:
+            self.logger.warning(f"Health check failed: {e}")
+            self.disconnect()
+            return False
+
+    def get_status(self, check_health: bool = False) -> Dict:
+        """
+        Get current Alpha 9120C status with M-Protocol capabilities.
+
+        Args:
+            check_health: If True, perform active health check before returning status
+
+        Returns:
+            Dict with status information
+        """
+        if check_health:
+            self.connected = self.health_check()
+
         return {
             'connected': self.connected,
             'host': self.host,
