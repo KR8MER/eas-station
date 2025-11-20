@@ -19,6 +19,7 @@ from app_core.models import (
     AudioSourceMetrics,
     Boundary,
     CAPAlert,
+    EASDecodedAudio,
     EASMessage,
     GPIOActivationLog,
     Intersection,
@@ -1257,6 +1258,124 @@ def register(app: Flask, logger) -> None:
                 for log in logs_result
             ]
 
+        elif log_type == 'eas_messages':
+            log_type_name = "EAS Messages Generated"
+            logs_result = (
+                EASMessage.query
+                .order_by(EASMessage.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+            logs_data = [
+                {
+                    'timestamp': log.created_at,
+                    'level': 'INFO',
+                    'module': 'EAS Message Generator',
+                    'message': (
+                        f"SAME: {log.same_header} | "
+                        f"TTS Provider: {log.tts_provider or 'None'} | "
+                        f"Audio: {log.audio_filename}"
+                    ),
+                    'details': {
+                        'id': log.id,
+                        'cap_alert_id': log.cap_alert_id,
+                        'same_header': log.same_header,
+                        'audio_filename': log.audio_filename,
+                        'text_filename': log.text_filename,
+                        'has_audio_data': log.audio_data is not None,
+                        'has_eom_audio': log.eom_audio_data is not None,
+                        'has_same_audio': log.same_audio_data is not None,
+                        'has_attention_audio': log.attention_audio_data is not None,
+                        'has_tts_audio': log.tts_audio_data is not None,
+                        'tts_provider': log.tts_provider,
+                        'tts_warning': log.tts_warning,
+                        'text_payload': log.text_payload,
+                        'metadata': log.metadata_payload,
+                    },
+                }
+                for log in logs_result
+            ]
+
+        elif log_type == 'decoded_audio':
+            log_type_name = "Decoded EAS Audio"
+            logs_result = (
+                EASDecodedAudio.query
+                .order_by(EASDecodedAudio.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+            logs_data = [
+                {
+                    'timestamp': log.created_at,
+                    'level': 'INFO',
+                    'module': 'EAS Audio Decoder',
+                    'message': (
+                        f"File: {log.original_filename or 'Unknown'} | "
+                        f"SAME Headers: {len(log.same_headers or [])} | "
+                        f"Type: {log.content_type or 'N/A'}"
+                    ),
+                    'details': {
+                        'id': log.id,
+                        'original_filename': log.original_filename,
+                        'content_type': log.content_type,
+                        'raw_text': log.raw_text,
+                        'same_headers': log.same_headers or [],
+                        'quality_metrics': log.quality_metrics or {},
+                        'segment_metadata': log.segment_metadata or {},
+                        'has_header_audio': log.header_audio_data is not None,
+                        'has_attention_tone': log.attention_tone_audio_data is not None,
+                        'has_narration': log.narration_audio_data is not None,
+                        'has_eom_audio': log.eom_audio_data is not None,
+                        'has_composite': log.composite_audio_data is not None,
+                    },
+                }
+                for log in logs_result
+            ]
+
+        elif log_type == 'manual_activations':
+            log_type_name = "Manual EAS Activations"
+            logs_result = (
+                ManualEASActivation.query
+                .order_by(ManualEASActivation.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+            logs_data = [
+                {
+                    'timestamp': log.created_at,
+                    'level': 'WARNING' if log.status == 'ALERT' else 'INFO',
+                    'module': 'Manual EAS Activation',
+                    'message': (
+                        f"Event: {log.event_name} ({log.event_code}) | "
+                        f"Status: {log.status} | "
+                        f"Type: {log.message_type}"
+                    ),
+                    'details': {
+                        'id': log.id,
+                        'identifier': log.identifier,
+                        'event_code': log.event_code,
+                        'event_name': log.event_name,
+                        'status': log.status,
+                        'message_type': log.message_type,
+                        'same_header': log.same_header,
+                        'same_locations': log.same_locations or [],
+                        'tone_profile': log.tone_profile,
+                        'tone_seconds': log.tone_seconds,
+                        'includes_tts': log.includes_tts,
+                        'tts_warning': log.tts_warning,
+                        'sent_at': log.sent_at.isoformat() if log.sent_at else None,
+                        'expires_at': log.expires_at.isoformat() if log.expires_at else None,
+                        'headline': log.headline,
+                        'message_text': log.message_text,
+                        'instruction_text': log.instruction_text,
+                        'duration_minutes': log.duration_minutes,
+                        'storage_path': log.storage_path,
+                        'archived_at': log.archived_at.isoformat() if log.archived_at else None,
+                    },
+                }
+                for log in logs_result
+            ]
+
         return log_type_name, logs_data
 
     @app.route("/logs")
@@ -1266,7 +1385,50 @@ def register(app: Flask, logger) -> None:
             log_type = request.args.get('type', 'system')
             limit = min(int(request.args.get('limit', 100)), 500)  # Max 500 records
 
+            # Get filter parameters
+            search_query = request.args.get('search', '').strip()
+            log_level_filter = request.args.get('level', '').strip().upper()
+            date_from = request.args.get('date_from', '').strip()
+            date_to = request.args.get('date_to', '').strip()
+
             log_type_name, logs_data = _load_logs_data(log_type, limit)
+
+            # Apply filters
+            if search_query:
+                logs_data = [
+                    log for log in logs_data
+                    if (search_query.lower() in log.get('message', '').lower() or
+                        search_query.lower() in log.get('module', '').lower() or
+                        search_query.lower() in str(log.get('details', '')).lower())
+                ]
+
+            if log_level_filter:
+                logs_data = [
+                    log for log in logs_data
+                    if log.get('level', '').upper() == log_level_filter
+                ]
+
+            if date_from:
+                try:
+                    from datetime import datetime
+                    date_from_obj = datetime.strptime(date_from, '%Y-%m-%d')
+                    logs_data = [
+                        log for log in logs_data
+                        if log.get('timestamp') and log['timestamp'] >= date_from_obj
+                    ]
+                except ValueError:
+                    pass
+
+            if date_to:
+                try:
+                    from datetime import datetime, timedelta
+                    date_to_obj = datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)
+                    logs_data = [
+                        log for log in logs_data
+                        if log.get('timestamp') and log['timestamp'] < date_to_obj
+                    ]
+                except ValueError:
+                    pass
 
             return render_template(
                 "logs.html",
@@ -1274,6 +1436,10 @@ def register(app: Flask, logger) -> None:
                 log_type=log_type,
                 limit=limit,
                 log_type_name=log_type_name,
+                search_query=search_query,
+                log_level_filter=log_level_filter,
+                date_from=date_from,
+                date_to=date_to,
             )
 
         except Exception as exc:  # pragma: no cover - fallback content
@@ -1281,6 +1447,55 @@ def register(app: Flask, logger) -> None:
             return (
                 "<h1>Error loading logs</h1>"
                 f"<p>{exc}</p><p><a href='/'>← Back to Main</a></p>"
+            )
+
+    @app.route("/logs/export.csv")
+    def logs_export_csv():
+        """Export logs as CSV file."""
+        try:
+            import csv
+            import io
+            from datetime import datetime
+
+            log_type = request.args.get('type', 'system')
+            limit = min(int(request.args.get('limit', 100)), 500)
+
+            log_type_name, logs_data = _load_logs_data(log_type, limit)
+
+            # Create CSV in memory
+            output = io.StringIO()
+            writer = csv.writer(output)
+
+            # Write header
+            writer.writerow(['Timestamp', 'Level', 'Module', 'Message', 'Details'])
+
+            # Write data
+            for log_entry in logs_data:
+                timestamp_str = format_local_datetime(
+                    log_entry.get('timestamp'), include_utc=True
+                ) if log_entry.get('timestamp') else 'N/A'
+                level = log_entry.get('level', 'INFO')
+                module = log_entry.get('module', 'System')
+                message = log_entry.get('message', '')
+                details = str(log_entry.get('details', ''))
+
+                writer.writerow([timestamp_str, level, module, message, details])
+
+            # Create response
+            csv_data = output.getvalue()
+            output.close()
+
+            response = Response(csv_data, mimetype="text/csv")
+            response.headers["Content-Disposition"] = (
+                f"attachment; filename=logs_{log_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            )
+            return response
+
+        except Exception as exc:
+            route_logger.error('Error generating logs CSV: %s', exc)
+            return (
+                "<h1>Error generating CSV</h1>"
+                f"<p>{exc}</p><p><a href='/logs'>← Back to Logs</a></p>"
             )
 
     @app.route("/logs/export.pdf")

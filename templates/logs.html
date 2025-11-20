@@ -6,7 +6,7 @@
 <div class="row mb-3">
     <div class="col-12">
         <h2><i class="fas fa-file-alt"></i> System Logs</h2>
-        <p class="text-muted">View and filter system logs by category</p>
+        <p class="text-muted">View, filter, and export system logs by category</p>
     </div>
 </div>
 
@@ -16,15 +16,21 @@
             <div class="card-header">
                 <div class="row align-items-center">
                     <div class="col-md-6">
-                        <h5 class="mb-0">Log Viewer</h5>
+                        <h5 class="mb-0">Log Viewer - {{ log_type_name }}</h5>
                     </div>
                     <div class="col-md-6 text-end">
                         <div class="btn-group" role="group">
+                            <a href="/logs/export.csv?type={{ log_type }}&limit={{ limit }}" class="btn btn-sm btn-outline-success">
+                                <i class="fas fa-file-csv"></i> Export CSV
+                            </a>
                             <a href="/logs/export.pdf?type={{ log_type }}&limit={{ limit }}" target="_blank" class="btn btn-sm btn-outline-secondary">
                                 <i class="fas fa-file-pdf"></i> Export PDF
                             </a>
                             <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">
                                 <i class="fas fa-sync"></i> Refresh
+                            </button>
+                            <button class="btn btn-sm btn-outline-info" id="autoRefreshBtn" onclick="toggleAutoRefresh()">
+                                <i class="fas fa-clock"></i> Auto-Refresh: <span id="autoRefreshStatus">OFF</span>
                             </button>
                         </div>
                     </div>
@@ -48,25 +54,25 @@
                     <li class="nav-item" role="presentation">
                         <a class="nav-link {% if log_type == 'polling_debug' %}active{% endif %}"
                            href="?type=polling_debug&limit={{ limit }}">
-                            <i class="fas fa-bug"></i> Polling Debug
+                            <i class="fas fa-bug"></i> Debug
                         </a>
                     </li>
                     <li class="nav-item" role="presentation">
                         <a class="nav-link {% if log_type == 'audio' %}active{% endif %}"
                            href="?type=audio&limit={{ limit }}">
-                            <i class="fas fa-volume-up"></i> Audio Alerts
+                            <i class="fas fa-volume-up"></i> Audio
                         </a>
                     </li>
                     <li class="nav-item" role="presentation">
                         <a class="nav-link {% if log_type == 'audio_metrics' %}active{% endif %}"
                            href="?type=audio_metrics&limit={{ limit }}">
-                            <i class="fas fa-chart-line"></i> Audio Metrics
+                            <i class="fas fa-chart-line"></i> Metrics
                         </a>
                     </li>
                     <li class="nav-item" role="presentation">
                         <a class="nav-link {% if log_type == 'audio_health' %}active{% endif %}"
                            href="?type=audio_health&limit={{ limit }}">
-                            <i class="fas fa-heartbeat"></i> Audio Health
+                            <i class="fas fa-heartbeat"></i> Health
                         </a>
                     </li>
                     <li class="nav-item" role="presentation">
@@ -75,36 +81,135 @@
                             <i class="fas fa-plug"></i> GPIO
                         </a>
                     </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link {% if log_type == 'eas_messages' %}active{% endif %}"
+                           href="?type=eas_messages&limit={{ limit }}">
+                            <i class="fas fa-broadcast-tower"></i> EAS Messages
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link {% if log_type == 'decoded_audio' %}active{% endif %}"
+                           href="?type=decoded_audio&limit={{ limit }}">
+                            <i class="fas fa-microphone"></i> Decoded Audio
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link {% if log_type == 'manual_activations' %}active{% endif %}"
+                           href="?type=manual_activations&limit={{ limit }}">
+                            <i class="fas fa-hand-paper"></i> Manual
+                        </a>
+                    </li>
                 </ul>
 
-                <!-- Limit Selector -->
-                <div class="mb-3">
-                    <label for="limitSelect" class="form-label">Records to show:</label>
-                    <select id="limitSelect" class="form-select form-select-sm" style="width: auto; display: inline-block;"
-                            onchange="window.location.href='?type={{ log_type }}&limit=' + this.value">
-                        <option value="50" {% if limit == 50 %}selected{% endif %}>50</option>
-                        <option value="100" {% if limit == 100 %}selected{% endif %}>100</option>
-                        <option value="250" {% if limit == 250 %}selected{% endif %}>250</option>
-                        <option value="500" {% if limit == 500 %}selected{% endif %}>500</option>
-                    </select>
+                <!-- Advanced Filters -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <form method="GET" action="/logs" id="filterForm">
+                            <input type="hidden" name="type" value="{{ log_type }}">
+                            <input type="hidden" name="limit" value="{{ limit }}">
+
+                            <div class="row g-3">
+                                <!-- Search -->
+                                <div class="col-md-3">
+                                    <label for="searchInput" class="form-label">
+                                        <i class="fas fa-search"></i> Search
+                                    </label>
+                                    <input type="text" class="form-control form-control-sm" id="searchInput"
+                                           name="search" placeholder="Search logs..."
+                                           value="{{ search_query or '' }}">
+                                </div>
+
+                                <!-- Log Level Filter -->
+                                <div class="col-md-2">
+                                    <label for="levelFilter" class="form-label">
+                                        <i class="fas fa-filter"></i> Level
+                                    </label>
+                                    <select class="form-select form-select-sm" id="levelFilter" name="level">
+                                        <option value="">All Levels</option>
+                                        <option value="DEBUG" {% if log_level_filter == 'DEBUG' %}selected{% endif %}>DEBUG</option>
+                                        <option value="INFO" {% if log_level_filter == 'INFO' %}selected{% endif %}>INFO</option>
+                                        <option value="SUCCESS" {% if log_level_filter == 'SUCCESS' %}selected{% endif %}>SUCCESS</option>
+                                        <option value="WARNING" {% if log_level_filter == 'WARNING' %}selected{% endif %}>WARNING</option>
+                                        <option value="ERROR" {% if log_level_filter == 'ERROR' %}selected{% endif %}>ERROR</option>
+                                        <option value="CRITICAL" {% if log_level_filter == 'CRITICAL' %}selected{% endif %}>CRITICAL</option>
+                                    </select>
+                                </div>
+
+                                <!-- Date From -->
+                                <div class="col-md-2">
+                                    <label for="dateFrom" class="form-label">
+                                        <i class="fas fa-calendar-alt"></i> From Date
+                                    </label>
+                                    <input type="date" class="form-control form-control-sm" id="dateFrom"
+                                           name="date_from" value="{{ date_from or '' }}">
+                                </div>
+
+                                <!-- Date To -->
+                                <div class="col-md-2">
+                                    <label for="dateTo" class="form-label">
+                                        <i class="fas fa-calendar-check"></i> To Date
+                                    </label>
+                                    <input type="date" class="form-control form-control-sm" id="dateTo"
+                                           name="date_to" value="{{ date_to or '' }}">
+                                </div>
+
+                                <!-- Limit -->
+                                <div class="col-md-2">
+                                    <label for="limitSelect" class="form-label">
+                                        <i class="fas fa-list-ol"></i> Records
+                                    </label>
+                                    <select id="limitSelect" class="form-select form-select-sm" name="limit">
+                                        <option value="50" {% if limit == 50 %}selected{% endif %}>50</option>
+                                        <option value="100" {% if limit == 100 %}selected{% endif %}>100</option>
+                                        <option value="250" {% if limit == 250 %}selected{% endif %}>250</option>
+                                        <option value="500" {% if limit == 500 %}selected{% endif %}>500</option>
+                                    </select>
+                                </div>
+
+                                <!-- Filter Buttons -->
+                                <div class="col-md-1 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                                        <i class="fas fa-filter"></i> Apply
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Clear Filters Button -->
+                            {% if search_query or log_level_filter or date_from or date_to %}
+                            <div class="row mt-2">
+                                <div class="col-12">
+                                    <a href="?type={{ log_type }}&limit={{ limit }}" class="btn btn-sm btn-outline-secondary">
+                                        <i class="fas fa-times"></i> Clear Filters
+                                    </a>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </form>
+                    </div>
                 </div>
 
                 <!-- Log Type Description -->
                 <div class="alert alert-info mb-3">
                     {% if log_type == 'system' %}
-                        <strong>System Logs:</strong> General application logs including errors, warnings, and informational messages.
+                        <strong><i class="fas fa-info-circle"></i> System Logs:</strong> General application logs including errors, warnings, and informational messages.
                     {% elif log_type == 'polling' %}
-                        <strong>Polling Logs:</strong> CAP alert polling history showing fetch attempts, new alerts, and errors.
+                        <strong><i class="fas fa-info-circle"></i> Polling Logs:</strong> CAP alert polling history showing fetch attempts, new alerts, and errors.
                     {% elif log_type == 'polling_debug' %}
-                        <strong>Polling Debug:</strong> Detailed debug information about alert parsing, geometry validation, and relevance checking.
+                        <strong><i class="fas fa-info-circle"></i> Polling Debug:</strong> Detailed debug information about alert parsing, geometry validation, and relevance checking.
                     {% elif log_type == 'audio' %}
-                        <strong>Audio Alerts:</strong> Audio system alerts for issues like silence detection, clipping, or disconnections.
+                        <strong><i class="fas fa-info-circle"></i> Audio Alerts:</strong> Audio system alerts for issues like silence detection, clipping, or disconnections.
                     {% elif log_type == 'audio_metrics' %}
-                        <strong>Audio Metrics:</strong> Real-time audio level measurements including peak, RMS, and stream information.
+                        <strong><i class="fas fa-info-circle"></i> Audio Metrics:</strong> Real-time audio level measurements including peak, RMS, and stream information.
                     {% elif log_type == 'audio_health' %}
-                        <strong>Audio Health:</strong> Overall audio system health scores and status snapshots.
+                        <strong><i class="fas fa-info-circle"></i> Audio Health:</strong> Overall audio system health scores and status snapshots.
                     {% elif log_type == 'gpio' %}
-                        <strong>GPIO Logs:</strong> Relay activation audit trail showing pin activations, operators, and durations.
+                        <strong><i class="fas fa-info-circle"></i> GPIO Logs:</strong> Relay activation audit trail showing pin activations, operators, and durations.
+                    {% elif log_type == 'eas_messages' %}
+                        <strong><i class="fas fa-info-circle"></i> EAS Messages:</strong> Generated EAS messages including SAME headers, audio files, and TTS information.
+                    {% elif log_type == 'decoded_audio' %}
+                        <strong><i class="fas fa-info-circle"></i> Decoded EAS Audio:</strong> Decoded audio from incoming EAS signals with SAME headers and quality metrics.
+                    {% elif log_type == 'manual_activations' %}
+                        <strong><i class="fas fa-info-circle"></i> Manual EAS Activations:</strong> Manually triggered EAS activations with event details and audio components.
                     {% endif %}
                 </div>
 
@@ -114,17 +219,27 @@
                         <table class="table table-sm table-hover" id="logsTable">
                             <thead class="table-light">
                                 <tr>
-                                    <th style="width: 180px;">Timestamp</th>
-                                    <th style="width: 100px;">Level</th>
-                                    <th style="width: 200px;">Module</th>
-                                    <th>Message</th>
-                                    <th style="width: 80px;">Details</th>
+                                    <th style="width: 180px;">
+                                        <i class="fas fa-clock"></i> Timestamp
+                                    </th>
+                                    <th style="width: 100px;">
+                                        <i class="fas fa-tag"></i> Level
+                                    </th>
+                                    <th style="width: 200px;">
+                                        <i class="fas fa-cube"></i> Module
+                                    </th>
+                                    <th>
+                                        <i class="fas fa-comment"></i> Message
+                                    </th>
+                                    <th style="width: 80px;">
+                                        <i class="fas fa-info"></i> Details
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for log in logs %}
-                                <tr>
-                                    <td><small>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') if log.timestamp else 'N/A' }}</small></td>
+                                <tr class="log-row log-level-{{ log.level|lower }}">
+                                    <td><small class="text-muted">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') if log.timestamp else 'N/A' }}</small></td>
                                     <td>
                                         <span class="badge bg-{{
                                             'success' if log.level == 'SUCCESS' or log.level == 'INFO'
@@ -136,9 +251,9 @@
                                             {{ log.level }}
                                         </span>
                                     </td>
-                                    <td><small>{{ log.module }}</small></td>
-                                    <td>{{ log.message }}</td>
-                                    <td>
+                                    <td><small class="text-muted">{{ log.module }}</small></td>
+                                    <td><span class="log-message">{{ log.message }}</span></td>
+                                    <td class="text-center">
                                         {% if log.details %}
                                         <button class="btn btn-sm btn-outline-secondary" type="button"
                                                 data-bs-toggle="collapse"
@@ -146,6 +261,8 @@
                                                 aria-expanded="false">
                                             <i class="fas fa-chevron-down"></i>
                                         </button>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
                                         {% endif %}
                                     </td>
                                 </tr>
@@ -153,8 +270,8 @@
                                 <tr class="collapse" id="details-{{ loop.index }}">
                                     <td colspan="5">
                                         <div class="card card-body bg-light">
-                                            <h6>Details:</h6>
-                                            <pre class="mb-0" style="font-size: 0.85rem;">{{ log.details | tojson(indent=2) }}</pre>
+                                            <h6><i class="fas fa-info-circle"></i> Detailed Information:</h6>
+                                            <pre class="mb-0" style="font-size: 0.85rem; max-height: 400px; overflow-y: auto;">{{ log.details | tojson(indent=2) }}</pre>
                                         </div>
                                     </td>
                                 </tr>
@@ -164,12 +281,23 @@
                         </table>
                     </div>
 
-                    <div class="mt-3">
-                        <small class="text-muted">Showing {{ logs|length }} most recent records</small>
+                    <div class="mt-3 d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            <i class="fas fa-list"></i> Showing {{ logs|length }} records
+                            {% if search_query or log_level_filter or date_from or date_to %}
+                            (filtered)
+                            {% endif %}
+                        </small>
+                        <small class="text-muted">
+                            <i class="fas fa-clock"></i> Last updated: <span id="lastUpdate">{{ 'now' }}</span>
+                        </small>
                     </div>
                 {% else %}
                     <div class="alert alert-secondary">
                         <i class="fas fa-info-circle"></i> No logs available for this category.
+                        {% if search_query or log_level_filter or date_from or date_to %}
+                        <br><small>Try adjusting your filters or <a href="?type={{ log_type }}&limit={{ limit }}">clear all filters</a>.</small>
+                        {% endif %}
                     </div>
                 {% endif %}
             </div>
@@ -182,41 +310,153 @@
         color: #6c757d;
         border: 1px solid transparent;
         margin-right: 0.25rem;
+        margin-bottom: 0.25rem;
+        font-size: 0.9rem;
+        padding: 0.4rem 0.8rem;
     }
 
     .nav-pills .nav-link:hover {
         background-color: #e9ecef;
+        border-color: #dee2e6;
     }
 
     .nav-pills .nav-link.active {
         background-color: #0d6efd;
         color: white;
+        border-color: #0d6efd;
     }
 
-    #logsTable tbody tr:hover {
+    #logsTable tbody tr.log-row:hover {
         background-color: #f8f9fa;
+        cursor: pointer;
+    }
+
+    .log-level-error,
+    .log-level-critical {
+        border-left: 3px solid #dc3545;
+    }
+
+    .log-level-warning {
+        border-left: 3px solid #ffc107;
+    }
+
+    .log-level-success {
+        border-left: 3px solid #28a745;
+    }
+
+    .log-level-info {
+        border-left: 3px solid #17a2b8;
+    }
+
+    .log-level-debug {
+        border-left: 3px solid #6c757d;
     }
 
     pre {
         white-space: pre-wrap;
         word-wrap: break-word;
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 10px;
+    }
+
+    .log-message {
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+    }
+
+    .card-body form .row {
+        align-items: end;
+    }
+
+    #autoRefreshBtn.active {
+        background-color: #0d6efd;
+        color: white;
     }
 </style>
 
 <script>
-    // Auto-refresh option (optional, can be enabled by user)
+    // Auto-refresh functionality
     let autoRefresh = false;
     let refreshInterval = null;
+    let refreshSeconds = 10;
+    let countdown = refreshSeconds;
 
     function toggleAutoRefresh() {
         autoRefresh = !autoRefresh;
+        const btn = document.getElementById('autoRefreshBtn');
+        const status = document.getElementById('autoRefreshStatus');
+
         if (autoRefresh) {
+            btn.classList.add('active');
+            status.textContent = `ON (${countdown}s)`;
+            startCountdown();
             refreshInterval = setInterval(() => {
                 location.reload();
-            }, 10000); // Refresh every 10 seconds
+            }, refreshSeconds * 1000);
         } else {
+            btn.classList.remove('active');
+            status.textContent = 'OFF';
             clearInterval(refreshInterval);
+            countdown = refreshSeconds;
         }
+    }
+
+    function startCountdown() {
+        const countdownInterval = setInterval(() => {
+            if (!autoRefresh) {
+                clearInterval(countdownInterval);
+                return;
+            }
+            countdown--;
+            document.getElementById('autoRefreshStatus').textContent = `ON (${countdown}s)`;
+            if (countdown <= 0) {
+                countdown = refreshSeconds;
+            }
+        }, 1000);
+    }
+
+    // Update last update time
+    function updateLastUpdateTime() {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString();
+        document.getElementById('lastUpdate').textContent = timeStr;
+    }
+
+    // Call on page load
+    updateLastUpdateTime();
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+        // Ctrl/Cmd + R for refresh
+        if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+            e.preventDefault();
+            location.reload();
+        }
+
+        // Ctrl/Cmd + F for search focus
+        if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+            e.preventDefault();
+            document.getElementById('searchInput').focus();
+        }
+    });
+
+    // Quick filter shortcuts
+    document.getElementById('searchInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            document.getElementById('filterForm').submit();
+        }
+    });
+
+    // Highlight search terms
+    const searchQuery = "{{ search_query or '' }}";
+    if (searchQuery) {
+        const messages = document.querySelectorAll('.log-message');
+        messages.forEach(msg => {
+            const regex = new RegExp(`(${searchQuery})`, 'gi');
+            msg.innerHTML = msg.textContent.replace(regex, '<mark>$1</mark>');
+        });
     }
 </script>
 {% endblock %}
