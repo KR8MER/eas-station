@@ -1026,6 +1026,16 @@ def initialize_database():
                 _initialize_radio_receivers()
             except Exception as radio_error:
                 logger.warning("Failed to initialize radio receivers: %s", radio_error)
+
+            # Initialize EAS continuous monitoring system
+            try:
+                from app_core.audio.startup_integration import initialize_eas_monitoring_system
+                if initialize_eas_monitoring_system():
+                    logger.info("EAS continuous monitoring enabled")
+                else:
+                    logger.warning("EAS continuous monitoring failed to start")
+            except Exception as monitor_error:
+                logger.warning("Failed to initialize EAS monitoring: %s", monitor_error)
         except OperationalError as db_error:
             _db_initialization_error = db_error
             logger.error("Database initialization failed: %s", db_error)
