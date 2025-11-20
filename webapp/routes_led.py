@@ -500,9 +500,10 @@ def register(app: Flask, logger) -> None:
             serialized = [
                 {
                     "id": message.id,
-                    "type": message.message_type,
+                    "message_type": message.message_type,
                     "content": message.content,
                     "priority": message.priority,
+                    "status": "sent" if message.sent_at else "pending",
                     "scheduled_time": message.scheduled_time.isoformat()
                     if message.scheduled_time
                     else None,
@@ -511,7 +512,7 @@ def register(app: Flask, logger) -> None:
                 }
                 for message in messages
             ]
-            return jsonify({"messages": serialized, "count": len(serialized)})
+            return jsonify({"success": True, "messages": serialized, "count": len(serialized)})
         except Exception as exc:
             route_logger.error("Error retrieving LED messages: %s", exc)
             return jsonify({"error": str(exc)}), 500

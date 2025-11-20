@@ -1677,7 +1677,7 @@ function sendEmergencyMessage() {
         priority: 0  // Emergency priority
     };
 
-    fetch('/api/led/emergency_override', {
+    fetch('/api/led/emergency', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(message)
@@ -1798,7 +1798,7 @@ function sendDateTimeDisplay() {
 function setBrightness() {
     const brightness = document.getElementById('brightness-slider').value;
 
-    fetch('/api/led/set_brightness', {
+    fetch('/api/led/brightness', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ brightness: parseInt(brightness) })
@@ -1862,15 +1862,19 @@ function testRGBColors() {
 }
 
 function testAllFeatures() {
-    if (confirm('This will run a comprehensive test of all LED sign features. Continue?')) {
-        fetch('/api/led/test_all_features', { method: 'POST' })
+    if (confirm('This will send a test message to the LED sign. Continue?')) {
+        fetch('/api/led/test', { method: 'POST' })
         .then(response => response.json())
         .then(result => {
             if (result.success) {
-                showToast('Comprehensive feature test started', 'success');
+                showToast('Test message sent to LED sign', 'success');
             } else {
-                showToast('Failed to start feature test', 'error');
+                showToast('Failed to send test: ' + (result.error || 'Unknown error'), 'error');
             }
+        })
+        .catch(error => {
+            showToast('Error sending test message', 'error');
+            console.error('Error:', error);
         });
     }
 }
@@ -1917,14 +1921,19 @@ function clearDisplay() {
 function clearAllMessages() {
     if (!confirm('Clear all stored messages from the LED sign?')) return;
 
-    fetch('/api/led/clear_all', { method: 'POST' })
+    fetch('/api/led/clear', { method: 'POST' })
     .then(response => response.json())
     .then(result => {
         if (result.success) {
             showToast('All messages cleared', 'success');
+            loadMessageHistory();
         } else {
-            showToast('Failed to clear messages', 'error');
+            showToast('Failed to clear messages: ' + (result.error || 'Unknown error'), 'error');
         }
+    })
+    .catch(error => {
+        showToast('Error clearing messages', 'error');
+        console.error('Error:', error);
     });
 }
 
@@ -1942,16 +1951,21 @@ function getSignStatus() {
 }
 
 function resetSign() {
-    if (!confirm('Reset the LED sign? This will clear all messages and settings.')) return;
+    if (!confirm('Reset the LED sign? This will clear the display.')) return;
 
-    fetch('/api/led/reset', { method: 'POST' })
+    fetch('/api/led/clear', { method: 'POST' })
     .then(response => response.json())
     .then(result => {
         if (result.success) {
             showToast('Sign reset successfully', 'success');
+            loadLEDStatus();
         } else {
-            showToast('Failed to reset sign', 'error');
+            showToast('Failed to reset sign: ' + (result.error || 'Unknown error'), 'error');
         }
+    })
+    .catch(error => {
+        showToast('Error resetting sign', 'error');
+        console.error('Error:', error);
     });
 }
 
@@ -2032,11 +2046,15 @@ function loadCannedMessages() {
 }
 
 function loadMessageHistory() {
-    fetch('/api/led/history')
+    fetch('/api/led/messages')
     .then(response => response.json())
     .then(data => {
-        messageHistory = data.messages || [];
-        displayMessageHistory();
+        if (data.success && data.messages) {
+            messageHistory = data.messages;
+            displayMessageHistory();
+        } else {
+            console.warn('No message history available');
+        }
     })
     .catch(error => console.error('Error loading message history:', error));
 }
