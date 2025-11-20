@@ -26,7 +26,7 @@ def initialize_eas_monitor(audio_manager, alert_callback=None, auto_start=True) 
     Initialize the global EAS monitor instance.
 
     Args:
-        audio_manager: AudioSourceManager instance
+        audio_manager: AudioSourceManager or AudioIngestController instance
         alert_callback: Optional callback for alert detections
         auto_start: Whether to automatically start monitoring
 
@@ -42,6 +42,13 @@ def initialize_eas_monitor(audio_manager, alert_callback=None, auto_start=True) 
 
         try:
             from .eas_monitor import ContinuousEASMonitor
+            from .ingest import AudioIngestController
+            from .controller_adapter import AudioControllerAdapter
+
+            # If we got an AudioIngestController, wrap it in an adapter
+            if isinstance(audio_manager, AudioIngestController):
+                logger.info("Adapting AudioIngestController for EAS monitor")
+                audio_manager = AudioControllerAdapter(audio_manager, sample_rate=22050)
 
             _monitor_instance = ContinuousEASMonitor(
                 audio_manager=audio_manager,
