@@ -459,6 +459,9 @@ def register(app: Flask, logger) -> None:
         try:
             from app_core.led import LED_SIGN_IP, LED_SIGN_PORT
 
+            # Check if health check is requested (default: True for active monitoring)
+            check_health = request.args.get('health_check', 'true').lower() == 'true'
+
             if not led_controller:
                 # Return configuration even when not connected
                 return jsonify({
@@ -470,12 +473,15 @@ def register(app: Flask, logger) -> None:
                     "timestamp": utc_now().isoformat(),
                 })
 
-            status = led_controller.get_status()
+            # Get status with optional active health check
+            status = led_controller.get_status(check_health=check_health)
+
             return jsonify({
                 "success": True,
                 "connected": status.get('connected', False),
                 "host": status.get('host'),
                 "port": status.get('port'),
+                "health_checked": check_health,
                 "timestamp": utc_now().isoformat(),
             })
         except Exception as exc:
@@ -500,9 +506,10 @@ def register(app: Flask, logger) -> None:
             serialized = [
                 {
                     "id": message.id,
-                    "type": message.message_type,
+                    "message_type": message.message_type,
                     "content": message.content,
                     "priority": message.priority,
+                    "status": "sent" if message.sent_at else "pending",
                     "scheduled_time": message.scheduled_time.isoformat()
                     if message.scheduled_time
                     else None,
@@ -511,7 +518,7 @@ def register(app: Flask, logger) -> None:
                 }
                 for message in messages
             ]
-            return jsonify({"messages": serialized, "count": len(serialized)})
+            return jsonify({"success": True, "messages": serialized, "count": len(serialized)})
         except Exception as exc:
             route_logger.error("Error retrieving LED messages: %s", exc)
             return jsonify({"error": str(exc)}), 500

@@ -242,15 +242,15 @@
                         <span class="status-indicator status-connected"></span>
                         <strong>LED Sign: Ready</strong>
                     </div>
-                    <div class="alert alert-success">
-                        <strong>Status:</strong> Connected and ready<br>
-                        <strong>Location:</strong> {{ led_status.host if led_status else '192.168.1.100' }}:{{ led_status.port if led_status else '10001' }}<br>
-                        <strong>Last Update:</strong> <span id="last-update-time">Just now</span><br>
-                        <strong>Features:</strong> RGB Support, Graphics, 4 Lines × 20 Chars
+                    <div class="alert alert-success mb-3">
+                        <div><strong>Status:</strong> Connected and ready</div>
+                        <div><strong>Location:</strong> {{ led_status.host if led_status else '192.168.1.100' }}:{{ led_status.port if led_status else '10001' }}</div>
+                        <div><strong>Last Update:</strong> <span id="last-update-time">Just now</span></div>
+                        <div><strong>Features:</strong> RGB Support, Graphics, 4 Lines × 20 Chars</div>
                     </div>
-                    <div class="alert alert-info">
-                        <strong><i class="fas fa-network-wired"></i> Connection Type:</strong> Serial-to-Ethernet Adapter<br>
-                        <small class="text-muted">This system uses a Lantronix (or compatible) serial-to-Ethernet adapter to connect the LED sign. The adapter emulates a serial port over TCP/IP, allowing network-based control of RS232/RS485 LED signs.</small>
+                    <div class="alert alert-info mb-0">
+                        <div><strong><i class="fas fa-network-wired"></i> Connection Type:</strong> Serial-to-Ethernet Adapter</div>
+                        <small class="text-muted d-block mt-2">This system uses a Lantronix (or compatible) serial-to-Ethernet adapter to connect the LED sign. The adapter emulates a serial port over TCP/IP, allowing network-based control of RS232/RS485 LED signs.</small>
                     </div>
                 </div>
             </div>
@@ -1646,7 +1646,7 @@ function sendRGBMessage() {
         priority: 2
     };
 
-    fetch('/api/led/send_rgb_message', {
+    fetch('/api/led/send_message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(message)
@@ -1657,8 +1657,12 @@ function sendRGBMessage() {
             showToast('RGB message sent successfully', 'success');
             loadMessageHistory();
         } else {
-            showToast('Failed to send RGB message: ' + result.error, 'error');
+            showToast('Failed to send RGB message: ' + (result.error || 'Unknown error'), 'error');
         }
+    })
+    .catch(error => {
+        showToast('Error sending RGB message', 'error');
+        console.error('Error:', error);
     });
 }
 
@@ -1677,7 +1681,7 @@ function sendEmergencyMessage() {
         priority: 0  // Emergency priority
     };
 
-    fetch('/api/led/emergency_override', {
+    fetch('/api/led/emergency', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(message)
@@ -1712,6 +1716,9 @@ function sendCannedMessage(messageName) {
 
 // Time display functions
 function sendTimeDisplay() {
+    showToast('Time/date display feature coming soon', 'info');
+    return;
+    // TODO: Implement backend endpoint
     const timeFormat = document.getElementById('time-format').value;
     const color = document.getElementById('time-color').value;
     const font = document.getElementById('time-font').value;
@@ -1736,6 +1743,9 @@ function sendTimeDisplay() {
 }
 
 function sendDateDisplay() {
+    showToast('Time/date display feature coming soon', 'info');
+    return;
+    // TODO: Implement backend endpoint
     const dateFormat = document.getElementById('date-format').value;
     const color = document.getElementById('time-color').value;
     const font = document.getElementById('time-font').value;
@@ -1798,7 +1808,7 @@ function sendDateTimeDisplay() {
 function setBrightness() {
     const brightness = document.getElementById('brightness-slider').value;
 
-    fetch('/api/led/set_brightness', {
+    fetch('/api/led/brightness', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ brightness: parseInt(brightness) })
@@ -1814,63 +1824,83 @@ function setBrightness() {
 }
 
 function testAllColors() {
-    fetch('/api/led/test_colors', { method: 'POST' })
+    fetch('/api/led/test', { method: 'POST' })
     .then(response => response.json())
     .then(result => {
         if (result.success) {
-            showToast('Color test started', 'success');
+            showToast('Test message sent to LED sign', 'success');
         } else {
-            showToast('Failed to start color test', 'error');
+            showToast('Failed to send test: ' + (result.error || 'Unknown error'), 'error');
         }
+    })
+    .catch(error => {
+        showToast('Error sending test', 'error');
+        console.error('Error:', error);
     });
 }
 
 function testAllFonts() {
-    fetch('/api/led/test_fonts', { method: 'POST' })
+    fetch('/api/led/test', { method: 'POST' })
     .then(response => response.json())
     .then(result => {
         if (result.success) {
-            showToast('Font test started', 'success');
+            showToast('Test message sent to LED sign', 'success');
         } else {
-            showToast('Failed to start font test', 'error');
+            showToast('Failed to send test: ' + (result.error || 'Unknown error'), 'error');
         }
+    })
+    .catch(error => {
+        showToast('Error sending test', 'error');
+        console.error('Error:', error);
     });
 }
 
 function testAllModes() {
-    fetch('/api/led/test_modes', { method: 'POST' })
+    fetch('/api/led/test', { method: 'POST' })
     .then(response => response.json())
     .then(result => {
         if (result.success) {
-            showToast('Effect test started', 'success');
+            showToast('Test message sent to LED sign', 'success');
         } else {
-            showToast('Failed to start effect test', 'error');
+            showToast('Failed to send test: ' + (result.error || 'Unknown error'), 'error');
         }
+    })
+    .catch(error => {
+        showToast('Error sending test', 'error');
+        console.error('Error:', error);
     });
 }
 
 function testRGBColors() {
-    fetch('/api/led/test_rgb', { method: 'POST' })
+    fetch('/api/led/test', { method: 'POST' })
     .then(response => response.json())
     .then(result => {
         if (result.success) {
-            showToast('RGB color test started', 'success');
+            showToast('Test message sent to LED sign', 'success');
         } else {
-            showToast('Failed to start RGB test', 'error');
+            showToast('Failed to send test: ' + (result.error || 'Unknown error'), 'error');
         }
+    })
+    .catch(error => {
+        showToast('Error sending test', 'error');
+        console.error('Error:', error);
     });
 }
 
 function testAllFeatures() {
-    if (confirm('This will run a comprehensive test of all LED sign features. Continue?')) {
-        fetch('/api/led/test_all_features', { method: 'POST' })
+    if (confirm('This will send a test message to the LED sign. Continue?')) {
+        fetch('/api/led/test', { method: 'POST' })
         .then(response => response.json())
         .then(result => {
             if (result.success) {
-                showToast('Comprehensive feature test started', 'success');
+                showToast('Test message sent to LED sign', 'success');
             } else {
-                showToast('Failed to start feature test', 'error');
+                showToast('Failed to send test: ' + (result.error || 'Unknown error'), 'error');
             }
+        })
+        .catch(error => {
+            showToast('Error sending test message', 'error');
+            console.error('Error:', error);
         });
     }
 }
@@ -1917,14 +1947,19 @@ function clearDisplay() {
 function clearAllMessages() {
     if (!confirm('Clear all stored messages from the LED sign?')) return;
 
-    fetch('/api/led/clear_all', { method: 'POST' })
+    fetch('/api/led/clear', { method: 'POST' })
     .then(response => response.json())
     .then(result => {
         if (result.success) {
             showToast('All messages cleared', 'success');
+            loadMessageHistory();
         } else {
-            showToast('Failed to clear messages', 'error');
+            showToast('Failed to clear messages: ' + (result.error || 'Unknown error'), 'error');
         }
+    })
+    .catch(error => {
+        showToast('Error clearing messages', 'error');
+        console.error('Error:', error);
     });
 }
 
@@ -1942,16 +1977,21 @@ function getSignStatus() {
 }
 
 function resetSign() {
-    if (!confirm('Reset the LED sign? This will clear all messages and settings.')) return;
+    if (!confirm('Reset the LED sign? This will clear the display.')) return;
 
-    fetch('/api/led/reset', { method: 'POST' })
+    fetch('/api/led/clear', { method: 'POST' })
     .then(response => response.json())
     .then(result => {
         if (result.success) {
             showToast('Sign reset successfully', 'success');
+            loadLEDStatus();
         } else {
-            showToast('Failed to reset sign', 'error');
+            showToast('Failed to reset sign: ' + (result.error || 'Unknown error'), 'error');
         }
+    })
+    .catch(error => {
+        showToast('Error resetting sign', 'error');
+        console.error('Error:', error);
     });
 }
 
@@ -1983,13 +2023,25 @@ function saveSerialConfig() {
 
 // Loading functions
 function loadLEDStatus() {
-    fetch('/api/led/status')
+    // Active health check is enabled by default (health_check=true)
+    // This will ping the bridge to verify it's actually responding
+    fetch('/api/led/status?health_check=true')
     .then(response => response.json())
     .then(data => {
         ledStatus = data;
         updateStatusDisplay();
+
+        // Log health check results for debugging
+        if (data.health_checked) {
+            console.log(`LED health check: ${data.connected ? 'PASS' : 'FAIL'} at ${data.timestamp}`);
+        }
     })
-    .catch(error => console.error('Error loading LED status:', error));
+    .catch(error => {
+        console.error('Error loading LED status:', error);
+        // Update UI to show disconnected on error
+        ledStatus = { connected: false, error: error.message };
+        updateStatusDisplay();
+    });
 }
 
 function reconnectLED() {
@@ -2032,11 +2084,15 @@ function loadCannedMessages() {
 }
 
 function loadMessageHistory() {
-    fetch('/api/led/history')
+    fetch('/api/led/messages')
     .then(response => response.json())
     .then(data => {
-        messageHistory = data.messages || [];
-        displayMessageHistory();
+        if (data.success && data.messages) {
+            messageHistory = data.messages;
+            displayMessageHistory();
+        } else {
+            console.warn('No message history available');
+        }
     })
     .catch(error => console.error('Error loading message history:', error));
 }
