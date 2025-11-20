@@ -17,6 +17,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """
 Audio Source Manager with Automatic Failover
 
@@ -32,8 +34,6 @@ Key Features:
 - Seamless audio handoff between sources
 - Integration with EAS decoder
 """
-
-from __future__ import annotations
 
 import logging
 import threading

@@ -17,14 +17,14 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """
 System Diagnostics Routes
 
 Provides web-based system validation and diagnostics.
 Exposes the validation checks as API endpoints for the UI.
 """
-
-from __future__ import annotations
 
 import logging
 import subprocess

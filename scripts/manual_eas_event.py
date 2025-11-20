@@ -18,9 +18,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Trigger manual EAS broadcasts from raw CAP XML messages."""
-
 from __future__ import annotations
+
+"""Trigger manual EAS broadcasts from raw CAP XML messages."""
 
 import argparse
 import os

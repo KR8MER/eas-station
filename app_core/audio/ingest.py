@@ -17,14 +17,14 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """
 Unified Audio Ingest Controller
 
 Provides a centralized interface for managing multiple audio sources
 with standardized PCM output, metering, and health monitoring.
 """
-
-from __future__ import annotations
 
 import asyncio
 import logging

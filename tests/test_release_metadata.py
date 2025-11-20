@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Tests that enforce release governance expectations for contributors."""
-
 from __future__ import annotations
+
+"""Tests that enforce release governance expectations for contributors."""
 
 import re
 import sys

@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Core abstractions for coordinating one or more radio receivers."""
-
 from __future__ import annotations
+
+"""Core abstractions for coordinating one or more radio receivers."""
 
 import logging
 import threading

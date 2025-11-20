@@ -18,6 +18,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """
 Post-Installation Validation Script
 
@@ -35,8 +37,6 @@ Usage:
     python tools/validate_installation.py --verbose
     python tools/validate_installation.py --fix-permissions
 """
-
-from __future__ import annotations
 
 import argparse
 import os

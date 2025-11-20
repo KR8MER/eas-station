@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Routes for RWT schedule configuration management."""
-
 from __future__ import annotations
+
+"""Routes for RWT schedule configuration management."""
 
 from typing import List
 

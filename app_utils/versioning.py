@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Utilities for tracking and resolving the application's release version."""
-
 from __future__ import annotations
+
+"""Utilities for tracking and resolving the application's release version."""
 
 import os
 from datetime import datetime, timedelta, timezone

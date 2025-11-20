@@ -18,9 +18,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Test all sample files to verify 8N1 protocol fix."""
-
 from __future__ import annotations
+
+"""Test all sample files to verify 8N1 protocol fix."""
 
 import sys
 from pathlib import Path

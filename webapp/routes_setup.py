@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Public routes for the web-based setup wizard."""
-
 from __future__ import annotations
+
+"""Public routes for the web-based setup wizard."""
 
 import re
 

@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Utilities for working with the NOAA public forecast zone catalog."""
-
 from __future__ import annotations
+
+"""Utilities for working with the NOAA public forecast zone catalog."""
 
 import struct
 from dataclasses import dataclass

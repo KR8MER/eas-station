@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""US FIPS county code reference data."""
-
 from __future__ import annotations
+
+"""US FIPS county code reference data."""
 
 from pathlib import Path
 from typing import Dict, FrozenSet, List, Tuple

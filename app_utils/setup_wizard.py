@@ -17,6 +17,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """Helpers for onboarding configuration via the setup wizard.
 
 This module centralises the logic for reading `.env.example`, merging it with
@@ -24,8 +26,6 @@ an existing `.env` file, and validating the subset of configuration fields that
 bootstrap the application.  Both the web-based onboarding flow and the CLI tool
 reuse these utilities to avoid divergent behaviour between environments.
 """
-
-from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime

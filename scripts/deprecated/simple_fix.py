@@ -18,8 +18,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Simple maintenance helpers used by ad-hoc recovery tooling."""
 from __future__ import annotations
+
+"""Simple maintenance helpers used by ad-hoc recovery tooling."""
 
 import argparse
 import logging

@@ -18,9 +18,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Test the newly generated file with 8N1 encoding."""
-
 from __future__ import annotations
+
+"""Test the newly generated file with 8N1 encoding."""
 
 import sys
 from pathlib import Path

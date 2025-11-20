@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Database models used by the NOAA alerts application."""
-
 from __future__ import annotations
+
+"""Database models used by the NOAA alerts application."""
 
 import hashlib
 import os

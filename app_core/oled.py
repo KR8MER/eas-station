@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""OLED display integration helpers for the Argon Industria SSD1306 module."""
-
 from __future__ import annotations
+
+"""OLED display integration helpers for the Argon Industria SSD1306 module."""
 
 import logging
 import os

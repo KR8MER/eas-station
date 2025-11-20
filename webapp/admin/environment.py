@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Environment settings management routes."""
-
 from __future__ import annotations
+
+"""Environment settings management routes."""
 
 import json
 import logging

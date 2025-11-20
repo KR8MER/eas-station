@@ -18,6 +18,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """Utility helpers for rebuilding Flask template assets.
 
 This module replaces an earlier ad-hoc shell script that attempted to
@@ -28,7 +30,6 @@ parsing the file.  The helpers below provide the same behaviour with
 simple, ASCII-only definitions so the module can be imported safely in
 maintenance tooling.
 """
-from __future__ import annotations
 
 import logging
 from dataclasses import dataclass

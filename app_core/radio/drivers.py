@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Receiver driver implementations for specific SDR front-ends."""
-
 from __future__ import annotations
+
+"""Receiver driver implementations for specific SDR front-ends."""
 
 import datetime
 import threading

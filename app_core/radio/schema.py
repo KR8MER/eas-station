@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Database helpers for radio receiver persistence."""
-
 from __future__ import annotations
+
+"""Database helpers for radio receiver persistence."""
 
 from typing import Callable, Iterable, Sequence, Tuple
 

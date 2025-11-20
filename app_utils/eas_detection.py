@@ -17,6 +17,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """
 Comprehensive EAS Detection Module
 
@@ -28,8 +30,6 @@ Integrates all EAS detection capabilities:
 
 This module provides a unified interface for analyzing EAS audio streams.
 """
-
-from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field

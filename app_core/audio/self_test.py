@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Utility harness for replaying SAME audio and verifying alert handling."""
-
 from __future__ import annotations
+
+"""Utility harness for replaying SAME audio and verifying alert handling."""
 
 import time
 from collections import OrderedDict

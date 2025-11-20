@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Alert processing helpers shared by the Flask routes and CLI tools."""
-
 from __future__ import annotations
+
+"""Alert processing helpers shared by the Flask routes and CLI tools."""
 
 import hashlib
 import json

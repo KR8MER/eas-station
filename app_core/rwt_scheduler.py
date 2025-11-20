@@ -17,13 +17,13 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """RWT (Required Weekly Test) automatic scheduler.
 
 This module provides scheduled background tasks for automatically sending
 RWT broadcasts according to configured schedules.
 """
-
-from __future__ import annotations
 
 import logging
 import threading

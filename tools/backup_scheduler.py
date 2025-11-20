@@ -18,12 +18,13 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """Automated backup scheduler for EAS Station.
 
 This script orchestrates regular backups, applies retention policies, and logs results.
 It can be run manually, via cron, or systemd timer.
 """
-from __future__ import annotations
 
 import argparse
 import logging

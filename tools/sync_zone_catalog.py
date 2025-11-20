@@ -18,9 +18,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Synchronise the NOAA zone catalog from the bundled DBF file."""
-
 from __future__ import annotations
+
+"""Synchronise the NOAA zone catalog from the bundled DBF file."""
 
 import argparse
 import os

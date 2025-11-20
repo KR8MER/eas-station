@@ -17,6 +17,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """
 Icecast Output for Audio Rebroadcast
 
@@ -30,8 +32,6 @@ Key Features:
 - Metadata updates (stream title, description)
 - Health monitoring
 """
-
-from __future__ import annotations
 
 import base64
 import errno

@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Analytics and trend analysis routes for the Flask app."""
-
 from __future__ import annotations
+
+"""Analytics and trend analysis routes for the Flask app."""
 
 from datetime import timedelta
 from typing import Any, Dict

@@ -17,13 +17,13 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """
 Audio demodulation for SDR receivers.
 
 Supports FM (wideband and narrowband), AM, and includes stereo decoding and RBDS extraction.
 """
-
-from __future__ import annotations
 
 import logging
 from dataclasses import dataclass

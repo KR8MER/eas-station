@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Utilities for working with SAME/EAS FIPS location codes."""
-
 from __future__ import annotations
+
+"""Utilities for working with SAME/EAS FIPS location codes."""
 
 from typing import Dict, Iterable, List, Optional, Set
 

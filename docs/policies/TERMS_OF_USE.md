@@ -30,8 +30,8 @@ _Last updated: January 30, 2025_
 - Those projects are governed by their respective licenses and are not endorsed by, nor affiliated with, EAS Station.
 
 ## 6. Licensing & Contributions
-- The EAS Station source code is released under the [MIT License](../../LICENSE). Copyright remains with Timothy Kramer (KR8MER).
-- By submitting code, documentation, or other content, contributors agree that their work is provided under the MIT License.
+- The EAS Station source code is dual-licensed under the [GNU Affero General Public License v3 (AGPL-3.0)](../../LICENSE) for open-source use and a [Commercial License](../../LICENSE-COMMERCIAL) for proprietary use. Copyright remains with Timothy Kramer (KR8MER).
+- By submitting code, documentation, or other content, contributors agree that their work is provided under the AGPL-3.0 license.
 - All commits must include a Developer Certificate of Origin (DCO) sign-off line (`Signed-off-by`) affirming that the contributor has the right to submit the work under the project license. Instructions are provided in [CONTRIBUTING.md](../process/CONTRIBUTING).
 
 ## 7. Updates

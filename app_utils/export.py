@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Shared helpers for generating CSV exports."""
-
 from __future__ import annotations
+
+"""Shared helpers for generating CSV exports."""
 
 import csv
 import io

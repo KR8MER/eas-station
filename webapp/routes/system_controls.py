@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Routes for system-level controls including GPIO relay management."""
-
 from __future__ import annotations
+
+"""Routes for system-level controls including GPIO relay management."""
 
 from datetime import datetime, timedelta
 

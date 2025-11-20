@@ -18,6 +18,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """Post-restore validation script for EAS Station.
 
 This script validates system health after restoring from a backup,
@@ -35,7 +37,6 @@ Exit codes:
     1 - One or more validation checks failed
     2 - Configuration or runtime error
 """
-from __future__ import annotations
 
 import argparse
 import json

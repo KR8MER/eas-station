@@ -17,6 +17,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """
 Continuous EAS Monitoring Service
 
@@ -25,8 +27,6 @@ Continuously buffers audio from AudioSourceManager and runs SAME decoder to dete
 
 This is the bridge between the audio subsystem and the alert detection logic.
 """
-
-from __future__ import annotations
 
 import hashlib
 import io

@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Debugging endpoints for inspecting alerts and boundaries."""
-
 from __future__ import annotations
+
+"""Debugging endpoints for inspecting alerts and boundaries."""
 
 from collections import OrderedDict
 

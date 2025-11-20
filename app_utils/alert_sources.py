@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Canonical alert source identifiers and helpers."""
-
 from __future__ import annotations
+
+"""Canonical alert source identifiers and helpers."""
 
 from typing import Iterable, Optional, Set
 

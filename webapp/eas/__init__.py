@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Authenticated EAS workflow blueprint."""
-
 from __future__ import annotations
+
+"""Authenticated EAS workflow blueprint."""
 
 from flask import Blueprint
 

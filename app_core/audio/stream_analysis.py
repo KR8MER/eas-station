@@ -17,14 +17,14 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """
 Audio stream analysis for codec and bitrate detection.
 
 Parses frame headers from MP3, AAC, and Ogg streams to automatically
 detect codec parameters without relying on HTTP headers.
 """
-
-from __future__ import annotations
 
 import logging
 from typing import Optional, Dict, Tuple

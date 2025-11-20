@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Registry and helper utilities for SAME/EAS event codes."""
-
 from __future__ import annotations
+
+"""Registry and helper utilities for SAME/EAS event codes."""
 
 import re
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Set

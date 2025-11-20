@@ -18,9 +18,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Generate a demo SAME audio file (optionally with Azure voiceover)."""
-
 from __future__ import annotations
+
+"""Generate a demo SAME audio file (optionally with Azure voiceover)."""
 
 import argparse
 import logging

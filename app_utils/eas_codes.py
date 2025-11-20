@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Helper functions for mapping SAME event and originator codes to names."""
-
 from __future__ import annotations
+
+"""Helper functions for mapping SAME event and originator codes to names."""
 
 from typing import Optional
 

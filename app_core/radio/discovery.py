@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Device discovery and diagnostic utilities for SoapySDR-based receivers."""
-
 from __future__ import annotations
+
+"""Device discovery and diagnostic utilities for SoapySDR-based receivers."""
 
 from typing import Dict, List, Any, Optional
 import logging

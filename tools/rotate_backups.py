@@ -18,13 +18,14 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """Rotate and clean up old backup snapshots.
 
 This utility manages backup retention by removing old snapshots according to a
 configurable retention policy. It keeps a specified number of daily, weekly,
 and monthly backups to balance storage usage with recovery options.
 """
-from __future__ import annotations
 
 import argparse
 import shutil

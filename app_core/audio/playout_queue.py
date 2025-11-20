@@ -17,6 +17,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """
 Audio Playout Queue with FCC-compliant precedence logic per 47 CFR Part 11.
 
@@ -32,8 +34,6 @@ Within each precedence level, alerts are prioritized by:
 - Urgency (Immediate > Expected > Future > Past > Unknown)
 - Timestamp (older alerts first)
 """
-
-from __future__ import annotations
 
 import heapq
 import logging

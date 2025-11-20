@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""LED sign routes extracted from the application entrypoint."""
-
 from __future__ import annotations
+
+"""LED sign routes extracted from the application entrypoint."""
 
 import os
 from typing import Any, Dict, List

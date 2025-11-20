@@ -17,12 +17,12 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """
 Changelog Parser Utility
 Parses CHANGELOG.md files and extracts version history for display.
 """
-
-from __future__ import annotations
 
 import re
 from pathlib import Path

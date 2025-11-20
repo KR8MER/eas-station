@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Helpers for managing persisted EAS audio and metadata payloads."""
-
 from __future__ import annotations
+
+"""Helpers for managing persisted EAS audio and metadata payloads."""
 
 import csv
 import io

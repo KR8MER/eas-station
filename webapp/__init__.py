@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Route scaffolding helpers for the NOAA alerts Flask application."""
-
 from __future__ import annotations
+
+"""Route scaffolding helpers for the NOAA alerts Flask application."""
 
 from dataclasses import dataclass
 from typing import Callable, Iterable

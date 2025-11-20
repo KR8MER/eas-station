@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Administrative routes and helpers for managing boundary data."""
-
 from __future__ import annotations
+
+"""Administrative routes and helpers for managing boundary data."""
 
 import json
 from typing import Any, Dict, Iterable, List, Optional, Set

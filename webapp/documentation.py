@@ -17,14 +17,14 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from __future__ import annotations
+
 """Documentation viewer for serving markdown documentation through the web UI.
 
 This module provides routes to serve all markdown documentation files from the docs/
 directory through the web interface, ensuring users don't need to visit the repository
 to access documentation.
 """
-
-from __future__ import annotations
 
 import logging
 import os

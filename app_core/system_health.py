@@ -17,9 +17,9 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""System health snapshot helpers shared across route modules."""
-
 from __future__ import annotations
+
+"""System health snapshot helpers shared across route modules."""
 
 import os
 import smtplib
