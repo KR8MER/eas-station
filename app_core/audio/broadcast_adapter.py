@@ -52,6 +52,10 @@ class BroadcastAudioAdapter:
         self._buffer = np.array([], dtype=np.float32)
         self._buffer_lock = threading.Lock()
 
+        # Statistics for monitoring audio continuity
+        self._underrun_count = 0
+        self._total_reads = 0
+
         logger.info(
             f"BroadcastAudioAdapter '{subscriber_id}' subscribed to '{broadcast_queue.name}'"
         )
@@ -69,18 +73,34 @@ class BroadcastAudioAdapter:
             NumPy array of samples, or None if insufficient data
         """
         with self._buffer_lock:
+            self._total_reads += 1
+
             # Try to fill buffer if we don't have enough samples
             while len(self._buffer) < num_samples:
                 try:
-                    chunk = self._subscriber_queue.get(timeout=0.1)
+                    # Increased timeout from 0.1s to 0.5s to match broadcast pump
+                    # This prevents false underruns when pump has brief delays
+                    chunk = self._subscriber_queue.get(timeout=0.5)
                 except Exception:
                     # No more audio available right now
                     if len(self._buffer) < num_samples:
+                        # Buffer underrun - log warning for monitoring
+                        self._underrun_count += 1
+                        logger.warning(
+                            f"{self.subscriber_id}: Buffer underrun #{self._underrun_count}! "
+                            f"Requested {num_samples} samples, only have {len(self._buffer)} "
+                            f"(queue empty after timeout, {self._underrun_count}/{self._total_reads} underruns)"
+                        )
                         return None
                     break
 
                 if chunk is None:
                     if len(self._buffer) < num_samples:
+                        self._underrun_count += 1
+                        logger.warning(
+                            f"{self.subscriber_id}: Received None chunk, "
+                            f"insufficient buffer ({len(self._buffer)}/{num_samples} samples)"
+                        )
                         return None
                     break
 
@@ -100,6 +120,12 @@ class BroadcastAudioAdapter:
                 self._buffer = self._buffer[num_samples:]
                 return samples
 
+            # This shouldn't happen due to while loop above, but safety check
+            self._underrun_count += 1
+            logger.warning(
+                f"{self.subscriber_id}: Unexpected buffer state - "
+                f"have {len(self._buffer)}, need {num_samples}"
+            )
             return None
 
     def get_active_source(self) -> Optional[str]:
@@ -107,10 +133,41 @@ class BroadcastAudioAdapter:
         # Broadcast queues don't track source name - return broadcast name
         return self.broadcast_queue.name
 
+    def get_stats(self) -> dict:
+        """
+        Get adapter statistics for monitoring audio continuity.
+
+        Returns:
+            Dictionary with buffer statistics and health metrics
+        """
+        with self._buffer_lock:
+            queue_size = self._subscriber_queue.qsize()
+            buffer_samples = len(self._buffer)
+            buffer_seconds = buffer_samples / self.sample_rate if self.sample_rate > 0 else 0
+
+            # Calculate underrun rate
+            underrun_rate = (self._underrun_count / self._total_reads * 100) if self._total_reads > 0 else 0
+
+            return {
+                "subscriber_id": self.subscriber_id,
+                "queue_size": queue_size,
+                "buffer_samples": buffer_samples,
+                "buffer_seconds": buffer_seconds,
+                "total_reads": self._total_reads,
+                "underrun_count": self._underrun_count,
+                "underrun_rate_percent": underrun_rate,
+                "health": "good" if underrun_rate < 1.0 else "degraded" if underrun_rate < 5.0 else "poor"
+            }
+
     def unsubscribe(self):
         """Unsubscribe from broadcast queue."""
+        stats = self.get_stats()
         self.broadcast_queue.unsubscribe(self.subscriber_id)
-        logger.info(f"BroadcastAudioAdapter '{self.subscriber_id}' unsubscribed")
+        logger.info(
+            f"BroadcastAudioAdapter '{self.subscriber_id}' unsubscribed - "
+            f"Stats: {stats['total_reads']} reads, {stats['underrun_count']} underruns "
+            f"({stats['underrun_rate_percent']:.2f}%)"
+        )
 
     def __repr__(self) -> str:
         return (
