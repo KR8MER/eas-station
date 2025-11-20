@@ -15,8 +15,12 @@ from flask import Flask, jsonify, request
 logger = logging.getLogger(__name__)
 
 
-def register_eas_monitor_routes(app: Flask) -> None:
+def register_eas_monitor_routes(app: Flask, logger_instance) -> None:
     """Register EAS monitoring status routes."""
+    # Use passed logger if provided
+    global logger
+    if logger_instance:
+        logger = logger_instance
 
     @app.route("/api/eas-monitor/status")
     def api_eas_monitor_status() -> Any:
