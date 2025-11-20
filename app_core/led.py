@@ -6,7 +6,7 @@ import os
 import threading
 from enum import Enum
 from types import ModuleType
-from typing import Optional
+from typing import Optional, Tuple
 
 from flask import current_app, has_app_context
 from sqlalchemy.exc import OperationalError
@@ -15,8 +15,20 @@ from .extensions import db
 from .location import get_location_settings
 from .models import LEDMessage, LEDSignStatus
 
-LED_SIGN_IP = os.getenv("LED_SIGN_IP", "192.168.1.100")
-LED_SIGN_PORT = int(os.getenv("LED_SIGN_PORT", "10001"))
+def _parse_led_network_config() -> Tuple[str, int]:
+    """Read LED sign network settings from the current environment."""
+
+    ip_address = os.environ.get("LED_SIGN_IP", "").strip() or "192.168.1.100"
+
+    try:
+        port = int(str(os.environ.get("LED_SIGN_PORT", "10001")).strip())
+    except (TypeError, ValueError):
+        port = 10001
+
+    return ip_address, port
+
+
+LED_SIGN_IP, LED_SIGN_PORT = _parse_led_network_config()
 
 LED_AVAILABLE = False
 led_controller = None
@@ -72,9 +84,15 @@ else:
 
         try:
             settings = get_location_settings()
+            ip_address, port = _parse_led_network_config()
+
+            # Refresh module-level values so downstream consumers see the updated config
+            globals()["LED_SIGN_IP"] = ip_address
+            globals()["LED_SIGN_PORT"] = port
+
             led_controller = LEDSignController(
-                LED_SIGN_IP,
-                LED_SIGN_PORT,
+                ip_address,
+                port,
                 location_settings=settings,
             )
         except Exception as controller_error:  # pragma: no cover - defensive
@@ -95,8 +113,8 @@ else:
         LED_AVAILABLE = True
         logger.info(
             "LED controller initialized successfully for %s:%s",
-            LED_SIGN_IP,
-            LED_SIGN_PORT,
+            ip_address,
+            port,
         )
         return led_controller
 

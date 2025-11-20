@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, List
 
 from flask import Flask, jsonify, redirect, render_template, request, url_for
@@ -14,7 +15,6 @@ from app_core.led import (
     Font,
     FontSize,
     LED_AVAILABLE,
-    LED_SIGN_IP,
     MessagePriority,
     SpecialFunction,
     Speed,
@@ -376,7 +376,8 @@ def register(app: Flask, logger) -> None:
             result = led_controller.set_brightness(brightness)
 
             if result:
-                status = LEDSignStatus.query.filter_by(sign_ip=LED_SIGN_IP).first()
+                ip_address = os.getenv("LED_SIGN_IP", "")
+                status = LEDSignStatus.query.filter_by(sign_ip=ip_address).first()
                 if status:
                     status.brightness_level = brightness
                     status.last_update = utc_now()
