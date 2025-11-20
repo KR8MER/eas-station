@@ -1743,6 +1743,9 @@ function sendTimeDisplay() {
 }
 
 function sendDateDisplay() {
+    showToast('Time/date display feature coming soon', 'info');
+    return;
+    // TODO: Implement backend endpoint
     const dateFormat = document.getElementById('date-format').value;
     const color = document.getElementById('time-color').value;
     const font = document.getElementById('time-font').value;
