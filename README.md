@@ -193,7 +193,7 @@ graph TB
 </td>
 <td width="50%">
 
-**Emergency Management**
+**Alert Distribution**
 - Custom alert distribution
 - Geographic targeting
 - Integration with existing systems
