@@ -180,11 +180,10 @@ def register(app: Flask, logger) -> None:
                     sanitised_lines.append(line_text)
                     flattened_lines.append(line_text)
 
-            color_name = (payload.get("color") or "RED").upper()
-            font_name = (payload.get("font") or "DEFAULT").upper()
-            mode_name = (payload.get("mode") or "HOLD").upper()
-            speed_name = (payload.get("speed") or "SPEED_3").upper()
-            priority_name = (payload.get("priority") or "NORMAL").upper()
+            color_name = str(payload.get("color") or "RED").upper()
+            font_name = str(payload.get("font") or "DEFAULT").upper()
+            mode_name = str(payload.get("mode") or "HOLD").upper()
+            speed_name = str(payload.get("speed") or "SPEED_3").upper()
 
             try:
                 color = Color[color_name]
@@ -209,10 +208,19 @@ def register(app: Flask, logger) -> None:
             except KeyError:
                 return jsonify({"success": False, "error": f"Unknown speed {speed_name}"})
 
-            try:
-                priority = MessagePriority[priority_name]
-            except KeyError:
-                priority = MessagePriority.NORMAL
+            # Handle priority as either int or string
+            priority_value = payload.get("priority")
+            if isinstance(priority_value, int):
+                try:
+                    priority = MessagePriority(priority_value)
+                except (ValueError, KeyError):
+                    priority = MessagePriority.NORMAL
+            else:
+                priority_name = str(priority_value or "NORMAL").upper()
+                try:
+                    priority = MessagePriority[priority_name]
+                except KeyError:
+                    priority = MessagePriority.NORMAL
 
             hold_time = int(payload.get("hold_time", 5))
             special_functions_raw = payload.get("special_functions")
