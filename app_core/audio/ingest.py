@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 import numpy as np
+from .broadcast_queue import BroadcastQueue
 
 logger = logging.getLogger(__name__)
 
@@ -418,6 +419,21 @@ class AudioIngestController:
         self._monitor_grace_period = 5.0
         self._monitor_stop = threading.Event()
         self._monitor_thread: Optional[threading.Thread] = None
+
+        # Broadcast queue for pub/sub audio distribution
+        self._broadcast_queue = BroadcastQueue(name="audio-ingest-broadcast", max_queue_size=100)
+        # Subscribe to our own broadcast for backward compatibility with get_audio_chunk()
+        self._controller_subscription = self._broadcast_queue.subscribe("controller-legacy")
+
+        # Start broadcast pump thread to publish audio from sources to broadcast queue
+        self._pump_stop = threading.Event()
+        self._pump_thread = threading.Thread(
+            target=self._broadcast_pump_loop,
+            name="AudioBroadcastPump",
+            daemon=True,
+        )
+        self._pump_thread.start()
+
         if enable_monitor:
             self._monitor_thread = threading.Thread(
                 target=self._monitor_loop,
@@ -472,27 +488,29 @@ class AudioIngestController:
                 source.stop()
 
     def get_audio_chunk(self, timeout: float = 1.0) -> Optional[np.ndarray]:
-        """Get audio from the highest priority active source."""
-        with self._lock:
-            # Find the best active source based on priority
-            active_sources = [
-                (name, source) for name, source in self._sources.items()
-                if source.status == AudioSourceStatus.RUNNING and source.config.enabled
-            ]
-            
-            if not active_sources:
-                return None
+        """
+        Get audio from the highest priority active source.
 
-            # Sort by priority (lower number = higher priority)
-            active_sources.sort(key=lambda x: x[1].config.priority)
-            best_source_name, best_source = active_sources[0]
-            
-            # Update active source if changed
-            if self._active_source != best_source_name:
-                self._active_source = best_source_name
-                logger.info(f"Switched to audio source: {best_source_name}")
+        DEPRECATED: New code should use get_broadcast_queue() and subscribe instead.
+        This method is maintained for backward compatibility and pulls from the
+        controller's own subscription to the broadcast queue.
+        """
+        try:
+            return self._controller_subscription.get(timeout=timeout)
+        except queue.Empty:
+            return None
 
-            return best_source.get_audio_chunk(timeout=timeout)
+    def get_broadcast_queue(self) -> BroadcastQueue:
+        """
+        Get the broadcast queue for subscribing to audio.
+
+        Subscribers receive independent copies of all audio chunks without
+        affecting other consumers (EAS monitor, Icecast, web streaming, etc).
+
+        Returns:
+            BroadcastQueue instance for subscribing
+        """
+        return self._broadcast_queue
 
     def get_source_metrics(self, name: str) -> Optional[AudioMetrics]:
         """Get metrics for a specific source."""
@@ -564,13 +582,70 @@ class AudioIngestController:
     def cleanup(self) -> None:
         """Cleanup all sources and threads."""
         self.stop_all()
+
+        # Stop broadcast pump
+        self._pump_stop.set()
+        if self._pump_thread and self._pump_thread.is_alive():
+            self._pump_thread.join(timeout=2.0)
+            self._pump_thread = None
+
+        # Stop health monitor
         self._monitor_stop.set()
         if self._monitor_thread and self._monitor_thread.is_alive():
             self._monitor_thread.join(timeout=2.0)
             self._monitor_thread = None
+
         with self._lock:
             self._sources.clear()
             self._active_source = None
+
+    def _broadcast_pump_loop(self) -> None:
+        """
+        Broadcast pump loop - reads from highest priority source and publishes to broadcast queue.
+
+        This allows multiple consumers (EAS monitor, Icecast, web streaming) to receive
+        independent copies of audio without competing for chunks.
+        """
+        logger.info("Broadcast pump started")
+
+        while not self._pump_stop.is_set():
+            try:
+                # Find the best active source based on priority
+                with self._lock:
+                    active_sources = [
+                        (name, source) for name, source in self._sources.items()
+                        if source.status == AudioSourceStatus.RUNNING and source.config.enabled
+                    ]
+
+                if not active_sources:
+                    # No active sources, sleep and retry
+                    time.sleep(0.1)
+                    continue
+
+                # Sort by priority (lower number = higher priority)
+                active_sources.sort(key=lambda x: x[1].config.priority)
+                best_source_name, best_source = active_sources[0]
+
+                # Update active source if changed
+                with self._lock:
+                    if self._active_source != best_source_name:
+                        self._active_source = best_source_name
+                        logger.info(f"Broadcast pump switched to audio source: {best_source_name}")
+
+                # Get chunk from source (this is still destructive on the source's queue)
+                chunk = best_source.get_audio_chunk(timeout=0.5)
+
+                if chunk is not None:
+                    # Publish to broadcast queue - all subscribers get a copy
+                    delivered = self._broadcast_queue.publish(chunk)
+                    if delivered == 0:
+                        logger.warning("No subscribers to receive audio chunk")
+
+            except Exception as e:
+                logger.error(f"Error in broadcast pump loop: {e}", exc_info=True)
+                time.sleep(0.1)
+
+        logger.info("Broadcast pump stopped")
 
     def _monitor_loop(self) -> None:
         """Background monitor that auto-recovers unhealthy sources."""

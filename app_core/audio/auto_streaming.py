@@ -17,9 +17,13 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Dict, Optional
+from typing import Dict, Optional, TYPE_CHECKING
 
 from .icecast_output import IcecastConfig, IcecastStreamer, StreamFormat
+from .broadcast_adapter import BroadcastAudioAdapter
+
+if TYPE_CHECKING:
+    from .ingest import AudioIngestController
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +45,8 @@ class AutoStreamingService:
         icecast_admin_password: Optional[str] = None,
         default_bitrate: int = 128,
         default_format: StreamFormat = StreamFormat.MP3,
-        enabled: bool = False
+        enabled: bool = False,
+        audio_controller: Optional['AudioIngestController'] = None
     ):
         """
         Initialize auto-streaming service.
@@ -53,6 +58,7 @@ class AutoStreamingService:
             default_bitrate: Default bitrate for streams (kbps)
             default_format: Default audio format (MP3 or OGG)
             enabled: Whether service is enabled
+            audio_controller: AudioIngestController for broadcast queue access
         """
         self.icecast_server = icecast_server
         self.icecast_port = icecast_port
@@ -62,9 +68,12 @@ class AutoStreamingService:
         self.default_bitrate = default_bitrate
         self.default_format = default_format
         self.enabled = enabled
+        self.audio_controller = audio_controller
 
         # Active streamers: source_name -> IcecastStreamer
         self._streamers: Dict[str, IcecastStreamer] = {}
+        # Broadcast adapters: source_name -> BroadcastAudioAdapter
+        self._broadcast_adapters: Dict[str, BroadcastAudioAdapter] = {}
         self._lock = threading.Lock()
 
         # Monitoring thread
@@ -73,7 +82,7 @@ class AutoStreamingService:
 
         logger.info(
             f"AutoStreamingService initialized: {icecast_server}:{icecast_port} "
-            f"(enabled={enabled})"
+            f"(enabled={enabled}, broadcast_mode={audio_controller is not None})"
         )
 
     def start(self) -> bool:
@@ -112,7 +121,7 @@ class AutoStreamingService:
         logger.info("Stopping AutoStreamingService")
         self._stop_event.set()
 
-        # Stop all active streamers
+        # Stop all active streamers and clean up broadcast adapters
         with self._lock:
             for source_name, streamer in list(self._streamers.items()):
                 try:
@@ -121,6 +130,15 @@ class AutoStreamingService:
                     logger.error(f"Error stopping streamer for {source_name}: {e}")
 
             self._streamers.clear()
+
+            # Unsubscribe all broadcast adapters
+            for source_name, adapter in list(self._broadcast_adapters.items()):
+                try:
+                    adapter.unsubscribe()
+                except Exception as e:
+                    logger.error(f"Error unsubscribing broadcast adapter for {source_name}: {e}")
+
+            self._broadcast_adapters.clear()
 
         # Wait for monitor thread
         if self._monitor_thread:
@@ -134,7 +152,7 @@ class AutoStreamingService:
 
         Args:
             source_name: Unique name for the source
-            audio_source: Audio source object with read_audio() method
+            audio_source: Audio source object (AudioSourceAdapter) - will be wrapped in broadcast adapter
             bitrate: Optional custom bitrate (uses default if None)
 
         Returns:
@@ -177,8 +195,29 @@ class AutoStreamingService:
                     admin_password=self.icecast_admin_password,
                 )
 
+                # If we have access to broadcast queue, use non-destructive subscription
+                # Otherwise fall back to direct audio source access (legacy mode)
+                actual_audio_source = audio_source
+                if self.audio_controller is not None:
+                    logger.info(
+                        f"Creating broadcast subscription for Icecast stream: {source_name} "
+                        "(non-destructive mode)"
+                    )
+                    broadcast_queue = self.audio_controller.get_broadcast_queue()
+                    broadcast_adapter = BroadcastAudioAdapter(
+                        broadcast_queue=broadcast_queue,
+                        subscriber_id=f"icecast-{source_name}",
+                        sample_rate=sample_rate
+                    )
+                    self._broadcast_adapters[source_name] = broadcast_adapter
+                    actual_audio_source = broadcast_adapter
+                    logger.info(
+                        f"Icecast stream '{source_name}' subscribed to broadcast queue "
+                        f"(no competition with EAS monitor)"
+                    )
+
                 # Create and start streamer
-                streamer = IcecastStreamer(config, audio_source)
+                streamer = IcecastStreamer(config, actual_audio_source)
                 if streamer.start():
                     self._streamers[source_name] = streamer
                     logger.info(
@@ -188,10 +227,18 @@ class AutoStreamingService:
                     return True
                 else:
                     logger.error(f"Failed to start Icecast stream for {source_name}")
+                    # Clean up broadcast adapter if we created one
+                    if source_name in self._broadcast_adapters:
+                        self._broadcast_adapters[source_name].unsubscribe()
+                        del self._broadcast_adapters[source_name]
                     return False
 
             except Exception as e:
                 logger.error(f"Error creating streamer for {source_name}: {e}")
+                # Clean up broadcast adapter if we created one
+                if source_name in self._broadcast_adapters:
+                    self._broadcast_adapters[source_name].unsubscribe()
+                    del self._broadcast_adapters[source_name]
                 return False
 
     def remove_source(self, source_name: str) -> bool:
@@ -206,17 +253,29 @@ class AutoStreamingService:
         """
         with self._lock:
             streamer = self._streamers.pop(source_name, None)
+            broadcast_adapter = self._broadcast_adapters.pop(source_name, None)
+
+            success = False
             if streamer:
                 try:
                     streamer.stop()
                     logger.info(f"Stopped Icecast stream for {source_name}")
-                    return True
+                    success = True
                 except Exception as e:
                     logger.error(f"Error stopping streamer for {source_name}: {e}")
-                    return False
-            else:
-                logger.warning(f"No streamer found for {source_name}")
+
+            if broadcast_adapter:
+                try:
+                    broadcast_adapter.unsubscribe()
+                    logger.info(f"Unsubscribed broadcast adapter for {source_name}")
+                except Exception as e:
+                    logger.error(f"Error unsubscribing broadcast adapter for {source_name}: {e}")
+
+            if not streamer and not broadcast_adapter:
+                logger.warning(f"No streamer or adapter found for {source_name}")
                 return False
+
+            return success
 
     def get_stream_url(self, source_name: str) -> Optional[str]:
         """

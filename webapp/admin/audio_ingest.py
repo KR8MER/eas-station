@@ -271,6 +271,8 @@ def _initialize_auto_streaming() -> None:
 
         if auto_config.is_enabled():
             logger.info("Initializing auto-streaming service from environment config")
+            # Get controller for broadcast queue access (non-destructive audio)
+            controller = _get_audio_controller()
             _auto_streaming_service = AutoStreamingService(
                 icecast_server=auto_config.server,
                 icecast_port=auto_config.port,
@@ -278,13 +280,13 @@ def _initialize_auto_streaming() -> None:
                 icecast_admin_user=auto_config.admin_user,
                 icecast_admin_password=auto_config.admin_password,
                 default_bitrate=128,
-                enabled=True
+                enabled=True,
+                audio_controller=controller
             )
             _auto_streaming_service.start()
             logger.info("Auto-streaming service initialized and started")
 
             # Start streaming for any already-running sources
-            controller = _get_audio_controller()
             for source_name, adapter in controller._sources.items():
                 if adapter.status == AudioSourceStatus.RUNNING:
                     try:
@@ -322,6 +324,8 @@ def _reload_auto_streaming_from_env() -> None:
         auto_config = get_icecast_auto_config()
         if auto_config.is_enabled():
             logger.info("Re-initializing auto-streaming service with updated Icecast settings")
+            # Get controller for broadcast queue access (non-destructive audio)
+            controller = _get_audio_controller()
             _auto_streaming_service = AutoStreamingService(
                 icecast_server=auto_config.server,
                 icecast_port=auto_config.port,
@@ -330,6 +334,7 @@ def _reload_auto_streaming_from_env() -> None:
                 icecast_admin_password=auto_config.admin_password,
                 default_bitrate=128,
                 enabled=True,
+                audio_controller=controller
             )
             _auto_streaming_service.start()
     except Exception as exc:  # pylint: disable=broad-except
