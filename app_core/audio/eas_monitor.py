@@ -375,6 +375,7 @@ class ContinuousEASMonitor:
         # Monitoring state
         self._monitor_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
+        self._stop_event.set()  # Initialize in "stopped" state
         self._alerts_detected = 0
         self._scans_performed = 0
         self._last_alert_time: Optional[float] = None
