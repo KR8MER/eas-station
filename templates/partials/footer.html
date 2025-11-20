@@ -5,6 +5,11 @@
             <div class="row align-items-center gy-3 text-center text-lg-start">
                 <div class="col-12 col-lg-4">
                     <div class="footer-meta">
+                        <div class="footer-brand mb-3">
+                            {% with logo_classes='footer-logo mb-2', logo_style='max-width: 200px;' %}
+                                {% include 'partials/logo_wordmark.html' %}
+                            {% endwith %}
+                        </div>
                         <div class="footer-brand">
                             <i class="fas fa-broadcast-tower me-2"></i>© 2025 Timothy Kramer (KR8MER)
                         </div>

@@ -181,8 +181,8 @@
 }
 
 .brand-logo {
-    height: 64px;
-    max-height: 64px;
+    height: 96px;
+    max-height: 96px;
     width: auto;
     display: block;
     padding: var(--logo-padding);
@@ -511,6 +511,26 @@
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
+}
+
+.footer-logo {
+    height: auto;
+    width: 100%;
+    max-width: 200px;
+    display: block;
+    margin: 0 auto;
+}
+
+.footer-logo .logo-text-primary {
+    fill: #ffffff;
+}
+
+.footer-logo .logo-text-secondary {
+    fill: rgba(255, 255, 255, 0.85);
+}
+
+.footer-logo .logo-bar {
+    fill: var(--accent-color);
 }
 
 .footer-subtext {

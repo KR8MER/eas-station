@@ -93,6 +93,22 @@
         margin-bottom: 0;
     }
 
+    .dashboard-page-logo {
+        height: auto;
+        width: 100%;
+        max-width: 300px;
+        display: block;
+    }
+
+    .dashboard-page-logo .logo-text-primary,
+    .dashboard-page-logo .logo-text-secondary {
+        fill: #ffffff;
+    }
+
+    .dashboard-page-logo .logo-bar {
+        fill: #ffffff;
+    }
+
     .page-header-actions {
         display: flex;
         flex-wrap: wrap;
@@ -592,6 +608,11 @@
     {% set state_code = location_settings.state_code if location_settings is defined and location_settings and location_settings.state_code else '' %}
     <div class="page-header">
         <div class="header-content">
+            <div class="dashboard-logo mb-3">
+                {% with logo_classes='dashboard-page-logo', logo_style='max-width: 300px;' %}
+                    {% include 'partials/logo_wordmark.html' %}
+                {% endwith %}
+            </div>
             <span class="eyebrow">Operations Dashboard</span>
             <h1 class="page-title">Interactive Emergency Alert Map</h1>
             <p class="page-subtitle">Stay aware of CAP activity across {{ county_name }}{% if state_code %}, {{ state_code }}{% endif %}.</p>
