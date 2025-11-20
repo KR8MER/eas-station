@@ -225,6 +225,7 @@
 {% endblock %}
 
 {% block content %}
+<div class="container-fluid py-4">
 <!-- LED Status Overview -->
 <div class="card mb-4">
     <div class="card-header bg-primary text-white">
@@ -266,25 +267,35 @@
 </div>
 
 <!-- Quick Action Buttons -->
-<div class="row mb-4">
-    <div class="col-md-3">
+<div class="row mb-4 g-2">
+    <div class="col-md-2 col-sm-6">
         <button class="btn btn-success w-100" onclick="sendDefaultMessage()">
             <i class="fas fa-home"></i> Default Message
         </button>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2 col-sm-6">
         <button class="btn btn-warning w-100" onclick="clearDisplay()">
             <i class="fas fa-eraser"></i> Clear Display
         </button>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2 col-sm-6">
         <button class="btn btn-info w-100" onclick="testAllFeatures()">
             <i class="fas fa-cog"></i> Test Features
         </button>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2 col-sm-6">
         <button class="btn btn-secondary w-100" onclick="loadMessageHistory()">
             <i class="fas fa-history"></i> Message History
+        </button>
+    </div>
+    <div class="col-md-2 col-sm-6">
+        <button class="btn btn-primary w-100" onclick="reconnectLED()" id="reconnectBtn">
+            <i class="fas fa-plug"></i> Reconnect
+        </button>
+    </div>
+    <div class="col-md-2 col-sm-6">
+        <button class="btn btn-outline-secondary w-100" onclick="loadLEDStatus()">
+            <i class="fas fa-sync"></i> Refresh
         </button>
     </div>
 </div>
@@ -1141,6 +1152,7 @@
         </div>
     </div>
 </div>
+</div><!-- /container-fluid -->
 {% endblock %}
 
 {% block scripts %}
@@ -1978,6 +1990,35 @@ function loadLEDStatus() {
         updateStatusDisplay();
     })
     .catch(error => console.error('Error loading LED status:', error));
+}
+
+function reconnectLED() {
+    const btn = document.getElementById('reconnectBtn');
+    const originalHTML = btn.innerHTML;
+
+    // Show loading state
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connecting...';
+
+    fetch('/api/led/reconnect', { method: 'POST' })
+    .then(response => response.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+
+        if (data.success) {
+            showToast('Successfully connected to LED sign at ' + data.message, 'success');
+            loadLEDStatus();
+        } else {
+            showToast('Connection failed: ' + (data.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(error => {
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+        showToast('Error reconnecting to LED sign', 'error');
+        console.error('Error:', error);
+    });
 }
 
 function loadCannedMessages() {

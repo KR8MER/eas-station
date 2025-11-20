@@ -42,7 +42,19 @@ def register(app: Flask, logger) -> None:
         try:
             ensure_led_tables()
 
+            # Get LED status from controller if available
             led_status = led_controller.get_status() if led_controller else None
+
+            # If controller isn't available, create status from environment
+            if not led_status:
+                from app_core.led import LED_SIGN_IP, LED_SIGN_PORT
+                led_status = {
+                    'connected': False,
+                    'host': LED_SIGN_IP,
+                    'port': LED_SIGN_PORT,
+                    'model': 'Alpha 9120C',
+                    'protocol': 'M-Protocol',
+                }
 
             try:
                 recent_messages = (
@@ -445,18 +457,37 @@ def register(app: Flask, logger) -> None:
     @app.route("/api/led/status")
     def api_led_status():
         try:
+            from app_core.led import LED_SIGN_IP, LED_SIGN_PORT
+
             if not led_controller:
-                return jsonify({"available": False, "error": "LED controller not available"})
+                # Return configuration even when not connected
+                return jsonify({
+                    "success": True,
+                    "connected": False,
+                    "host": LED_SIGN_IP,
+                    "port": LED_SIGN_PORT,
+                    "error": "LED controller not available - check bridge connection",
+                    "timestamp": utc_now().isoformat(),
+                })
 
             status = led_controller.get_status()
             return jsonify({
-                "available": True,
-                "status": status,
+                "success": True,
+                "connected": status.get('connected', False),
+                "host": status.get('host'),
+                "port": status.get('port'),
                 "timestamp": utc_now().isoformat(),
             })
         except Exception as exc:
             route_logger.error("Error retrieving LED status: %s", exc)
-            return jsonify({"available": False, "error": str(exc)})
+            from app_core.led import LED_SIGN_IP, LED_SIGN_PORT
+            return jsonify({
+                "success": False,
+                "connected": False,
+                "host": LED_SIGN_IP,
+                "port": LED_SIGN_PORT,
+                "error": str(exc)
+            })
 
     @app.route("/api/led/messages")
     def api_led_messages():
@@ -602,6 +633,43 @@ def register(app: Flask, logger) -> None:
             except Exception as exc:
                 route_logger.error(f"Error saving serial configuration: {exc}")
                 return jsonify({"success": False, "error": str(exc)})
+
+    @app.route("/api/led/reconnect", methods=["POST"])
+    def api_led_reconnect():
+        """Attempt to reinitialize the LED controller connection."""
+        try:
+            from app_core.led import initialise_led_controller, LED_SIGN_IP, LED_SIGN_PORT
+            import app_core.led as led_module
+
+            route_logger.info(f"Attempting to reconnect to LED sign at {LED_SIGN_IP}:{LED_SIGN_PORT}")
+
+            # Try to reinitialize
+            controller = initialise_led_controller(route_logger)
+
+            if controller:
+                # Update the global led_controller variable
+                led_module.led_controller = controller
+                led_module.LED_AVAILABLE = True
+
+                return jsonify({
+                    "success": True,
+                    "message": f"Successfully connected to LED sign at {LED_SIGN_IP}:{LED_SIGN_PORT}",
+                    "connected": True
+                })
+            else:
+                return jsonify({
+                    "success": False,
+                    "error": f"Could not connect to LED sign at {LED_SIGN_IP}:{LED_SIGN_PORT}. Check bridge is powered on and configured as TCP Server on port {LED_SIGN_PORT}.",
+                    "connected": False
+                })
+
+        except Exception as exc:
+            route_logger.error(f"Error reconnecting to LED sign: {exc}")
+            return jsonify({
+                "success": False,
+                "error": str(exc),
+                "connected": False
+            })
 
 
 def _enum_label(value: Any) -> str:
