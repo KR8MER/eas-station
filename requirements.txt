@@ -1,4 +1,7 @@
-# NOAA CAP Alerts System Requirements
+# EAS Station Requirements
+# Copyright (c) 2025 Timothy Kramer (KR8MER)
+# Licensed under AGPL v3 or Commercial License
+# See LICENSE and LICENSE-COMMERCIAL files
 #
 # NOTE: PostgreSQL with the PostGIS extension is required for spatial
 # functionality, but it must be provisioned in its own container or

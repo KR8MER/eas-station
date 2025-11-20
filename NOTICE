@@ -1,0 +1,105 @@
+EAS STATION - DUAL LICENSE NOTICE
+
+Copyright (c) 2025 Timothy Kramer (KR8MER)
+All rights reserved.
+
+================================================================================
+DUAL LICENSING
+================================================================================
+
+This software is available under two licenses:
+
+1. GNU AFFERO GENERAL PUBLIC LICENSE v3 (AGPL-3.0)
+   - See LICENSE file
+   - Free for open-source use
+   - REQUIRES source code disclosure for web service deployments
+   - REQUIRES attribution and copyright notices to remain intact
+
+2. COMMERCIAL LICENSE
+   - See LICENSE-COMMERCIAL file
+   - For proprietary/closed-source use
+   - No source code disclosure requirements
+   - Contact copyright holder for pricing
+
+================================================================================
+MANDATORY ATTRIBUTION REQUIREMENTS (BOTH LICENSES)
+================================================================================
+
+All uses of this software MUST include the following attribution:
+
+  "Powered by EAS Station - Copyright (c) 2025 Timothy Kramer (KR8MER)"
+
+This attribution MUST appear:
+- In the web interface footer (if deployed as web service)
+- In the software's about/credits section
+- In any documentation distributed with the software
+- In any derivative works
+
+You may NOT:
+- Remove or obscure copyright notices
+- Remove or obscure author attributions
+- Claim this software as your own creation
+- Rebrand this software without explicit written permission
+- Remove the "EAS Station" name from the software
+
+================================================================================
+ANTI-REBRANDING PROTECTION
+================================================================================
+
+The name "EAS Station" and associated branding are protected. You may NOT:
+
+1. Rename the software and distribute it as your own product
+2. Remove references to the original author (Timothy Kramer/KR8MER)
+3. Present modified versions as original works without attribution
+4. Use confusingly similar names that imply official endorsement
+
+Derivative works MUST clearly indicate:
+- The original software name: "EAS Station"
+- The original author: Timothy Kramer (KR8MER)
+- That it is a modified version (e.g., "Based on EAS Station")
+
+================================================================================
+TRADEMARK NOTICE
+================================================================================
+
+"EAS Station" is a trademark of Timothy Kramer.
+Unauthorized use of this trademark is prohibited.
+
+================================================================================
+LICENSE SELECTION
+================================================================================
+
+By using this software, you agree to comply with one of the two licenses:
+
+- If you deploy as a web service or distribute modified versions:
+  You MUST either (a) comply with AGPL v3 and share your source code, OR
+  (b) obtain a commercial license
+
+- If you use internally without distribution:
+  You may use under AGPL v3 with attribution requirements
+
+================================================================================
+CONTACT
+================================================================================
+
+For commercial licensing inquiries:
+Timothy Kramer (KR8MER)
+Email: [Your contact email]
+GitHub: https://github.com/KR8MER/eas-station
+
+For open-source questions:
+See GitHub Issues: https://github.com/KR8MER/eas-station/issues
+
+================================================================================
+ENFORCEMENT
+================================================================================
+
+Violation of attribution requirements or unauthorized rebranding will result in:
+- License termination
+- Legal action for copyright infringement
+- Legal action for trademark infringement
+- Damages as provided by law
+
+================================================================================
+
+Last updated: 2025-01-20
