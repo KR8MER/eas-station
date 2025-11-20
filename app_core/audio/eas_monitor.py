@@ -425,6 +425,73 @@ class ContinuousEASMonitor:
             f"{self._alerts_detected} alerts detected"
         )
 
+    def get_status(self) -> dict:
+        """Get current monitor status and metrics for UI display.
+
+        Returns dict with:
+        - running: bool
+        - buffer_duration: float (seconds)
+        - scan_interval: float (seconds)
+        - buffer_utilization: float (0-100%)
+        - buffer_fill_seconds: float (how much audio is in buffer)
+        - scans_performed: int
+        - alerts_detected: int
+        - last_scan_time: float (unix timestamp) or None
+        - last_alert_time: float (unix timestamp) or None
+        - active_scans: int
+        - audio_flowing: bool
+        - sample_rate: int
+        - scan_warnings: int (how many scans were skipped)
+        """
+        is_running = not self._stop_event.is_set()
+
+        # Calculate buffer utilization
+        with self._buffer_lock:
+            buffer_len = len(self._audio_buffer)
+            # Simple heuristic: buffer is "full" if we've written at least once
+            buffer_fill_seconds = (buffer_len / self.sample_rate) if self._buffer_pos > 0 else 0
+            buffer_utilization = min(100.0, (buffer_fill_seconds / self.buffer_duration) * 100.0)
+
+        # Audio flowing if we've written data
+        audio_flowing = self._buffer_pos > 0
+
+        with self._scan_lock:
+            active_scans = self._active_scans
+
+        return {
+            "running": is_running,
+            "buffer_duration": self.buffer_duration,
+            "scan_interval": self.scan_interval,
+            "buffer_utilization": buffer_utilization,
+            "buffer_fill_seconds": buffer_fill_seconds,
+            "scans_performed": self._scans_performed,
+            "alerts_detected": self._alerts_detected,
+            "last_scan_time": None,  # TODO: track this
+            "last_alert_time": self._last_alert_time,
+            "active_scans": active_scans,
+            "audio_flowing": audio_flowing,
+            "sample_rate": self.sample_rate,
+            "scan_warnings": 0  # TODO: track skipped scans
+        }
+
+    def get_buffer_history(self, max_points: int = 60) -> list:
+        """Get recent buffer utilization history for graphing.
+
+        Returns list of dicts with:
+        - timestamp: float (unix time)
+        - utilization: float (0-100%)
+        - active_scans: int
+
+        TODO: Actually track history over time
+        For now, returns current state only.
+        """
+        status = self.get_status()
+        return [{
+            "timestamp": time.time(),
+            "utilization": status["buffer_utilization"],
+            "active_scans": status["active_scans"]
+        }]
+
     def _monitor_loop(self) -> None:
         """Main monitoring loop - runs continuously."""
         logger.debug("EAS monitor loop started")
