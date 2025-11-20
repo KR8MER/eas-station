@@ -335,8 +335,8 @@ class ContinuousEASMonitor:
     def __init__(
         self,
         audio_manager: AudioSourceManager,
-        buffer_duration: float = 30.0,  # Reduced from 120s to 30s for faster scanning
-        scan_interval: float = 5.0,  # Increased from 2s to 5s to reduce CPU load
+        buffer_duration: float = 10.0,  # Optimized for SAME detection (3s header × 3 bursts + margin)
+        scan_interval: float = 10.0,  # Prevents scan pileup - matches buffer for reliable detection
         sample_rate: int = 22050,
         alert_callback: Optional[Callable[[EASAlert], None]] = None,
         save_audio_files: bool = True,
@@ -424,6 +424,73 @@ class ContinuousEASMonitor:
             f"Stopped EAS monitoring. Stats: {self._scans_performed} scans, "
             f"{self._alerts_detected} alerts detected"
         )
+
+    def get_status(self) -> dict:
+        """Get current monitor status and metrics for UI display.
+
+        Returns dict with:
+        - running: bool
+        - buffer_duration: float (seconds)
+        - scan_interval: float (seconds)
+        - buffer_utilization: float (0-100%)
+        - buffer_fill_seconds: float (how much audio is in buffer)
+        - scans_performed: int
+        - alerts_detected: int
+        - last_scan_time: float (unix timestamp) or None
+        - last_alert_time: float (unix timestamp) or None
+        - active_scans: int
+        - audio_flowing: bool
+        - sample_rate: int
+        - scan_warnings: int (how many scans were skipped)
+        """
+        is_running = not self._stop_event.is_set()
+
+        # Calculate buffer utilization
+        with self._buffer_lock:
+            buffer_len = len(self._audio_buffer)
+            # Simple heuristic: buffer is "full" if we've written at least once
+            buffer_fill_seconds = (buffer_len / self.sample_rate) if self._buffer_pos > 0 else 0
+            buffer_utilization = min(100.0, (buffer_fill_seconds / self.buffer_duration) * 100.0)
+
+        # Audio flowing if we've written data
+        audio_flowing = self._buffer_pos > 0
+
+        with self._scan_lock:
+            active_scans = self._active_scans
+
+        return {
+            "running": is_running,
+            "buffer_duration": self.buffer_duration,
+            "scan_interval": self.scan_interval,
+            "buffer_utilization": buffer_utilization,
+            "buffer_fill_seconds": buffer_fill_seconds,
+            "scans_performed": self._scans_performed,
+            "alerts_detected": self._alerts_detected,
+            "last_scan_time": None,  # TODO: track this
+            "last_alert_time": self._last_alert_time,
+            "active_scans": active_scans,
+            "audio_flowing": audio_flowing,
+            "sample_rate": self.sample_rate,
+            "scan_warnings": 0  # TODO: track skipped scans
+        }
+
+    def get_buffer_history(self, max_points: int = 60) -> list:
+        """Get recent buffer utilization history for graphing.
+
+        Returns list of dicts with:
+        - timestamp: float (unix time)
+        - utilization: float (0-100%)
+        - active_scans: int
+
+        TODO: Actually track history over time
+        For now, returns current state only.
+        """
+        status = self.get_status()
+        return [{
+            "timestamp": time.time(),
+            "utilization": status["buffer_utilization"],
+            "active_scans": status["active_scans"]
+        }]
 
     def _monitor_loop(self) -> None:
         """Main monitoring loop - runs continuously."""
