@@ -122,6 +122,10 @@ def register(app: Flask, logger) -> None:
             if not _led_enums_available():
                 return jsonify({"success": False, "error": "LED library enums unavailable"})
 
+            # Validate enums are not None
+            if not all([Color, Font, DisplayMode, Speed, MessagePriority]):
+                return jsonify({"success": False, "error": "LED enums not properly initialized"})
+
             raw_lines = payload.get("lines")
             if raw_lines is None:
                 return jsonify({"success": False, "error": "At least one line of text is required"})
@@ -139,26 +143,26 @@ def register(app: Flask, logger) -> None:
                 if isinstance(entry, dict):
                     cleaned_line: Dict[str, Any] = {}
                     for key in ("display_position", "font", "color", "rgb_color", "mode", "speed"):
-                        value = entry.get(key)
+                        value = entry.get(key) if entry else None
                         if value not in (None, "", []):
                             cleaned_line[key] = value
 
-                    specials = entry.get("special_functions")
+                    specials = entry.get("special_functions") if entry else None
                     if specials:
                         cleaned_line["special_functions"] = specials
 
                     segments_payload = []
-                    raw_segments = entry.get("segments")
+                    raw_segments = entry.get("segments") if entry else None
                     if isinstance(raw_segments, list) and raw_segments:
                         for raw_segment in raw_segments:
                             if isinstance(raw_segment, dict):
                                 segment_text = str(raw_segment.get("text", ""))
                                 cleaned_segment: Dict[str, Any] = {"text": segment_text}
                                 for seg_key in ("font", "color", "rgb_color", "mode", "speed"):
-                                    seg_value = raw_segment.get(seg_key)
+                                    seg_value = raw_segment.get(seg_key) if raw_segment else None
                                     if seg_value not in (None, "", []):
                                         cleaned_segment[seg_key] = seg_value
-                                seg_specials = raw_segment.get("special_functions")
+                                seg_specials = raw_segment.get("special_functions") if raw_segment else None
                                 if seg_specials:
                                     cleaned_segment["special_functions"] = seg_specials
                             else:
@@ -168,12 +172,12 @@ def register(app: Flask, logger) -> None:
                     if segments_payload:
                         cleaned_line["segments"] = segments_payload
 
-                    line_text = entry.get("text")
+                    line_text = entry.get("text") if entry else None
                     if isinstance(line_text, str):
                         cleaned_line["text"] = line_text
                         flattened_lines.append(line_text)
                     elif segments_payload:
-                        flattened_lines.append(" ".join(seg.get("text", "") for seg in segments_payload))
+                        flattened_lines.append(" ".join(seg.get("text", "") if seg else "" for seg in segments_payload))
                     sanitised_lines.append(cleaned_line)
                 else:
                     line_text = str(entry or "")
@@ -185,65 +189,84 @@ def register(app: Flask, logger) -> None:
             mode_name = str(payload.get("mode") or "HOLD").upper()
             speed_name = str(payload.get("speed") or "SPEED_3").upper()
 
+            # Safe enum lookups with better error handling
             try:
-                color = Color[color_name]
-            except KeyError:
+                color = Color[color_name] if Color else None
+                if not color:
+                    return jsonify({"success": False, "error": "Color enum not available"})
+            except (KeyError, TypeError):
                 return jsonify({"success": False, "error": f"Unknown color {color_name}"})
 
             try:
-                font = Font[font_name]
-            except KeyError:
-                try:
-                    font = FontSize[font_name]
-                except KeyError:
+                font = Font[font_name] if Font else None
+                if not font and FontSize:
+                    try:
+                        font = FontSize[font_name]
+                    except (KeyError, TypeError):
+                        pass
+                if not font:
                     return jsonify({"success": False, "error": f"Unknown font {font_name}"})
+            except (KeyError, TypeError):
+                return jsonify({"success": False, "error": f"Unknown font {font_name}"})
 
             try:
-                mode = DisplayMode[mode_name]
-            except KeyError:
+                mode = DisplayMode[mode_name] if DisplayMode else None
+                if not mode:
+                    return jsonify({"success": False, "error": "DisplayMode enum not available"})
+            except (KeyError, TypeError):
                 return jsonify({"success": False, "error": f"Unknown mode {mode_name}"})
 
             try:
-                speed = Speed[speed_name]
-            except KeyError:
+                speed = Speed[speed_name] if Speed else None
+                if not speed:
+                    return jsonify({"success": False, "error": "Speed enum not available"})
+            except (KeyError, TypeError):
                 return jsonify({"success": False, "error": f"Unknown speed {speed_name}"})
 
             # Handle priority as either int or string
             priority_value = payload.get("priority")
+            priority = None
             if isinstance(priority_value, int):
                 try:
-                    priority = MessagePriority(priority_value)
-                except (ValueError, KeyError):
-                    priority = MessagePriority.NORMAL
+                    priority = MessagePriority(priority_value) if MessagePriority else None
+                except (ValueError, KeyError, TypeError):
+                    pass
             else:
                 priority_name = str(priority_value or "NORMAL").upper()
                 try:
-                    priority = MessagePriority[priority_name]
-                except KeyError:
-                    priority = MessagePriority.NORMAL
+                    priority = MessagePriority[priority_name] if MessagePriority else None
+                except (KeyError, TypeError):
+                    pass
+
+            if not priority:
+                priority = MessagePriority.NORMAL if MessagePriority else None
+                if not priority:
+                    return jsonify({"success": False, "error": "MessagePriority enum not available"})
 
             hold_time = int(payload.get("hold_time", 5))
             special_functions_raw = payload.get("special_functions")
-            special_enum = SpecialFunction if special_functions_raw else None
             special_functions = []
-            if special_enum:
+            if special_functions_raw and SpecialFunction:
                 for func_name in special_functions_raw:
                     try:
-                        special_functions.append(special_enum[func_name.upper()])
-                    except KeyError:
+                        special_functions.append(SpecialFunction[str(func_name).upper()])
+                    except (KeyError, TypeError, AttributeError):
                         route_logger.warning("Ignoring unknown special function: %s", func_name)
 
             def _gather_values(field_name: str) -> set:
                 values = set()
                 for line in sanitised_lines:
-                    if isinstance(line, dict):
+                    if isinstance(line, dict) and line:
                         value = line.get(field_name)
                         if value:
                             values.add(str(value).upper())
-                        for segment in line.get("segments", []):
-                            seg_value = segment.get(field_name)
-                            if seg_value:
-                                values.add(str(seg_value).upper())
+                        segments = line.get("segments", [])
+                        if segments:
+                            for segment in segments:
+                                if segment:
+                                    seg_value = segment.get(field_name) if isinstance(segment, dict) else None
+                                    if seg_value:
+                                        values.add(str(seg_value).upper())
                 return values
 
             color_values = _gather_values("color")
@@ -262,21 +285,21 @@ def register(app: Flask, logger) -> None:
                     else "RGB-MULTI"
                 )
             else:
-                color_summary = color.name
+                color_summary = color.name if color and hasattr(color, 'name') else "RED"
 
             mode_summary = next(iter(mode_values)) if len(mode_values) == 1 else (
-                "MIXED" if mode_values else mode.name
+                "MIXED" if mode_values else (mode.name if mode and hasattr(mode, 'name') else "HOLD")
             )
             speed_summary = next(iter(speed_values)) if len(speed_values) == 1 else (
-                "MIXED" if speed_values else speed.name
+                "MIXED" if speed_values else (speed.name if speed and hasattr(speed, 'name') else "SPEED_3")
             )
 
             led_message = LEDMessage(
                 message_type="custom",
                 content="\n".join(flattened_lines),
-                priority=priority.value,
+                priority=priority.value if priority and hasattr(priority, 'value') else 2,
                 color=color_summary,
-                font_size=font.name,
+                font_size=font.name if font and hasattr(font, 'name') else "DEFAULT",
                 effect=mode_summary,
                 speed=speed_summary,
                 display_time=hold_time,
@@ -307,8 +330,11 @@ def register(app: Flask, logger) -> None:
                     "timestamp": utc_now().isoformat(),
                 }
             )
+        except TypeError as exc:
+            route_logger.error("Type error sending LED message: %s", exc, exc_info=True)
+            return jsonify({"success": False, "error": f"Invalid data type in request: {str(exc)}"})
         except Exception as exc:  # pragma: no cover - defensive
-            route_logger.error("Error sending LED message: %s", exc)
+            route_logger.error("Error sending LED message: %s", exc, exc_info=True)
             return jsonify({"success": False, "error": str(exc)})
 
     @app.route("/api/led/send_canned", methods=["POST"])
