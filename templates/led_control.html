@@ -1716,6 +1716,9 @@ function sendCannedMessage(messageName) {
 
 // Time display functions
 function sendTimeDisplay() {
+    showToast('Time/date display feature coming soon', 'info');
+    return;
+    // TODO: Implement backend endpoint
     const timeFormat = document.getElementById('time-format').value;
     const color = document.getElementById('time-color').value;
     const font = document.getElementById('time-font').value;
