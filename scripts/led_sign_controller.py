@@ -239,7 +239,7 @@ class Alpha9120CController:
         welcome_lines = [
             'WELCOME TO',
             county_name,
-            'EMERGENCY MGMT',
+            'EAS STATION',
             ''
         ]
 
