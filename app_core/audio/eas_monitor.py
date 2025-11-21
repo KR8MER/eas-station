@@ -686,9 +686,11 @@ class ContinuousEASMonitor:
                     except Exception as scan_error:
                         logger.error(f"Error initiating scan for alerts: {scan_error}", exc_info=True)
                         last_scan_time = current_time  # Still update to avoid rapid retry
-                else:
-                    # Brief sleep to avoid busy-waiting
-                    time.sleep(0.01)
+                
+                # Brief sleep only if we didn't get audio samples (prevents tight loop when audio unavailable)
+                # Combined with 100ms timeout in get_audio_chunk(), creates ~120ms cycle (8.3 Hz) when idle
+                if samples is None:
+                    time.sleep(0.02)  # 20ms sleep when no audio available
 
             except Exception as e:
                 logger.error(f"Unexpected error in EAS monitor loop: {e}", exc_info=True)

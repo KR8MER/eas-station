@@ -246,7 +246,7 @@ class AudioSourceAdapter(ABC):
                     # Only sleep if source had no data activity (prevents busy loops on truly idle sources)
                     # Stream sources may read HTTP data but not have enough to decode yet - don't sleep in that case
                     if not self._had_data_activity:
-                        time.sleep(0.001)  # 1ms sleep to prevent CPU spinning on idle sources
+                        time.sleep(0.05)  # 50ms sleep to prevent CPU spinning on idle sources
 
             except Exception as e:
                 logger.error(f"Error in capture loop for {self.config.name}: {e}")

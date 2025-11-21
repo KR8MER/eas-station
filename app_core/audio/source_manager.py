@@ -290,7 +290,7 @@ class AudioSourceManager:
                         logger.warning("Master buffer overflow - decoder too slow!")
                 else:
                     # No data available, yield briefly
-                    time.sleep(0.001)
+                    time.sleep(0.05)  # 50ms sleep to prevent CPU spinning
 
             except Exception as e:
                 logger.error(f"Error in mixer loop: {e}")
