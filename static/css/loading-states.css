@@ -205,6 +205,7 @@
     align-items: center;
 }
 
+/* Loading spinner - using CSS variables for theme consistency */
 .loading-state.loading::after {
     content: '';
     position: absolute;
@@ -213,8 +214,8 @@
     transform: translate(-50%, -50%);
     width: 40px;
     height: 40px;
-    border: 4px solid rgba(0, 123, 255, 0.1);
-    border-top: 4px solid #007bff;
+    border: 4px solid var(--border-color);
+    border-top: 4px solid var(--primary-color);
     border-radius: 50%;
     animation: spin 1s linear infinite;
     z-index: 2;
@@ -405,6 +406,7 @@
     z-index: 1;
 }
 
+/* Table loading spinner - using CSS variables for theme consistency */
 .table-loading::after {
     content: '';
     position: absolute;
@@ -413,8 +415,8 @@
     transform: translate(-50%, -50%);
     width: 32px;
     height: 32px;
-    border: 3px solid rgba(0, 123, 255, 0.1);
-    border-top: 3px solid #007bff;
+    border: 3px solid var(--border-color);
+    border-top: 3px solid var(--primary-color);
     border-radius: 50%;
     animation: spin 1s linear infinite;
     z-index: 2;
