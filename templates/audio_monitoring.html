@@ -42,6 +42,8 @@
             <br>
             <strong>Background Monitoring:</strong> EAS alert detection, waveform visualization, and audio level monitoring run continuously in the background, independent of web playback.
             Even if you pause or stop web playback, the system continues monitoring for alerts 24/7.
+            <br>
+            <strong>How Scanning Works:</strong> The monitor uses a circular buffer that continuously fills with audio. The entire buffer is scanned at regular intervals with overlapping windows to ensure no alerts are missed at window boundaries. Higher overlap percentages provide better alert detection reliability.
         </div>
     </div>
 </div>
@@ -118,15 +120,19 @@
 
                 <!-- Additional Details -->
                 <div class="row g-3 mt-2">
-                    <div class="col-md-4 col-sm-6">
-                        <small class="text-muted">Buffer Duration:</small>
+                    <div class="col-md-3 col-sm-6">
+                        <small class="text-muted" title="Size of the rolling audio buffer being analyzed">Buffer Size:</small>
                         <div><strong id="eas-buffer-duration">--</strong></div>
                     </div>
-                    <div class="col-md-4 col-sm-6">
-                        <small class="text-muted">Scan Interval:</small>
+                    <div class="col-md-3 col-sm-6">
+                        <small class="text-muted" title="How often the buffer is scanned for alerts">Scan Every:</small>
                         <div><strong id="eas-scan-interval">--</strong></div>
                     </div>
-                    <div class="col-md-4 col-sm-6">
+                    <div class="col-md-3 col-sm-6">
+                        <small class="text-muted" title="Overlapping scan windows ensure no alerts are missed">Window Overlap:</small>
+                        <div><strong id="eas-scan-overlap">--</strong></div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
                         <small class="text-muted">Sample Rate:</small>
                         <div><strong id="eas-sample-rate">--</strong></div>
                     </div>
@@ -858,12 +864,14 @@ function bindAudioPlayerEvents(audioEl) {
     });
 
     audioEl.addEventListener('waiting', () => {
+        // Only show buffering status, don't trigger recovery immediately
+        // The 'stalled' event will handle actual recovery if needed
         setPlayerStatus(sourceName, 'Buffering…', 'info');
-        scheduleStreamRecovery(audioEl, sourceName);
     });
 
     audioEl.addEventListener('stalled', () => {
-        setPlayerStatus(sourceName, 'Stream stalled – attempting to recover…', 'warning');
+        // Only trigger recovery on actual stall, not during normal buffering
+        setPlayerStatus(sourceName, 'Stream stalled – will retry if not recovered…', 'warning');
         scheduleStreamRecovery(audioEl, sourceName);
     });
 
@@ -959,8 +967,9 @@ function scheduleStreamRecovery(audioEl, sourceName) {
 
     const streamType = audioEl.dataset.streamType || audioEl.dataset.initialStreamType || 'unknown';
     const wasPlaying = !audioEl.paused;
-    // Increased timeouts to prevent premature reconnections during normal buffering
-    const timeoutMs = streamType === 'icecast' ? 10000 : 8000;
+    // Use longer timeouts to allow network/server time to recover naturally
+    // These values prevent aggressive reconnection loops that worsen the problem
+    const timeoutMs = streamType === 'icecast' ? 15000 : 12000;
 
     const timerId = window.setTimeout(() => {
         audioEl.dataset.stallTimerId = '';
@@ -1025,10 +1034,11 @@ function onAudioPlaybackError(event) {
 
     console.warn(`Audio playback error for ${sourceName} (${streamType})`, error);
 
-    // Debounce: Don't retry if we recently had an error (within last 5 seconds)
+    // Debounce: Don't retry if we recently had an error (increased to 10 seconds)
+    // This prevents rapid reconnection loops that can overwhelm the server
     const lastErrorTime = parseInt(audioEl.dataset.lastErrorTime || '0', 10);
     const now = Date.now();
-    if (now - lastErrorTime < 5000) {
+    if (now - lastErrorTime < 10000) {
         console.debug(`Debouncing error recovery for ${sourceName} (last error was ${(now - lastErrorTime) / 1000}s ago)`);
         return;
     }
@@ -1047,18 +1057,19 @@ function onAudioPlaybackError(event) {
     if (streamType === 'flask-proxy') {
         const retries = parseInt(audioEl.dataset.fallbackRetries || '0', 10);
 
-        if (retries < 2) {  // Reduced from 3 to 2 retries
+        if (retries < 3) {  // Allow 3 retries with exponential backoff
             audioEl.dataset.fallbackRetries = String(retries + 1);
             const wasPlaying = !audioEl.paused;
-            setPlayerStatus(sourceName, 'Reconnecting to secure stream…', 'warning');
+            setPlayerStatus(sourceName, `Reconnecting to secure stream (attempt ${retries + 1}/3)…`, 'warning');
 
-            // Increased delay to give network time to stabilize
+            // Use exponential backoff: 3s, 6s, 12s
+            const backoffMs = 3000 * Math.pow(2, retries);
             setTimeout(() => {
                 switchToProxyStream(audioEl, sourceName, {
                     autoplay: wasPlaying,
                     notify: false
                 });
-            }, 2000);  // Increased from 500ms to 2000ms
+            }, backoffMs);
 
             return;
         }
@@ -1684,6 +1695,23 @@ function updateEASMonitorDisplay(status) {
     const scanInterval = document.getElementById('eas-scan-interval');
     if (scanInterval) {
         scanInterval.textContent = status.scan_interval ? `${status.scan_interval.toFixed(1)}s` : '--';
+    }
+
+    // Calculate and display overlap percentage
+    const scanOverlap = document.getElementById('eas-scan-overlap');
+    if (scanOverlap && status.buffer_duration && status.scan_interval) {
+        const overlapPct = ((status.buffer_duration - status.scan_interval) / status.buffer_duration * 100);
+        const overlapText = `${overlapPct.toFixed(0)}%`;
+        scanOverlap.textContent = overlapText;
+        
+        // Color code based on overlap (green = good, yellow = warning, red = bad)
+        if (overlapPct >= 50) {
+            scanOverlap.style.color = '#28a745'; // green
+        } else if (overlapPct >= 25) {
+            scanOverlap.style.color = '#ffc107'; // yellow
+        } else {
+            scanOverlap.style.color = '#dc3545'; // red
+        }
     }
 
     const sampleRate = document.getElementById('eas-sample-rate');

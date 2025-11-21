@@ -77,8 +77,8 @@ def initialize_eas_monitor(audio_manager, alert_callback=None, auto_start=True) 
 
             _monitor_instance = ContinuousEASMonitor(
                 audio_manager=audio_manager,
-                buffer_duration=10.0,  # Optimized for SAME detection
-                scan_interval=10.0,  # Prevents scan pileup
+                buffer_duration=12.0,  # 12s captures full SAME sequence (3s × 3 bursts + margin)
+                scan_interval=3.0,  # 3s interval creates 75% overlap to never miss alerts
                 sample_rate=22050,
                 alert_callback=alert_callback,
                 save_audio_files=True,
