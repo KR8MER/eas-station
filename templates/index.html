@@ -93,11 +93,13 @@
         margin-bottom: 0;
     }
 
+    /* Prominent dashboard logo - larger for visual impact */
     .dashboard-page-logo {
         height: auto;
         width: 100%;
-        max-width: 300px;
+        max-width: 360px;
         display: block;
+        filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.15));
     }
 
     .dashboard-page-logo .logo-text-primary,
@@ -107,6 +109,13 @@
 
     .dashboard-page-logo .logo-bar {
         fill: #ffffff;
+    }
+    
+    /* Responsive logo sizing for dashboard */
+    @media (max-width: 767.98px) {
+        .dashboard-page-logo {
+            max-width: 280px;
+        }
     }
 
     .page-header-actions {
@@ -153,11 +162,12 @@
         align-items: center;
         justify-content: center;
         font-size: 1.35rem;
-        color: #fff;
+        color: var(--text-inverse);
     }
 
-    .metric-icon.metric-alert { background: #e05263; }
-    .metric-icon.metric-boundary { background: #2eb08d; }
+    /* Using CSS variables for metric icons */
+    .metric-icon.metric-alert { background: var(--danger-color); }
+    .metric-icon.metric-boundary { background: var(--success-color); }
     .metric-icon.metric-clock { background: #f6b968; color: #1c2233; }
     .metric-icon.metric-map { background: #2f5aa1; }
 
