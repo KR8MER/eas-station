@@ -952,8 +952,8 @@ ENV_CATEGORIES = {
                 'key': 'ICECAST_PUBLIC_HOSTNAME',
                 'label': 'Public Hostname/IP',
                 'type': 'text',
-                'description': 'CRITICAL for remote servers: Server\'s public IP or hostname (e.g., 207.148.11.5 or wxalerts.k8tek.net). Leave empty ONLY if accessing from localhost.',
-                'placeholder': 'e.g., 207.148.11.5 or wxalerts.k8tek.net',
+                'description': 'CRITICAL for remote servers: Server\'s public IP or hostname (e.g., 207.148.11.5 or easstation.com). Leave empty ONLY if accessing from localhost.',
+                'placeholder': 'e.g., 207.148.11.5 or easstation.com',
                 'category': 'icecast_enabled',
             },
             {
