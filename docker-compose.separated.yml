@@ -1,0 +1,173 @@
+# Docker Compose with Separated Services
+# This file demonstrates how to separate components into individual containers
+# for better CPU attribution and debugging
+
+version: '3.8'
+
+services:
+  # Database
+  alerts-db:
+    # ... keep existing configuration ...
+    
+  # Main Flask web application (UI only, no background processing)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SOAPYSDR_DRIVERS: ${SOAPYSDR_DRIVERS:-rtlsdr,airspy}
+    image: eas-station:latest
+    expose:
+      - "5000"
+    networks:
+      - eas-network
+    env_file:
+      - stack.env
+    volumes:
+      - app-config:/app-config
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-alerts}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    restart: unless-stopped
+    # Web UI only - no background tasks
+  
+  # CAP Alert Poller for NOAA (lean, polling only)
+  noaa-poller:
+    image: eas-station:latest
+    depends_on:
+      - alerts-db
+    networks:
+      - eas-network
+    command: ["python", "poller/cap_poller.py", "--continuous", "--interval", "180"]
+    restart: unless-stopped
+    env_file:
+      - stack.env
+    volumes:
+      - app-config:/app-config
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-alerts}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      # Disable components that run in separate containers
+      CAP_POLLER_ENABLE_RADIO: "0"  # Radio runs in radio-manager container
+      # Note: EAS broadcaster should be decoupled from poller
+    # htop will show: "python cap_poller.py" with accurate CPU usage
+  
+  # CAP Alert Poller for IPAWS
+  ipaws-poller:
+    image: eas-station:latest
+    depends_on:
+      - alerts-db
+    networks:
+      - eas-network
+    command: ["python", "poller/cap_poller.py", "--continuous", "--interval", "180"]
+    restart: unless-stopped
+    env_file:
+      - stack.env
+    volumes:
+      - app-config:/app-config
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-alerts}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      CAP_POLLER_MODE: "IPAWS"
+      CAP_POLLER_ENABLE_RADIO: "0"
+  
+  # EAS Audio Broadcaster (separate process)
+  eas-broadcaster:
+    image: eas-station:latest
+    depends_on:
+      - alerts-db
+      - app
+    networks:
+      - eas-network
+    command: ["python", "scripts/run_eas_broadcaster.py"]
+    restart: unless-stopped
+    env_file:
+      - stack.env
+    volumes:
+      - app-config:/app-config
+      - /tmp/eas-audio:/tmp/eas-audio  # For audio file storage
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-alerts}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      EAS_BROADCAST_CHECK_INTERVAL: ${EAS_BROADCAST_CHECK_INTERVAL:-5}
+    devices:
+      - /dev/snd:/dev/snd  # Audio device access
+    # htop will show: "python run_eas_broadcaster.py" with its own CPU usage
+  
+  # Radio/SDR Manager (separate process)
+  radio-manager:
+    image: eas-station:latest
+    depends_on:
+      - alerts-db
+    networks:
+      - eas-network
+    command: ["python", "scripts/run_radio_manager.py"]
+    restart: unless-stopped
+    env_file:
+      - stack.env
+    volumes:
+      - app-config:/app-config
+      - ./radio_captures:/app/radio_captures
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-alerts}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      ENABLE_RADIO_MANAGER: ${ENABLE_RADIO_MANAGER:-0}  # Set to 1 to enable
+      RADIO_CONFIG_REFRESH_INTERVAL: ${RADIO_CONFIG_REFRESH_INTERVAL:-300}
+    devices:
+      - /dev/bus/usb:/dev/bus/usb  # SDR device access
+    privileged: false  # Only if needed for SDR access
+    # htop will show: "python run_radio_manager.py" with its own CPU usage
+  
+  # EAS Audio Monitor (separate process) - THE CPU HOG!
+  eas-audio-monitor:
+    image: eas-station:latest
+    depends_on:
+      - alerts-db
+      - app
+    networks:
+      - eas-network
+    command: ["python", "examples/run_continuous_eas_monitor.py"]  # Or create new script
+    restart: unless-stopped
+    env_file:
+      - stack.env
+    volumes:
+      - app-config:/app-config
+      - /tmp/eas-audio:/tmp/eas-audio
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-alerts}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      EAS_SCAN_INTERVAL: ${EAS_SCAN_INTERVAL:-6.0}  # CRITICAL: Set to 6+ to avoid backlog
+      MAX_CONCURRENT_EAS_SCANS: ${MAX_CONCURRENT_EAS_SCANS:-2}
+    devices:
+      - /dev/snd:/dev/snd  # Audio input device
+    # htop will show: "python run_continuous_eas_monitor.py" - NOW WE CAN SEE THE CPU HOG!
+
+  # Nginx reverse proxy
+  nginx:
+    # ... keep existing ...
+
+volumes:
+  app-config:
+  # ... other volumes ...
+
+networks:
+  eas-network:
+    driver: bridge
