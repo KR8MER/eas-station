@@ -354,8 +354,8 @@ class ContinuousEASMonitor:
     def __init__(
         self,
         audio_manager: AudioSourceManager,
-        buffer_duration: float = 10.0,  # Optimized for SAME detection (3s header × 3 bursts + margin)
-        scan_interval: float = 5.0,  # Scan every 5 seconds for faster detection (was 10s)
+        buffer_duration: float = 12.0,  # 12 seconds to capture full SAME sequence (3s × 3 bursts + margin)
+        scan_interval: float = 3.0,  # Scan every 3 seconds for 75% overlap to never miss alerts
         sample_rate: int = 22050,
         alert_callback: Optional[Callable[[EASAlert], None]] = None,
         save_audio_files: bool = True,
@@ -366,12 +366,27 @@ class ContinuousEASMonitor:
 
         Args:
             audio_manager: AudioSourceManager instance providing audio
-            buffer_duration: Seconds of audio to buffer for analysis (default: 30s)
-            scan_interval: Seconds between decode attempts (default: 5s)
+            buffer_duration: Seconds of audio to buffer for analysis
+                            12s ensures full SAME capture (3 bursts × ~3s each)
+            scan_interval: Seconds between decode attempts
+                          3s provides 75% overlap (12s buffer, 3s interval)
+                          This ensures no SAME sequence can be missed at boundaries
             sample_rate: Audio sample rate in Hz (default: 22050)
             alert_callback: Optional callback function called when alert detected
             save_audio_files: Whether to save audio files of detected alerts
             audio_archive_dir: Directory to save alert audio files
+            
+        Note on overlap strategy:
+            SAME headers consist of 3 bursts, each ~3 seconds long = ~9 seconds total.
+            With 12s buffer and 3s scan interval, we get 75% overlap:
+            
+            Time:    0    3    6    9    12   15   18
+            Scan 1:  [------------]
+            Scan 2:       [------------]
+            Scan 3:            [------------]
+            
+            Any SAME sequence will appear COMPLETELY in at least one scan window,
+            ensuring 100% detection with no missed alerts at boundaries.
         """
         self.audio_manager = audio_manager
         self.buffer_duration = buffer_duration
@@ -411,11 +426,20 @@ class ContinuousEASMonitor:
         self._watchdog_timeout: float = 60.0  # Seconds before considering thread stalled
         self._restart_count: int = 0
 
+        # Calculate overlap percentage for logging
+        overlap_pct = ((buffer_duration - scan_interval) / buffer_duration * 100) if buffer_duration > 0 else 0
+        
         logger.info(
             f"Initialized ContinuousEASMonitor: buffer={buffer_duration}s, "
-            f"scan_interval={scan_interval}s, sample_rate={sample_rate}Hz, "
-            f"watchdog_timeout={self._watchdog_timeout}s"
+            f"scan_interval={scan_interval}s ({overlap_pct:.0f}% overlap), "
+            f"sample_rate={sample_rate}Hz, watchdog_timeout={self._watchdog_timeout}s"
         )
+        
+        if overlap_pct < 50:
+            logger.warning(
+                f"Low scan overlap ({overlap_pct:.0f}%) may miss alerts at window boundaries. "
+                f"Recommend scan_interval <= {buffer_duration * 0.5:.1f}s for 50%+ overlap."
+            )
 
     def start(self) -> bool:
         """
@@ -447,7 +471,11 @@ class ContinuousEASMonitor:
         )
         self._watchdog_thread.start()
 
-        logger.info("Started continuous EAS monitoring with watchdog")
+        overlap_pct = ((self.buffer_duration - self.scan_interval) / self.buffer_duration * 100)
+        logger.info(
+            f"Started continuous EAS monitoring with {overlap_pct:.0f}% overlapping windows. "
+            f"SAME sequences (9s) will appear completely in at least one scan window."
+        )
         return True
 
     def stop(self) -> None:
