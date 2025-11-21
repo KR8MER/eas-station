@@ -438,6 +438,11 @@ class ContinuousEASMonitor:
         self._last_adjustment_time = 0.0  # When we last adjusted parameters
         self._adjustment_cooldown = 30.0  # Wait 30s between adjustments to let changes stabilize
         
+        # Auto-tuning constants
+        self.SCAN_BUFFER_FACTOR = 1.15  # Add 15% buffer to scan time for interval
+        self.MAX_DYNAMIC_SCANS = 8  # Cap on concurrent scans
+        self.MIN_SCAN_INTERVAL = 1.5  # Hard floor on scan interval (seconds)
+        
         # Watchdog/heartbeat tracking
         self._last_activity: float = time.time()
         self._activity_lock = threading.Lock()
@@ -650,16 +655,23 @@ class ContinuousEASMonitor:
             max_scan_duration = max(recent_scans)
             min_scan_duration = min(recent_scans)
             
-            # Calculate skip rate (recent history)
-            recent_scan_count = min(20, self._scans_performed)
-            recent_skip_count = min(20, self._scans_skipped)
-            skip_rate = recent_skip_count / recent_scan_count if recent_scan_count > 0 else 0
+            # Calculate skip rate (recent history) 
+            # Use ratio of skips to total attempts (skips + performed)
+            # This gives true skip rate for recent operations
+            total_recent_attempts = self._scans_performed + self._scans_skipped
+            if total_recent_attempts > 20:
+                # For long-running monitors, estimate recent skip rate
+                # by assuming last 20 attempts follow overall ratio
+                skip_rate = self._scans_skipped / total_recent_attempts if total_recent_attempts > 0 else 0
+            else:
+                # For new monitors, use actual totals
+                skip_rate = self._scans_skipped / total_recent_attempts if total_recent_attempts > 0 else 0
             
             # Calculate queue pressure (how often are all slots full?)
             queue_pressure = self._active_scans / self._dynamic_max_scans if self._dynamic_max_scans > 0 else 0
             
-            # Determine optimal interval: scan_duration + small buffer for safety
-            optimal_interval = avg_scan_duration * 1.15  # 15% buffer
+            # Determine optimal interval: scan_duration + buffer for safety
+            optimal_interval = avg_scan_duration * self.SCAN_BUFFER_FACTOR
             
             # Determine if we need to adjust
             needs_adjustment = False
@@ -686,14 +698,14 @@ class ContinuousEASMonitor:
                 needs_adjustment = True
                 
                 # Option A: Increase concurrency if we're not maxed out
-                if self._dynamic_max_scans < 8 and queue_pressure > 0.5:
+                if self._dynamic_max_scans < self.MAX_DYNAMIC_SCANS and queue_pressure > 0.5:
                     self._dynamic_max_scans += 1
                     adjustment_reason.append(f"increased concurrency to {self._dynamic_max_scans}")
                 
                 # Option B: Decrease interval to scan more frequently
-                elif self._dynamic_scan_interval > 1.5:  # Don't go below 1.5s
+                elif self._dynamic_scan_interval > self.MIN_SCAN_INTERVAL:
                     new_interval = max(optimal_interval, self._dynamic_scan_interval * 0.8)
-                    new_interval = max(new_interval, 1.5)  # Hard floor
+                    new_interval = max(new_interval, self.MIN_SCAN_INTERVAL)  # Hard floor
                     if new_interval < self._dynamic_scan_interval:
                         self._dynamic_scan_interval = new_interval
                         adjustment_reason.append(f"decreased interval to {self._dynamic_scan_interval:.2f}s")

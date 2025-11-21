@@ -1950,8 +1950,18 @@ function updateEASMonitorDisplay(status) {
             perfStatus.textContent = 'Monitor is stopped.';
             perfStatus.className = 'text-muted';
         } else if (status.scan_interval_auto_adjusted) {
-            perfStatus.innerHTML = `System detected slower hardware and auto-adjusted scan interval from <strong>${status.scan_interval.toFixed(1)}s</strong> to <strong>${status.effective_scan_interval.toFixed(1)}s</strong> for optimal performance.`;
+            // Build message safely without innerHTML
+            perfStatus.textContent = '';
             perfStatus.className = 'text-info';
+            perfStatus.appendChild(document.createTextNode('System detected slower hardware and auto-adjusted scan interval from '));
+            const fromSpan = document.createElement('strong');
+            fromSpan.textContent = status.scan_interval.toFixed(1) + 's';
+            perfStatus.appendChild(fromSpan);
+            perfStatus.appendChild(document.createTextNode(' to '));
+            const toSpan = document.createElement('strong');
+            toSpan.textContent = status.effective_scan_interval.toFixed(1) + 's';
+            perfStatus.appendChild(toSpan);
+            perfStatus.appendChild(document.createTextNode(' for optimal performance.'));
         } else if (skipRate > 5) {
             perfStatus.textContent = `Scan queue is backing up (${skipRate.toFixed(1)}% skip rate). System will auto-tune.`;
             perfStatus.className = 'text-warning';
